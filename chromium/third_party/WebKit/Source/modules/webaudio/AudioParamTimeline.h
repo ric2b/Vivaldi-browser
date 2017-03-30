@@ -54,7 +54,7 @@ public:
 
     // hasValue is set to true if a valid timeline value is returned.
     // otherwise defaultValue is returned.
-    float valueForContextTime(AudioDestinationHandler&, float defaultValue, bool& hasValue);
+    float valueForContextTime(AudioDestinationHandler&, float defaultValue, bool& hasValue, float minValue, float maxValue);
 
     // Given the time range in frames, calculates parameter values into the values buffer and
     // returns the last parameter value calculated for "values" or the defaultValue if none were
@@ -62,11 +62,13 @@ public:
     // calculated.  It should equal sampleRate for sample-accurate parameter changes, and otherwise
     // will usually match the render quantum size such that the parameter value changes once per
     // render quantum.
-    float valuesForFrameRange(size_t startFrame, size_t endFrame, float defaultValue, float* values, unsigned numberOfValues, double sampleRate, double controlRate);
+    float valuesForFrameRange(size_t startFrame, size_t endFrame, float defaultValue, float* values, unsigned numberOfValues, double sampleRate, double controlRate, float minValue, float maxValue);
 
     // Returns true if this AudioParam has any events on it.
     bool hasValues() const;
 
+    float smoothedValue() { return m_smoothedValue; }
+    void setSmoothedValue(float v) { m_smoothedValue = v; }
 private:
     class ParamEvent {
     public:
@@ -83,31 +85,21 @@ private:
         static ParamEvent createExponentialRampEvent(float value, double time, float initialValue, double callTime);
         static ParamEvent createSetValueEvent(float value, double time);
         static ParamEvent createSetTargetEvent(float value, double time, double timeConstant);
-        static ParamEvent createSetValueCurveEvent(DOMFloat32Array* curve, double time, double duration);
+        static ParamEvent createSetValueCurveEvent(const DOMFloat32Array* curve, double time, double duration);
 
         Type getType() const { return m_type; }
         float value() const { return m_value; }
         double time() const { return m_time; }
         double timeConstant() const { return m_timeConstant; }
         double duration() const { return m_duration; }
-        DOMFloat32Array* curve() { return m_curve.get(); }
+        Vector<float>& curve() { return m_curve; }
         float initialValue() const { return m_initialValue; }
         double callTime() const { return m_callTime; }
 
     private:
         ParamEvent(Type type, float value, double time,
-            double timeConstant, double duration, DOMFloat32Array* curve,
-            float initialValue = 0, double callTime = 0)
-            : m_type(type)
-            , m_value(value)
-            , m_time(time)
-            , m_timeConstant(timeConstant)
-            , m_duration(duration)
-            , m_curve(curve)
-            , m_initialValue(initialValue)
-            , m_callTime(callTime)
-        {
-        }
+            double timeConstant, double duration, const DOMFloat32Array* curve,
+            float initialValue = 0, double callTime = 0);
 
         Type m_type;
         float m_value;
@@ -116,7 +108,7 @@ private:
         double m_timeConstant;
         // Only used for SetValueCurve events.
         double m_duration;
-        CrossThreadPersistent<DOMFloat32Array> m_curve;
+        Vector<float> m_curve;
         // Initial value and time to use for linear and exponential ramps that don't have a
         // preceding event.
         float m_initialValue;
@@ -131,6 +123,9 @@ private:
     Vector<ParamEvent> m_events;
 
     mutable Mutex m_eventsLock;
+
+    // Smoothing (de-zippering)
+    float m_smoothedValue;
 };
 
 } // namespace blink

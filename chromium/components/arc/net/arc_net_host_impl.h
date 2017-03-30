@@ -6,6 +6,7 @@
 #define COMPONENTS_ARC_NET_ARC_NET_HOST_IMPL_H_
 
 #include <stdint.h>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -17,6 +18,7 @@
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/net.mojom.h"
+#include "components/arc/instance_holder.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace base {
@@ -31,7 +33,7 @@ class ArcBridgeService;
 
 // Private implementation of ArcNetHost.
 class ArcNetHostImpl : public ArcService,
-                       public ArcBridgeService::Observer,
+                       public InstanceHolder<mojom::NetInstance>::Observer,
                        public chromeos::NetworkStateHandlerObserver,
                        public mojom::NetHost {
  public:
@@ -74,14 +76,37 @@ class ArcNetHostImpl : public ArcService,
   void ScanCompleted(const chromeos::DeviceState* /*unused*/) override;
   void OnShuttingDown() override;
   void DefaultNetworkChanged(const chromeos::NetworkState* network) override;
+  void DeviceListChanged() override;
   void GetDefaultNetwork(const GetDefaultNetworkCallback& callback) override;
 
-  // Overridden from ArcBridgeService::Observer:
-  void OnNetInstanceReady() override;
+  // Overridden from ArcBridgeService::InterfaceObserver<mojom::NetInstance>:
+  void OnInstanceReady() override;
 
  private:
   void DefaultNetworkSuccessCallback(const std::string& service_path,
                                      const base::DictionaryValue& dictionary);
+
+  // Due to a race in Chrome, GetNetworkStateFromGuid() might not know about
+  // newly created networks, as that function relies on the completion of a
+  // separate GetProperties shill call that completes asynchronously.  So this
+  // class keeps a local cache of the path->guid mapping as a fallback.
+  // This is sufficient to pass CTS but it might not handle multiple
+  // successive Create operations (crbug.com/631646).
+  bool GetNetworkPathFromGuid(const std::string& guid, std::string* path);
+
+  void CreateNetworkSuccessCallback(
+      const arc::mojom::NetHost::CreateNetworkCallback& mojo_callback,
+      const std::string& service_path,
+      const std::string& guid);
+
+  void CreateNetworkFailureCallback(
+      const arc::mojom::NetHost::CreateNetworkCallback& mojo_callback,
+      const std::string& error_name,
+      std::unique_ptr<base::DictionaryValue> error_data);
+
+  std::string cached_service_path_;
+  std::string cached_guid_;
+
   base::ThreadChecker thread_checker_;
   mojo::Binding<arc::mojom::NetHost> binding_;
   base::WeakPtrFactory<ArcNetHostImpl> weak_factory_;

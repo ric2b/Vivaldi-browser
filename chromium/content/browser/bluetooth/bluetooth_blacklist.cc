@@ -6,8 +6,8 @@
 
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/optional.h"
 #include "base/strings/string_split.h"
-#include "content/common/bluetooth/bluetooth_scan_filter.h"
 #include "content/public/browser/content_browser_client.h"
 
 using device::BluetoothUUID;
@@ -33,7 +33,7 @@ BluetoothBlacklist& BluetoothBlacklist::Get() {
   return g_singleton.Get();
 }
 
-void BluetoothBlacklist::Add(const device::BluetoothUUID& uuid, Value value) {
+void BluetoothBlacklist::Add(const BluetoothUUID& uuid, Value value) {
   CHECK(uuid.IsValid());
   auto insert_result = blacklisted_uuids_.insert(std::make_pair(uuid, value));
   bool inserted = insert_result.second;
@@ -86,10 +86,10 @@ bool BluetoothBlacklist::IsExcluded(const BluetoothUUID& uuid) const {
 }
 
 bool BluetoothBlacklist::IsExcluded(
-    const std::vector<content::BluetoothScanFilter>& filters) {
-  for (const BluetoothScanFilter& filter : filters) {
-    for (const BluetoothUUID& service : filter.services) {
-      if (IsExcluded(service)) {
+    const mojo::Array<blink::mojom::WebBluetoothScanFilterPtr>& filters) {
+  for (const blink::mojom::WebBluetoothScanFilterPtr& filter : filters) {
+    for (const base::Optional<BluetoothUUID>& service : filter->services) {
+      if (IsExcluded(service.value())) {
         return true;
       }
     }
@@ -113,16 +113,16 @@ bool BluetoothBlacklist::IsExcludedFromWrites(const BluetoothUUID& uuid) const {
   return it->second == Value::EXCLUDE || it->second == Value::EXCLUDE_WRITES;
 }
 
-void BluetoothBlacklist::RemoveExcludedUuids(
-    std::vector<device::BluetoothUUID>* uuids) {
-  auto it = uuids->begin();
-  while (it != uuids->end()) {
-    if (IsExcluded(*it)) {
-      it = uuids->erase(it);
-    } else {
-      it++;
+void BluetoothBlacklist::RemoveExcludedUUIDs(
+    blink::mojom::WebBluetoothRequestDeviceOptions* options) {
+  mojo::Array<base::Optional<BluetoothUUID>>
+      optional_services_blacklist_filtered;
+  for (const base::Optional<BluetoothUUID>& uuid : options->optional_services) {
+    if (!IsExcluded(uuid.value())) {
+      optional_services_blacklist_filtered.push_back(uuid);
     }
   }
+  options->optional_services = std::move(optional_services_blacklist_filtered);
 }
 
 void BluetoothBlacklist::ResetToDefaultValuesForTest() {

@@ -32,6 +32,7 @@
 #
 
 ActiveScriptWrappable
+CEReactions
 CachedAttribute=*
 CallWith=ExecutionContext|ScriptState|ScriptArguments|CurrentWindow|EnteredWindow|ThisValue
 CheckSecurity=Receiver|ReturnValue
@@ -48,10 +49,10 @@ DependentLifetime
 DeprecateAs=*
 DoNotCheckConstants
 DoNotCheckSecurity=|Setter
+DoNotTestNewObject
 EnforceRange
 Exposed=*
 FlexibleArrayBufferView
-GarbageCollected
 Global=|*
 ImplementedAs=*
 ImplementedInPrivateScript
@@ -85,9 +86,10 @@ ReflectMissing=*
 ReflectOnly=*
 Replaceable
 # Valid values for [RuntimeEnabled] are the Runtime Enabled Features, listed in
-# Source/core/page/RuntimeEnabledFeatures.in
+# Source/platform/RuntimeEnabledFeatures.in
 RuntimeEnabled=*
 SameObject
+SaveSameObject
 SetWrapperReferenceFrom=*
 SetWrapperReferenceTo=*
 SetterCallWith=ExecutionContext|ScriptArguments|CurrentWindow|EnteredWindow

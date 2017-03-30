@@ -107,8 +107,6 @@ def DetectTargetArch():
     return 'arm64'
   elif target_arch == 'mipsel':
     return 'mips'
-  elif target_arch:
-    raise Error('Unrecognized target_arch: %s' % target_arch)
 
   return None
 
@@ -191,7 +189,7 @@ def InstallSysroot(target_arch):
   if os.path.exists(stamp):
     with open(stamp) as s:
       if s.read() == url:
-        print 'Debian Wheezy %s root image already up-to-date: %s' % \
+        print 'Debian Wheezy %s root image already up to date: %s' % \
             (target_arch, sysroot)
         return
 

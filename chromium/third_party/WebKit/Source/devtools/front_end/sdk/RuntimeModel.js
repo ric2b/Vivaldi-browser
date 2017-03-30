@@ -97,7 +97,7 @@ WebInspector.RuntimeModel.prototype = {
     _executionContextCreated: function(context)
     {
         // The private script context should be hidden behind an experiment.
-        if (context.name == WebInspector.RuntimeModel._privateScript && !context.origin && !Runtime.experiments.isEnabled("privateScriptInspection")) {
+        if (context.name === WebInspector.RuntimeModel._privateScript && !context.origin && !Runtime.experiments.isEnabled("privateScriptInspection")) {
             return;
         }
         var executionContext = new WebInspector.ExecutionContext(this.target(), context.id, context.name, context.origin, context.isDefault, context.frameId);
@@ -499,7 +499,7 @@ WebInspector.ExecutionContext.prototype = {
         if (dotNotation || bracketNotation)
             expressionString = expressionString.substr(0, lastIndex);
 
-        if (expressionString && parseInt(expressionString, 10) == expressionString) {
+        if (expressionString && !isNaN(expressionString)) {
             // User is entering float value, do not suggest anything.
             completionsReadyCallback([]);
             return;
@@ -714,6 +714,7 @@ WebInspector.ExecutionContext.prototype = {
  * @constructor
  * @extends {WebInspector.SDKObject}
  * @param {!WebInspector.Target} target
+ * @param {!WebInspector.RemoteObject} eventTarget
  * @param {string} type
  * @param {boolean} useCapture
  * @param {boolean} passive
@@ -723,9 +724,10 @@ WebInspector.ExecutionContext.prototype = {
  * @param {?WebInspector.RemoteObject} removeFunction
  * @param {string=} listenerType
  */
-WebInspector.EventListener = function(target, type, useCapture, passive, handler, originalHandler, location, removeFunction, listenerType)
+WebInspector.EventListener = function(target, eventTarget, type, useCapture, passive, handler, originalHandler, location, removeFunction, listenerType)
 {
     WebInspector.SDKObject.call(this, target);
+    this._eventTarget = eventTarget;
     this._type = type;
     this._useCapture = useCapture;
     this._passive = passive;
@@ -810,6 +812,32 @@ WebInspector.EventListener.prototype = {
     {
         if (!this._removeFunction)
             return Promise.resolve();
+        return this._removeFunction.callFunctionPromise(callCustomRemove, [
+                WebInspector.RemoteObject.toCallArgument(this._type),
+                WebInspector.RemoteObject.toCallArgument(this._originalHandler),
+                WebInspector.RemoteObject.toCallArgument(this._useCapture),
+                WebInspector.RemoteObject.toCallArgument(this._passive),
+            ]).then(() => undefined);
+
+        /**
+         * @param {string} type
+         * @param {function()} listener
+         * @param {boolean} useCapture
+         * @param {boolean} passive
+         * @this {Function}
+         * @suppressReceiverCheck
+         */
+        function callCustomRemove(type, listener, useCapture, passive)
+        {
+            this.call(null, type, listener, useCapture, passive);
+        }
+    },
+
+    /**
+     * @return {!Promise<undefined>}
+     */
+    togglePassive: function()
+    {
         return new Promise(promiseConstructor.bind(this));
 
         /**
@@ -818,24 +846,25 @@ WebInspector.EventListener.prototype = {
          */
         function promiseConstructor(success)
         {
-            this._removeFunction.callFunction(callCustomRemove, [
-                WebInspector.RemoteObject.toCallArgument(this._removeFunction),
+            this._eventTarget.callFunctionPromise(callTogglePassive, [
                 WebInspector.RemoteObject.toCallArgument(this._type),
                 WebInspector.RemoteObject.toCallArgument(this._originalHandler),
                 WebInspector.RemoteObject.toCallArgument(this._useCapture),
                 WebInspector.RemoteObject.toCallArgument(this._passive),
-            ], success);
+            ]).then(success);
 
             /**
-             * @param {function(string, function(), boolean, boolean)} func
              * @param {string} type
              * @param {function()} listener
              * @param {boolean} useCapture
              * @param {boolean} passive
+             * @this {Object}
+             * @suppressReceiverCheck
              */
-            function callCustomRemove(func, type, listener, useCapture, passive)
+            function callTogglePassive(type, listener, useCapture, passive)
             {
-                func.call(null, type, listener, useCapture, passive);
+                this.removeEventListener(type, listener, {capture: useCapture});
+                this.addEventListener(type, listener, {capture: useCapture, passive: !passive});
             }
         }
     },
@@ -854,6 +883,22 @@ WebInspector.EventListener.prototype = {
     setListenerType: function(listenerType)
     {
         this._listenerType = listenerType;
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isScrollBlockingType: function()
+    {
+        return this._type === "touchstart" || this._type === "touchmove" || this._type === "mousewheel" || this._type === "wheel";
+    },
+
+    /**
+     * @return {boolean}
+     */
+    isNormalListenerType: function()
+    {
+        return this._listenerType === "normal";
     },
 
     __proto__: WebInspector.SDKObject.prototype

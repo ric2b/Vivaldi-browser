@@ -69,7 +69,8 @@ static std::unique_ptr<TimingFunction> EaseOutWithInitialVelocity(
   // Clamp velocity to a sane value.
   velocity = std::min(std::max(velocity, -1000.0), 1000.0);
 
-  // Based on EaseInOutTimingFunction::Create with first control point scaled.
+  // Based on CubicBezierTimingFunction::EaseType::EASE_IN_OUT preset
+  // with first control point scaled.
   const double x1 = 0.42;
   const double y1 = velocity * x1;
   return CubicBezierTimingFunction::Create(x1, y1, 0.58, 1);
@@ -106,6 +107,12 @@ void ScrollOffsetAnimationCurve::SetInitialValue(
 
 bool ScrollOffsetAnimationCurve::HasSetInitialValue() const {
   return has_set_initial_value_;
+}
+
+void ScrollOffsetAnimationCurve::ApplyAdjustment(
+    const gfx::Vector2dF& adjustment) {
+  initial_value_ = ScrollOffsetWithDelta(initial_value_, adjustment);
+  target_value_ = ScrollOffsetWithDelta(target_value_, adjustment);
 }
 
 gfx::ScrollOffset ScrollOffsetAnimationCurve::GetValue(

@@ -175,10 +175,12 @@ class TestExpectationParser(object):
                 if self._port.reference_files(test):
                     text_expected_filename = self._port.expected_filename(test, '.txt')
                     if not self._port.host.filesystem.exists(text_expected_filename):
-                        expectation_line.warnings.append('A reftest without text expectation cannot be marked as NeedsRebaseline/NeedsManualRebaseline')
+                        expectation_line.warnings.append(
+                            'A reftest without text expectation cannot be marked as NeedsRebaseline/NeedsManualRebaseline')
 
         specifiers = [specifier.lower() for specifier in expectation_line.specifiers]
-        if (self.REBASELINE_MODIFIER in expectations or self.NEEDS_REBASELINE_MODIFIER in expectations) and ('debug' in specifiers or 'release' in specifiers):
+        if (self.REBASELINE_MODIFIER in expectations or self.NEEDS_REBASELINE_MODIFIER in expectations) and (
+                'debug' in specifiers or 'release' in specifiers):
             expectation_line.warnings.append('A test cannot be rebaselined for Debug/Release.')
 
     def _parse_expectations(self, expectation_line):
@@ -295,9 +297,9 @@ class TestExpectationParser(object):
         state = 'start'
         for token in tokens:
             if (token.startswith(WEBKIT_BUG_PREFIX) or
-                token.startswith(CHROMIUM_BUG_PREFIX) or
-                token.startswith(V8_BUG_PREFIX) or
-                token.startswith(NAMED_BUG_PREFIX)):
+                    token.startswith(CHROMIUM_BUG_PREFIX) or
+                    token.startswith(V8_BUG_PREFIX) or
+                    token.startswith(NAMED_BUG_PREFIX)):
                 if state != 'start':
                     warnings.append('"%s" is not at the start of the line.' % token)
                     break
@@ -364,7 +366,8 @@ class TestExpectationParser(object):
             warnings.append('SLOW tests should ony be added to SlowTests and not to TestExpectations.')
 
         if 'WONTFIX' in expectations and ('NeverFixTests' not in filename and 'StaleTestExpectations' not in filename):
-            warnings.append('WONTFIX tests should ony be added to NeverFixTests or StaleTestExpectations and not to TestExpectations.')
+            warnings.append(
+                'WONTFIX tests should ony be added to NeverFixTests or StaleTestExpectations and not to TestExpectations.')
 
         if 'NeverFixTests' in filename and expectations != ['WONTFIX', 'SKIP']:
             warnings.append('Only WONTFIX expectations are allowed in NeverFixTests')
@@ -410,7 +413,8 @@ class TestExpectationLine(object):
         self.is_skipped_outside_expectations_file = False
 
     def __str__(self):
-        return "TestExpectationLine{name=%s, matching_configurations=%s, original_string=%s}" % (self.name, self.matching_configurations, self.original_string)
+        return "TestExpectationLine{name=%s, matching_configurations=%s, original_string=%s}" % (
+            self.name, self.matching_configurations, self.original_string)
 
     def __eq__(self, other):
         return (self.original_string == other.original_string
@@ -435,8 +439,11 @@ class TestExpectationLine(object):
     def is_flaky(self):
         return len(self.parsed_expectations) > 1
 
-    def is_whitespace_or_comment(self):
-        return bool(re.match("^\s*$", self.original_string.split('#')[0]))
+    def is_comment(self):
+        return bool(re.match(r"^\s*#.*$", self.original_string))
+
+    def is_whitespace(self):
+        return not self.original_string.strip()
 
     @staticmethod
     def create_passing_expectation(test):
@@ -527,7 +534,8 @@ class TestExpectationLine(object):
         return expectations
 
     @staticmethod
-    def _format_line(bugs, specifiers, name, expectations, comment, include_specifiers=True, include_expectations=True, include_comment=True):
+    def _format_line(bugs, specifiers, name, expectations, comment, include_specifiers=True,
+                     include_expectations=True, include_comment=True):
         new_specifiers = []
         new_expectations = []
         for specifier in specifiers:
@@ -895,7 +903,7 @@ class TestExpectations(object):
 
     @classmethod
     def expectation_from_string(cls, string):
-        assert(' ' not in string)  # This only handles one expectation at a time.
+        assert ' ' not in string  # This only handles one expectation at a time.
         return cls.EXPECTATIONS.get(string.lower())
 
     @staticmethod
@@ -905,12 +913,13 @@ class TestExpectations(object):
             result: actual result of a test execution
             expected_results: set of results listed in test_expectations
             test_needs_rebaselining: whether test was marked as REBASELINE"""
-        if not (set(expected_results) - (set(TestExpectations.NON_TEST_OUTCOME_EXPECTATIONS))):
+        if not set(expected_results) - set(TestExpectations.NON_TEST_OUTCOME_EXPECTATIONS):
             expected_results = set([PASS])
 
         if result in expected_results:
             return True
-        if result in (PASS, TEXT, IMAGE, IMAGE_PLUS_TEXT, AUDIO, MISSING) and (NEEDS_REBASELINE in expected_results or NEEDS_MANUAL_REBASELINE in expected_results):
+        if result in (PASS, TEXT, IMAGE, IMAGE_PLUS_TEXT, AUDIO, MISSING) and (
+                NEEDS_REBASELINE in expected_results or NEEDS_MANUAL_REBASELINE in expected_results):
             return True
         if result in (TEXT, IMAGE, IMAGE_PLUS_TEXT, AUDIO) and (FAIL in expected_results):
             return True
@@ -959,24 +968,30 @@ class TestExpectations(object):
         return set(suffixes)
 
     @staticmethod
-    def suffixes_for_actual_expectations_string(expectations):
+    # test_result is an instance of webkitpy.common.net.layouttestresults.LayoutTestResult
+    def suffixes_for_test_result(test_result):
         suffixes = set()
-        if 'TEXT' in expectations:
+        actual_results = test_result.actual_results()
+        if 'TEXT' in actual_results:
             suffixes.add('txt')
-        if 'IMAGE' in expectations:
+        if 'IMAGE' in actual_results:
             suffixes.add('png')
-        if 'AUDIO' in expectations:
+        if 'AUDIO' in actual_results:
             suffixes.add('wav')
-        if 'MISSING' in expectations:
-            suffixes.add('txt')
-            suffixes.add('png')
-            suffixes.add('wav')
+        if 'MISSING' in actual_results:
+            if test_result.is_missing_text():
+                suffixes.add('txt')
+            if test_result.is_missing_image():
+                suffixes.add('png')
+            if test_result.is_missing_audio():
+                suffixes.add('wav')
         return suffixes
 
     # FIXME: This constructor does too much work. We should move the actual parsing of
     # the expectations into separate routines so that linting and handling overrides
     # can be controlled separately, and the constructor can be more of a no-op.
-    def __init__(self, port, tests=None, include_overrides=True, expectations_dict=None, model_all_expectations=False, is_lint_mode=False):
+    def __init__(self, port, tests=None, include_overrides=True, expectations_dict=None,
+                 model_all_expectations=False, is_lint_mode=False):
         self._full_test_list = tests
         self._test_config = port.test_configuration()
         self._is_lint_mode = is_lint_mode
@@ -1109,8 +1124,11 @@ class TestExpectations(object):
             index = self._expectations.index(expectation)
             self._expectations.remove(expectation)
 
-            if index == len(self._expectations) or self._expectations[index].is_whitespace_or_comment():
-                while index and self._expectations[index - 1].is_whitespace_or_comment():
+            if index == len(self._expectations) or self._expectations[index].is_whitespace() or self._expectations[index].is_comment():
+                while index and self._expectations[index - 1].is_comment():
+                    index = index - 1
+                    self._expectations.pop(index)
+                while index and self._expectations[index - 1].is_whitespace():
                     index = index - 1
                     self._expectations.pop(index)
 

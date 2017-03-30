@@ -11,6 +11,7 @@
 
 #include "base/i18n/rtl.h"
 #include "base/mac/foundation_util.h"
+#include "base/mac/objc_property_releaser.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -112,10 +113,16 @@ NSColor* DimTextColor(BOOL is_dark_theme) {
   return skia::SkColorToSRGBNSColor(SkColorSetRGB(0x64, 0x64, 0x64));
 }
 NSColor* PositiveTextColor() {
-  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0x3d, 0x94, 0x00));
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0x3d, 0x94, 0x00));
+  }
+  return skia::SkColorToSRGBNSColor(SkColorSetRGB(0x3d, 0x94, 0x00));
 }
 NSColor* NegativeTextColor() {
-  return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0xdd, 0x4b, 0x39));
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return skia::SkColorToCalibratedNSColor(SkColorSetRGB(0xdd, 0x4b, 0x39));
+  }
+  return skia::SkColorToSRGBNSColor(SkColorSetRGB(0xdd, 0x4b, 0x39));
 }
 NSColor* URLTextColor(BOOL is_dark_theme) {
   if (!ui::MaterialDesignController::IsModeMaterial()) {
@@ -126,16 +133,16 @@ NSColor* URLTextColor(BOOL is_dark_theme) {
 }
 
 NSFont* FieldFont() {
-  return OmniboxViewMac::GetFieldFont(gfx::Font::NORMAL);
+  return OmniboxViewMac::GetNormalFieldFont();
 }
 NSFont* BoldFieldFont() {
-  return OmniboxViewMac::GetFieldFont(gfx::Font::BOLD);
+  return OmniboxViewMac::GetBoldFieldFont();
 }
 NSFont* LargeFont() {
-  return OmniboxViewMac::GetLargeFont(gfx::Font::NORMAL);
+  return OmniboxViewMac::GetLargeFont();
 }
 NSFont* LargeSuperscriptFont() {
-  NSFont* font = OmniboxViewMac::GetLargeFont(gfx::Font::NORMAL);
+  NSFont* font = OmniboxViewMac::GetLargeFont();
   // Calculate a slightly smaller font. The ratio here is somewhat arbitrary.
   // Proportions from 5/9 to 5/7 all look pretty good.
   CGFloat size = [font pointSize] * 5.0 / 9.0;
@@ -143,11 +150,20 @@ NSFont* LargeSuperscriptFont() {
   return [NSFont fontWithDescriptor:descriptor size:size];
 }
 NSFont* SmallFont() {
-  return OmniboxViewMac::GetSmallFont(gfx::Font::NORMAL);
+  return OmniboxViewMac::GetSmallFont();
 }
 
-CGFloat GetContentAreaWidth(NSRect cellFrame) {
-  return NSWidth(cellFrame) - TextStartOffset();
+// Sets the writing direction to |direction| for a given |range| of
+// |attributedString|.
+void SetTextDirectionForRange(NSMutableAttributedString* attributedString,
+                              NSWritingDirection direction,
+                              NSRange range) {
+  base::scoped_nsobject<NSMutableParagraphStyle> paragraph_style(
+      [[NSMutableParagraphStyle alloc] init]);
+  [paragraph_style setBaseWritingDirection:direction];
+  [attributedString addAttribute:NSParagraphStyleAttributeName
+                           value:paragraph_style
+                           range:range];
 }
 
 NSAttributedString* CreateAnswerStringHelper(const base::string16& text,
@@ -293,7 +309,6 @@ NSAttributedString* CreateAnswerLine(const SuggestionAnswer::ImageLine& line,
   }
   base::scoped_nsobject<NSMutableParagraphStyle> style(
       [[NSMutableParagraphStyle alloc] init]);
-  [style setLineBreakMode:NSLineBreakByTruncatingTail];
   [style setTighteningFactorForTruncation:0.0];
   [answer_string addAttribute:NSParagraphStyleAttributeName
                             value:style
@@ -317,7 +332,6 @@ NSMutableAttributedString* CreateAttributedString(
 
   NSMutableParagraphStyle* style =
       [[[NSMutableParagraphStyle alloc] init] autorelease];
-  [style setLineBreakMode:NSLineBreakByTruncatingTail];
   [style setTighteningFactorForTruncation:0.0];
   [style setAlignment:textAlignment];
   [attributedString addAttribute:NSParagraphStyleAttributeName
@@ -363,6 +377,10 @@ NSAttributedString* CreateClassifiedAttributedString(
     }
 
     if (0 != (i->style & ACMatchClassification::URL)) {
+      // URLs have their text direction set to to LTR (avoids RTL characters
+      // making the URL render from right to left, as per RFC 3987 Section 4.1).
+      SetTextDirectionForRange(attributedString, NSWritingDirectionLeftToRight,
+                               range);
       [attributedString addAttribute:NSForegroundColorAttributeName
                                value:URLTextColor(is_dark_theme)
                                range:range];
@@ -377,6 +395,11 @@ NSAttributedString* CreateClassifiedAttributedString(
 }
 
 }  // namespace
+
+@interface OmniboxPopupCellData () {
+  base::mac::ObjCPropertyReleaser propertyReleaser_OmniboxPopupCellData_;
+}
+@end
 
 @interface OmniboxPopupCell ()
 - (CGFloat)drawMatchPart:(NSAttributedString*)attributedString
@@ -403,6 +426,7 @@ NSAttributedString* CreateClassifiedAttributedString(
 @synthesize isContentsRTL = isContentsRTL_;
 @synthesize isAnswer = isAnswer_;
 @synthesize matchType = matchType_;
+@synthesize max_lines = max_lines_;
 
 - (instancetype)initWithMatch:(const AutocompleteMatch&)match
                contentsOffset:(CGFloat)contentsOffset
@@ -435,6 +459,7 @@ NSAttributedString* CreateClassifiedAttributedString(
           [CreateAnswerLine(match.answer->first_line(), isDarkTheme) retain];
       description_ =
           [CreateAnswerLine(match.answer->second_line(), isDarkTheme) retain];
+      max_lines_ = match.answer->second_line().num_text_lines();
     } else {
       contents_ = [CreateClassifiedAttributedString(
           match.contents, ContentTextColor(isDarkTheme), match.contents_class,
@@ -444,14 +469,12 @@ NSAttributedString* CreateClassifiedAttributedString(
             match.description, DimTextColor(isDarkTheme),
             match.description_class, isDarkTheme) retain];
       }
+      max_lines_ = 1;
     }
+    propertyReleaser_OmniboxPopupCellData_.Init(self,
+                                                [OmniboxPopupCellData class]);
   }
   return self;
-}
-
-- (void)dealloc {
-  [incognitoImage_ release];
-  [super dealloc];
 }
 
 - (instancetype)copyWithZone:(NSZone*)zone {
@@ -496,8 +519,8 @@ NSAttributedString* CreateClassifiedAttributedString(
       base::mac::ObjCCastStrict<OmniboxPopupCellData>([self objectValue]);
   OmniboxPopupMatrix* tableView =
       base::mac::ObjCCastStrict<OmniboxPopupMatrix>(controlView);
-  CGFloat remainingWidth =
-      GetContentAreaWidth(cellFrame) - [tableView contentLeftPadding];
+  CGFloat remainingWidth = [OmniboxPopupCell getContentAreaWidth:cellFrame] -
+                           [tableView contentLeftPadding];
   CGFloat contentsWidth = [cellData getMatchContentsWidth];
   CGFloat separatorWidth = [[tableView separator] size].width;
   CGFloat descriptionWidth =
@@ -587,8 +610,8 @@ NSAttributedString* CreateClassifiedAttributedString(
   OmniboxPopupCellData* cellData =
       base::mac::ObjCCastStrict<OmniboxPopupCellData>([self objectValue]);
   CGFloat offset = 0.0f;
-  CGFloat remainingWidth =
-      GetContentAreaWidth(cellFrame) - [tableView contentLeftPadding];
+  CGFloat remainingWidth = [OmniboxPopupCell getContentAreaWidth:cellFrame] -
+                           [tableView contentLeftPadding];
   CGFloat prefixWidth = [[cellData prefix] size].width;
 
   CGFloat prefixOffset = 0.0f;
@@ -636,8 +659,11 @@ NSAttributedString* CreateClassifiedAttributedString(
       cellFrame, NSOffsetRect(cellFrame, origin.x, origin.y));
   renderRect.size.width =
       std::min(NSWidth(renderRect), static_cast<CGFloat>(maxWidth));
-  if (!NSIsEmptyRect(renderRect))
-    [attributedString drawInRect:FlipIfRTL(renderRect, cellFrame)];
+  if (!NSIsEmptyRect(renderRect)) {
+    [attributedString drawWithRect:FlipIfRTL(renderRect, cellFrame)
+                           options:NSStringDrawingUsesLineFragmentOrigin |
+                                   NSStringDrawingTruncatesLastVisibleLine];
+  }
   return NSWidth(renderRect);
 }
 
@@ -713,6 +739,10 @@ NSAttributedString* CreateClassifiedAttributedString(
   base::string16 raw_separator =
       l10n_util::GetStringUTF16(IDS_AUTOCOMPLETE_MATCH_DESCRIPTION_SEPARATOR);
   return CreateAttributedString(raw_separator, DimTextColor(isDarkTheme));
+}
+
++ (CGFloat)getContentAreaWidth:(NSRect)cellFrame {
+  return NSWidth(cellFrame) - TextStartOffset();
 }
 
 @end

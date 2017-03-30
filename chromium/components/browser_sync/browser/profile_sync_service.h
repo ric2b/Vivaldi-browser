@@ -165,14 +165,16 @@ class EncryptedData;
 //   that control the initial sync download:
 //
 //    * SetFirstSetupComplete()
-//    * SetSetupInProgress()
+//    * GetSetupInProgressHandle()
 //
 //   SetFirstSetupComplete() should be called once the user has finished setting
-//   up sync at least once on their account. SetSetupInProgress(true) should be
-//   called while the user is actively configuring their account, and then
-//   SetSetupInProgress(false) should be called when configuration is complete.
-//   Once both these conditions have been met, CanConfigureDataTypes() will
-//   return true and datatype configuration can begin.
+//   up sync at least once on their account. GetSetupInProgressHandle() should
+//   be called while the user is actively configuring their account. The handle
+//   should be deleted once configuration is complete.
+//
+//   Once first setup has completed and there are no outstanding
+//   setup-in-progress handles, CanConfigureDataTypes() will return true and
+//   datatype configuration can begin.
 class ProfileSyncService : public sync_driver::SyncService,
                            public sync_driver::SyncFrontend,
                            public sync_driver::SyncPrefObserver,
@@ -280,7 +282,8 @@ class ProfileSyncService : public sync_driver::SyncService,
                             syncer::ModelTypeSet chosen_types) override;
   void SetFirstSetupComplete() override;
   bool IsFirstSetupInProgress() const override;
-  void SetSetupInProgress(bool setup_in_progress) override;
+  std::unique_ptr<sync_driver::SyncSetupInProgressHandle>
+  GetSetupInProgressHandle() override;
   bool IsSetupInProgress() const override;
   bool ConfigurationDone() const override;
   const GoogleServiceAuthError& GetAuthError() const override;
@@ -413,6 +416,7 @@ class ProfileSyncService : public sync_driver::SyncService,
   // GaiaCookieManagerService::Observer implementation.
   void OnGaiaAccountsInCookieUpdated(
       const std::vector<gaia::ListedAccount>& accounts,
+      const std::vector<gaia::ListedAccount>& signed_out_accounts,
       const GoogleServiceAuthError& error) override;
 
   // Get the sync status code.
@@ -678,11 +682,6 @@ class ProfileSyncService : public sync_driver::SyncService,
   // Update the last auth error and notify observers of error state.
   void UpdateAuthErrorState(const GoogleServiceAuthError& error);
 
-  // Detects and attempts to recover from a previous improper datatype
-  // configuration where Keep Everything Synced and the preferred types were
-  // not correctly set.
-  void TrySyncDatatypePrefRecovery();
-
   // Puts the backend's sync scheduler into NORMAL mode.
   // Called when configuration is complete.
   void StartSyncingWithServer();
@@ -801,6 +800,9 @@ class ProfileSyncService : public sync_driver::SyncService,
   // True if setup has been completed at least once and is not in progress.
   bool CanConfigureDataTypes() const;
 
+  // Called when a SetupInProgressHandle issued by this instance is destroyed.
+  virtual void OnSetupInProgressHandleDestroyed();
+
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
   std::unique_ptr<sync_driver::SyncClient> sync_client_;
@@ -842,6 +844,10 @@ class ProfileSyncService : public sync_driver::SyncService,
   // Indicates if this is the first time sync is being configured.  This value
   // is equal to !IsFirstSetupComplete() at the time of OnBackendInitialized().
   bool is_first_time_sync_configure_;
+
+  // Number of UIs currently configuring the Sync service. When this number
+  // is decremented back to zero, Sync setup is marked no longer in progress.
+  int outstanding_setup_in_progress_handles_ = 0;
 
   // List of available data type controllers.
   sync_driver::DataTypeController::TypeMap data_type_controllers_;
@@ -1008,15 +1014,10 @@ class ProfileSyncService : public sync_driver::SyncService,
   // this object was created on.
   base::ThreadChecker thread_checker_;
 
-  base::WeakPtrFactory<ProfileSyncService> weak_factory_;
+  // This weak factory invalidates its issued pointers when Sync is disabled.
+  base::WeakPtrFactory<ProfileSyncService> sync_enabled_weak_factory_;
 
-  // We don't use |weak_factory_| for the StartupController because the weak
-  // ptrs should be bound to the lifetime of ProfileSyncService and not to the
-  // [Initialize -> sync disabled/shutdown] lifetime.  We don't pass
-  // StartupController an Unretained reference to future-proof against
-  // the controller impl changing to post tasks. Therefore, we have a separate
-  // factory.
-  base::WeakPtrFactory<ProfileSyncService> startup_controller_weak_factory_;
+  base::WeakPtrFactory<ProfileSyncService> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSyncService);
 };

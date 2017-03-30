@@ -22,6 +22,7 @@ class CSSRuleList;
 class CSSStyleDeclaration;
 class CustomElementsRegistry;
 class DOMSelection;
+class DOMVisualViewport;
 class DOMWindowCSS;
 class Document;
 class Element;
@@ -50,8 +51,8 @@ public:
     // GarbageCollectedFinalized overrides:
     DECLARE_VIRTUAL_TRACE();
 
-    virtual bool isLocalDOMWindow() const { return false; }
-    virtual bool isRemoteDOMWindow() const { return false; }
+    virtual bool isLocalDOMWindow() const = 0;
+    virtual bool isRemoteDOMWindow() const = 0;
 
     virtual Frame* frame() const = 0;
 
@@ -90,6 +91,8 @@ public:
     virtual double scrollY() const = 0;
     double pageXOffset() const { return scrollX(); }
     double pageYOffset() const { return scrollY(); }
+
+    virtual DOMVisualViewport* visualViewport() { return nullptr; }
 
     bool closed() const;
 

@@ -24,6 +24,7 @@
 #include "core/css/CSSHelper.h"
 #include "core/css/CSSMarkup.h"
 #include "core/css/CSSToLengthConversionData.h"
+#include "core/css/CSSValuePool.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/Node.h"
 #include "core/style/ComputedStyle.h"
@@ -44,64 +45,11 @@ namespace {
 const int maxValueForCssLength = INT_MAX / kFixedPointDenominator - 2;
 const int minValueForCssLength = INT_MIN / kFixedPointDenominator + 2;
 
-using StringToUnitTable = HashMap<String, CSSPrimitiveValue::UnitType>;
-
-StringToUnitTable createStringToUnitTable()
-{
-    StringToUnitTable table;
-    table.set(String("em"), CSSPrimitiveValue::UnitType::Ems);
-    table.set(String("ex"), CSSPrimitiveValue::UnitType::Exs);
-    table.set(String("px"), CSSPrimitiveValue::UnitType::Pixels);
-    table.set(String("cm"), CSSPrimitiveValue::UnitType::Centimeters);
-    table.set(String("mm"), CSSPrimitiveValue::UnitType::Millimeters);
-    table.set(String("in"), CSSPrimitiveValue::UnitType::Inches);
-    table.set(String("pt"), CSSPrimitiveValue::UnitType::Points);
-    table.set(String("pc"), CSSPrimitiveValue::UnitType::Picas);
-    table.set(String("deg"), CSSPrimitiveValue::UnitType::Degrees);
-    table.set(String("rad"), CSSPrimitiveValue::UnitType::Radians);
-    table.set(String("grad"), CSSPrimitiveValue::UnitType::Gradians);
-    table.set(String("ms"), CSSPrimitiveValue::UnitType::Milliseconds);
-    table.set(String("s"), CSSPrimitiveValue::UnitType::Seconds);
-    table.set(String("hz"), CSSPrimitiveValue::UnitType::Hertz);
-    table.set(String("khz"), CSSPrimitiveValue::UnitType::Kilohertz);
-    table.set(String("dpi"), CSSPrimitiveValue::UnitType::DotsPerInch);
-    table.set(String("dpcm"), CSSPrimitiveValue::UnitType::DotsPerCentimeter);
-    table.set(String("dppx"), CSSPrimitiveValue::UnitType::DotsPerPixel);
-    table.set(String("vw"), CSSPrimitiveValue::UnitType::ViewportWidth);
-    table.set(String("vh"), CSSPrimitiveValue::UnitType::ViewportHeight);
-    table.set(String("vmin"), CSSPrimitiveValue::UnitType::ViewportMin);
-    table.set(String("vmax"), CSSPrimitiveValue::UnitType::ViewportMax);
-    table.set(String("rem"), CSSPrimitiveValue::UnitType::Rems);
-    table.set(String("fr"), CSSPrimitiveValue::UnitType::Fraction);
-    table.set(String("turn"), CSSPrimitiveValue::UnitType::Turns);
-    table.set(String("ch"), CSSPrimitiveValue::UnitType::Chs);
-    table.set(String("__qem"), CSSPrimitiveValue::UnitType::QuirkyEms);
-    return table;
-}
-
-StringToUnitTable& unitTable()
-{
-    DEFINE_STATIC_LOCAL(StringToUnitTable, unitTable, (createStringToUnitTable()));
-    return unitTable;
-}
-
 } // namespace
 
 float CSSPrimitiveValue::clampToCSSLengthRange(double value)
 {
     return clampTo<float>(value, minValueForCssLength, maxValueForCssLength);
-}
-
-void CSSPrimitiveValue::initUnitTable()
-{
-    // Make sure we initialize this during blink initialization
-    // to avoid racy static local initialization.
-    unitTable();
-}
-
-CSSPrimitiveValue::UnitType CSSPrimitiveValue::fromName(const String& unit)
-{
-    return unitTable().get(unit.lower());
 }
 
 CSSPrimitiveValue::UnitCategory CSSPrimitiveValue::unitTypeToUnitCategory(UnitType type)
@@ -151,6 +99,56 @@ bool CSSPrimitiveValue::colorIsDerivedFromElement() const
     default:
         return false;
     }
+}
+
+CSSPrimitiveValue* CSSPrimitiveValue::createIdentifier(CSSValueID valueID)
+{
+    CSSPrimitiveValue* cssValue = cssValuePool().identifierCacheValue(valueID);
+    if (!cssValue)
+        cssValue = cssValuePool().setIdentifierCacheValue(valueID, new CSSPrimitiveValue(valueID));
+    return cssValue;
+}
+
+CSSPrimitiveValue* CSSPrimitiveValue::create(double value, UnitType type)
+{
+    // TODO(timloh): This looks wrong.
+    if (std::isinf(value))
+        value = 0;
+
+    if (value < 0 || value > CSSValuePool::maximumCacheableIntegerValue)
+        return new CSSPrimitiveValue(value, type);
+
+    int intValue = static_cast<int>(value);
+    if (value != intValue)
+        return new CSSPrimitiveValue(value, type);
+
+    CSSValuePool& pool = cssValuePool();
+    CSSPrimitiveValue* result = nullptr;
+    switch (type) {
+    case CSSPrimitiveValue::UnitType::Pixels:
+        result = pool.pixelCacheValue(intValue);
+        if (!result)
+            result = pool.setPixelCacheValue(intValue, new CSSPrimitiveValue(value, type));
+        return result;
+    case CSSPrimitiveValue::UnitType::Percentage:
+        result = pool.percentCacheValue(intValue);
+        if (!result)
+            result = pool.setPercentCacheValue(intValue, new CSSPrimitiveValue(value, type));
+        return result;
+    case CSSPrimitiveValue::UnitType::Number:
+    case CSSPrimitiveValue::UnitType::Integer:
+        result = pool.numberCacheValue(intValue);
+        if (!result)
+            result = pool.setNumberCacheValue(intValue, new CSSPrimitiveValue(value, CSSPrimitiveValue::UnitType::Integer));
+        return result;
+    default:
+        return new CSSPrimitiveValue(value, type);
+    }
+}
+
+CSSPrimitiveValue* CSSPrimitiveValue::create(const Length& value, const ComputedStyle& style)
+{
+    return CSSPrimitiveValue::create(value, style.effectiveZoom());
 }
 
 using CSSTextCache = PersistentHeapHashMap<WeakMember<const CSSPrimitiveValue>, String>;
@@ -208,6 +206,7 @@ CSSPrimitiveValue::CSSPrimitiveValue(CSSValueID valueID)
     : CSSValue(PrimitiveClass)
 {
     init(UnitType::ValueID);
+    // TODO(sashab): Add a DCHECK_NE(valueID, CSSValueInvalid).
     m_value.valueID = valueID;
 }
 

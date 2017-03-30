@@ -6,7 +6,7 @@
 
 #include "ui/gl/gl_bindings.h"
 
-namespace gfx {
+namespace gl {
 
 GLFenceNV::GLFenceNV() {
   // What if either of these GL calls fails? TestFenceNV will return true.
@@ -49,8 +49,14 @@ void GLFenceNV::ServerWait() {
 }
 
 GLFenceNV::~GLFenceNV() {
-  DCHECK(glIsFenceNV(fence_));
-  glDeleteFencesNV(1, &fence_);
+  if (fence_) {
+    DCHECK(glIsFenceNV(fence_));
+    glDeleteFencesNV(1, &fence_);
+  }
 }
 
-}  // namespace gfx
+void GLFenceNV::Invalidate() {
+  fence_ = 0;
+}
+
+}  // namespace gl

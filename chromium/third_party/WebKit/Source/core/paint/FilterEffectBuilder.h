@@ -29,15 +29,16 @@
 #include "core/CoreExport.h"
 #include "platform/graphics/filters/FilterEffect.h"
 #include "platform/heap/Handle.h"
-#include "wtf/Vector.h"
 
 class SkPaint;
 
 namespace blink {
 
-class Filter;
-class FilterOperations;
 class Element;
+class FilterOperations;
+class ReferenceFilterOperation;
+class SVGFilterElement;
+class SVGFilterGraphNodeMap;
 
 class CORE_EXPORT FilterEffectBuilder final : public GarbageCollectedFinalized<FilterEffectBuilder> {
 public:
@@ -49,7 +50,10 @@ public:
     virtual ~FilterEffectBuilder();
     DECLARE_TRACE();
 
-    bool build(Element*, const FilterOperations&, float zoom, const FloatSize* referenceBoxSize = nullptr, const SkPaint* fillPaint = nullptr, const SkPaint* strokePaint = nullptr);
+    static Filter* buildReferenceFilter(const ReferenceFilterOperation&, const FloatSize* zoomedReferenceBoxSize, const SkPaint* fillPaint, const SkPaint* strokePaint, Element&, FilterEffect* previousEffect, float zoom);
+    static Filter* buildReferenceFilter(SVGFilterElement&, const FloatRect& referenceBox, const SkPaint* fillPaint, const SkPaint* strokePaint, FilterEffect* previousEffect, float zoom, SVGFilterGraphNodeMap* = nullptr);
+
+    bool build(Element*, const FilterOperations&, float zoom, const FloatSize* zoomedReferenceBoxSize = nullptr, const SkPaint* fillPaint = nullptr, const SkPaint* strokePaint = nullptr);
 
     FilterEffect* lastEffect() const
     {
@@ -60,7 +64,6 @@ private:
     FilterEffectBuilder();
 
     Member<FilterEffect> m_lastEffect;
-    HeapVector<Member<Filter>> m_referenceFilters;
 };
 
 } // namespace blink

@@ -24,6 +24,7 @@
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/texture_layer_client.h"
+#include "cc/resources/texture_mailbox.h"
 #include "content/common/content_export.h"
 #include "content/public/renderer/pepper_plugin_instance.h"
 #include "content/public/renderer/plugin_instance_throttler.h"
@@ -105,6 +106,7 @@ namespace content {
 class ContentDecryptorDelegate;
 class FullscreenContainer;
 class MessageChannel;
+class PepperAudioController;
 class PepperCompositorHost;
 class PepperGraphics2DHost;
 class PluginInstanceThrottlerImpl;
@@ -197,9 +199,18 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // slow path can also be triggered if there is an overlapping frame.
   void ScrollRect(int dx, int dy, const gfx::Rect& rect);
 
-  // Commit the backing texture to the screen once the side effects some
-  // rendering up to an offscreen SwapBuffers are visible.
-  void CommitBackingTexture();
+  // Commit the texture mailbox to the screen.
+  void CommitTextureMailbox(const cc::TextureMailbox& texture_mailbox);
+
+  // Passes the committed texture to |texture_layer_| and marks it as in use.
+  void PassCommittedTextureToTextureLayer();
+
+  // Callback when the compositor is finished consuming the committed texture.
+  void FinishedConsumingCommittedTexture(
+      const cc::TextureMailbox& texture_mailbox,
+      scoped_refptr<PPB_Graphics3D_Impl> graphics_3d,
+      const gpu::SyncToken& sync_token,
+      bool is_lost);
 
   // Called when the out-of-process plugin implementing this instance crashed.
   void InstanceCrashed();
@@ -219,8 +230,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   PP_Var GetInstanceObject(v8::Isolate* isolate);
   void ViewChanged(const gfx::Rect& window,
                    const gfx::Rect& clip,
-                   const gfx::Rect& unobscured,
-                   const std::vector<gfx::Rect>& cut_outs_rects);
+                   const gfx::Rect& unobscured);
 
   // Handlers for composition events.
   bool HandleCompositionStart(const base::string16& text);
@@ -259,7 +269,7 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   bool StartFind(const base::string16& search_text,
                  bool case_sensitive,
                  int identifier);
-  void SelectFindResult(bool forward);
+  void SelectFindResult(bool forward, int identifier);
   void StopFind();
 
   bool SupportsPrintInterface();
@@ -548,6 +558,10 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   void OnThrottleStateChange() override;
   void OnHiddenForPlaceholder(bool hidden) override;
 
+  PepperAudioController& audio_controller() {
+    return *audio_controller_;
+  }
+
  private:
   friend class base::RefCounted<PepperPluginInstanceImpl>;
   friend class PpapiPluginInstanceTest;
@@ -702,6 +716,28 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   void ConvertRectToDIP(PP_Rect* rect) const;
   void ConvertDIPToViewport(gfx::Rect* rect) const;
 
+  // Each time CommitTextureMailbox() is called, this instance is given
+  // ownership
+  // of a cc::TextureMailbox. This instance always needs to hold on to the most
+  // recently committed cc::TextureMailbox, since UpdateLayer() might require
+  // it.
+  // Since it is possible for a cc::TextureMailbox to be passed to
+  // texture_layer_ more than once, a reference counting mechanism is necessary
+  // to ensure that a cc::TextureMailbox isn't returned until all copies of it
+  // have been released by texture_layer_.
+  //
+  // This method should be called each time a cc::TextureMailbox is passed to
+  // |texture_layer_|. It increments an internal reference count.
+  void IncrementTextureReferenceCount(const cc::TextureMailbox& mailbox);
+
+  // This method should be called each time |texture_layer_| finishes consuming
+  // a cc::TextureMailbox. It decrements an internal reference count. Returns
+  // whether the last reference was removed.
+  bool DecrementTextureReferenceCount(const cc::TextureMailbox& mailbox);
+
+  // Whether a given cc::TextureMailbox is in use by |texture_layer_|.
+  bool IsTextureInUse(const cc::TextureMailbox& mailbox) const;
+
   RenderFrameImpl* render_frame_;
   scoped_refptr<PluginModule> module_;
   std::unique_ptr<ppapi::PPP_Instance_Combined> instance_interface_;
@@ -831,10 +867,6 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // Set to true if this plugin thinks it will always be on top. This allows us
   // to use a more optimized painting path in some cases.
   bool always_on_top_;
-  // Even if |always_on_top_| is true, the plugin is not fully visible if there
-  // are some cut-out areas (occupied by iframes higher in the stacking order).
-  // This information is used in the optimized painting path.
-  std::vector<gfx::Rect> cut_outs_rects_;
 
   // Implementation of PPB_FlashFullscreen.
 
@@ -932,7 +964,26 @@ class CONTENT_EXPORT PepperPluginInstanceImpl
   // The text that is currently selected in the plugin.
   base::string16 selected_text_;
 
+  // The most recently committed texture. This is kept around in case the layer
+  // needs to be regenerated.
+  cc::TextureMailbox committed_texture_;
+
+  // The Graphics3D that produced the most recently committed texture.
+  scoped_refptr<PPB_Graphics3D_Impl> committed_texture_graphics_3d_;
+
+  gpu::SyncToken committed_texture_consumed_sync_token_;
+
+  // Holds the number of references |texture_layer_| has to any given
+  // cc::TextureMailbox.
+  // We expect there to be no more than 10 textures in use at a time. A
+  // std::vector will have better performance than a std::map.
+  using TextureMailboxRefCount = std::pair<cc::TextureMailbox, int>;
+  std::vector<TextureMailboxRefCount> texture_ref_counts_;
+
   bool initialized_;
+
+  // The controller for all active audios of this pepper instance.
+  std::unique_ptr<PepperAudioController> audio_controller_;
 
   // We use a weak ptr factory for scheduling DidChangeView events so that we
   // can tell whether updates are pending and consolidate them. When there's

@@ -506,6 +506,10 @@ public class CronetHttpURLConnection extends HttpURLConnection {
             if (mInputStream != null) {
                 mInputStream.setResponseDataCompleted(exception);
             }
+            if (mOutputStream != null) {
+                mOutputStream.setRequestCompleted(exception);
+            }
+            mHasResponse = true;
             mMessageLoop.quit();
         }
     }

@@ -38,6 +38,8 @@ union ObjectUnion {
   array<int8> f_array_int8;
   map<string, int8> f_map_int8;
   PodUnion f_pod_union;
+  // Test that Clone() is defined after SmallStruct is declared.
+  array<SmallStruct> f_small_structs;
 };
 
 union HandleUnion {
@@ -47,6 +49,7 @@ union HandleUnion {
   handle<data_pipe_producer> f_data_pipe_producer;
   handle<shared_buffer> f_shared_buffer;
   SmallCache f_small_cache;
+  SmallCache& f_small_cache_request;
 };
 
 struct WrapperStruct {

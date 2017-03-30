@@ -23,9 +23,9 @@ _COMMAND_LINE_FLAGS_SUPPORTED = True
 
 _MAX_INLINE_FLAGS_LENGTH = 50  # Arbitrarily chosen.
 _EXTRA_COMMAND_LINE_FILE = (
-    'org.chromium.native_test.NativeTestActivity.CommandLineFile')
+    'org.chromium.native_test.NativeTest.CommandLineFile')
 _EXTRA_COMMAND_LINE_FLAGS = (
-    'org.chromium.native_test.NativeTestActivity.CommandLineFlags')
+    'org.chromium.native_test.NativeTest.CommandLineFlags')
 _EXTRA_TEST_LIST = (
     'org.chromium.native_test.NativeTestInstrumentationTestRunner'
         '.TestList')
@@ -202,7 +202,7 @@ class _ExeDelegate(object):
       pass
 
     output = device.RunShellCommand(
-        cmd, cwd=cwd, env=env, check_return=True, large_output=True, **kwargs)
+        cmd, cwd=cwd, env=env, check_return=False, large_output=True, **kwargs)
     return output
 
   def PullAppFiles(self, device, files, directory):
@@ -241,12 +241,16 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
 
       def push_test_data():
         # Push data dependencies.
-        external_storage = dev.GetExternalStoragePath()
+        device_root = posixpath.join(dev.GetExternalStoragePath(),
+                                     'chromium_tests_root')
         data_deps = self._test_instance.GetDataDependencies()
         host_device_tuples = [
-            (h, d if d is not None else external_storage)
+            (h, d if d is not None else device_root)
             for h, d in data_deps]
-        dev.PushChangedFiles(host_device_tuples)
+        dev.PushChangedFiles(host_device_tuples, delete_device_stale=True)
+        if not host_device_tuples:
+          dev.RunShellCommand(['rm', '-rf', device_root], check_return=True)
+          dev.RunShellCommand(['mkdir', '-p', device_root], check_return=True)
 
       def init_tool_and_start_servers():
         tool = self.GetTool(dev)
@@ -350,7 +354,7 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
 
     # Parse the output.
     # TODO(jbudorick): Transition test scripts away from parsing stdout.
-    results = self._test_instance.ParseGTestOutput(output)
+    results = gtest_test_instance.ParseGTestOutput(output)
 
     # Check whether there are any crashed testcases.
     self._crashes.update(r.GetName() for r in results

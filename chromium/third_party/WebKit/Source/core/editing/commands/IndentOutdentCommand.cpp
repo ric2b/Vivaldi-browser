@@ -54,12 +54,6 @@ static bool isHTMLListOrBlockquoteElement(const Node* node)
     return isHTMLUListElement(element) || isHTMLOListElement(element) || element.hasTagName(blockquoteTag);
 }
 
-static bool isInline(const Node* node)
-{
-    return node && node->layoutObject() && node->layoutObject()->isInline();
-}
-
-
 IndentOutdentCommand::IndentOutdentCommand(Document& document, EIndentType typeOfAction)
     : ApplyBlockElementCommand(document, blockquoteTag, "margin: 0 0 0 40px; border: none; padding: 0px;")
     , m_typeOfAction(typeOfAction)
@@ -88,7 +82,7 @@ bool IndentOutdentCommand::tryIndentingAsListItem(const Position& start, const P
     // We should calculate visible range in list item because inserting new
     // list element will change visibility of list item, e.g. :first-child
     // CSS selector.
-    HTMLElement* newList = toHTMLElement(document().createElement(listElement->tagQName(), false));
+    HTMLElement* newList = toHTMLElement(document().createElement(listElement->tagQName(), CreatedByCloneNode));
     insertNodeBefore(newList, selectedListItem, editingState);
     if (editingState->isAborted())
         return false;
@@ -99,7 +93,7 @@ bool IndentOutdentCommand::tryIndentingAsListItem(const Position& start, const P
     if (end.anchorNode() == selectedListItem || end.anchorNode()->isDescendantOf(selectedListItem->lastChild())) {
         moveParagraphWithClones(createVisiblePosition(start), createVisiblePosition(end), newList, selectedListItem, editingState);
     } else {
-        moveParagraphWithClones(createVisiblePosition(start), createVisiblePosition(Position::afterNode(selectedListItem->lastChild())), newList, selectedListItem, editingState);
+        moveParagraphWithClones(createVisiblePosition(start), VisiblePosition::afterNode(selectedListItem->lastChild()), newList, selectedListItem, editingState);
         if (editingState->isAborted())
             return false;
         removeNode(selectedListItem, editingState);
@@ -148,7 +142,7 @@ void IndentOutdentCommand::indentIntoBlockquote(const Position& start, const Pos
             insertNodeBefore(targetBlockquote, outerBlock, editingState);
         if (editingState->isAborted())
             return;
-        startOfContents = createVisiblePosition(Position::inParentAfterNode(*targetBlockquote));
+        startOfContents = VisiblePosition::inParentAfterNode(*targetBlockquote);
     }
 
     VisiblePosition endOfContents = createVisiblePosition(end);
@@ -181,7 +175,7 @@ void IndentOutdentCommand::outdentParagraph(EditingState* editingState)
     // If the blockquote is inline, the start of the enclosing block coincides with
     // positionInEnclosingBlock.
     VisiblePosition startOfEnclosingBlock = (enclosingElement->layoutObject() && enclosingElement->layoutObject()->isInline()) ? positionInEnclosingBlock : startOfBlock(positionInEnclosingBlock);
-    VisiblePosition lastPositionInEnclosingBlock = createVisiblePosition(Position::lastPositionInNode(enclosingElement));
+    VisiblePosition lastPositionInEnclosingBlock = VisiblePosition::lastPositionInNode(enclosingElement);
     VisiblePosition endOfEnclosingBlock = endOfBlock(lastPositionInEnclosingBlock);
     if (visibleStartOfParagraph.deepEquivalent() == startOfEnclosingBlock.deepEquivalent()
         && visibleEndOfParagraph.deepEquivalent() == endOfEnclosingBlock.deepEquivalent()) {
@@ -231,7 +225,7 @@ void IndentOutdentCommand::outdentParagraph(EditingState* editingState)
     insertNodeBefore(placeholder, splitBlockquoteNode, editingState);
     if (editingState->isAborted())
         return;
-    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, createVisiblePosition(positionBeforeNode(placeholder)), editingState, true);
+    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, VisiblePosition::beforeNode(placeholder), editingState, PreserveSelection);
 }
 
 // FIXME: We should merge this function with ApplyBlockElementCommand::formatSelection

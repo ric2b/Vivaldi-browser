@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.snackbar;
 
+import android.app.Activity;
 import android.os.Handler;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -61,7 +62,7 @@ public class SnackbarManager implements OnClickListener {
     private static int sSnackbarDurationMs = DEFAULT_SNACKBAR_DURATION_MS;
     private static int sAccessibilitySnackbarDurationMs = ACCESSIBILITY_MODE_SNACKBAR_DURATION_MS;
 
-    private ViewGroup mParentView;
+    private Activity mActivity;
     private SnackbarView mView;
     private final Handler mUIThreadHandler;
     private SnackbarCollection mSnackbars = new SnackbarCollection();
@@ -77,10 +78,10 @@ public class SnackbarManager implements OnClickListener {
 
     /**
      * Constructs a SnackbarManager to show snackbars in the given window.
-     * @param rootView The main view (e.g. android.R.id.content) of the embedding activity.
+     * @param activity The embedding activity.
      */
-    public SnackbarManager(ViewGroup rootView) {
-        mParentView = rootView;
+    public SnackbarManager(Activity activity) {
+        mActivity = activity;
         mUIThreadHandler = new Handler();
     }
 
@@ -146,6 +147,19 @@ public class SnackbarManager implements OnClickListener {
     }
 
     /**
+     * Temporarily changes the parent {@link ViewGroup} of the snackbar. If a snackbar is currently
+     * showing, this method removes the snackbar from its original parent, and attaches it to the
+     * given parent. If <code>null</code> is given, the snackbar will be reattached to its original
+     * parent.
+     *
+     * @param overridingParent The temporary parent of the snackbar. If null, previous calls of this
+     *                         method will be reverted.
+     */
+    public void overrideParent(ViewGroup overridingParent) {
+        if (mView != null) mView.overrideParent(overridingParent);
+    }
+
+    /**
      * @return Whether there is a snackbar on screen.
      */
     public boolean isShowing() {
@@ -168,7 +182,7 @@ public class SnackbarManager implements OnClickListener {
         } else {
             boolean viewChanged = true;
             if (mView == null) {
-                mView = new SnackbarView(mParentView, this, currentSnackbar);
+                mView = new SnackbarView(mActivity, this, currentSnackbar);
                 mView.show();
             } else {
                 viewChanged = mView.update(currentSnackbar);
@@ -187,7 +201,7 @@ public class SnackbarManager implements OnClickListener {
     private int getDuration(Snackbar snackbar) {
         int durationMs = snackbar.getDuration();
         if (durationMs == 0) {
-            durationMs = DeviceClassManager.isAccessibilityModeEnabled(mParentView.getContext())
+            durationMs = DeviceClassManager.isAccessibilityModeEnabled(mActivity)
                     ? sAccessibilitySnackbarDurationMs : sSnackbarDurationMs;
         }
         return durationMs;

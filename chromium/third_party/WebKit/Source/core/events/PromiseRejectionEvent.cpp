@@ -17,6 +17,7 @@ PromiseRejectionEvent::PromiseRejectionEvent(ScriptState* state, const AtomicStr
     : Event(type, initializer)
     , m_scriptState(state)
 {
+    ThreadState::current()->registerPreFinalizer(this);
     ASSERT(initializer.hasPromise());
     m_promise.set(initializer.promise().isolate(), initializer.promise().v8Value());
     m_promise.setWeak(this, &PromiseRejectionEvent::didCollectPromise);
@@ -28,6 +29,15 @@ PromiseRejectionEvent::PromiseRejectionEvent(ScriptState* state, const AtomicStr
 
 PromiseRejectionEvent::~PromiseRejectionEvent()
 {
+}
+
+void PromiseRejectionEvent::dispose()
+{
+    // Clear ScopedPersistents so that V8 doesn't call phantom callbacks
+    // (and touch the ScopedPersistents) after Oilpan starts lazy sweeping.
+    m_promise.clear();
+    m_reason.clear();
+    m_scriptState.clear();
 }
 
 ScriptPromise PromiseRejectionEvent::promise(ScriptState* state) const
@@ -71,6 +81,12 @@ bool PromiseRejectionEvent::canBeDispatchedInWorld(const DOMWrapperWorld& world)
 DEFINE_TRACE(PromiseRejectionEvent)
 {
     Event::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(PromiseRejectionEvent)
+{
+    visitor->traceWrappers(&m_promise);
+    visitor->traceWrappers(&m_reason);
 }
 
 void PromiseRejectionEvent::didCollectPromise(const v8::WeakCallbackInfo<PromiseRejectionEvent>& data)

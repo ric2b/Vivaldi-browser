@@ -4,6 +4,9 @@
 
 #include "content/browser/gpu/gpu_data_manager_impl_private.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -13,7 +16,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
-#include "base/sys_info.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -47,10 +49,11 @@
 #include "base/win/windows_version.h"
 #endif  // OS_WIN
 #if defined(OS_ANDROID)
+#include "media/base/media_switches.h"
 #include "ui/gfx/android/device_display_info.h"
 #endif  // OS_ANDROID
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
-#include "content/common/mojo/mojo_shell_connection_impl.h"
+#include "services/shell/runner/common/client_util.h"
 #endif
 
 namespace content {
@@ -72,6 +75,9 @@ enum WinSubVersion {
   kWinVista,
   kWin7,
   kWin8,
+  kWin8_1,
+  kWin10,
+  kWin10_TH2,
   kNumWinSubVersions
 };
 
@@ -79,21 +85,28 @@ int GetGpuBlacklistHistogramValueWin(GpuFeatureStatus status) {
   static WinSubVersion sub_version = kNumWinSubVersions;
   if (sub_version == kNumWinSubVersions) {
     sub_version = kWinOthers;
-    std::string version_str = base::SysInfo::OperatingSystemVersion();
-    size_t pos = version_str.find_first_not_of("0123456789.");
-    if (pos != std::string::npos)
-      version_str = version_str.substr(0, pos);
-    Version os_version(version_str);
-    if (os_version.IsValid() && os_version.components().size() >= 2) {
-      const std::vector<uint32_t>& version_numbers = os_version.components();
-      if (version_numbers[0] == 5)
-        sub_version = kWinXP;
-      else if (version_numbers[0] == 6 && version_numbers[1] == 0)
-        sub_version = kWinVista;
-      else if (version_numbers[0] == 6 && version_numbers[1] == 1)
+    switch (base::win::GetVersion()) {
+      case base::win::VERSION_PRE_XP:
+      case base::win::VERSION_XP:
+      case base::win::VERSION_SERVER_2003:
+      case base::win::VERSION_VISTA:
+      case base::win::VERSION_WIN_LAST:
+        break;
+      case base::win::VERSION_WIN7:
         sub_version = kWin7;
-      else if (version_numbers[0] == 6 && version_numbers[1] == 2)
+        break;
+      case base::win::VERSION_WIN8:
         sub_version = kWin8;
+        break;
+      case base::win::VERSION_WIN8_1:
+        sub_version = kWin8_1;
+        break;
+      case base::win::VERSION_WIN10:
+        sub_version = kWin10;
+        break;
+      case base::win::VERSION_WIN10_TH2:
+        sub_version = kWin10_TH2;
+        break;
     }
   }
   int entry_index = static_cast<int>(sub_version) * kGpuFeatureNumStatus;
@@ -258,7 +271,7 @@ enum BlockStatusHistogram {
 bool ShouldDisableHardwareAcceleration() {
 #if defined(MOJO_SHELL_CLIENT) && defined(USE_AURA)
   // TODO(rjkroege): Remove this when https://crbug.com/602519 is fixed.
-  if (IsRunningInMojoShell())
+  if (shell::ShellIsRemote())
     return true;
 #endif
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -515,8 +528,11 @@ void GpuDataManagerImplPrivate::Initialize() {
   }
 
   gpu::GPUInfo gpu_info;
-  if (command_line->GetSwitchValueASCII(
-          switches::kUseGL) == gfx::kGLImplementationOSMesaName) {
+  const bool force_osmesa =
+      (command_line->GetSwitchValueASCII(switches::kUseGL) ==
+       gl::kGLImplementationOSMesaName) ||
+      command_line->HasSwitch(switches::kOverrideUseGLWithOSMesaForTests);
+  if (force_osmesa) {
     // If using the OSMesa GL implementation, use fake vendor and device ids to
     // make sure it never gets blacklisted. This is better than simply
     // cancelling GPUInfo gathering as it allows us to proceed with loading the
@@ -527,7 +543,11 @@ void GpuDataManagerImplPrivate::Initialize() {
 
     // Also declare the driver_vendor to be osmesa to be able to specify
     // exceptions based on driver_vendor==osmesa for some blacklist rules.
-    gpu_info.driver_vendor = gfx::kGLImplementationOSMesaName;
+    gpu_info.driver_vendor = gl::kGLImplementationOSMesaName;
+
+    // We are not going to call CollectBasicGraphicsInfo.
+    // So mark it as collected.
+    gpu_info.basic_info_state = gpu::kCollectInfoSuccess;
   } else {
     TRACE_EVENT0("startup",
       "GpuDataManagerImpl::Initialize:CollectBasicGraphicsInfo");
@@ -694,8 +714,8 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
               IsFeatureBlacklisted(
                   gpu::GPU_FEATURE_TYPE_ACCELERATED_2D_CANVAS)) &&
              (use_gl == "any")) {
-    command_line->AppendSwitchASCII(
-        switches::kUseGL, gfx::kGLImplementationOSMesaName);
+    command_line->AppendSwitchASCII(switches::kUseGL,
+                                    gl::kGLImplementationOSMesaName);
   } else if (!use_gl.empty()) {
     command_line->AppendSwitchASCII(switches::kUseGL, use_gl);
   }
@@ -726,6 +746,14 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
       command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
     }
   }
+
+#if defined(OS_ANDROID)
+  if (command_line->HasSwitch(switches::kEnableThreadedTextureMailboxes) &&
+      IsDriverBugWorkaroundActive(gpu::AVDA_NO_EGLIMAGE_FOR_LUMINANCE_TEX)) {
+    command_line->AppendSwitch(switches::kDisableUnifiedMediaPipeline);
+  }
+#endif
+
 #if defined(ENABLE_WEBRTC)
   if (IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_ACCELERATED_VIDEO_ENCODE) &&
       !command_line->HasSwitch(switches::kDisableWebRtcHWEncoding)) {
@@ -902,11 +930,11 @@ void GpuDataManagerImplPrivate::ProcessCrashed(
 base::ListValue* GpuDataManagerImplPrivate::GetLogMessages() const {
   base::ListValue* value = new base::ListValue;
   for (size_t ii = 0; ii < log_messages_.size(); ++ii) {
-    base::DictionaryValue* dict = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetInteger("level", log_messages_[ii].level);
     dict->SetString("header", log_messages_[ii].header);
     dict->SetString("message", log_messages_[ii].message);
-    value->Append(dict);
+    value->Append(std::move(dict));
   }
   return value;
 }
@@ -923,6 +951,16 @@ void GpuDataManagerImplPrivate::HandleGpuSwitch() {
 
 bool GpuDataManagerImplPrivate::UpdateActiveGpu(uint32_t vendor_id,
                                                 uint32_t device_id) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+
+  // For tests, only the gpu process is allowed to detect the active gpu device
+  // using information on the actual loaded GL driver.
+  if (command_line->HasSwitch(switches::kGpuTestingVendorId) &&
+      command_line->HasSwitch(switches::kGpuTestingDeviceId)) {
+    return false;
+  }
+
   if (gpu_info_.gpu.vendor_id == vendor_id &&
       gpu_info_.gpu.device_id == device_id) {
     // The primary GPU is active.

@@ -29,12 +29,11 @@
 #include "modules/ModulesExport.h"
 #include "platform/audio/AudioBus.h"
 #include "wtf/Forward.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/ThreadSafeRefCounted.h"
 #include "wtf/Vector.h"
 #include "wtf/build_config.h"
+#include <memory>
 
 #define DEBUG_AUDIONODE_REFERENCES 0
 
@@ -217,6 +216,7 @@ public:
     AudioBus::ChannelInterpretation internalChannelInterpretation() const { return m_channelInterpretation; }
 
     void updateChannelCountMode();
+    void updateChannelInterpretation();
 
 protected:
     // Inputs and outputs must be created before the AudioHandler is
@@ -251,8 +251,8 @@ private:
     UntracedMember<AbstractAudioContext> m_context;
 
     float m_sampleRate;
-    Vector<OwnPtr<AudioNodeInput>> m_inputs;
-    Vector<OwnPtr<AudioNodeOutput>> m_outputs;
+    Vector<std::unique_ptr<AudioNodeInput>> m_inputs;
+    Vector<std::unique_ptr<AudioNodeOutput>> m_outputs;
 
     double m_lastProcessingTime;
     double m_lastNonSilentTime;
@@ -273,6 +273,10 @@ protected:
     // The new channel count mode that will be used to set the actual mode in the pre or post
     // rendering phase.
     ChannelCountMode m_newChannelCountMode;
+    // The new channel interpretation that will be used to set the actual
+    // intepretation in the pre or post rendering phase.
+    AudioBus::ChannelInterpretation m_newChannelInterpretation;
+
 };
 
 class MODULES_EXPORT AudioNode : public EventTargetWithInlineData {

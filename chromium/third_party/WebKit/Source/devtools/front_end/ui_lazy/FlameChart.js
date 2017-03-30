@@ -501,6 +501,15 @@ WebInspector.FlameChart.prototype = {
     },
 
     /**
+     * @override
+     * @return {!Array.<!Element>}
+     */
+    elementsToRestoreScrollPositionsFor: function()
+    {
+        return [this._vScrollElement];
+    },
+
+    /**
      * @param {number} entryIndex
      */
     highlightEntry: function(entryIndex)
@@ -1301,7 +1310,7 @@ WebInspector.FlameChart.prototype = {
             context.fill();
         }
 
-        context.strokeStyle = "rgb(0, 0, 0)";
+        context.strokeStyle = "rgba(0, 0, 0, 0.2)";
         context.beginPath();
         for (var m = 0; m < nextMarkerIndex; ++m) {
             var entryIndex = markerIndices[m];
@@ -1504,7 +1513,7 @@ WebInspector.FlameChart.prototype = {
      */
     _labelWidthForGroup: function(context, group)
     {
-       return this._measureWidth(context, group.name) + this._expansionArrowIndent * (group.style.nestingLevel + 1) + 2 * this._headerLabelXPadding;
+        return this._measureWidth(context, group.name) + this._expansionArrowIndent * (group.style.nestingLevel + 1) + 2 * this._headerLabelXPadding;
     },
 
     /**
@@ -1828,7 +1837,7 @@ WebInspector.FlameChart.prototype = {
      */
     _levelToHeight: function(level)
     {
-         return this._visibleLevelOffsets[level];
+        return this._visibleLevelOffsets[level];
     },
 
     /**
@@ -1941,6 +1950,10 @@ WebInspector.FlameChart.prototype = {
     {
         this._totalHeight = this._levelToHeight(this._dataProvider.maxStackDepth());
         this._vScrollContent.style.height = this._totalHeight + "px";
+        if (this._scrollTop + this._offsetHeight > this._totalHeight) {
+            this._scrollTop = Math.max(0, this._totalHeight - this._offsetHeight);
+            this._vScrollElement.scrollTop = this._scrollTop;
+        }
     },
 
     onResize: function()
@@ -1995,6 +2008,7 @@ WebInspector.FlameChart.prototype = {
     reset: function()
     {
         this._vScrollElement.scrollTop = 0;
+        this._scrollTop = 0;
         this._highlightedMarkerIndex = -1;
         this._highlightedEntryIndex = -1;
         this._selectedEntryIndex = -1;

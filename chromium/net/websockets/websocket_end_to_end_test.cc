@@ -25,10 +25,10 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/auth.h"
 #include "net/base/proxy_delegate.h"
-#include "net/base/test_data_directory.h"
 #include "net/proxy/proxy_service.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/test_data_directory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "net/websockets/websocket_channel.h"
 #include "net/websockets/websocket_event_interface.h"
@@ -224,9 +224,6 @@ class TestProxyDelegateWithProxyInfo : public ProxyDelegate {
                                 const HostPortPair& proxy_server,
                                 int net_error) override {}
   void OnFallback(const ProxyServer& bad_proxy, int net_error) override {}
-  void OnBeforeSendHeaders(URLRequest* request,
-                           const ProxyInfo& proxy_info,
-                           HttpRequestHeaders* headers) override {}
   void OnBeforeTunnelRequest(const HostPortPair& proxy_server,
                              HttpRequestHeaders* extra_headers) override {}
   void OnTunnelHeadersReceived(
@@ -273,7 +270,7 @@ class WebSocketEndToEndTest : public ::testing::Test {
     channel_.reset(
         new WebSocketChannel(base::WrapUnique(event_interface_), &context_));
     channel_->SendAddChannelRequest(GURL(socket_url), sub_protocols_, origin,
-                                    first_party_for_cookies);
+                                    first_party_for_cookies, "");
     event_interface_->WaitForResponse();
     return !event_interface_->failed();
   }

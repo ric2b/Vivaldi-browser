@@ -46,6 +46,9 @@
 [submodule "third_party/catapult"]
 	path = third_party/catapult
 	url = ../../external/github.com/catapult-project/catapult.git
+[submodule "third_party/ced/src"]
+	path = third_party/ced/src
+	url = ../../external/github.com/google/compact_enc_det.git
 [submodule "third_party/chromite"]
 	path = third_party/chromite
 	url = ../../chromiumos/chromite.git
@@ -58,9 +61,6 @@
 [submodule "third_party/cros_system_api"]
 	path = third_party/cros_system_api
 	url = ../../chromiumos/platform/system_api.git
-[submodule "third_party/deqp/src"]
-	path = third_party/deqp/src
-	url = ../../android/platform/external/deqp.git
 [submodule "third_party/dom_distiller_js/dist"]
 	path = third_party/dom_distiller_js/dist
 	url = ../../external/github.com/chromium/dom-distiller-dist.git
@@ -94,6 +94,9 @@
 [submodule "third_party/gperf"]
 	path = third_party/gperf
 	url = ../deps/gperf.git
+[submodule "third_party/grpc"]
+	path = third_party/grpc
+	url = ../../external/github.com/grpc/grpc.git
 [submodule "third_party/hunspell_dictionaries"]
 	path = third_party/hunspell_dictionaries
 	url = ../deps/hunspell_dictionaries.git
@@ -184,9 +187,6 @@
 [submodule "third_party/re2/src"]
 	path = third_party/re2/src
 	url = ../../external/github.com/google/re2.git
-[submodule "third_party/safe_browsing/testing"]
-	path = third_party/safe_browsing/testing
-	url = ../../external/google-safe-browsing/testing.git
 [submodule "third_party/scons-2.0.1"]
 	path = third_party/scons-2.0.1
 	url = ../../native_client/src/third_party/scons-2.0.1.git

@@ -18,10 +18,12 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_item_model.h"
@@ -59,8 +61,7 @@
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
-#include "ui/views/animation/ink_drop_delegate.h"
-#include "ui/views/animation/ink_drop_hover.h"
+#include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -151,6 +152,23 @@ class SeparatorBorder : public views::Border {
 
 }  // namespace
 
+// Allows the DownloadItemViewMd to control the InkDrop on the drop down button.
+class DownloadItemViewMd::DropDownButton : public BarControlButton {
+ public:
+  explicit DropDownButton(views::ButtonListener* listener)
+      : BarControlButton(listener) {}
+  ~DropDownButton() override {}
+
+  // Promoted visibility to public.
+  void AnimateInkDrop(views::InkDropState state) {
+    // TODO(bruthig): Plumb in the proper Event.
+    BarControlButton::AnimateInkDrop(state, nullptr /* event */);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(DropDownButton);
+};
+
 DownloadItemViewMd::DownloadItemViewMd(DownloadItem* download_item,
                                        DownloadShelfView* parent)
     : shelf_(parent),
@@ -160,16 +178,16 @@ DownloadItemViewMd::DownloadItemViewMd(DownloadItem* download_item,
       dragging_(false),
       starting_drag_(false),
       model_(download_item),
-      ink_drop_delegate_(this, this),
       save_button_(nullptr),
       discard_button_(nullptr),
-      dropdown_button_(new BarControlButton(this)),
+      dropdown_button_(new DropDownButton(this)),
       dangerous_download_label_(nullptr),
       dangerous_download_label_sized_(false),
       disabled_while_opening_(false),
       creation_time_(base::Time::Now()),
       time_download_warning_shown_(base::Time()),
       weak_ptr_factory_(this) {
+  SetHasInkDrop(ui::MaterialDesignController::IsModeMaterial());
   DCHECK(download());
   DCHECK(ui::MaterialDesignController::IsModeMaterial());
   download()->AddObserver(this);
@@ -309,7 +327,7 @@ void DownloadItemViewMd::OnDownloadDestroyed(DownloadItem* download) {
 void DownloadItemViewMd::OnDownloadOpened(DownloadItem* download) {
   disabled_while_opening_ = true;
   SetEnabled(false);
-  base::MessageLoop::current()->task_runner()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&DownloadItemViewMd::Reenable, weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kDisabledOnOpenDuration));
@@ -392,7 +410,7 @@ bool DownloadItemViewMd::OnMouseDragged(const ui::MouseEvent& event) {
   if (!starting_drag_) {
     starting_drag_ = true;
     drag_start_point_ = event.location();
-    ink_drop_delegate_.OnAction(views::InkDropState::HIDDEN);
+    AnimateInkDrop(views::InkDropState::HIDDEN, &event);
   }
   if (dragging_) {
     if (download()->GetState() == DownloadItem::COMPLETE) {
@@ -432,8 +450,7 @@ bool DownloadItemViewMd::OnKeyPressed(const ui::KeyEvent& event) {
 
   if (event.key_code() == ui::VKEY_SPACE ||
       event.key_code() == ui::VKEY_RETURN) {
-    ink_drop_delegate_.set_last_ink_drop_location(
-        GetLocalBounds().CenterPoint());
+    AnimateInkDrop(views::InkDropState::ACTION_TRIGGERED, nullptr /* &event */);
     // OpenDownload may delete this, so don't add any code after this line.
     OpenDownload();
     return true;
@@ -477,18 +494,20 @@ void DownloadItemViewMd::AddInkDropLayer(ui::Layer* ink_drop_layer) {
 std::unique_ptr<views::InkDropRipple> DownloadItemViewMd::CreateInkDropRipple()
     const {
   return base::WrapUnique(new views::FloodFillInkDropRipple(
-      GetLocalBounds(), ink_drop_delegate_.last_ink_drop_location(),
-      color_utils::DeriveDefaultIconColor(GetTextColor())));
+      GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
+      color_utils::DeriveDefaultIconColor(GetTextColor()),
+      ink_drop_visible_opacity()));
 }
 
-std::unique_ptr<views::InkDropHover> DownloadItemViewMd::CreateInkDropHover()
-    const {
+std::unique_ptr<views::InkDropHighlight>
+DownloadItemViewMd::CreateInkDropHighlight() const {
   if (IsShowingWarningDialog())
     return nullptr;
 
   gfx::Size size = GetPreferredSize();
-  return base::WrapUnique(new views::InkDropHover(
-      size, kInkDropSmallCornerRadius, gfx::Rect(size).CenterPoint(),
+  return base::WrapUnique(new views::InkDropHighlight(
+      size, kInkDropSmallCornerRadius,
+      gfx::RectF(gfx::SizeF(size)).CenterPoint(),
       color_utils::DeriveDefaultIconColor(GetTextColor())));
 }
 
@@ -605,7 +624,7 @@ void DownloadItemViewMd::OnPaint(gfx::Canvas* canvas) {
   OnPaintBorder(canvas);
 
   if (HasFocus())
-    views::CustomButton::PaintMdFocusRing(canvas, this);
+    views::MdTextButton::PaintMdFocusRing(canvas, this, 1, SK_AlphaOPAQUE);
 }
 
 int DownloadItemViewMd::GetYForFilenameText() const {
@@ -740,7 +759,6 @@ void DownloadItemViewMd::OpenDownload() {
                            base::Time::Now() - creation_time_);
 
   UpdateAccessibleName();
-  ink_drop_delegate_.OnAction(views::InkDropState::ACTION_TRIGGERED);
 
   // Calling download()->OpenDownload may delete this, so this must be
   // the last thing we do.
@@ -794,10 +812,16 @@ void DownloadItemViewMd::UpdateColorsFromTheme() {
   if (!GetThemeProvider())
     return;
 
-  if (dangerous_download_label_)
-    dangerous_download_label_->SetEnabledColor(GetTextColor());
   SetBorder(base::WrapUnique(new SeparatorBorder(GetThemeProvider()->GetColor(
       ThemeProperties::COLOR_TOOLBAR_VERTICAL_SEPARATOR))));
+
+  SkColor text_color = GetTextColor();
+  if (dangerous_download_label_)
+    dangerous_download_label_->SetEnabledColor(text_color);
+  if (save_button_)
+    save_button_->SetEnabledTextColors(text_color);
+  if (discard_button_)
+    discard_button_->SetEnabledTextColors(text_color);
 }
 
 void DownloadItemViewMd::ShowContextMenuImpl(const gfx::Rect& rect,
@@ -816,7 +840,7 @@ void DownloadItemViewMd::ShowContextMenuImpl(const gfx::Rect& rect,
   // Post a task to release the button.  When we call the Run method on the menu
   // below, it runs an inner message loop that might cause us to be deleted.
   // Posting a task with a WeakPtr lets us safely handle the button release.
-  base::MessageLoop::current()->task_runner()->PostNonNestableTask(
+  base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
       FROM_HERE, base::Bind(&DownloadItemViewMd::ReleaseDropdown,
                             weak_ptr_factory_.GetWeakPtr()));
 
@@ -828,8 +852,8 @@ void DownloadItemViewMd::ShowContextMenuImpl(const gfx::Rect& rect,
 
 void DownloadItemViewMd::HandlePressEvent(const ui::LocatedEvent& event,
                                           bool active_event) {
-  // The event should not activate us in dangerous mode.
-  if (mode_ == DANGEROUS_MODE)
+  // The event should not activate us in dangerous/malicious mode.
+  if (IsShowingWarningDialog())
     return;
 
   // Stop any completion animation.
@@ -840,18 +864,16 @@ void DownloadItemViewMd::HandlePressEvent(const ui::LocatedEvent& event,
   if (!active_event)
     return;
 
-  ink_drop_delegate_.set_last_ink_drop_location(event.location());
-  ink_drop_delegate_.OnAction(views::InkDropState::ACTION_PENDING);
+  AnimateInkDrop(views::InkDropState::ACTION_PENDING, &event);
 }
 
 void DownloadItemViewMd::HandleClickEvent(const ui::LocatedEvent& event,
                                           bool active_event) {
-  // Mouse should not activate us in dangerous mode.
-  if (mode_ == DANGEROUS_MODE)
-    return;
-
+  // The event should not activate us in dangerous/malicious mode.
   if (!active_event || IsShowingWarningDialog())
     return;
+
+  AnimateInkDrop(views::InkDropState::ACTION_TRIGGERED, &event);
 
   // OpenDownload may delete this, so don't add any code after this line.
   OpenDownload();
@@ -869,9 +891,9 @@ void DownloadItemViewMd::SetDropdownState(State new_state) {
                           : gfx::VectorIconId::FIND_PREV,
       base::Bind(&DownloadItemViewMd::GetTextColor, base::Unretained(this)));
   if (new_state != dropdown_state_) {
-    dropdown_button_->ink_drop_delegate()->OnAction(
-        new_state == PUSHED ? views::InkDropState::ACTIVATED
-                            : views::InkDropState::DEACTIVATED);
+    dropdown_button_->AnimateInkDrop(new_state == PUSHED
+                                         ? views::InkDropState::ACTIVATED
+                                         : views::InkDropState::DEACTIVATED);
   }
   dropdown_button_->OnThemeChanged();
   dropdown_state_ = new_state;
@@ -895,7 +917,7 @@ void DownloadItemViewMd::ToggleWarningDialog() {
 void DownloadItemViewMd::ClearWarningDialog() {
   DCHECK(download()->GetDangerType() ==
          content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED);
-  DCHECK(mode_ == DANGEROUS_MODE || mode_ == MALICIOUS_MODE);
+  DCHECK(IsShowingWarningDialog());
 
   mode_ = NORMAL_MODE;
   dropdown_state_ = NORMAL;

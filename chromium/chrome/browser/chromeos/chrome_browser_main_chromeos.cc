@@ -10,7 +10,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -77,6 +77,7 @@
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/status/data_promo_notification.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
+#include "chrome/browser/chromeos/ui/low_disk_notification.h"
 #include "chrome/browser/chromeos/upgrade_detector_chromeos.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -141,6 +142,7 @@
 #include "net/socket/ssl_server_socket.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "printing/backend/print_backend.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/touch/touch_device.h"
@@ -155,10 +157,6 @@
 #include "chrome/browser/chromeos/device_uma.h"
 #include "chrome/browser/chromeos/events/system_key_event_listener.h"
 #include "chrome/browser/chromeos/events/xinput_hierarchy_changed_event_listener.h"
-#endif
-
-#if defined(MOJO_SHELL_CLIENT)
-#include "chrome/browser/chromeos/chrome_interface_factory.h"
 #endif
 
 namespace chromeos {
@@ -382,13 +380,6 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopStart() {
 // Threads are initialized between MainMessageLoopStart and MainMessageLoopRun.
 // about_flags settings are applied in ChromeBrowserMainParts::PreCreateThreads.
 void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
-#if defined(MOJO_SHELL_CLIENT)
-  if (chrome::IsRunningInMash()) {
-    content::MojoShellConnection::Get()->AddListener(
-        base::WrapUnique(new ChromeInterfaceFactory));
-  }
-#endif
-
   // Set the crypto thread after the IO thread has been created/started.
   TPMTokenLoader::Get()->SetCryptoTaskRunner(
       content::BrowserThread::GetMessageLoopProxyForThread(
@@ -515,6 +506,10 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
       ShouldAutoLaunchKioskApp(parsed_command_line())) {
     WizardController::SetZeroDelays();
   }
+
+  // Enable/disable native CUPS integration
+  printing::PrintBackend::SetNativeCupsEnabled(
+      parsed_command_line().HasSwitch(::switches::kEnableNativeCups));
 
   power_prefs_.reset(new PowerPrefs(PowerPolicyController::Get()));
 
@@ -691,6 +686,9 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
     arc::ArcServiceManager::Get()->OnAshStarted();
   }
 
+  // Start watching for low disk space events to notify the user.
+  low_disk_notification_.reset(new LowDiskNotification());
+
   ChromeBrowserMainPartsLinux::PostProfileInit();
 }
 
@@ -799,6 +797,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   wake_on_wifi_manager_.reset();
   ScreenLocker::ShutDownClass();
   keyboard_event_rewriters_.reset();
+  low_disk_notification_.reset();
 #if defined(USE_X11)
   // The XInput2 event listener needs to be shut down earlier than when
   // Singletons are finally destroyed in AtExitManager.

@@ -28,6 +28,7 @@ bool SavedpasswordsGetListFunction::RunAsync() {
 }
 
 SavedpasswordsGetListFunction::~SavedpasswordsGetListFunction() {
+  Respond(ArgumentList(std::move(results_)));
 }
 
 Profile* SavedpasswordsGetListFunction::GetProfile() {
@@ -76,7 +77,6 @@ void SavedpasswordsGetListFunction::SendAsyncResponse() {
 }
 
 void SavedpasswordsGetListFunction::SendResponseToCallback() {
-  SendResponse(true);
   Release();  // Balanced in RunAsync().
 }
 

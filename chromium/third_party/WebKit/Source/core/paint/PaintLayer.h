@@ -60,7 +60,8 @@
 #include "platform/graphics/SquashingDisallowedReasons.h"
 #include "public/platform/WebBlendMode.h"
 #include "wtf/Allocator.h"
-#include "wtf/OwnPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -99,7 +100,7 @@ struct PaintLayerRareData {
     // Our current relative position offset.
     LayoutSize offsetForInFlowPosition;
 
-    OwnPtr<TransformationMatrix> transform;
+    std::unique_ptr<TransformationMatrix> transform;
 
     // Pointer to the enclosing Layer that caused us to be paginated. It is 0 if we are not paginated.
     //
@@ -124,16 +125,16 @@ struct PaintLayerRareData {
 
     // If the layer paints into its own backings, this keeps track of the backings.
     // It's nullptr if the layer is not composited or paints into grouped backing.
-    OwnPtr<CompositedLayerMapping> compositedLayerMapping;
+    std::unique_ptr<CompositedLayerMapping> compositedLayerMapping;
 
     // If the layer paints into grouped backing (i.e. squashed), this points to the
     // grouped CompositedLayerMapping. It's null if the layer is not composited or
     // paints into its own backing.
     CompositedLayerMapping* groupedMapping;
 
-    OwnPtr<PaintLayerReflectionInfo> reflectionInfo;
+    std::unique_ptr<PaintLayerReflectionInfo> reflectionInfo;
 
-    OwnPtr<PaintLayerFilterInfo> filterInfo;
+    Persistent<PaintLayerFilterInfo> filterInfo;
 
     // The accumulated subpixel offset of a composited layer's composited bounds compared to absolute coordinates.
     LayoutSize subpixelAccumulation;
@@ -305,10 +306,9 @@ public:
     // True if this layer container layoutObjects that paint.
     bool hasNonEmptyChildLayoutObjects() const;
 
-    // Will ensure that hasNonCompositiedChild are up to date.
+    // Will ensure that isAllScrollingContentComposited() is up to date.
     void updateScrollingStateAfterCompositingChange();
-    bool hasVisibleNonLayerContent() const { return m_hasVisibleNonLayerContent; }
-    bool hasNonCompositedChild() const { ASSERT(isAllowedToQueryCompositingState()); return m_hasNonCompositedChild; }
+    bool isAllScrollingContentComposited() const { return m_isAllScrollingContentComposited; }
 
     // Gets the ancestor layer that serves as the containing block of this layer. This is either
     // another out of flow positioned layer, or one that contains paint.
@@ -402,11 +402,11 @@ public:
     // Note that this transform does not have the perspective-origin baked in.
     TransformationMatrix perspectiveTransform() const;
     FloatPoint perspectiveOrigin() const;
-    bool preserves3D() const { return layoutObject()->style()->transformStyle3D() == TransformStyle3DPreserve3D; }
+    bool preserves3D() const { return layoutObject()->style()->preserves3D(); }
     bool has3DTransform() const { return m_rareData && m_rareData->transform && !m_rareData->transform->isAffine(); }
 
     // FIXME: reflections should force transform-style to be flat in the style: https://bugs.webkit.org/show_bug.cgi?id=106959
-    bool shouldPreserve3D() const { return !layoutObject()->hasReflection() && layoutObject()->style()->transformStyle3D() == TransformStyle3DPreserve3D; }
+    bool shouldPreserve3D() const { return !layoutObject()->hasReflection() && layoutObject()->style()->preserves3D(); }
 
     void filterNeedsPaintInvalidation();
 
@@ -695,15 +695,19 @@ public:
     ClipRectsCache& ensureClipRectsCache() const
     {
         if (!m_clipRectsCache)
-            m_clipRectsCache = adoptPtr(new ClipRectsCache);
+            m_clipRectsCache = wrapUnique(new ClipRectsCache);
         return *m_clipRectsCache;
     }
-    void clearClipRectsCache() const { m_clipRectsCache.clear(); }
+    void clearClipRectsCache() const { m_clipRectsCache.reset(); }
 
     void dirty3DTransformedDescendantStatus();
     // Both updates the status, and returns true if descendants of this have 3d.
     bool update3DTransformedDescendantStatus();
     bool has3DTransformedDescendant() const { DCHECK(!m_3DTransformedDescendantStatusDirty); return m_has3DTransformedDescendant; }
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    void endShouldKeepAliveAllClientsRecursive();
+#endif
 
 private:
     // Bounding box in the coordinates of this layer.
@@ -772,12 +776,13 @@ private:
     void updatePaginationRecursive(bool needsPaginationUpdate = false);
     void clearPaginationRecursive();
 
+    void setNeedsRepaintInternal();
     void markCompositingContainerChainForNeedsRepaint();
 
     PaintLayerRareData& ensureRareData()
     {
         if (!m_rareData)
-            m_rareData = adoptPtr(new PaintLayerRareData);
+            m_rareData = wrapUnique(new PaintLayerRareData);
         return *m_rareData;
     }
 
@@ -789,6 +794,8 @@ private:
     }
 
     bool isSelfPaintingLayerForIntrinsicOrScrollingReasons() const;
+
+    bool shouldFragmentCompositedBounds(const PaintLayer* compositingLayer) const;
 
     // Self-painting layer is an optimization where we avoid the heavy Layer painting
     // machinery for a Layer allocated only to handle the overflow clip case.
@@ -806,8 +813,6 @@ private:
     unsigned m_hasVisibleContent : 1;
     unsigned m_visibleDescendantStatusDirty : 1;
     unsigned m_hasVisibleDescendant : 1;
-
-    unsigned m_hasVisibleNonLayerContent : 1;
 
 #if ENABLE(ASSERT)
     unsigned m_needsPositionUpdate : 1;
@@ -827,9 +832,9 @@ private:
     // Used only while determining what layers should be composited. Applies to the tree of z-order lists.
     unsigned m_hasCompositingDescendant : 1;
 
-    // Applies to the real layout layer tree (i.e., the tree determined by the layer's parent and children and
-    // as opposed to the tree formed by the z-order and normal flow lists).
-    unsigned m_hasNonCompositedChild : 1;
+    // True iff we have scrollable overflow and all children of m_layoutObject are known to paint
+    // exclusively into their own composited layers.  Set by updateScrollingStateAfterCompositingChange().
+    unsigned m_isAllScrollingContentComposited : 1;
 
     // Should be for stacking contexts having unisolated blending descendants.
     unsigned m_shouldIsolateCompositedDescendants : 1;
@@ -875,19 +880,19 @@ private:
     const PaintLayer* m_ancestorOverflowLayer;
 
     AncestorDependentCompositingInputs m_ancestorDependentCompositingInputs;
-    OwnPtr<RareAncestorDependentCompositingInputs> m_rareAncestorDependentCompositingInputs;
+    std::unique_ptr<RareAncestorDependentCompositingInputs> m_rareAncestorDependentCompositingInputs;
 
     Persistent<PaintLayerScrollableArea> m_scrollableArea;
 
-    mutable OwnPtr<ClipRectsCache> m_clipRectsCache;
+    mutable std::unique_ptr<ClipRectsCache> m_clipRectsCache;
 
-    OwnPtr<PaintLayerStackingNode> m_stackingNode;
+    std::unique_ptr<PaintLayerStackingNode> m_stackingNode;
 
     IntSize m_previousScrollOffsetAccumulationForPainting;
     RefPtr<ClipRects> m_previousPaintingClipRects;
     LayoutRect m_previousPaintDirtyRect;
 
-    OwnPtr<PaintLayerRareData> m_rareData;
+    std::unique_ptr<PaintLayerRareData> m_rareData;
 };
 
 } // namespace blink

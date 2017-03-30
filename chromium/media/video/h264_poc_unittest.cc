@@ -52,11 +52,13 @@ TEST_F(H264POCTest, PicOrderCntType0) {
 
   // Initial IDR with POC 0.
   slice_hdr_.idr_pic_flag = true;
+  slice_hdr_.frame_num = 0;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(0, poc_);
 
   // Ref frame with POC lsb 8.
   slice_hdr_.idr_pic_flag = false;
+  slice_hdr_.frame_num = 1;
   slice_hdr_.pic_order_cnt_lsb = 8;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(8, poc_);
@@ -64,12 +66,14 @@ TEST_F(H264POCTest, PicOrderCntType0) {
   // Ref frame with POC lsb 0. This should be detected as wrapping, as the
   // (negative) gap is at least half the maximum.
   slice_hdr_.pic_order_cnt_lsb = 0;
+  slice_hdr_.frame_num = 2;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(16, poc_);
 
   // Ref frame with POC lsb 9. This should be detected as negative wrapping,
   // as the (positive) gap is more than half the maximum.
   slice_hdr_.pic_order_cnt_lsb = 9;
+  slice_hdr_.frame_num = 3;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(9, poc_);
 }
@@ -80,30 +84,36 @@ TEST_F(H264POCTest, PicOrderCntType0_WithMMCO5) {
 
   // Initial IDR with POC 0.
   slice_hdr_.idr_pic_flag = true;
+  slice_hdr_.frame_num = 0;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(0, poc_);
 
   // Skip ahead.
   slice_hdr_.idr_pic_flag = false;
+  slice_hdr_.frame_num = 1;
   slice_hdr_.pic_order_cnt_lsb = 8;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(8, poc_);
 
+  slice_hdr_.frame_num = 2;
   slice_hdr_.pic_order_cnt_lsb = 0;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(16, poc_);
 
+  slice_hdr_.frame_num = 3;
   slice_hdr_.pic_order_cnt_lsb = 8;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(24, poc_);
 
-  SetMMCO5();
+  slice_hdr_.frame_num = 4;
   slice_hdr_.pic_order_cnt_lsb = 0;
+  SetMMCO5();
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(32, poc_);
 
   // Due to the MMCO5 above, this is relative to 0, but also detected as
   // positive wrapping.
+  slice_hdr_.frame_num = 5;
   slice_hdr_.pic_order_cnt_lsb = 8;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(24, poc_);
@@ -180,6 +190,35 @@ TEST_F(H264POCTest, PicOrderCntType1_WithMMCO5) {
   slice_hdr_.frame_num = 1;
   ASSERT_TRUE(ComputePOC());
   ASSERT_EQ(1, poc_);
+}
+
+// Despite being invalid, videos with duplicate non-keyframe |frame_num| values
+// are common. http://crbug.com/615289, http://crbug.com/616349.
+TEST_F(H264POCTest, PicOrderCntType1_DupFrameNum) {
+  sps_.pic_order_cnt_type = 1;
+  sps_.log2_max_frame_num_minus4 = 0;  // 16
+  sps_.num_ref_frames_in_pic_order_cnt_cycle = 2;
+  sps_.expected_delta_per_pic_order_cnt_cycle = 3;
+  sps_.offset_for_ref_frame[0] = 1;
+  sps_.offset_for_ref_frame[1] = 2;
+
+  // Initial IDR with POC 0.
+  slice_hdr_.idr_pic_flag = true;
+  slice_hdr_.frame_num = 0;
+  ASSERT_TRUE(ComputePOC());
+  ASSERT_EQ(0, poc_);
+
+  // Ref frame.
+  slice_hdr_.idr_pic_flag = false;
+  slice_hdr_.frame_num = 1;
+  ASSERT_TRUE(ComputePOC());
+  ASSERT_EQ(1, poc_);
+
+  // Duplicate |frame_num| frame.
+  slice_hdr_.frame_num = 1;
+  slice_hdr_.delta_pic_order_cnt0 = 1;
+  ASSERT_TRUE(ComputePOC());
+  ASSERT_EQ(2, poc_);
 }
 
 TEST_F(H264POCTest, PicOrderCntType2) {

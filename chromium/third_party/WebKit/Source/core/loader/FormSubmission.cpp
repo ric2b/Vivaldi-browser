@@ -45,6 +45,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/network/EncodedFormData.h"
 #include "platform/network/FormDataEncoder.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/TextEncoding.h"
@@ -72,7 +73,7 @@ static void appendMailtoPostFormDataToURL(KURL& url, const EncodedFormData& data
 
     Vector<char> bodyData;
     bodyData.append("body=", 5);
-    FormDataEncoder::encodeStringAsFormData(bodyData, body.utf8());
+    FormDataEncoder::encodeStringAsFormData(bodyData, body.utf8(), FormDataEncoder::NormalizeCRLF);
     body = String(bodyData.data(), bodyData.size()).replace('+', "%20");
 
     StringBuilder query;
@@ -198,7 +199,7 @@ FormSubmission* FormSubmission::create(HTMLFormElement* form, const Attributes& 
     Document& document = form->document();
     KURL actionURL = document.completeURL(copiedAttributes.action().isEmpty() ? document.url().getString() : copiedAttributes.action());
 
-    if (document.getInsecureRequestsPolicy() == SecurityContext::InsecureRequestsUpgrade && actionURL.protocolIs("http")) {
+    if (document.getInsecureRequestPolicy() & kUpgradeInsecureRequests && actionURL.protocolIs("http")) {
         UseCounter::count(document, UseCounter::UpgradeInsecureRequestsUpgradedRequest);
         actionURL.setProtocol("https");
         if (actionURL.port() == 80)
@@ -270,8 +271,10 @@ KURL FormSubmission::requestURL() const
     return requestURL;
 }
 
-void FormSubmission::populateFrameLoadRequest(FrameLoadRequest& frameRequest)
+FrameLoadRequest FormSubmission::createFrameLoadRequest(Document* originDocument)
 {
+    FrameLoadRequest frameRequest(originDocument);
+
     if (!m_target.isEmpty())
         frameRequest.setFrameName(m_target);
 
@@ -287,6 +290,11 @@ void FormSubmission::populateFrameLoadRequest(FrameLoadRequest& frameRequest)
     }
 
     frameRequest.resourceRequest().setURL(requestURL());
+
+    frameRequest.setTriggeringEvent(m_event);
+    frameRequest.setForm(m_form);
+
+    return frameRequest;
 }
 
 } // namespace blink

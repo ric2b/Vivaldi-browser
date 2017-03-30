@@ -133,8 +133,9 @@ if (enable_configuration_policy) {
     ]
   }
 
+  policy_templates_grd_file = "resources/policy_templates.grd"
   grit("policy_templates") {
-    source = "resources/policy_templates.grd"
+    source = policy_templates_grd_file
     use_qualified_include = true
     output_dir = "$root_gen_dir/chrome"
     outputs = policy_templates_doc_outputs
@@ -169,6 +170,7 @@ if (enable_configuration_policy) {
     proto_out_dir = "policy/proto"
     cc_generator_options = "dllexport_decl=POLICY_PROTO_EXPORT:"
     cc_include = "components/policy/policy_proto_export.h"
+    component_build_force_source_set = true
     defines = [ "POLICY_PROTO_COMPILATION" ]
 
     deps = [
@@ -284,19 +286,15 @@ if (enable_configuration_policy) {
 
   if (is_android) {
     import("//build/config/android/rules.gni")
-    import("//build/config/zip.gni")
 
-    resources_name = "app_restrictions_resources"
-    resources_zip = "res.java/$resources_name.zip"
-    generated_resources_dir = "$root_gen_dir/chrome/app/policy/android"
+    _generated_resources_dir = "$root_gen_dir/chrome/app/policy/android"
 
-    consolidate_target_name = "${resources_name}__consolidate_resources"
-    copy(consolidate_target_name) {
+    copy("app_restrictions_resources_copy") {
       sources = [
         app_restrictions_path,
       ]
       outputs = [
-        "$generated_resources_dir/xml-v21/app_restrictions.xml",
+        "$_generated_resources_dir/xml-v21/app_restrictions.xml",
       ]
       deps = [
         ":cloud_policy_code_generate",
@@ -304,33 +302,18 @@ if (enable_configuration_policy) {
       ]
     }
 
-    # TODO(471115): The write_build_config template is in
-    # //build/config/android/internal_rules.gni and is not meant for external
-    # use. The public rules (in rules.gni) should be updated to support what
-    # we are doing here.
-    build_config_target_name = "${resources_name}__build_config"
-    write_build_config(build_config_target_name) {
-      build_config = "$target_gen_dir/$resources_name.build_config"
-      resources_zip = "$root_build_dir/$resources_zip"
-      type = "android_resources"
-    }
-
-    zip_target_name = "${resources_name}__create_zip"
-    zip(zip_target_name) {
-      inputs = get_target_outputs(":$consolidate_target_name") +
-               policy_templates_android_outputs
-      output = "$root_build_dir/$resources_zip"
-      base_dir = generated_resources_dir
-      deps = [
-        ":$consolidate_target_name",
-        ":policy_templates_grit",  # For policy_templates_android_outputs.
+    android_resources("app_restrictions_resources") {
+      resource_dirs = []
+      generated_resource_dirs = [
+        "$policy_templates_base_dir/android",
+        _generated_resources_dir,
       ]
-    }
-
-    group("app_restrictions_resources") {
+      generated_resource_files =
+          policy_templates_android_outputs +
+          [ "$_generated_resources_dir/xml-v21/app_restrictions.xml" ]
       deps = [
-        ":$build_config_target_name",
-        ":$zip_target_name",
+        ":app_restrictions_resources_copy",
+        ":policy_templates_grit",
       ]
     }
   } else if (is_mac) {
@@ -343,7 +326,7 @@ if (enable_configuration_policy) {
         script,
       ]
       outputs = [
-        "$target_gen_dir/$chrome_mac_bundle_id.plist",
+        "$target_gen_dir/$chrome_mac_bundle_id.manifest",
       ]
 
       args = [
@@ -391,6 +374,52 @@ if (enable_configuration_policy) {
       deps = [
         ":manifest_bundle_data",
         ":manifest_strings_bundle_data",
+      ]
+    }
+  }
+
+  if (is_win) {
+    version_file = "VERSION"
+    version_path = "$policy_templates_base_dir/$version_file"
+
+    copy("add_version") {
+      sources = [
+        "//chrome/VERSION",
+      ]
+      outputs = [
+        version_path,
+      ]
+    }
+
+    action("pack_policy_templates") {
+      output_zip_file = "$root_out_dir/policy_templates.zip"
+      script = "tools/make_policy_zip.py"
+      inputs =
+          [
+            version_path,
+            policy_templates_grd_file,
+            grit_info_script,
+          ] + policy_templates_windows_outputs + policy_templates_doc_outputs
+      outputs = [
+        output_zip_file,
+      ]
+      args = [
+               "--output",
+               rebase_path(output_zip_file, root_build_dir),
+               "--basedir",
+               rebase_path(policy_templates_base_dir, root_build_dir),
+               "--grd_input",
+               rebase_path(policy_templates_grd_file, root_build_dir),
+               "--grd_strip_path_prefix",
+               "app/policy",
+               "--extra_input",
+               version_file,
+               "--grit_info",
+               rebase_path(grit_info_script, root_build_dir),
+             ] + grit_defines
+      deps = [
+        ":add_version",
+        ":policy_templates",
       ]
     }
   }

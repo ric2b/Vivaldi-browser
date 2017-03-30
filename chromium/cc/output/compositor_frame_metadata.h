@@ -10,20 +10,25 @@
 #include <vector>
 
 #include "cc/base/cc_export.h"
-#include "cc/output/viewport_selection_bound.h"
+#include "cc/input/selection.h"
 #include "cc/surfaces/surface_id.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/events/latency_info.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/selection_bound.h"
 
 namespace cc {
 
 class CC_EXPORT CompositorFrameMetadata {
  public:
   CompositorFrameMetadata();
-  CompositorFrameMetadata(const CompositorFrameMetadata& other);
+  CompositorFrameMetadata(CompositorFrameMetadata&& other);
   ~CompositorFrameMetadata();
+
+  CompositorFrameMetadata& operator=(CompositorFrameMetadata&& other);
+
+  CompositorFrameMetadata Clone() const;
 
   // The device scale factor used to generate this compositor frame.
   float device_scale_factor;
@@ -54,7 +59,7 @@ class CC_EXPORT CompositorFrameMetadata {
 
   // Provides selection region updates relative to the current viewport. If the
   // selection is empty or otherwise unused, the bound types will indicate such.
-  ViewportSelection selection;
+  Selection<gfx::SelectionBound> selection;
 
   std::vector<ui::LatencyInfo> latency_info;
 
@@ -64,6 +69,10 @@ class CC_EXPORT CompositorFrameMetadata {
 
   // This is the set of Surfaces that are referenced by this frame.
   std::vector<SurfaceId> referenced_surfaces;
+
+ private:
+  CompositorFrameMetadata(const CompositorFrameMetadata& other);
+  CompositorFrameMetadata operator=(const CompositorFrameMetadata&) = delete;
 };
 
 }  // namespace cc

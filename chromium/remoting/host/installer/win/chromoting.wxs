@@ -8,13 +8,9 @@
        see http://crbug.com/121785 -->
   <?if $(var.Branding) ~= Chrome ?>
     <?define ChromotingHost = "Chrome Remote Desktop Host" ?>
-    <?define ChromotingServiceName = "Chrome Remote Desktop Service" ?>
-    <?define ChromotingServiceDescription = "This service enables incoming connections from Chrome Remote Desktop clients." ?>
     <?define Manufacturer = "Google Inc." ?>
   <?else?>
     <?define ChromotingHost = "Chromoting Host" ?>
-    <?define ChromotingServiceName = "Chromoting Service" ?>
-    <?define ChromotingServiceDescription = "This service enables incoming connections from Chromoting clients." ?>
     <?define Manufacturer = "The Chromium Authors" ?>
   <?endif?>
 
@@ -157,13 +153,6 @@
     </Directory>
 
     <DirectoryRef Id="binaries">
-      <Component Id="sas" Guid="*">
-        <File Id="sas.dll"
-              DiskId="1"
-              Name="sas.dll"
-              Vital="yes"/>
-      </Component>
-
       <Component Id="credits" Guid="*">
         <File Id="CREDITS.txt"
               DiskId="1"
@@ -640,7 +629,6 @@
       <ComponentRef Id="remoting_lib"/>
       <ComponentRef Id="remoting_pairing_registry"/>
       <ComponentRef Id="remoting_start_host"/>
-      <ComponentRef Id="sas"/>
       <ComponentRef Id="sawbuck_provider"/>
     </Feature>
 

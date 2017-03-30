@@ -9,6 +9,7 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -154,7 +155,7 @@ bool AutoConfirmPrompt(ExtensionInstallPrompt::DoneCallback* callback) {
     // the real implementations it's highly likely the message loop will be
     // pumping a few times before the user clicks accept or cancel.
     case extensions::ScopedTestDialogAutoConfirm::ACCEPT:
-      base::MessageLoop::current()->PostTask(
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE, base::Bind(base::ResetAndReturn(callback),
                                 ExtensionInstallPrompt::Result::ACCEPTED));
       return true;
@@ -608,7 +609,6 @@ scoped_refptr<Extension>
 
 ExtensionInstallPrompt::ExtensionInstallPrompt(content::WebContents* contents)
     : profile_(ProfileForWebContents(contents)),
-      ui_loop_(base::MessageLoop::current()),
       extension_(NULL),
       install_ui_(extensions::CreateExtensionInstallUI(
           ProfileForWebContents(contents))),
@@ -620,7 +620,6 @@ ExtensionInstallPrompt::ExtensionInstallPrompt(content::WebContents* contents)
 ExtensionInstallPrompt::ExtensionInstallPrompt(Profile* profile,
                                                gfx::NativeWindow native_window)
     : profile_(profile),
-      ui_loop_(base::MessageLoop::current()),
       extension_(NULL),
       install_ui_(extensions::CreateExtensionInstallUI(profile)),
       show_params_(
@@ -659,7 +658,7 @@ void ExtensionInstallPrompt::ShowDialog(
     std::unique_ptr<Prompt> prompt,
     std::unique_ptr<const PermissionSet> custom_permissions,
     const ShowDialogCallback& show_dialog_callback) {
-  DCHECK(ui_loop_ == base::MessageLoop::current());
+  DCHECK(ui_thread_checker_.CalledOnValidThread());
   DCHECK(prompt);
   extension_ = extension;
   done_callback_ = done_callback;

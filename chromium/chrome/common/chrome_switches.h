@@ -84,23 +84,24 @@ extern const char kDisableExtensionsFileAccessCheck[];
 extern const char kDisableExtensionsHttpThrottling[];
 extern const char kDisableExtensions[];
 extern const char kDisableFieldTrialTestingConfig[];
-extern const char kDisableHttp2[];
 extern const char kDisableMinimizeOnSecondLauncherItemClick[];
 extern const char kDisableNewBookmarkApps[];
 extern const char kDisableOfflineAutoReload[];
 extern const char kDisableOfflineAutoReloadVisibleOnly[];
 extern const char kDisableOutOfProcessPac[];
 extern const char kDisablePasswordManagerReauthentication[];
+extern const char kDisablePermissionActionReporting[];
 extern const char kDisablePermissionsBlacklist[];
 extern const char kDisablePopupBlocking[];
 extern const char kDisablePreconnect[];
 extern const char kDisablePrintPreview[];
 extern const char kDisablePromptOnRepost[];
 extern const char kDisablePushApiBackgroundMode[];
-extern const char kDisableQuic[];
-extern const char kDisableQuicPortSelection[];
 extern const char kDisableSessionCrashedBubble[];
 extern const char kDisableSiteEngagementService[];
+#if defined(OS_ANDROID)
+extern const char kDisableVrShell[];
+#endif
 extern const char kDisableWebNotificationCustomLayouts[];
 extern const char kDisableWebUsbSecurity[];
 extern const char kDisableZeroBrowsersOpenForTests[];
@@ -116,6 +117,9 @@ extern const char kEnableAllBookmarksView[];
 extern const char kEnableAppLink[];
 #endif
 extern const char kEnableAppsFileAssociations[];
+#if defined(OS_CHROMEOS)
+extern const char kEnableIntentPicker[];
+#endif  // defined(OS_CHROMEOS)
 extern const char kEnableAudioDebugRecordingsFromExtension[];
 extern const char kEnableBenchmarking[];
 extern const char kEnableBookmarkUndo[];
@@ -147,14 +151,13 @@ extern const char kEnableOfflineAutoReload[];
 extern const char kEnableOfflineAutoReloadVisibleOnly[];
 extern const char kEnablePanels[];
 extern const char kDisablePanels[];
+extern const char kEnablePermissionActionReporting[];
 extern const char kEnablePermissionsBlacklist[];
 extern const char kEnablePotentiallyAnnoyingSecurityFeatures[];
 extern const char kEnablePowerOverlay[];
 extern const char kEnablePrintPreviewRegisterPromos[];
 extern const char kEnableProfiling[];
 extern const char kEnablePushApiBackgroundMode[];
-extern const char kEnableQuic[];
-extern const char kEnableQuicPortSelection[];
 extern const char kEnableWebRtcEventLoggingFromExtension[];
 extern const char kEnableSessionCrashedBubble[];
 extern const char kEnableSettingsWindow[];
@@ -166,7 +169,13 @@ extern const char kEnableSupervisedUserManagedBookmarksFolder[];
 extern const char kEnableTabAudioMuting[];
 extern const char kEnableThumbnailRetargeting[];
 extern const char kEnableUserAlternateProtocolPorts[];
+#if defined(OS_ANDROID)
+extern const char kEnableVrShell[];
+#endif
 extern const char kEnableWebAppFrame[];
+#if defined(OS_ANDROID)
+extern const char kEnableWebApk[];
+#endif  // defined(OS_ANDROID)
 extern const char kEnableWebNotificationCustomLayouts[];
 extern const char kExtensionContentVerificationBootstrap[];
 extern const char kExtensionContentVerificationEnforceStrict[];
@@ -185,13 +194,11 @@ extern const char kHistoryEnableGroupByDomain[];
 extern const char kHomePage[];
 extern const char kHostRules[];
 extern const char kHostResolverRetryAttempts[];
-extern const char kIgnoreUrlFetcherCertRequests[];
 extern const char kIncognito[];
 extern const char kInstallChromeApp[];
 extern const char kInstallSupervisedUserWhitelists[];
 extern const char kInstantProcess[];
 extern const char kInterestsURL[];
-extern const char kIpcDumpDirectory[];
 extern const char kKeepAliveForTest[];
 extern const char kKioskMode[];
 extern const char kKioskModePrinting[];
@@ -218,8 +225,8 @@ extern const char kNoStartupWindow[];
 extern const char kNoSupervisedUserAcknowledgmentCheck[];
 extern const char kNumPacThreads[];
 extern const char kOpenInNewWindow[];
-extern const char kOriginToForceQuicOn[];
 extern const char kOriginalProcessStartTime[];
+extern const char kOriginTrialDisabledFeatures[];
 extern const char kOriginTrialPublicKey[];
 extern const char kPackExtension[];
 extern const char kPackExtensionKey[];
@@ -246,10 +253,6 @@ extern const char kProxyBypassList[];
 extern const char kProxyPacUrl[];
 extern const char kProxyServer[];
 extern const char kPurgeAndSuspendTime[];
-extern const char kQuicConnectionOptions[];
-extern const char kQuicHostWhitelist[];
-extern const char kQuicMaxPacketLength[];
-extern const char kQuicVersion[];
 extern const char kRemoteDebuggingTargets[];
 extern const char kRestoreLastSession[];
 extern const char kSavePageAsMHTML[];
@@ -312,6 +315,7 @@ extern const char kEnableHungRendererInfoBar[];
 extern const char kProgressBarAnimation[];
 extern const char kEnableThemeColorInTabbedMode[];
 extern const char kEnableTabSwitcherInDocumentMode[];
+extern const char kEnableTabSwitcherThemeColors[];
 extern const char kNtpSwitchToExistingTab[];
 extern const char kForceShowUpdateMenuItem[];
 extern const char kForceShowUpdateMenuItemSummary[];
@@ -343,6 +347,8 @@ extern const char kAppsKeepChromeAliveInTests[];
 extern const char kHostedAppQuitNotification[];
 extern const char kDisableAppInfoDialogMac[];
 extern const char kDisableAppWindowCycling[];
+extern const char kDisableFullscreenLowPowerMode[];
+extern const char kDisableFullscreenTabDetaching[];
 extern const char kDisableHostedAppShimCreation[];
 extern const char kDisableHostedAppsInWindows[];
 extern const char kDisableMacViewsNativeAppWindows[];
@@ -350,9 +356,9 @@ extern const char kDisableTranslateNewUX[];
 extern const char kEnableAppInfoDialogMac[];
 extern const char kEnableAppWindowCycling[];
 extern const char kEnableFullscreenTabDetaching[];
+extern const char kEnableFullscreenToolbarReveal[];
 extern const char kEnableHostedAppsInWindows[];
 extern const char kEnableMacViewsNativeAppWindows[];
-extern const char kEnableMacViewsDialogs[];
 extern const char kEnableTranslateNewUX[];
 extern const char kMetricsClientID[];
 extern const char kRelauncherProcess[];
@@ -373,10 +379,6 @@ extern const char kWatcherProcess[];
 extern const char kWindows8Search[];
 #endif  // defined(OS_WIN)
 
-#if defined(ENABLE_IPC_FUZZER)
-extern const char kIpcFuzzerTestcase[];
-#endif
-
 #if defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 extern const char kDebugPrint[];
 #endif
@@ -386,10 +388,6 @@ extern const char kAllowNaClCrxFsAPI[];
 extern const char kAllowNaClFileHandleAPI[];
 extern const char kAllowNaClSocketAPI[];
 #endif
-
-#if defined(ENABLE_TASK_MANAGER)
-extern const char kDisableNewTaskManager[];
-#endif  // defined(ENABLE_TASK_MANAGER)
 
 #if defined(ENABLE_WAYLAND_SERVER)
 extern const char kEnableWaylandServer[];
@@ -410,10 +408,6 @@ bool SettingsWindowEnabled();
 #if defined(OS_CHROMEOS)
 bool PowerOverlayEnabled();
 #endif
-
-#if defined(ENABLE_TASK_MANAGER)
-bool NewTaskManagerEnabled();
-#endif  // defined(ENABLE_TASK_MANAGER)
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in
 // alphabetical order, or in one of the ifdefs (also in order in each section).

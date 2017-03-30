@@ -5,12 +5,13 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://md-settings/icons.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_subpage.html">
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
+<link rel="import" href="/icons.html">
+<link rel="import" href="/settings_page/settings_animated_pages.html">
+<link rel="import" href="/settings_page/settings_subpage.html">
+<link rel="import" href="/settings_shared_css.html">
 <link rel="import" href="language_detail_page.html">
 <link rel="import" href="languages.html">
 <link rel="import" href="manage_languages_page.html">
@@ -25,7 +26,20 @@
 
 <dom-module id="settings-languages-page">
   <template>
-    <style include="settings-shared"></style>
+    <style include="settings-shared">
+      .list-button {
+        @apply(--settings-actionable);
+      }
+
+      .dropdown-content {
+        background: white;
+        box-shadow: 0 2px 6px grey;
+      }
+
+      paper-item:hover {
+        background-color: var(--settings-hover-color);
+      }
+    </style>
     <settings-languages languages="{{languages}}"></settings-languages>
     <settings-animated-pages id="pages" current-route="{{currentRoute}}"
         section="languages">
@@ -43,9 +57,17 @@
         </div>
         <iron-collapse id="languagesCollapse" opened="[[languagesOpened_]]">
           <div class="list-frame vertical-list">
+            <span class="list-item"
+                hidden="[[isHelpTextHidden_(languages.enabled.*)]]">
+              <span>$i18n{orderLanguagesInstructions}</span>
+              <a href="$i18n{languagesLearnMoreURL}" target="_blank">
+                $i18n{learnMore}
+              </a>
+            </span>
             <template is="dom-repeat" items="[[languages.enabled]]">
               <div class$="list-item [[getLanguageItemClass_(
-                      item.language.code, prefs.intl.app_locale.value)]]"
+                  item.language.code, prefs.intl.app_locale.value,
+                  item.language.supportsUI)]]"
                   on-tap="onLanguageTap_">
 <if expr="not chromeos and not is_win">
                 <div class="start" title="[[item.language.nativeDisplayName]]">
@@ -63,8 +85,29 @@
                   </iron-icon>
                 </div>
 </if>
-                <paper-icon-button icon="cr:settings"
-                    on-tap="onShowLanguageDetailTap_"></paper-icon-button>
+                <paper-icon-button id="more-[[item.language.code]]"
+                    icon="cr:more-vert" toggles
+                    active="{{item.optionsMenuOpened}}">
+                </paper-icon-button>
+                <iron-dropdown opened="{{item.optionsMenuOpened}}"
+                    horizontal-align="right" vertical-align="top">
+                  <div class="dropdown-content">
+                    <paper-item on-tap="onMoveUpTap_"
+                        hidden="[[isFirstLanguage_(index,
+                                                   languages.enabled.*)]]">
+                      $i18n{moveUp}
+                    </paper-item>
+                    <paper-item on-tap="onMoveDownTap_"
+                        hidden="[[isLastLanguage_(index,
+                                                  languages.enabled.*)]]">
+                      $i18n{moveDown}
+                    </paper-item>
+                    <paper-item class="language-detail-item"
+                        on-tap="onShowLanguageDetailTap_">
+                      $i18n{languageDetail}
+                    </paper-item>
+                  </div>
+                </iron-dropdown>
               </div>
             </template>
             <div class="list-item list-button" on-tap="onManageLanguagesTap_">
@@ -90,7 +133,7 @@
                 items="[[languages.inputMethods.enabled]]">
               <div class$="list-item [[getInputMethodItemClass_(
                       item.id, languages.inputMethods.currentId)]]"
-                  on-tap="onInputMethodTap_">
+                  on-tap="onInputMethodTap_" actionable>
                 <div>[[item.displayName]]</div>
                 <div class="middle">
                   <iron-icon icon="settings:done"
@@ -115,26 +158,31 @@
         <div class="settings-box two-line">
           <div class="start">
             <div>$i18n{spellCheckListTitle}</div>
-            <div class="secondary">[[spellCheckSecondary_]]</div>
+            <div class="secondary">
+              [[getSpellCheckSecondaryText_(languages.enabled.*)]]
+            </div>
           </div>
           <cr-expand-button expanded="{{spellCheckOpened_}}">
           </cr-expand-button>
         </div>
         <iron-collapse id="spellCheckCollapse" opened="[[spellCheckOpened_]]">
           <div class="list-frame vertical-list">
-            <template is="dom-repeat"
-                items="[[spellCheckLanguages_(languages.enabled.*)]]">
+            <template is="dom-repeat" items="[[languages.enabled]]">
               <div class="list-item">
-                <div class="start">
-                  <paper-checkbox
-                      checked="[[item.spellCheckEnabled]]"
-                      on-change="onSpellCheckChange_">
+                <label class="start"
+                    id="supportsSpellCheckLabel-[[item.language.code]]">
+                  <span disabled$="[[!item.language.supportsSpellcheck]]">
                     [[item.language.displayName]]
-                  </paper-checkbox>
-                </div>
-                <paper-icon-button icon="cr:settings"
-                    on-tap="onShowLanguageDetailTap_"></paper-icon-button>
-              </div>
+                  </span>
+                </label>
+                <paper-toggle-button
+                    checked="[[item.spellCheckEnabled]]"
+                    on-change="onSpellCheckChange_"
+                    disabled$="[[!item.language.supportsSpellcheck]]"
+                    aria-labelledby=
+                        "supportsSpellCheckLabel-[[item.language.code]]">
+                </paper-toggle-button>
+              </label>
             </template>
             <div class="list-item list-button" on-tap="onEditDictionaryTap_">
               $i18n{manageSpellCheck}
@@ -159,7 +207,7 @@
       </template>
 <if expr="chromeos">
       <template is="dom-if" name="manage-input-methods">
-        <settings-subpage page-title="$i18n{manageInputMethods}">
+        <settings-subpage page-title="$i18n{manageInputMethodsPageTitle}">
           <settings-manage-input-methods-page>
           </settings-manage-input-methods-page>
         </settings-subpage>

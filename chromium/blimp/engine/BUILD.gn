@@ -66,9 +66,10 @@ source_set("app") {
     ":app_permissions",
     ":app_settings",
     ":app_ui",
-    ":blob_channel",
+    ":blob_channel_service",
     ":common",
     ":crash",
+    ":feature",
     ":renderer",
     ":session",
     "//base",
@@ -106,6 +107,8 @@ source_set("app_metrics") {
   sources = [
     "app/blimp_metrics_service_client.cc",
     "app/blimp_metrics_service_client.h",
+    "app/blimp_stability_metrics_provider.cc",
+    "app/blimp_stability_metrics_provider.h",
   ]
 
   public_deps = [
@@ -261,6 +264,8 @@ source_set("feature") {
     "feature/engine_render_widget_feature.h",
     "feature/engine_settings_feature.cc",
     "feature/engine_settings_feature.h",
+    "feature/geolocation/blimp_location_provider.cc",
+    "feature/geolocation/blimp_location_provider.h",
   ]
 
   deps = [
@@ -284,19 +289,25 @@ source_set("renderer") {
   sources = [
     "renderer/blimp_content_renderer_client.cc",
     "renderer/blimp_content_renderer_client.h",
+    "renderer/blimp_engine_picture_cache.cc",
+    "renderer/blimp_engine_picture_cache.h",
+    "renderer/blob_channel_sender_proxy.cc",
+    "renderer/blob_channel_sender_proxy.h",
     "renderer/engine_image_serialization_processor.cc",
     "renderer/engine_image_serialization_processor.h",
   ]
 
   deps = [
-    ":blob_channel_mojo",
+    ":blob_channel_service",
     "//base",
     "//blimp/common",
     "//blimp/common/proto",
+    "//blimp/net",
     "//cc",
     "//components/web_cache/renderer",
     "//content/public/common",
     "//content/public/renderer",
+    "//services/shell/public/cpp",
     "//skia",
     "//third_party/libwebp",
     "//ui/gfx/geometry",
@@ -308,6 +319,10 @@ source_set("session") {
   sources = [
     "session/blimp_engine_session.cc",
     "session/blimp_engine_session.h",
+    "session/page_load_tracker.cc",
+    "session/page_load_tracker.h",
+    "session/tab.cc",
+    "session/tab.h",
   ]
 
   deps = [
@@ -316,6 +331,7 @@ source_set("session") {
     ":app_switches",
     ":app_ui",
     ":common",
+    ":common_user_agent",
     ":feature",
     "//base",
     "//blimp/common",
@@ -331,12 +347,15 @@ source_set("session") {
 }
 
 # Implements the browser portions of the Mojo bridge to BlobChannel.
-source_set("blob_channel") {
+source_set("blob_channel_service") {
   sources = [
     "mojo/blob_channel_service.cc",
     "mojo/blob_channel_service.h",
   ]
   deps = [
+    "//blimp/net",
+  ]
+  public_deps = [
     ":blob_channel_mojo",
   ]
 }
@@ -367,6 +386,7 @@ source_set("app_unit_tests") {
   sources = [
     "app/blimp_engine_config_unittest.cc",
     "app/blimp_metrics_service_client_unittest.cc",
+    "app/blimp_stability_metrics_provider_unittest.cc",
     "app/blimp_system_url_request_context_getter_unittest.cc",
     "app/settings_manager_unittest.cc",
     "app/ui/blimp_screen_unittest.cc",
@@ -387,6 +407,7 @@ source_set("app_unit_tests") {
     "//components/metrics:metrics",
     "//components/pref_registry:pref_registry",
     "//components/prefs:prefs",
+    "//components/prefs:test_support",
     "//content/test:test_support",
     "//net:test_support",
     "//testing/gmock",
@@ -435,13 +456,30 @@ source_set("feature_unit_tests") {
     "//blimp/engine:app_settings",
     "//blimp/net",
     "//blimp/net:test_support",
+    "//content",
     "//content/public/browser",
     "//net",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/WebKit/public:blink_headers",
-    "//ui/base/ime",
+    "//ui/base:test_support",
+  ]
+}
+
+source_set("renderer_unit_tests") {
+  testonly = true
+
+  sources = [
+    "renderer/blimp_engine_picture_cache_unittest.cc",
+  ]
+
+  deps = [
+    ":renderer",
+    "//blimp/test:support",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
   ]
 }
 
@@ -452,6 +490,7 @@ source_set("unit_tests") {
     ":app_unit_tests",
     ":common_unit_tests",
     ":feature_unit_tests",
+    ":renderer_unit_tests",
   ]
 }
 
@@ -526,11 +565,12 @@ if (is_linux) {
   # Builds and bundles the engine into a tarball that can be used to build a
   # Docker image.
   action("blimp_engine_bundle") {
-    script = "//blimp/tools/bundle-engine.py"
+    script = "//blimp/tools/create-bundle.py"
 
     # These form the arguments to the script.
     _rebased_out_dir = rebase_path(root_out_dir)
     _rebased_dockerfile = rebase_path("//blimp/engine/Dockerfile")
+    _rebased_dockerfile_base = rebase_path("//blimp/tools/Dockerfile.base")
     _rebased_startup_script = rebase_path("//blimp/engine/start_engine.sh")
     _bundle = "$root_out_dir/blimp_engine_bundle.tar.gz"
 
@@ -543,6 +583,7 @@ if (is_linux) {
     sources = [
       _manifest,
       _rebased_dockerfile,
+      _rebased_dockerfile_base,
       _rebased_startup_script,
     ]
     outputs = [
@@ -553,9 +594,9 @@ if (is_linux) {
     args = [
       "--build-dir",
       _rebased_out_dir,
-      "--dockerfile",
+      "--filelist",
       _rebased_dockerfile,
-      "--startup-script",
+      _rebased_dockerfile_base,
       _rebased_startup_script,
       "--manifest",
       _rebased_manifest,
@@ -602,4 +643,43 @@ if (is_linux) {
       ]
     }
   }
+}
+
+source_set("browser_tests") {
+  testonly = true
+
+  sources = [
+    "browser_tests/blimp_browser_test.cc",
+    "browser_tests/blimp_browser_test.h",
+    "browser_tests/blimp_test_launcher.cc",
+    "browser_tests/engine_browsertest.cc",
+  ]
+
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  deps = [
+    "//base",
+    "//blimp/client:feature",
+    "//blimp/client:session",
+    "//blimp/client:switches",
+    "//blimp/client:test_support",
+    "//blimp/common",
+    "//blimp/engine:app",
+    "//blimp/engine:app_config",
+    "//blimp/engine:app_switches",
+    "//blimp/engine:pak",
+    "//blimp/engine:session",
+    "//blimp/engine:test_support",
+    "//blimp/net",
+    "//content/public/app:both",
+    "//content/test:browsertest_base",
+    "//content/test:test_support",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+
+  data = [
+    "data/",
+    "$root_out_dir/blimp_engine.pak",
+  ]
 }

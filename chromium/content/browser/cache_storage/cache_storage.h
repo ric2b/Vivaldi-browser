@@ -31,6 +31,7 @@ class BlobStorageContext;
 
 namespace content {
 class CacheStorageScheduler;
+class CacheStorageCacheHandle;
 
 // TODO(jkarlin): Constrain the total bytes used per origin.
 
@@ -41,7 +42,7 @@ class CONTENT_EXPORT CacheStorage {
  public:
   typedef std::vector<std::string> StringVector;
   typedef base::Callback<void(bool, CacheStorageError)> BoolAndErrorCallback;
-  typedef base::Callback<void(scoped_refptr<CacheStorageCache>,
+  typedef base::Callback<void(std::unique_ptr<CacheStorageCacheHandle>,
                               CacheStorageError)>
       CacheAndErrorCallback;
   typedef base::Callback<void(const StringVector&, CacheStorageError)>
@@ -64,7 +65,10 @@ class CONTENT_EXPORT CacheStorage {
   virtual ~CacheStorage();
 
   // Get the cache for the given key. If the cache is not found it is
-  // created.
+  // created. The CacheStorgeCacheHandle in the callback prolongs the lifetime
+  // of the cache. Once all handles to a cache are deleted the cache is deleted.
+  // The cache will also be deleted in the CacheStorage's destructor so be sure
+  // to check the handle's value before using it.
   void OpenCache(const std::string& cache_name,
                  const CacheAndErrorCallback& callback);
 
@@ -73,7 +77,11 @@ class CONTENT_EXPORT CacheStorage {
                 const BoolAndErrorCallback& callback);
 
   // Deletes the cache if it exists. If it doesn't exist,
-  // CACHE_STORAGE_ERROR_NOT_FOUND is returned.
+  // CACHE_STORAGE_ERROR_NOT_FOUND is returned. Any existing
+  // CacheStorageCacheHandle(s) to the cache will remain valid but future
+  // CacheStorage operations won't be able to access the cache. The cache
+  // isn't actually erased from disk until the last handle is dropped.
+  // TODO(jkarlin): Rename to DoomCache.
   void DeleteCache(const std::string& cache_name,
                    const BoolAndErrorCallback& callback);
 
@@ -106,24 +114,25 @@ class CONTENT_EXPORT CacheStorage {
   void CompleteAsyncOperationForTesting();
 
  private:
-  friend class TestCacheStorage;
+  friend class CacheStorageCacheHandle;
+  friend class CacheStorageCache;
   class CacheLoader;
   class MemoryLoader;
   class SimpleCacheLoader;
   struct CacheMatchResponse;
 
-  typedef std::map<std::string, base::WeakPtr<CacheStorageCache>> CacheMap;
+  typedef std::map<std::string, std::unique_ptr<CacheStorageCache>> CacheMap;
 
-  // Return a CacheStorageCache for the given name if the name is known. If the
-  // CacheStorageCache has been deleted, creates a new one.
-  scoped_refptr<CacheStorageCache> GetLoadedCache(
+  // Functions for exposing handles to CacheStorageCache to clients.
+  std::unique_ptr<CacheStorageCacheHandle> CreateCacheHandle(
+      CacheStorageCache* cache);
+  void AddCacheHandleRef(CacheStorageCache* cache);
+  void DropCacheHandleRef(CacheStorageCache* cache);
+
+  // Returns a CacheStorageCacheHandle for the given name if the name is known.
+  // If the CacheStorageCache has been deleted, creates a new one.
+  std::unique_ptr<CacheStorageCacheHandle> GetLoadedCache(
       const std::string& cache_name);
-
-  // Holds a reference to a cache for thirty seconds.
-  void TemporarilyPreserveCache(scoped_refptr<CacheStorageCache> cache);
-  virtual void SchedulePreservedCacheRemoval(
-      const base::Closure& callback);  // Virtual for testing.
-  void RemovePreservedCache(const CacheStorageCache* cache);
 
   // Initializer and its callback are below.
   void LazyInit();
@@ -136,10 +145,11 @@ class CONTENT_EXPORT CacheStorage {
                      const CacheAndErrorCallback& callback);
   void CreateCacheDidCreateCache(const std::string& cache_name,
                                  const CacheAndErrorCallback& callback,
-                                 scoped_refptr<CacheStorageCache> cache);
-  void CreateCacheDidWriteIndex(const CacheAndErrorCallback& callback,
-                                scoped_refptr<CacheStorageCache> cache,
-                                bool success);
+                                 std::unique_ptr<CacheStorageCache> cache);
+  void CreateCacheDidWriteIndex(
+      const CacheAndErrorCallback& callback,
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
+      bool success);
 
   // The HasCache callbacks are below.
   void HasCacheImpl(const std::string& cache_name,
@@ -148,18 +158,15 @@ class CONTENT_EXPORT CacheStorage {
   // The DeleteCache callbacks are below.
   void DeleteCacheImpl(const std::string& cache_name,
                        const BoolAndErrorCallback& callback);
-
-  void DeleteCacheDidClose(const std::string& cache_name,
-                           const BoolAndErrorCallback& callback,
-                           const StringVector& ordered_cache_names,
-                           scoped_refptr<CacheStorageCache> cache,
-                           int64_t cache_size);
-  void DeleteCacheDidWriteIndex(const std::string& cache_name,
-                                const BoolAndErrorCallback& callback,
-                                int cache_size,
-                                bool success);
-  void DeleteCacheDidCleanUp(const BoolAndErrorCallback& callback,
-                             bool success);
+  void DeleteCacheDidWriteIndex(
+      const std::string& cache_name,
+      const StringVector& original_ordered_cache_names,
+      const BoolAndErrorCallback& callback,
+      bool success);
+  void DeleteCacheFinalize(std::unique_ptr<CacheStorageCache> doomed_cache);
+  void DeleteCacheDidGetSize(std::unique_ptr<CacheStorageCache> cache,
+                             int64_t cache_size);
+  void DeleteCacheDidCleanUp(bool success);
 
   // The EnumerateCache callbacks are below.
   void EnumerateCachesImpl(const StringsAndErrorCallback& callback);
@@ -168,7 +175,7 @@ class CONTENT_EXPORT CacheStorage {
   void MatchCacheImpl(const std::string& cache_name,
                       std::unique_ptr<ServiceWorkerFetchRequest> request,
                       const CacheStorageCache::ResponseCallback& callback);
-  void MatchCacheDidMatch(scoped_refptr<CacheStorageCache> cache,
+  void MatchCacheDidMatch(std::unique_ptr<CacheStorageCacheHandle> cache_handle,
                           const CacheStorageCache::ResponseCallback& callback,
                           CacheStorageError error,
                           std::unique_ptr<ServiceWorkerResponse> response,
@@ -178,7 +185,7 @@ class CONTENT_EXPORT CacheStorage {
   void MatchAllCachesImpl(std::unique_ptr<ServiceWorkerFetchRequest> request,
                           const CacheStorageCache::ResponseCallback& callback);
   void MatchAllCachesDidMatch(
-      scoped_refptr<CacheStorageCache> cache,
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
       CacheMatchResponse* out_match_response,
       const base::Closure& barrier_closure,
       CacheStorageError error,
@@ -196,9 +203,10 @@ class CONTENT_EXPORT CacheStorage {
   void PendingBoolAndErrorCallback(const BoolAndErrorCallback& callback,
                                    bool found,
                                    CacheStorageError error);
-  void PendingCacheAndErrorCallback(const CacheAndErrorCallback& callback,
-                                    scoped_refptr<CacheStorageCache> cache,
-                                    CacheStorageError error);
+  void PendingCacheAndErrorCallback(
+      const CacheAndErrorCallback& callback,
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
+      CacheStorageError error);
   void PendingStringsAndErrorCallback(const StringsAndErrorCallback& callback,
                                       const StringVector& strings,
                                       CacheStorageError error);
@@ -214,11 +222,22 @@ class CONTENT_EXPORT CacheStorage {
   bool initialized_;
   bool initializing_;
 
+  // True if the backend is supposed to reside in memory only.
+  bool memory_only_;
+
   // The pending operation scheduler.
   std::unique_ptr<CacheStorageScheduler> scheduler_;
 
   // The map of cache names to CacheStorageCache objects.
   CacheMap cache_map_;
+
+  // Caches that have been deleted but must still be held onto until all handles
+  // have been released.
+  std::map<CacheStorageCache*, std::unique_ptr<CacheStorageCache>>
+      doomed_caches_;
+
+  // CacheStorageCacheHandle reference counts
+  std::map<CacheStorageCache*, size_t> cache_handle_counts_;
 
   // The names of caches in the order that they were created.
   StringVector ordered_cache_names_;
@@ -231,11 +250,6 @@ class CONTENT_EXPORT CacheStorage {
 
   // Performs backend specific operations (memory vs disk).
   std::unique_ptr<CacheLoader> cache_loader_;
-
-  // Holds ref pointers to recently opened caches so that they can be reused
-  // without having the open the cache again.
-  std::map<const CacheStorageCache*, scoped_refptr<CacheStorageCache>>
-      preserved_caches_;
 
   // The quota manager.
   scoped_refptr<storage::QuotaManagerProxy> quota_manager_proxy_;

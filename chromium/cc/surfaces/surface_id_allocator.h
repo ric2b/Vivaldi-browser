@@ -25,8 +25,6 @@ class CC_SURFACES_EXPORT SurfaceIdAllocator {
 
   SurfaceId GenerateId();
 
-  static uint32_t NamespaceForId(SurfaceId id);
-
   // This needs to be called before any sequences with this allocator's
   // namespace will be used to enforce destruction dependencies.
   // When this SurfaceIdAllocator is destroyed, its namespace is
@@ -36,6 +34,10 @@ class CC_SURFACES_EXPORT SurfaceIdAllocator {
   void RegisterSurfaceIdNamespace(SurfaceManager* manager);
 
   uint32_t id_namespace() const { return id_namespace_; }
+
+  // SurfaceIdAllocator's owner can call this when it find out that
+  // SurfaceManager is no longer alive during destruction.
+  void DidDestroySurfaceManager() { manager_ = nullptr; }
 
  private:
   const uint32_t id_namespace_;

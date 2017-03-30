@@ -45,12 +45,12 @@ static bool import_key_is_cached = false;
 // Same as GetEncrytpionKey(), but used by vivaldi during import of passwords.
 crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
                                        const std::string& account_name) {
-  static crypto::SymmetricKey* import_cached_encryption_key = NULL;
+  static std::unique_ptr<crypto::SymmetricKey> import_cached_encryption_key;
   static base::Lock importLock;
   base::AutoLock auto_lock(importLock);
 
   if (import_key_is_cached)
-    return import_cached_encryption_key;
+    return import_cached_encryption_key.get();
 
   std::string password;
   AppleKeychain keychain;
@@ -63,7 +63,7 @@ crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
   import_key_is_cached = true;
 
   if (password.empty())
-    return import_cached_encryption_key;
+    return import_cached_encryption_key.get();
 
   std::string salt(kSalt);
 
@@ -77,7 +77,7 @@ crypto::SymmetricKey* GetEncryptionKey(const std::string& service_name,
                                                 kDerivedKeySizeInBits);
   ANNOTATE_LEAKING_OBJECT_PTR(import_cached_encryption_key);
   DCHECK(import_cached_encryption_key);
-  return import_cached_encryption_key;
+  return import_cached_encryption_key.get();
 }
 
 // Generates a newly allocated SymmetricKey object based on the password found
@@ -117,12 +117,10 @@ crypto::SymmetricKey* GetEncryptionKey() {
 
   // Create an encryption key from our password and salt. The key is
   // intentionally leaked.
-  cached_encryption_key =
-      crypto::SymmetricKey::DeriveKeyFromPassword(crypto::SymmetricKey::AES,
-                                                  password,
-                                                  salt,
-                                                  kEncryptionIterations,
-                                                  kDerivedKeySizeInBits);
+  cached_encryption_key = crypto::SymmetricKey::DeriveKeyFromPassword(
+                              crypto::SymmetricKey::AES, password, salt,
+                              kEncryptionIterations, kDerivedKeySizeInBits)
+                              .release();
   ANNOTATE_LEAKING_OBJECT_PTR(cached_encryption_key);
   DCHECK(cached_encryption_key);
   return cached_encryption_key;

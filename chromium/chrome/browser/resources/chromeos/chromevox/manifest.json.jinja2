@@ -20,6 +20,7 @@
     "commandLinePrivate",
     "experimental",
     "history",
+    "notifications",
     "storage",
     "tabs",
     "tts",
@@ -30,9 +31,13 @@
     {
       "matches": [ "<all_urls>" ],
       "exclude_globs": [
+{% if is_webstore is not defined %}
           "chrome-extension://*",
           "chrome://*",
-          "https://accounts.google.com/embedded/setup/chromeos*"
+          "https://accounts.google.com/embedded/setup/chromeos*",
+          "https://talkgadget.google.com/hangouts*",
+          "*.pdf"
+{% endif %}
       ],
       "all_frames": true,
       "js": [

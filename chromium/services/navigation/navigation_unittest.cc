@@ -36,6 +36,7 @@ class NavigationTest : public shell::test::ShellTest,
 
  private:
   // mojom::ViewClient:
+  void OpenURL(mojom::OpenURLParamsPtr params) override {}
   void LoadingStateChanged(bool is_loading) override {
     // Should see loading start, then stop.
     if (++load_count_ == 2 && loop_)
@@ -46,12 +47,20 @@ class NavigationTest : public shell::test::ShellTest,
                               bool can_go_back,
                               bool can_go_forward) override {}
   void LoadProgressChanged(double progress) override {}
+  void UpdateHoverURL(const GURL& url) override {}
   void ViewCreated(mojom::ViewPtr,
                    mojom::ViewClientRequest,
                    bool,
-                   mojo::RectPtr,
+                   const gfx::Rect&,
                    bool) override {}
   void Close() override {}
+  void NavigationPending(mojom::NavigationEntryPtr entry) override {}
+  void NavigationCommitted(
+      mojom::NavigationCommittedDetailsPtr details,
+      int current_index) override {}
+  void NavigationEntryChanged(mojom::NavigationEntryPtr entry,
+                              int entry_index) override {}
+  void NavigationListPruned(bool from_front, int count) override {}
 
   int load_count_ = 0;
   mojo::Binding<mojom::ViewClient> binding_;
@@ -61,7 +70,8 @@ class NavigationTest : public shell::test::ShellTest,
   DISALLOW_COPY_AND_ASSIGN(NavigationTest);
 };
 
-TEST_F(NavigationTest, Navigate) {
+// See crbug.com/619523
+TEST_F(NavigationTest, DISABLED_Navigate) {
   mojom::ViewFactoryPtr view_factory;
   connector()->ConnectToInterface("exe:navigation", &view_factory);
 

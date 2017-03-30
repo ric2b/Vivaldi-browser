@@ -5,8 +5,10 @@
 #include "media/midi/midi_manager.h"
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 
@@ -119,7 +121,7 @@ void MidiManager::StartSession(MidiManagerClient* client) {
         // Call StartInitialization() only for the first request.
         if (pending_clients_.empty()) {
           completion = Completion::INVOKE_INITIALIZATION;
-          session_thread_runner_ = base::MessageLoop::current()->task_runner();
+          session_thread_runner_ = base::ThreadTaskRunnerHandle::Get();
         } else {
           completion = Completion::COMPLETE_ASYNCHRONOUSLY;
         }
@@ -187,7 +189,7 @@ void MidiManager::AddInputPort(const MidiPortInfo& info) {
   ReportUsage(Usage::INPUT_PORT_ADDED);
   base::AutoLock auto_lock(lock_);
   input_ports_.push_back(info);
-  for (auto client : clients_)
+  for (auto* client : clients_)
     client->AddInputPort(info);
 }
 
@@ -195,7 +197,7 @@ void MidiManager::AddOutputPort(const MidiPortInfo& info) {
   ReportUsage(Usage::OUTPUT_PORT_ADDED);
   base::AutoLock auto_lock(lock_);
   output_ports_.push_back(info);
-  for (auto client : clients_)
+  for (auto* client : clients_)
     client->AddOutputPort(info);
 }
 
@@ -203,7 +205,7 @@ void MidiManager::SetInputPortState(uint32_t port_index, MidiPortState state) {
   base::AutoLock auto_lock(lock_);
   DCHECK_LT(port_index, input_ports_.size());
   input_ports_[port_index].state = state;
-  for (auto client : clients_)
+  for (auto* client : clients_)
     client->SetInputPortState(port_index, state);
 }
 
@@ -211,7 +213,7 @@ void MidiManager::SetOutputPortState(uint32_t port_index, MidiPortState state) {
   base::AutoLock auto_lock(lock_);
   DCHECK_LT(port_index, output_ports_.size());
   output_ports_[port_index].state = state;
-  for (auto client : clients_)
+  for (auto* client : clients_)
     client->SetOutputPortState(port_index, state);
 }
 
@@ -221,7 +223,7 @@ void MidiManager::ReceiveMidiData(uint32_t port_index,
                                   double timestamp) {
   base::AutoLock auto_lock(lock_);
 
-  for (auto client : clients_)
+  for (auto* client : clients_)
     client->ReceiveMidiData(port_index, data, length, timestamp);
 }
 
@@ -241,7 +243,7 @@ void MidiManager::CompleteInitializationInternal(Result result) {
   initialized_ = true;
   result_ = result;
 
-  for (auto client : pending_clients_) {
+  for (auto* client : pending_clients_) {
     if (result_ == Result::OK) {
       AddInitialPorts(client);
       clients_.insert(client);
@@ -266,7 +268,7 @@ void MidiManager::ShutdownOnSessionThread() {
   finalized_ = true;
 
   // Detach all clients so that they do not call MidiManager methods any more.
-  for (auto client : clients_)
+  for (auto* client : clients_)
     client->Detach();
 }
 

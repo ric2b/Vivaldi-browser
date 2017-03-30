@@ -25,11 +25,13 @@
 #include "core/layout/svg/LayoutSVGResourceMarker.h"
 #include "core/layout/svg/LayoutSVGResourceMasker.h"
 #include "core/layout/svg/LayoutSVGResourcePaintServer.h"
-#include "core/style/SVGComputedStyle.h"
+#include "core/style/ComputedStyle.h"
 #include "core/svg/SVGFilterElement.h"
 #include "core/svg/SVGGradientElement.h"
 #include "core/svg/SVGPatternElement.h"
 #include "core/svg/SVGURIReference.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 #ifndef NDEBUG
 #include <stdio.h>
@@ -195,15 +197,15 @@ bool SVGResources::hasResourceData() const
         || m_linkedResource;
 }
 
-static inline SVGResources& ensureResources(OwnPtr<SVGResources>& resources)
+static inline SVGResources& ensureResources(std::unique_ptr<SVGResources>& resources)
 {
     if (!resources)
-        resources = adoptPtr(new SVGResources);
+        resources = wrapUnique(new SVGResources);
 
     return *resources.get();
 }
 
-PassOwnPtr<SVGResources> SVGResources::buildResources(const LayoutObject* object, const SVGComputedStyle& style)
+std::unique_ptr<SVGResources> SVGResources::buildResources(const LayoutObject* object, const ComputedStyle& computedStyle)
 {
     ASSERT(object);
 
@@ -220,7 +222,9 @@ PassOwnPtr<SVGResources> SVGResources::buildResources(const LayoutObject* object
     TreeScope& treeScope = element->treeScope();
     SVGDocumentExtensions& extensions = element->document().accessSVGExtensions();
 
-    OwnPtr<SVGResources> resources;
+    const SVGComputedStyle& style = computedStyle.svgStyle();
+
+    std::unique_ptr<SVGResources> resources;
     if (clipperFilterMaskerTags().contains(tagName)) {
         if (style.hasClipper()) {
             AtomicString id = style.clipperResource();
@@ -228,10 +232,17 @@ PassOwnPtr<SVGResources> SVGResources::buildResources(const LayoutObject* object
                 registerPendingResource(extensions, id, element);
         }
 
-        if (style.hasFilter()) {
-            AtomicString id = style.filterResource();
-            if (!ensureResources(resources).setFilter(getLayoutSVGResourceById<LayoutSVGResourceFilter>(treeScope, id)))
-                registerPendingResource(extensions, id, element);
+        if (computedStyle.hasFilter() && !object->isSVGRoot())  {
+            const FilterOperations& filterOperations = computedStyle.filter();
+            if (filterOperations.size() == 1) {
+                const FilterOperation& filterOperation = *filterOperations.at(0);
+                if (filterOperation.type() == FilterOperation::REFERENCE) {
+                    const auto& referenceFilterOperation = toReferenceFilterOperation(filterOperation);
+                    AtomicString id = SVGURIReference::fragmentIdentifierFromIRIString(referenceFilterOperation.url(), treeScope);
+                    if (!ensureResources(resources).setFilter(getLayoutSVGResourceById<LayoutSVGResourceFilter>(treeScope, id)))
+                        registerPendingResource(extensions, id, element);
+                }
+            }
         }
 
         if (style.hasMasker()) {

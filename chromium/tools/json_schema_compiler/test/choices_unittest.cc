@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/strings/string_piece.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/json_schema_compiler/test/test_util.h"
@@ -77,7 +79,7 @@ TEST(JsonSchemaCompilerChoicesTest, ObjectWithChoicesParamsCreateFail) {
     object_param->SetWithoutPathExpansion("strings",
                                           new base::FundamentalValue(5));
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(object_param.release());
+    params_value->Append(std::move(object_param));
     std::unique_ptr<ObjectWithChoices::Params> params(
         ObjectWithChoices::Params::Create(*params_value));
     EXPECT_FALSE(params.get());
@@ -90,7 +92,7 @@ TEST(JsonSchemaCompilerChoicesTest, ObjectWithChoicesParamsCreateFail) {
     object_param->SetWithoutPathExpansion("integers",
                                           new base::StringValue("asdf"));
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(object_param.release());
+    params_value->Append(std::move(object_param));
     std::unique_ptr<ObjectWithChoices::Params> params(
         ObjectWithChoices::Params::Create(*params_value));
     EXPECT_FALSE(params.get());
@@ -101,7 +103,7 @@ TEST(JsonSchemaCompilerChoicesTest, ObjectWithChoicesParamsCreateFail) {
     object_param->SetWithoutPathExpansion("integers",
                                           new base::FundamentalValue(6));
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(object_param.release());
+    params_value->Append(std::move(object_param));
     std::unique_ptr<ObjectWithChoices::Params> params(
         ObjectWithChoices::Params::Create(*params_value));
     EXPECT_FALSE(params.get());
@@ -115,7 +117,7 @@ TEST(JsonSchemaCompilerChoicesTest, PopulateChoiceType) {
 
   base::ListValue* strings_value = new base::ListValue();
   for (size_t i = 0; i < strings.size(); ++i)
-    strings_value->Append(new base::StringValue(strings[i]));
+    strings_value->AppendString(strings[i]);
 
   base::DictionaryValue value;
   value.SetInteger("integers", 4);
@@ -134,9 +136,9 @@ TEST(JsonSchemaCompilerChoicesTest, PopulateChoiceType) {
 
 TEST(JsonSchemaCompilerChoicesTest, ChoiceTypeToValue) {
   base::ListValue* strings_value = new base::ListValue();
-  strings_value->Append(new base::StringValue("list"));
-  strings_value->Append(new base::StringValue("of"));
-  strings_value->Append(new base::StringValue("strings"));
+  strings_value->AppendString("list");
+  strings_value->AppendString("of");
+  strings_value->AppendString("strings");
 
   base::DictionaryValue value;
   value.SetInteger("integers", 5);

@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/system/cast/tray_cast.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_item.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/system/cast/tray_cast.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/system_tray_item.h"
 #include "ash/test/tray_cast_test_api.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -72,9 +73,8 @@ bool StartCastWithVerification(const extensions::Extension* extension,
 
   // We will simulate a button click in the detail view to begin the cast, so we
   // need to make a detail view available.
-  std::unique_ptr<views::View> detailed_view =
-      base::WrapUnique(system_tray_item->CreateDetailedView(
-          ash::user::LoginStatus::LOGGED_IN_USER));
+  std::unique_ptr<views::View> detailed_view = base::WrapUnique(
+      system_tray_item->CreateDetailedView(ash::LoginStatus::USER));
 
   // Clear out any old state and execute any pending JS calls created from the
   // CreateDetailedView call.
@@ -159,9 +159,8 @@ namespace chromeos {
 // recognizes the cast extension.
 IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastChromeOSTest,
                        CastTraySanityCheckTestExtensionGetsRecognized) {
-  ash::CastConfigDelegate* cast_config_delegate = ash::Shell::GetInstance()
-                                                      ->system_tray_delegate()
-                                                      ->GetCastConfigDelegate();
+  ash::CastConfigDelegate* cast_config_delegate =
+      ash::WmShell::Get()->system_tray_delegate()->GetCastConfigDelegate();
 
   EXPECT_FALSE(cast_config_delegate->HasCastExtension());
   const extensions::Extension* extension = LoadCastTestExtension();
@@ -284,9 +283,8 @@ IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastChromeOSTest,
 IN_PROC_BROWSER_TEST_F(SystemTrayTrayCastChromeOSTest, CastTrayOpenOptions) {
   const extensions::Extension* extension = LoadCastTestExtension();
 
-  ash::CastConfigDelegate* cast_config_delegate = ash::Shell::GetInstance()
-                                                      ->system_tray_delegate()
-                                                      ->GetCastConfigDelegate();
+  ash::CastConfigDelegate* cast_config_delegate =
+      ash::WmShell::Get()->system_tray_delegate()->GetCastConfigDelegate();
   cast_config_delegate->LaunchCastOptions();
 
   const GURL url =

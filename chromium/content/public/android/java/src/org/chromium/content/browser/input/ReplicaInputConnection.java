@@ -81,6 +81,18 @@ public class ReplicaInputConnection
         public Handler getHandler() {
             return mHandler;
         }
+
+        @Override
+        public void onWindowFocusChanged(boolean gainFocus) {}
+
+        @Override
+        public void onViewFocusChanged(boolean gainFocus) {}
+
+        @Override
+        public void onViewAttachedToWindow() {}
+
+        @Override
+        public void onViewDetachedFromWindow() {}
     }
 
     @VisibleForTesting

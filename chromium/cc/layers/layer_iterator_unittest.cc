@@ -131,12 +131,12 @@ TEST_F(LayerIteratorTest, SimpleTree) {
   TestLayerImpl* third_ptr = third.get();
   TestLayerImpl* fourth_ptr = fourth.get();
 
-  root_layer->AddChild(std::move(first));
-  root_layer->AddChild(std::move(second));
-  root_layer->AddChild(std::move(third));
-  root_layer->AddChild(std::move(fourth));
+  root_layer->test_properties()->AddChild(std::move(first));
+  root_layer->test_properties()->AddChild(std::move(second));
+  root_layer->test_properties()->AddChild(std::move(third));
+  root_layer->test_properties()->AddChild(std::move(fourth));
 
-  host_impl_.active_tree()->SetRootLayer(std::move(root_layer));
+  host_impl_.active_tree()->SetRootLayerForTesting(std::move(root_layer));
 
   LayerImplList render_surface_layer_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
@@ -172,16 +172,16 @@ TEST_F(LayerIteratorTest, ComplexTree) {
   TestLayerImpl* root221_ptr = root221.get();
   TestLayerImpl* root231_ptr = root231.get();
 
-  root22->AddChild(std::move(root221));
-  root23->AddChild(std::move(root231));
-  root2->AddChild(std::move(root21));
-  root2->AddChild(std::move(root22));
-  root2->AddChild(std::move(root23));
-  root_layer->AddChild(std::move(root1));
-  root_layer->AddChild(std::move(root2));
-  root_layer->AddChild(std::move(root3));
+  root22->test_properties()->AddChild(std::move(root221));
+  root23->test_properties()->AddChild(std::move(root231));
+  root2->test_properties()->AddChild(std::move(root21));
+  root2->test_properties()->AddChild(std::move(root22));
+  root2->test_properties()->AddChild(std::move(root23));
+  root_layer->test_properties()->AddChild(std::move(root1));
+  root_layer->test_properties()->AddChild(std::move(root2));
+  root_layer->test_properties()->AddChild(std::move(root3));
 
-  host_impl_.active_tree()->SetRootLayer(std::move(root_layer));
+  host_impl_.active_tree()->SetRootLayerForTesting(std::move(root_layer));
 
   LayerImplList render_surface_layer_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
@@ -224,17 +224,17 @@ TEST_F(LayerIteratorTest, ComplexTreeMultiSurface) {
   root22->test_properties()->force_render_surface = true;
   root23->test_properties()->force_render_surface = true;
   root2->test_properties()->force_render_surface = true;
-  root22->AddChild(std::move(root221));
-  root23->AddChild(std::move(root231));
+  root22->test_properties()->AddChild(std::move(root221));
+  root23->test_properties()->AddChild(std::move(root231));
   root2->SetDrawsContent(false);
-  root2->AddChild(std::move(root21));
-  root2->AddChild(std::move(root22));
-  root2->AddChild(std::move(root23));
-  root_layer->AddChild(std::move(root1));
-  root_layer->AddChild(std::move(root2));
-  root_layer->AddChild(std::move(root3));
+  root2->test_properties()->AddChild(std::move(root21));
+  root2->test_properties()->AddChild(std::move(root22));
+  root2->test_properties()->AddChild(std::move(root23));
+  root_layer->test_properties()->AddChild(std::move(root1));
+  root_layer->test_properties()->AddChild(std::move(root2));
+  root_layer->test_properties()->AddChild(std::move(root3));
 
-  host_impl_.active_tree()->SetRootLayer(std::move(root_layer));
+  host_impl_.active_tree()->SetRootLayerForTesting(std::move(root_layer));
 
   LayerImplList render_surface_layer_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(

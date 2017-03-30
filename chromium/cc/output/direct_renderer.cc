@@ -141,19 +141,29 @@ DirectRenderer::DirectRenderer(RendererClient* client,
 
 DirectRenderer::~DirectRenderer() {}
 
-void DirectRenderer::SetEnlargePassTextureAmountForTesting(
-    const gfx::Vector2d& amount) {
-  enlarge_pass_texture_amount_ = amount;
+const TileDrawQuad* DirectRenderer::CanPassBeDrawnDirectly(
+    const RenderPass* pass) {
+  return nullptr;
 }
 
 void DirectRenderer::DecideRenderPassAllocationsForFrame(
     const RenderPassList& render_passes_in_draw_order) {
+  render_pass_bypass_quads_.clear();
+
   std::unordered_map<RenderPassId, gfx::Size, RenderPassIdHash>
       render_passes_in_frame;
-  for (size_t i = 0; i < render_passes_in_draw_order.size(); ++i)
+  RenderPass* root_render_pass = render_passes_in_draw_order.back().get();
+  for (size_t i = 0; i < render_passes_in_draw_order.size(); ++i) {
+    RenderPass* pass = render_passes_in_draw_order[i].get();
+    if (pass != root_render_pass) {
+      if (const TileDrawQuad* tile_quad = CanPassBeDrawnDirectly(pass)) {
+        render_pass_bypass_quads_[pass->id] = *tile_quad;
+        continue;
+      }
+    }
     render_passes_in_frame.insert(std::pair<RenderPassId, gfx::Size>(
-        render_passes_in_draw_order[i]->id,
-        RenderPassTextureSize(render_passes_in_draw_order[i].get())));
+        pass->id, RenderPassTextureSize(pass)));
+  }
 
   std::vector<RenderPassId> passes_to_delete;
   for (auto pass_iter = render_pass_textures_.begin();
@@ -179,18 +189,16 @@ void DirectRenderer::DecideRenderPassAllocationsForFrame(
   for (size_t i = 0; i < passes_to_delete.size(); ++i)
     render_pass_textures_.erase(passes_to_delete[i]);
 
-  for (size_t i = 0; i < render_passes_in_draw_order.size(); ++i) {
-    if (render_pass_textures_.count(render_passes_in_draw_order[i]->id) == 0) {
-      std::unique_ptr<ScopedResource> texture =
-          ScopedResource::Create(resource_provider_);
-      render_pass_textures_[render_passes_in_draw_order[i]->id] =
-          std::move(texture);
-    }
+  for (auto& pass : render_passes_in_draw_order) {
+    auto& resource = render_pass_textures_[pass->id];
+    if (!resource)
+      resource = ScopedResource::Create(resource_provider_);
   }
 }
 
 void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
                                float device_scale_factor,
+                               const gfx::ColorSpace& device_color_space,
                                const gfx::Rect& device_viewport_rect,
                                const gfx::Rect& device_clip_rect,
                                bool disable_picture_quad_image_filtering) {
@@ -219,6 +227,7 @@ void DirectRenderer::DrawFrame(RenderPassList* render_passes_in_draw_order,
   // can leave the window at the wrong size if we never draw and the proper
   // viewport size is never set.
   output_surface_->Reshape(device_viewport_rect.size(), device_scale_factor,
+                           device_color_space,
                            frame.root_render_pass->has_transparent_background);
 
   BeginDrawingFrame(&frame);
@@ -410,6 +419,11 @@ void DirectRenderer::FlushPolygons(
 void DirectRenderer::DrawRenderPassAndExecuteCopyRequests(
     DrawingFrame* frame,
     RenderPass* render_pass) {
+  if (render_pass_bypass_quads_.find(render_pass->id) !=
+      render_pass_bypass_quads_.end()) {
+    return;
+  }
+
   DrawRenderPass(frame, render_pass);
 
   bool first_request = true;
@@ -536,8 +550,8 @@ bool DirectRenderer::UseRenderPass(DrawingFrame* frame,
   DCHECK(texture);
 
   gfx::Size size = RenderPassTextureSize(render_pass);
-  size.Enlarge(enlarge_pass_texture_amount_.x(),
-               enlarge_pass_texture_amount_.y());
+  size.Enlarge(enlarge_pass_texture_amount_.width(),
+               enlarge_pass_texture_amount_.height());
   if (!texture->id()) {
     texture->Allocate(size,
                       ResourceProvider::TEXTURE_HINT_IMMUTABLE_FRAMEBUFFER,

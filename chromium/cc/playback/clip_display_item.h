@@ -18,20 +18,17 @@
 class SkCanvas;
 
 namespace cc {
-class ImageSerializationProcessor;
 
 class CC_EXPORT ClipDisplayItem : public DisplayItem {
  public:
   ClipDisplayItem(const gfx::Rect& clip_rect,
-                  const std::vector<SkRRect>& rounded_clip_rects);
+                  const std::vector<SkRRect>& rounded_clip_rects,
+                  bool antialias);
   explicit ClipDisplayItem(const proto::DisplayItem& proto);
   ~ClipDisplayItem() override;
 
-  void ToProtobuf(proto::DisplayItem* proto,
-                  ImageSerializationProcessor* image_serialization_processor)
-      const override;
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
-              const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
@@ -41,10 +38,12 @@ class CC_EXPORT ClipDisplayItem : public DisplayItem {
 
  private:
   void SetNew(const gfx::Rect& clip_rect,
-              const std::vector<SkRRect>& rounded_clip_rects);
+              const std::vector<SkRRect>& rounded_clip_rects,
+              bool antialias);
 
   gfx::Rect clip_rect_;
   std::vector<SkRRect> rounded_clip_rects_;
+  bool antialias_;
 };
 
 class CC_EXPORT EndClipDisplayItem : public DisplayItem {
@@ -53,18 +52,14 @@ class CC_EXPORT EndClipDisplayItem : public DisplayItem {
   explicit EndClipDisplayItem(const proto::DisplayItem& proto);
   ~EndClipDisplayItem() override;
 
-  void ToProtobuf(proto::DisplayItem* proto,
-                  ImageSerializationProcessor* image_serialization_processor)
-      const override;
+  void ToProtobuf(proto::DisplayItem* proto) const override;
   void Raster(SkCanvas* canvas,
-              const gfx::Rect& canvas_target_playback_rect,
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;
   size_t ExternalMemoryUsage() const override;
 
   int ApproximateOpCount() const { return 0; }
-  bool IsSuitableForGpuRasterization() const { return true; }
 };
 
 }  // namespace cc

@@ -24,12 +24,12 @@ std::string GnubbyExtension::capability() const {
 }
 
 std::unique_ptr<HostExtensionSession> GnubbyExtension::CreateExtensionSession(
-    ClientSessionControl* client_session_control,
+    ClientSessionDetails* details,
     protocol::ClientStub* client_stub) {
   // TODO(joedow): Update this mechanism to allow for multiple sessions.  The
   //               extension will only send messages through the initial
-  //               |client_stub| with the current design.
-  return base::WrapUnique(new GnubbyExtensionSession(client_stub));
+  //               |client_stub| and |details| with the current design.
+  return base::WrapUnique(new GnubbyExtensionSession(details, client_stub));
 }
 
 }  // namespace remoting

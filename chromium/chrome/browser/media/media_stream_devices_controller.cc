@@ -74,17 +74,21 @@ bool ContentTypeIsRequested(content::PermissionType type,
 using PermissionActionCallback =
     base::Callback<void(content::PermissionType, const GURL&)>;
 
+void RecordSinglePermissionAction(const content::MediaStreamRequest& request,
+                                  content::PermissionType permission_type,
+                                  PermissionActionCallback callback) {
+  if (ContentTypeIsRequested(permission_type, request)) {
+    callback.Run(permission_type, request.security_origin);
+  }
+}
+
 // Calls |action_function| for each permission requested by |request|.
 void RecordPermissionAction(const content::MediaStreamRequest& request,
                             PermissionActionCallback callback) {
-  if (ContentTypeIsRequested(content::PermissionType::VIDEO_CAPTURE, request)) {
-    callback.Run(content::PermissionType::VIDEO_CAPTURE,
-                 request.security_origin);
-  }
-  if (ContentTypeIsRequested(content::PermissionType::AUDIO_CAPTURE, request)) {
-    callback.Run(content::PermissionType::AUDIO_CAPTURE,
-                 request.security_origin);
-  }
+  RecordSinglePermissionAction(request, content::PermissionType::AUDIO_CAPTURE,
+                               callback);
+  RecordSinglePermissionAction(request, content::PermissionType::VIDEO_CAPTURE,
+                               callback);
 }
 
 // This helper class helps to measure the number of media stream requests that
@@ -295,6 +299,28 @@ void MediaStreamDevicesController::PermissionDenied() {
               content::MEDIA_DEVICE_PERMISSION_DENIED);
 }
 
+void MediaStreamDevicesController::GroupedRequestFinished(bool audio_accepted,
+                                                          bool video_accepted) {
+  RecordSinglePermissionAction(
+      request_, content::PermissionType::AUDIO_CAPTURE,
+      base::Bind(audio_accepted ? PermissionUmaUtil::PermissionGranted
+                                : PermissionUmaUtil::PermissionDenied));
+  RecordSinglePermissionAction(
+      request_, content::PermissionType::VIDEO_CAPTURE,
+      base::Bind(video_accepted ? PermissionUmaUtil::PermissionGranted
+                                : PermissionUmaUtil::PermissionDenied));
+
+  ContentSetting audio_setting =
+      audio_accepted ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
+  ContentSetting video_setting =
+      video_accepted ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK;
+  RunCallback(GetNewSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                            old_audio_setting_, audio_setting),
+              GetNewSetting(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
+                            old_video_setting_, video_setting),
+              content::MEDIA_DEVICE_PERMISSION_DENIED);
+}
+
 void MediaStreamDevicesController::Cancelled() {
   RecordPermissionAction(
       request_, base::Bind(PermissionUmaUtil::PermissionDismissed));
@@ -463,28 +489,21 @@ void MediaStreamDevicesController::StorePermission(
     ContentSetting new_audio_setting,
     ContentSetting new_video_setting) const {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  bool is_pepper_request =
-      request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY;
+  DCHECK(content::IsOriginSecure(request_.security_origin) ||
+         request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY);
 
   if (IsAskingForAudio() && new_audio_setting != CONTENT_SETTING_ASK) {
-    if (ShouldPersistContentSetting(new_audio_setting, request_.security_origin,
-                                    is_pepper_request)) {
-      HostContentSettingsMapFactory::GetForProfile(profile_)
-          ->SetContentSettingDefaultScope(request_.security_origin, GURL(),
-                                          CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-                                          std::string(), new_audio_setting);
-    }
+    HostContentSettingsMapFactory::GetForProfile(profile_)
+        ->SetContentSettingDefaultScope(request_.security_origin, GURL(),
+                                        CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
+                                        std::string(), new_audio_setting);
   }
   if (IsAskingForVideo() && new_video_setting != CONTENT_SETTING_ASK) {
-    if (ShouldPersistContentSetting(new_video_setting, request_.security_origin,
-                                    is_pepper_request)) {
-      HostContentSettingsMapFactory::GetForProfile(profile_)
-          ->SetContentSettingDefaultScope(
-              request_.security_origin, GURL(),
-              CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(),
-              new_video_setting);
-    }
+    HostContentSettingsMapFactory::GetForProfile(profile_)
+        ->SetContentSettingDefaultScope(
+            request_.security_origin, GURL(),
+            CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA, std::string(),
+            new_video_setting);
   }
 }
 
@@ -561,11 +580,9 @@ ContentSetting MediaStreamDevicesController::GetContentSetting(
   }
 
   if (ContentTypeIsRequested(permission_type, request)) {
-    bool is_insecure_pepper_request =
-        request.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY &&
-        request.security_origin.SchemeIs(url::kHttpScheme);
-    MediaPermission permission(
-        content_type, is_insecure_pepper_request, request.security_origin,
+    DCHECK(content::IsOriginSecure(request_.security_origin) ||
+           request_.request_type == content::MEDIA_OPEN_DEVICE_PEPPER_ONLY);
+    MediaPermission permission(content_type, request.security_origin,
         web_contents_->GetLastCommittedURL().GetOrigin(), profile_);
     return permission.GetPermissionStatusWithDeviceRequired(requested_device_id,
                                                             denial_reason);

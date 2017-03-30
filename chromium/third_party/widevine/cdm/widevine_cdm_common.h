@@ -16,6 +16,9 @@ const char kWidevineKeySystem[] = "com.widevine.alpha";
 // This type is used to register the Widevine CDM.
 const char kWidevineCdmType[] = "Widevine";
 
+// Widevine CDM files are in a directory with this name.
+const char kWidevineCdmBaseDirectory[] = "WidevineCdm";
+
 // This name is used by UMA. Do not change it!
 const char kWidevineKeySystemNameForUMA[] = "Widevine";
 
@@ -30,15 +33,8 @@ const char kWidevineCdmPluginMimeType[] = "application/x-ppapi-widevine-cdm";
 const char kWidevineCdmPluginMimeTypeDescription[] =
     "Widevine Content Decryption Module";
 
-// File name of the CDM on different platforms.
-const char kWidevineCdmFileName[] =
-#if defined(OS_MACOSX)
-    "libwidevinecdm.dylib";
-#elif defined(OS_WIN)
-    "widevinecdm.dll";
-#else  // OS_LINUX, etc.
-    "libwidevinecdm.so";
-#endif
+// Name of the CDM library.
+const char kWidevineCdmLibraryName[] = "widevinecdm";
 
 // File name of the adapter on different platforms.
 const char kWidevineCdmAdapterFileName[] =

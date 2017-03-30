@@ -6,6 +6,7 @@
 
 #include "chrome/browser/android/signin/signin_manager_android.h"
 
+#include "base/android/callback_android.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -78,6 +79,12 @@ class ProfileDataRemover : public BrowsingDataRemover::Observer {
   DISALLOW_COPY_AND_ASSIGN(ProfileDataRemover);
 };
 
+void UserManagementDomainFetched(
+    base::android::ScopedJavaGlobalRef<jobject> callback,
+    const std::string& dm_token, const std::string& client_id) {
+  base::android::RunCallbackAndroid(callback, !dm_token.empty());
+}
+
 }  // namespace
 
 SigninManagerAndroid::SigninManagerAndroid(JNIEnv* env, jobject obj)
@@ -86,6 +93,7 @@ SigninManagerAndroid::SigninManagerAndroid(JNIEnv* env, jobject obj)
   java_signin_manager_.Reset(env, obj);
   profile_ = ProfileManager::GetActiveUserProfile();
   DCHECK(profile_);
+  SigninManagerFactory::GetForProfile(profile_)->AddObserver(this);
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kSigninAllowed,
@@ -269,6 +277,20 @@ jboolean SigninManagerAndroid::IsSignedInOnNative(
   return SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated();
 }
 
+void SigninManagerAndroid::GoogleSigninFailed(
+    const GoogleServiceAuthError& error) {}
+
+void SigninManagerAndroid::GoogleSigninSucceeded(const std::string& account_id,
+                                                 const std::string& username,
+                                                 const std::string& password) {}
+
+void SigninManagerAndroid::GoogleSignedOut(const std::string& account_id,
+                                           const std::string& username) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  Java_SigninManager_onNativeSignOut(base::android::AttachCurrentThread(),
+                                     java_signin_manager_.obj());
+}
+
 void SigninManagerAndroid::OnSigninAllowedPrefChanged() {
   Java_SigninManager_onSigninAllowedByPolicyChanged(
       base::android::AttachCurrentThread(), java_signin_manager_.obj(),
@@ -283,11 +305,40 @@ static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
 
 static jboolean ShouldLoadPolicyForUser(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jclass>& clazz,
     const JavaParamRef<jstring>& j_username) {
   std::string username =
       base::android::ConvertJavaStringToUTF8(env, j_username);
   return !policy::BrowserPolicyConnector::IsNonEnterpriseUser(username);
+}
+
+static void IsUserManaged(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& j_username,
+    const JavaParamRef<jobject>& j_callback) {
+  base::android::ScopedJavaGlobalRef<jobject> callback(env, j_callback);
+
+  Profile* profile = ProfileManager::GetActiveUserProfile();
+  std::string username =
+      base::android::ConvertJavaStringToUTF8(env, j_username);
+  policy::UserPolicySigninService* service =
+      policy::UserPolicySigninServiceFactory::GetForProfile(profile);
+  service->RegisterForPolicy(
+      username, AccountTrackerServiceFactory::GetForProfile(profile)
+                     ->FindAccountInfoByEmail(username)
+                     .account_id,
+      base::Bind(&UserManagementDomainFetched, callback));
+}
+
+base::android::ScopedJavaLocalRef<jstring>
+ExtractDomainName(
+    JNIEnv *env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& j_email) {
+  std::string email = base::android::ConvertJavaStringToUTF8(env, j_email);
+  std::string domain = gaia::ExtractDomainName(email);
+  return base::android::ConvertUTF8ToJavaString(env, domain);
 }
 
 // static

@@ -12,8 +12,10 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
+#include "chrome/browser/engagement/site_engagement_observer.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "ui/base/page_transition_types.h"
@@ -23,12 +25,17 @@ class DictionaryValue;
 class Clock;
 }
 
+namespace content {
+class WebContents;
+}
+
 namespace history {
 class HistoryService;
 }
 
 class GURL;
 class Profile;
+class SiteEngagementScore;
 
 class SiteEngagementScoreProvider {
  public:
@@ -92,7 +99,7 @@ class SiteEngagementService : public KeyedService,
   // Returns whether the engagement service has enough data to make meaningful
   // decisions. Clients should avoid using engagement in their heuristic until
   // this is true.
-  bool IsBootstrapped();
+  bool IsBootstrapped() const;
 
   // Returns whether |url| has at least the given |level| of engagement.
   bool IsEngagementAtLeast(const GURL& url, EngagementLevel level) const;
@@ -109,6 +116,7 @@ class SiteEngagementService : public KeyedService,
   double GetTotalEngagementPoints() const override;
 
  private:
+  friend class SiteEngagementObserver;
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, CheckHistograms);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, CleanupEngagementScores);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, ClearHistoryForURLs);
@@ -120,7 +128,9 @@ class SiteEngagementService : public KeyedService,
                            CleanupOriginsOnHistoryDeletion);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, IsBootstrapped);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, EngagementLevel);
+  FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, Observers);
   FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, ScoreDecayHistograms);
+  FRIEND_TEST_ALL_PREFIXES(SiteEngagementServiceTest, LastEngagementTime);
   FRIEND_TEST_ALL_PREFIXES(AppBannerSettingsHelperTest, SiteEngagementTrigger);
 
   // Only used in tests.
@@ -130,27 +140,58 @@ class SiteEngagementService : public KeyedService,
   // maximum limits for the day and overall.
   void AddPoints(const GURL& url, double points);
 
-  // Post startup tasks: cleaning up origins which have decayed to 0, and
-  // logging UMA statistics.
+  // Retrieves the SiteEngagementScore object for |origin|.
+  SiteEngagementScore CreateEngagementScore(const GURL& origin) const;
+
+  // Runs site engagement maintenance tasks.
   void AfterStartupTask();
-  void CleanupEngagementScores();
+
+  // Removes any origins which have decayed to 0 engagement. If
+  // |update_last_engagement_time| is true, the last engagement time of all
+  // origins is reset by calculating the delta between the last engagement event
+  // recorded by the site engagement service and the origin. The origin's last
+  // engagement time is then set to clock_->Now() - delta.
+  //
+  // If a user does not use the browser at all for some period of time,
+  // engagement is not decayed, and the state is restored equivalent to how they
+  // left it once they return.
+  void CleanupEngagementScores(bool update_last_engagement_time) const;
+
+  // Records UMA metrics.
   void RecordMetrics();
+
+  // Get and set the last engagement time from prefs.
+  base::Time GetLastEngagementTime() const;
+  void SetLastEngagementTime(base::Time last_engagement_time) const;
+
+  // Get the maximum decay period and the stale period for last engagement
+  // times.
+  base::TimeDelta GetMaxDecayPeriod() const;
+  base::TimeDelta GetStalePeriod() const;
 
   // Returns the median engagement score of all recorded origins.
   double GetMedianEngagement(const std::map<GURL, double>& score_map) const;
 
-  // Update the engagement score of the origin matching |url| for media playing.
-  // The points awarded are discounted if the media is being played in a non-
-  // visible tab.
-  void HandleMediaPlaying(const GURL& url, bool is_hidden);
+  // Update the engagement score of the origin loaded in |web_contents| for
+  // media playing. The points awarded are discounted if the media is being
+  // played in a non-visible tab.
+  void HandleMediaPlaying(content::WebContents* web_contents, bool is_hidden);
 
-  // Update the engagement score of the origin matching |url| for navigation.
-  void HandleNavigation(const GURL& url, ui::PageTransition transition);
+  // Update the engagement score of the origin loaded in |web_contents| for
+  // navigation.
+  void HandleNavigation(content::WebContents* web_contents,
+                        ui::PageTransition transition);
 
-  // Update the engagement score of the origin matching |url| for time-on-site,
-  // based on user input.
-  void HandleUserInput(const GURL& url,
+  // Update the engagement score of the origin loaded in |web_contents| for
+  // time-on-site, based on user input.
+  void HandleUserInput(content::WebContents* web_contents,
                        SiteEngagementMetrics::EngagementType type);
+
+  // Returns true if the last engagement increasing event seen by the site
+  // engagement service was sufficiently long ago that we need to reset all
+  // scores to be relative to now. This ensures that users who do not use the
+  // browser for an extended period of time do not have their engagement decay.
+  bool IsLastEngagementStale() const;
 
   // Overridden from history::HistoryServiceObserver:
   void OnURLsDeleted(history::HistoryService* history_service,
@@ -167,17 +208,14 @@ class SiteEngagementService : public KeyedService,
   // Callback for the history service when it is asked for a map of origins to
   // how many URLs corresponding to that origin remain in history.
   void GetCountsAndLastVisitForOriginsComplete(
-    history::HistoryService* history_service,
-    const std::multiset<GURL>& deleted_url_origins,
-    bool expired,
-    const history::OriginCountAndLastVisitMap& remaining_origin_counts);
+      history::HistoryService* history_service,
+      const std::multiset<GURL>& deleted_url_origins,
+      bool expired,
+      const history::OriginCountAndLastVisitMap& remaining_origin_counts);
 
-  // Resets the engagement score for |url| to |score|, and sets the last
-  // engagement time and last shortcut launch time (if it is non-null) to
-  // |updated_time|. Clears daily limits.
-  void ResetScoreAndAccessTimesForURL(const GURL& url,
-                                      double score,
-                                      const base::Time* updated_time);
+  // Add and remove observers of this service.
+  void AddObserver(SiteEngagementObserver* observer);
+  void RemoveObserver(SiteEngagementObserver* observer);
 
   Profile* profile_;
 
@@ -190,6 +228,10 @@ class SiteEngagementService : public KeyedService,
   // origin's engagement score after an hour has elapsed triggers the next
   // upload.
   base::Time last_metrics_time_;
+
+  // A list of observers. When any origin registers an engagement-increasing
+  // event, each observer's OnEngagementIncreased method will be called.
+  base::ObserverList<SiteEngagementObserver> observer_list_;
 
   base::WeakPtrFactory<SiteEngagementService> weak_factory_;
 

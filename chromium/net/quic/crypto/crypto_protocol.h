@@ -73,6 +73,7 @@ const QuicTag kIFW7 = TAG('I', 'F', 'W', '7');   // Set initial size
 const QuicTag kTBBR = TAG('T', 'B', 'B', 'R');   // Reduced Buffer Bloat TCP
 const QuicTag kRENO = TAG('R', 'E', 'N', 'O');   // Reno Congestion Control
 const QuicTag kBYTE = TAG('B', 'Y', 'T', 'E');   // TCP cubic or reno in bytes
+const QuicTag kRATE = TAG('R', 'A', 'T', 'E');   // TCP cubic rate based sending
 const QuicTag kIW03 = TAG('I', 'W', '0', '3');   // Force ICWND to 3
 const QuicTag kIW10 = TAG('I', 'W', '1', '0');   // Force ICWND to 10
 const QuicTag kIW20 = TAG('I', 'W', '2', '0');   // Force ICWND to 20
@@ -98,11 +99,12 @@ const QuicTag kAKD3 = TAG('A', 'K', 'D', '3');   // Ack decimation style acking
 const QuicTag kAKD4 = TAG('A', 'K', 'D', '4');   // Ack decimation with 1/8 RTT
                                                  // tolerating out of order.
 const QuicTag kSSLR = TAG('S', 'S', 'L', 'R');   // Slow Start Large Reduction.
+const QuicTag kNPRR = TAG('N', 'P', 'R', 'R');   // Pace at unity instead of PRR
 const QuicTag k5RTO = TAG('5', 'R', 'T', 'O');   // Close connection on 5 RTOs
 const QuicTag kCTIM = TAG('C', 'T', 'I', 'M');   // Client timestamp in seconds
                                                  // since UNIX epoch.
 const QuicTag kDHDT = TAG('D', 'H', 'D', 'T');   // Disable HPACK dynamic table.
-const QuicTag kIPFS = TAG('I', 'P', 'F', 'S');   // Immediate Forward Secrecy.
+const QuicTag kIPFS = TAG('I', 'P', 'F', 'S');   // No Immediate Forward Secrecy
 
 // Optional support of truncated Connection IDs.  If sent by a peer, the value
 // is the minimum number of bytes allowed for the connection ID sent to the
@@ -145,6 +147,7 @@ const QuicTag kICSL = TAG('I', 'C', 'S', 'L');   // Idle connection state
                                                  // lifetime
 const QuicTag kSCLS = TAG('S', 'C', 'L', 'S');   // Silently close on timeout
 const QuicTag kMSPC = TAG('M', 'S', 'P', 'C');   // Max streams per connection.
+const QuicTag kMIDS = TAG('M', 'I', 'D', 'S');   // Max incoming dynamic streams
 const QuicTag kIRTT = TAG('I', 'R', 'T', 'T');   // Estimated initial RTT in us.
 const QuicTag kSWND = TAG('S', 'W', 'N', 'D');   // Server's Initial congestion
                                                  // window.
@@ -173,6 +176,8 @@ const QuicTag kRCID = TAG('R', 'C', 'I', 'D');   // Server-designated
                                                  // connection ID
 // Server hello tags
 const QuicTag kCADR = TAG('C', 'A', 'D', 'R');   // Client IP address and port
+const QuicTag kASAD = TAG('A', 'S', 'A', 'D');   // Alternate Server IP address
+                                                 // and port.
 
 // CETV tags
 const QuicTag kCIDK = TAG('C', 'I', 'D', 'K');   // ChannelID key

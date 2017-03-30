@@ -26,7 +26,7 @@
 
 #include "core/dom/Fullscreen.h"
 #include "core/frame/FrameHost.h"
-#include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/page/Page.h"
 
@@ -48,6 +48,8 @@ public:
 
 private:
     bool isOfType(LayoutObjectType type) const override { return type == LayoutObjectLayoutFullScreenPlaceholder || LayoutBlockFlow::isOfType(type); }
+    bool anonymousHasStylePropagationOverride() override { return true; }
+
     void willBeDestroyed() override;
     LayoutFullScreen* m_owner;
 };

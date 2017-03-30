@@ -11,8 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "ash/ash_switches.h"
-#include "ash/display/display_info.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/display_layout_store.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
@@ -29,7 +30,7 @@
 #include "ui/display/types/display_mode.h"
 #include "ui/display/types/display_snapshot.h"
 #include "ui/display/util/display_util.h"
-#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/events/devices/touchscreen_device.h"
 
 namespace ash {
@@ -46,9 +47,9 @@ struct DeviceScaleFactorDPIThreshold {
 };
 
 const DeviceScaleFactorDPIThreshold kThresholdTable[] = {
-  {200.0f, 2.0f},
-  {150.0f, 1.25f},
-  {0.0f, 1.0f},
+    {200.0f, 2.0f},
+    {150.0f, 1.25f},
+    {0.0f, 1.0f},
 };
 
 // 1 inch in mm.
@@ -81,8 +82,7 @@ std::vector<DisplayMode> DisplayChangeObserver::GetInternalDisplayModeList(
   const ui::DisplayMode* ui_native_mode = output.native_mode();
   DisplayMode native_mode(ui_native_mode->size(),
                           ui_native_mode->refresh_rate(),
-                          ui_native_mode->is_interlaced(),
-                          true);
+                          ui_native_mode->is_interlaced(), true);
   native_mode.device_scale_factor = display_info.device_scale_factor();
 
   return CreateInternalDisplayModeList(native_mode);
@@ -95,12 +95,12 @@ std::vector<DisplayMode> DisplayChangeObserver::GetExternalDisplayModeList(
   DisplayModeMap display_mode_map;
 
   DisplayMode native_mode;
-  for (const ui::DisplayMode* mode_info : output.modes()) {
+  for (const auto& mode_info : output.modes()) {
     const std::pair<int, int> size(mode_info->size().width(),
                                    mode_info->size().height());
     const DisplayMode display_mode(mode_info->size(), mode_info->refresh_rate(),
                                    mode_info->is_interlaced(),
-                                   output.native_mode() == mode_info);
+                                   output.native_mode() == mode_info.get());
     if (display_mode.native)
       native_mode = display_mode;
 
@@ -130,8 +130,7 @@ std::vector<DisplayMode> DisplayChangeObserver::GetExternalDisplayModeList(
   }
 
   if (native_mode.size.width() >= kMinimumWidthFor4K) {
-    for (size_t i = 0; i < arraysize(kAdditionalDeviceScaleFactorsFor4k);
-         ++i) {
+    for (size_t i = 0; i < arraysize(kAdditionalDeviceScaleFactorsFor4k); ++i) {
       DisplayMode mode = native_mode;
       mode.device_scale_factor = kAdditionalDeviceScaleFactorsFor4k[i];
       mode.native = false;
@@ -143,13 +142,13 @@ std::vector<DisplayMode> DisplayChangeObserver::GetExternalDisplayModeList(
 }
 
 DisplayChangeObserver::DisplayChangeObserver() {
-  Shell::GetInstance()->AddShellObserver(this);
-  ui::DeviceDataManager::GetInstance()->AddObserver(this);
+  WmShell::Get()->AddShellObserver(this);
+  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 }
 
 DisplayChangeObserver::~DisplayChangeObserver() {
-  ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
-  Shell::GetInstance()->RemoveShellObserver(this);
+  ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
+  WmShell::Get()->RemoveShellObserver(this);
 }
 
 ui::MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
@@ -167,15 +166,15 @@ ui::MultipleDisplayState DisplayChangeObserver::GetStateForDisplayIds(
                                              ->display_manager()
                                              ->layout_store()
                                              ->GetRegisteredDisplayLayout(list);
-  return layout.mirrored ? ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR :
-                           ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
+  return layout.mirrored ? ui::MULTIPLE_DISPLAY_STATE_DUAL_MIRROR
+                         : ui::MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED;
 }
 
 bool DisplayChangeObserver::GetResolutionForDisplayId(int64_t display_id,
                                                       gfx::Size* size) const {
   DisplayMode mode;
   if (!Shell::GetInstance()->display_manager()->GetSelectedModeForDisplayId(
-           display_id, &mode))
+          display_id, &mode))
     return false;
 
   *size = mode.size;
@@ -269,7 +268,8 @@ void DisplayChangeObserver::OnDisplayModeChanged(
   }
 
   AssociateTouchscreens(
-      &displays, ui::DeviceDataManager::GetInstance()->touchscreen_devices());
+      &displays,
+      ui::InputDeviceManager::GetInstance()->GetTouchscreenDevices());
   // DisplayManager can be null during the boot.
   Shell::GetInstance()->display_manager()->OnNativeDisplaysChanged(displays);
 

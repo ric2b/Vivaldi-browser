@@ -22,6 +22,9 @@ class View;
 // that the border is one pixel regardless of display scaling.
 class BackgroundWith1PxBorder : public views::Background {
  public:
+  // Corner radius of the inside edge of the roundrect border stroke.
+  static constexpr int kCornerRadius = 2;
+
   BackgroundWith1PxBorder(SkColor background, SkColor border);
 
   void Paint(gfx::Canvas* canvas, views::View* view) const override;

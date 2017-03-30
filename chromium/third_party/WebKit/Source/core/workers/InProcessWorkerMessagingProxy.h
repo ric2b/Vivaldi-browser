@@ -34,10 +34,10 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -60,15 +60,15 @@ public:
     // (Only use these methods in the parent context thread.)
     void startWorkerGlobalScope(const KURL& scriptURL, const String& userAgent, const String& sourceCode) override;
     void terminateWorkerGlobalScope() override;
-    void postMessageToWorkerGlobalScope(PassRefPtr<SerializedScriptValue>, PassOwnPtr<MessagePortChannelArray>) override;
+    void postMessageToWorkerGlobalScope(PassRefPtr<SerializedScriptValue>, std::unique_ptr<MessagePortChannelArray>) override;
     bool hasPendingActivity() const final;
     void workerObjectDestroyed() override;
 
     // These methods come from worker context thread via
     // InProcessWorkerObjectProxy and are called on the parent context thread.
-    void postMessageToWorkerObject(PassRefPtr<SerializedScriptValue>, PassOwnPtr<MessagePortChannelArray>);
-    void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, int exceptionId);
-    void reportConsoleMessage(MessageSource, MessageLevel, const String& message, int lineNumber, const String& sourceURL);
+    void postMessageToWorkerObject(PassRefPtr<SerializedScriptValue>, std::unique_ptr<MessagePortChannelArray>);
+    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>);
+    void reportConsoleMessage(MessageSource, MessageLevel, const String& message, std::unique_ptr<SourceLocation>);
     void postMessageToPageInspector(const String&);
     void postWorkerConsoleAgentEnabled();
     void confirmMessageFromWorkerObject(bool hasPendingActivity);
@@ -78,11 +78,14 @@ public:
 
     ExecutionContext* getExecutionContext() const { return m_executionContext.get(); }
 
+    // Number of live messaging proxies, used by leak detection.
+    static int proxyCount();
+
 protected:
     InProcessWorkerMessagingProxy(InProcessWorkerBase*, WorkerClients*);
     ~InProcessWorkerMessagingProxy() override;
 
-    virtual PassOwnPtr<WorkerThread> createWorkerThread(double originTime) = 0;
+    virtual std::unique_ptr<WorkerThread> createWorkerThread(double originTime) = 0;
 
     PassRefPtr<WorkerLoaderProxy> loaderProxy() { return m_loaderProxy; }
     InProcessWorkerObjectProxy& workerObjectProxy() { return *m_workerObjectProxy.get(); }
@@ -101,10 +104,10 @@ private:
     bool isParentContextThread() const;
 
     Persistent<ExecutionContext> m_executionContext;
-    OwnPtr<InProcessWorkerObjectProxy> m_workerObjectProxy;
+    std::unique_ptr<InProcessWorkerObjectProxy> m_workerObjectProxy;
     WeakPersistent<InProcessWorkerBase> m_workerObject;
     bool m_mayBeDestroyed;
-    OwnPtr<WorkerThread> m_workerThread;
+    std::unique_ptr<WorkerThread> m_workerThread;
 
     // Unconfirmed messages from the parent context thread to the worker thread.
     unsigned m_unconfirmedMessageCount;

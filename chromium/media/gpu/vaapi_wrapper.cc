@@ -23,10 +23,11 @@
 #include "ui/gl/gl_bindings.h"
 
 #if defined(USE_X11)
-#include "ui/gfx/x/x11_types.h"
+#include "ui/gfx/x/x11_types.h"  // nogncheck
 #elif defined(USE_OZONE)
 #include "third_party/libva/va/drm/va_drm.h"
 #include "third_party/libva/va/va_drmcommon.h"
+#include "ui/gfx/buffer_format_util.h"
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif  // USE_X11
@@ -71,6 +72,8 @@ uint32_t BufferFormatToVAFourCC(gfx::BufferFormat fmt) {
       return VA_FOURCC_BGRA;
     case gfx::BufferFormat::UYVY_422:
       return VA_FOURCC_UYVY;
+    case gfx::BufferFormat::YVU_420:
+      return VA_FOURCC_YV12;
     default:
       NOTREACHED();
       return 0;
@@ -84,6 +87,8 @@ uint32_t BufferFormatToVARTFormat(gfx::BufferFormat fmt) {
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::BGRA_8888:
       return VA_RT_FORMAT_RGB32;
+    case gfx::BufferFormat::YVU_420:
+      return VA_RT_FORMAT_YUV420;
     default:
       NOTREACHED();
       return 0;
@@ -118,21 +123,21 @@ static const VAConfigAttrib kEncodeVAConfigAttribs[] = {
 };
 
 struct ProfileMap {
-  media::VideoCodecProfile profile;
+  VideoCodecProfile profile;
   VAProfile va_profile;
 };
 
 // A map between VideoCodecProfile and VAProfile.
 static const ProfileMap kProfileMap[] = {
-    {media::H264PROFILE_BASELINE, VAProfileH264Baseline},
-    {media::H264PROFILE_MAIN, VAProfileH264Main},
+    {H264PROFILE_BASELINE, VAProfileH264Baseline},
+    {H264PROFILE_MAIN, VAProfileH264Main},
     // TODO(posciak): See if we can/want support other variants of
-    // media::H264PROFILE_HIGH*.
-    {media::H264PROFILE_HIGH, VAProfileH264High},
-    {media::VP8PROFILE_ANY, VAProfileVP8Version0_3},
+    // H264PROFILE_HIGH*.
+    {H264PROFILE_HIGH, VAProfileH264High},
+    {VP8PROFILE_ANY, VAProfileVP8Version0_3},
     // TODO(servolk): Need to add VP9 profiles 1,2,3 here after rolling
     // third_party/libva to 1.7. crbug.com/598118
-    {media::VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
+    {VP9PROFILE_PROFILE0, VAProfileVP9Profile0},
 };
 
 static std::vector<VAConfigAttrib> GetRequiredAttribs(
@@ -205,7 +210,7 @@ scoped_refptr<VaapiWrapper> VaapiWrapper::Create(
 // static
 scoped_refptr<VaapiWrapper> VaapiWrapper::CreateForVideoCodec(
     CodecMode mode,
-    media::VideoCodecProfile profile,
+    VideoCodecProfile profile,
     const base::Closure& report_error_to_uma_cb) {
   VAProfile va_profile = ProfileToVAProfile(profile, mode);
   scoped_refptr<VaapiWrapper> vaapi_wrapper =
@@ -214,9 +219,9 @@ scoped_refptr<VaapiWrapper> VaapiWrapper::CreateForVideoCodec(
 }
 
 // static
-media::VideoEncodeAccelerator::SupportedProfiles
+VideoEncodeAccelerator::SupportedProfiles
 VaapiWrapper::GetSupportedEncodeProfiles() {
-  media::VideoEncodeAccelerator::SupportedProfiles profiles;
+  VideoEncodeAccelerator::SupportedProfiles profiles;
   std::vector<ProfileInfo> encode_profile_infos =
       profile_infos_.Get().GetSupportedProfileInfosForCodecMode(kEncode);
 
@@ -226,7 +231,7 @@ VaapiWrapper::GetSupportedEncodeProfiles() {
       continue;
     for (const auto& profile_info : encode_profile_infos) {
       if (profile_info.va_profile == va_profile) {
-        media::VideoEncodeAccelerator::SupportedProfile profile;
+        VideoEncodeAccelerator::SupportedProfile profile;
         profile.profile = kProfileMap[i].profile;
         profile.max_resolution = profile_info.max_resolution;
         profile.max_framerate_numerator = kMaxEncoderFramerate;
@@ -240,9 +245,9 @@ VaapiWrapper::GetSupportedEncodeProfiles() {
 }
 
 // static
-media::VideoDecodeAccelerator::SupportedProfiles
+VideoDecodeAccelerator::SupportedProfiles
 VaapiWrapper::GetSupportedDecodeProfiles() {
-  media::VideoDecodeAccelerator::SupportedProfiles profiles;
+  VideoDecodeAccelerator::SupportedProfiles profiles;
   std::vector<ProfileInfo> decode_profile_infos =
       profile_infos_.Get().GetSupportedProfileInfosForCodecMode(kDecode);
 
@@ -252,7 +257,7 @@ VaapiWrapper::GetSupportedDecodeProfiles() {
       continue;
     for (const auto& profile_info : decode_profile_infos) {
       if (profile_info.va_profile == va_profile) {
-        media::VideoDecodeAccelerator::SupportedProfile profile;
+        VideoDecodeAccelerator::SupportedProfile profile;
         profile.profile = kProfileMap[i].profile;
         profile.max_resolution = profile_info.max_resolution;
         profile.min_resolution.SetSize(16, 16);
@@ -284,7 +289,7 @@ void VaapiWrapper::TryToSetVADisplayAttributeToLocalGPU() {
 }
 
 // static
-VAProfile VaapiWrapper::ProfileToVAProfile(media::VideoCodecProfile profile,
+VAProfile VaapiWrapper::ProfileToVAProfile(VideoCodecProfile profile,
                                            CodecMode mode) {
   VAProfile va_profile = VAProfileNone;
   for (size_t i = 0; i < arraysize(kProfileMap); ++i) {
@@ -295,7 +300,7 @@ VAProfile VaapiWrapper::ProfileToVAProfile(media::VideoCodecProfile profile,
   }
   if (!profile_infos_.Get().IsProfileSupported(mode, va_profile) &&
       va_profile == VAProfileH264Baseline) {
-    // crbug.com/345569: media::ProfileIDToVideoCodecProfile() currently strips
+    // crbug.com/345569: ProfileIDToVideoCodecProfile() currently strips
     // the information whether the profile is constrained or not, so we have no
     // way to know here. Try for baseline first, but if it is not supported,
     // try constrained baseline and hope this is what it actually is
@@ -614,33 +619,49 @@ scoped_refptr<VASurface> VaapiWrapper::CreateUnownedSurface(
 #if defined(USE_OZONE)
 scoped_refptr<VASurface> VaapiWrapper::CreateVASurfaceForPixmap(
     const scoped_refptr<ui::NativePixmap>& pixmap) {
-  // Get the dmabuf of the created buffer.
-  int dmabuf_fd = pixmap->GetDmaBufFd();
-  if (dmabuf_fd < 0) {
-    LOG(ERROR) << "Failed to get dmabuf from an Ozone NativePixmap";
-    return nullptr;
-  }
-  int dmabuf_pitch = pixmap->GetDmaBufPitch();
-  gfx::Size pixmap_size = pixmap->GetBufferSize();
-
-  // Create a VASurface out of the created buffer using the dmabuf.
+  // Create a VASurface for a NativePixmap by importing the underlying dmabufs.
   VASurfaceAttribExternalBuffers va_attrib_extbuf;
   memset(&va_attrib_extbuf, 0, sizeof(va_attrib_extbuf));
+
   va_attrib_extbuf.pixel_format =
       BufferFormatToVAFourCC(pixmap->GetBufferFormat());
-  va_attrib_extbuf.width = pixmap_size.width();
-  va_attrib_extbuf.height = pixmap_size.height();
-  va_attrib_extbuf.data_size = pixmap_size.height() * dmabuf_pitch;
-  va_attrib_extbuf.num_planes = 1;
-  va_attrib_extbuf.pitches[0] = dmabuf_pitch;
-  va_attrib_extbuf.offsets[0] = 0;
-  va_attrib_extbuf.buffers = reinterpret_cast<unsigned long*>(&dmabuf_fd);
-  va_attrib_extbuf.num_buffers = 1;
+  gfx::Size size = pixmap->GetBufferSize();
+  va_attrib_extbuf.width = size.width();
+  va_attrib_extbuf.height = size.height();
+
+  size_t num_fds = pixmap->GetDmaBufFdCount();
+  size_t num_planes =
+      gfx::NumberOfPlanesForBufferFormat(pixmap->GetBufferFormat());
+  if (num_fds == 0 || num_fds > num_planes) {
+    LOG(ERROR) << "Invalid number of dmabuf fds: " << num_fds
+               << " , planes: " << num_planes;
+    return nullptr;
+  }
+
+  for (size_t i = 0; i < num_planes; ++i) {
+    va_attrib_extbuf.pitches[i] = pixmap->GetDmaBufPitch(i);
+    va_attrib_extbuf.offsets[i] = pixmap->GetDmaBufOffset(i);
+    DVLOG(4) << "plane " << i << ": pitch: " << va_attrib_extbuf.pitches[i]
+             << " offset: " << va_attrib_extbuf.offsets[i];
+  }
+  va_attrib_extbuf.num_planes = num_planes;
+
+  std::vector<unsigned long> fds(num_fds);
+  for (size_t i = 0; i < num_fds; ++i) {
+    int dmabuf_fd = pixmap->GetDmaBufFd(i);
+    if (dmabuf_fd < 0) {
+      LOG(ERROR) << "Failed to get dmabuf from an Ozone NativePixmap";
+      return nullptr;
+    }
+    fds[i] = dmabuf_fd;
+  }
+  va_attrib_extbuf.buffers = fds.data();
+  va_attrib_extbuf.num_buffers = fds.size();
+
   va_attrib_extbuf.flags = 0;
   va_attrib_extbuf.private_data = NULL;
 
-  std::vector<VASurfaceAttrib> va_attribs;
-  va_attribs.resize(2);
+  std::vector<VASurfaceAttrib> va_attribs(2);
 
   va_attribs[0].type = VASurfaceAttribMemoryType;
   va_attribs[0].flags = VA_SURFACE_ATTRIB_SETTABLE;
@@ -652,9 +673,8 @@ scoped_refptr<VASurface> VaapiWrapper::CreateVASurfaceForPixmap(
   va_attribs[1].value.type = VAGenericValueTypePointer;
   va_attribs[1].value.value.p = &va_attrib_extbuf;
 
-  scoped_refptr<VASurface> va_surface =
-      CreateUnownedSurface(BufferFormatToVARTFormat(pixmap->GetBufferFormat()),
-                           pixmap_size, va_attribs);
+  scoped_refptr<VASurface> va_surface = CreateUnownedSurface(
+      BufferFormatToVARTFormat(pixmap->GetBufferFormat()), size, va_attribs);
   if (!va_surface) {
     LOG(ERROR) << "Failed to create VASurface for an Ozone NativePixmap";
     return nullptr;
@@ -930,7 +950,7 @@ static void DestroyVAImage(VADisplay va_display, VAImage image) {
 }
 
 bool VaapiWrapper::UploadVideoFrameToSurface(
-    const scoped_refptr<media::VideoFrame>& frame,
+    const scoped_refptr<VideoFrame>& frame,
     VASurfaceID va_surface_id) {
   base::AutoLock auto_lock(*va_lock_);
 
@@ -959,12 +979,9 @@ bool VaapiWrapper::UploadVideoFrameToSurface(
   {
     base::AutoUnlock auto_unlock(*va_lock_);
     ret = libyuv::I420ToNV12(
-        frame->data(media::VideoFrame::kYPlane),
-        frame->stride(media::VideoFrame::kYPlane),
-        frame->data(media::VideoFrame::kUPlane),
-        frame->stride(media::VideoFrame::kUPlane),
-        frame->data(media::VideoFrame::kVPlane),
-        frame->stride(media::VideoFrame::kVPlane),
+        frame->data(VideoFrame::kYPlane), frame->stride(VideoFrame::kYPlane),
+        frame->data(VideoFrame::kUPlane), frame->stride(VideoFrame::kUPlane),
+        frame->data(VideoFrame::kVPlane), frame->stride(VideoFrame::kVPlane),
         static_cast<uint8_t*>(image_ptr) + image.offsets[0], image.pitches[0],
         static_cast<uint8_t*>(image_ptr) + image.offsets[1], image.pitches[1],
         image.width, image.height);

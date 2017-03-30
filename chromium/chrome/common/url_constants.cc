@@ -49,6 +49,7 @@ const char kChromeUIExtensionsFrameURL[] = "chrome://extensions-frame/";
 const char kChromeUIExtensionsURL[] = "chrome://extensions/";
 const char kChromeUIFallbackIconURL[] = "chrome://fallback-icon/";
 const char kChromeUIFaviconURL[] = "chrome://favicon/";
+const char kChromeUIFeedbackURL[] = "chrome://feedback/";
 const char kChromeUIFlagsURL[] = "chrome://flags/";
 const char kChromeUIFlashURL[] = "chrome://flash/";
 const char kChromeUIGCMInternalsURL[] = "chrome://gcm-internals/";
@@ -145,6 +146,9 @@ const char kChromeUIWebRtcLogsURL[] = "chrome://webrtc-logs/";
 
 #if defined(ENABLE_MEDIA_ROUTER)
 const char kChromeUIMediaRouterURL[] = "chrome://media-router/";
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+const char kChromeUICastURL[] = "chrome://cast/";
+#endif
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
@@ -187,6 +191,7 @@ const char kChromeUIExtensionsFrameHost[] = "extensions-frame";
 const char kChromeUIExtensionsHost[] = "extensions";
 const char kChromeUIFallbackIconHost[] = "fallback-icon";
 const char kChromeUIFaviconHost[] = "favicon";
+const char kChromeUIFeedbackHost[] = "feedback";
 const char kChromeUIFlagsHost[] = "flags";
 const char kChromeUIFlashHost[] = "flash";
 const char kChromeUIGCMInternalsHost[] = "gcm-internals";
@@ -266,6 +271,7 @@ const char kChromeUISandboxHost[] = "sandbox";
 
 #if defined(OS_ANDROID)
 const char kChromeUIContextualSearchPromoHost[] = "contextual-search-promo";
+const char kChromeUIOfflineInternalsHost[] = "offline-internals";
 const char kChromeUIPhysicalWebHost[] = "physical-web";
 const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
@@ -329,6 +335,9 @@ const char kChromeUIWebRtcLogsHost[] = "webrtc-logs";
 
 #if defined(ENABLE_MEDIA_ROUTER)
 const char kChromeUIMediaRouterHost[] = "media-router";
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+const char kChromeUICastHost[] = "cast";
+#endif
 #endif
 
 // Option sub pages.
@@ -655,6 +664,7 @@ const char* const kChromeHostURLs[] = {
 #endif
 #if defined(OS_ANDROID)
   kChromeUINetExportHost,
+  kChromeUIOfflineInternalsHost,
   kChromeUIPopularSitesInternalsHost,
   kChromeUISnippetsInternalsHost,
 #else  // non-mobile
@@ -771,5 +781,9 @@ const char kChooserBluetoothOverviewURL[] =
 
 const char kChooserUsbOverviewURL[] =
     "https://support.google.com/chrome?p=webusb";
+
+#if defined(OS_CHROMEOS)
+const char kEolNotificationURL[] = "https://www.google.com/chromebook/older/";
+#endif
 
 }  // namespace chrome

@@ -441,12 +441,14 @@ void PepperVideoEncoderHost::RequireBitstreamBuffers(
 }
 
 void PepperVideoEncoderHost::BitstreamBufferReady(int32_t buffer_id,
-                                                  size_t payload_size,
-                                                  bool key_frame) {
+    size_t payload_size,
+    bool key_frame,
+    base::TimeDelta /* timestamp */) {
   DCHECK(RenderThreadImpl::current());
   DCHECK(shm_buffers_[buffer_id]->in_use);
 
   shm_buffers_[buffer_id]->in_use = false;
+  // TODO: Pass timestamp. Tracked in crbug/613984.
   host()->SendUnsolicitedReply(
       pp_resource(),
       PpapiPluginMsg_VideoEncoder_BitstreamBufferReady(
@@ -527,10 +529,10 @@ bool PepperVideoEncoderHost::EnsureGpuChannel() {
     return false;
 
   command_buffer_ = gpu::CommandBufferProxyImpl::Create(
-      std::move(channel), gpu::kNullSurfaceHandle, gfx::Size(), nullptr,
+      std::move(channel), gpu::kNullSurfaceHandle, nullptr,
       gpu::GPU_STREAM_DEFAULT, gpu::GpuStreamPriority::NORMAL,
       gpu::gles2::ContextCreationAttribHelper(), GURL::EmptyGURL(),
-      gfx::PreferIntegratedGpu, base::ThreadTaskRunnerHandle::Get());
+      base::ThreadTaskRunnerHandle::Get());
   if (!command_buffer_) {
     Close();
     return false;

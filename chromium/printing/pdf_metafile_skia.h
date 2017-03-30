@@ -18,27 +18,29 @@
 #include <windows.h>
 #endif
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-namespace base {
-struct FileDescriptor;
-}
-#endif
+class SkCanvas;
 
 namespace printing {
+
+enum SkiaDocumentType {
+  PDF_SKIA_DOCUMENT_TYPE,
+  // MSKP is an experimental, fragile, and diagnostic-only document type.
+  MSKP_SKIA_DOCUMENT_TYPE,
+};
 
 struct PdfMetafileSkiaData;
 
 // This class uses Skia graphics library to generate a PDF document.
 class PRINTING_EXPORT PdfMetafileSkia : public Metafile {
  public:
-  PdfMetafileSkia();
+  explicit PdfMetafileSkia(SkiaDocumentType type);
   ~PdfMetafileSkia() override;
 
   // Metafile methods.
   bool Init() override;
   bool InitFromData(const void* src_buffer, uint32_t src_buffer_size) override;
 
-  bool StartPage(const gfx::Size& page_size,
+  void StartPage(const gfx::Size& page_size,
                  const gfx::Rect& content_area,
                  const float& scale_factor) override;
   bool FinishPage() override;
@@ -65,13 +67,9 @@ class PRINTING_EXPORT PdfMetafileSkia : public Metafile {
 
   bool SaveTo(base::File* file) const override;
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-  // TODO(vitalybuka): replace with SaveTo().
-  bool SaveToFD(const base::FileDescriptor& fd) const;
-#endif  // if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-
   // Return a new metafile containing just the current page in draft mode.
-  std::unique_ptr<PdfMetafileSkia> GetMetafileForCurrentPage();
+  std::unique_ptr<PdfMetafileSkia> GetMetafileForCurrentPage(
+      SkiaDocumentType type);
 
   // This method calls StartPage and then returns an appropriate
   // PlatformCanvas implementation bound to the context created by

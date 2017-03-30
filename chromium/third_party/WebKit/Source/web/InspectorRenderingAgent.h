@@ -6,6 +6,7 @@
 #define InspectorRenderingAgent_h
 
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/Rendering.h"
 
 namespace blink {
 
@@ -13,7 +14,7 @@ class InspectorOverlay;
 class WebLocalFrameImpl;
 class WebViewImpl;
 
-class InspectorRenderingAgent final : public InspectorBaseAgent<InspectorRenderingAgent, protocol::Frontend::Rendering>, public protocol::Backend::Rendering {
+class InspectorRenderingAgent final : public InspectorBaseAgent<protocol::Rendering::Metainfo> {
     WTF_MAKE_NONCOPYABLE(InspectorRenderingAgent);
 public:
     static InspectorRenderingAgent* create(WebLocalFrameImpl*, InspectorOverlay*);

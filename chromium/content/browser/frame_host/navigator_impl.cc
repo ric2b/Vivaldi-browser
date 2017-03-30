@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/time/time.h"
 #include "content/browser/frame_host/frame_tree.h"
@@ -42,6 +43,7 @@
 #include "content/public/common/resource_response.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/net_errors.h"
+#include "url/gurl.h"
 #include "url/url_constants.h"
 
 namespace content {
@@ -269,7 +271,8 @@ bool NavigatorImpl::NavigateToEntry(
     const NavigationEntryImpl& entry,
     NavigationController::ReloadType reload_type,
     bool is_same_document_history_load,
-    bool is_pending_entry) {
+    bool is_pending_entry,
+    const scoped_refptr<ResourceRequestBodyImpl>& post_body) {
   TRACE_EVENT0("browser,navigation", "NavigatorImpl::NavigateToEntry");
 
   GURL dest_url = frame_entry.url();
@@ -348,8 +351,9 @@ bool NavigatorImpl::NavigateToEntry(
 
   } else {
     RenderFrameHostImpl* dest_render_frame_host =
-        frame_tree_node->render_manager()->Navigate(dest_url, frame_entry,
-                                                    entry);
+        frame_tree_node->render_manager()->Navigate(
+            dest_url, frame_entry, entry,
+            reload_type != NavigationController::NO_RELOAD);
     if (!dest_render_frame_host)
       return false;  // Unable to create the desired RenderFrameHost.
 
@@ -387,9 +391,9 @@ bool NavigatorImpl::NavigateToEntry(
       FrameMsg_Navigate_Type::Value navigation_type = GetNavigationType(
           controller_->GetBrowserContext(), entry, reload_type);
       dest_render_frame_host->Navigate(
-          entry.ConstructCommonNavigationParams(dest_url, dest_referrer,
-                                                navigation_type, lofi_state,
-                                                navigation_start),
+          entry.ConstructCommonNavigationParams(
+              frame_entry, post_body, dest_url, dest_referrer, navigation_type,
+              lofi_state, navigation_start),
           entry.ConstructStartNavigationParams(),
           entry.ConstructRequestNavigationParams(
               frame_entry, is_same_document_history_load,
@@ -436,7 +440,7 @@ bool NavigatorImpl::NavigateToPendingEntry(
     bool is_same_document_history_load) {
   return NavigateToEntry(frame_tree_node, frame_entry,
                          *controller_->GetPendingEntry(), reload_type,
-                         is_same_document_history_load, true);
+                         is_same_document_history_load, true, nullptr);
 }
 
 bool NavigatorImpl::NavigateNewChildFrame(
@@ -457,7 +461,7 @@ bool NavigatorImpl::NavigateNewChildFrame(
 
   return NavigateToEntry(render_frame_host->frame_tree_node(), *frame_entry,
                          *entry, NavigationControllerImpl::NO_RELOAD, false,
-                         false);
+                         false, nullptr);
 }
 
 void NavigatorImpl::DidNavigate(
@@ -525,8 +529,8 @@ void NavigatorImpl::DidNavigate(
   render_frame_host->frame_tree_node()->SetCurrentOrigin(
       params.origin, params.has_potentially_trustworthy_unique_origin);
 
-  render_frame_host->frame_tree_node()->SetEnforceStrictMixedContentChecking(
-      params.should_enforce_strict_mixed_content_checking);
+  render_frame_host->frame_tree_node()->SetInsecureRequestPolicy(
+      params.insecure_request_policy);
 
   // Navigating to a new location means a new, fresh set of http headers and/or
   // <meta> elements - we need to reset CSP policy to an empty set.
@@ -644,13 +648,16 @@ bool NavigatorImpl::ShouldAssignSiteForURL(const GURL& url) {
   return GetContentClient()->browser()->ShouldAssignSiteForURL(url);
 }
 
-void NavigatorImpl::RequestOpenURL(RenderFrameHostImpl* render_frame_host,
-                                   const GURL& url,
-                                   SiteInstance* source_site_instance,
-                                   const Referrer& referrer,
-                                   WindowOpenDisposition disposition,
-                                   bool should_replace_current_entry,
-                                   bool user_gesture) {
+void NavigatorImpl::RequestOpenURL(
+    RenderFrameHostImpl* render_frame_host,
+    const GURL& url,
+    bool uses_post,
+    const scoped_refptr<ResourceRequestBodyImpl>& body,
+    SiteInstance* source_site_instance,
+    const Referrer& referrer,
+    WindowOpenDisposition disposition,
+    bool should_replace_current_entry,
+    bool user_gesture) {
   // Note: This can be called for subframes (even when OOPIFs are not possible)
   // if the disposition calls for a different window.
 
@@ -688,6 +695,8 @@ void NavigatorImpl::RequestOpenURL(RenderFrameHostImpl* render_frame_host,
   OpenURLParams params(dest_url, referrer, frame_tree_node_id, disposition,
                        ui::PAGE_TRANSITION_LINK,
                        true /* is_renderer_initiated */);
+  params.uses_post = uses_post;
+  params.post_data = body;
   params.source_site_instance = source_site_instance;
   if (redirect_chain.size() > 0)
     params.redirect_chain = redirect_chain;
@@ -713,6 +722,9 @@ void NavigatorImpl::RequestOpenURL(RenderFrameHostImpl* render_frame_host,
     params.is_renderer_initiated = false;
   }
 
+  GetContentClient()->browser()->OverrideOpenURLParams(current_site_instance,
+                                                       &params);
+
   if (delegate_)
     delegate_->RequestOpenURL(render_frame_host, params);
 }
@@ -725,7 +737,15 @@ void NavigatorImpl::RequestTransferURL(
     const Referrer& referrer,
     ui::PageTransition page_transition,
     const GlobalRequestID& transferred_global_request_id,
-    bool should_replace_current_entry) {
+    bool should_replace_current_entry,
+    const std::string& method,
+    scoped_refptr<ResourceRequestBodyImpl> post_body) {
+  // |method != "POST"| should imply absence of |post_body|.
+  if (method != "POST" && post_body) {
+    NOTREACHED();
+    post_body = nullptr;
+  }
+
   // This call only makes sense for subframes if OOPIFs are possible.
   DCHECK(!render_frame_host->GetParent() ||
          SiteIsolationPolicy::AreCrossProcessFramesPossible());
@@ -789,12 +809,10 @@ void NavigatorImpl::RequestTransferURL(
               is_renderer_initiated, std::string(),
               controller_->GetBrowserContext()));
     }
-    // TODO(creis): Handle POST submissions.  See https://crbug.com/582211 and
-    // https://crbug.com/101395.
     entry->AddOrUpdateFrameEntry(
         node, -1, -1, nullptr,
         static_cast<SiteInstanceImpl*>(source_site_instance), dest_url,
-        referrer_to_use, PageState(), "GET", -1);
+        referrer_to_use, PageState(), method, -1);
   } else {
     // Main frame case.
     entry = NavigationEntryImpl::FromNavigationEntry(
@@ -824,14 +842,13 @@ void NavigatorImpl::RequestTransferURL(
   // further in https://crbug.com/536906.
   scoped_refptr<FrameNavigationEntry> frame_entry(entry->GetFrameEntry(node));
   if (!frame_entry) {
-    // TODO(creis): Handle POST submissions here, as above.
     frame_entry = new FrameNavigationEntry(
         node->unique_name(), -1, -1, nullptr,
         static_cast<SiteInstanceImpl*>(source_site_instance), dest_url,
-        referrer_to_use, "GET", -1);
+        referrer_to_use, method, -1);
   }
   NavigateToEntry(node, *frame_entry, *entry.get(),
-                  NavigationController::NO_RELOAD, false, false);
+                  NavigationController::NO_RELOAD, false, false, post_body);
 }
 
 // PlzNavigate
@@ -861,8 +878,7 @@ void NavigatorImpl::OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
 void NavigatorImpl::OnBeginNavigation(
     FrameTreeNode* frame_tree_node,
     const CommonNavigationParams& common_params,
-    const BeginNavigationParams& begin_params,
-    scoped_refptr<ResourceRequestBody> body) {
+    const BeginNavigationParams& begin_params) {
   // TODO(clamy): the url sent by the renderer should be validated with
   // FilterURL.
   // This is a renderer-initiated navigation.
@@ -890,7 +906,7 @@ void NavigatorImpl::OnBeginNavigation(
   // NavigationRequest is created for the node.
   frame_tree_node->CreatedNavigationRequest(
       NavigationRequest::CreateRendererInitiated(
-          frame_tree_node, common_params, begin_params, body,
+          frame_tree_node, common_params, begin_params,
           controller_->GetLastCommittedEntryIndex(),
           controller_->GetEntryCount()));
   NavigationRequest* navigation_request = frame_tree_node->navigation_request();
@@ -1023,7 +1039,8 @@ void NavigatorImpl::RequestNavigation(
       ShouldMakeNetworkRequestForURL(
           navigation_request->common_params().url)) {
     navigation_request->SetWaitingForRendererResponse();
-    frame_tree_node->current_frame_host()->DispatchBeforeUnload(true);
+    frame_tree_node->current_frame_host()->DispatchBeforeUnload(
+        true, reload_type != NavigationController::NO_RELOAD);
   } else {
     navigation_request->BeginNavigation();
   }

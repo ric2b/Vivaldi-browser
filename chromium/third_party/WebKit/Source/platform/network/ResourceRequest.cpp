@@ -33,6 +33,8 @@
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -75,12 +77,12 @@ ResourceRequest::ResourceRequest(CrossThreadResourceRequestData* data)
     m_uiStartTime = data->m_uiStartTime;
     m_isExternalRequest = data->m_isExternalRequest;
     m_inputPerfMetricReportPolicy = data->m_inputPerfMetricReportPolicy;
-    m_followedRedirect = data->m_followedRedirect;
+    m_redirectStatus = data->m_redirectStatus;
 }
 
-PassOwnPtr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
+std::unique_ptr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
 {
-    OwnPtr<CrossThreadResourceRequestData> data = adoptPtr(new CrossThreadResourceRequestData());
+    std::unique_ptr<CrossThreadResourceRequestData> data = wrapUnique(new CrossThreadResourceRequestData());
     data->m_url = url().copy();
     data->m_cachePolicy = getCachePolicy();
     data->m_timeoutInterval = timeoutInterval();
@@ -117,7 +119,7 @@ PassOwnPtr<CrossThreadResourceRequestData> ResourceRequest::copyData() const
     data->m_uiStartTime = m_uiStartTime;
     data->m_isExternalRequest = m_isExternalRequest;
     data->m_inputPerfMetricReportPolicy = m_inputPerfMetricReportPolicy;
-    data->m_followedRedirect = m_followedRedirect;
+    data->m_redirectStatus = m_redirectStatus;
     return data;
 }
 
@@ -407,7 +409,7 @@ void ResourceRequest::initialize(const KURL& url)
     m_hasUserGesture = false;
     m_downloadToFile = false;
     m_useStreamOnResponse = false;
-    m_skipServiceWorker = false;
+    m_skipServiceWorker = WebURLRequest::SkipServiceWorker::None;
     m_shouldResetAppCache = false;
     m_priority = ResourceLoadPriorityLowest;
     m_intraPriorityValue = 0;
@@ -426,7 +428,7 @@ void ResourceRequest::initialize(const KURL& url)
     m_uiStartTime = 0;
     m_isExternalRequest = false;
     m_inputPerfMetricReportPolicy = InputToLoadPerfMetricReportPolicy::NoReport;
-    m_followedRedirect = false;
+    m_redirectStatus = RedirectStatus::NoRedirect;
     m_requestorOrigin = SecurityOrigin::createUnique();
 }
 

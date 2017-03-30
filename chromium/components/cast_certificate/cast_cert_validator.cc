@@ -17,8 +17,10 @@
 #include "net/cert/internal/extended_key_usage.h"
 #include "net/cert/internal/parse_certificate.h"
 #include "net/cert/internal/parse_name.h"
+#include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/signature_algorithm.h"
 #include "net/cert/internal/signature_policy.h"
+#include "net/cert/internal/trust_store.h"
 #include "net/cert/internal/verify_certificate_chain.h"
 #include "net/cert/internal/verify_signed_data.h"
 #include "net/der/input.h"
@@ -54,11 +56,20 @@ class CastTrustStore {
   friend struct base::DefaultSingletonTraits<CastTrustStore>;
 
   CastTrustStore() {
-    // Initialize the trust store with two root certificates.
-    CHECK(store_.AddTrustedCertificateWithoutCopying(kCastRootCaDer,
-                                                     sizeof(kCastRootCaDer)));
-    CHECK(store_.AddTrustedCertificateWithoutCopying(kEurekaRootCaDer,
-                                                     sizeof(kEurekaRootCaDer)));
+    AddAnchor(kCastRootCaDer);
+    AddAnchor(kEurekaRootCaDer);
+  }
+
+  // Adds a trust anchor given a DER-encoded certificate from static
+  // storage.
+  template <size_t N>
+  void AddAnchor(const uint8_t (&data)[N]) {
+    scoped_refptr<net::ParsedCertificate> root =
+        net::ParsedCertificate::CreateFromCertificateData(
+            data, N, net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE,
+            {});
+    CHECK(root);
+    store_.AddTrustedCertificate(std::move(root));
   }
 
   net::TrustStore store_;
@@ -164,70 +175,30 @@ bool HasClientAuth(const std::vector<net::der::Input>& ekus) {
   return false;
 }
 
-// Returns the parsing options used for Cast certificates.
-net::ParseCertificateOptions GetCertParsingOptions() {
-  net::ParseCertificateOptions options;
-
-  // Some cast intermediate certificates contain serial numbers that are
-  // 21 octets long, and might also not use valid DER encoding for an
-  // INTEGER (non-minimal encoding).
-  //
-  // Allow these sorts of serial numbers.
-  //
-  // TODO(eroman): At some point in the future this workaround will no longer be
-  // necessary. Should revisit this for removal in 2017 if not earlier.
-  options.allow_invalid_serial_numbers = true;
-  return options;
-}
-
 // Checks properties on the target certificate.
 //
 //   * The Key Usage must include Digital Signature
-//   * THe Extended Key Usage must includ TLS Client Auth
+//   * The Extended Key Usage must include TLS Client Auth
 //   * May have the policy 1.3.6.1.4.1.11129.2.5.2 to indicate it
 //     is an audio-only device.
 WARN_UNUSED_RESULT bool CheckTargetCertificate(
-    const net::der::Input& cert_der,
+    const net::ParsedCertificate* cert,
     std::unique_ptr<CertVerificationContext>* context,
     CastDeviceCertPolicy* policy) {
-  // TODO(eroman): Simplify this. The certificate chain verification
-  // function already parses this stuff, awkward to re-do it here.
-
-  net::der::Input tbs_certificate_tlv;
-  net::der::Input signature_algorithm_tlv;
-  net::der::BitString signature_value;
-  if (!net::ParseCertificate(cert_der, &tbs_certificate_tlv,
-                             &signature_algorithm_tlv, &signature_value))
-    return false;
-
-  net::ParsedTbsCertificate tbs;
-  if (!net::ParseTbsCertificate(tbs_certificate_tlv, GetCertParsingOptions(),
-                                &tbs))
-    return false;
-
-  // Get the extensions.
-  if (!tbs.has_extensions)
-    return false;
-  ExtensionsMap extensions;
-  if (!net::ParseExtensions(tbs.extensions_tlv, &extensions))
-    return false;
-
-  net::der::Input extension_value;
-
   // Get the Key Usage extension.
-  if (!GetExtensionValue(extensions, net::KeyUsageOid(), &extension_value))
-    return false;
-  net::der::BitString key_usage;
-  if (!net::ParseKeyUsage(extension_value, &key_usage))
+  if (!cert->has_key_usage())
     return false;
 
   // Ensure Key Usage contains digitalSignature.
-  if (!key_usage.AssertsBit(net::KEY_USAGE_BIT_DIGITAL_SIGNATURE))
+  if (!cert->key_usage().AssertsBit(net::KEY_USAGE_BIT_DIGITAL_SIGNATURE))
     return false;
 
   // Get the Extended Key Usage extension.
-  if (!GetExtensionValue(extensions, net::ExtKeyUsageOid(), &extension_value))
+  net::der::Input extension_value;
+  if (!GetExtensionValue(cert->unparsed_extensions(), net::ExtKeyUsageOid(),
+                         &extension_value)) {
     return false;
+  }
   std::vector<net::der::Input> ekus;
   if (!net::ParseEKUExtension(extension_value, &ekus))
     return false;
@@ -238,8 +209,8 @@ WARN_UNUSED_RESULT bool CheckTargetCertificate(
 
   // Check for an optional audio-only policy extension.
   *policy = CastDeviceCertPolicy::NONE;
-  if (GetExtensionValue(extensions, net::CertificatePoliciesOid(),
-                        &extension_value)) {
+  if (GetExtensionValue(cert->unparsed_extensions(),
+                        net::CertificatePoliciesOid(), &extension_value)) {
     std::vector<net::der::Input> policies;
     if (!net::ParseCertificatePoliciesExtension(extension_value, &policies))
       return false;
@@ -253,10 +224,11 @@ WARN_UNUSED_RESULT bool CheckTargetCertificate(
 
   // Get the Common Name for the certificate.
   std::string common_name;
-  if (!GetCommonNameFromSubject(tbs.subject_tlv, &common_name))
+  if (!GetCommonNameFromSubject(cert->tbs().subject_tlv, &common_name))
     return false;
 
-  context->reset(new CertVerificationContextImpl(tbs.spki_tlv, common_name));
+  context->reset(
+      new CertVerificationContextImpl(cert->tbs().spki_tlv, common_name));
   return true;
 }
 
@@ -273,6 +245,36 @@ net::der::GeneralizedTime ConvertExplodedTime(
   return result;
 }
 
+class ScopedCheckUnreferencedCerts {
+ public:
+  explicit ScopedCheckUnreferencedCerts(
+      std::vector<scoped_refptr<net::ParsedCertificate>>* certs)
+      : certs_(certs) {}
+  ~ScopedCheckUnreferencedCerts() {
+    for (const auto& cert : *certs_)
+      DCHECK(cert->HasOneRef());
+  }
+
+ private:
+  std::vector<scoped_refptr<net::ParsedCertificate>>* certs_;
+};
+
+// Returns the parsing options used for Cast certificates.
+net::ParseCertificateOptions GetCertParsingOptions() {
+  net::ParseCertificateOptions options;
+
+  // Some cast intermediate certificates contain serial numbers that are
+  // 21 octets long, and might also not use valid DER encoding for an
+  // INTEGER (non-minimal encoding).
+  //
+  // Allow these sorts of serial numbers.
+  //
+  // TODO(eroman): At some point in the future this workaround will no longer be
+  // necessary. Should revisit this for removal in 2017 if not earlier.
+  options.allow_invalid_serial_numbers = true;
+  return options;
+}
+
 }  // namespace
 
 bool VerifyDeviceCert(const std::vector<std::string>& certs,
@@ -280,25 +282,37 @@ bool VerifyDeviceCert(const std::vector<std::string>& certs,
                       std::unique_ptr<CertVerificationContext>* context,
                       CastDeviceCertPolicy* policy) {
   // The underlying verification function expects a sequence of
-  // der::Input, so wrap the data in it (cheap).
-  std::vector<net::der::Input> input_chain;
-  for (const auto& cert : certs)
-    input_chain.push_back(net::der::Input(&cert));
+  // ParsedCertificate.
+  std::vector<scoped_refptr<net::ParsedCertificate>> input_chain;
+  // Verify that nothing saves a reference to the input certs, since the backing
+  // data will go out of scope when the function finishes.
+  ScopedCheckUnreferencedCerts ref_checker(&input_chain);
+
+  for (const auto& cert_der : certs) {
+    // No reference to the ParsedCertificate is kept past the end of this
+    // function, so using EXTERNAL_REFERENCE here is safe.
+    if (!net::ParsedCertificate::CreateAndAddToVector(
+            reinterpret_cast<const uint8_t*>(cert_der.data()), cert_der.size(),
+            net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE,
+            GetCertParsingOptions(), &input_chain)) {
+      return false;
+    }
+  }
 
   // Use a signature policy compatible with Cast's PKI.
   auto signature_policy = CreateCastSignaturePolicy();
 
   // Do RFC 5280 compatible certificate verification using the two Cast
   // trust anchors and Cast signature policy.
-  if (!net::VerifyCertificateChain(
-          input_chain, GetCertParsingOptions(), CastTrustStore::Get(),
-          signature_policy.get(), ConvertExplodedTime(time))) {
+  if (!net::VerifyCertificateChain(input_chain, CastTrustStore::Get(),
+                                   signature_policy.get(),
+                                   ConvertExplodedTime(time), nullptr)) {
     return false;
   }
 
   // Check properties of the leaf certificate (key usage, policy), and construct
   // a CertVerificationContext that uses its public key.
-  return CheckTargetCertificate(input_chain[0], context, policy);
+  return CheckTargetCertificate(input_chain[0].get(), context, policy);
 }
 
 std::unique_ptr<CertVerificationContext> CertVerificationContextImplForTest(
@@ -310,8 +324,14 @@ std::unique_ptr<CertVerificationContext> CertVerificationContextImplForTest(
 }
 
 bool AddTrustAnchorForTest(const uint8_t* data, size_t length) {
-  return CastTrustStore::Get().AddTrustedCertificateWithoutCopying(data,
-                                                                   length);
+  scoped_refptr<net::ParsedCertificate> anchor(
+      net::ParsedCertificate::CreateFromCertificateData(
+          data, length, net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE,
+          GetCertParsingOptions()));
+  if (!anchor)
+    return false;
+  CastTrustStore::Get().AddTrustedCertificate(std::move(anchor));
+  return true;
 }
 
 }  // namespace cast_certificate

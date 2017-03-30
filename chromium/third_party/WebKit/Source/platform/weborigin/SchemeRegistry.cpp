@@ -354,7 +354,7 @@ String SchemeRegistry::listOfCORSEnabledURLSchemes()
     }
     for (const auto& scheme : schemes) {
         if (addSeparator)
-            builder.appendLiteral(", ");
+            builder.append(", ");
         else
             addSeparator = true;
 
@@ -400,6 +400,12 @@ void SchemeRegistry::registerURLSchemeAsFirstPartyWhenTopLevel(const String& sch
 {
     MutexLocker locker(mutex());
     firstPartyWhenTopLevelSchemes().add(scheme);
+}
+
+void SchemeRegistry::removeURLSchemeAsFirstPartyWhenTopLevel(const String& scheme)
+{
+    MutexLocker locker(mutex());
+    firstPartyWhenTopLevelSchemes().remove(scheme);
 }
 
 bool SchemeRegistry::shouldTreatURLSchemeAsFirstPartyWhenTopLevel(const String& scheme)

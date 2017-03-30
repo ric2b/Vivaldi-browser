@@ -115,7 +115,7 @@ class GPU_EXPORT GpuCommandBufferStub
 
   void SendCachedShader(const std::string& key, const std::string& shader);
 
-  gfx::GLSurface* surface() const { return surface_.get(); }
+  gl::GLSurface* surface() const { return surface_.get(); }
 
   void AddDestructionObserver(DestructionObserver* observer);
   void RemoveDestructionObserver(DestructionObserver* observer);
@@ -148,7 +148,8 @@ class GPU_EXPORT GpuCommandBufferStub
 
   // Message handlers:
   void OnSetGetBuffer(int32_t shm_id, IPC::Message* reply_message);
-  void OnProduceFrontBuffer(const Mailbox& mailbox);
+  void OnTakeFrontBuffer(const Mailbox& mailbox);
+  void OnReturnFrontBuffer(const Mailbox& mailbox, bool is_lost);
   void OnGetState(IPC::Message* reply_message);
   void OnWaitForTokenInRange(int32_t start,
                              int32_t end,
@@ -167,6 +168,7 @@ class GPU_EXPORT GpuCommandBufferStub
 
   void OnEnsureBackbuffer();
 
+  void OnWaitSyncToken(const SyncToken& sync_token);
   void OnSignalSyncToken(const SyncToken& sync_token, uint32_t id);
   void OnSignalAck(uint32_t id);
   void OnSignalQuery(uint32_t query, uint32_t id);
@@ -178,6 +180,9 @@ class GPU_EXPORT GpuCommandBufferStub
   void OnWaitFenceSyncCompleted(CommandBufferNamespace namespace_id,
                                 CommandBufferId command_buffer_id,
                                 uint64_t release);
+
+  void OnDescheduleUntilFinished();
+  void OnRescheduleAfterFinished();
 
   void OnCreateImage(const GpuCommandBufferMsg_CreateImage_Params& params);
   void OnDestroyImage(int32_t id);
@@ -228,7 +233,7 @@ class GPU_EXPORT GpuCommandBufferStub
   std::unique_ptr<gles2::GLES2Decoder> decoder_;
   std::unique_ptr<CommandExecutor> executor_;
   std::unique_ptr<SyncPointClient> sync_point_client_;
-  scoped_refptr<gfx::GLSurface> surface_;
+  scoped_refptr<gl::GLSurface> surface_;
 
   base::ObserverList<DestructionObserver> destruction_observers_;
 

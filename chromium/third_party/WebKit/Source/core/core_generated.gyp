@@ -153,6 +153,7 @@
         'generated_testing_idls',
         'core_event_interfaces',
         '../config.gyp:config',
+        'inspector/inspector.gyp:protocol_sources',
       ],
       'sources': [
         # bison rule
@@ -727,6 +728,25 @@
             '../build/scripts/make_token_matcher.py',
             '../core/html/HTMLMetaElement-in.cpp',
             '<(blink_core_output_dir)/HTMLMetaElement.cpp',
+          ],
+        },
+        {
+          'action_name': 'CSSPrimitiveValueUnitTrie',
+          'inputs': [
+            '<@(make_trie_helpers_files)',
+            '../build/scripts/make_css_primitive_value_unit_trie.py',
+            '../build/scripts/templates/CSSPrimitiveValueUnitTrie.cpp.tmpl',
+            'css/CSSPrimitiveValueUnits.in',
+          ],
+          'outputs': [
+            '<(blink_core_output_dir)/CSSPrimitiveValueUnitTrie.cpp',
+          ],
+          'action': [
+            'python',
+            '../build/scripts/make_css_primitive_value_unit_trie.py',
+            'css/CSSPrimitiveValueUnits.in',
+            '--output_dir',
+            '<(blink_core_output_dir)',
           ],
         },
         {

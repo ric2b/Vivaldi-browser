@@ -101,7 +101,7 @@ CSSStyleSheet* CSSStyleSheet::createInline(StyleSheetContents* sheet, Node* owne
 
 CSSStyleSheet* CSSStyleSheet::createInline(Node* ownerNode, const KURL& baseURL, const TextPosition& startPosition, const String& encoding)
 {
-    CSSParserContext parserContext(ownerNode->document(), 0, baseURL, encoding);
+    CSSParserContext parserContext(ownerNode->document(), nullptr, baseURL, encoding);
     StyleSheetContents* sheet = StyleSheetContents::create(baseURL.getString(), parserContext);
     return new CSSStyleSheet(sheet, ownerNode, true, startPosition);
 }
@@ -330,7 +330,7 @@ int CSSStyleSheet::addRule(const String& selector, const String& style, int inde
 {
     StringBuilder text;
     text.append(selector);
-    text.appendLiteral(" { ");
+    text.append(" { ");
     text.append(style);
     if (!style.isEmpty())
         text.append(' ');

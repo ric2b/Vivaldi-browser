@@ -6,11 +6,10 @@ import("//build/config/chrome_build.gni")
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
 import("//media/media_options.gni")
-import("//third_party/kasko/kasko.gni")
 import("//third_party/protobuf/proto_library.gni")
-import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 # //build/config/android/rules.gni imports //tools/grit/grit_rule.gni, which
 # produces a conflict for the "grit" template so we have to only include one.
@@ -79,7 +78,17 @@ if (is_desktop_linux) {
   }
 }
 
-source_set("browser") {
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+split_static_library("browser") {
+  # Split into multiple static libraries on Windows official builds, where we
+  # run into a 2GB max size limit.
+  if (is_win && is_official_build) {
+    split_count = 5
+  } else {
+    split_count = 1
+  }
+
   configs += [
     "//build/config/compiler:wexit_time_destructors",
     "//build/config:precompiled_headers",
@@ -117,6 +126,7 @@ source_set("browser") {
     "//components/browser_sync/common",
     "//components/captive_portal",
     "//components/certificate_reporting",
+    "//components/certificate_transparency",
     "//components/cloud_devices/common",
     "//components/component_updater",
     "//components/content_settings/content/common",
@@ -150,6 +160,7 @@ source_set("browser") {
     "//components/metrics_services_manager",
     "//components/mime_util",
     "//components/navigation_metrics",
+    "//components/network_session_configurator",
     "//components/network_time",
     "//components/ntp_snippets",
     "//components/ntp_tiles",
@@ -174,13 +185,14 @@ source_set("browser") {
     "//components/security_state",
     "//components/signin/core/browser",
     "//components/ssl_errors",
+    "//components/startup_metric_utils/browser:host",
     "//components/startup_metric_utils/browser:lib",
-    "//components/startup_metric_utils/browser:message_filter_lib",
 
     # TODO(fdoray): Remove this once the PreRead field trial has expired.
     # crbug.com/577698
     "//components/startup_metric_utils/common",
     "//components/strings",
+    "//components/subresource_filter/core/browser",
     "//components/suggestions",
     "//components/supervised_user_error_page",
     "//components/sync_bookmarks",
@@ -189,7 +201,6 @@ source_set("browser") {
     "//components/tracing:startup_tracing",
     "//components/translate/core/browser",
     "//components/translate/core/common",
-    "//components/ui/zoom",
     "//components/undo",
     "//components/update_client",
     "//components/url_formatter",
@@ -201,6 +212,7 @@ source_set("browser") {
     "//components/web_resource",
     "//components/webdata/common",
     "//components/webdata_services",
+    "//components/zoom",
     "//content/public/browser",
     "//content/public/common",
     "//content/public/common:feature_h264_with_openh264_ffmpeg",
@@ -360,6 +372,7 @@ source_set("browser") {
       "//components/sessions",
       "//components/ssl_config",
       "//components/storage_monitor",
+      "//components/subresource_filter/content/browser",
       "//components/syncable_prefs",
       "//components/translate/content/browser",
       "//components/upload_list",
@@ -381,7 +394,6 @@ source_set("browser") {
       "//net:extras",
       "//net:net_with_v8",
       "//services/shell/public/cpp",
-      "//skia/public",
       "//storage/browser",
       "//storage/common",
       "//third_party/WebKit/public:image_resources",
@@ -477,6 +489,13 @@ source_set("browser") {
                       ".",
                       "//chrome")
     }
+
+    if (is_mac && !mac_views_browser) {
+      sources +=
+          rebase_path(gypi_values.chrome_browser_old_task_manager_cocoa_sources,
+                      ".",
+                      "//chrome")
+    }
   }
   if (enable_spellcheck) {
     sources += rebase_path(gypi_values.chrome_browser_spellchecker_sources,
@@ -564,10 +583,10 @@ source_set("browser") {
 
   if (is_chromeos) {
     sources += [
-      "metrics/leak_detector_controller.cc",
-      "metrics/leak_detector_controller.h",
+      "metrics/leak_detector/leak_detector_controller.cc",
+      "metrics/leak_detector/leak_detector_controller.h",
     ]
-    deps += [ "//components/metrics:leak_detector" ]
+    public_deps += [ "//components/metrics:leak_detector" ]
   }
 
   if (use_cups) {
@@ -600,13 +619,13 @@ source_set("browser") {
     ]
     deps += [
       "//components/mus/public/cpp",
+      "//components/mus/public/cpp/input_devices",
       "//content/public/common",
       "//ui/aura",
       "//ui/compositor",
-      "//ui/views/mus:for_component",
+      "//ui/views/mus",
     ]
     defines += [ "MOJO_SHELL_CLIENT" ]
-    data_deps += [ "//mash/wm" ]
   }
   if (ui_compositor_image_transport) {
     deps += [ "//ui/gl" ]
@@ -634,13 +653,6 @@ source_set("browser") {
       "//components/version_info:generate_version_info",
     ]
   }
-  if (is_win && enable_kasko_failed_rdv_reports) {
-    sources += [
-      "//chrome/app/chrome_crash_reporter_client_win.cc",
-      "//chrome/app/chrome_crash_reporter_client_win.h",
-    ]
-    deps += [ "//components/crash/content/app:lib" ]
-  }
   if (use_nss_certs) {
     sources +=
         rebase_path(gypi_values.chrome_browser_nss_sources, ".", "//chrome")
@@ -662,6 +674,9 @@ source_set("browser") {
               gypi_values.chrome_browser_notifications_non_android_sources,
               ".",
               "//chrome")
+    }
+    if (is_mac) {
+      deps += [ "//chrome/browser/ui/cocoa/notifications:common" ]
     }
   }
   if (enable_themes) {
@@ -818,7 +833,6 @@ source_set("browser") {
       ":chrome_process_finder",
       "//chrome:file_pre_reader",
       "//chrome/chrome_watcher:client",
-      "//chrome/chrome_watcher:kasko_util",
       "//chrome/common:metrics_constants_util_win",
       "//chrome/common:version_header",
       "//chrome/installer/util:strings",
@@ -859,11 +873,10 @@ source_set("browser") {
 
   if (is_linux) {
     if (use_aura) {
-      configs += [ "//build/config/linux/dbus" ]
-      deps += [
-        "//build/linux:fontconfig",
-        "//dbus",
-      ]
+      deps += [ "//build/linux:fontconfig" ]
+      if (use_dbus) {
+        deps += [ "//dbus" ]
+      }
     }
     if (use_x11) {
       configs += [ "//build/config/linux:x11" ]
@@ -953,10 +966,6 @@ source_set("browser") {
       "chrome_browser_main_extra_parts_exo.h",
     ]
   }
-
-  if (enable_ipc_fuzzer) {
-    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
-  }
 }
 
 if (android_java_ui) {
@@ -985,8 +994,8 @@ if (android_java_ui) {
 if (is_win) {
   source_set("chrome_process_finder") {
     sources = [
-      "chrome_process_finder_win.cc",
-      "chrome_process_finder_win.h",
+      "win/chrome_process_finder.cc",
+      "win/chrome_process_finder.h",
     ]
     deps = [
       "//base",
@@ -1026,6 +1035,7 @@ grit("resources") {
     "//chrome/browser/ui/webui/engagement:mojo_bindings__generator",
     "//chrome/browser/ui/webui/omnibox:mojo_bindings__generator",
     "//chrome/browser/ui/webui/plugins:mojo_bindings__generator",
+    "//url/mojo:url_mojom_gurl__generator",
   ]
 }
 
@@ -1049,7 +1059,10 @@ if (is_chrome_branded) {
 }
 
 # In GYP this is part of test_support_common.
-source_set("test_support") {
+#
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+static_library("test_support") {
   testonly = true
 
   # Always include this via the main test support target.
@@ -1104,8 +1117,8 @@ source_set("test_support") {
     "sessions/session_service_test_helper.h",
     "signin/fake_account_fetcher_service_builder.cc",
     "signin/fake_account_fetcher_service_builder.h",
-    "signin/fake_gaia_cookie_manager_service.cc",
-    "signin/fake_gaia_cookie_manager_service.h",
+    "signin/fake_gaia_cookie_manager_service_builder.cc",
+    "signin/fake_gaia_cookie_manager_service_builder.h",
     "signin/fake_profile_oauth2_token_service_builder.cc",
     "signin/fake_profile_oauth2_token_service_builder.h",
     "signin/fake_signin_manager_builder.cc",
@@ -1133,6 +1146,7 @@ source_set("test_support") {
     "//components/password_manager/core/browser:test_support",
     "//components/prefs:test_support",
     "//components/search_engines:test_support",
+    "//components/subresource_filter/core/browser:test_support",
     "//components/syncable_prefs:test_support",
     "//components/user_prefs/tracked:user_prefs_tracked_test_support",
     "//content/test:browsertest_base",
@@ -1289,6 +1303,17 @@ source_set("test_support") {
       "ui/app_list/test/test_app_list_controller_delegate.h",
     ]
   }
+
+  if (enable_pepper_cdms) {
+    sources += [
+      "media/pepper_cdm_test_helper.cc",
+      "media/pepper_cdm_test_helper.h",
+    ]
+    deps += [
+      ":pepper_cdm_test_constants",
+      "//media:cdm_paths",
+    ]
+  }
 }
 
 # In GYP this is part of test_support_ui.
@@ -1328,6 +1353,19 @@ if (enable_rlz_support) {
       "//components/rlz",
       "//components/search_engines",
       "//rlz:rlz_lib",
+    ]
+  }
+}
+
+if (enable_pepper_cdms) {
+  # These constants are separated so that test binaries can use them without
+  # linking all of the test support.
+  source_set("pepper_cdm_test_constants") {
+    testonly = true
+    visibility = [ "//chrome/*" ]
+    sources = [
+      "media/pepper_cdm_test_constants.cc",
+      "media/pepper_cdm_test_constants.h",
     ]
   }
 }

@@ -5,6 +5,7 @@
 #include "modules/serviceworkers/ServiceWorkerLinkResource.h"
 
 #include "core/dom/Document.h"
+#include "core/frame/DOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLLinkElement.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -12,6 +13,7 @@
 #include "modules/serviceworkers/ServiceWorkerContainer.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -24,12 +26,12 @@ public:
 
     void onSuccess(std::unique_ptr<WebServiceWorkerRegistration::Handle> handle) override
     {
-        Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, bind(&LinkLoaderClient::linkLoaded, m_client));
+        Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&LinkLoaderClient::linkLoaded, m_client));
     }
 
     void onError(const WebServiceWorkerError& error) override
     {
-        Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, bind(&LinkLoaderClient::linkLoadingErrored, m_client));
+        Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&LinkLoaderClient::linkLoadingErrored, m_client));
     }
 
 private:
@@ -71,7 +73,7 @@ void ServiceWorkerLinkResource::process()
 
     TrackExceptionState exceptionState;
 
-    NavigatorServiceWorker::serviceWorker(&document, *document.frame()->domWindow()->navigator(), exceptionState)->registerServiceWorkerImpl(&document, scriptURL, scopeURL, adoptPtr(new RegistrationCallback(m_owner)));
+    NavigatorServiceWorker::serviceWorker(&document, *document.frame()->domWindow()->navigator(), exceptionState)->registerServiceWorkerImpl(&document, scriptURL, scopeURL, wrapUnique(new RegistrationCallback(m_owner)));
 }
 
 bool ServiceWorkerLinkResource::hasLoaded() const

@@ -44,7 +44,6 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
-#include "core/html/HTMLLabelElement.h"
 #include "core/html/HTMLMapElement.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -229,6 +228,9 @@ HitTestResult hitTestInDocument(const Document* document, int x, int y, const Hi
     if (!pointWithScrollAndZoomIfPossible(*document, hitPoint))
         return HitTestResult();
 
+    if (!document->isActive())
+        return HitTestResult();
+
     HitTestResult result(request, hitPoint);
     document->layoutViewItem().hitTest(result);
     return result;
@@ -301,36 +303,6 @@ HeapVector<Member<Element>> TreeScope::elementsFromPoint(int x, int y) const
     document.layoutViewItem().hitTest(result);
 
     return elementsFromHitTestResult(result);
-}
-
-void TreeScope::addLabel(const AtomicString& forAttributeValue, HTMLLabelElement* element)
-{
-    DCHECK(m_labelsByForAttribute);
-    m_labelsByForAttribute->add(forAttributeValue, element);
-}
-
-void TreeScope::removeLabel(const AtomicString& forAttributeValue, HTMLLabelElement* element)
-{
-    DCHECK(m_labelsByForAttribute);
-    m_labelsByForAttribute->remove(forAttributeValue, element);
-}
-
-HTMLLabelElement* TreeScope::labelElementForId(const AtomicString& forAttributeValue)
-{
-    if (forAttributeValue.isEmpty())
-        return nullptr;
-
-    if (!m_labelsByForAttribute) {
-        // Populate the map on first access.
-        m_labelsByForAttribute = DocumentOrderedMap::create();
-        for (HTMLLabelElement& label : Traversal<HTMLLabelElement>::startsAfter(rootNode())) {
-            const AtomicString& forValue = label.fastGetAttribute(forAttr);
-            if (!forValue.isEmpty())
-                addLabel(forValue, &label);
-        }
-    }
-
-    return toHTMLLabelElement(m_labelsByForAttribute->getElementByLabelForAttribute(forAttributeValue, this));
 }
 
 DOMSelection* TreeScope::getSelection() const
@@ -419,6 +391,23 @@ Element* TreeScope::adjustedFocusedElement() const
     return nullptr;
 }
 
+Element* TreeScope::adjustedPointerLockElement(const Element& target) const
+{
+    const Element* adjustedTarget = &target;
+    // Unless the target is in the same TreeScope as |scope|, traverse up shadow trees to
+    // find a shadow host that is in the same TreeScope as |scope|.
+    for (const Element* ancestor = &target; ancestor; ancestor = ancestor->shadowHost()) {
+        // Exception is that if the host has V0 or UA shadow, skip the adjustment because
+        // .pointerLockElement is not available for non-V1 shadows.
+        // TODO(kochi): Once V0 code is removed, use the same logic as .activeElement for
+        // Shadow DOM V1.
+        if (ancestor->shadowRootIfV1())
+            adjustedTarget = ancestor;
+        if (this == ancestor->treeScope())
+            return const_cast<Element*>(adjustedTarget);
+    }
+    return nullptr;
+}
 unsigned short TreeScope::comparePosition(const TreeScope& otherScope) const
 {
     if (otherScope == this)
@@ -534,7 +523,6 @@ DEFINE_TRACE(TreeScope)
     visitor->trace(m_selection);
     visitor->trace(m_elementsById);
     visitor->trace(m_imageMapsByName);
-    visitor->trace(m_labelsByForAttribute);
     visitor->trace(m_scopedStyleResolver);
     visitor->trace(m_radioButtonGroupScope);
 }

@@ -292,7 +292,13 @@ Runner.prototype = {
       this.spriteDef = Runner.spriteDefinition.LDPI;
     }
 
-    this.init();
+    if (Runner.imageSprite.complete) {
+      this.init();
+    } else {
+      // If the images are not yet loaded, add a listener.
+      Runner.imageSprite.addEventListener(Runner.events.LOAD,
+          this.init.bind(this));
+    }
   },
 
   /**
@@ -650,7 +656,7 @@ Runner.prototype = {
    */
   onKeyDown: function(e) {
     // Prevent native page scrolling whilst tapping on mobile.
-    if (IS_MOBILE) {
+    if (IS_MOBILE && this.activated) {
       e.preventDefault();
     }
 
@@ -660,7 +666,9 @@ Runner.prototype = {
         if (!this.activated) {
           this.loadSounds();
           this.activated = true;
-          errorPageController.trackEasterEgg();
+          if (window.errorPageController) {
+            errorPageController.trackEasterEgg();
+          }
         }
 
         if (!this.tRex.jumping && !this.tRex.ducking) {

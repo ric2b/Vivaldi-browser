@@ -5,8 +5,8 @@
 // Windows specific implementation of VideoCaptureDevice. DirectShow is used for
 // capturing. DirectShow provide its own threads for capturing.
 
-#ifndef MEDIA_VIDEO_CAPTURE_WIN_VIDEO_CAPTURE_DEVICE_WIN_H_
-#define MEDIA_VIDEO_CAPTURE_WIN_VIDEO_CAPTURE_DEVICE_WIN_H_
+#ifndef MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_WIN_H_
+#define MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_WIN_H_
 
 // Avoid including strsafe.h via dshow as it will cause build warnings.
 #define NO_DSHOW_STRSAFE
@@ -86,7 +86,7 @@ class VideoCaptureDeviceWin : public VideoCaptureDevice,
   // Implements SinkFilterObserver.
   void FrameReceived(const uint8_t* buffer,
                      int length,
-                     base::TimeTicks timestamp) override;
+                     base::TimeDelta timestamp) override;
 
   bool CreateCapabilityMap();
   void SetAntiFlickerInCaptureFilter(const VideoCaptureParams& params);
@@ -112,6 +112,8 @@ class VideoCaptureDeviceWin : public VideoCaptureDevice,
   CapabilityList capabilities_;
   VideoCaptureFormat capture_format_;
 
+  base::TimeTicks first_ref_time_;
+
   base::ThreadChecker thread_checker_;
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(VideoCaptureDeviceWin);
@@ -119,4 +121,4 @@ class VideoCaptureDeviceWin : public VideoCaptureDevice,
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_WIN_VIDEO_CAPTURE_DEVICE_WIN_H_
+#endif  // MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_WIN_H_

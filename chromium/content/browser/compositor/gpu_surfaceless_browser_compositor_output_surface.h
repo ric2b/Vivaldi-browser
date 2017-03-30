@@ -28,7 +28,7 @@ class GpuSurfacelessBrowserCompositorOutputSurface
       scoped_refptr<ContextProviderCommandBuffer> context,
       gpu::SurfaceHandle surface_handle,
       scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-      base::SingleThreadTaskRunner* task_runner,
+      cc::SyntheticBeginFrameSource* begin_frame_source,
       std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator,
       unsigned int target,
@@ -36,12 +36,15 @@ class GpuSurfacelessBrowserCompositorOutputSurface
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager);
   ~GpuSurfacelessBrowserCompositorOutputSurface() override;
 
- private:
   // cc::OutputSurface implementation.
-  void SwapBuffers(cc::CompositorFrame* frame) override;
+  void SwapBuffers(cc::CompositorFrame frame) override;
   void OnSwapBuffersComplete() override;
   void BindFramebuffer() override;
-  void Reshape(const gfx::Size& size, float scale_factor, bool alpha) override;
+  uint32_t GetFramebufferCopyTextureFormat() override;
+  void Reshape(const gfx::Size& size,
+               float scale_factor,
+               const gfx::ColorSpace& color_space,
+               bool alpha) override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
 
@@ -51,9 +54,10 @@ class GpuSurfacelessBrowserCompositorOutputSurface
       gfx::SwapResult result,
       const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac) override;
 
-  unsigned int internalformat_;
+ private:
+  const unsigned int internalformat_;
   std::unique_ptr<display_compositor::GLHelper> gl_helper_;
-  std::unique_ptr<display_compositor::BufferQueue> output_surface_;
+  std::unique_ptr<display_compositor::BufferQueue> buffer_queue_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
 };
 

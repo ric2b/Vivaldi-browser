@@ -10,6 +10,9 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/lifetime/keep_alive_types.h"
 #include "chrome/browser/lifetime/scoped_keep_alive.h"
@@ -46,7 +49,7 @@ class WindowSizerTest : public InProcessBrowserTest {
 
 void CloseBrowser(Browser* browser) {
   browser->window()->Close();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 gfx::Rect GetChromeIconBoundsForRootWindow(aura::Window* root_window) {
@@ -148,7 +151,7 @@ class WindowSizerContextMenuTest : public WindowSizerTest {
   }
 
   static void QuitLoop() {
-    base::MessageLoop::current()->task_runner()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
 
@@ -193,11 +196,12 @@ IN_PROC_BROWSER_TEST_F(WindowSizerContextMenuTest,
             browser_list->get(0)->window()->GetNativeWindow()->GetRootWindow());
   EXPECT_EQ(root_windows[1], ash::Shell::GetTargetRootWindow());
 
+  CloseBrowser(browser_list->get(0));
   OpenBrowserUsingContextMenuOnRootWindow(root_windows[0]);
 
   // Next new browser must be created on 1st display.
-  ASSERT_EQ(2u, browser_list->size());
+  ASSERT_EQ(1u, browser_list->size());
   EXPECT_EQ(root_windows[0],
-            browser_list->get(1)->window()->GetNativeWindow()->GetRootWindow());
+            browser_list->get(0)->window()->GetNativeWindow()->GetRootWindow());
   EXPECT_EQ(root_windows[0], ash::Shell::GetTargetRootWindow());
 }

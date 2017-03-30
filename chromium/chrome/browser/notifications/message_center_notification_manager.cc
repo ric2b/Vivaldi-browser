@@ -40,8 +40,8 @@
 #endif
 
 #if defined(USE_ASH)
+#include "ash/common/system/web_notification/web_notification_tray.h"
 #include "ash/shell.h"
-#include "ash/system/web_notification/web_notification_tray.h"
 #endif
 
 
@@ -145,10 +145,12 @@ bool MessageCenterNotificationManager::Update(const Notification& notification,
 
       // Add/remove notification in the local list but just update the same
       // one in MessageCenter.
-      delete old_notification;
-      profile_notifications_.erase(old_id);
       ProfileNotification* new_notification =
           new ProfileNotification(profile, notification);
+      // Delete the old one after the new one is created to ensure we don't run
+      // out of KeepAlives.
+      delete old_notification;
+      profile_notifications_.erase(old_id);
       profile_notifications_[new_notification->notification().id()] =
           new_notification;
 

@@ -24,8 +24,8 @@
 #include "core/CoreExport.h"
 #include "core/dom/ViewportDescription.h"
 #include "core/frame/Deprecation.h"
+#include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/LocalFrame.h"
-#include "core/frame/OriginsUsingFeatures.h"
 #include "core/frame/SettingsDelegate.h"
 #include "core/frame/UseCounter.h"
 #include "core/page/Page.h"
@@ -33,7 +33,6 @@
 #include "core/page/PageLifecycleNotifier.h"
 #include "core/page/PageLifecycleObserver.h"
 #include "core/page/PageVisibilityState.h"
-#include "platform/MemoryPurgeController.h"
 #include "platform/Supplementable.h"
 #include "platform/Timer.h"
 #include "platform/geometry/LayoutRect.h"
@@ -71,7 +70,7 @@ typedef uint64_t LinkHash;
 
 float deviceScaleFactor(LocalFrame*);
 
-class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>, public Supplementable<Page>, public PageLifecycleNotifier, public SettingsDelegate, public MemoryPurgeClient {
+class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>, public Supplementable<Page>, public PageLifecycleNotifier, public SettingsDelegate {
     USING_GARBAGE_COLLECTED_MIXIN(Page);
     WTF_MAKE_NONCOPYABLE(Page);
     friend class Settings;
@@ -112,7 +111,6 @@ public:
     static PageSet& ordinaryPages();
 
     static void platformColorsChanged();
-    static void onMemoryPressure();
 
     FrameHost& frameHost() const { return *m_frameHost; }
 
@@ -162,12 +160,10 @@ public:
 
     UseCounter& useCounter() { return m_useCounter; }
     Deprecation& deprecation() { return m_deprecation; }
-    OriginsUsingFeatures& originsUsingFeatures() { return m_originsUsingFeatures; }
+    HostsUsingFeatures& hostsUsingFeatures() { return m_hostsUsingFeatures; }
 
     void setTabKeyCyclesThroughElements(bool b) { m_tabKeyCyclesThroughElements = b; }
     bool tabKeyCyclesThroughElements() const { return m_tabKeyCyclesThroughElements; }
-
-    void unmarkAllTextMatches();
 
     // DefersLoading is used to delay loads during modal dialogs.
     // Modal dialogs are supposed to freeze all background processes
@@ -203,10 +199,6 @@ public:
     void acceptLanguagesChanged();
 
     static void networkStateChanged(bool online);
-
-    MemoryPurgeController& memoryPurgeController();
-
-    void purgeMemory(DeviceKind) override;
 
     DECLARE_TRACE();
 
@@ -258,7 +250,7 @@ private:
 
     UseCounter m_useCounter;
     Deprecation m_deprecation;
-    OriginsUsingFeatures m_originsUsingFeatures;
+    HostsUsingFeatures m_hostsUsingFeatures;
 
     bool m_openedByDOM;
 
@@ -278,8 +270,6 @@ private:
     // A pointer to all the interfaces provided to in-process Frames for this Page.
     // FIXME: Most of the members of Page should move onto FrameHost.
     Member<FrameHost> m_frameHost;
-
-    Member<MemoryPurgeController> m_memoryPurgeController;
 
     Timer<Page> m_timerForCompressStrings;
 };

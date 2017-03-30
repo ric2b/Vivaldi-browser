@@ -31,6 +31,7 @@
 #include "wtf/WTFExport.h"
 #include "wtf/text/Unicode.h"
 #include <limits.h>
+#include <string.h>
 
 #if OS(MACOSX)
 typedef const struct __CFString * CFStringRef;
@@ -223,6 +224,7 @@ public:
 
     ALWAYS_INLINE const LChar* characters8() const { ASSERT(is8Bit()); return reinterpret_cast<const LChar*>(this + 1); }
     ALWAYS_INLINE const UChar* characters16() const { ASSERT(!is8Bit()); return reinterpret_cast<const UChar*>(this + 1); }
+    ALWAYS_INLINE const void* bytes() const { return reinterpret_cast<const void*>(this + 1); }
 
     template <typename CharType>
     ALWAYS_INLINE const CharType * getCharacters() const;
@@ -488,8 +490,8 @@ ALWAYS_INLINE bool equal(const UChar* a, const LChar* b, unsigned length) { retu
 WTF_EXPORT bool equalIgnoringCase(const StringImpl*, const StringImpl*);
 WTF_EXPORT bool equalIgnoringCase(const StringImpl*, const LChar*);
 inline bool equalIgnoringCase(const LChar* a, const StringImpl* b) { return equalIgnoringCase(b, a); }
-WTF_EXPORT bool equalIgnoringCase(const LChar*, const LChar*, unsigned);
-WTF_EXPORT bool equalIgnoringCase(const UChar*, const LChar*, unsigned);
+WTF_EXPORT bool equalIgnoringCase(const LChar*, const LChar*, unsigned length);
+WTF_EXPORT bool equalIgnoringCase(const UChar*, const LChar*, unsigned length);
 inline bool equalIgnoringCase(const UChar* a, const char* b, unsigned length) { return equalIgnoringCase(a, reinterpret_cast<const LChar*>(b), length); }
 inline bool equalIgnoringCase(const LChar* a, const UChar* b, unsigned length) { return equalIgnoringCase(b, a, length); }
 inline bool equalIgnoringCase(const char* a, const UChar* b, unsigned length) { return equalIgnoringCase(b, reinterpret_cast<const LChar*>(a), length); }
@@ -514,12 +516,28 @@ inline bool equalIgnoringASCIICase(const CharacterTypeA* a, const CharacterTypeB
 }
 
 WTF_EXPORT bool equalIgnoringASCIICase(const StringImpl*, const StringImpl*);
-WTF_EXPORT bool equalIgnoringASCIICase(const StringImpl*, const LChar*);
+WTF_EXPORT bool equalIgnoringASCIICase(const StringImpl*, const LChar*, unsigned length);
+inline bool equalIgnoringASCIICase(const StringImpl* a, const char* b, unsigned length) { return equalIgnoringASCIICase(a, reinterpret_cast<const LChar*>(b), length); }
+inline bool equalIgnoringASCIICase(const StringImpl* a, const LChar* b)
+{
+    size_t length = b ? strlen(reinterpret_cast<const char*>(b)) : 0;
+    return equalIgnoringASCIICase(a, b, length);
+}
+inline bool equalIgnoringASCIICase(const StringImpl* a, const char* b) { return equalIgnoringASCIICase(a, reinterpret_cast<const LChar*>(b)); }
 
 WTF_EXPORT int codePointCompareIgnoringASCIICase(const StringImpl*, const LChar*);
 
-template<typename CharacterType>
-inline size_t find(const CharacterType* characters, unsigned length, CharacterType matchCharacter, unsigned index = 0)
+inline size_t find(const LChar* characters, unsigned length, LChar matchCharacter, unsigned index = 0)
+{
+    // Some clients rely on being able to pass index >= length.
+    if (index >= length)
+        return kNotFound;
+    const LChar* found = static_cast<const LChar*>(
+        memchr(characters + index, matchCharacter, length - index));
+    return found ? found - characters : kNotFound;
+}
+
+inline size_t find(const UChar* characters, unsigned length, UChar matchCharacter, unsigned index = 0)
 {
     while (index < length) {
         if (characters[index] == matchCharacter)
@@ -538,6 +556,12 @@ inline size_t find(const LChar* characters, unsigned length, UChar matchCharacte
 {
     if (matchCharacter & ~0xFF)
         return kNotFound;
+    return find(characters, length, static_cast<LChar>(matchCharacter), index);
+}
+
+template <typename CharacterType>
+inline size_t find(const CharacterType* characters, unsigned length, char matchCharacter, unsigned index = 0)
+{
     return find(characters, length, static_cast<LChar>(matchCharacter), index);
 }
 

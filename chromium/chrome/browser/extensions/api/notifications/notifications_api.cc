@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/guid.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -157,7 +158,7 @@ class NotificationsApiDelegate : public NotificationDelegate {
         by_user ? EventRouter::USER_GESTURE_ENABLED
                 : EventRouter::USER_GESTURE_NOT_ENABLED;
     std::unique_ptr<base::ListValue> args(CreateBaseEventArgs());
-    args->Append(new base::FundamentalValue(by_user));
+    args->AppendBoolean(by_user);
     SendEvent(events::NOTIFICATIONS_ON_CLOSED,
               notifications::OnClosed::kEventName, gesture, std::move(args));
   }
@@ -179,7 +180,7 @@ class NotificationsApiDelegate : public NotificationDelegate {
 
   void ButtonClick(int index) override {
     std::unique_ptr<base::ListValue> args(CreateBaseEventArgs());
-    args->Append(new base::FundamentalValue(index));
+    args->AppendInteger(index);
     SendEvent(events::NOTIFICATIONS_ON_BUTTON_CLICKED,
               notifications::OnButtonClicked::kEventName,
               EventRouter::USER_GESTURE_ENABLED, std::move(args));
@@ -210,7 +211,7 @@ class NotificationsApiDelegate : public NotificationDelegate {
 
   std::unique_ptr<base::ListValue> CreateBaseEventArgs() {
     std::unique_ptr<base::ListValue> args(new base::ListValue());
-    args->Append(new base::StringValue(id_));
+    args->AppendString(id_);
     return args;
   }
 
@@ -606,7 +607,7 @@ bool NotificationsCreateFunction::RunNotificationsApi() {
       notification_id = base::RandBytesAsString(16);
   }
 
-  SetResult(new base::StringValue(notification_id));
+  SetResult(base::MakeUnique<base::StringValue>(notification_id));
 
   // TODO(dewittj): Add more human-readable error strings if this fails.
   if (!CreateNotification(notification_id, &params_->options))
@@ -634,7 +635,7 @@ bool NotificationsUpdateFunction::RunNotificationsApi() {
           CreateScopedIdentifier(extension_->id(), params_->notification_id),
           NotificationUIManager::GetProfileID(GetProfile()));
   if (!matched_notification) {
-    SetResult(new base::FundamentalValue(false));
+    SetResult(base::MakeUnique<base::FundamentalValue>(false));
     SendResponse(true);
     return true;
   }
@@ -648,7 +649,8 @@ bool NotificationsUpdateFunction::RunNotificationsApi() {
   // TODO(dewittj): Add more human-readable error strings if this fails.
   bool could_update_notification = UpdateNotification(
       params_->notification_id, &params_->options, &notification);
-  SetResult(new base::FundamentalValue(could_update_notification));
+  SetResult(
+      base::MakeUnique<base::FundamentalValue>(could_update_notification));
   if (!could_update_notification)
     return false;
 
@@ -672,7 +674,7 @@ bool NotificationsClearFunction::RunNotificationsApi() {
       CreateScopedIdentifier(extension_->id(), params_->notification_id),
       NotificationUIManager::GetProfileID(GetProfile()));
 
-  SetResult(new base::FundamentalValue(cancel_result));
+  SetResult(base::MakeUnique<base::FundamentalValue>(cancel_result));
   SendResponse(true);
 
   return true;
@@ -697,7 +699,7 @@ bool NotificationsGetAllFunction::RunNotificationsApi() {
         StripScopeFromIdentifier(extension_->id(), *iter), true);
   }
 
-  SetResult(result.release());
+  SetResult(std::move(result));
   SendResponse(true);
 
   return true;
@@ -719,7 +721,8 @@ bool NotificationsGetPermissionLevelFunction::RunNotificationsApi() {
           ? api::notifications::PERMISSION_LEVEL_GRANTED
           : api::notifications::PERMISSION_LEVEL_DENIED;
 
-  SetResult(new base::StringValue(api::notifications::ToString(result)));
+  SetResult(base::MakeUnique<base::StringValue>(
+      api::notifications::ToString(result)));
   SendResponse(true);
 
   return true;

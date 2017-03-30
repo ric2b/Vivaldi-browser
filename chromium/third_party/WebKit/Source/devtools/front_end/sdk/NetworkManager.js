@@ -51,7 +51,7 @@ WebInspector.NetworkManager = function(target)
     else
         this._networkAgent.enable();
 
-    /** @type {!Map<!NetworkAgent.CertificateId, !Promise<!NetworkAgent.CertificateDetails>>} */
+    /** @type {!Map<!SecurityAgent.CertificateId, !Promise<!NetworkAgent.CertificateDetails>>} */
     this._certificateDetailsCache = new Map();
 
     this._bypassServiceWorkerSetting = WebInspector.settings.createSetting("bypassServiceWorker", false);
@@ -88,6 +88,33 @@ WebInspector.NetworkManager.NoThrottlingConditions = {title: WebInspector.UIStri
 /** @type {!WebInspector.NetworkManager.Conditions} */
 WebInspector.NetworkManager.OfflineConditions = {title: WebInspector.UIString("Offline"), download: 0, upload: 0, latency: 0};
 
+/**
+ * @param {!WebInspector.NetworkManager.Conditions} conditions
+ * @return {!NetworkAgent.ConnectionType}
+ * TODO(allada): this belongs to NetworkConditionsSelector, which should hardcode/guess it.
+ */
+WebInspector.NetworkManager._connectionType = function(conditions)
+{
+    if (!conditions.download && !conditions.upload)
+        return NetworkAgent.ConnectionType.None;
+    var types = WebInspector.NetworkManager._connectionTypes;
+    if (!types) {
+        WebInspector.NetworkManager._connectionTypes = [];
+        types = WebInspector.NetworkManager._connectionTypes;
+        types.push(["2g", NetworkAgent.ConnectionType.Cellular2g]);
+        types.push(["3g", NetworkAgent.ConnectionType.Cellular3g]);
+        types.push(["4g", NetworkAgent.ConnectionType.Cellular4g]);
+        types.push(["bluetooth", NetworkAgent.ConnectionType.Bluetooth]);
+        types.push(["wifi", NetworkAgent.ConnectionType.Wifi]);
+        types.push(["wimax", NetworkAgent.ConnectionType.Wimax]);
+    }
+    for (var type of types) {
+        if (conditions.title.toLowerCase().indexOf(type[0]) !== -1)
+            return type[1];
+    }
+    return NetworkAgent.ConnectionType.Other;
+}
+
 WebInspector.NetworkManager.prototype = {
     /**
      * @param {string} url
@@ -113,7 +140,7 @@ WebInspector.NetworkManager.prototype = {
     },
 
     /**
-     * @param {!NetworkAgent.CertificateId} certificateId
+     * @param {!SecurityAgent.CertificateId} certificateId
      * @return {!Promise<!NetworkAgent.CertificateDetails>}
      */
     certificateDetailsPromise: function(certificateId)
@@ -395,7 +422,7 @@ WebInspector.NetworkDispatcher.prototype = {
             return;
 
         networkRequest.resourceSize += dataLength;
-        if (encodedDataLength != -1)
+        if (encodedDataLength !== -1)
             networkRequest.increaseTransferSize(encodedDataLength);
         networkRequest.endTime = time;
 
@@ -692,7 +719,7 @@ WebInspector.MultitargetNetworkManager = function()
 
     this._userAgentOverride = "";
     /** @type {!Set<!Protocol.NetworkAgent>} */
-    this._agentsCapableOfEmulation = new Set();
+    this._agents = new Set();
     /** @type {!WebInspector.NetworkManager.Conditions} */
     this._networkConditions = WebInspector.NetworkManager.NoThrottlingConditions;
 }
@@ -716,20 +743,9 @@ WebInspector.MultitargetNetworkManager.prototype = {
             networkAgent.setUserAgentOverride(this._currentUserAgent());
         for (var url of this._blockedURLs)
             networkAgent.addBlockedURL(url);
-
-        networkAgent.canEmulateNetworkConditions(callback.bind(this));
-
-        /**
-         * @this {WebInspector.MultitargetNetworkManager}
-         */
-        function callback(error, canEmulate)
-        {
-            if (error || !canEmulate)
-                return;
-            this._agentsCapableOfEmulation.add(networkAgent);
-            if (this.isThrottling())
-                this._updateNetworkConditions(networkAgent);
-        }
+        this._agents.add(networkAgent);
+        if (this.isThrottling())
+            this._updateNetworkConditions(networkAgent);
     },
 
     /**
@@ -738,7 +754,7 @@ WebInspector.MultitargetNetworkManager.prototype = {
      */
     targetRemoved: function(target)
     {
-        this._agentsCapableOfEmulation.delete(target.networkAgent());
+        this._agents.delete(target.networkAgent());
     },
 
     /**
@@ -763,7 +779,7 @@ WebInspector.MultitargetNetworkManager.prototype = {
     setNetworkConditions: function(conditions)
     {
         this._networkConditions = conditions;
-        for (var agent of this._agentsCapableOfEmulation)
+        for (var agent of this._agents)
             this._updateNetworkConditions(agent);
         this.dispatchEventToListeners(WebInspector.MultitargetNetworkManager.Events.ConditionsChanged);
     },
@@ -785,7 +801,7 @@ WebInspector.MultitargetNetworkManager.prototype = {
         if (!this.isThrottling()) {
             networkAgent.emulateNetworkConditions(false, 0, 0, 0);
         } else {
-            networkAgent.emulateNetworkConditions(this.isOffline(), conditions.latency, conditions.download < 0 ? 0 : conditions.download, conditions.upload < 0 ? 0 : conditions.upload);
+            networkAgent.emulateNetworkConditions(this.isOffline(), conditions.latency, conditions.download < 0 ? 0 : conditions.download, conditions.upload < 0 ? 0 : conditions.upload, WebInspector.NetworkManager._connectionType(conditions));
         }
     },
 
@@ -891,7 +907,7 @@ WebInspector.MultitargetNetworkManager.prototype = {
     },
 
     /**
-     * @param {!NetworkAgent.CertificateId} certificateId
+     * @param {!SecurityAgent.CertificateId} certificateId
      */
     showCertificateViewer: function(certificateId)
     {

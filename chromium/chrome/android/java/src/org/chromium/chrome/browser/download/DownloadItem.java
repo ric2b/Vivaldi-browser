@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.download;
 
-import org.chromium.content.browser.DownloadInfo;
-
 /**
  * A generic class representing a download item. The item can be either downloaded through the
  * Android DownloadManager, or through Chrome's network stack
@@ -36,16 +34,6 @@ public class DownloadItem {
      */
     public boolean hasSystemDownloadId() {
         return mDownloadId != INVALID_DOWNLOAD_ID;
-    }
-
-    /**
-     * @return notification ID for this download.
-     */
-    public int getNotificationId() {
-        if (mUseAndroidDownloadManager) {
-            return (int) mDownloadId;
-        }
-        return mDownloadInfo.getNotificationId();
     }
 
     /**

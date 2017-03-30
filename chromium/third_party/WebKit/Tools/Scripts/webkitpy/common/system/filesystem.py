@@ -28,6 +28,7 @@
 
 """Wrapper object for the file system / source tree."""
 
+import stat
 import codecs
 import errno
 import exceptions
@@ -172,7 +173,7 @@ class FileSystem(object):
         """Create the specified directory if it doesn't already exist."""
         try:
             os.makedirs(self.join(*path))
-        except OSError, e:
+        except OSError as e:
             if e.errno != errno.EEXIST:
                 raise
 
@@ -254,7 +255,7 @@ class FileSystem(object):
             try:
                 osremove(path)
                 return True
-            except exceptions.WindowsError, e:
+            except exceptions.WindowsError as e:
                 time.sleep(sleep_interval)
                 retry_timeout_sec -= sleep_interval
                 if retry_timeout_sec < 0:
@@ -274,3 +275,6 @@ class FileSystem(object):
     def splitext(self, path):
         """Return (dirname + os.sep + basename, '.' + ext)"""
         return os.path.splitext(path)
+
+    def make_executable(self, file_path):
+        os.chmod(file_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR | stat.S_IRGRP | stat.S_IXGRP)

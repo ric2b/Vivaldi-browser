@@ -21,12 +21,15 @@
 #include "base/timer/timer.h"
 #include "jingle/glue/proxy_resolving_client_socket.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/http/transport_security_state.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/client_socket_handle.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/buffered_socket_writer.h"
+#include "remoting/base/logging.h"
 #include "remoting/signaling/xmpp_login_handler.h"
 #include "remoting/signaling/xmpp_stream_parser.h"
 #include "third_party/webrtc/libjingle/xmllite/xmlelement.h"
@@ -120,10 +123,11 @@ class XmppSignalStrategy::Core : public XmppLoginHandler::Delegate {
   // Used by the |socket_|.
   std::unique_ptr<net::CertVerifier> cert_verifier_;
   std::unique_ptr<net::TransportSecurityState> transport_security_state_;
+  std::unique_ptr<net::CTVerifier> cert_transparency_verifier_;
+  std::unique_ptr<net::CTPolicyEnforcer> ct_policy_enforcer_;
 
   std::unique_ptr<net::StreamSocket> socket_;
   std::unique_ptr<BufferedSocketWriter> writer_;
-  int pending_writes_ = 0;
   scoped_refptr<net::IOBuffer> read_buffer_;
   bool read_pending_ = false;
 
@@ -245,6 +249,9 @@ bool XmppSignalStrategy::Core::SendStanza(
     return false;
   }
 
+  HOST_DLOG << "Sending outgoing stanza:\n"
+            << stanza->Str()
+            << "\n=========================================================";
   SendMessage(stanza->Str());
 
   // Return false if the SendMessage() call above resulted in the SignalStrategy
@@ -295,9 +302,13 @@ void XmppSignalStrategy::Core::StartTls() {
 
   cert_verifier_ = net::CertVerifier::CreateDefault();
   transport_security_state_.reset(new net::TransportSecurityState());
+  cert_transparency_verifier_.reset(new net::MultiLogCTVerifier());
+  ct_policy_enforcer_.reset(new net::CTPolicyEnforcer());
   net::SSLClientSocketContext context;
   context.cert_verifier = cert_verifier_.get();
   context.transport_security_state = transport_security_state_.get();
+  context.cert_transparency_verifier = cert_transparency_verifier_.get();
+  context.ct_policy_enforcer = ct_policy_enforcer_.get();
 
   socket_ = socket_factory_->CreateSSLClientSocket(
       std::move(socket_handle),
@@ -348,6 +359,11 @@ void XmppSignalStrategy::Core::OnMessageSent() {
 void XmppSignalStrategy::Core::OnStanza(
     const std::unique_ptr<buzz::XmlElement> stanza) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+
+  HOST_DLOG << "Received incoming stanza:\n"
+            << stanza->Str()
+            << "\n=========================================================";
 
   base::ObserverListBase<Listener>::Iterator it(&listeners_);
   for (Listener* listener = it.GetNext(); listener; listener = it.GetNext()) {

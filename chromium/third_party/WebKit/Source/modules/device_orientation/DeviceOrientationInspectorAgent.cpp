@@ -6,9 +6,9 @@
 
 #include "core/frame/LocalFrame.h"
 #include "core/page/Page.h"
-
 #include "modules/device_orientation/DeviceOrientationController.h"
 #include "modules/device_orientation/DeviceOrientationData.h"
+#include "wtf/Assertions.h"
 
 namespace blink {
 
@@ -30,20 +30,19 @@ DeviceOrientationInspectorAgent::~DeviceOrientationInspectorAgent()
 }
 
 DeviceOrientationInspectorAgent::DeviceOrientationInspectorAgent(Page& page)
-    : InspectorBaseAgent<DeviceOrientationInspectorAgent, protocol::Frontend::DeviceOrientation>("DeviceOrientation")
-    , m_page(&page)
+    : m_page(&page)
 {
 }
 
 DEFINE_TRACE(DeviceOrientationInspectorAgent)
 {
     visitor->trace(m_page);
-    InspectorBaseAgent<DeviceOrientationInspectorAgent, protocol::Frontend::DeviceOrientation>::trace(visitor);
+    InspectorBaseAgent::trace(visitor);
 }
 
 DeviceOrientationController& DeviceOrientationInspectorAgent::controller()
 {
-    ASSERT(toLocalFrame(m_page->mainFrame())->document());
+    DCHECK(toLocalFrame(m_page->mainFrame())->document());
     return DeviceOrientationController::from(*m_page->deprecatedLocalMainFrame()->document());
 }
 

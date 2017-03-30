@@ -37,13 +37,13 @@ void VirtualAudioOutputStream::Start(AudioSourceCallback* callback)  {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!callback_);
   callback_ = callback;
-  target_input_stream_->AddOutputStream(this, params_);
+  target_input_stream_->AddInputProvider(this, params_);
 }
 
 void VirtualAudioOutputStream::Stop() {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (callback_) {
-    target_input_stream_->RemoveOutputStream(this, params_);
+    target_input_stream_->RemoveInputProvider(this, params_);
     callback_ = NULL;
   }
 }
@@ -74,17 +74,15 @@ void VirtualAudioOutputStream::GetVolume(double* volume) {
 }
 
 double VirtualAudioOutputStream::ProvideInput(AudioBus* audio_bus,
-                                              base::TimeDelta buffer_delay) {
+                                              uint32_t frames_delayed) {
   // Note: This method may be invoked on any one thread, depending on the
   // platform.
   DCHECK(callback_);
 
-  DCHECK_GE(buffer_delay, base::TimeDelta());
-  const int64_t upstream_delay_in_bytes = params_.GetBytesPerSecond() *
-                                          buffer_delay /
-                                          base::TimeDelta::FromSeconds(1);
-  const int frames = callback_->OnMoreData(
-      audio_bus, static_cast<uint32_t>(upstream_delay_in_bytes), 0);
+  const uint32_t upstream_delay_in_bytes =
+      params_.GetBytesPerFrame() * frames_delayed;
+  const int frames =
+      callback_->OnMoreData(audio_bus, upstream_delay_in_bytes, 0);
   if (frames < audio_bus->frames())
     audio_bus->ZeroFramesPartial(frames, audio_bus->frames() - frames);
 

@@ -7,26 +7,31 @@
 #include <string>
 #include <vector>
 
-#include "ash/ash_switches.h"
 #include "ash/audio/sounds.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/shell.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_event.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_storage.h"
+#include "chrome/browser/chromeos/login/quick_unlock/pin_storage_factory.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/supervised/supervised_user_authentication.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
@@ -215,6 +220,18 @@ void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
       user_manager::UserManager::Get()->SwitchActiveUser(
           user_context.GetAccountId());
     }
+
+    // Reset the number of PIN attempts available to the user. We always do this
+    // because:
+    // 1. If the user signed in with a PIN, that means they should be able to
+    //    continue signing in with a PIN.
+    // 2. If the user signed in with cryptohome keys, then the PIN timeout is
+    //    going to be reset as well, so it is safe to reset the unlock attempt
+    //    count.
+    PinStorage* pin_storage = PinStorageFactory::GetForUser(user);
+    if (pin_storage)
+      pin_storage->ResetUnlockAttemptCount();
+
     UserSessionManager::GetInstance()->UpdateEasyUnlockKeys(user_context);
   } else {
     NOTREACHED() << "Logged in user not found.";
@@ -225,12 +242,19 @@ void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
 
   // Add guard for case when something get broken in call chain to unlock
   // for sure.
-  base::MessageLoop::current()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&ScreenLocker::UnlockOnLoginSuccess,
-          weak_factory_.GetWeakPtr()),
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::Bind(&ScreenLocker::UnlockOnLoginSuccess,
+                            weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kUnlockGuardTimeoutMs));
   delegate_->AnimateAuthenticationSuccess();
+}
+
+void ScreenLocker::OnPasswordAuthSuccess(const UserContext& user_context) {
+  // The user has signed in using their password, so reset the PIN timeout.
+  PinStorage* pin_storage =
+      PinStorageFactory::GetForAccountId(user_context.GetAccountId());
+  if (pin_storage)
+    pin_storage->MarkStrongAuth();
 }
 
 void ScreenLocker::UnlockOnLoginSuccess() {
@@ -252,30 +276,43 @@ void ScreenLocker::UnlockOnLoginSuccess() {
 }
 
 void ScreenLocker::Authenticate(const UserContext& user_context) {
-  LOG_ASSERT(IsUserLoggedIn(user_context.GetAccountId().GetUserEmail()))
+  LOG_ASSERT(IsUserLoggedIn(user_context.GetAccountId()))
       << "Invalid user trying to unlock.";
 
   authentication_start_time_ = base::Time::Now();
   delegate_->SetInputEnabled(false);
   delegate_->OnAuthenticate();
 
-  // Special case: supervised users. Use special authenticator.
-  if (const user_manager::User* user =
-          FindUnlockUser(user_context.GetAccountId().GetUserEmail())) {
+  const user_manager::User* user = FindUnlockUser(user_context.GetAccountId());
+  if (user) {
+    // Check to see if the user submitted a PIN and it is valid.
+    const std::string pin = user_context.GetKey()->GetSecret();
+
+    // We only want to try authenticating the pin if it is a number,
+    // otherwise we will timeout PIN if the user enters their account password
+    // incorrectly more than a few times.
+    int dummy_value;
+    if (base::StringToInt(pin, &dummy_value)) {
+      chromeos::PinStorage* pin_storage =
+          chromeos::PinStorageFactory::GetForUser(user);
+      if (pin_storage && pin_storage->TryAuthenticatePin(pin)) {
+        OnAuthSuccess(user_context);
+        return;
+      }
+    }
+
+    // Special case: supervised users. Use special authenticator.
     if (user->GetType() == user_manager::USER_TYPE_SUPERVISED) {
       UserContext updated_context = ChromeUserManager::Get()
                                         ->GetSupervisedUserManager()
                                         ->GetAuthentication()
                                         ->TransformKey(user_context);
-      // TODO(antrim) : replace empty closure with explicit method.
-      // http://crbug.com/351268
       BrowserThread::PostTask(
-          BrowserThread::UI,
-          FROM_HERE,
+          BrowserThread::UI, FROM_HERE,
           base::Bind(&ExtendedAuthenticator::AuthenticateToCheck,
-                     extended_authenticator_.get(),
-                     updated_context,
-                     base::Closure()));
+                     extended_authenticator_.get(), updated_context,
+                     base::Bind(&ScreenLocker::OnPasswordAuthSuccess,
+                                weak_factory_.GetWeakPtr(), updated_context)));
       return;
     }
   }
@@ -283,23 +320,18 @@ void ScreenLocker::Authenticate(const UserContext& user_context) {
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&ExtendedAuthenticator::AuthenticateToCheck,
-                 extended_authenticator_.get(),
-                 user_context,
-                 base::Closure()));
+                 extended_authenticator_.get(), user_context,
+                 base::Bind(&ScreenLocker::OnPasswordAuthSuccess,
+                            weak_factory_.GetWeakPtr(), user_context)));
 }
 
 const user_manager::User* ScreenLocker::FindUnlockUser(
-    const std::string& user_id) {
-  const user_manager::User* unlock_user = NULL;
-  for (user_manager::UserList::const_iterator it = users_.begin();
-       it != users_.end();
-       ++it) {
-    if ((*it)->email() == user_id) {
-      unlock_user = *it;
-      break;
-    }
+    const AccountId& account_id) {
+  for (const user_manager::User* user : users_) {
+    if (user->GetAccountId() == account_id)
+      return user;
   }
-  return unlock_user;
+  return nullptr;
 }
 
 void ScreenLocker::ClearErrors() {
@@ -390,9 +422,10 @@ void ScreenLocker::Show() {
   // visible while in fullscreen because the shelf makes it harder for a web
   // page or app to mimick the lock screen.
   ash::wm::WindowState* active_window_state = ash::wm::GetActiveWindowState();
-  if (active_window_state &&
-      active_window_state->IsFullscreen() &&
-      active_window_state->hide_shelf_when_fullscreen()) {
+
+  if (active_window_state && active_window_state->IsFullscreen() &&
+      active_window_state->shelf_mode_in_fullscreen() !=
+          ash::wm::WindowState::SHELF_AUTO_HIDE_VISIBLE) {
     const ash::wm::WMEvent event(ash::wm::WM_EVENT_TOGGLE_FULLSCREEN);
     active_window_state->OnWMEvent(&event);
   }
@@ -503,11 +536,9 @@ content::WebUI* ScreenLocker::GetAssociatedWebUI() {
   return delegate_->GetAssociatedWebUI();
 }
 
-bool ScreenLocker::IsUserLoggedIn(const std::string& username) {
-  for (user_manager::UserList::const_iterator it = users_.begin();
-       it != users_.end();
-       ++it) {
-    if ((*it)->email() == username)
+bool ScreenLocker::IsUserLoggedIn(const AccountId& account_id) const {
+  for (user_manager::User* user : users_) {
+    if (user->GetAccountId() == account_id)
       return true;
   }
   return false;

@@ -53,74 +53,86 @@ public:
         visitor->trace(m_observers);
     }
 
-    bool isIteratingOverObservers() const { return m_iterating != IteratingNone; }
+    bool isIteratingOverObservers() const { return m_iterationState != NotIterating; }
 
 protected:
     LifecycleNotifier()
-        : m_iterating(IteratingNone)
-        , m_didCallContextDestroyed(false)
+        : m_iterationState(NotIterating)
     {
     }
-
-    enum IterationType {
-        IteratingNone,
-        IteratingOverAll,
-    };
-
-    IterationType m_iterating;
-
-protected:
-    using ObserverSet = HeapHashSet<WeakMember<Observer>>;
-
-    ObserverSet m_observers;
 
 #if DCHECK_IS_ON()
     T* context() { return static_cast<T*>(this); }
 #endif
 
-private:
-    bool m_didCallContextDestroyed;
+    using ObserverSet = HeapHashSet<WeakMember<Observer>>;
+
+    void removePending(ObserverSet&);
+
+    enum IterationState {
+        AllowingNone        = 0,
+        AllowingAddition    = 1,
+        AllowingRemoval     = 2,
+        NotIterating        = AllowingAddition | AllowingRemoval,
+        AllowPendingRemoval = 4,
+    };
+
+    // Iteration state is recorded while iterating the observer set,
+    // optionally barring add or remove mutations.
+    IterationState m_iterationState;
+    ObserverSet m_observers;
 };
 
 template<typename T, typename Observer>
 inline LifecycleNotifier<T, Observer>::~LifecycleNotifier()
 {
     // FIXME: Enable the following ASSERT. Also see a FIXME in Document::detach().
-    // ASSERT(!m_observers.size() || m_didCallContextDestroyed);
+    // ASSERT(!m_observers.size());
 }
 
 template<typename T, typename Observer>
 inline void LifecycleNotifier<T, Observer>::notifyContextDestroyed()
 {
-    // Don't notify contextDestroyed() twice.
-    if (m_didCallContextDestroyed)
-        return;
-
-    TemporaryChange<IterationType> scope(m_iterating, IteratingOverAll);
-    Vector<UntracedMember<Observer>> snapshotOfObservers;
-    copyToVector(m_observers, snapshotOfObservers);
-    for (Observer* observer : snapshotOfObservers) {
-        if (!m_observers.contains(observer))
-            continue;
-
+    // Observer unregistration is allowed, but effectively a no-op.
+    TemporaryChange<IterationState> scope(m_iterationState, AllowingRemoval);
+    ObserverSet observers;
+    m_observers.swap(observers);
+    for (Observer* observer : observers) {
         ASSERT(observer->lifecycleContext() == context());
         observer->contextDestroyed();
     }
-
-    m_didCallContextDestroyed = true;
 }
 
 template<typename T, typename Observer>
 inline void LifecycleNotifier<T, Observer>::addObserver(Observer* observer)
 {
-    RELEASE_ASSERT(m_iterating != IteratingOverAll);
+    RELEASE_ASSERT(m_iterationState & AllowingAddition);
     m_observers.add(observer);
 }
 
 template<typename T, typename Observer>
 inline void LifecycleNotifier<T, Observer>::removeObserver(Observer* observer)
 {
+    // If immediate removal isn't currently allowed,
+    // |observer| is recorded for pending removal.
+    if (m_iterationState & AllowPendingRemoval) {
+        m_observers.add(observer);
+        return;
+    }
+    RELEASE_ASSERT(m_iterationState & AllowingRemoval);
     m_observers.remove(observer);
+}
+
+template<typename T, typename Observer>
+inline void LifecycleNotifier<T, Observer>::removePending(ObserverSet& observers)
+{
+    if (m_observers.size()) {
+        // Prevent allocation (==shrinking) while removing;
+        // the table is likely to become garbage soon.
+        ThreadState::NoAllocationScope scope(ThreadState::current());
+        observers.removeAll(m_observers);
+    }
+    m_observers.swap(observers);
 }
 
 } // namespace blink

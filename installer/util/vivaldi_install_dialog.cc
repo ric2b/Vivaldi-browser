@@ -73,6 +73,7 @@ std::map<const std::wstring, const std::wstring>  kLanguages = {
   { L"ro",    L"Romanian" },
   { L"ru",    L"Russian" },
   { L"sc",    L"Sardinian" },
+  { L"gd",    L"Scots Gaelic" },
   { L"sr",    L"Serbian" },
   { L"sk",    L"Slovak" },
   { L"sl",    L"Slovenian" },

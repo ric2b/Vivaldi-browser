@@ -28,6 +28,7 @@
 namespace blink {
 
 class SVGElement;
+enum class SVGTransformChange;
 
 class LayoutSVGContainer : public LayoutSVGModelObject {
 public:
@@ -71,7 +72,7 @@ protected:
     bool nodeAtFloatPoint(HitTestResult&, const FloatPoint& pointInParent, HitTestAction) override;
 
     // Allow LayoutSVGTransformableContainer to hook in at the right time in layout().
-    virtual bool calculateLocalTransform() { return false; }
+    virtual SVGTransformChange calculateLocalTransform();
 
     // Allow LayoutSVGViewportContainer to hook in at the right times in layout() and nodeAtFloatPoint().
     virtual void calcViewport() { }

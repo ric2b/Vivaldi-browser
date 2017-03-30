@@ -5,7 +5,9 @@
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
@@ -15,6 +17,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/ssl/chrome_security_state_model_client.h"
 #include "components/security_state/security_state_model.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
 #include "net/base/filename_util.h"
@@ -29,6 +32,15 @@ const char kMHTMLFileNameExtension[] = ".mhtml";
 const char kFileNameComponentsSeparator[] = "-";
 const char kReplaceChars[] = " ";
 const char kReplaceWith[] = "_";
+
+void DeleteFileOnFileThread(const base::FilePath& file_path,
+                            const base::Closure& callback) {
+  content::BrowserThread::PostTaskAndReply(
+      content::BrowserThread::FILE, FROM_HERE,
+      base::Bind(base::IgnoreResult(&base::DeleteFile), file_path,
+                 false /* recursive */),
+      callback);
+}
 }  // namespace
 
 // static
@@ -121,8 +133,6 @@ void OfflinePageMHTMLArchiver::GenerateMHTML(
           GenerateFileName(url, base::UTF16ToUTF8(title), archive_id)));
 
   content::MHTMLGenerationParams params(file_path);
-  params.cache_control_policy =
-      content::MHTMLCacheControlPolicy::FAIL_FOR_NO_STORE_MAIN_FRAME;
   params.use_binary_encoding = true;
 
   web_contents_->GenerateMHTML(
@@ -135,7 +145,10 @@ void OfflinePageMHTMLArchiver::OnGenerateMHTMLDone(
     const base::FilePath& file_path,
     int64_t file_size) {
   if (file_size < 0) {
-    ReportFailure(ArchiverResult::ERROR_ARCHIVE_CREATION_FAILED);
+    DeleteFileOnFileThread(
+        file_path, base::Bind(&OfflinePageMHTMLArchiver::ReportFailure,
+                              weak_ptr_factory_.GetWeakPtr(),
+                              ArchiverResult::ERROR_ARCHIVE_CREATION_FAILED));
   } else {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,

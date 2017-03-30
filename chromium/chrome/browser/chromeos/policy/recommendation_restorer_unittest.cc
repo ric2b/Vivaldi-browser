@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/common/accessibility_types.h"
 #include "base/macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_simple_task_runner.h"
@@ -29,8 +30,8 @@
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
+#include "extensions/browser/quota_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/chromeos/accessibility_types.h"
 
 namespace policy {
 
@@ -68,6 +69,9 @@ class RecommendationRestorerTest : public testing::Test {
   void VerifyNotListeningForNotifications() const;
   void VerifyTimerIsStopped() const;
   void VerifyTimerIsRunning() const;
+
+  extensions::QuotaService::ScopedDisablePurgeForTesting
+      disable_purge_for_testing_;
 
   TestingPrefStore* recommended_prefs_;  // Not owned.
   syncable_prefs::TestingPrefServiceSyncable* prefs_;  // Not owned.
@@ -131,7 +135,7 @@ void RecommendationRestorerTest::SetUserSettings() {
   prefs_->SetBoolean(prefs::kAccessibilityHighContrastEnabled, true);
   prefs_->SetBoolean(prefs::kAccessibilityScreenMagnifierEnabled, true);
   prefs_->SetInteger(prefs::kAccessibilityScreenMagnifierType,
-                     ui::MAGNIFIER_FULL);
+                     ash::MAGNIFIER_FULL);
   prefs_->SetBoolean(prefs::kAccessibilityVirtualKeyboardEnabled, true);
 }
 
@@ -188,7 +192,7 @@ void RecommendationRestorerTest::VerifyPrefsFollowUser() const {
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierEnabled,
                         base::FundamentalValue(true));
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierType,
-                        base::FundamentalValue(ui::MAGNIFIER_FULL));
+                        base::FundamentalValue(ash::MAGNIFIER_FULL));
   VerifyPrefFollowsUser(prefs::kAccessibilityVirtualKeyboardEnabled,
                         base::FundamentalValue(true));
 }
@@ -325,7 +329,7 @@ TEST_F(RecommendationRestorerTest, RestoreOnRecommendationChangeOnLoginScreen) {
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierEnabled,
                         base::FundamentalValue(true));
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierType,
-                        base::FundamentalValue(ui::MAGNIFIER_FULL));
+                        base::FundamentalValue(ash::MAGNIFIER_FULL));
   VerifyTimerIsRunning();
   runner_->RunUntilIdle();
   VerifyPrefFollowsRecommendation(prefs::kAccessibilityScreenMagnifierEnabled,
@@ -380,7 +384,7 @@ TEST_F(RecommendationRestorerTest, RestoreOnRecommendationChangeInUserSession) {
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierEnabled,
                         base::FundamentalValue(true));
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierType,
-                        base::FundamentalValue(ui::MAGNIFIER_FULL));
+                        base::FundamentalValue(ash::MAGNIFIER_FULL));
   recommended_prefs_->SetBoolean(prefs::kAccessibilityScreenMagnifierEnabled,
                                  false);
   recommended_prefs_->SetInteger(prefs::kAccessibilityScreenMagnifierType, 0);
@@ -428,11 +432,11 @@ TEST_F(RecommendationRestorerTest, DoNothingOnUserChange) {
 
   prefs_->SetBoolean(prefs::kAccessibilityScreenMagnifierEnabled, true);
   prefs_->SetInteger(prefs::kAccessibilityScreenMagnifierType,
-                     ui::MAGNIFIER_FULL);
+                     ash::MAGNIFIER_FULL);
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierEnabled,
                         base::FundamentalValue(true));
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierType,
-                        base::FundamentalValue(ui::MAGNIFIER_FULL));
+                        base::FundamentalValue(ash::MAGNIFIER_FULL));
   VerifyTimerIsStopped();
 
   prefs_->SetBoolean(prefs::kAccessibilityVirtualKeyboardEnabled, true);
@@ -480,11 +484,11 @@ TEST_F(RecommendationRestorerTest, RestoreOnUserChange) {
   VerifyTimerIsStopped();
   prefs_->SetBoolean(prefs::kAccessibilityScreenMagnifierEnabled, true);
   prefs_->SetInteger(prefs::kAccessibilityScreenMagnifierType,
-                     ui::MAGNIFIER_FULL);
+                     ash::MAGNIFIER_FULL);
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierEnabled,
                         base::FundamentalValue(true));
   VerifyPrefFollowsUser(prefs::kAccessibilityScreenMagnifierType,
-                        base::FundamentalValue(ui::MAGNIFIER_FULL));
+                        base::FundamentalValue(ash::MAGNIFIER_FULL));
   VerifyTimerIsRunning();
   runner_->RunUntilIdle();
   VerifyPrefFollowsRecommendation(prefs::kAccessibilityScreenMagnifierEnabled,

@@ -6,6 +6,9 @@
 
 #include <utility>
 
+#include "content/common/page_state_serialization.h"
+#include "content/common/site_isolation_policy.h"
+
 namespace content {
 
 FrameNavigationEntry::FrameNavigationEntry()
@@ -78,6 +81,20 @@ void FrameNavigationEntry::set_item_sequence_number(
 void FrameNavigationEntry::set_document_sequence_number(
     int64_t document_sequence_number) {
   document_sequence_number_ = document_sequence_number;
+}
+
+scoped_refptr<ResourceRequestBodyImpl> FrameNavigationEntry::GetPostData()
+    const {
+  DCHECK(SiteIsolationPolicy::UseSubframeNavigationEntries());
+  if (method_ != "POST")
+    return nullptr;
+
+  // Generate the body from the PageState.
+  ExplodedPageState exploded_state;
+  if (!DecodePageState(page_state_.ToEncodedData(), &exploded_state))
+    return nullptr;
+
+  return exploded_state.top.http_body.request_body;
 }
 
 }  // namespace content

@@ -12,10 +12,10 @@
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "media/base/audio_buffer_converter.h"
-#include "media/base/audio_hardware_config.h"
 #include "media/base/audio_splicer.h"
 #include "media/base/fake_audio_renderer_sink.h"
 #include "media/base/gmock_callback_support.h"
@@ -69,7 +69,12 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
  public:
   // Give the decoder some non-garbage media properties.
   AudioRendererImplTest()
-      : hardware_config_(AudioParameters(), AudioParameters()),
+      : hardware_params_(AudioParameters::AUDIO_PCM_LOW_LATENCY,
+                         kChannelLayout,
+                         kOutputSamplesPerSecond,
+                         SampleFormatToBytesPerChannel(kSampleFormat) * 8,
+                         512),
+        sink_(new FakeAudioRendererSink(hardware_params_)),
         tick_clock_(new base::SimpleTestTickClock()),
         demuxer_stream_(DemuxerStream::AUDIO),
         decoder_(new MockAudioDecoder()),
@@ -96,13 +101,11 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
                                kOutputSamplesPerSecond,
                                SampleFormatToBytesPerChannel(kSampleFormat) * 8,
                                512);
-    hardware_config_.UpdateOutputConfig(out_params);
     ScopedVector<AudioDecoder> decoders;
     decoders.push_back(decoder_);
-    sink_ = new FakeAudioRendererSink();
     renderer_.reset(new AudioRendererImpl(message_loop_.task_runner(),
                                           sink_.get(), std::move(decoders),
-                                          hardware_config_, new MediaLog()));
+                                          new MediaLog()));
     renderer_->tick_clock_.reset(tick_clock_);
     tick_clock_->Advance(base::TimeDelta::FromSeconds(1));
   }
@@ -271,13 +274,13 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
                                  DecoderBuffer::CreateEOSBuffer()));
 
     // Satify pending |decode_cb_| to trigger a new DemuxerStream::Read().
-    message_loop_.PostTask(
+    message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
 
     WaitForPendingRead();
 
-    message_loop_.PostTask(
+    message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
 
@@ -298,11 +301,11 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
   // buffer. Returns true if and only if all of |requested_frames| were able
   // to be consumed.
   bool ConsumeBufferedData(OutputFrames requested_frames,
-                           uint32_t delay_frames) {
+                           uint32_t frames_delayed) {
     std::unique_ptr<AudioBus> bus =
         AudioBus::Create(kChannels, requested_frames.value);
     int frames_read = 0;
-    EXPECT_TRUE(sink_->Render(bus.get(), delay_frames, &frames_read));
+    EXPECT_TRUE(sink_->Render(bus.get(), frames_delayed, &frames_read));
     return frames_read == requested_frames.value;
   }
 
@@ -362,10 +365,10 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
   bool ended() const { return ended_; }
 
   // Fixture members.
+  AudioParameters hardware_params_;
   base::MessageLoop message_loop_;
   std::unique_ptr<AudioRendererImpl> renderer_;
   scoped_refptr<FakeAudioRendererSink> sink_;
-  AudioHardwareConfig hardware_config_;
   base::SimpleTestTickClock* tick_clock_;
   PipelineStatistics last_statistics_;
 
@@ -374,9 +377,9 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
                      const AudioDecoder::DecodeCB& decode_cb) {
     // TODO(scherkus): Make this a DCHECK after threading semantics are fixed.
     if (base::MessageLoop::current() != &message_loop_) {
-      message_loop_.PostTask(FROM_HERE, base::Bind(
-          &AudioRendererImplTest::DecodeDecoder,
-          base::Unretained(this), buffer, decode_cb));
+      message_loop_.task_runner()->PostTask(
+          FROM_HERE, base::Bind(&AudioRendererImplTest::DecodeDecoder,
+                                base::Unretained(this), buffer, decode_cb));
       return;
     }
 
@@ -396,7 +399,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
       return;
     }
 
-    message_loop_.PostTask(FROM_HERE, reset_cb);
+    message_loop_.task_runner()->PostTask(FROM_HERE, reset_cb);
   }
 
   void DeliverBuffer(DecodeStatus status,
@@ -715,16 +718,15 @@ TEST_F(AudioRendererImplTest, RenderingDelayedForEarlyStartTime) {
   // Choose a first timestamp a few buffers into the future, which ends halfway
   // through the desired output buffer; this allows for maximum test coverage.
   const double kBuffers = 4.5;
-  const base::TimeDelta first_timestamp = base::TimeDelta::FromSecondsD(
-      hardware_config_.GetOutputBufferSize() * kBuffers /
-      hardware_config_.GetOutputSampleRate());
+  const base::TimeDelta first_timestamp =
+      base::TimeDelta::FromSecondsD(hardware_params_.frames_per_buffer() *
+                                    kBuffers / hardware_params_.sample_rate());
 
   Preroll(base::TimeDelta(), first_timestamp, PIPELINE_OK);
   StartTicking();
 
   // Verify the first few buffers are silent.
-  std::unique_ptr<AudioBus> bus =
-      AudioBus::Create(hardware_config_.GetOutputConfig());
+  std::unique_ptr<AudioBus> bus = AudioBus::Create(hardware_params_);
   int frames_read = 0;
   for (int i = 0; i < std::floor(kBuffers); ++i) {
     EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
@@ -754,8 +756,7 @@ TEST_F(AudioRendererImplTest, RenderingDelayedForSuspend) {
 
   // Verify the first buffer is real data.
   int frames_read = 0;
-  std::unique_ptr<AudioBus> bus =
-      AudioBus::Create(hardware_config_.GetOutputConfig());
+  std::unique_ptr<AudioBus> bus = AudioBus::Create(hardware_params_);
   EXPECT_TRUE(sink_->Render(bus.get(), 0, &frames_read));
   EXPECT_NE(0, frames_read);
   for (int i = 0; i < bus->frames(); ++i)

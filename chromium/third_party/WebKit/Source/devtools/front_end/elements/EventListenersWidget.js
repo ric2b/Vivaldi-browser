@@ -44,7 +44,7 @@ WebInspector.EventListenersWidget = function()
 
     this._showFrameworkListenersSetting = WebInspector.settings.createSetting("showFrameowkrListeners", true);
     this._showFrameworkListenersSetting.addChangeListener(this._showFrameworkListenersChanged.bind(this));
-    this._eventListenersView = new WebInspector.EventListenersView(this.element);
+    this._eventListenersView = new WebInspector.EventListenersView(this.element, this.update.bind(this));
     WebInspector.context.addFlavorChangeListener(WebInspector.DOMNode, this.update, this);
 }
 
@@ -134,8 +134,8 @@ WebInspector.EventListenersWidget.prototype = {
     _showFrameworkListenersChanged: function()
     {
         var dispatchFilter = this._dispatchFilterBySetting.get();
-        var showPassive = dispatchFilter == WebInspector.EventListenersWidget.DispatchFilterBy.All || dispatchFilter == WebInspector.EventListenersWidget.DispatchFilterBy.Passive;
-        var showBlocking = dispatchFilter == WebInspector.EventListenersWidget.DispatchFilterBy.All || dispatchFilter == WebInspector.EventListenersWidget.DispatchFilterBy.Blocking;
+        var showPassive = dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.All || dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.Passive;
+        var showBlocking = dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.All || dispatchFilter === WebInspector.EventListenersWidget.DispatchFilterBy.Blocking;
         this._eventListenersView.showFrameworkListeners(this._showFrameworkListenersSetting.get(), showPassive, showBlocking);
     },
 

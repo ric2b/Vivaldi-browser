@@ -352,6 +352,8 @@ public class AwContents implements SmartClipProvider,
     // Do not use directly, call isDestroyed() instead.
     private boolean mIsDestroyed = false;
 
+    private AwContentsDestroyRunnable mAwContentsDestroyRunnable;
+
     private static String sCurrentLocale = "";
 
     private static final class AwContentsDestroyRunnable implements Runnable {
@@ -359,6 +361,7 @@ public class AwContents implements SmartClipProvider,
         // Hold onto a reference to the window (via its wrapper), so that it is not destroyed
         // until we are done here.
         private final WindowAndroidWrapper mWindowAndroid;
+        private boolean mHasRun;
 
         private AwContentsDestroyRunnable(
                 long nativeAwContents, WindowAndroidWrapper windowAndroid) {
@@ -369,6 +372,12 @@ public class AwContents implements SmartClipProvider,
         @Override
         public void run() {
             nativeDestroy(mNativeAwContents);
+            mHasRun = true;
+        }
+
+        // TODO(boliu): Generalize this as a CleanupReference feature.
+        public boolean hasRun() {
+            return mHasRun;
         }
     }
 
@@ -674,12 +683,12 @@ public class AwContents implements SmartClipProvider,
     private class AwComponentCallbacks implements ComponentCallbacks2 {
         @Override
         public void onTrimMemory(final int level) {
-            if (isDestroyed(NO_WARN)) return;
             boolean visibleRectEmpty = getGlobalVisibleRect().isEmpty();
             final boolean visible = mIsViewVisible && mIsWindowVisible && !visibleRectEmpty;
             ThreadUtils.runOnUiThreadBlocking(new Runnable() {
                 @Override
                 public void run() {
+                    if (isDestroyed(NO_WARN)) return;
                     if (level >= TRIM_MEMORY_MODERATE) {
                         mInitialFunctor.deleteHardwareRenderer();
                         if (mFullScreenFunctor != null) {
@@ -1051,8 +1060,9 @@ public class AwContents implements SmartClipProvider,
 
         // The native side object has been bound to this java instance, so now is the time to
         // bind all the native->java relationships.
-        mCleanupReference = new CleanupReference(
-                this, new AwContentsDestroyRunnable(mNativeAwContents, mWindowAndroid));
+        mAwContentsDestroyRunnable =
+                new AwContentsDestroyRunnable(mNativeAwContents, mWindowAndroid);
+        mCleanupReference = new CleanupReference(this, mAwContentsDestroyRunnable);
     }
 
     private void installWebContentsObserver() {
@@ -1067,7 +1077,7 @@ public class AwContents implements SmartClipProvider,
      * provide the AwContents to host the pop up content.
      */
     public void supplyContentsForPopup(AwContents newContents) {
-        assert !isDestroyed(NO_WARN);
+        if (isDestroyed(WARN)) return;
         long popupNativeAwContents = nativeReleasePopupAwContents(mNativeAwContents);
         if (popupNativeAwContents == 0) {
             Log.w(TAG, "Popup WebView bind failed: no pending content.");
@@ -1085,6 +1095,7 @@ public class AwContents implements SmartClipProvider,
     // Recap: supplyContentsForPopup() is called on the parent window's content, this method is
     // called on the popup window's content.
     private void receivePopupContents(long popupNativeAwContents) {
+        if (isDestroyed(WARN)) return;
         mDeferredShouldOverrideUrlLoadingIsPendingForPopup = true;
         // Save existing view state.
         final boolean wasAttached = mIsAttachedToWindow;
@@ -1154,12 +1165,10 @@ public class AwContents implements SmartClipProvider,
             mPostMessageSender = null;
         }
 
-        // If we are attached, we have to call native detach to clean up
-        // hardware resources.
         if (mIsAttachedToWindow) {
             Log.w(TAG, "WebView.destroy() called while WebView is still attached to window.");
-            mCurrentFunctor.onDetachedFromWindow();
-            nativeOnDetachedFromWindow(mNativeAwContents);
+            // Need to call detach to avoid leaks because the real detach later will be ignored.
+            onDetachedFromWindow();
         }
         mIsDestroyed = true;
         mHandler.post(new Runnable() {
@@ -1214,7 +1223,13 @@ public class AwContents implements SmartClipProvider,
         } else if (warnIfDestroyed == WARN) {
             Log.w(TAG, "Application attempted to call on a destroyed WebView", new Throwable());
         }
-        return mIsDestroyed;
+        boolean destroyRunnableHasRun =
+                mAwContentsDestroyRunnable != null && mAwContentsDestroyRunnable.hasRun();
+        if (TRACE && destroyRunnableHasRun && !mIsDestroyed) {
+            // Swallow the error. App developers are not going to do anything with an error msg.
+            Log.d(TAG, "AwContents is kept alive past CleanupReference by finalizer");
+        }
+        return mIsDestroyed || destroyRunnableHasRun;
     }
 
     @VisibleForTesting
@@ -1579,10 +1594,6 @@ public class AwContents implements SmartClipProvider,
             }
         }
 
-        // Temporary to generate a Java stack for crbug.com/618807.
-        if (mNativeAwContents == 0) {
-            throw new RuntimeException("Calling load on destroyed webview " + mIsDestroyed);
-        }
         nativeSetExtraHeadersForUrl(
                 mNativeAwContents, params.getUrl(), params.getExtraHttpRequestHeadersString());
         params.setExtraHeaders(new HashMap<String, String>());

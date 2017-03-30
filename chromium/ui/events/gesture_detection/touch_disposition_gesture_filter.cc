@@ -23,7 +23,9 @@ GestureEventData CreateGesture(EventType type,
                                const GestureEventDataPacket& packet) {
   // As the event is purely synthetic, we needn't be strict with event flags.
   int flags = EF_NONE;
-  return GestureEventData(GestureEventDetails(type),
+  GestureEventDetails details(type);
+  details.set_device_type(GestureDeviceType::DEVICE_TOUCHSCREEN);
+  return GestureEventData(details,
                           motion_event_id,
                           primary_tool_type,
                           packet.timestamp(),
@@ -33,7 +35,8 @@ GestureEventData CreateGesture(EventType type,
                           packet.raw_touch_location().y(),
                           1,
                           gfx::RectF(packet.touch_location(), gfx::SizeF()),
-                          flags);
+                          flags,
+                          packet.unique_touch_event_id());
 }
 
 enum RequiredTouches {
@@ -187,8 +190,8 @@ TouchDispositionGestureFilter::OnGesturePacket(
   return SUCCESS;
 }
 
-void TouchDispositionGestureFilter::OnTouchEventAck(uint32_t unique_event_id,
-                                                    bool event_consumed) {
+void TouchDispositionGestureFilter::OnTouchEventAck(
+    uint32_t unique_touch_event_id, bool event_consumed) {
   // Spurious asynchronous acks should not trigger a crash.
   if (IsEmpty() || (Head().empty() && sequences_.size() == 1))
     return;
@@ -197,13 +200,13 @@ void TouchDispositionGestureFilter::OnTouchEventAck(uint32_t unique_event_id,
     PopGestureSequence();
 
   if (!Tail().empty() &&
-      Tail().back().unique_touch_event_id() == unique_event_id) {
+      Tail().back().unique_touch_event_id() == unique_touch_event_id) {
     Tail().back().Ack(event_consumed);
     if (sequences_.size() == 1 && Tail().size() == 1)
       SendAckedEvents();
   } else {
     DCHECK(!Head().empty());
-    DCHECK_EQ(Head().front().unique_touch_event_id(), unique_event_id);
+    DCHECK_EQ(Head().front().unique_touch_event_id(), unique_touch_event_id);
     Head().front().Ack(event_consumed);
     SendAckedEvents();
   }
@@ -306,6 +309,9 @@ void TouchDispositionGestureFilter::FilterAndSendPacket(
 void TouchDispositionGestureFilter::SendGesture(
     const GestureEventData& event,
     const GestureEventDataPacket& packet_being_sent) {
+  DCHECK(event.unique_touch_event_id ==
+         packet_being_sent.unique_touch_event_id());
+
   // TODO(jdduke): Factor out gesture stream reparation code into a standalone
   // utility class.
   switch (event.type()) {

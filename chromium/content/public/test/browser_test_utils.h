@@ -27,6 +27,9 @@
 #include "ipc/message_filter.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_tree_update.h"
+#include "ui/events/keycodes/dom/dom_code.h"
+#include "ui/events/keycodes/dom/dom_key.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "url/gurl.h"
 
@@ -148,53 +151,41 @@ void SimulateTapWithModifiersAt(WebContents* web_contents,
                                 const gfx::Point& point);
 
 // Sends a key press asynchronously.
-// The native code of the key event will be set to InvalidNativeKeycode().
+// |key| specifies the UIEvents (aka: DOM4Events) value of the key.
+// |code| specifies the UIEvents (aka: DOM4Events) value of the physical key.
 // |key_code| alone is good enough for scenarios that only need the char
 // value represented by a key event and not the physical key on the keyboard
 // or the keyboard layout.
-// For scenarios such as chromoting that need the native code,
-// SimulateKeyPressWithCode should be used.
 void SimulateKeyPress(WebContents* web_contents,
+                      ui::DomKey key,
+                      ui::DomCode code,
                       ui::KeyboardCode key_code,
                       bool control,
                       bool shift,
                       bool alt,
                       bool command);
 
-// Sends a key press asynchronously.
-// |code| specifies the UIEvents (aka: DOM4Events) value of the key:
-// https://dvcs.w3.org/hg/d4e/raw-file/tip/source_respec.htm
-// The native code of the key event will be set based on |code|.
-// See ui/base/keycodes/vi usb_keycode_map.h for mappings between |code|
-// and the native code.
-// Examples of the various codes:
-//   key_code: VKEY_A
-//   code: "KeyA"
-//   native key code: 0x001e (for Windows).
-//   native key code: 0x0026 (for Linux).
-void SimulateKeyPressWithCode(WebContents* web_contents,
-                              ui::KeyboardCode key_code,
-                              const std::string& code,
-                              bool control,
-                              bool shift,
-                              bool alt,
-                              bool command);
-
 // Allow ExecuteScript* methods to target either a WebContents or a
 // RenderFrameHost.  Targetting a WebContents means executing the script in the
-// RenderFrameHost returned by WebContents::GetMainFrame(), which is the
-// main frame.  Pass a specific RenderFrameHost to target it.
+// RenderFrameHost returned by WebContents::GetMainFrame(), which is the main
+// frame.  Pass a specific RenderFrameHost to target it. Embedders may declare
+// additional ConvertToRenderFrameHost functions for convenience.
 class ToRenderFrameHost {
  public:
-  ToRenderFrameHost(WebContents* web_contents);
-  ToRenderFrameHost(RenderViewHost* render_view_host);
-  ToRenderFrameHost(RenderFrameHost* render_frame_host);
+  template <typename T>
+  ToRenderFrameHost(T* frame_convertible_value)
+      : render_frame_host_(ConvertToRenderFrameHost(frame_convertible_value)) {}
 
+  // Extract the underlying frame.
   RenderFrameHost* render_frame_host() const { return render_frame_host_; }
 
  private:
   RenderFrameHost* render_frame_host_;
 };
+
+RenderFrameHost* ConvertToRenderFrameHost(RenderViewHost* render_view_host);
+RenderFrameHost* ConvertToRenderFrameHost(RenderFrameHost* render_view_host);
+RenderFrameHost* ConvertToRenderFrameHost(WebContents* web_contents);
 
 // Executes the passed |script| in the specified frame. The |script| should not
 // invoke domAutomationController.send(); otherwise, your test will hang or be
@@ -268,6 +259,12 @@ void FetchHistogramsFromChildProcesses();
 // "/cross-site/hostname/rest/of/path" to redirect the request to
 // "<scheme>://hostname:<port>/rest/of/path", where <scheme> and <port>
 // are the values for the instance of EmbeddedTestServer.
+//
+// By default, redirection will be done using HTTP 302 response, but in some
+// cases (e.g. to preserve HTTP method and POST body across redirects as
+// prescribed by https://tools.ietf.org/html/rfc7231#section-6.4.7) a test might
+// want to use HTTP 307 response instead.  This can be accomplished by replacing
+// "/cross-site/" URL substring above with "/cross-site-307/".
 void SetupCrossSiteRedirector(net::EmbeddedTestServer* embedded_test_server);
 
 // Waits for an interstitial page to attach to given web contents.
@@ -297,6 +294,21 @@ void WaitForAccessibilityFocusChange();
 
 // Retrieve information about the node that's focused in the accessibility tree.
 ui::AXNodeData GetFocusedAccessibilityNodeInfo(WebContents* web_contents);
+
+// This is intended to be a robust way to assert that the accessibility
+// tree eventually gets into the correct state, without worrying about
+// the exact ordering of events received while getting there.
+//
+// Searches the accessibility tree to see if any node's accessible name
+// is equal to the given name. If not, sets up a notification waiter
+// that listens for any accessibility event in any frame, and checks again
+// after each event. Keeps looping until the text is found (or the
+// test times out).
+void WaitForAccessibilityTreeToContainNodeWithName(WebContents* web_contents,
+                                                   const std::string& name);
+
+// Get a snapshot of a web page's accessibility tree.
+ui::AXTreeUpdate GetAccessibilityTreeSnapshot(WebContents* web_contents);
 
 // Watches title changes on a WebContents, blocking until an expected title is
 // set.

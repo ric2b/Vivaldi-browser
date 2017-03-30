@@ -37,7 +37,6 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceRequest.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -73,7 +72,7 @@ public:
     WebCachePolicy resourceRequestCachePolicy(const ResourceRequest&, Resource::Type, FetchRequest::DeferOption) const override;
     void dispatchDidChangeResourcePriority(unsigned long identifier, ResourceLoadPriority, int intraPriorityValue) override;
     void dispatchWillSendRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse& redirectResponse, const FetchInitiatorInfo& = FetchInitiatorInfo()) override;
-    void dispatchDidLoadResourceFromMemoryCache(Resource*, WebURLRequest::FrameType, WebURLRequest::RequestContext) override;
+    void dispatchDidLoadResourceFromMemoryCache(unsigned long identifier, Resource*, WebURLRequest::FrameType, WebURLRequest::RequestContext) override;
     void dispatchDidReceiveResponse(unsigned long identifier, const ResourceResponse&, WebURLRequest::FrameType, WebURLRequest::RequestContext, Resource*) override;
     void dispatchDidReceiveData(unsigned long identifier, const char* data, int dataLength, int encodedDataLength) override;
     void dispatchDidDownloadData(unsigned long identifier, int dataLength, int encodedDataLength)  override;
@@ -81,7 +80,7 @@ public:
     void dispatchDidFail(unsigned long identifier, const ResourceError&, bool isInternalRequest) override;
 
     bool shouldLoadNewResource(Resource::Type) const override;
-    void willStartLoadingResource(Resource*, ResourceRequest&) override;
+    void willStartLoadingResource(unsigned long identifier, ResourceRequest&, Resource::Type) override;
     void didLoadResource(Resource*) override;
 
     void addResourceTiming(const ResourceTimingInfo&) override;
@@ -106,7 +105,7 @@ public:
 
     MHTMLArchive* archive() const override;
 
-    ResourceLoadPriority modifyPriorityForExperiments(ResourceLoadPriority, Resource::Type, const FetchRequest&, ResourcePriority::VisibilityStatus) override;
+    ResourceLoadPriority modifyPriorityForExperiments(ResourceLoadPriority) override;
 
     void countClientHintsDPR() override;
     void countClientHintsResourceWidth() override;
@@ -118,19 +117,19 @@ public:
 
 private:
     explicit FrameFetchContext(DocumentLoader*, Document*);
-    inline DocumentLoader* ensureLoaderForNotifications() const;
+    inline DocumentLoader* masterDocumentLoader() const;
 
     LocalFrame* frame() const; // Can be null
     void printAccessDeniedMessage(const KURL&) const;
-    ResourceRequestBlockedReason canRequestInternal(Resource::Type, const ResourceRequest&, const KURL&, const ResourceLoaderOptions&, bool forPreload, FetchRequest::OriginRestriction, ContentSecurityPolicy::RedirectStatus) const;
+    ResourceRequestBlockedReason canRequestInternal(Resource::Type, const ResourceRequest&, const KURL&, const ResourceLoaderOptions&, bool forPreload, FetchRequest::OriginRestriction, ResourceRequest::RedirectStatus) const;
+
+    void prepareRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse&);
 
     // FIXME: Oilpan: Ideally this should just be a traced Member but that will
     // currently leak because ComputedStyle and its data are not on the heap.
     // See crbug.com/383860 for details.
     WeakMember<Document> m_document;
     Member<DocumentLoader> m_documentLoader;
-
-    bool m_imageFetched : 1;
 };
 
 } // namespace blink

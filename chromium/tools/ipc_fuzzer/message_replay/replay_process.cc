@@ -12,15 +12,17 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/posix/global_descriptors.h"
+#include "base/run_loop.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
+#include "ipc/ipc_channel_mojo.h"
 #include "ipc/ipc_descriptors.h"
 #include "ipc/ipc_switches.h"
-#include "ipc/mojo/ipc_channel_mojo.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
 
 #if defined(OS_POSIX)
 #include "content/public/common/content_descriptors.h"
@@ -49,9 +51,9 @@ void InitializeMojoIPCChannel() {
 
 ReplayProcess::ReplayProcess()
     : io_thread_("Chrome_ChildIOThread"),
-      shutdown_event_(true, false),
-      message_index_(0) {
-}
+      shutdown_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                      base::WaitableEvent::InitialState::NOT_SIGNALED),
+      message_index_(0) {}
 
 ReplayProcess::~ReplayProcess() {
   channel_.reset();
@@ -93,7 +95,8 @@ bool ReplayProcess::Initialize(int argc, const char** argv) {
              kMojoIPCChannel + base::GlobalDescriptors::kBaseDescriptor);
 #endif
 
-  mojo_ipc_support_.reset(new IPC::ScopedIPCSupport(io_thread_.task_runner()));
+  mojo_ipc_support_.reset(
+      new mojo::edk::ScopedIPCSupport(io_thread_.task_runner()));
   InitializeMojoIPCChannel();
 
   return true;
@@ -155,7 +158,7 @@ void ReplayProcess::Run() {
                 base::TimeDelta::FromMilliseconds(1),
                 base::Bind(&ReplayProcess::SendNextMessage,
                            base::Unretained(this)));
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 bool ReplayProcess::OnMessageReceived(const IPC::Message& msg) {

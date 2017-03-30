@@ -35,7 +35,10 @@ SelectedKeywordDecoration::SelectedKeywordDecoration() {
 SelectedKeywordDecoration::~SelectedKeywordDecoration() {}
 
 NSColor* SelectedKeywordDecoration::GetBackgroundBorderColor() {
-  return skia::SkColorToCalibratedNSColor(gfx::kGoogleBlue700);
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    return skia::SkColorToCalibratedNSColor(gfx::kGoogleBlue700);
+  }
+  return skia::SkColorToSRGBNSColor(gfx::kGoogleBlue700);
 }
 
 CGFloat SelectedKeywordDecoration::GetWidthForSpace(CGFloat width) {
@@ -66,20 +69,27 @@ void SelectedKeywordDecoration::SetKeyword(const base::string16& short_name,
                                            bool is_extension_keyword) {
   const base::string16 min_name(
       location_bar_util::CalculateMinString(short_name));
-  NSString* full_string = is_extension_keyword ?
-      base::SysUTF16ToNSString(short_name) :
-      l10n_util::GetNSStringF(IDS_OMNIBOX_KEYWORD_TEXT, short_name);
+  const int keyword_text_id = ui::MaterialDesignController::IsModeMaterial()
+                                  ? IDS_OMNIBOX_KEYWORD_TEXT_MD
+                                  : IDS_OMNIBOX_KEYWORD_TEXT;
+
+  NSString* full_string =
+      is_extension_keyword
+          ? base::SysUTF16ToNSString(short_name)
+          : l10n_util::GetNSStringF(keyword_text_id, short_name);
 
   // The text will be like "Search <name>:".  "<name>" is a parameter
-  // derived from |short_name|.
+  // derived from |short_name|. If we're using Material Design, the text will
+  // be like "Search <name>" instead.
   full_string_.reset([full_string copy]);
 
   if (min_name.empty()) {
     partial_string_.reset();
   } else {
-    NSString* partial_string = is_extension_keyword ?
-        base::SysUTF16ToNSString(min_name) :
-        l10n_util::GetNSStringF(IDS_OMNIBOX_KEYWORD_TEXT, min_name);
+    NSString* partial_string =
+        is_extension_keyword
+            ? base::SysUTF16ToNSString(min_name)
+            : l10n_util::GetNSStringF(keyword_text_id, min_name);
     partial_string_.reset([partial_string copy]);
   }
 }

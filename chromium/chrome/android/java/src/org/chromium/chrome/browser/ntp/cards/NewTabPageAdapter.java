@@ -5,21 +5,23 @@
 package org.chromium.chrome.browser.ntp.cards;
 
 import android.graphics.Canvas;
-import android.support.v4.view.animation.FastOutLinearInInterpolator;
 import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.RecyclerView.Adapter;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.support.v7.widget.helper.ItemTouchHelper;
-import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.Interpolator;
 
+import org.chromium.base.Callback;
 import org.chromium.base.Log;
 import org.chromium.chrome.browser.ntp.NewTabPageLayout;
+import org.chromium.chrome.browser.ntp.NewTabPageUma;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
+import org.chromium.chrome.browser.ntp.snippets.DisabledReason;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticleViewHolder;
 import org.chromium.chrome.browser.ntp.snippets.SnippetHeaderListItem;
+import org.chromium.chrome.browser.ntp.snippets.SnippetHeaderViewHolder;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge.SnippetsObserver;
 
 import java.util.ArrayList;
@@ -33,26 +35,32 @@ import java.util.List;
  */
 public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements SnippetsObserver {
     private static final String TAG = "Ntp";
-    private static final Interpolator FADE_INTERPOLATOR = new FastOutLinearInInterpolator();
+
+    /**
+     * Position of the first card in the adapter. This is always going to be a valid position,
+     * occupied either by a card showing content or by a status card.
+     */
+    private static final int FIRST_CARD_POSITION = 2;
 
     private final NewTabPageManager mNewTabPageManager;
     private final NewTabPageLayout mNewTabPageLayout;
     private final AboveTheFoldListItem mAboveTheFoldListItem;
+    private final SnippetHeaderListItem mHeaderListItem;
+    private StatusListItem mStatusListItem;
     private final List<NewTabPageListItem> mNewTabPageListItems;
     private final ItemTouchCallbacks mItemTouchCallbacks;
     private NewTabPageRecyclerView mRecyclerView;
-    private boolean mWantsSnippets;
+    private int mServiceStatus;
+
+    private SnippetsBridge mSnippetsBridge;
 
     private class ItemTouchCallbacks extends ItemTouchHelper.Callback {
         @Override
         public void onSwiped(ViewHolder viewHolder, int direction) {
             mRecyclerView.onItemDismissStarted(viewHolder.itemView);
 
-            // This is going to have a effect at the next layout pass, which is going to happen
-            // after the item has been removed from the adapter and the layout.
-            mRecyclerView.refreshBottomSpacing();
-
             NewTabPageAdapter.this.dismissItem(viewHolder);
+            addStatusCardIfNecessary();
         }
 
         @Override
@@ -78,8 +86,7 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
             assert viewHolder instanceof NewTabPageViewHolder;
 
             int swipeFlags = 0;
-            NewTabPageViewHolder ntpViewHolder = (NewTabPageViewHolder) viewHolder;
-            if (ntpViewHolder.isDismissable()) {
+            if (((NewTabPageViewHolder) viewHolder).isDismissable()) {
                 swipeFlags = ItemTouchHelper.START | ItemTouchHelper.END;
             }
 
@@ -89,10 +96,9 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         @Override
         public void onChildDraw(Canvas c, RecyclerView recyclerView, ViewHolder viewHolder,
                 float dX, float dY, int actionState, boolean isCurrentlyActive) {
-            View itemView = viewHolder.itemView;
-            float input = Math.abs(dX) / itemView.getMeasuredWidth();
-            float alpha = 1 - FADE_INTERPOLATOR.getInterpolation(input);
-            itemView.setAlpha(alpha);
+            assert viewHolder instanceof NewTabPageViewHolder;
+
+            ((NewTabPageViewHolder) viewHolder).updateViewStateForDismiss(dX);
             super.onChildDraw(c, recyclerView, viewHolder, dX, dY, actionState, isCurrentlyActive);
         }
     }
@@ -100,20 +106,25 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
     /**
      * Constructor to create the manager for all the cards to display on the NTP
      *
-     * @param manager the NewTabPageManager to use to interact with the snippets service and the
-     *                rest of the system.
+     * @param manager the NewTabPageManager to use to interact with the rest of the system.
      * @param newTabPageLayout the layout encapsulating all the above-the-fold elements
      *                         (logo, search box, most visited tiles)
+     * @param snippetsBridge the bridge to interact with the snippets service.
      */
-    public NewTabPageAdapter(NewTabPageManager manager, NewTabPageLayout newTabPageLayout) {
+    public NewTabPageAdapter(NewTabPageManager manager, NewTabPageLayout newTabPageLayout,
+            SnippetsBridge snippetsBridge) {
         mNewTabPageManager = manager;
         mNewTabPageLayout = newTabPageLayout;
         mAboveTheFoldListItem = new AboveTheFoldListItem();
+        mHeaderListItem = new SnippetHeaderListItem();
         mItemTouchCallbacks = new ItemTouchCallbacks();
         mNewTabPageListItems = new ArrayList<NewTabPageListItem>();
-        mNewTabPageListItems.add(mAboveTheFoldListItem);
-        mWantsSnippets = true;
-        mNewTabPageManager.setSnippetsObserver(this);
+        mServiceStatus = DisabledReason.NONE;
+        mSnippetsBridge = snippetsBridge;
+        mStatusListItem = StatusListItem.create(snippetsBridge.getDisabledReason(), this, manager);
+
+        loadSnippets(new ArrayList<SnippetArticle>());
+        mSnippetsBridge.setObserver(this);
     }
 
     /** Returns callbacks to configure the interactions with the RecyclerView's items. */
@@ -123,7 +134,13 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
     @Override
     public void onSnippetsReceived(List<SnippetArticle> listSnippets) {
-        if (!mWantsSnippets) return;
+        // We never want to refresh the suggestions if we already have some content.
+        if (hasSuggestions()) return;
+
+        if (!(mServiceStatus == DisabledReason.NONE
+                    || mServiceStatus == DisabledReason.HISTORY_SYNC_STATE_UNKNOWN)) {
+            return;
+        }
 
         int newSnippetCount = listSnippets.size();
         Log.d(TAG, "Received %d new snippets.", newSnippetCount);
@@ -133,15 +150,31 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
         loadSnippets(listSnippets);
 
-        // We don't want to get notified of other changes.
-        mWantsSnippets = false;
+        NewTabPageUma.recordSnippetAction(NewTabPageUma.SNIPPETS_ACTION_SHOWN);
     }
 
     @Override
-    public void onSnippetsDisabled() {
-        // Clear the snippets, wait for new updates in case the service is reenabled later.
-        loadSnippets(new ArrayList<SnippetArticle>());
-        mWantsSnippets = true;
+    public void onDisabledReasonChanged(int disabledReason) {
+        // Observers should not be registered for that state
+        assert disabledReason != DisabledReason.EXPLICITLY_DISABLED;
+
+        mServiceStatus = disabledReason;
+        mStatusListItem = StatusListItem.create(mServiceStatus, this, mNewTabPageManager);
+
+        // We had suggestions but we just got notified about the service being enabled. Nothing to
+        // do then.
+        if (disabledReason == DisabledReason.NONE && hasSuggestions()) return;
+
+        if (hasSuggestions()) {
+            // We had many items, implies that the service was previously enabled and just
+            // transitioned to a disabled state. We now clear it.
+            loadSnippets(new ArrayList<SnippetArticle>());
+        } else {
+            mNewTabPageListItems.set(FIRST_CARD_POSITION, mStatusListItem);
+
+            // Update both the first card and the spacing item coming after it.
+            notifyItemRangeChanged(FIRST_CARD_POSITION, 2);
+        }
     }
 
     @Override
@@ -152,21 +185,26 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
 
     @Override
     public NewTabPageViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+        assert parent == mRecyclerView;
+
         if (viewType == NewTabPageListItem.VIEW_TYPE_ABOVE_THE_FOLD) {
             return new NewTabPageViewHolder(mNewTabPageLayout);
         }
 
         if (viewType == NewTabPageListItem.VIEW_TYPE_HEADER) {
-            return new NewTabPageViewHolder(SnippetHeaderListItem.createView(parent));
+            return new SnippetHeaderViewHolder(SnippetHeaderListItem.createView(parent));
         }
 
         if (viewType == NewTabPageListItem.VIEW_TYPE_SNIPPET) {
-            return new SnippetArticleViewHolder(
-                    SnippetArticleViewHolder.createView(parent), mNewTabPageManager);
+            return new SnippetArticleViewHolder(mRecyclerView, mNewTabPageManager, mSnippetsBridge);
         }
 
         if (viewType == NewTabPageListItem.VIEW_TYPE_SPACING) {
             return new NewTabPageViewHolder(SpacingListItem.createView(parent));
+        }
+
+        if (viewType == NewTabPageListItem.VIEW_TYPE_STATUS) {
+            return new StatusListItem.ViewHolder(mRecyclerView);
         }
 
         return null;
@@ -182,6 +220,11 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         return mNewTabPageListItems.size();
     }
 
+    /** Start a request for new snippets. */
+    public void reloadSnippets() {
+        SnippetsBridge.fetchSnippets();
+    }
+
     private void loadSnippets(List<SnippetArticle> listSnippets) {
         // Copy thumbnails over
         for (SnippetArticle newSnippet : listSnippets) {
@@ -193,10 +236,19 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
                             .getThumbnailBitmap());
         }
 
+        boolean hasContentToShow = !listSnippets.isEmpty();
+        mHeaderListItem.setVisible(hasContentToShow);
+
         mNewTabPageListItems.clear();
         mNewTabPageListItems.add(mAboveTheFoldListItem);
-        mNewTabPageListItems.add(new SnippetHeaderListItem());
-        mNewTabPageListItems.addAll(listSnippets);
+        mNewTabPageListItems.add(mHeaderListItem);
+
+        if (hasContentToShow) {
+            mNewTabPageListItems.addAll(listSnippets);
+        } else {
+            mNewTabPageListItems.add(mStatusListItem);
+        }
+
         mNewTabPageListItems.add(new SpacingListItem());
 
         notifyDataSetChanged();
@@ -220,10 +272,37 @@ public class NewTabPageAdapter extends Adapter<NewTabPageViewHolder> implements 
         assert itemViewHolder.getItemViewType() == NewTabPageListItem.VIEW_TYPE_SNIPPET;
 
         int position = itemViewHolder.getAdapterPosition();
-        mNewTabPageManager.onSnippetDismissed((SnippetArticle) mNewTabPageListItems.get(position));
+        SnippetArticle dismissedSnippet = (SnippetArticle) mNewTabPageListItems.get(position);
 
+        mSnippetsBridge.getSnippedVisited(dismissedSnippet, new Callback<Boolean>() {
+            @Override
+            public void onResult(Boolean result) {
+                NewTabPageUma.recordSnippetAction(result
+                                ? NewTabPageUma.SNIPPETS_ACTION_DISMISSED_VISITED
+                                : NewTabPageUma.SNIPPETS_ACTION_DISMISSED_UNVISITED);
+            }
+        });
+
+        mSnippetsBridge.discardSnippet(dismissedSnippet);
         mNewTabPageListItems.remove(position);
         notifyItemRemoved(position);
+    }
+
+    private void addStatusCardIfNecessary() {
+        if (mNewTabPageListItems.size() == 3 /* above-the-fold + header + spacing */) {
+            // TODO(dgn) hack until we refactor the entire class with sections, etc.
+            // (see https://crbug.com/616090)
+            mNewTabPageListItems.add(FIRST_CARD_POSITION, mStatusListItem);
+
+            // We also want to refresh the header and the bottom padding.
+            mHeaderListItem.setVisible(false);
+            notifyDataSetChanged();
+        }
+    }
+
+    /** Returns whether we have some suggested content to display. */
+    private boolean hasSuggestions() {
+        return getItemViewType(FIRST_CARD_POSITION) == NewTabPageListItem.VIEW_TYPE_SNIPPET;
     }
 
     List<NewTabPageListItem> getItemsForTesting() {

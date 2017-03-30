@@ -31,7 +31,7 @@
 #define GL_DEPTH24_STENCIL8 0x88F0
 #endif
 
-using ::gfx::MockGLInterface;
+using ::gl::MockGLInterface;
 using ::testing::_;
 using ::testing::DoAll;
 using ::testing::InSequence;
@@ -268,6 +268,22 @@ class GLES2DecoderVertexArraysOESTest : public GLES2DecoderWithShaderTest {
     AddExpectationsForDeleteVertexArraysOES();
   }
 
+  void GenVertexArraysOESImmediateDuplicateOrNullIds() {
+    cmds::GenVertexArraysOESImmediate* cmd =
+        GetImmediateAs<cmds::GenVertexArraysOESImmediate>();
+    GLuint temp[3] = {kNewClientId, kNewClientId + 1, kNewClientId};
+    cmd->Init(3, temp);
+    EXPECT_EQ(error::kInvalidArguments,
+              ExecuteImmediateCmd(*cmd, sizeof(temp)));
+    EXPECT_TRUE(GetVertexArrayInfo(kNewClientId) == NULL);
+    EXPECT_TRUE(GetVertexArrayInfo(kNewClientId + 1) == NULL);
+    GLuint null_id[2] = {kNewClientId, 0};
+    cmd->Init(2, null_id);
+    EXPECT_EQ(error::kInvalidArguments,
+              ExecuteImmediateCmd(*cmd, sizeof(temp)));
+    EXPECT_TRUE(GetVertexArrayInfo(kNewClientId) == NULL);
+  }
+
   void GenVertexArraysOESImmediateInvalidArgs() {
     EXPECT_CALL(*gl_, GenVertexArraysOES(_, _)).Times(0);
     GenVertexArraysOESImmediate* cmd =
@@ -378,6 +394,15 @@ TEST_P(GLES2DecoderVertexArraysOESTest, GenVertexArraysOESImmediateValidArgs) {
 TEST_P(GLES2DecoderEmulatedVertexArraysOESTest,
        GenVertexArraysOESImmediateValidArgs) {
   GenVertexArraysOESImmediateValidArgs();
+}
+
+TEST_P(GLES2DecoderVertexArraysOESTest,
+       GenVertexArraysOESImmediateDuplicateOrNullIds) {
+  GenVertexArraysOESImmediateDuplicateOrNullIds();
+}
+TEST_P(GLES2DecoderEmulatedVertexArraysOESTest,
+       GenVertexArraysOESImmediateDuplicateOrNullIds) {
+  GenVertexArraysOESImmediateDuplicateOrNullIds();
 }
 
 TEST_P(GLES2DecoderVertexArraysOESTest,

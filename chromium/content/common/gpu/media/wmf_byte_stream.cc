@@ -167,7 +167,8 @@ WMFByteStream::Read(BYTE* buff, ULONG len, ULONG* read) {
     // as it might cause freezes with the read_done event never firing.
     return E_FAIL;
   }
-  base::WaitableEvent read_done(false, false);
+  base::WaitableEvent read_done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                                base::WaitableEvent::InitialState::NOT_SIGNALED);
   int bytes_read = 0;
   data_source_->Read(read_position_, len, buff,
                      base::Bind(&BlockingReadDone, &bytes_read, &read_done));

@@ -68,6 +68,9 @@ config("net_config") {
   if (disable_ftp_support) {
     defines += [ "DISABLE_FTP_SUPPORT=1" ]
   }
+  if (enable_websockets) {
+    defines += [ "ENABLE_WEBSOCKETS" ]
+  }
 }
 
 config("net_internal_config") {
@@ -94,6 +97,7 @@ net_configs = [
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
   "//build/config/compiler:no_size_t_to_int_warning",
+  "//build/config/compiler:wexit_time_destructors",
 ]
 
 if (use_glib && use_gconf && !is_chromeos) {
@@ -432,6 +436,7 @@ proto_library("net_quic_proto") {
   ]
   cc_generator_options = "dllexport_decl=NET_EXPORT_PRIVATE:"
   cc_include = "net/base/net_export.h"
+  component_build_force_source_set = true
 
   defines = [ "NET_IMPLEMENTATION" ]
 
@@ -514,8 +519,6 @@ source_set("test_support") {
     "base/mock_file_stream.h",
     "base/test_completion_callback.cc",
     "base/test_completion_callback.h",
-    "base/test_data_directory.cc",
-    "base/test_data_directory.h",
     "cert/mock_cert_verifier.cc",
     "cert/mock_cert_verifier.h",
     "cert/mock_client_cert_verifier.cc",
@@ -537,6 +540,8 @@ source_set("test_support") {
     "dns/mock_host_resolver.h",
     "dns/mock_mdns_socket_factory.cc",
     "dns/mock_mdns_socket_factory.h",
+    "http/http_stream_factory_test_util.cc",
+    "http/http_stream_factory_test_util.h",
     "http/http_transaction_test_util.cc",
     "http/http_transaction_test_util.h",
     "log/test_net_log.cc",
@@ -581,6 +586,8 @@ source_set("test_support") {
     "test/scoped_disable_exit_on_dfatal.cc",
     "test/scoped_disable_exit_on_dfatal.h",
     "test/test_certificate_data.h",
+    "test/test_data_directory.cc",
+    "test/test_data_directory.h",
     "test/url_request/ssl_certificate_error_job.cc",
     "test/url_request/ssl_certificate_error_job.h",
     "test/url_request/url_request_failed_job.cc",
@@ -628,6 +635,10 @@ source_set("test_support") {
 
   deps = [
     ":test_support_bundle_data",
+  ]
+
+  data = [
+    "data/",
   ]
 
   if (!is_ios) {
@@ -804,6 +815,27 @@ if (use_v8_in_net && !is_android) {
 }
 
 if (!is_ios && !is_android) {
+  executable("cert_verify_tool") {
+    testonly = true
+    sources = [
+      "tools/cert_verify_tool/cert_verify_tool.cc",
+      "tools/cert_verify_tool/cert_verify_tool_util.cc",
+      "tools/cert_verify_tool/cert_verify_tool_util.h",
+      "tools/cert_verify_tool/verify_using_cert_verify_proc.cc",
+      "tools/cert_verify_tool/verify_using_cert_verify_proc.h",
+    ]
+
+    # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+    deps = [
+      ":net",
+      ":test_support",
+      "//base",
+      "//build/config/sanitizers:deps",
+      "//build/win:default_exe_manifest",
+    ]
+  }
+
   executable("crash_cache") {
     testonly = true
     sources = [
@@ -1250,8 +1282,6 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_per_connection_packet_writer.cc",
     "tools/quic/quic_per_connection_packet_writer.h",
     "tools/quic/quic_process_packet_interface.h",
-    "tools/quic/quic_server_session_base.cc",
-    "tools/quic/quic_server_session_base.h",
     "tools/quic/quic_simple_client.cc",
     "tools/quic/quic_simple_client.h",
     "tools/quic/quic_simple_per_connection_packet_writer.cc",
@@ -1262,12 +1292,16 @@ source_set("simple_quic_tools") {
     "tools/quic/quic_simple_server_packet_writer.h",
     "tools/quic/quic_simple_server_session.cc",
     "tools/quic/quic_simple_server_session.h",
+    "tools/quic/quic_simple_server_session_helper.cc",
+    "tools/quic/quic_simple_server_session_helper.h",
     "tools/quic/quic_simple_server_stream.cc",
     "tools/quic/quic_simple_server_stream.h",
     "tools/quic/quic_spdy_client_stream.cc",
     "tools/quic/quic_spdy_client_stream.h",
     "tools/quic/quic_time_wait_list_manager.cc",
     "tools/quic/quic_time_wait_list_manager.h",
+    "tools/quic/stateless_rejector.cc",
+    "tools/quic/stateless_rejector.h",
     "tools/quic/synchronous_host_resolver.cc",
     "tools/quic/synchronous_host_resolver.h",
   ]
@@ -1406,9 +1440,7 @@ test("net_unittests") {
     "//url:url_features",
   ]
 
-  data = [
-    "data/",
-  ]
+  data = []
   data_deps = [
     "third_party/nist-pkits/",
   ]
@@ -1670,6 +1702,10 @@ test("net_unittests") {
       # data += [ "$root_out_dir/net_unittests.dSYM/" ]
     }
   }
+
+  if (is_win) {
+    libs = [ "iphlpapi.lib" ]
+  }
 }
 
 # !is_android && !is_win && !is_mac
@@ -1727,6 +1763,8 @@ source_set("net_fuzzer_test_support") {
     "socket/fuzzed_socket.h",
     "socket/fuzzed_socket_factory.cc",
     "socket/fuzzed_socket_factory.h",
+    "udp/fuzzed_datagram_client_socket.cc",
+    "udp/fuzzed_datagram_client_socket.h",
   ]
   deps = [
     "//base",
@@ -1902,6 +1940,21 @@ fuzzer_test("net_dns_hosts_parse_fuzzer") {
     "//base",
     "//net",
   ]
+}
+
+fuzzer_test("net_host_resolver_impl_fuzzer") {
+  sources = [
+    "dns/fuzzed_host_resolver.cc",
+    "dns/fuzzed_host_resolver.h",
+    "dns/host_resolver_impl_fuzzer.cc",
+  ]
+  deps = [
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+  ]
+  dict = "data/dns/dns.dict"
 }
 
 fuzzer_test("net_http_stream_parser_fuzzer") {

@@ -12,7 +12,7 @@
     kAutoUpdate,
     kBookmarksPrivate,
     kExtensionActionUtils,
-    kHistorySearch,
+    kHistoryPrivate,
     kImportData,
     kEditCommand,
     kZoom,

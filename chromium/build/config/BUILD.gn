@@ -80,6 +80,12 @@ config("feature_flags") {
       # Can be defined without ENABLE_BASIC_PRINTING.
       defines += [ "ENABLE_PRINT_PREVIEW=1" ]
     }
+    if ((enable_basic_printing && is_win) || enable_print_preview) {
+      # Windows basic printing or print preview requires pdf enabled.
+      assert(enable_pdf,
+             "Windows basic printing or print preview needs pdf: " +
+                 "set enable_pdf=true.")
+    }
   }
   if (enable_spellcheck) {
     defines += [ "ENABLE_SPELLCHECK=1" ]
@@ -159,8 +165,11 @@ config("feature_flags") {
   if (is_msan) {
     defines += [ "MEMORY_SANITIZER" ]
   }
-  if (is_ubsan || is_ubsan_vptr || is_ubsan_security) {
+  if (is_ubsan || is_ubsan_null || is_ubsan_vptr || is_ubsan_security) {
     defines += [ "UNDEFINED_SANITIZER" ]
+  }
+  if (use_external_popup_menu) {
+    defines += [ "USE_EXTERNAL_POPUP_MENU=1" ]
   }
   if (enable_webrtc) {
     defines += [ "ENABLE_WEBRTC=1" ]
@@ -203,9 +212,6 @@ config("feature_flags") {
   }
   if (enable_image_loader_extension) {
     defines += [ "IMAGE_LOADER_EXTENSION=1" ]
-  }
-  if (enable_topchrome_md) {
-    defines += [ "ENABLE_TOPCHROME_MD=1" ]
   }
   if (enable_wayland_server) {
     defines += [ "ENABLE_WAYLAND_SERVER=1" ]
@@ -394,6 +400,12 @@ config("executable_config") {
       configs += [ "//build/config/chromecast:executable_config" ]
     }
   }
+
+  # If we're using the prebuilt instrumented libraries with the sanitizers, we
+  # need to add ldflags to every binary to make sure they are picked up.
+  if (prebuilt_instrumented_libraries_available) {
+    configs += [ "//third_party/instrumented_libraries:prebuilt_ldflags" ]
+  }
 }
 
 # Shared library configs -------------------------------------------------------
@@ -408,6 +420,12 @@ config("shared_library_config") {
     configs += [ "//build/config/mac:mac_dynamic_flags" ]
   } else if (is_chromecast) {
     configs += [ "//build/config/chromecast:shared_library_config" ]
+  }
+
+  # If we're using the prebuilt instrumented libraries with the sanitizers, we
+  # need to add ldflags to every binary to make sure they are picked up.
+  if (prebuilt_instrumented_libraries_available) {
+    configs += [ "//third_party/instrumented_libraries:prebuilt_ldflags" ]
   }
 }
 

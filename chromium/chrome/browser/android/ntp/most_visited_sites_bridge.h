@@ -14,9 +14,9 @@
 
 #include "base/android/scoped_java_ref.h"
 #include "base/macros.h"
-#include "chrome/browser/android/ntp/most_visited_sites.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_observer.h"
+#include "components/ntp_tiles/most_visited_sites.h"
 
 class Profile;
 
@@ -33,11 +33,6 @@ class MostVisitedSitesBridge {
       const base::android::JavaParamRef<jobject>& j_observer,
       jint num_sites);
 
-  void GetURLThumbnail(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& url,
-      const base::android::JavaParamRef<jobject>& j_callback);
   void AddOrRemoveBlacklistedUrl(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -46,7 +41,9 @@ class MostVisitedSitesBridge {
   void RecordTileTypeMetrics(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jintArray>& jtile_types);
+      const base::android::JavaParamRef<jintArray>& jtile_types,
+      const base::android::JavaParamRef<jintArray>& jsources,
+      const base::android::JavaParamRef<jintArray>& jprovider_indices);
   void RecordOpenedMostVisitedItem(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -62,7 +59,7 @@ class MostVisitedSitesBridge {
   class JavaObserver;
   std::unique_ptr<JavaObserver> java_observer_;
 
-  class SupervisorBridge : public MostVisitedSitesSupervisor,
+  class SupervisorBridge : public ntp_tiles::MostVisitedSitesSupervisor,
                            public SupervisedUserServiceObserver {
    public:
     explicit SupervisorBridge(Profile* profile);
@@ -84,7 +81,7 @@ class MostVisitedSitesBridge {
   };
   SupervisorBridge supervisor_;
 
-  MostVisitedSites most_visited_;
+  ntp_tiles::MostVisitedSites most_visited_;
 
   DISALLOW_COPY_AND_ASSIGN(MostVisitedSitesBridge);
 };

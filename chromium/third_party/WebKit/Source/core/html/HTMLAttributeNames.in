@@ -264,6 +264,7 @@ onwheel
 open
 optimum
 pattern
+permissions
 placeholder
 ping
 poster
@@ -274,7 +275,6 @@ readonly
 referrerpolicy
 rel
 required
-results
 rev
 reversed
 role

@@ -20,10 +20,10 @@
 #include "cc/base/unique_notifier.h"
 #include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
-#include "cc/raster/gpu_rasterizer.h"
 #include "cc/raster/one_copy_raster_buffer_provider.h"
 #include "cc/raster/synchronous_task_graph_runner.h"
 #include "cc/raster/zero_copy_raster_buffer_provider.h"
+#include "cc/resources/platform_color.h"
 #include "cc/resources/resource_pool.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/scoped_resource.h"
@@ -51,16 +51,26 @@ enum RasterBufferProviderType {
   RASTER_BUFFER_PROVIDER_TYPE_BITMAP
 };
 
+class TestRasterTaskCompletionHandler {
+ public:
+  virtual void OnRasterTaskCompleted(
+      std::unique_ptr<RasterBuffer> raster_buffer,
+      unsigned id,
+      bool was_canceled) = 0;
+};
+
 class TestRasterTaskImpl : public TileTask {
  public:
-  typedef base::Callback<void(bool was_canceled)> Reply;
-
-  TestRasterTaskImpl(const Resource* resource,
-                     const Reply& reply,
+  TestRasterTaskImpl(TestRasterTaskCompletionHandler* completion_handler,
+                     std::unique_ptr<ScopedResource> resource,
+                     unsigned id,
+                     std::unique_ptr<RasterBuffer> raster_buffer,
                      TileTask::Vector* dependencies)
       : TileTask(true, dependencies),
-        resource_(resource),
-        reply_(reply),
+        completion_handler_(completion_handler),
+        resource_(std::move(resource)),
+        id_(id),
+        raster_buffer_(std::move(raster_buffer)),
         raster_source_(FakeRasterSource::CreateFilled(gfx::Size(1, 1))) {}
 
   // Overridden from Task:
@@ -76,22 +86,18 @@ class TestRasterTaskImpl : public TileTask {
   }
 
   // Overridden from TileTask:
-  void ScheduleOnOriginThread(RasterBufferProvider* provider) override {
-    // The raster buffer has no tile ids associated with it for partial update,
-    // so doesn't need to provide a valid dirty rect.
-    raster_buffer_ = provider->AcquireBufferForRaster(resource_, 0, 0);
-  }
-  void CompleteOnOriginThread(RasterBufferProvider* provider) override {
-    provider->ReleaseBufferForRaster(std::move(raster_buffer_));
-    reply_.Run(!state().IsFinished());
+  void OnTaskCompleted() override {
+    completion_handler_->OnRasterTaskCompleted(std::move(raster_buffer_), id_,
+                                               state().IsCanceled());
   }
 
  protected:
   ~TestRasterTaskImpl() override {}
 
  private:
-  const Resource* resource_;
-  const Reply reply_;
+  TestRasterTaskCompletionHandler* completion_handler_;
+  std::unique_ptr<ScopedResource> resource_;
+  unsigned id_;
   std::unique_ptr<RasterBuffer> raster_buffer_;
   scoped_refptr<RasterSource> raster_source_;
 
@@ -100,11 +106,19 @@ class TestRasterTaskImpl : public TileTask {
 
 class BlockingTestRasterTaskImpl : public TestRasterTaskImpl {
  public:
-  BlockingTestRasterTaskImpl(const Resource* resource,
-                             const Reply& reply,
-                             base::Lock* lock,
-                             TileTask::Vector* dependencies)
-      : TestRasterTaskImpl(resource, reply, dependencies), lock_(lock) {}
+  BlockingTestRasterTaskImpl(
+      TestRasterTaskCompletionHandler* completion_handler,
+      std::unique_ptr<ScopedResource> resource,
+      unsigned id,
+      std::unique_ptr<RasterBuffer> raster_buffer,
+      base::Lock* lock,
+      TileTask::Vector* dependencies)
+      : TestRasterTaskImpl(completion_handler,
+                           std::move(resource),
+                           id,
+                           std::move(raster_buffer),
+                           dependencies),
+        lock_(lock) {}
 
   // Overridden from Task:
   void RunOnWorkerThread() override {
@@ -122,7 +136,8 @@ class BlockingTestRasterTaskImpl : public TestRasterTaskImpl {
 };
 
 class RasterBufferProviderTest
-    : public testing::TestWithParam<RasterBufferProviderType> {
+    : public TestRasterTaskCompletionHandler,
+      public testing::TestWithParam<RasterBufferProviderType> {
  public:
   struct RasterTaskResult {
     unsigned id;
@@ -145,41 +160,43 @@ class RasterBufferProviderTest
 
   // Overridden from testing::Test:
   void SetUp() override {
-    std::unique_ptr<RasterBufferProvider> raster_buffer_provider;
     switch (GetParam()) {
       case RASTER_BUFFER_PROVIDER_TYPE_ZERO_COPY:
         Create3dOutputSurfaceAndResourceProvider();
-        raster_buffer_provider = ZeroCopyRasterBufferProvider::Create(
+        raster_buffer_provider_ = ZeroCopyRasterBufferProvider::Create(
             resource_provider_.get(), PlatformColor::BestTextureFormat());
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY:
         Create3dOutputSurfaceAndResourceProvider();
-        raster_buffer_provider = OneCopyRasterBufferProvider::Create(
+        raster_buffer_provider_ = base::MakeUnique<OneCopyRasterBufferProvider>(
             base::ThreadTaskRunnerHandle::Get().get(), context_provider_.get(),
-            resource_provider_.get(), kMaxBytesPerCopyOperation, false,
-            kMaxStagingBuffers, PlatformColor::BestTextureFormat());
+            worker_context_provider_.get(), resource_provider_.get(),
+            kMaxBytesPerCopyOperation, false, kMaxStagingBuffers,
+            PlatformColor::BestTextureFormat(), false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_GPU:
         Create3dOutputSurfaceAndResourceProvider();
-        raster_buffer_provider = GpuRasterBufferProvider::Create(
-            context_provider_.get(), resource_provider_.get(), false, 0);
+        raster_buffer_provider_ = base::MakeUnique<GpuRasterBufferProvider>(
+            context_provider_.get(), worker_context_provider_.get(),
+            resource_provider_.get(), false, 0, false);
         break;
       case RASTER_BUFFER_PROVIDER_TYPE_BITMAP:
         CreateSoftwareOutputSurfaceAndResourceProvider();
-        raster_buffer_provider =
+        raster_buffer_provider_ =
             BitmapRasterBufferProvider::Create(resource_provider_.get());
         break;
     }
 
-    DCHECK(raster_buffer_provider);
+    DCHECK(raster_buffer_provider_);
 
-    tile_task_manager_ = TileTaskManagerImpl::Create(
-        std::move(raster_buffer_provider), &task_graph_runner_);
+    tile_task_manager_ = TileTaskManagerImpl::Create(&task_graph_runner_);
   }
 
   void TearDown() override {
     tile_task_manager_->Shutdown();
     tile_task_manager_->CheckForCompletedTasks();
+
+    raster_buffer_provider_->Shutdown();
   }
 
   void AllTileTasksFinished() {
@@ -203,6 +220,7 @@ class RasterBufferProviderTest
                                 0 /* dependencies */);
     }
 
+    raster_buffer_provider_->OrderingBarrier();
     tile_task_manager_->ScheduleTasks(&graph_);
   }
 
@@ -211,14 +229,14 @@ class RasterBufferProviderTest
         ScopedResource::Create(resource_provider_.get()));
     resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
                        RGBA_8888);
-    const Resource* const_resource = resource.get();
 
+    // The raster buffer has no tile ids associated with it for partial update,
+    // so doesn't need to provide a valid dirty rect.
+    std::unique_ptr<RasterBuffer> raster_buffer =
+        raster_buffer_provider_->AcquireBufferForRaster(resource.get(), 0, 0);
     TileTask::Vector empty;
-    tasks_.push_back(new TestRasterTaskImpl(
-        const_resource,
-        base::Bind(&RasterBufferProviderTest::OnTaskCompleted,
-                   base::Unretained(this), base::Passed(&resource), id),
-        &empty));
+    tasks_.push_back(new TestRasterTaskImpl(this, std::move(resource), id,
+                                            std::move(raster_buffer), &empty));
   }
 
   void AppendTask(unsigned id) { AppendTask(id, gfx::Size(1, 1)); }
@@ -230,14 +248,12 @@ class RasterBufferProviderTest
         ScopedResource::Create(resource_provider_.get()));
     resource->Allocate(size, ResourceProvider::TEXTURE_HINT_IMMUTABLE,
                        RGBA_8888);
-    const Resource* const_resource = resource.get();
 
+    std::unique_ptr<RasterBuffer> raster_buffer =
+        raster_buffer_provider_->AcquireBufferForRaster(resource.get(), 0, 0);
     TileTask::Vector empty;
     tasks_.push_back(new BlockingTestRasterTaskImpl(
-        const_resource,
-        base::Bind(&RasterBufferProviderTest::OnTaskCompleted,
-                   base::Unretained(this), base::Passed(&resource), id),
-        lock, &empty));
+        this, std::move(resource), id, std::move(raster_buffer), lock, &empty));
   }
 
   const std::vector<RasterTaskResult>& completed_tasks() const {
@@ -250,6 +266,16 @@ class RasterBufferProviderTest
     context_provider->ContextGL()->LoseContextCHROMIUM(
         GL_GUILTY_CONTEXT_RESET_ARB, GL_INNOCENT_CONTEXT_RESET_ARB);
     context_provider->ContextGL()->Flush();
+  }
+
+  void OnRasterTaskCompleted(std::unique_ptr<RasterBuffer> raster_buffer,
+                             unsigned id,
+                             bool was_canceled) override {
+    raster_buffer_provider_->ReleaseBufferForRaster(std::move(raster_buffer));
+    RasterTaskResult result;
+    result.id = id;
+    result.canceled = was_canceled;
+    completed_tasks_.push_back(result);
   }
 
  private:
@@ -271,15 +297,6 @@ class RasterBufferProviderTest
         output_surface_.get(), &shared_bitmap_manager_, nullptr);
   }
 
-  void OnTaskCompleted(std::unique_ptr<ScopedResource> resource,
-                       unsigned id,
-                       bool was_canceled) {
-    RasterTaskResult result;
-    result.id = id;
-    result.canceled = was_canceled;
-    completed_tasks_.push_back(result);
-  }
-
   void OnTimeout() {
     timed_out_ = true;
     base::MessageLoop::current()->QuitWhenIdle();
@@ -292,6 +309,7 @@ class RasterBufferProviderTest
   std::unique_ptr<FakeOutputSurface> output_surface_;
   std::unique_ptr<ResourceProvider> resource_provider_;
   std::unique_ptr<TileTaskManager> tile_task_manager_;
+  std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
   TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   TestSharedBitmapManager shared_bitmap_manager_;
   SynchronousTaskGraphRunner task_graph_runner_;

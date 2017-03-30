@@ -5,6 +5,7 @@
 source_set("surface_id") {
   sources = [
     "surface_id.h",
+    "surface_sequence.h",
   ]
 
   deps = [
@@ -20,8 +21,6 @@ component("surfaces") {
     "display_client.h",
     "display_scheduler.cc",
     "display_scheduler.h",
-    "onscreen_display_client.cc",
-    "onscreen_display_client.h",
     "surface.cc",
     "surface.h",
     "surface_aggregator.cc",
@@ -40,6 +39,7 @@ component("surfaces") {
     "surface_manager.h",
     "surface_resource_holder.cc",
     "surface_resource_holder.h",
+    "surface_sequence.h",
     "surfaces_export.h",
   ]
 

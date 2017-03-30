@@ -6,7 +6,9 @@
 
 #include "base/atomic_sequence_num.h"
 #include "base/command_line.h"
+#include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_switches.h"
@@ -40,6 +42,26 @@ bool IsSystemKeyModifier(int flags) {
   // so we don't consider keys with the AltGr modifier as a system key.
   return (kSystemKeyModifierMask & flags) != 0 &&
          (EF_ALTGR_DOWN & flags) == 0;
+}
+
+base::LazyInstance<std::unique_ptr<base::TickClock>>::Leaky g_tick_clock =
+    LAZY_INSTANCE_INITIALIZER;
+
+base::TimeTicks EventTimeForNow() {
+  return g_tick_clock.Get() ? g_tick_clock.Get()->NowTicks()
+                            : base::TimeTicks::Now();
+}
+
+void SetEventTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock) {
+  g_tick_clock.Get() = std::move(tick_clock);
+}
+
+double EventTimeStampToSeconds(base::TimeTicks time_stamp) {
+  return (time_stamp - base::TimeTicks()).InSecondsF();
+}
+
+base::TimeTicks EventTimeStampFromSeconds(double time_stamp_seconds) {
+  return base::TimeTicks() + base::TimeDelta::FromSecondsD(time_stamp_seconds);
 }
 
 }  // namespace ui

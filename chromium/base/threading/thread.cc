@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
+#include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_id_name_manager.h"
@@ -66,11 +67,13 @@ Thread::Thread(const std::string& name)
       running_(false),
       thread_(0),
       id_(kInvalidThreadId),
-      id_event_(true, false),
+      id_event_(WaitableEvent::ResetPolicy::MANUAL,
+                WaitableEvent::InitialState::NOT_SIGNALED),
       message_loop_(nullptr),
       message_loop_timer_slack_(TIMER_SLACK_NONE),
       name_(name),
-      start_event_(true, false) {
+      start_event_(WaitableEvent::ResetPolicy::MANUAL,
+                   WaitableEvent::InitialState::NOT_SIGNALED) {
 }
 
 Thread::~Thread() {
@@ -199,7 +202,7 @@ bool Thread::IsRunning() const {
 }
 
 void Thread::Run(MessageLoop* message_loop) {
-  message_loop->Run();
+  RunLoop().Run();
 }
 
 void Thread::SetThreadWasQuitProperly(bool flag) {
@@ -229,7 +232,6 @@ void Thread::ThreadMain() {
   DCHECK(message_loop_);
   std::unique_ptr<MessageLoop> message_loop(message_loop_);
   message_loop_->BindToCurrentThread();
-  message_loop_->set_thread_name(name_);
   message_loop_->SetTimerSlack(message_loop_timer_slack_);
 
 #if defined(OS_WIN)

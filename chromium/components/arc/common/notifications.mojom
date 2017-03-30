@@ -1,6 +1,8 @@
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+//
+// Next MinVersion: 8
 
 module arc.mojom;
 
@@ -68,6 +70,18 @@ struct ArcNotificationData {
   // Image for image notifications.
   [MinVersion=3]
   ArcBitmap? big_picture;
+  // Flag if a notification is a custom notification backed by a notification
+  // surface. Note the flag is only used on creation. Change of the flag
+  // on notification update is ignored.
+  [MinVersion=5]
+  bool use_custom_notification;
+  [MinVersion=6]
+  ArcBitmap? small_icon;
+  // A snapshot image to show before the notification window is created.
+  [MinVersion=7]
+  ArcBitmap? snapshot_image;
+  [MinVersion=7]
+  float snapshot_image_scale;
 };
 
 [MinVersion=2]
@@ -75,9 +89,14 @@ struct ArcToastData {
   // Unique identifier
   string id;
   // Toast text.
-  string text;
-  // Toast duration in milliseconds.
+  string? text;
+  // Toast duration in milliseconds. If -1, the toast will be displayed until
+  // the dismiss button is clicked.
   int32 duration;
+  // Toast dismiss button label, if set. Otherwise, default label is used for
+  // the dismiss button.
+  [MinVersion=4]
+  string? dismiss_text;
 };
 
 interface NotificationsHost {
@@ -102,9 +121,17 @@ interface NotificationsHost {
 // TODO(lhchavez): Migrate all request/response messages to Mojo.
 interface NotificationsInstance {
   // Establishes full-duplex communication with the host.
-  Init(NotificationsHost host_ptr);
+  Init@0(NotificationsHost host_ptr);
 
   // Sends an event from Chrome notification UI to Android.
   // |event| is a type of occured event.
-  SendNotificationEventToAndroid(string key, ArcNotificationEvent event);
+  SendNotificationEventToAndroid@1(string key, ArcNotificationEvent event);
+
+  // Requests to Android side to create the notification window.
+  [MinVersion=7]
+  CreateNotificationWindow@2(string key);
+
+  // Requests to Android side to close the notification window.
+  [MinVersion=7]
+  CloseNotificationWindow@3(string key);
 };

@@ -5,11 +5,13 @@
 #include "components/mus/public/cpp/tests/window_server_test_base.h"
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_connection.h"
+#include "components/mus/public/cpp/window_tree_client.h"
 #include "components/mus/public/cpp/window_tree_host_factory.h"
 #include "services/shell/public/cpp/connector.h"
 
@@ -27,11 +29,11 @@ void TimeoutRunLoop(const base::Closure& timeout_task, bool* timeout) {
 }  // namespace
 
 WindowServerTestBase::WindowServerTestBase()
-    : most_recent_connection_(nullptr),
+    : most_recent_client_(nullptr),
       window_manager_(nullptr),
       window_manager_delegate_(nullptr),
       window_manager_client_(nullptr),
-      window_tree_connection_destroyed_(false) {}
+      window_tree_client_destroyed_(false) {}
 
 WindowServerTestBase::~WindowServerTestBase() {}
 
@@ -42,7 +44,7 @@ bool WindowServerTestBase::DoRunLoopWithTimeout() {
 
   bool timeout = false;
   base::RunLoop run_loop;
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&TimeoutRunLoop, run_loop.QuitClosure(), &timeout),
       TestTimeouts::action_timeout());
 
@@ -68,7 +70,7 @@ void WindowServerTestBase::SetUp() {
   CreateWindowTreeHost(connector(), this, &host_, this);
 
   ASSERT_TRUE(DoRunLoopWithTimeout());  // RunLoop should be quit by OnEmbed().
-  std::swap(window_manager_, most_recent_connection_);
+  std::swap(window_manager_, most_recent_client_);
 }
 
 bool WindowServerTestBase::AcceptConnection(shell::Connection* connection) {
@@ -77,14 +79,15 @@ bool WindowServerTestBase::AcceptConnection(shell::Connection* connection) {
 }
 
 void WindowServerTestBase::OnEmbed(Window* root) {
-  most_recent_connection_ = root->connection();
+  most_recent_client_ = root->window_tree();
   EXPECT_TRUE(QuitRunLoop());
   ASSERT_TRUE(window_manager_client_);
   window_manager_client_->AddActivationParent(root);
 }
 
-void WindowServerTestBase::OnConnectionLost(WindowTreeConnection* connection) {
-  window_tree_connection_destroyed_ = true;
+void WindowServerTestBase::OnWindowTreeClientDestroyed(
+    WindowTreeClient* client) {
+  window_tree_client_destroyed_ = true;
 }
 
 void WindowServerTestBase::OnEventObserved(const ui::Event& event,
@@ -116,17 +119,27 @@ Window* WindowServerTestBase::OnWmCreateTopLevelWindow(
              : nullptr;
 }
 
+void WindowServerTestBase::OnWmClientJankinessChanged(
+    const std::set<Window*>& client_windows,
+    bool janky) {
+  if (window_manager_delegate_)
+    window_manager_delegate_->OnWmClientJankinessChanged(client_windows, janky);
+}
+
+void WindowServerTestBase::OnWmNewDisplay(Window* window,
+                                          const display::Display& display) {
+  if (window_manager_delegate_)
+    window_manager_delegate_->OnWmNewDisplay(window, display);
+}
+
 void WindowServerTestBase::OnAccelerator(uint32_t id, const ui::Event& event) {
   if (window_manager_delegate_)
     window_manager_delegate_->OnAccelerator(id, event);
 }
 
-void WindowServerTestBase::Create(
-    shell::Connection* connection,
-    mojo::InterfaceRequest<mojom::WindowTreeClient> request) {
-  WindowTreeConnection::Create(
-      this, std::move(request),
-      WindowTreeConnection::CreateType::DONT_WAIT_FOR_EMBED);
+void WindowServerTestBase::Create(shell::Connection* connection,
+                                  mojom::WindowTreeClientRequest request) {
+  new WindowTreeClient(this, nullptr, std::move(request));
 }
 
 }  // namespace mus

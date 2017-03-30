@@ -10,6 +10,7 @@
 #include "net/quic/crypto/crypto_handshake_message.h"
 #include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/quic_bug_tracker.h"
+#include "net/quic/quic_socket_address_coder.h"
 #include "net/quic/quic_utils.h"
 
 using std::min;
@@ -335,6 +336,71 @@ QuicErrorCode QuicFixedTagVector::ProcessPeerHello(
   return error;
 }
 
+QuicFixedIPEndPoint::QuicFixedIPEndPoint(QuicTag tag,
+                                         QuicConfigPresence presence)
+    : QuicConfigValue(tag, presence),
+      has_send_value_(false),
+      has_receive_value_(false) {}
+
+QuicFixedIPEndPoint::~QuicFixedIPEndPoint() {}
+
+bool QuicFixedIPEndPoint::HasSendValue() const {
+  return has_send_value_;
+}
+
+const IPEndPoint& QuicFixedIPEndPoint::GetSendValue() const {
+  QUIC_BUG_IF(!has_send_value_) << "No send value to get for tag:"
+                                << QuicUtils::TagToString(tag_);
+  return send_value_;
+}
+
+void QuicFixedIPEndPoint::SetSendValue(const IPEndPoint& value) {
+  has_send_value_ = true;
+  send_value_ = value;
+}
+
+bool QuicFixedIPEndPoint::HasReceivedValue() const {
+  return has_receive_value_;
+}
+
+const IPEndPoint& QuicFixedIPEndPoint::GetReceivedValue() const {
+  QUIC_BUG_IF(!has_receive_value_) << "No receive value to get for tag:"
+                                   << QuicUtils::TagToString(tag_);
+  return receive_value_;
+}
+
+void QuicFixedIPEndPoint::SetReceivedValue(const IPEndPoint& value) {
+  has_receive_value_ = true;
+  receive_value_ = value;
+}
+
+void QuicFixedIPEndPoint::ToHandshakeMessage(
+    CryptoHandshakeMessage* out) const {
+  if (has_send_value_) {
+    QuicSocketAddressCoder address_coder(send_value_);
+    out->SetStringPiece(tag_, address_coder.Encode());
+  }
+}
+
+QuicErrorCode QuicFixedIPEndPoint::ProcessPeerHello(
+    const CryptoHandshakeMessage& peer_hello,
+    HelloType hello_type,
+    string* error_details) {
+  base::StringPiece address;
+  if (!peer_hello.GetStringPiece(tag_, &address)) {
+    if (presence_ == PRESENCE_REQUIRED) {
+      *error_details = "Missing " + QuicUtils::TagToString(tag_);
+      return QUIC_CRYPTO_MESSAGE_PARAMETER_NOT_FOUND;
+    }
+  } else {
+    QuicSocketAddressCoder address_coder;
+    if (address_coder.Decode(address.data(), address.length())) {
+      SetReceivedValue(IPEndPoint(address_coder.ip(), address_coder.port()));
+    }
+  }
+  return QUIC_NO_ERROR;
+}
+
 QuicConfig::QuicConfig()
     : max_time_before_crypto_handshake_(QuicTime::Delta::Zero()),
       max_idle_time_before_crypto_handshake_(QuicTime::Delta::Zero()),
@@ -342,14 +408,16 @@ QuicConfig::QuicConfig()
       connection_options_(kCOPT, PRESENCE_OPTIONAL),
       idle_connection_state_lifetime_seconds_(kICSL, PRESENCE_REQUIRED),
       silent_close_(kSCLS, PRESENCE_OPTIONAL),
-      max_streams_per_connection_(kMSPC, PRESENCE_REQUIRED),
+      max_streams_per_connection_(kMSPC, PRESENCE_OPTIONAL),
+      max_incoming_dynamic_streams_(kMIDS, PRESENCE_OPTIONAL),
       bytes_for_connection_id_(kTCID, PRESENCE_OPTIONAL),
       initial_round_trip_time_us_(kIRTT, PRESENCE_OPTIONAL),
       initial_stream_flow_control_window_bytes_(kSFCW, PRESENCE_OPTIONAL),
       initial_session_flow_control_window_bytes_(kCFCW, PRESENCE_OPTIONAL),
       socket_receive_buffer_(kSRBF, PRESENCE_OPTIONAL),
       multipath_enabled_(kMPTH, PRESENCE_OPTIONAL),
-      connection_migration_disabled_(kNCMR, PRESENCE_OPTIONAL) {
+      connection_migration_disabled_(kNCMR, PRESENCE_OPTIONAL),
+      alternate_server_address_(kASAD, PRESENCE_OPTIONAL) {
   SetDefaults();
 }
 
@@ -432,6 +500,23 @@ void QuicConfig::SetMaxStreamsPerConnection(size_t max_streams,
 
 uint32_t QuicConfig::MaxStreamsPerConnection() const {
   return max_streams_per_connection_.GetUint32();
+}
+
+void QuicConfig::SetMaxIncomingDynamicStreamsToSend(
+    uint32_t max_incoming_dynamic_streams) {
+  max_incoming_dynamic_streams_.SetSendValue(max_incoming_dynamic_streams);
+}
+
+uint32_t QuicConfig::GetMaxIncomingDynamicStreamsToSend() {
+  return max_incoming_dynamic_streams_.GetSendValue();
+}
+
+bool QuicConfig::HasReceivedMaxIncomingDynamicStreams() {
+  return max_incoming_dynamic_streams_.HasReceivedValue();
+}
+
+uint32_t QuicConfig::ReceivedMaxIncomingDynamicStreams() {
+  return max_incoming_dynamic_streams_.GetReceivedValue();
 }
 
 bool QuicConfig::HasSetBytesForConnectionIdToSend() const {
@@ -545,6 +630,19 @@ bool QuicConfig::DisableConnectionMigration() const {
   return connection_migration_disabled_.HasReceivedValue();
 }
 
+void QuicConfig::SetAlternateServerAddressToSend(
+    const IPEndPoint& alternate_server_address) {
+  alternate_server_address_.SetSendValue(alternate_server_address);
+}
+
+bool QuicConfig::HasReceivedAlternateServerAddress() const {
+  return alternate_server_address_.HasReceivedValue();
+}
+
+const IPEndPoint& QuicConfig::ReceivedAlternateServerAddress() const {
+  return alternate_server_address_.GetReceivedValue();
+}
+
 bool QuicConfig::negotiated() const {
   // TODO(ianswett): Add the negotiated parameters once and iterate over all
   // of them in negotiated, ToHandshakeMessage, ProcessClientHello, and
@@ -559,6 +657,7 @@ void QuicConfig::SetDefaults() {
   silent_close_.set(1, 0);
   SetMaxStreamsPerConnection(kDefaultMaxStreamsPerConnection,
                              kDefaultMaxStreamsPerConnection);
+  SetMaxIncomingDynamicStreamsToSend(kDefaultMaxStreamsPerConnection);
   max_time_before_crypto_handshake_ =
       QuicTime::Delta::FromSeconds(kMaxTimeForCryptoHandshakeSecs);
   max_idle_time_before_crypto_handshake_ =
@@ -573,6 +672,7 @@ void QuicConfig::ToHandshakeMessage(CryptoHandshakeMessage* out) const {
   idle_connection_state_lifetime_seconds_.ToHandshakeMessage(out);
   silent_close_.ToHandshakeMessage(out);
   max_streams_per_connection_.ToHandshakeMessage(out);
+  max_incoming_dynamic_streams_.ToHandshakeMessage(out);
   bytes_for_connection_id_.ToHandshakeMessage(out);
   initial_round_trip_time_us_.ToHandshakeMessage(out);
   initial_stream_flow_control_window_bytes_.ToHandshakeMessage(out);
@@ -580,6 +680,7 @@ void QuicConfig::ToHandshakeMessage(CryptoHandshakeMessage* out) const {
   socket_receive_buffer_.ToHandshakeMessage(out);
   connection_migration_disabled_.ToHandshakeMessage(out);
   connection_options_.ToHandshakeMessage(out);
+  alternate_server_address_.ToHandshakeMessage(out);
 }
 
 QuicErrorCode QuicConfig::ProcessPeerHello(
@@ -600,6 +701,10 @@ QuicErrorCode QuicConfig::ProcessPeerHello(
   if (error == QUIC_NO_ERROR) {
     error = max_streams_per_connection_.ProcessPeerHello(peer_hello, hello_type,
                                                          error_details);
+  }
+  if (error == QUIC_NO_ERROR) {
+    error = max_incoming_dynamic_streams_.ProcessPeerHello(
+        peer_hello, hello_type, error_details);
   }
   if (error == QUIC_NO_ERROR) {
     error = bytes_for_connection_id_.ProcessPeerHello(peer_hello, hello_type,
@@ -628,6 +733,10 @@ QuicErrorCode QuicConfig::ProcessPeerHello(
   if (error == QUIC_NO_ERROR) {
     error = connection_options_.ProcessPeerHello(peer_hello, hello_type,
                                                  error_details);
+  }
+  if (error == QUIC_NO_ERROR) {
+    error = alternate_server_address_.ProcessPeerHello(peer_hello, hello_type,
+                                                       error_details);
   }
   return error;
 }

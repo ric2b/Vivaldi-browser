@@ -48,6 +48,11 @@ class NodeDelegate;
 
 class Node {
  public:
+  enum class ShutdownPolicy {
+    DONT_ALLOW_LOCAL_PORTS,
+    ALLOW_LOCAL_PORTS,
+  };
+
   // Does not take ownership of the delegate.
   Node(const NodeName& name, NodeDelegate* delegate);
   ~Node();
@@ -59,9 +64,11 @@ class Node {
   // method may be called again after AcceptMessage to check if the Node is now
   // ready to be destroyed.
   //
-  // If |allow_local_ports| is |true|, this will only return |false| when there
-  // are transient ports referring to other nodes.
-  bool CanShutdownCleanly(bool allow_local_ports);
+  // If |policy| is set to |ShutdownPolicy::ALLOW_LOCAL_PORTS|, this will return
+  // |true| even if some ports remain alive, as long as none of them are proxies
+  // to another node.
+  bool CanShutdownCleanly(
+      ShutdownPolicy policy = ShutdownPolicy::DONT_ALLOW_LOCAL_PORTS);
 
   // Lookup the named port.
   int GetPort(const PortName& port_name, PortRef* port_ref);
@@ -144,6 +151,10 @@ class Node {
   int LostConnectionToNode(const NodeName& node_name);
 
  private:
+  class LockedPort;
+
+  // Note: Functions that end with _Locked require |ports_lock_| to be held
+  // before calling.
   int OnUserMessage(ScopedMessage message);
   int OnPortAccepted(const PortName& port_name);
   int OnObserveProxy(const PortName& port_name,
@@ -154,26 +165,32 @@ class Node {
 
   int AddPortWithName(const PortName& port_name,
                       const scoped_refptr<Port>& port);
+  void ErasePort(const PortName& port_name);
   void ErasePort_Locked(const PortName& port_name);
   scoped_refptr<Port> GetPort(const PortName& port_name);
   scoped_refptr<Port> GetPort_Locked(const PortName& port_name);
 
   int SendMessageInternal(const PortRef& port_ref, ScopedMessage* message);
   int MergePorts_Locked(const PortRef& port0_ref, const PortRef& port1_ref);
-  void WillSendPort_Locked(Port* port,
-                           const NodeName& to_node_name,
-                           PortName* port_name,
-                           PortDescriptor* port_descriptor);
+  void WillSendPort(const LockedPort& port,
+                    const NodeName& to_node_name,
+                    PortName* port_name,
+                    PortDescriptor* port_descriptor);
   int AcceptPort(const PortName& port_name,
                  const PortDescriptor& port_descriptor);
 
-  int WillSendMessage_Locked(Port* port,
+  int WillSendMessage_Locked(const LockedPort& port,
                              const PortName& port_name,
                              Message* message);
-  int BeginProxying_Locked(Port* port, const PortName& port_name);
-  int ForwardMessages_Locked(Port* port, const PortName& port_name);
-  void InitiateProxyRemoval_Locked(Port* port, const PortName& port_name);
-  void MaybeRemoveProxy_Locked(Port* port, const PortName& port_name);
+  int BeginProxying_Locked(const LockedPort& port, const PortName& port_name);
+  int BeginProxying(PortRef port_ref);
+  int ForwardMessages_Locked(const LockedPort& port, const PortName& port_name);
+  void InitiateProxyRemoval(const LockedPort& port, const PortName& port_name);
+  void MaybeRemoveProxy_Locked(const LockedPort& port,
+                               const PortName& port_name);
+  void TryRemoveProxy(PortRef port_ref);
+  void DestroyAllPortsWithPeer(const NodeName& node_name,
+                               const PortName& port_name);
 
   ScopedMessage NewInternalMessage_Helper(const PortName& port_name,
                                           const EventType& type,

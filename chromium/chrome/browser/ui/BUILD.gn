@@ -5,6 +5,7 @@
 import("//build/config/crypto.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
+import("//build/split_static_library.gni")
 import("//chrome/common/features.gni")
 
 gypi_values = exec_script("//build/gypi_to_gn.py",
@@ -19,7 +20,17 @@ config("ui_warnings") {
   }
 }
 
-source_set("ui") {
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+split_static_library("ui") {
+  # Split into multiple static libraries on Windows official builds, where we
+  # run into a 2GB max size limit.
+  if (is_win && is_official_build) {
+    split_count = 5
+  } else {
+    split_count = 1
+  }
+
   sources = []
   defines = []
   libs = []
@@ -103,15 +114,16 @@ source_set("ui") {
     "//components/sync_sessions",
     "//components/toolbar",
     "//components/translate/core/browser",
-    "//components/ui/zoom",
     "//components/update_client",
     "//components/upload_list",
     "//components/user_prefs",
     "//components/version_ui",
     "//components/web_resource",
+    "//components/zoom",
     "//content/public/common",
     "//crypto",
     "//device/core",
+    "//services/shell/runner/common",
     "//skia",
     "//third_party/cacheinvalidation",
     "//third_party/icu",
@@ -162,13 +174,13 @@ source_set("ui") {
       "//components/url_formatter",
       "//device/nfc",
       "//media",
-      "//mojo/edk/system",
       "//net:net_with_v8",
       "//net:stale_while_revalidate_experiment_domains",
       "//storage/browser",
       "//storage/common",
       "//third_party/WebKit/public:resources",
       "//third_party/adobe/flash:flapper_version_h",
+      "//third_party/brotli",
       "//third_party/leveldatabase",
       "//third_party/libjingle",
       "//third_party/re2",
@@ -196,6 +208,7 @@ source_set("ui") {
     deps += [
       "//chrome/browser/profile_resetter:profile_reset_report_proto",
       "//chrome/common:features",
+      "//components/chooser_controller:chooser_controller",
       "//components/copresence",
       "//components/feedback/proto",
       "//components/proximity_auth/webui",
@@ -255,8 +268,12 @@ source_set("ui") {
     sources += [
       "ash/app_list/app_list_presenter_service.cc",
       "ash/app_list/app_list_presenter_service.h",
+      "ash/chrome_wallpaper_manager.cc",
+      "ash/chrome_wallpaper_manager.h",
       "ash/keyboard_ui_service.cc",
       "ash/keyboard_ui_service.h",
+      "ash/launcher/chrome_launcher_controller_mus.cc",
+      "ash/launcher/chrome_launcher_controller_mus.h",
       "ash/launcher/chrome_mash_shelf_controller.cc",
       "ash/launcher/chrome_mash_shelf_controller.h",
     ]
@@ -264,18 +281,13 @@ source_set("ui") {
       "//ash",
       "//ash:ash_with_content",
       "//ash/strings",
+      "//ash/sysui/public/interfaces",
       "//components/user_manager",
       "//mash/shelf/public/interfaces",
-      "//skia/public",
       "//ui/app_list/presenter",
       "//ui/app_list/presenter:mojom",
       "//ui/keyboard:mojom",
     ]
-    if (!is_chromeos) {
-      sources += rebase_path(gypi_values.chrome_browser_ui_ash_non_chromeos,
-                             ".",
-                             "//chrome")
-    }
   } else {  # Not ash.
     sources += rebase_path(gypi_values.chrome_browser_ui_non_ash_sources,
                            ".",
@@ -291,7 +303,12 @@ source_set("ui") {
       deps += [ "//extensions/components/native_app_window" ]
     }
 
-    if (!is_chromeos && (!is_mac || mac_views_browser)) {
+    if (is_chromeos) {
+      sources +=
+          rebase_path(gypi_values.chrome_browser_ui_views_chromeos_sources,
+                      ".",
+                      "//chrome")
+    } else if (!is_mac || mac_views_browser) {
       sources +=
           rebase_path(gypi_values.chrome_browser_ui_views_non_chromeos_sources,
                       ".",
@@ -357,7 +374,6 @@ source_set("ui") {
     deps += [
       # aura uses some of ash resources.
       "//ash/resources",
-      "//ash/wm/common/resources",
       "//ui/aura",
       "//ui/keyboard",
       "//ui/keyboard:keyboard_with_content",
@@ -449,8 +465,6 @@ source_set("ui") {
       "Carbon.framework",
       "Quartz.framework",
     ]
-    configs +=
-        [ "//third_party/google_toolbox_for_mac:google_toolbox_for_mac_config" ]
   } else {  # non-Mac.
     sources += rebase_path(gypi_values.chrome_browser_ui_non_mac_sources,
                            ".",
@@ -460,7 +474,6 @@ source_set("ui") {
   if (is_win) {
     sources +=
         rebase_path(gypi_values.chrome_browser_ui_win_sources, ".", "//chrome")
-    sources -= [ "views/frame/taskbar_decorator.cc" ]
     public_deps += [
       "//ui/views",
       "//ui/views/controls/webview",
@@ -508,10 +521,10 @@ source_set("ui") {
                            ".",
                            "//chrome")
     if (use_aura) {
-      deps += [
-        "//build/linux:fontconfig",
-        "//dbus",
-      ]
+      deps += [ "//build/linux:fontconfig" ]
+      if (use_dbus) {
+        deps += [ "//dbus" ]
+      }
     }
     if (use_x11) {
       sources += rebase_path(gypi_values.chrome_browser_ui_x11_sources,
@@ -628,7 +641,7 @@ if (is_mac) {
 }
 
 # In GYP this is part of test_support_common.
-source_set("test_support") {
+static_library("test_support") {
   testonly = true
 
   sources = [

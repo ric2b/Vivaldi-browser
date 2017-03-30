@@ -86,7 +86,6 @@ WebMouseWheelEvent SyntheticWebMouseWheelEventBuilder::Build(float x,
     result.wheelTicksY = dy > 0.0f ? 1.0f : -1.0f;
   result.modifiers = modifiers;
   result.hasPreciseScrollingDeltas = precise;
-  result.canScroll = true;
   return result;
 }
 
@@ -170,7 +169,7 @@ WebGestureEvent SyntheticWebGestureEventBuilder::BuildFling(
 
 SyntheticWebTouchEvent::SyntheticWebTouchEvent() : WebTouchEvent() {
   uniqueTouchEventId = ui::GetNextTouchEventId();
-  SetTimestamp(base::TimeTicks::Now() - base::TimeTicks());
+  SetTimestamp(base::TimeTicks::Now());
 }
 
 void SyntheticWebTouchEvent::ResetPoints() {
@@ -237,8 +236,8 @@ void SyntheticWebTouchEvent::CancelPoint(int index) {
       WebInputEvent::TouchCancel, timeStampSeconds, this);
 }
 
-void SyntheticWebTouchEvent::SetTimestamp(base::TimeDelta timestamp) {
-  timeStampSeconds = timestamp.InSecondsF();
+void SyntheticWebTouchEvent::SetTimestamp(base::TimeTicks timestamp) {
+  timeStampSeconds = ui::EventTimeStampToSeconds(timestamp);
 }
 
 }  // namespace content

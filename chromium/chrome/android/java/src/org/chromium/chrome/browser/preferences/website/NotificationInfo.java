@@ -15,13 +15,13 @@ public class NotificationInfo extends PermissionInfo {
     @Override
     protected int getNativePreferenceValue(String origin, String embedder, boolean isIncognito) {
         return WebsitePreferenceBridge.nativeGetNotificationSettingForOrigin(
-                origin, embedder, isIncognito);
+                origin, isIncognito);
     }
 
     @Override
     protected void setNativePreferenceValue(
             String origin, String embedder, ContentSetting value, boolean isIncognito) {
         WebsitePreferenceBridge.nativeSetNotificationSettingForOrigin(
-                origin, embedder, value.toInt(), isIncognito);
+                origin, value.toInt(), isIncognito);
     }
 }

@@ -445,8 +445,8 @@ bool DesktopWindowTreeHostWin::IsFullscreen() const {
   return message_handler_->fullscreen_handler()->fullscreen();
 }
 
-void DesktopWindowTreeHostWin::SetOpacity(unsigned char opacity) {
-  content_window_->layer()->SetOpacity(opacity / 255.0);
+void DesktopWindowTreeHostWin::SetOpacity(float opacity) {
+  content_window_->layer()->SetOpacity(opacity);
 }
 
 void DesktopWindowTreeHostWin::SetWindowIcons(
@@ -527,7 +527,6 @@ void DesktopWindowTreeHostWin::SetBounds(const gfx::Rect& bounds) {
   // If the window bounds have to be expanded we need to subtract the
   // window_expansion_top_left_delta_ from the origin and add the
   // window_expansion_bottom_right_delta_ to the width and height
-  gfx::Size old_hwnd_size(message_handler_->GetClientAreaBounds().size());
   gfx::Size old_content_size = GetBounds().size();
 
   gfx::Rect expanded(
@@ -937,6 +936,15 @@ void DesktopWindowTreeHostWin::HandleWindowSizeChanged() {
   if (compositor()) {
     compositor()->SetScaleAndSize(
         compositor()->device_scale_factor(),
+        message_handler_->GetClientAreaBounds().size());
+  }
+}
+
+void DesktopWindowTreeHostWin::HandleWindowScaleFactorChanged(
+    float window_scale_factor) {
+  if (compositor()) {
+    compositor()->SetScaleAndSize(
+        window_scale_factor,
         message_handler_->GetClientAreaBounds().size());
   }
 }

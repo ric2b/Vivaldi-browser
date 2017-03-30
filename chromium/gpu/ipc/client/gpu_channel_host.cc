@@ -135,11 +135,14 @@ uint32_t GpuChannelHost::OrderingBarrier(
     uint32_t flush_count,
     const std::vector<ui::LatencyInfo>& latency_info,
     bool put_offset_changed,
-    bool do_flush) {
+    bool do_flush,
+    uint32_t* highest_verified_flush_id) {
   AutoLock lock(context_lock_);
   StreamFlushInfo& flush_info = stream_flush_info_[stream_id];
   if (flush_info.flush_pending && flush_info.route_id != route_id)
     InternalFlush(&flush_info);
+
+  *highest_verified_flush_id = flush_info.verified_stream_flush_id;
 
   if (put_offset_changed) {
     const uint32_t flush_id = flush_info.next_stream_flush_id++;
@@ -242,9 +245,32 @@ gfx::GpuMemoryBufferHandle GpuChannelHost::ShareGpuMemoryBufferToGpuProcess(
       *requires_sync_point = false;
       return handle;
     }
+#if defined(USE_OZONE)
+    case gfx::OZONE_NATIVE_PIXMAP: {
+      std::vector<base::ScopedFD> scoped_fds;
+      for (auto& fd : source_handle.native_pixmap_handle.fds) {
+        base::ScopedFD scoped_fd(HANDLE_EINTR(dup(fd.fd)));
+        if (!scoped_fd.is_valid()) {
+          PLOG(ERROR) << "dup";
+          return gfx::GpuMemoryBufferHandle();
+        }
+        scoped_fds.emplace_back(std::move(scoped_fd));
+      }
+      gfx::GpuMemoryBufferHandle handle;
+      handle.type = gfx::OZONE_NATIVE_PIXMAP;
+      handle.id = source_handle.id;
+      for (auto& scoped_fd : scoped_fds) {
+        handle.native_pixmap_handle.fds.emplace_back(scoped_fd.release(),
+                                                     true /* auto_close */);
+      }
+      handle.native_pixmap_handle.strides_and_offsets =
+          source_handle.native_pixmap_handle.strides_and_offsets;
+      *requires_sync_point = false;
+      return handle;
+    }
+#endif
     case gfx::IO_SURFACE_BUFFER:
     case gfx::SURFACE_TEXTURE_BUFFER:
-    case gfx::OZONE_NATIVE_PIXMAP:
       *requires_sync_point = true;
       return source_handle;
     default:

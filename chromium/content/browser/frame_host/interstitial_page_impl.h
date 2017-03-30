@@ -30,6 +30,7 @@ class NavigationEntry;
 class NavigationControllerImpl;
 class RenderViewHostImpl;
 class RenderWidgetHostView;
+class TextInputManager;
 class WebContentsView;
 
 enum ResourceRequestAction {
@@ -140,12 +141,15 @@ class CONTENT_EXPORT InterstitialPageImpl
                        blink::WebPopupType popup_type) override;
   void CreateNewFullscreenWidget(int32_t render_process_id,
                                  int32_t route_id) override;
-  void ShowCreatedWindow(int route_id,
+  void ShowCreatedWindow(int process_id,
+                         int route_id,
                          WindowOpenDisposition disposition,
                          const gfx::Rect& initial_rect,
                          bool user_gesture) override;
-  void ShowCreatedWidget(int route_id, const gfx::Rect& initial_rect) override;
-  void ShowCreatedFullscreenWidget(int route_id) override;
+  void ShowCreatedWidget(int process_id,
+                         int route_id,
+                         const gfx::Rect& initial_rect) override;
+  void ShowCreatedFullscreenWidget(int process_id, int route_id) override;
 
   SessionStorageNamespace* GetSessionStorageNamespace(
       SiteInstance* instance) override;
@@ -157,6 +161,7 @@ class CONTENT_EXPORT InterstitialPageImpl
   bool PreHandleKeyboardEvent(const NativeWebKeyboardEvent& event,
                               bool* is_keyboard_shortcut) override;
   void HandleKeyboardEvent(const NativeWebKeyboardEvent& event) override;
+  TextInputManager* GetTextInputManager() override;
 
   bool enabled() const { return enabled_; }
   WebContents* web_contents() const;

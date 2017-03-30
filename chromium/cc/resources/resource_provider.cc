@@ -381,22 +381,89 @@ ResourceProvider::Child::Child(const Child& other) = default;
 
 ResourceProvider::Child::~Child() {}
 
-std::unique_ptr<ResourceProvider> ResourceProvider::Create(
-    OutputSurface* output_surface,
+ResourceProvider::ResourceProvider(
+    ContextProvider* compositor_context_provider,
     SharedBitmapManager* shared_bitmap_manager,
     gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
     BlockingTaskRunner* blocking_main_thread_task_runner,
     int highp_threshold_min,
     size_t id_allocation_chunk_size,
+    bool delegated_sync_points_required,
     bool use_gpu_memory_buffer_resources,
-    const std::vector<unsigned>& use_image_texture_targets) {
-  std::unique_ptr<ResourceProvider> resource_provider(new ResourceProvider(
-      output_surface, shared_bitmap_manager, gpu_memory_buffer_manager,
-      blocking_main_thread_task_runner, highp_threshold_min,
-      id_allocation_chunk_size, use_gpu_memory_buffer_resources,
-      use_image_texture_targets));
-  resource_provider->Initialize();
-  return resource_provider;
+    const std::vector<unsigned>& use_image_texture_targets)
+    : compositor_context_provider_(compositor_context_provider),
+      shared_bitmap_manager_(shared_bitmap_manager),
+      gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
+      blocking_main_thread_task_runner_(blocking_main_thread_task_runner),
+      lost_output_surface_(false),
+      highp_threshold_min_(highp_threshold_min),
+      next_id_(1),
+      next_child_(1),
+      delegated_sync_points_required_(delegated_sync_points_required),
+      default_resource_type_(use_gpu_memory_buffer_resources
+                                 ? RESOURCE_TYPE_GPU_MEMORY_BUFFER
+                                 : RESOURCE_TYPE_GL_TEXTURE),
+      use_texture_storage_ext_(false),
+      use_texture_format_bgra_(false),
+      use_texture_usage_hint_(false),
+      use_compressed_texture_etc1_(false),
+      yuv_resource_format_(LUMINANCE_8),
+      max_texture_size_(0),
+      best_texture_format_(RGBA_8888),
+      best_render_buffer_format_(RGBA_8888),
+      id_allocation_chunk_size_(id_allocation_chunk_size),
+      use_sync_query_(false),
+      use_image_texture_targets_(use_image_texture_targets),
+      tracing_id_(g_next_resource_provider_tracing_id.GetNext()) {
+  DCHECK(id_allocation_chunk_size_);
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
+  // Don't register a dump provider in these cases.
+  // TODO(ericrk): Get this working in Android Webview. crbug.com/517156
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+        this, "cc::ResourceProvider", base::ThreadTaskRunnerHandle::Get());
+  }
+
+  if (!compositor_context_provider_) {
+    default_resource_type_ = RESOURCE_TYPE_BITMAP;
+    // Pick an arbitrary limit here similar to what hardware might.
+    max_texture_size_ = 16 * 1024;
+    best_texture_format_ = RGBA_8888;
+    return;
+  }
+
+  DCHECK(!texture_id_allocator_);
+  DCHECK(!buffer_id_allocator_);
+
+  const auto& caps = compositor_context_provider_->ContextCapabilities();
+
+  DCHECK(IsGpuResourceType(default_resource_type_));
+  use_texture_storage_ext_ = caps.texture_storage;
+  use_texture_format_bgra_ = caps.texture_format_bgra8888;
+  use_texture_usage_hint_ = caps.texture_usage;
+  use_compressed_texture_etc1_ = caps.texture_format_etc1;
+  yuv_resource_format_ = caps.texture_rg ? RED_8 : LUMINANCE_8;
+  yuv_highbit_resource_format_ = yuv_resource_format_;
+  if (caps.texture_half_float_linear)
+    yuv_highbit_resource_format_ = LUMINANCE_F16;
+  use_sync_query_ = caps.sync_query;
+
+  GLES2Interface* gl = ContextGL();
+
+  max_texture_size_ = 0;  // Context expects cleared value.
+  gl->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size_);
+  best_texture_format_ =
+      PlatformColor::BestSupportedTextureFormat(use_texture_format_bgra_);
+
+  best_render_buffer_format_ = PlatformColor::BestSupportedTextureFormat(
+      caps.render_buffer_format_bgra8888);
+
+  texture_id_allocator_.reset(
+      new TextureIdAllocator(gl, id_allocation_chunk_size_));
+  buffer_id_allocator_.reset(
+      new BufferIdAllocator(gl, id_allocation_chunk_size_));
 }
 
 ResourceProvider::~ResourceProvider() {
@@ -431,8 +498,8 @@ ResourceProvider::~ResourceProvider() {
 
 bool ResourceProvider::IsResourceFormatSupported(ResourceFormat format) const {
   gpu::Capabilities caps;
-  if (output_surface_->context_provider())
-    caps = output_surface_->context_provider()->ContextCapabilities();
+  if (compositor_context_provider_)
+    caps = compositor_context_provider_->ContextCapabilities();
 
   switch (format) {
     case ALPHA_8:
@@ -458,9 +525,7 @@ bool ResourceProvider::IsResourceFormatSupported(ResourceFormat format) const {
 bool ResourceProvider::InUseByConsumer(ResourceId id) {
   Resource* resource = GetResource(id);
   return resource->lock_for_read_count > 0 || resource->exported_count > 0 ||
-         resource->lost ||
-         (resource->gpu_memory_buffer &&
-          resource->gpu_memory_buffer->IsInUseByMacOSWindowServer());
+         resource->lost;
 }
 
 bool ResourceProvider::IsLost(ResourceId id) {
@@ -562,26 +627,6 @@ ResourceId ResourceProvider::CreateBitmap(const gfx::Size& size) {
   return id;
 }
 
-ResourceId ResourceProvider::CreateResourceFromIOSurface(
-    const gfx::Size& size,
-    unsigned io_surface_id) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  ResourceId id = next_id_++;
-  Resource* resource = InsertResource(
-      id, Resource(0, gfx::Size(), Resource::INTERNAL, GL_TEXTURE_RECTANGLE_ARB,
-                   GL_LINEAR, TEXTURE_HINT_IMMUTABLE, RESOURCE_TYPE_GL_TEXTURE,
-                   RGBA_8888));
-  LazyCreate(resource);
-  GLES2Interface* gl = ContextGL();
-  DCHECK(gl);
-  gl->BindTexture(GL_TEXTURE_RECTANGLE_ARB, resource->gl_id);
-  gl->TexImageIOSurface2DCHROMIUM(
-      GL_TEXTURE_RECTANGLE_ARB, size.width(), size.height(), io_surface_id, 0);
-  resource->allocated = true;
-  return id;
-}
-
 ResourceId ResourceProvider::CreateResourceFromTextureMailbox(
     const TextureMailbox& mailbox,
     std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl,
@@ -614,7 +659,6 @@ ResourceId ResourceProvider::CreateResourceFromTextureMailbox(
                  base::Owned(release_callback_impl.release()));
   resource->read_lock_fences_enabled = read_lock_fences_enabled;
   resource->is_overlay_candidate = mailbox.is_overlay_candidate();
-  resource->gpu_memory_buffer_id = mailbox.gpu_memory_buffer_id();
 
   return id;
 }
@@ -648,11 +692,25 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
                                               DeleteStyle style) {
   TRACE_EVENT0("cc", "ResourceProvider::DeleteResourceInternal");
   Resource* resource = &it->second;
-  bool lost_resource = resource->lost;
-
   DCHECK(resource->exported_count == 0 || style != NORMAL);
-  if (style == FOR_SHUTDOWN && resource->exported_count > 0)
-    lost_resource = true;
+
+  // Exported resources are lost on shutdown.
+  bool exported_resource_lost =
+      style == FOR_SHUTDOWN && resource->exported_count > 0;
+  // GPU resources are lost when output surface is lost.
+  bool gpu_resource_lost =
+      IsGpuResourceType(resource->type) && lost_output_surface_;
+  bool lost_resource =
+      resource->lost || exported_resource_lost || gpu_resource_lost;
+
+  if (!lost_resource &&
+      resource->synchronization_state() == Resource::NEEDS_WAIT) {
+    DCHECK(resource->allocated);
+    DCHECK(IsGpuResourceType(resource->type));
+    GLES2Interface* gl = ContextGL();
+    DCHECK(gl);
+    resource->WaitSyncToken(gl);
+  }
 
   if (resource->image_id) {
     DCHECK(resource->origin == Resource::INTERNAL);
@@ -683,7 +741,6 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
     gpu::SyncToken sync_token = resource->mailbox().sync_token();
     if (IsGpuResourceType(resource->type)) {
       DCHECK(resource->mailbox().IsTexture());
-      lost_resource |= lost_output_surface_;
       GLES2Interface* gl = ContextGL();
       DCHECK(gl);
       if (resource->gl_id) {
@@ -721,7 +778,8 @@ void ResourceProvider::DeleteResourceInternal(ResourceMap::iterator it,
     resource->pixels = nullptr;
   }
   if (resource->gpu_memory_buffer) {
-    DCHECK(resource->origin == Resource::INTERNAL);
+    DCHECK(resource->origin == Resource::INTERNAL ||
+           resource->origin == Resource::DELEGATED);
     resource->gpu_memory_buffer.reset();
   }
   resources_.erase(it);
@@ -753,6 +811,9 @@ void ResourceProvider::CopyToResource(ResourceId id,
   DCHECK_EQ(image_size.width(), resource->size.width());
   DCHECK_EQ(image_size.height(), resource->size.height());
 
+  if (resource->allocated)
+    WaitSyncTokenIfNeeded(id);
+
   if (resource->type == RESOURCE_TYPE_BITMAP) {
     DCHECK_EQ(RESOURCE_TYPE_BITMAP, resource->type);
     DCHECK(resource->allocated);
@@ -765,11 +826,12 @@ void ResourceProvider::CopyToResource(ResourceId id,
     SkCanvas dest(lock.sk_bitmap());
     dest.writePixels(source_info, image, image_stride, 0, 0);
   } else {
-    ScopedWriteLockGL lock(this, id);
-    DCHECK(lock.texture_id());
+    ScopedWriteLockGL lock(this, id, false);
+    unsigned resource_texture_id = lock.texture_id();
+    DCHECK(resource_texture_id);
     GLES2Interface* gl = ContextGL();
     DCHECK(gl);
-    gl->BindTexture(resource->target, lock.texture_id());
+    gl->BindTexture(resource->target, resource_texture_id);
     if (resource->format == ETC1) {
       DCHECK_EQ(resource->target, static_cast<GLenum>(GL_TEXTURE_2D));
       int image_bytes = ResourceUtil::CheckedSizeInBytes<int>(image_size, ETC1);
@@ -781,6 +843,12 @@ void ResourceProvider::CopyToResource(ResourceId id,
                         image_size.height(), GLDataFormat(resource->format),
                         GLDataType(resource->format), image);
     }
+    const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
+    gl->OrderingBarrierCHROMIUM();
+    gpu::SyncToken sync_token;
+    gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
+    lock.set_sync_token(sync_token);
+    lock.set_synchronized(true);
   }
 }
 
@@ -798,6 +866,7 @@ void ResourceProvider::GenerateSyncTokenForResource(ResourceId resource_id) {
   gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
 
   resource->UpdateSyncToken(sync_token);
+  resource->SetSynchronized();
 }
 
 void ResourceProvider::GenerateSyncTokenForResources(
@@ -818,6 +887,7 @@ void ResourceProvider::GenerateSyncTokenForResources(
       }
 
       resource->UpdateSyncToken(sync_token);
+      resource->SetSynchronized();
     }
   }
 }
@@ -909,11 +979,9 @@ void ResourceProvider::UnlockForRead(ResourceId id) {
 
 ResourceProvider::Resource* ResourceProvider::LockForWrite(ResourceId id) {
   Resource* resource = GetResource(id);
-  // TODO(ccameron): The allowance for IsInUseByMacOSWindowServer should not
-  // be needed.
-  // http://crbug.com/577121
-  DCHECK(CanLockForWrite(id) || IsInUseByMacOSWindowServer(id));
-  DCHECK_NE(Resource::NEEDS_WAIT, resource->synchronization_state());
+  DCHECK(CanLockForWrite(id));
+  if (resource->allocated)
+    WaitSyncTokenIfNeeded(id);
   resource->locked_for_write = true;
   resource->SetLocallyUsed();
   return resource;
@@ -923,9 +991,7 @@ bool ResourceProvider::CanLockForWrite(ResourceId id) {
   Resource* resource = GetResource(id);
   return !resource->locked_for_write && !resource->lock_for_read_count &&
          !resource->exported_count && resource->origin == Resource::INTERNAL &&
-         !resource->lost && ReadLockFenceHasPassed(resource) &&
-         !(resource->gpu_memory_buffer &&
-           resource->gpu_memory_buffer->IsInUseByMacOSWindowServer());
+         !resource->lost && ReadLockFenceHasPassed(resource);
 }
 
 bool ResourceProvider::IsOverlayCandidate(ResourceId id) {
@@ -933,18 +999,11 @@ bool ResourceProvider::IsOverlayCandidate(ResourceId id) {
   return resource->is_overlay_candidate;
 }
 
-bool ResourceProvider::IsInUseByMacOSWindowServer(ResourceId id) {
-  Resource* resource = GetResource(id);
-  return resource->gpu_memory_buffer &&
-         resource->gpu_memory_buffer->IsInUseByMacOSWindowServer();
-}
-
-void ResourceProvider::UnlockForWrite(ResourceProvider::Resource* resource) {
+void ResourceProvider::UnlockForWrite(Resource* resource) {
   DCHECK(resource->locked_for_write);
   DCHECK_EQ(resource->exported_count, 0);
   DCHECK(resource->origin == Resource::INTERNAL);
   resource->locked_for_write = false;
-  resource->SetSynchronized();
 }
 
 void ResourceProvider::EnableReadLockFencesForTesting(ResourceId id) {
@@ -956,10 +1015,11 @@ void ResourceProvider::EnableReadLockFencesForTesting(ResourceId id) {
 ResourceProvider::ScopedReadLockGL::ScopedReadLockGL(
     ResourceProvider* resource_provider,
     ResourceId resource_id)
-    : resource_provider_(resource_provider),
-      resource_id_(resource_id),
-      resource_(resource_provider->LockForRead(resource_id)) {
-  DCHECK(resource_);
+    : resource_provider_(resource_provider), resource_id_(resource_id) {
+  const Resource* resource = resource_provider->LockForRead(resource_id);
+  texture_id_ = resource->gl_id;
+  target_ = resource->target;
+  size_ = resource->size;
 }
 
 ResourceProvider::ScopedReadLockGL::~ScopedReadLockGL() {
@@ -970,46 +1030,118 @@ ResourceProvider::ScopedSamplerGL::ScopedSamplerGL(
     ResourceProvider* resource_provider,
     ResourceId resource_id,
     GLenum filter)
-    : ScopedReadLockGL(resource_provider, resource_id),
+    : resource_lock_(resource_provider, resource_id),
       unit_(GL_TEXTURE0),
-      target_(resource_provider->BindForSampling(resource_id, unit_, filter)) {
-}
+      target_(resource_provider->BindForSampling(resource_id, unit_, filter)) {}
 
 ResourceProvider::ScopedSamplerGL::ScopedSamplerGL(
     ResourceProvider* resource_provider,
     ResourceId resource_id,
     GLenum unit,
     GLenum filter)
-    : ScopedReadLockGL(resource_provider, resource_id),
+    : resource_lock_(resource_provider, resource_id),
       unit_(unit),
-      target_(resource_provider->BindForSampling(resource_id, unit_, filter)) {
-}
+      target_(resource_provider->BindForSampling(resource_id, unit_, filter)) {}
 
-ResourceProvider::ScopedSamplerGL::~ScopedSamplerGL() {
-}
+ResourceProvider::ScopedSamplerGL::~ScopedSamplerGL() {}
 
 ResourceProvider::ScopedWriteLockGL::ScopedWriteLockGL(
     ResourceProvider* resource_provider,
-    ResourceId resource_id)
+    ResourceId resource_id,
+    bool create_mailbox)
     : resource_provider_(resource_provider),
-      resource_(resource_provider->LockForWrite(resource_id)),
-      texture_id_(0),
-      set_sync_token_(false) {
-  resource_provider_->LazyAllocate(resource_);
-  texture_id_ = resource_->gl_id;
-  DCHECK(texture_id_);
-  if (resource_->image_id && resource_->dirty_image)
-    resource_provider_->BindImageForSampling(resource_);
+      resource_id_(resource_id),
+      synchronized_(false) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  Resource* resource = resource_provider->LockForWrite(resource_id);
+  resource_provider_->LazyAllocate(resource);
+  if (resource->image_id && resource->dirty_image)
+    resource_provider_->BindImageForSampling(resource);
+  if (create_mailbox) {
+    resource_provider_->CreateMailboxAndBindResource(
+        resource_provider_->ContextGL(), resource);
+  }
+  texture_id_ = resource->gl_id;
+  target_ = resource->target;
+  format_ = resource->format;
+  size_ = resource->size;
+  mailbox_ = resource->mailbox();
 }
 
 ResourceProvider::ScopedWriteLockGL::~ScopedWriteLockGL() {
-  if (set_sync_token_)
-    resource_->UpdateSyncToken(sync_token_);
-  resource_provider_->UnlockForWrite(resource_);
+  DCHECK(thread_checker_.CalledOnValidThread());
+  Resource* resource = resource_provider_->GetResource(resource_id_);
+  DCHECK(resource->locked_for_write);
+  if (sync_token_.HasData())
+    resource->UpdateSyncToken(sync_token_);
+  if (synchronized_)
+    resource->SetSynchronized();
+  resource_provider_->UnlockForWrite(resource);
 }
 
-void ResourceProvider::PopulateSkBitmapWithResource(
-    SkBitmap* sk_bitmap, const Resource* resource) {
+ResourceProvider::ScopedTextureProvider::ScopedTextureProvider(
+    gpu::gles2::GLES2Interface* gl,
+    ScopedWriteLockGL* resource_lock,
+    bool use_mailbox)
+    : gl_(gl), use_mailbox_(use_mailbox) {
+  if (use_mailbox_) {
+    texture_id_ = gl_->CreateAndConsumeTextureCHROMIUM(
+        resource_lock->target(), resource_lock->mailbox().name());
+  } else {
+    texture_id_ = resource_lock->texture_id();
+  }
+  DCHECK(texture_id_);
+}
+
+ResourceProvider::ScopedTextureProvider::~ScopedTextureProvider() {
+  if (use_mailbox_)
+    gl_->DeleteTextures(1, &texture_id_);
+}
+
+ResourceProvider::ScopedSkSurfaceProvider::ScopedSkSurfaceProvider(
+    ContextProvider* context_provider,
+    ScopedWriteLockGL* resource_lock,
+    bool use_mailbox,
+    bool use_distance_field_text,
+    bool can_use_lcd_text,
+    int msaa_sample_count)
+    : texture_provider_(context_provider->ContextGL(),
+                        resource_lock,
+                        use_mailbox) {
+  GrGLTextureInfo texture_info;
+  texture_info.fID = texture_provider_.texture_id();
+  texture_info.fTarget = resource_lock->target();
+  GrBackendTextureDesc desc;
+  desc.fFlags = kRenderTarget_GrBackendTextureFlag;
+  desc.fWidth = resource_lock->size().width();
+  desc.fHeight = resource_lock->size().height();
+  desc.fConfig = ToGrPixelConfig(resource_lock->format());
+  desc.fOrigin = kTopLeft_GrSurfaceOrigin;
+  desc.fTextureHandle = skia::GrGLTextureInfoToGrBackendObject(texture_info);
+  desc.fSampleCnt = msaa_sample_count;
+
+  uint32_t flags =
+      use_distance_field_text ? SkSurfaceProps::kUseDistanceFieldFonts_Flag : 0;
+  // Use unknown pixel geometry to disable LCD text.
+  SkSurfaceProps surface_props(flags, kUnknown_SkPixelGeometry);
+  if (can_use_lcd_text) {
+    // LegacyFontHost will get LCD text and skia figures out what type to use.
+    surface_props =
+        SkSurfaceProps(flags, SkSurfaceProps::kLegacyFontHost_InitType);
+  }
+  sk_surface_ = SkSurface::MakeFromBackendTextureAsRenderTarget(
+      context_provider->GrContext(), desc, &surface_props);
+}
+
+ResourceProvider::ScopedSkSurfaceProvider::~ScopedSkSurfaceProvider() {
+  if (sk_surface_.get()) {
+    sk_surface_->prepareForExternalIO();
+    sk_surface_.reset();
+  }
+}
+
+void ResourceProvider::PopulateSkBitmapWithResource(SkBitmap* sk_bitmap,
+                                                    const Resource* resource) {
   DCHECK_EQ(RGBA_8888, resource->format);
   SkImageInfo info = SkImageInfo::MakeN32Premul(resource->size.width(),
                                                 resource->size.height());
@@ -1028,52 +1160,89 @@ ResourceProvider::ScopedReadLockSoftware::~ScopedReadLockSoftware() {
   resource_provider_->UnlockForRead(resource_id_);
 }
 
+ResourceProvider::ScopedReadLockSkImage::ScopedReadLockSkImage(
+    ResourceProvider* resource_provider,
+    ResourceId resource_id)
+    : resource_provider_(resource_provider), resource_id_(resource_id) {
+  const Resource* resource = resource_provider->LockForRead(resource_id);
+  if (resource->gl_id) {
+    GrGLTextureInfo texture_info;
+    texture_info.fID = resource->gl_id;
+    texture_info.fTarget = resource->target;
+    GrBackendTextureDesc desc;
+    desc.fFlags = kRenderTarget_GrBackendTextureFlag;
+    desc.fWidth = resource->size.width();
+    desc.fHeight = resource->size.height();
+    desc.fConfig = ToGrPixelConfig(resource->format);
+    desc.fOrigin = kTopLeft_GrSurfaceOrigin;
+    desc.fTextureHandle = skia::GrGLTextureInfoToGrBackendObject(texture_info);
+    sk_image_ = SkImage::MakeFromTexture(
+        resource_provider->compositor_context_provider_->GrContext(), desc);
+  } else if (resource->pixels) {
+    SkBitmap sk_bitmap;
+    ResourceProvider::PopulateSkBitmapWithResource(&sk_bitmap, resource);
+    sk_bitmap.setImmutable();
+    sk_image_ = SkImage::MakeFromBitmap(sk_bitmap);
+  } else {
+    // TODO(enne): fix race condition of shared bitmap manager going away
+    // that can cause this to happen.  This will cause the read lock
+    // to not be valid.
+  }
+}
+
+ResourceProvider::ScopedReadLockSkImage::~ScopedReadLockSkImage() {
+  resource_provider_->UnlockForRead(resource_id_);
+}
+
 ResourceProvider::ScopedWriteLockSoftware::ScopedWriteLockSoftware(
     ResourceProvider* resource_provider,
     ResourceId resource_id)
-    : resource_provider_(resource_provider),
-      resource_(resource_provider->LockForWrite(resource_id)) {
-  ResourceProvider::PopulateSkBitmapWithResource(&sk_bitmap_, resource_);
+    : resource_provider_(resource_provider), resource_id_(resource_id) {
+  ResourceProvider::PopulateSkBitmapWithResource(
+      &sk_bitmap_, resource_provider->LockForWrite(resource_id));
   DCHECK(valid());
 }
 
 ResourceProvider::ScopedWriteLockSoftware::~ScopedWriteLockSoftware() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  resource_provider_->UnlockForWrite(resource_);
+  Resource* resource = resource_provider_->GetResource(resource_id_);
+  DCHECK(resource);
+  resource->SetSynchronized();
+  resource_provider_->UnlockForWrite(resource);
 }
 
 ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
     ScopedWriteLockGpuMemoryBuffer(ResourceProvider* resource_provider,
                                    ResourceId resource_id)
-    : resource_provider_(resource_provider),
-      resource_(resource_provider->LockForWrite(resource_id)) {
-  DCHECK(IsGpuResourceType(resource_->type));
-  gpu_memory_buffer_ = std::move(resource_->gpu_memory_buffer);
-  resource_->gpu_memory_buffer = nullptr;
+    : resource_provider_(resource_provider), resource_id_(resource_id) {
+  Resource* resource = resource_provider->LockForWrite(resource_id);
+  DCHECK(IsGpuResourceType(resource->type));
+  format_ = resource->format;
+  size_ = resource->size;
+  gpu_memory_buffer_ = std::move(resource->gpu_memory_buffer);
+  resource->gpu_memory_buffer = nullptr;
 }
 
 ResourceProvider::ScopedWriteLockGpuMemoryBuffer::
     ~ScopedWriteLockGpuMemoryBuffer() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  resource_provider_->UnlockForWrite(resource_);
-  if (!gpu_memory_buffer_)
-    return;
-
-  DCHECK(!resource_->gpu_memory_buffer);
-  resource_provider_->LazyCreate(resource_);
-  resource_->gpu_memory_buffer = std::move(gpu_memory_buffer_);
-  if (resource_->gpu_memory_buffer)
-    resource_->gpu_memory_buffer_id = resource_->gpu_memory_buffer->GetId();
-  resource_->allocated = true;
-  resource_provider_->LazyCreateImage(resource_);
-  resource_->dirty_image = true;
-  resource_->is_overlay_candidate = true;
-  resource_->SetSynchronized();
-
-  // GpuMemoryBuffer provides direct access to the memory used by the GPU.
-  // Read lock fences are required to ensure that we're not trying to map a
-  // buffer that is currently in-use by the GPU.
-  resource_->read_lock_fences_enabled = true;
+  Resource* resource = resource_provider_->GetResource(resource_id_);
+  DCHECK(resource);
+  if (gpu_memory_buffer_) {
+    DCHECK(!resource->gpu_memory_buffer);
+    resource_provider_->LazyCreate(resource);
+    resource->gpu_memory_buffer = std::move(gpu_memory_buffer_);
+    resource->allocated = true;
+    resource_provider_->LazyCreateImage(resource);
+    resource->dirty_image = true;
+    resource->is_overlay_candidate = true;
+    // GpuMemoryBuffer provides direct access to the memory used by the GPU.
+    // Read lock fences are required to ensure that we're not trying to map a
+    // buffer that is currently in-use by the GPU.
+    resource->read_lock_fences_enabled = true;
+  }
+  resource->SetSynchronized();
+  resource_provider_->UnlockForWrite(resource);
 }
 
 gfx::GpuMemoryBuffer*
@@ -1081,80 +1250,17 @@ ResourceProvider::ScopedWriteLockGpuMemoryBuffer::GetGpuMemoryBuffer() {
   if (!gpu_memory_buffer_) {
     gpu_memory_buffer_ =
         resource_provider_->gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
-            resource_->size, BufferFormat(resource_->format),
+            size_, BufferFormat(format_),
             gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle);
   }
   return gpu_memory_buffer_.get();
 }
 
-ResourceProvider::ScopedWriteLockGr::ScopedWriteLockGr(
-    ResourceProvider* resource_provider,
-    ResourceId resource_id)
-    : resource_provider_(resource_provider),
-      resource_(resource_provider->LockForWrite(resource_id)),
-      set_sync_token_(false) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  resource_provider_->LazyAllocate(resource_);
-  if (resource_->image_id && resource_->dirty_image)
-    resource_provider_->BindImageForSampling(resource_);
-}
-
-ResourceProvider::ScopedWriteLockGr::~ScopedWriteLockGr() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(resource_->locked_for_write);
-  if (set_sync_token_)
-    resource_->UpdateSyncToken(sync_token_);
-
-  resource_provider_->UnlockForWrite(resource_);
-}
-
-void ResourceProvider::ScopedWriteLockGr::InitSkSurface(
-    bool use_distance_field_text,
-    bool can_use_lcd_text,
-    int msaa_sample_count) {
-  DCHECK(resource_->locked_for_write);
-
-  GrGLTextureInfo texture_info;
-  texture_info.fID = resource_->gl_id;
-  texture_info.fTarget = resource_->target;
-  GrBackendTextureDesc desc;
-  desc.fFlags = kRenderTarget_GrBackendTextureFlag;
-  desc.fWidth = resource_->size.width();
-  desc.fHeight = resource_->size.height();
-  desc.fConfig = ToGrPixelConfig(resource_->format);
-  desc.fOrigin = kTopLeft_GrSurfaceOrigin;
-  desc.fTextureHandle = skia::GrGLTextureInfoToGrBackendObject(texture_info);
-  desc.fSampleCnt = msaa_sample_count;
-
-  bool use_worker_context = true;
-  class GrContext* gr_context =
-      resource_provider_->GrContext(use_worker_context);
-  uint32_t flags =
-      use_distance_field_text ? SkSurfaceProps::kUseDistanceFieldFonts_Flag : 0;
-  // Use unknown pixel geometry to disable LCD text.
-  SkSurfaceProps surface_props(flags, kUnknown_SkPixelGeometry);
-  if (can_use_lcd_text) {
-    // LegacyFontHost will get LCD text and skia figures out what type to use.
-    surface_props =
-        SkSurfaceProps(flags, SkSurfaceProps::kLegacyFontHost_InitType);
-  }
-  sk_surface_ = SkSurface::MakeFromBackendTextureAsRenderTarget(
-      gr_context, desc, &surface_props);
-}
-
-void ResourceProvider::ScopedWriteLockGr::ReleaseSkSurface() {
-  DCHECK(sk_surface_);
-  sk_surface_->prepareForExternalIO();
-  sk_surface_.reset();
-}
-
 ResourceProvider::SynchronousFence::SynchronousFence(
     gpu::gles2::GLES2Interface* gl)
-    : gl_(gl), has_synchronized_(true) {
-}
+    : gl_(gl), has_synchronized_(true) {}
 
-ResourceProvider::SynchronousFence::~SynchronousFence() {
-}
+ResourceProvider::SynchronousFence::~SynchronousFence() {}
 
 void ResourceProvider::SynchronousFence::Set() {
   has_synchronized_ = false;
@@ -1175,93 +1281,6 @@ void ResourceProvider::SynchronousFence::Wait() {
 void ResourceProvider::SynchronousFence::Synchronize() {
   TRACE_EVENT0("cc", "ResourceProvider::SynchronousFence::Synchronize");
   gl_->Finish();
-}
-
-ResourceProvider::ResourceProvider(
-    OutputSurface* output_surface,
-    SharedBitmapManager* shared_bitmap_manager,
-    gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-    BlockingTaskRunner* blocking_main_thread_task_runner,
-    int highp_threshold_min,
-    size_t id_allocation_chunk_size,
-    bool use_gpu_memory_buffer_resources,
-    const std::vector<unsigned>& use_image_texture_targets)
-    : output_surface_(output_surface),
-      shared_bitmap_manager_(shared_bitmap_manager),
-      gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
-      blocking_main_thread_task_runner_(blocking_main_thread_task_runner),
-      lost_output_surface_(false),
-      highp_threshold_min_(highp_threshold_min),
-      next_id_(1),
-      next_child_(1),
-      default_resource_type_(use_gpu_memory_buffer_resources
-                                 ? RESOURCE_TYPE_GPU_MEMORY_BUFFER
-                                 : RESOURCE_TYPE_GL_TEXTURE),
-      use_texture_storage_ext_(false),
-      use_texture_format_bgra_(false),
-      use_texture_usage_hint_(false),
-      use_compressed_texture_etc1_(false),
-      yuv_resource_format_(LUMINANCE_8),
-      max_texture_size_(0),
-      best_texture_format_(RGBA_8888),
-      best_render_buffer_format_(RGBA_8888),
-      id_allocation_chunk_size_(id_allocation_chunk_size),
-      use_sync_query_(false),
-      use_image_texture_targets_(use_image_texture_targets),
-      tracing_id_(g_next_resource_provider_tracing_id.GetNext()) {
-  DCHECK(output_surface_->HasClient());
-  DCHECK(id_allocation_chunk_size_);
-}
-
-void ResourceProvider::Initialize() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-
-  // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
-  // Don't register a dump provider in these cases.
-  // TODO(ericrk): Get this working in Android Webview. crbug.com/517156
-  if (base::ThreadTaskRunnerHandle::IsSet()) {
-    base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
-        this, "cc::ResourceProvider", base::ThreadTaskRunnerHandle::Get());
-  }
-
-  GLES2Interface* gl = ContextGL();
-  if (!gl) {
-    default_resource_type_ = RESOURCE_TYPE_BITMAP;
-    // Pick an arbitrary limit here similar to what hardware might.
-    max_texture_size_ = 16 * 1024;
-    best_texture_format_ = RGBA_8888;
-    return;
-  }
-
-  DCHECK(!texture_id_allocator_);
-  DCHECK(!buffer_id_allocator_);
-
-  const gpu::Capabilities& caps =
-      output_surface_->context_provider()->ContextCapabilities();
-
-  DCHECK(IsGpuResourceType(default_resource_type_));
-  use_texture_storage_ext_ = caps.texture_storage;
-  use_texture_format_bgra_ = caps.texture_format_bgra8888;
-  use_texture_usage_hint_ = caps.texture_usage;
-  use_compressed_texture_etc1_ = caps.texture_format_etc1;
-  yuv_resource_format_ = caps.texture_rg ? RED_8 : LUMINANCE_8;
-  yuv_highbit_resource_format_ = yuv_resource_format_;
-  if (caps.texture_half_float_linear)
-    yuv_highbit_resource_format_ = LUMINANCE_F16;
-  use_sync_query_ = caps.sync_query;
-
-  max_texture_size_ = 0;  // Context expects cleared value.
-  gl->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size_);
-  best_texture_format_ =
-      PlatformColor::BestSupportedTextureFormat(use_texture_format_bgra_);
-
-  best_render_buffer_format_ = PlatformColor::BestSupportedTextureFormat(
-      caps.render_buffer_format_bgra8888);
-
-  texture_id_allocator_.reset(
-      new TextureIdAllocator(gl, id_allocation_chunk_size_));
-  buffer_id_allocator_.reset(
-      new BufferIdAllocator(gl, id_allocation_chunk_size_));
 }
 
 int ResourceProvider::CreateChild(const ReturnCallback& return_callback) {
@@ -1297,8 +1316,7 @@ void ResourceProvider::DestroyChildInternal(ChildMap::iterator it,
   ResourceIdArray resources_for_child;
 
   for (ResourceIdMap::iterator child_it = child.child_to_parent_map.begin();
-       child_it != child.child_to_parent_map.end();
-       ++child_it) {
+       child_it != child.child_to_parent_map.end(); ++child_it) {
     ResourceId id = child_it->second;
     resources_for_child.push_back(id);
   }
@@ -1332,12 +1350,12 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resource_ids,
     // are required. The only case where we allow a sync token to not be set is
     // the case where the image is dirty. In that case we will bind the image
     // lazily and generate a sync token at that point.
-    DCHECK(!output_surface_->capabilities().delegated_sync_points_required ||
-           resource->dirty_image || !resource->needs_sync_token());
+    DCHECK(!delegated_sync_points_required_ || resource->dirty_image ||
+           !resource->needs_sync_token());
 
     // If we are validating the resource to be sent, the resource cannot be
     // in a LOCALLY_USED state. It must have been properly synchronized.
-    DCHECK(!output_surface_->capabilities().delegated_sync_points_required ||
+    DCHECK(!delegated_sync_points_required_ ||
            Resource::LOCALLY_USED != resource->synchronization_state());
 
     resources.push_back(resource);
@@ -1347,33 +1365,42 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resource_ids,
   std::vector<GLbyte*> unverified_sync_tokens;
   std::vector<Resource*> need_synchronization_resources;
   for (Resource* resource : resources) {
+    if (!IsGpuResourceType(resource->type))
+      continue;
+
     CreateMailboxAndBindResource(gl, resource);
 
-    if (output_surface_->capabilities().delegated_sync_points_required &&
-        resource->needs_sync_token()) {
-      need_synchronization_resources.push_back(resource);
-    } else if (resource->mailbox().HasSyncToken() &&
-               !resource->mailbox().sync_token().verified_flush()) {
-      unverified_sync_tokens.push_back(resource->GetSyncTokenData());
+    if (delegated_sync_points_required_) {
+      if (resource->needs_sync_token()) {
+        need_synchronization_resources.push_back(resource);
+      } else if (resource->mailbox().HasSyncToken() &&
+                 !resource->mailbox().sync_token().verified_flush()) {
+        unverified_sync_tokens.push_back(resource->GetSyncTokenData());
+      }
     }
   }
 
   // Insert sync point to synchronize the mailbox creation or bound textures.
   gpu::SyncToken new_sync_token;
-  if (gl) {
-    if (!need_synchronization_resources.empty()) {
-      const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
-      gl->OrderingBarrierCHROMIUM();
-      gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, new_sync_token.GetData());
-      unverified_sync_tokens.push_back(new_sync_token.GetData());
-    }
-
-    if (!unverified_sync_tokens.empty()) {
-      gl->VerifySyncTokensCHROMIUM(unverified_sync_tokens.data(),
-                                   unverified_sync_tokens.size());
-    }
+  if (!need_synchronization_resources.empty()) {
+    DCHECK(delegated_sync_points_required_);
+    DCHECK(gl);
+    const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
+    gl->OrderingBarrierCHROMIUM();
+    gl->GenUnverifiedSyncTokenCHROMIUM(fence_sync, new_sync_token.GetData());
+    unverified_sync_tokens.push_back(new_sync_token.GetData());
   }
+
+  if (!unverified_sync_tokens.empty()) {
+    DCHECK(delegated_sync_points_required_);
+    DCHECK(gl);
+    gl->VerifySyncTokensCHROMIUM(unverified_sync_tokens.data(),
+                                 unverified_sync_tokens.size());
+  }
+
+  // Set sync token after verification.
   for (Resource* resource : need_synchronization_resources) {
+    DCHECK(IsGpuResourceType(resource->type));
     resource->UpdateSyncToken(new_sync_token);
     resource->SetSynchronized();
   }
@@ -1384,9 +1411,8 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resource_ids,
     Resource* source = resources[i];
     const ResourceId id = resource_ids[i];
 
-    DCHECK(!output_surface_->capabilities().delegated_sync_points_required ||
-           !source->needs_sync_token());
-    DCHECK(!output_surface_->capabilities().delegated_sync_points_required ||
+    DCHECK(!delegated_sync_points_required_ || !source->needs_sync_token());
+    DCHECK(!delegated_sync_points_required_ ||
            Resource::LOCALLY_USED != source->synchronization_state());
 
     TransferableResource resource;
@@ -1398,14 +1424,14 @@ void ResourceProvider::PrepareSendToParent(const ResourceIdArray& resource_ids,
 }
 
 void ResourceProvider::ReceiveFromChild(
-    int child, const TransferableResourceArray& resources) {
+    int child,
+    const TransferableResourceArray& resources) {
   DCHECK(thread_checker_.CalledOnValidThread());
   GLES2Interface* gl = ContextGL();
   Child& child_info = children_.find(child)->second;
   DCHECK(!child_info.marked_for_deletion);
   for (TransferableResourceArray::const_iterator it = resources.begin();
-       it != resources.end();
-       ++it) {
+       it != resources.end(); ++it) {
     ResourceIdMap::iterator resource_in_map_it =
         child_info.child_to_parent_map.find(it->id);
     if (resource_in_map_it != child_info.child_to_parent_map.end()) {
@@ -1442,7 +1468,6 @@ void ResourceProvider::ReceiveFromChild(
                                            it->mailbox_holder.texture_target));
       resource->read_lock_fences_enabled = it->read_lock_fences_enabled;
       resource->is_overlay_candidate = it->is_overlay_candidate;
-      resource->gpu_memory_buffer_id = it->gpu_memory_buffer_id;
     }
     resource->child_id = child;
     // Don't allocate a texture for a child.
@@ -1465,8 +1490,7 @@ void ResourceProvider::DeclareUsedResourcesFromChild(
 
   ResourceIdArray unused;
   for (ResourceIdMap::iterator it = child_info.child_to_parent_map.begin();
-       it != child_info.child_to_parent_map.end();
-       ++it) {
+       it != child_info.child_to_parent_map.end(); ++it) {
     ResourceId local_id = it->second;
     bool resource_is_in_use = resources_from_child.count(it->first) > 0;
     if (!resource_is_in_use)
@@ -1534,24 +1558,25 @@ void ResourceProvider::ReceiveReturnsFromParent(
 void ResourceProvider::CreateMailboxAndBindResource(
     gpu::gles2::GLES2Interface* gl,
     Resource* resource) {
-  if (resource->type != RESOURCE_TYPE_BITMAP) {
-    if (!resource->mailbox().IsValid()) {
-      LazyCreate(resource);
+  DCHECK(IsGpuResourceType(resource->type));
+  DCHECK(gl);
 
-      gpu::MailboxHolder mailbox_holder;
-      mailbox_holder.texture_target = resource->target;
-      gl->GenMailboxCHROMIUM(mailbox_holder.mailbox.name);
-      gl->ProduceTextureDirectCHROMIUM(resource->gl_id,
-                                       mailbox_holder.texture_target,
-                                       mailbox_holder.mailbox.name);
-      resource->set_mailbox(TextureMailbox(mailbox_holder));
-    }
+  if (!resource->mailbox().IsValid()) {
+    LazyCreate(resource);
 
-    if (resource->image_id && resource->dirty_image) {
-      DCHECK(resource->gl_id);
-      DCHECK(resource->origin == Resource::INTERNAL);
-      BindImageForSampling(resource);
-    }
+    gpu::MailboxHolder mailbox_holder;
+    mailbox_holder.texture_target = resource->target;
+    gl->GenMailboxCHROMIUM(mailbox_holder.mailbox.name);
+    gl->ProduceTextureDirectCHROMIUM(resource->gl_id,
+                                     mailbox_holder.texture_target,
+                                     mailbox_holder.mailbox.name);
+    resource->set_mailbox(TextureMailbox(mailbox_holder));
+  }
+
+  if (resource->image_id && resource->dirty_image) {
+    DCHECK(resource->gl_id);
+    DCHECK(resource->origin == Resource::INTERNAL);
+    BindImageForSampling(resource);
   }
 }
 
@@ -1568,7 +1593,6 @@ void ResourceProvider::TransferResource(Resource* source,
   resource->filter = source->filter;
   resource->size = source->size;
   resource->read_lock_fences_enabled = source->read_lock_fences_enabled;
-  resource->gpu_memory_buffer_id = source->gpu_memory_buffer_id;
   resource->is_overlay_candidate = source->is_overlay_candidate;
 
   if (source->type == RESOURCE_TYPE_BITMAP) {
@@ -1599,10 +1623,11 @@ void ResourceProvider::DeleteAndReturnUnusedResourcesToChild(
 
   ReturnedResourceArray to_return;
   to_return.reserve(unused.size());
+  std::vector<ReturnedResource*> need_synchronization_resources;
   std::vector<GLbyte*> unverified_sync_tokens;
 
-  bool need_sync_token = false;
   GLES2Interface* gl = ContextGL();
+
   for (ResourceId local_id : unused) {
     ResourceMap::iterator it = resources_.find(local_id);
     CHECK(it != resources_.end());
@@ -1636,10 +1661,11 @@ void ResourceProvider::DeleteAndReturnUnusedResourcesToChild(
       is_lost = true;
     }
 
-    if (gl && resource.filter != resource.original_filter) {
+    if (IsGpuResourceType(resource.type) &&
+        resource.filter != resource.original_filter) {
       DCHECK(resource.target);
       DCHECK(resource.gl_id);
-
+      DCHECK(gl);
       gl->BindTexture(resource.target, resource.gl_id);
       gl->TexParameteri(resource.target, GL_TEXTURE_MIN_FILTER,
                         resource.original_filter);
@@ -1650,30 +1676,30 @@ void ResourceProvider::DeleteAndReturnUnusedResourcesToChild(
 
     ReturnedResource returned;
     returned.id = child_id;
-    if (resource.needs_sync_token())
-      need_sync_token = true;
-    else
-      returned.sync_token = resource.mailbox().sync_token();
-
+    returned.sync_token = resource.mailbox().sync_token();
     returned.count = resource.imported_count;
     returned.lost = is_lost;
     to_return.push_back(returned);
+
+    if (IsGpuResourceType(resource.type) && child_info->needs_sync_tokens) {
+      if (resource.needs_sync_token()) {
+        need_synchronization_resources.push_back(&to_return.back());
+      } else if (returned.sync_token.HasData() &&
+                 !returned.sync_token.verified_flush()) {
+        // Before returning any sync tokens, they must be verified.
+        unverified_sync_tokens.push_back(returned.sync_token.GetData());
+      }
+    }
 
     child_info->parent_to_child_map.erase(local_id);
     child_info->child_to_parent_map.erase(child_id);
     resource.imported_count = 0;
     DeleteResourceInternal(it, style);
-
-    // Before returning any sync tokens, they must be verified. Note that we
-    // need to verify the sync token inside of the "to_return" array.
-    if (to_return.back().sync_token.HasData() &&
-        !to_return.back().sync_token.verified_flush()) {
-      unverified_sync_tokens.push_back(to_return.back().sync_token.GetData());
-    }
   }
 
   gpu::SyncToken new_sync_token;
-  if (need_sync_token && child_info->needs_sync_tokens) {
+  if (!need_synchronization_resources.empty()) {
+    DCHECK(child_info->needs_sync_tokens);
     DCHECK(gl);
     const uint64_t fence_sync = gl->InsertFenceSyncCHROMIUM();
     gl->OrderingBarrierCHROMIUM();
@@ -1682,18 +1708,15 @@ void ResourceProvider::DeleteAndReturnUnusedResourcesToChild(
   }
 
   if (!unverified_sync_tokens.empty()) {
+    DCHECK(child_info->needs_sync_tokens);
     DCHECK(gl);
     gl->VerifySyncTokensCHROMIUM(unverified_sync_tokens.data(),
                                  unverified_sync_tokens.size());
   }
 
-  if (new_sync_token.HasData()) {
-    DCHECK(need_sync_token && child_info->needs_sync_tokens);
-    for (ReturnedResource& returned_resource : to_return) {
-      if (!returned_resource.sync_token.HasData())
-        returned_resource.sync_token = new_sync_token;
-    }
-  }
+  // Set sync token after verification.
+  for (ReturnedResource* returned : need_synchronization_resources)
+    returned->sync_token = new_sync_token;
 
   if (!to_return.empty())
     child_info->return_callback.Run(to_return,
@@ -1786,11 +1809,13 @@ void ResourceProvider::LazyAllocate(Resource* resource) {
         gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
             size, BufferFormat(format),
             gfx::BufferUsage::GPU_READ_CPU_READ_WRITE, gpu::kNullSurfaceHandle);
-    if (resource->gpu_memory_buffer)
-      resource->gpu_memory_buffer_id = resource->gpu_memory_buffer->GetId();
     LazyCreateImage(resource);
     resource->dirty_image = true;
     resource->is_overlay_candidate = true;
+    // GpuMemoryBuffer provides direct access to the memory used by the GPU.
+    // Read lock fences are required to ensure that we're not trying to map a
+    // buffer that is currently in-use by the GPU.
+    resource->read_lock_fences_enabled = true;
   } else if (use_texture_storage_ext_ &&
              IsFormatSupportedForStorage(format, use_texture_format_bgra_) &&
              (resource->hint & TEXTURE_HINT_IMMUTABLE)) {
@@ -1883,15 +1908,8 @@ void ResourceProvider::ValidateResource(ResourceId id) const {
 }
 
 GLES2Interface* ResourceProvider::ContextGL() const {
-  ContextProvider* context_provider = output_surface_->context_provider();
+  ContextProvider* context_provider = compositor_context_provider_;
   return context_provider ? context_provider->ContextGL() : nullptr;
-}
-
-class GrContext* ResourceProvider::GrContext(bool worker_context) const {
-  ContextProvider* context_provider =
-      worker_context ? output_surface_->worker_context_provider()
-                     : output_surface_->context_provider();
-  return context_provider ? context_provider->GrContext() : nullptr;
 }
 
 bool ResourceProvider::IsGLContextLost() const {
@@ -1952,9 +1970,8 @@ bool ResourceProvider::OnMemoryDump(
         break;
       case RESOURCE_TYPE_GL_TEXTURE:
         DCHECK(resource.gl_id);
-        guid = gfx::GetGLTextureClientGUIDForTracing(
-            output_surface_->context_provider()
-                ->ContextSupport()
+        guid = gl::GetGLTextureClientGUIDForTracing(
+            compositor_context_provider_->ContextSupport()
                 ->ShareGroupTracingGUID(),
             resource.gl_id);
         break;

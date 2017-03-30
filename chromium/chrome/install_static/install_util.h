@@ -9,6 +9,9 @@
 #ifndef CHROME_INSTALL_STATIC_INSTALL_UTIL_H_
 #define CHROME_INSTALL_STATIC_INSTALL_UTIL_H_
 
+#include <string>
+#include <vector>
+
 #include "base/strings/string16.h"
 
 namespace install_static {
@@ -20,10 +23,9 @@ enum class ProcessType {
 };
 
 // TODO(ananta)
-// http://crbug.com/604923
+// https://crbug.com/604923
 // The constants defined in this file are also defined in chrome/installer and
 // other places. we need to unify them.
-
 extern const wchar_t kChromeChannelUnknown[];
 extern const wchar_t kChromeChannelCanary[];
 extern const wchar_t kChromeChannelDev[];
@@ -40,6 +42,24 @@ extern const wchar_t kMetricsReportingEnabled[];
 extern const wchar_t kAppGuidCanary[];
 extern const wchar_t kAppGuidGoogleChrome[];
 extern const wchar_t kAppGuidGoogleBinaries[];
+
+// TODO(ananta)
+// https://crbug.com/604923
+// Unify these constants with env_vars.h.
+extern const wchar_t kHeadless[];
+extern const wchar_t kShowRestart[];
+extern const wchar_t kRestartInfo[];
+extern const wchar_t kRtlLocale[];
+
+// TODO(ananta)
+// https://crbug.com/604923
+// Unify these constants with those defined in content_switches.h.
+extern const char kGpuProcess[];
+extern const char kPpapiPluginProcess[];
+extern const char kRendererProcess[];
+extern const char kUtilityProcess[];
+extern const char kProcessType[];
+extern const char kCrashpadHandler[];
 
 // Returns true if |exe_path| points to a Chrome installed in an SxS
 // installation.
@@ -93,15 +113,19 @@ bool GetDefaultCrashDumpLocation(base::string16* crash_dir);
 // block of the calling process. Returns an empty string if the variable does
 // not exist.
 std::string GetEnvironmentString(const std::string& variable_name);
+base::string16 GetEnvironmentString16(const base::string16& variable_name);
 
 // Sets the environment variable identified by |variable_name| to the value
 // identified by |new_value|.
 bool SetEnvironmentString(const std::string& variable_name,
                           const std::string& new_value);
+bool SetEnvironmentString16(const base::string16& variable_name,
+                            const base::string16& new_value);
 
 // Returns true if the environment variable identified by |variable_name|
 // exists.
 bool HasEnvironmentVariable(const std::string& variable_name);
+bool HasEnvironmentVariable16(const base::string16& variable_name);
 
 // Gets the exe version details like the |product_name|, |version|,
 // |special_build|, |channel_name|, etc. Most of this information is read
@@ -155,6 +179,37 @@ base::string16 GetBrowserCrashDumpAttemptsRegistryPath();
 // something in the middle of the string then you need to specify the pattern
 // as '*xyz*'.
 bool MatchPattern(const base::string16& source, const base::string16& pattern);
+
+// UTF8 to UTF16 and vice versa conversion helpers.
+base::string16 UTF8ToUTF16(const std::string& source);
+
+std::string UTF16ToUTF8(const base::string16& source);
+
+// Tokenizes a string |str| based on single character delimiter.
+// The tokens are returned in a vector. The |trim_spaces| parameter indicates
+// whether the function should optionally trim spaces throughout the string.
+std::vector<std::string> TokenizeString(const std::string& str,
+                                        char delimiter,
+                                        bool trim_spaces);
+std::vector<base::string16> TokenizeString16(const base::string16& str,
+                                             base::char16 delimiter,
+                                             bool trim_spaces);
+
+// Compares version strings of the form "X.X.X.X" and returns the result of the
+// comparison in the |result| parameter. The result is as below:
+// 0 if the versions are equal.
+// -1 if version1 < version2.
+// 1 if version1 > version2.
+// Returns true on success, false on invalid strings being passed, etc.
+bool CompareVersionStrings(const std::string& version1,
+                           const std::string& version2,
+                           int* result);
+
+// We assume that the command line |command_line| contains multiple switches
+// with the format --<switch name>=<switch value>. This function returns the
+// value of the |switch_name| passed in.
+std::string GetSwitchValueFromCommandLine(const std::string& command_line,
+                                          const std::string& switch_name);
 
 // Caches the |ProcessType| of the current process.
 extern ProcessType g_process_type;

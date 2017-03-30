@@ -16,7 +16,7 @@
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
-#include "net/base/test_data_directory.h"
+#include "net/test/test_data_directory.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/base/url_request.h"
@@ -149,6 +149,10 @@ class ProtocolPerfTest
   }
 
   // VideoRenderer interface.
+  bool Initialize(const ClientContext& client_context,
+                  protocol::PerformanceTracker* perf_tracker) override {
+    return true;
+  }
   void OnSessionConfig(const protocol::SessionConfig& config) override {}
   protocol::VideoStub* GetVideoStub() override { return this; }
   protocol::FrameConsumer* GetFrameConsumer() override { return this; }

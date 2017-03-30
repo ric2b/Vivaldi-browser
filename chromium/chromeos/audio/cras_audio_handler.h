@@ -242,6 +242,7 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   void NodesChanged() override;
   void ActiveOutputNodeChanged(uint64_t node_id) override;
   void ActiveInputNodeChanged(uint64_t node_id) override;
+  void OutputNodeVolumeChanged(uint64_t node_id, int volume) override;
 
   // AudioPrefObserver overrides.
   void OnAudioPolicyPrefChanged() override;
@@ -430,6 +431,11 @@ class CHROMEOS_EXPORT CrasAudioHandler : public CrasAudioClient::Observer,
   bool hdmi_rediscovering_;
 
   bool cras_service_available_ = false;
+
+  bool initializing_audio_state_ = false;
+  int init_volume_;
+  uint64_t init_node_id_;
+  int init_volume_count_ = 0;
 
   base::WeakPtrFactory<CrasAudioHandler> weak_ptr_factory_;
 

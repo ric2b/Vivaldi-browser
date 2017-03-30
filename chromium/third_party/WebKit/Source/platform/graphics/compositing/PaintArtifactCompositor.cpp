@@ -12,6 +12,7 @@
 #include "cc/playback/drawing_display_item.h"
 #include "cc/playback/transform_display_item.h"
 #include "cc/trees/layer_tree_host.h"
+#include "cc/trees/property_tree.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/paint/ClipPaintPropertyNode.h"
 #include "platform/graphics/paint/DisplayItem.h"
@@ -22,7 +23,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "public/platform/WebLayer.h"
-#include "skia/ext/refptr.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
@@ -33,8 +33,9 @@
 #include "ui/gfx/skia_util.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
+#include <memory>
 #include <utility>
 
 namespace blink {
@@ -69,7 +70,7 @@ PaintArtifactCompositor::PaintArtifactCompositor()
     if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled())
         return;
     m_rootLayer = cc::Layer::Create();
-    m_webLayer = adoptPtr(Platform::current()->compositorSupport()->createLayerFromCCLayer(m_rootLayer.get()));
+    m_webLayer = wrapUnique(Platform::current()->compositorSupport()->createLayerFromCCLayer(m_rootLayer.get()));
 }
 
 PaintArtifactCompositor::~PaintArtifactCompositor()
@@ -240,7 +241,7 @@ private:
     Vector<NodeLayerPair, 16> m_clipLayers;
 };
 
-scoped_refptr<cc::Layer> foreignLayerForPaintChunk(const PaintArtifact& paintArtifact, const PaintChunk& paintChunk, gfx::Transform transform)
+scoped_refptr<cc::Layer> foreignLayerForPaintChunk(const PaintArtifact& paintArtifact, const PaintChunk& paintChunk, gfx::Vector2dF& layerOffset)
 {
     if (paintChunk.size() != 1)
         return nullptr;
@@ -250,95 +251,66 @@ scoped_refptr<cc::Layer> foreignLayerForPaintChunk(const PaintArtifact& paintArt
         return nullptr;
 
     const auto& foreignLayerDisplayItem = static_cast<const ForeignLayerDisplayItem&>(displayItem);
+    layerOffset = gfx::Vector2dF(foreignLayerDisplayItem.location().x(), foreignLayerDisplayItem.location().y());
     scoped_refptr<cc::Layer> layer = foreignLayerDisplayItem.layer();
-    transform.Translate(foreignLayerDisplayItem.location().x(), foreignLayerDisplayItem.location().y());
-    layer->SetTransform(transform);
     layer->SetBounds(foreignLayerDisplayItem.bounds());
     layer->SetIsDrawable(true);
     return layer;
 }
 
-static const int kInvalidNodeId = -1;
-static const int kRealRootNodeId = 0;
-static const int kSecondaryRootNodeId = 1;
-static const int kPropertyTreeSequenceNumber = 1;
+
+constexpr int kRealRootNodeId = 0;
+constexpr int kSecondaryRootNodeId = 1;
+constexpr int kPropertyTreeSequenceNumber = 1;
 
 // Creates a minimal set of property trees for the compositor.
 void setMinimalPropertyTrees(cc::PropertyTrees* propertyTrees, int ownerId)
 {
-    // cc's property trees expect a child of the actual root to be used. So we
-    // need to create and populate an additional node for each type of tree.
-
+    // cc is hardcoded to use transform node index 1 for device scale and transform.
     cc::TransformTree& transformTree = propertyTrees->transform_tree;
-    if (transformTree.size() < 2) {
-        transformTree.Insert(cc::TransformNode(), kRealRootNodeId);
-        cc::TransformNode& transformNode = *transformTree.back();
-        transformNode.data.target_id = kRealRootNodeId;
-        transformNode.data.content_target_id = kSecondaryRootNodeId;
-        transformNode.data.source_node_id = kRealRootNodeId;
-        transformNode.data.needs_local_transform_update = true;
-        transformNode.owner_id = ownerId;
-        transformTree.set_needs_update(true);
-    }
-    DCHECK_EQ(transformTree.size(), 2u);
+    transformTree.clear();
+    cc::TransformNode& transformNode = *transformTree.Node(transformTree.Insert(cc::TransformNode(), kRealRootNodeId));
+    DCHECK_EQ(transformNode.id, kSecondaryRootNodeId);
+    transformNode.data.source_node_id = transformNode.parent_id;
+    transformTree.SetTargetId(transformNode.id, kRealRootNodeId);
+    transformTree.SetContentTargetId(transformNode.id, kRealRootNodeId);
 
+    // cc is hardcoded to use clip node index 1 for viewport clip.
     cc::ClipTree& clipTree = propertyTrees->clip_tree;
-    if (clipTree.size() < 2) {
-        clipTree.Insert(cc::ClipNode(), kRealRootNodeId);
-        cc::ClipNode& clipNode = *clipTree.back();
-        clipNode.data.transform_id = kSecondaryRootNodeId;
-        clipNode.data.target_id = kSecondaryRootNodeId;
-        clipNode.owner_id = ownerId;
-        clipTree.set_needs_update(true);
-    }
-    DCHECK_EQ(clipTree.size(), 2u);
+    clipTree.clear();
+    cc::ClipNode& clipNode = *clipTree.Node(clipTree.Insert(cc::ClipNode(), kRealRootNodeId));
+    DCHECK_EQ(clipNode.id, kSecondaryRootNodeId);
+    clipNode.owner_id = ownerId;
 
+    // cc is hardcoded to use effect node index 1 for root render surface.
     cc::EffectTree& effectTree = propertyTrees->effect_tree;
-    if (effectTree.size() < 2) {
-        // This matches what cc does right now: the secondary root isn't a child
-        // of the first root (at index 0). This may not have been intentional.
-        effectTree.Insert(cc::EffectNode(), kInvalidNodeId);
-        cc::EffectNode& effectNode = *effectTree.back();
-        effectNode.data.has_render_surface = true;
-        effectNode.data.transform_id = kRealRootNodeId;
-        effectNode.data.clip_id = kRealRootNodeId;
-        effectNode.owner_id = ownerId;
-        effectTree.set_needs_update(true);
-    }
-    DCHECK_EQ(effectTree.size(), 2u);
+    effectTree.clear();
+    cc::EffectNode& effectNode = *effectTree.Node(effectTree.Insert(cc::EffectNode(), kRealRootNodeId));
+    DCHECK_EQ(effectNode.id, kSecondaryRootNodeId);
+    effectNode.owner_id = ownerId;
+    effectNode.data.clip_id = clipNode.id;
+    effectNode.data.has_render_surface = true;
 
     cc::ScrollTree& scrollTree = propertyTrees->scroll_tree;
-    if (scrollTree.size() < 2) {
-        scrollTree.Insert(cc::ScrollNode(), kRealRootNodeId);
-        cc::ScrollNode& scrollNode = *scrollTree.back();
-        scrollNode.data.scrollable = false;
-        scrollNode.data.transform_id = kSecondaryRootNodeId;
-        scrollNode.owner_id = ownerId;
-        scrollTree.set_needs_update(true);
-    }
-    DCHECK_EQ(scrollTree.size(), 2u);
+    scrollTree.clear();
 }
 
 } // namespace
 
 void PaintArtifactCompositor::update(const PaintArtifact& paintArtifact)
 {
-    ASSERT(m_rootLayer);
+    DCHECK(m_rootLayer);
+
+    if (m_extraDataForTestingEnabled)
+        m_extraDataForTesting = wrapUnique(new ExtraDataForTesting);
 
     // If the compositor is configured to expect using flat layer lists plus
     // property trees, then we should provide that format.
     cc::LayerTreeHost* host = m_rootLayer->layer_tree_host();
     const bool useLayerLists = host && host->settings().use_layer_lists;
-
     if (useLayerLists) {
-        // The root layer must be the owner so that the render surface
-        // validation works. It's expected to own at least the effect node.
-        setMinimalPropertyTrees(host->property_trees(), m_rootLayer->id());
-        m_rootLayer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
-        m_rootLayer->SetTransformTreeIndex(kSecondaryRootNodeId);
-        m_rootLayer->SetClipTreeIndex(kSecondaryRootNodeId);
-        m_rootLayer->SetEffectTreeIndex(kSecondaryRootNodeId);
-        m_rootLayer->SetScrollTreeIndex(kSecondaryRootNodeId);
+        updateInLayerListMode(paintArtifact);
+        return;
     }
 
     // TODO(jbroman): This should be incremental.
@@ -348,83 +320,156 @@ void PaintArtifactCompositor::update(const PaintArtifact& paintArtifact)
     m_contentLayerClients.reserveCapacity(paintArtifact.paintChunks().size());
     ClipLayerManager clipLayerManager(m_rootLayer.get());
     for (const PaintChunk& paintChunk : paintArtifact.paintChunks()) {
-        cc::Layer* parent;
-        gfx::Transform transform;
-        if (useLayerLists) {
-            parent = m_rootLayer.get();
-        } else {
-            parent = clipLayerManager.switchToNewClipLayer(paintChunk.properties.clip.get());
-            // TODO(jbroman): Same as above. This assumes the transform space of the current clip is
-            // an ancestor of the chunk. It is not necessarily true. crbug.com/597156
-            transform = transformToTransformSpace(paintChunk.properties.transform.get(), localTransformSpace(paintChunk.properties.clip.get()));
-        }
+        cc::Layer* parent = clipLayerManager.switchToNewClipLayer(paintChunk.properties.clip.get());
 
-        scoped_refptr<cc::Layer> layer = layerForPaintChunk(paintArtifact, paintChunk, transform);
-        if (useLayerLists) {
-            // This is only good enough to get trivial 2D translations working.
-            // We'll need to actually create more cc transform nodes to do any
-            // more; then we'll express offset-to-transform-parent relative to
-            // that transform node.
-            // TODO(jbroman): ^ Do that.
-            layer->set_offset_to_transform_parent(
-                transformToTransformSpace(paintChunk.properties.transform.get(), nullptr).To2dTranslation()
-                + layer->transform().To2dTranslation());
+        gfx::Vector2dF layerOffset;
+        scoped_refptr<cc::Layer> layer = layerForPaintChunk(paintArtifact, paintChunk, layerOffset);
+        // TODO(jbroman): Same as above. This assumes the transform space of the current clip is
+        // an ancestor of the chunk. It is not necessarily true. crbug.com/597156
+        gfx::Transform transform = transformToTransformSpace(paintChunk.properties.transform.get(), localTransformSpace(paintChunk.properties.clip.get()));
+        transform.Translate(layerOffset.x(), layerOffset.y());
+        // If a clip was applied, its origin needs to be cancelled out in
+        // this transform.
+        if (const auto* clip = paintChunk.properties.clip.get()) {
+            FloatPoint offsetDueToClipOffset = clip->clipRect().rect().location();
+            gfx::Transform undoClipOffset;
+            undoClipOffset.Translate(-offsetDueToClipOffset.x(), -offsetDueToClipOffset.y());
+            transform.ConcatTransform(undoClipOffset);
         }
+        layer->SetTransform(transform);
+        layer->SetDoubleSided(!paintChunk.properties.backfaceHidden);
         layer->SetNeedsDisplay();
         parent->AddChild(layer);
 
-        if (useLayerLists) {
-            layer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
-            layer->SetTransformTreeIndex(kSecondaryRootNodeId);
-            layer->SetClipTreeIndex(kSecondaryRootNodeId);
-            layer->SetEffectTreeIndex(kSecondaryRootNodeId);
-            layer->SetScrollTreeIndex(kSecondaryRootNodeId);
-        }
-    }
-
-    if (useLayerLists) {
-        // Mark the property trees as having been rebuilt.
-        host->property_trees()->sequence_number = kPropertyTreeSequenceNumber;
-        host->property_trees()->needs_rebuild = false;
+        if (m_extraDataForTestingEnabled)
+            m_extraDataForTesting->contentLayers.append(layer);
     }
 }
 
-scoped_refptr<cc::Layer> PaintArtifactCompositor::layerForPaintChunk(const PaintArtifact& paintArtifact, const PaintChunk& paintChunk, gfx::Transform transform)
+scoped_refptr<cc::Layer> PaintArtifactCompositor::layerForPaintChunk(const PaintArtifact& paintArtifact, const PaintChunk& paintChunk, gfx::Vector2dF& layerOffset)
 {
+    DCHECK(paintChunk.size());
+
     // If the paint chunk is a foreign layer, just return that layer.
-    if (scoped_refptr<cc::Layer> foreignLayer = foreignLayerForPaintChunk(paintArtifact, paintChunk, transform))
+    if (scoped_refptr<cc::Layer> foreignLayer = foreignLayerForPaintChunk(paintArtifact, paintChunk, layerOffset))
         return foreignLayer;
 
     // The common case: create a layer for painted content.
     gfx::Rect combinedBounds = enclosingIntRect(paintChunk.bounds);
     scoped_refptr<cc::DisplayItemList> displayList = recordPaintChunk(paintArtifact, paintChunk, combinedBounds);
-    OwnPtr<ContentLayerClientImpl> contentLayerClient = adoptPtr(
+    std::unique_ptr<ContentLayerClientImpl> contentLayerClient = wrapUnique(
         new ContentLayerClientImpl(std::move(displayList), gfx::Rect(combinedBounds.size())));
 
-    // Include the offset in the transform, because it needs to apply in
-    // this layer's transform space (whereas layer position applies in its
-    // parent's transform space).
-    gfx::Vector2dF offset = gfx::PointF(combinedBounds.origin()).OffsetFromOrigin();
-    transform.Translate(offset.x(), offset.y());
-
-    // If a clip was applied, its origin needs to be cancelled out in
-    // this transform.
-    if (const auto* clip = paintChunk.properties.clip.get()) {
-        FloatPoint offsetDueToClipOffset = clip->clipRect().rect().location();
-        gfx::Transform undoClipOffset;
-        undoClipOffset.Translate(-offsetDueToClipOffset.x(), -offsetDueToClipOffset.y());
-        transform.ConcatTransform(undoClipOffset);
-    }
-
+    layerOffset = combinedBounds.OffsetFromOrigin();
     scoped_refptr<cc::PictureLayer> layer = cc::PictureLayer::Create(contentLayerClient.get());
     layer->SetBounds(combinedBounds.size());
-    layer->SetTransform(transform);
     layer->SetIsDrawable(true);
-    layer->SetDoubleSided(!paintChunk.properties.backfaceHidden);
     if (paintChunk.knownToBeOpaque)
         layer->SetContentsOpaque(true);
     m_contentLayerClients.append(std::move(contentLayerClient));
     return layer;
+}
+
+namespace {
+
+class TransformTreeManager {
+    WTF_MAKE_NONCOPYABLE(TransformTreeManager);
+public:
+    TransformTreeManager(cc::TransformTree& transformTree, cc::Layer* rootLayer)
+        : m_transformTree(transformTree)
+        , m_rootLayer(rootLayer) {}
+
+    int compositorIdForNode(const TransformPaintPropertyNode*);
+
+private:
+    // Transform tree which should be updated by the manager.
+    cc::TransformTree& m_transformTree;
+
+    // Layer to which transform "owner" layers should be added. These will not
+    // have any actual children, but at present must exist in the tree.
+    cc::Layer* m_rootLayer;
+
+    // Map from Blink-side transform nodes to cc transform node indices.
+    HashMap<const TransformPaintPropertyNode*, int> m_nodeMap;
+};
+
+int TransformTreeManager::compositorIdForNode(const TransformPaintPropertyNode* transformNode)
+{
+    if (!transformNode)
+        return kSecondaryRootNodeId;
+
+    auto it = m_nodeMap.find(transformNode);
+    if (it != m_nodeMap.end())
+        return it->value;
+
+    scoped_refptr<cc::Layer> dummyLayer = cc::Layer::Create();
+    int parentId = compositorIdForNode(transformNode->parent());
+    int id = m_transformTree.Insert(cc::TransformNode(), parentId);
+
+    cc::TransformNode& compositorNode = *m_transformTree.Node(id);
+    m_transformTree.SetTargetId(id, kRealRootNodeId);
+    m_transformTree.SetContentTargetId(id, kRealRootNodeId);
+    compositorNode.data.source_node_id = parentId;
+
+    FloatPoint3D origin = transformNode->origin();
+    compositorNode.data.pre_local.matrix().setTranslate(
+        -origin.x(), -origin.y(), -origin.z());
+    compositorNode.data.local.matrix() = TransformationMatrix::toSkMatrix44(transformNode->matrix());
+    compositorNode.data.post_local.matrix().setTranslate(
+        origin.x(), origin.y(), origin.z());
+    compositorNode.data.needs_local_transform_update = true;
+
+    m_rootLayer->AddChild(dummyLayer);
+    dummyLayer->SetTransformTreeIndex(id);
+    dummyLayer->SetClipTreeIndex(kSecondaryRootNodeId);
+    dummyLayer->SetEffectTreeIndex(kSecondaryRootNodeId);
+    dummyLayer->SetScrollTreeIndex(kRealRootNodeId);
+    dummyLayer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
+
+    auto result = m_nodeMap.set(transformNode, id);
+    DCHECK(result.isNewEntry);
+    m_transformTree.set_needs_update(true);
+    return id;
+}
+
+} // namespace
+
+void PaintArtifactCompositor::updateInLayerListMode(const PaintArtifact& paintArtifact)
+{
+    cc::LayerTreeHost* host = m_rootLayer->layer_tree_host();
+
+    setMinimalPropertyTrees(host->property_trees(), m_rootLayer->id());
+    m_rootLayer->RemoveAllChildren();
+    m_rootLayer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
+    m_rootLayer->SetTransformTreeIndex(kSecondaryRootNodeId);
+    m_rootLayer->SetClipTreeIndex(kSecondaryRootNodeId);
+    m_rootLayer->SetEffectTreeIndex(kSecondaryRootNodeId);
+    m_rootLayer->SetScrollTreeIndex(kRealRootNodeId);
+
+    TransformTreeManager transformTreeManager(host->property_trees()->transform_tree, m_rootLayer.get());
+    m_contentLayerClients.clear();
+    m_contentLayerClients.reserveCapacity(paintArtifact.paintChunks().size());
+    for (const PaintChunk& paintChunk : paintArtifact.paintChunks()) {
+        gfx::Vector2dF layerOffset;
+        scoped_refptr<cc::Layer> layer = layerForPaintChunk(paintArtifact, paintChunk, layerOffset);
+
+        int transformId = transformTreeManager.compositorIdForNode(paintChunk.properties.transform.get());
+        layer->set_offset_to_transform_parent(layerOffset);
+
+        m_rootLayer->AddChild(layer);
+        layer->set_property_tree_sequence_number(kPropertyTreeSequenceNumber);
+        layer->SetTransformTreeIndex(transformId);
+        layer->SetClipTreeIndex(kSecondaryRootNodeId);
+        layer->SetEffectTreeIndex(kSecondaryRootNodeId);
+        layer->SetScrollTreeIndex(kRealRootNodeId);
+
+        if (m_extraDataForTestingEnabled)
+            m_extraDataForTesting->contentLayers.append(layer);
+    }
+
+    // Mark the property trees as having been rebuilt.
+    host->property_trees()->sequence_number = kPropertyTreeSequenceNumber;
+    host->property_trees()->needs_rebuild = false;
 }
 
 } // namespace blink

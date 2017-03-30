@@ -29,8 +29,8 @@ GpuMemoryBufferFactorySurfaceTexture::CreateGpuMemoryBuffer(
   // attaches the surface texture to a real texture id. glDeleteTextures
   // silently ignores 0.
   const int kDummyTextureId = 0;
-  scoped_refptr<gfx::SurfaceTexture> surface_texture =
-      gfx::SurfaceTexture::Create(kDummyTextureId);
+  scoped_refptr<gl::SurfaceTexture> surface_texture =
+      gl::SurfaceTexture::Create(kDummyTextureId);
   if (!surface_texture.get())
     return gfx::GpuMemoryBufferHandle();
 
@@ -49,17 +49,6 @@ GpuMemoryBufferFactorySurfaceTexture::CreateGpuMemoryBuffer(
   handle.type = gfx::SURFACE_TEXTURE_BUFFER;
   handle.id = id;
   return handle;
-}
-
-gfx::GpuMemoryBufferHandle
-GpuMemoryBufferFactorySurfaceTexture::CreateGpuMemoryBufferFromHandle(
-    const gfx::GpuMemoryBufferHandle& handle,
-    gfx::GpuMemoryBufferId id,
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    int client_id) {
-  NOTIMPLEMENTED();
-  return gfx::GpuMemoryBufferHandle();
 }
 
 void GpuMemoryBufferFactorySurfaceTexture::DestroyGpuMemoryBuffer(
@@ -87,7 +76,8 @@ GpuMemoryBufferFactorySurfaceTexture::CreateImageForGpuMemoryBuffer(
     const gfx::Size& size,
     gfx::BufferFormat format,
     unsigned internalformat,
-    int client_id) {
+    int client_id,
+    SurfaceHandle surface_handle) {
   base::AutoLock lock(surface_textures_lock_);
 
   DCHECK_EQ(handle.type, gfx::SURFACE_TEXTURE_BUFFER);

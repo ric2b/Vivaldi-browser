@@ -351,56 +351,13 @@ size_t CalculatePositionsInFrame(
   // Draw the border.
   if (isModeMaterial) {
     if (!inDarkMode) {
-      [[NSColor colorWithCalibratedWhite:168 / 255. alpha:1] set];
-      [path stroke];
+      const CGFloat kNormalStrokeGray = 168 / 255.;
+      [[NSColor colorWithCalibratedWhite:kNormalStrokeGray alpha:1] set];
     } else {
-      // In dark mode the top, middle, and bottom portions of the stroke are
-      // drawn in different colors.
-      {
-        gfx::ScopedNSGraphicsContextSaveGState saveState;
-        [[NSColor colorWithCalibratedWhite:52 / 255. alpha:1] set];
-        [NSBezierPath clipRect:NSMakeRect(NSMinX(frame), NSMaxY(frame) - 2,
-                                          NSWidth(frame), 2)];
-        [path stroke];
-      }
-      {
-        gfx::ScopedNSGraphicsContextSaveGState saveState;
-        [[NSColor colorWithCalibratedWhite:61 / 255. alpha:1] set];
-        [NSBezierPath clipRect:NSMakeRect(NSMinX(frame), NSMinY(frame) + 3,
-                                          NSWidth(frame), NSHeight(frame) - 5)];
-        [path stroke];
-      }
-      {
-        gfx::ScopedNSGraphicsContextSaveGState saveState;
-        [[NSColor colorWithCalibratedWhite:71 / 255. alpha:1] set];
-        [NSBezierPath clipRect:NSMakeRect(NSMinX(frame), NSMinY(frame),
-                                          NSWidth(frame), 3)];
-        [path stroke];
-      }
-
-      // Draw a highlight beneath the top edge, and a shadow beneath the bottom
-      // edge when on a Retina screen.
-      {
-        gfx::ScopedNSGraphicsContextSaveGState saveState;
-        [NSBezierPath setDefaultLineWidth:singlePixelLineWidth_];
-
-        [[NSColor colorWithCalibratedWhite:120 / 255. alpha:1] set];
-        NSPoint origin = NSMakePoint(NSMinX(pathRect) + 3,
-                                     NSMinY(pathRect) + singlePixelLineWidth_);
-        NSPoint destination =
-            NSMakePoint(NSMaxX(pathRect) - 3,
-                        NSMinY(pathRect) + singlePixelLineWidth_);
-        [NSBezierPath strokeLineFromPoint:origin
-                                  toPoint:destination];
-
-        if (singlePixelLineWidth_ < 1) {
-          origin.y = destination.y = NSMaxY(pathRect) + singlePixelLineWidth_;
-          [[AutocompleteTextField shadowColor] set];
-          [NSBezierPath strokeLineFromPoint:origin
-                                    toPoint:destination];
-        }
-      }
+      const CGFloat k30PercentAlpha = 0.3;
+      [[NSColor colorWithCalibratedWhite:0 alpha:k30PercentAlpha] set];
     }
+    [path stroke];
   } else {
     ui::DrawNinePartImage(frame,
                           isPopupMode_ ? kPopupBorderImageIds
@@ -427,10 +384,15 @@ size_t CalculatePositionsInFrame(
 
     CGFloat alphaComponent = 0.5 / singlePixelLineWidth_;
     if (isModeMaterial && inDarkMode) {
-      alphaComponent = 1;
+      // Special focus color for Material Incognito.
+      [[NSColor colorWithSRGBRed:123 / 255.
+                           green:170 / 255.
+                            blue:247 / 255.
+                           alpha:1] set];
+    } else {
+      [[[NSColor keyboardFocusIndicatorColor]
+          colorWithAlphaComponent:alphaComponent] set];
     }
-    [[[NSColor keyboardFocusIndicatorColor]
-        colorWithAlphaComponent:alphaComponent] set];
     [path stroke];
   }
 }
@@ -699,12 +661,15 @@ static NSString* UnusedLegalNameForNewDropFile(NSURL* saveLocation,
   NSPasteboard* pboard = [NSPasteboard pasteboardWithName:NSDragPboard];
   NSFileManager* fileManager = [NSFileManager defaultManager];
 
-  if (![pboard containsURLData])
+  if (![pboard containsURLDataConvertingTextToURL:YES])
     return NULL;
 
   NSArray *urls = NULL;
   NSArray* titles = NULL;
-  [pboard getURLs:&urls andTitles:&titles convertingFilenames:YES];
+  [pboard getURLs:&urls
+                andTitles:&titles
+      convertingFilenames:YES
+      convertingTextToURL:YES];
 
   NSString* urlStr = [urls objectAtIndex:0];
   NSString* nameStr = [titles objectAtIndex:0];

@@ -63,7 +63,7 @@ class IsAssignable {
         char padding[8];
     };
 
-    template <typename T2, typename From2, typename = decltype(std::declval<T2>() = std::declval<From2>())>
+    template <typename T2, typename From2, typename = decltype(std::declval<T2&>() = std::declval<From2>())>
     static YesType checkAssignability(int);
     template <typename T2, typename From2>
     static NoType checkAssignability(...);
@@ -248,7 +248,7 @@ class Visitor;
 namespace WTF {
 
 template <typename T>
-class NeedsTracing {
+class IsTraceable {
     typedef char YesType;
     typedef struct NoType {
         char padding[8];
@@ -264,17 +264,17 @@ public:
     static const bool value = sizeof(YesType) + sizeof(T) == sizeof(checkHasTraceMethod<T>(nullptr)) + sizeof(T);
 };
 
-// Convenience template wrapping the NeedsTracingLazily template in
+// Convenience template wrapping the IsTraceableInCollection template in
 // Collection Traits. It helps make the code more readable.
 template <typename Traits>
-class NeedsTracingTrait {
+class IsTraceableInCollectionTrait {
 public:
-    static const bool value = Traits::template NeedsTracingLazily<>::value;
+    static const bool value = Traits::template IsTraceableInCollection<>::value;
 };
 
 template <typename T, typename U>
-struct NeedsTracing<std::pair<T, U>> {
-    static const bool value = NeedsTracing<T>::value || NeedsTracing<U>::value || IsWeak<T>::value || IsWeak<U>::value;
+struct IsTraceable<std::pair<T, U>> {
+    static const bool value = IsTraceable<T>::value || IsTraceable<U>::value;
 };
 
 // This is used to check that DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects are not
@@ -300,10 +300,33 @@ class IsGarbageCollectedType {
         char padding[8];
     } NoType;
 
+    static_assert(sizeof(T), "T must be fully defined");
+
+    using NonConstType = typename std::remove_const<T>::type;
     template <typename U> static YesType checkGarbageCollectedType(typename U::IsGarbageCollectedTypeMarker*);
     template <typename U> static NoType checkGarbageCollectedType(...);
+
+    // Separately check for GarbageCollectedMixin, which declares a different
+    // marker typedef, to avoid resolution ambiguity for cases like
+    // IsGarbageCollectedType<B> over:
+    //
+    //    class A : public GarbageCollected<A>, public GarbageCollectedMixin {
+    //        USING_GARBAGE_COLLECTED_MIXIN(A);
+    //        ...
+    //    };
+    //    class B : public A, public GarbageCollectedMixin { ... };
+    //
+    template <typename U> static YesType checkGarbageCollectedMixinType(typename U::IsGarbageCollectedMixinMarker*);
+    template <typename U> static NoType checkGarbageCollectedMixinType(...);
 public:
-    static const bool value = (sizeof(YesType) == sizeof(checkGarbageCollectedType<T>(nullptr)));
+    static const bool value = (sizeof(YesType) == sizeof(checkGarbageCollectedType<NonConstType>(nullptr)))
+        || (sizeof(YesType) == sizeof(checkGarbageCollectedMixinType<NonConstType>(nullptr)));
+};
+
+template<>
+class IsGarbageCollectedType<void> {
+public:
+    static const bool value = false;
 };
 
 template<typename T>
@@ -319,17 +342,20 @@ public:
     static const bool value = (sizeof(YesType) == sizeof(checkPersistentReferenceType<T>(nullptr)));
 };
 
-template<typename T>
+template<typename T, bool = std::is_function<typename std::remove_const<typename std::remove_pointer<T>::type>::type>::value || std::is_void<typename std::remove_const<typename std::remove_pointer<T>::type>::type>::value>
 class IsPointerToGarbageCollectedType {
 public:
     static const bool value = false;
 };
+
 template<typename T>
-class IsPointerToGarbageCollectedType<T*> {
+class IsPointerToGarbageCollectedType<T*, false> {
 public:
     static const bool value = IsGarbageCollectedType<T>::value;
 };
 
 } // namespace WTF
+
+using WTF::IsGarbageCollectedType;
 
 #endif // TypeTraits_h

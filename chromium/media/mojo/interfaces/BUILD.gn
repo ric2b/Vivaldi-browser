@@ -16,6 +16,7 @@ mojom("interfaces") {
     "output_protection.mojom",
     "renderer.mojom",
     "service_factory.mojom",
+    "video_decoder.mojom",
   ]
 
   if (is_chromeos) {
@@ -26,7 +27,14 @@ mojom("interfaces") {
     sources += [ "provision_fetcher.mojom" ]
   }
 
-  deps = [
-    "//ui/mojo/geometry:interfaces",
+  public_deps = [
+    "//ui/gfx/geometry/mojo",
+    "//url/mojo:url_mojom_gurl",
+  ]
+}
+
+mojom("image_capture") {
+  sources = [
+    "image_capture.mojom",
   ]
 }

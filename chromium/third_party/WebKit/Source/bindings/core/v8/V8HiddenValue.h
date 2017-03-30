@@ -9,7 +9,8 @@
 #include "bindings/core/v8/ScriptPromiseProperties.h"
 #include "core/CoreExport.h"
 #include "wtf/Allocator.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 #include <v8.h>
 
 namespace blink {
@@ -18,8 +19,6 @@ class ScriptState;
 class ScriptWrappable;
 
 #define V8_HIDDEN_VALUES(V) \
-    V(arrayBufferData) \
-    V(privateScriptObjectIsInitialized) \
     V(customElementAttachedCallback) \
     V(customElementAttributeChangedCallback) \
     V(customElementCreatedCallback) \
@@ -30,12 +29,6 @@ class ScriptWrappable;
     V(customElementTagName) \
     V(customElementType) \
     V(customElementsRegistryMap) \
-    V(callback) \
-    V(condition) \
-    V(data) \
-    V(detail) \
-    V(document) \
-    V(error) \
     V(event) \
     V(idbCursorRequest) \
     V(internalBodyBuffer) \
@@ -45,7 +38,6 @@ class ScriptWrappable;
     V(readableStreamReaderInResponse) \
     V(requestInFetchEvent) \
     V(state) \
-    V(stringData) \
     V(testInterfaces) \
     V(thenableHiddenPromise) \
     V(toStringString) \
@@ -58,6 +50,8 @@ class ScriptWrappable;
     V(webglCubeMapTextures) \
     V(webglExtensions) \
     V(webglMisc) \
+    V(webglQueries) \
+    V(webglSamplers) \
     V(webglShaders) \
     SCRIPT_PROMISE_PROPERTIES(V, Promise)  \
     SCRIPT_PROMISE_PROPERTIES(V, Resolver)
@@ -66,7 +60,7 @@ class CORE_EXPORT V8HiddenValue {
     USING_FAST_MALLOC(V8HiddenValue);
     WTF_MAKE_NONCOPYABLE(V8HiddenValue);
 public:
-    static PassOwnPtr<V8HiddenValue> create() { return adoptPtr(new V8HiddenValue()); }
+    static std::unique_ptr<V8HiddenValue> create() { return wrapUnique(new V8HiddenValue()); }
 
 #define V8_DECLARE_METHOD(name) static v8::Local<v8::String> name(v8::Isolate* isolate);
     V8_HIDDEN_VALUES(V8_DECLARE_METHOD);

@@ -16,11 +16,22 @@
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
+      'target_name': 'grouped_list',
+      'dependencies': [
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-collapse/compiled_resources2.gyp:iron-collapse-extracted',
+        'constants',
+        'history_item',
+        '../history/compiled_resources2.gyp:externs',
+      ],
+      'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
       'target_name': 'history_item',
       'dependencies': [
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
+        'constants',
         '../history/compiled_resources2.gyp:externs',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
@@ -42,7 +53,7 @@
     {
       'target_name': 'history_toolbar',
       'dependencies': [
-        '<(DEPTH)/ui/webui/resources/cr_elements/cr_search_field/compiled_resources2.gyp:cr_search_field',
+        '<(DEPTH)/ui/webui/resources/cr_elements/cr_toolbar/compiled_resources2.gyp:cr_toolbar',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:util',
       ],
@@ -77,6 +88,10 @@
     },
     {
       'target_name': 'side_bar',
+      'dependencies': [
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/app-layout/app-drawer/compiled_resources2.gyp:app-drawer-extracted',
+        '<(DEPTH)/third_party/polymer/v1_0/components-chromium/iron-selector/compiled_resources2.gyp:iron-selector-extracted',
+      ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
     {
@@ -84,6 +99,7 @@
       'dependencies': [
         '../history/compiled_resources2.gyp:externs',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:icon',
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
       ],
       'includes': ['../../../../third_party/closure_compiler/compile_js2.gypi'],
     },

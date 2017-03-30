@@ -1047,8 +1047,14 @@ void WebContentsViewAura::OnMouseEvent(ui::MouseEvent* event) {
     return;
 
   ui::EventType type = event->type();
-  if (type == ui::ET_MOUSE_PRESSED)
-      web_contents_->GetDelegate()->ActivateContents(web_contents_);
+  if (type == ui::ET_MOUSE_PRESSED) {
+    // Linux window managers like to handle raise-on-click themselves.  If we
+    // raise-on-click manually, this may override user settings that prevent
+    // focus-stealing.
+#if !defined(USE_X11) || defined (OS_CHROMEOS)
+    web_contents_->GetDelegate()->ActivateContents(web_contents_);
+#endif
+  }
 
   web_contents_->GetDelegate()->ContentsMouseEvent(
       web_contents_, display::Screen::GetScreen()->GetCursorScreenPoint(),
@@ -1063,6 +1069,9 @@ void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
   current_drop_data_.reset(new DropData());
 
   PrepareDropData(current_drop_data_.get(), event.data());
+
+  web_contents_->GetRenderViewHost()->FilterDropData(current_drop_data_.get());
+
   blink::WebDragOperationsMask op = ConvertToWeb(event.source_operations());
 
   // Give the delegate an opportunity to cancel the drag.
@@ -1078,7 +1087,7 @@ void WebContentsViewAura::OnDragEntered(const ui::DropTargetEvent& event) {
 
   gfx::Point screen_pt = display::Screen::GetScreen()->GetCursorScreenPoint();
   web_contents_->GetRenderViewHost()->DragTargetDragEnter(
-      *current_drop_data_.get(), event.location(), screen_pt, op,
+      *current_drop_data_, event.location(), screen_pt, op,
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
 
   if (drag_dest_delegate_) {
@@ -1131,7 +1140,8 @@ int WebContentsViewAura::OnPerformDrop(const ui::DropTargetEvent& event) {
     return ui::DragDropTypes::DRAG_NONE;
 
   web_contents_->GetRenderViewHost()->DragTargetDrop(
-      event.location(), display::Screen::GetScreen()->GetCursorScreenPoint(),
+      *current_drop_data_, event.location(),
+      display::Screen::GetScreen()->GetCursorScreenPoint(),
       ConvertAuraEventFlagsToWebInputEventModifiers(event.flags()));
   if (drag_dest_delegate_)
     drag_dest_delegate_->OnDrop();
@@ -1151,5 +1161,22 @@ void WebContentsViewAura::OnWindowVisibilityChanged(aura::Window* window,
 
   web_contents_->UpdateWebContentsVisibility(visible);
 }
+
+#if defined(USE_EXTERNAL_POPUP_MENU)
+void WebContentsViewAura::ShowPopupMenu(RenderFrameHost* render_frame_host,
+                                        const gfx::Rect& bounds,
+                                        int item_height,
+                                        double item_font_size,
+                                        int selected_item,
+                                        const std::vector<MenuItem>& items,
+                                        bool right_aligned,
+                                        bool allow_multiple_selection) {
+  NOTIMPLEMENTED() << " show " << items.size() << " menu items";
+}
+
+void WebContentsViewAura::HidePopupMenu() {
+  NOTIMPLEMENTED();
+}
+#endif
 
 }  // namespace content

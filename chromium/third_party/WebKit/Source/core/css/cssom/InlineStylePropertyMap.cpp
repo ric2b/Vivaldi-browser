@@ -4,28 +4,45 @@
 
 #include "core/css/cssom/InlineStylePropertyMap.h"
 
+#include "bindings/core/v8/Iterable.h"
 #include "core/CSSPropertyNames.h"
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/cssom/CSSOMTypes.h"
-#include "core/css/cssom/SimpleLength.h"
+#include "core/css/cssom/CSSSimpleLength.h"
+#include "core/css/cssom/StyleValueFactory.h"
 
 namespace blink {
 
-StylePropertyMap::StyleValueVector InlineStylePropertyMap::getAll(CSSPropertyID propertyID)
+namespace {
+
+CSSValue* styleValueToCSSValue(CSSPropertyID propertyID, const CSSStyleValue& styleValue)
+{
+    if (!CSSOMTypes::propertyCanTake(propertyID, styleValue))
+        return nullptr;
+    return styleValue.toCSSValueWithProperty(propertyID);
+}
+
+} // namespace
+
+CSSStyleValueVector InlineStylePropertyMap::getAllInternal(CSSPropertyID propertyID)
 {
     CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(propertyID);
     if (!cssValue)
-        return StyleValueVector();
+        return CSSStyleValueVector();
 
-    return cssValueToStyleValueVector(propertyID, *cssValue);
+    return StyleValueFactory::cssValueToStyleValueVector(propertyID, *cssValue);
 }
 
-bool InlineStylePropertyMap::has(CSSPropertyID propertyID)
+CSSStyleValueVector InlineStylePropertyMap::getAllInternal(AtomicString customPropertyName)
 {
-    return !getAll(propertyID).isEmpty();
+    CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(customPropertyName);
+    if (!cssValue)
+        return CSSStyleValueVector();
+
+    return StyleValueFactory::cssValueToStyleValueVector(CSSPropertyInvalid, *cssValue);
 }
 
 Vector<String> InlineStylePropertyMap::getProperties()
@@ -39,16 +56,16 @@ Vector<String> InlineStylePropertyMap::getProperties()
     return result;
 }
 
-void InlineStylePropertyMap::set(CSSPropertyID propertyID, StyleValueOrStyleValueSequenceOrString& item, ExceptionState& exceptionState)
+void InlineStylePropertyMap::set(CSSPropertyID propertyID, CSSStyleValueOrCSSStyleValueSequenceOrString& item, ExceptionState& exceptionState)
 {
-    if (item.isStyleValue()) {
-        StyleValue* styleValue = item.getAsStyleValue();
-        if (!CSSOMTypes::propertyCanTake(propertyID, *styleValue))  {
+    if (item.isCSSStyleValue()) {
+        CSSValue* cssValue = styleValueToCSSValue(propertyID, *item.getAsCSSStyleValue());
+        if (!cssValue) {
             exceptionState.throwTypeError("Invalid type for property");
             return;
         }
-        m_ownerElement->setInlineStyleProperty(propertyID, styleValue->toCSSValue());
-    } else if (item.isStyleValueSequence()) {
+        m_ownerElement->setInlineStyleProperty(propertyID, cssValue);
+    } else if (item.isCSSStyleValueSequence()) {
         if (!CSSPropertyMetadata::propertySupportsMultiple(propertyID)) {
             exceptionState.throwTypeError("Property does not support multiple values");
             return;
@@ -56,59 +73,61 @@ void InlineStylePropertyMap::set(CSSPropertyID propertyID, StyleValueOrStyleValu
 
         // TODO(meade): This won't always work. Figure out what kind of CSSValueList to create properly.
         CSSValueList* valueList = CSSValueList::createSpaceSeparated();
-        StyleValueVector styleValueVector = item.getAsStyleValueSequence();
-        for (const Member<StyleValue> value : styleValueVector) {
-            if (!CSSOMTypes::propertyCanTake(propertyID, *value)) {
+        CSSStyleValueVector styleValueVector = item.getAsCSSStyleValueSequence();
+        for (const Member<CSSStyleValue> value : styleValueVector) {
+            CSSValue* cssValue = styleValueToCSSValue(propertyID, *value);
+            if (!cssValue) {
                 exceptionState.throwTypeError("Invalid type for property");
                 return;
             }
-            valueList->append(value->toCSSValue());
+            valueList->append(*cssValue);
         }
 
         m_ownerElement->setInlineStyleProperty(propertyID, valueList);
     } else {
         // Parse it.
-        ASSERT(item.isString());
+        DCHECK(item.isString());
         // TODO(meade): Implement this.
         exceptionState.throwTypeError("Not implemented yet");
     }
 }
 
-void InlineStylePropertyMap::append(CSSPropertyID propertyID, StyleValueOrStyleValueSequenceOrString& item, ExceptionState& exceptionState)
+void InlineStylePropertyMap::append(CSSPropertyID propertyID, CSSStyleValueOrCSSStyleValueSequenceOrString& item, ExceptionState& exceptionState)
 {
     if (!CSSPropertyMetadata::propertySupportsMultiple(propertyID)) {
         exceptionState.throwTypeError("Property does not support multiple values");
         return;
     }
 
-    CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(propertyID);
+    const CSSValue* cssValue = m_ownerElement->ensureMutableInlineStyle().getPropertyCSSValue(propertyID);
     CSSValueList* cssValueList = nullptr;
     if (cssValue->isValueList()) {
-        cssValueList = toCSSValueList(cssValue);
+        cssValueList = toCSSValueList(cssValue)->copy();
     } else {
         // TODO(meade): Figure out what the correct behaviour here is.
         exceptionState.throwTypeError("Property is not already list valued");
         return;
     }
 
-    if (item.isStyleValue()) {
-        StyleValue* styleValue = item.getAsStyleValue();
-        if (!CSSOMTypes::propertyCanTake(propertyID, *styleValue)) {
+    if (item.isCSSStyleValue()) {
+        CSSValue* cssValue = styleValueToCSSValue(propertyID, *item.getAsCSSStyleValue());
+        if (!cssValue) {
             exceptionState.throwTypeError("Invalid type for property");
             return;
         }
-        cssValueList->append(item.getAsStyleValue()->toCSSValue());
-    } else if (item.isStyleValueSequence()) {
-        for (StyleValue* styleValue : item.getAsStyleValueSequence()) {
-            if (!CSSOMTypes::propertyCanTake(propertyID, *styleValue)) {
+        cssValueList->append(*cssValue);
+    } else if (item.isCSSStyleValueSequence()) {
+        for (CSSStyleValue* styleValue : item.getAsCSSStyleValueSequence()) {
+            CSSValue* cssValue = styleValueToCSSValue(propertyID, *styleValue);
+            if (!cssValue) {
                 exceptionState.throwTypeError("Invalid type for property");
                 return;
             }
-            cssValueList->append(styleValue->toCSSValue());
+            cssValueList->append(*cssValue);
         }
     } else {
         // Parse it.
-        ASSERT(item.isString());
+        DCHECK(item.isString());
         // TODO(meade): Implement this.
         exceptionState.throwTypeError("Not implemented yet");
         return;
@@ -120,6 +139,24 @@ void InlineStylePropertyMap::append(CSSPropertyID propertyID, StyleValueOrStyleV
 void InlineStylePropertyMap::remove(CSSPropertyID propertyID, ExceptionState& exceptionState)
 {
     m_ownerElement->removeInlineStyleProperty(propertyID);
+}
+
+HeapVector<StylePropertyMap::StylePropertyMapEntry> InlineStylePropertyMap::getIterationEntries()
+{
+    HeapVector<StylePropertyMap::StylePropertyMapEntry> result;
+    StylePropertySet& inlineStyleSet = m_ownerElement->ensureMutableInlineStyle();
+    for (unsigned i = 0; i < inlineStyleSet.propertyCount(); i++) {
+        StylePropertySet::PropertyReference propertyReference = inlineStyleSet.propertyAt(i);
+        CSSPropertyID propertyID = propertyReference.id();
+        CSSStyleValueVector styleValueVector = StyleValueFactory::cssValueToStyleValueVector(propertyID, *propertyReference.value());
+        CSSStyleValueOrCSSStyleValueSequence value;
+        if (styleValueVector.size() == 1)
+            value.setCSSStyleValue(styleValueVector[0]);
+        else
+            value.setCSSStyleValueSequence(styleValueVector);
+        result.append(std::make_pair(getPropertyNameString(propertyID), value));
+    }
+    return result;
 }
 
 } // namespace blink

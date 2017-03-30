@@ -8,19 +8,20 @@
 
 #include <string>
 
-#include "ash/system/chromeos/devicetype_utils.h"
+#include "ash/common/system/chromeos/devicetype_utils.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/i18n/message_formatter.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner_util.h"
+#include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -191,10 +192,10 @@ base::FilePath FindRegulatoryLabelDir() {
 
 // Reads the file containing the regulatory label text, if found, relative to
 // the asset directory. Must be called from the blocking pool.
-std::string ReadRegulatoryLabelText(const base::FilePath& path) {
+std::string ReadRegulatoryLabelText(const base::FilePath& label_dir_path) {
   DCHECK(BrowserThread::GetBlockingPool()->RunsTasksOnCurrentThread());
   base::FilePath text_path(chrome::kChromeOSAssetPath);
-  text_path = text_path.Append(path);
+  text_path = text_path.Append(label_dir_path);
   text_path = text_path.AppendASCII(kRegulatoryLabelTextFilename);
 
   std::string contents;
@@ -266,23 +267,32 @@ AboutHandler* AboutHandler::Create(content::WebUIDataSource* html_source,
       l10n_util::GetStringFUTF16(IDS_ABOUT_PRODUCT_VERSION,
                                  BuildBrowserVersionString()));
 
-  base::Time::Exploded exploded_time;
-  base::Time::Now().LocalExplode(&exploded_time);
   html_source->AddString(
       "aboutProductCopyright",
-      l10n_util::GetStringFUTF16(IDS_ABOUT_VERSION_COPYRIGHT,
-                                 base::IntToString16(exploded_time.year)));
+      base::i18n::MessageFormatter::FormatWithNumberedArgs(
+          l10n_util::GetStringUTF16(IDS_ABOUT_VERSION_COPYRIGHT),
+          base::Time::Now()));
 
   base::string16 license = l10n_util::GetStringFUTF16(
       IDS_VERSION_UI_LICENSE, base::ASCIIToUTF16(chrome::kChromiumProjectURL),
       base::ASCIIToUTF16(chrome::kChromeUICreditsURL));
   html_source->AddString("aboutProductLicense", license);
 
-  html_source->AddBoolean("aboutObsolteNowOrSoon",
+  html_source->AddBoolean("aboutObsoleteNowOrSoon",
                           ObsoleteSystem::IsObsoleteNowOrSoon());
-  html_source->AddBoolean("aboutObsolteEndOfTheLine",
+  html_source->AddBoolean("aboutObsoleteEndOfTheLine",
                           ObsoleteSystem::IsObsoleteNowOrSoon() &&
                               ObsoleteSystem::IsEndOfTheLine());
+  html_source->AddString("aboutObsoleteSystem",
+                         ObsoleteSystem::LocalizedObsoleteString());
+  html_source->AddString("aboutObsoleteSystemURL",
+                         ObsoleteSystem::GetLinkURL());
+
+#if defined(GOOGLE_CHROME_BUILD)
+  base::string16 tos = l10n_util::GetStringFUTF16(
+      IDS_ABOUT_TERMS_OF_SERVICE, base::UTF8ToUTF16(chrome::kChromeUITermsURL));
+  html_source->AddString("aboutProductTos", tos);
+#endif
 
 #if defined(OS_CHROMEOS)
   base::string16 os_license = l10n_util::GetStringFUTF16(
@@ -317,9 +327,6 @@ void AboutHandler::RegisterMessages() {
       "refreshUpdateStatus",
       base::Bind(&AboutHandler::HandleRefreshUpdateStatus,
                  base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "relaunchNow",
-      base::Bind(&AboutHandler::HandleRelaunchNow, base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "openFeedbackDialog", base::Bind(&AboutHandler::HandleOpenFeedbackDialog,
                                        base::Unretained(this)));
@@ -383,16 +390,11 @@ void AboutHandler::OnJavascriptDisallowed() {
 void AboutHandler::Observe(int type,
                            const content::NotificationSource& source,
                            const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_UPGRADE_RECOMMENDED: {
-      // A version update is installed and ready to go. Refresh the UI so the
-      // correct state will be shown.
-      RequestUpdate();
-      break;
-    }
-    default:
-      NOTREACHED();
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_UPGRADE_RECOMMENDED, type);
+
+  // A version update is installed and ready to go. Refresh the UI so the
+  // correct state will be shown.
+  RequestUpdate();
 }
 
 // static
@@ -451,11 +453,6 @@ void AboutHandler::PromoteUpdater(const base::ListValue* args) {
   version_updater_->PromoteUpdater();
 }
 #endif
-
-void AboutHandler::HandleRelaunchNow(const base::ListValue* args) {
-  DCHECK(args->empty());
-  version_updater_->RelaunchBrowser();
-}
 
 void AboutHandler::HandleOpenFeedbackDialog(const base::ListValue* args) {
   DCHECK(args->empty());
@@ -622,9 +619,10 @@ void AboutHandler::SetPromotionState(VersionUpdater::PromotionState state) {
 #endif  // defined(OS_MACOSX)
 
 #if defined(OS_CHROMEOS)
-void AboutHandler::OnRegulatoryLabelDirFound(std::string callback_id,
-                                             const base::FilePath& path) {
-  if (path.empty()) {
+void AboutHandler::OnRegulatoryLabelDirFound(
+    std::string callback_id,
+    const base::FilePath& label_dir_path) {
+  if (label_dir_path.empty()) {
     ResolveJavascriptCallback(base::StringValue(callback_id),
                               *base::Value::CreateNullValue());
     return;
@@ -632,20 +630,24 @@ void AboutHandler::OnRegulatoryLabelDirFound(std::string callback_id,
 
   base::PostTaskAndReplyWithResult(
       content::BrowserThread::GetBlockingPool(), FROM_HERE,
-      base::Bind(&ReadRegulatoryLabelText, path),
+      base::Bind(&ReadRegulatoryLabelText, label_dir_path),
       base::Bind(&AboutHandler::OnRegulatoryLabelTextRead,
-                 weak_factory_.GetWeakPtr(), callback_id, path));
+                 weak_factory_.GetWeakPtr(), callback_id, label_dir_path));
 }
 
-void AboutHandler::OnRegulatoryLabelTextRead(std::string callback_id,
-                                             const base::FilePath& path,
-                                             const std::string& text) {
+void AboutHandler::OnRegulatoryLabelTextRead(
+    std::string callback_id,
+    const base::FilePath& label_dir_path,
+    const std::string& text) {
   std::unique_ptr<base::DictionaryValue> regulatory_info(
       new base::DictionaryValue);
   // Remove unnecessary whitespace.
   regulatory_info->SetString("text", base::CollapseWhitespaceASCII(text, true));
-  std::string url = std::string("chrome://") + chrome::kChromeOSAssetHost +
-                    "/" + path.MaybeAsASCII();
+
+  std::string image_path =
+      label_dir_path.AppendASCII(kRegulatoryLabelImageFilename).MaybeAsASCII();
+  std::string url =
+      std::string("chrome://") + chrome::kChromeOSAssetHost + "/" + image_path;
   regulatory_info->SetString("url", url);
 
   ResolveJavascriptCallback(base::StringValue(callback_id), *regulatory_info);

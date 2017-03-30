@@ -30,13 +30,14 @@ class CC_EXPORT DelegatingRenderer : public Renderer {
 
   void DrawFrame(RenderPassList* render_passes_in_draw_order,
                  float device_scale_factor,
+                 const gfx::ColorSpace& device_color_space,
                  const gfx::Rect& device_viewport_rect,
                  const gfx::Rect& device_clip_rect,
                  bool disable_picture_quad_image_filtering) override;
 
   void Finish() override {}
 
-  void SwapBuffers(const CompositorFrameMetadata& metadata) override;
+  void SwapBuffers(CompositorFrameMetadata metadata) override;
   void ReceiveSwapBuffersAck(const CompositorFrameAck&) override;
 
  private:

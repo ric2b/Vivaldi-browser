@@ -32,8 +32,10 @@ SurfaceFactory::~SurfaceFactory() {
 }
 
 void SurfaceFactory::DestroyAll() {
-  for (auto& pair : surface_map_)
-    manager_->Destroy(std::move(pair.second));
+  if (manager_) {
+    for (auto& pair : surface_map_)
+      manager_->Destroy(std::move(pair.second));
+  }
   surface_map_.clear();
 }
 
@@ -50,7 +52,8 @@ void SurfaceFactory::Destroy(SurfaceId surface_id) {
   DCHECK(it->second->factory().get() == this);
   std::unique_ptr<Surface> surface(std::move(it->second));
   surface_map_.erase(it);
-  manager_->Destroy(std::move(surface));
+  if (manager_)
+    manager_->Destroy(std::move(surface));
 }
 
 void SurfaceFactory::SetPreviousFrameSurface(SurfaceId new_id,
@@ -63,10 +66,9 @@ void SurfaceFactory::SetPreviousFrameSurface(SurfaceId new_id,
   }
 }
 
-void SurfaceFactory::SubmitCompositorFrame(
-    SurfaceId surface_id,
-    std::unique_ptr<CompositorFrame> frame,
-    const DrawCallback& callback) {
+void SurfaceFactory::SubmitCompositorFrame(SurfaceId surface_id,
+                                           CompositorFrame frame,
+                                           const DrawCallback& callback) {
   TRACE_EVENT0("cc", "SurfaceFactory::SubmitCompositorFrame");
   OwningSurfaceMap::iterator it = surface_map_.find(surface_id);
   DCHECK(it != surface_map_.end());

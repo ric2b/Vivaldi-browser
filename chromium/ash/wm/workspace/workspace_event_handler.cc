@@ -4,13 +4,12 @@
 
 #include "ash/wm/workspace/workspace_event_handler.h"
 
-#include "ash/metrics/user_metrics_recorder.h"
-#include "ash/shell.h"
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
+#include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/touch/touch_uma.h"
-#include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_event.h"
-#include "ash/wm/common/wm_window.h"
 #include "ash/wm/window_state_aura.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -18,21 +17,17 @@
 
 namespace ash {
 
-WorkspaceEventHandler::WorkspaceEventHandler()
-    : click_component_(HTNOWHERE) {
-}
+WorkspaceEventHandler::WorkspaceEventHandler() : click_component_(HTNOWHERE) {}
 
-WorkspaceEventHandler::~WorkspaceEventHandler() {
-}
+WorkspaceEventHandler::~WorkspaceEventHandler() {}
 
 void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
-  if (event->type() == ui::ET_MOUSE_PRESSED &&
-      event->IsOnlyLeftMouseButton() &&
-      ((event->flags() &
-          (ui::EF_IS_DOUBLE_CLICK | ui::EF_IS_TRIPLE_CLICK)) == 0)) {
-    click_component_ = target->delegate()->
-        GetNonClientComponent(event->location());
+  if (event->type() == ui::ET_MOUSE_PRESSED && event->IsOnlyLeftMouseButton() &&
+      ((event->flags() & (ui::EF_IS_DOUBLE_CLICK | ui::EF_IS_TRIPLE_CLICK)) ==
+       0)) {
+    click_component_ =
+        target->delegate()->GetNonClientComponent(event->location());
   }
 
   if (event->handled())
@@ -42,8 +37,8 @@ void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event) {
     case ui::ET_MOUSE_MOVED: {
       int component =
           target->delegate()->GetNonClientComponent(event->location());
-      multi_window_resize_controller_.Show(wm::WmWindowAura::Get(target),
-                                           component, event->location());
+      multi_window_resize_controller_.Show(WmWindowAura::Get(target), component,
+                                           event->location());
       break;
     }
     case ui::ET_MOUSE_ENTERED:
@@ -56,12 +51,11 @@ void WorkspaceEventHandler::OnMouseEvent(ui::MouseEvent* event) {
 
       if (event->IsOnlyLeftMouseButton()) {
         if (event->flags() & ui::EF_IS_DOUBLE_CLICK) {
-          int component = target->delegate()->
-              GetNonClientComponent(event->location());
-          if (component == HTCAPTION &&
-              component == click_component_) {
-            ash::Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-                ash::UMA_TOGGLE_MAXIMIZE_CAPTION_CLICK);
+          int component =
+              target->delegate()->GetNonClientComponent(event->location());
+          if (component == HTCAPTION && component == click_component_) {
+            WmShell::Get()->RecordUserMetricsAction(
+                UMA_TOGGLE_MAXIMIZE_CAPTION_CLICK);
             const wm::WMEvent wm_event(wm::WM_EVENT_TOGGLE_MAXIMIZE_CAPTION);
             target_state->OnWMEvent(&wm_event);
             event->StopPropagation();
@@ -86,21 +80,21 @@ void WorkspaceEventHandler::OnGestureEvent(ui::GestureEvent* event) {
 
   aura::Window* target = static_cast<aura::Window*>(event->target());
   int previous_target_component = click_component_;
-  click_component_ = target->delegate()->
-      GetNonClientComponent(event->location());
+  click_component_ =
+      target->delegate()->GetNonClientComponent(event->location());
 
   if (click_component_ != HTCAPTION)
     return;
 
   if (event->details().tap_count() != 2) {
-    TouchUMA::GetInstance()->
-        RecordGestureAction(TouchUMA::GESTURE_FRAMEVIEW_TAP);
+    TouchUMA::GetInstance()->RecordGestureAction(
+        TouchUMA::GESTURE_FRAMEVIEW_TAP);
     return;
   }
 
   if (click_component_ == previous_target_component) {
-    ash::Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-        ash::UMA_TOGGLE_MAXIMIZE_CAPTION_GESTURE);
+    WmShell::Get()->RecordUserMetricsAction(
+        UMA_TOGGLE_MAXIMIZE_CAPTION_GESTURE);
     TouchUMA::GetInstance()->RecordGestureAction(
         TouchUMA::GESTURE_MAXIMIZE_DOUBLETAP);
     const wm::WMEvent wm_event(wm::WM_EVENT_TOGGLE_MAXIMIZE_CAPTION);
@@ -113,17 +107,17 @@ void WorkspaceEventHandler::OnGestureEvent(ui::GestureEvent* event) {
 void WorkspaceEventHandler::HandleVerticalResizeDoubleClick(
     wm::WindowState* target_state,
     ui::MouseEvent* event) {
-  wm::WmWindow* target = target_state->window();
+  WmWindow* target = target_state->window();
   if (event->flags() & ui::EF_IS_DOUBLE_CLICK) {
     int component = target->GetNonClientComponent(event->location());
     if (component == HTBOTTOM || component == HTTOP) {
-      Shell::GetInstance()->metrics()->RecordUserMetricsAction(
+      WmShell::Get()->RecordUserMetricsAction(
           UMA_TOGGLE_SINGLE_AXIS_MAXIMIZE_BORDER_CLICK);
       const wm::WMEvent wm_event(wm::WM_EVENT_TOGGLE_VERTICAL_MAXIMIZE);
       target_state->OnWMEvent(&wm_event);
       event->StopPropagation();
     } else if (component == HTLEFT || component == HTRIGHT) {
-      Shell::GetInstance()->metrics()->RecordUserMetricsAction(
+      WmShell::Get()->RecordUserMetricsAction(
           UMA_TOGGLE_SINGLE_AXIS_MAXIMIZE_BORDER_CLICK);
       const wm::WMEvent wm_event(wm::WM_EVENT_TOGGLE_HORIZONTAL_MAXIMIZE);
       target_state->OnWMEvent(&wm_event);

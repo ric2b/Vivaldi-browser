@@ -16,6 +16,7 @@ import hashlib
 import json
 import logging
 import re
+import sys
 import urlparse
 
 import devtools_monitor
@@ -23,6 +24,7 @@ import devtools_monitor
 
 class Timing(object):
   """Collects the timing data for a request."""
+  UNVAILABLE = -1
   _TIMING_NAMES = (
       ('connectEnd', 'connect_end'), ('connectStart', 'connect_start'),
       ('dnsEnd', 'dns_end'), ('dnsStart', 'dns_start'),
@@ -43,7 +45,7 @@ class Timing(object):
     Initialize with keywords arguments from __slots__.
     """
     for slot in self.__slots__:
-      setattr(self, slot, -1)
+      setattr(self, slot, self.UNVAILABLE)
     for (attr, value) in kwargs.items():
       setattr(self, attr, value)
 
@@ -173,6 +175,7 @@ class Request(object):
                  chunks received, with their offset in ms relative to
                  Timing.requestTime.
     failed: (bool) Whether the request failed.
+    error_text: (str) User friendly error message when request failed.
     start_msec: (float) Request start time, in milliseconds from chrome start.
     end_msec: (float) Request end time, in milliseconds from chrome start.
       start_msec.
@@ -209,6 +212,7 @@ class Request(object):
     self.encoded_data_length = 0
     self.data_chunks = []
     self.failed = False
+    self.error_text = None
 
   @property
   def start_msec(self):
@@ -249,6 +253,25 @@ class Request(object):
       result.timing = Timing(request_time=result.timestamp)
     return result
 
+  def GetEncodedDataLength(self):
+    """Get the total amount of encoded data no matter whether load has finished
+    or not.
+    """
+    assert self.HasReceivedResponse()
+    assert not self.from_disk_cache and not self.served_from_cache
+    assert self.protocol != 'about'
+    if self.failed:
+      # TODO(gabadie): Once crbug.com/622018 is fixed, remove this branch.
+      return 0
+    if self.timing.loading_finished != Timing.UNVAILABLE:
+      encoded_data_length = self.encoded_data_length
+      assert encoded_data_length > 0
+    else:
+      encoded_data_length = sum(
+          [chunk_size for _, chunk_size in self.data_chunks])
+      assert encoded_data_length > 0 or len(self.data_chunks) == 0
+    return encoded_data_length
+
   def GetHTTPResponseHeader(self, header_name):
     """Gets the value of a HTTP response header.
 
@@ -263,8 +286,16 @@ class Request(object):
         break
     return result
 
+  def SetHTTPResponseHeader(self, header, header_value):
+    """Sets the value of a HTTP response header."""
+    assert header.islower()
+    for name in self.response_headers.keys():
+      if name.lower() == header:
+        del self.response_headers[name]
+    self.response_headers[header] = header_value
+
   def GetResponseHeaderValue(self, header, value):
-    """Returns True iff the response headers |header| contains |value|."""
+    """Returns a copy of |value| iff response |header| contains it."""
     header_values = self.GetHTTPResponseHeader(header)
     if not header_values:
       return None
@@ -373,6 +404,26 @@ class Request(object):
     return json.dumps(self.ToJsonDict(), sort_keys=True, indent=2)
 
 
+def _ParseStringToInt(string):
+  """Parses a string to an integer like base::StringToInt64().
+
+  Returns:
+    Parsed integer.
+  """
+  string = string.strip()
+  while string:
+    try:
+      parsed_integer = int(string)
+      if parsed_integer > sys.maxint:
+        return sys.maxint
+      if parsed_integer < -sys.maxint - 1:
+        return -sys.maxint - 1
+      return parsed_integer
+    except ValueError:
+      string = string[:-1]
+  return 0
+
+
 class CachingPolicy(object):
   """Represents the caching policy at an arbitrary time for a cached response.
   """
@@ -420,17 +471,17 @@ class CachingPolicy(object):
     # net/http/http_response_headers.cc, itself following RFC 2616.
     if not self.IsCacheable():
       return self.FETCH
-    freshness = self._GetFreshnessLifetimes()
+    freshness = self.GetFreshnessLifetimes()
     if freshness[0] == 0 and freshness[1] == 0:
       return self.VALIDATION_SYNC
     age = self._GetCurrentAge(timestamp)
     if freshness[0] > age:
       return self.VALIDATION_NONE
-    if freshness[1] > age:
+    if (freshness[0] + freshness[1]) > age:
       return self.VALIDATION_ASYNC
     return self.VALIDATION_SYNC
 
-  def _GetFreshnessLifetimes(self):
+  def GetFreshnessLifetimes(self):
     """Returns [freshness, stale-while-revalidate freshness] in seconds."""
     # This is adapted from GetFreshnessLifetimes() in
     # //net/http/http_response_headers.cc (which follows the RFC).
@@ -444,11 +495,11 @@ class CachingPolicy(object):
         'Cache-Control', 'must-revalidate')
     swr_header = r.GetCacheControlDirective('stale-while-revalidate')
     if not must_revalidate and swr_header:
-      result[1] = int(swr_header)
+      result[1] = _ParseStringToInt(swr_header)
 
     max_age_header = r.GetCacheControlDirective('max-age')
     if max_age_header:
-      result[0] = int(max_age_header)
+      result[0] = _ParseStringToInt(max_age_header)
       return result
 
     date = self._GetDateValue('Date') or self._response_time
@@ -701,7 +752,8 @@ class RequestTrack(devtools_monitor.Track):
     return initiator
 
   def _RequestServedFromCache(self, request_id, _):
-    assert request_id in self._requests_in_flight
+    if request_id not in self._requests_in_flight:
+      return
     (request, status) = self._requests_in_flight[request_id]
     assert status == RequestTrack._STATUS_SENT
     request.served_from_cache = True
@@ -736,10 +788,10 @@ class RequestTrack(devtools_monitor.Track):
                       ('requestHeaders', 'request_headers'),
                       ('headers', 'response_headers')))
     timing_dict = {}
-    # data URLs don't have a timing dict, and timings for cached requests are
-    # stale.
+    # Some URLs don't have a timing dict (e.g. data URLs), and timings for
+    # cached requests are stale.
     # TODO(droger): the timestamp is inacurate, get the real timings instead.
-    if r.protocol in ('data', 'about') or r.served_from_cache:
+    if not response.get('timing') or r.served_from_cache:
       timing_dict = {'requestTime': r.timestamp}
     else:
       timing_dict = response['timing']
@@ -748,6 +800,8 @@ class RequestTrack(devtools_monitor.Track):
     self._request_id_to_response_received[request_id] = params
 
   def _DataReceived(self, request_id, params):
+    if request_id not in self._requests_in_flight:
+      return
     (r, status) = self._requests_in_flight[request_id]
     assert (status == RequestTrack._STATUS_RESPONSE
             or status == RequestTrack._STATUS_DATA)
@@ -756,25 +810,32 @@ class RequestTrack(devtools_monitor.Track):
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_DATA)
 
   def _LoadingFinished(self, request_id, params):
-    assert request_id in self._requests_in_flight
+    if request_id not in self._requests_in_flight:
+      return
     (r, status) = self._requests_in_flight[request_id]
     assert (status == RequestTrack._STATUS_RESPONSE
             or status == RequestTrack._STATUS_DATA)
     r.encoded_data_length = params['encodedDataLength']
+    assert (r.encoded_data_length > 0 or r.protocol == 'about' or
+            r.from_disk_cache or r.served_from_cache)
     r.timing.loading_finished = r._TimestampOffsetFromStartMs(
         params['timestamp'])
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_FINISHED)
     self._FinalizeRequest(request_id)
 
-  def _LoadingFailed(self, request_id, _):
-    assert request_id in self._requests_in_flight
+  def _LoadingFailed(self, request_id, params):
+    if request_id not in self._requests_in_flight:
+      logging.warning('An unknown request failed: %s' % request_id)
+      return
     (r, _) = self._requests_in_flight[request_id]
     r.failed = True
+    r.error_text = params['errorText']
     self._requests_in_flight[request_id] = (r, RequestTrack._STATUS_FINISHED)
     self._FinalizeRequest(request_id)
 
   def _FinalizeRequest(self, request_id):
-    assert request_id in self._requests_in_flight
+    if request_id not in self._requests_in_flight:
+      return
     (request, status) = self._requests_in_flight[request_id]
     assert status == RequestTrack._STATUS_FINISHED
     del self._requests_in_flight[request_id]

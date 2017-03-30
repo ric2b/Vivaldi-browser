@@ -11,10 +11,12 @@
 #include <string>
 
 #include "blimp/common/blimp_common_export.h"
+#include "blimp/common/proto/protocol_control.pb.h"
 
 namespace blimp {
 
 class BlimpMessage;
+class BlobChannelMessage;
 class CompositorMessage;
 class EngineSettingsMessage;
 class ImeMessage;
@@ -23,7 +25,6 @@ class NavigationMessage;
 class RenderWidgetMessage;
 class SettingsMessage;
 class SizeMessage;
-class StartConnectionMessage;
 class TabControlMessage;
 
 // Suite of helper methods to simplify the repetitive task of creating
@@ -66,12 +67,18 @@ BLIMP_COMMON_EXPORT std::unique_ptr<BlimpMessage> CreateBlimpMessage(
 BLIMP_COMMON_EXPORT std::unique_ptr<BlimpMessage> CreateBlimpMessage(
     EngineSettingsMessage** engine_settings);
 
+BLIMP_COMMON_EXPORT std::unique_ptr<BlimpMessage> CreateBlimpMessage(
+    BlobChannelMessage** blob_channel_message);
+
 BLIMP_COMMON_EXPORT std::unique_ptr<BlimpMessage> CreateStartConnectionMessage(
     const std::string& client_token,
     int protocol_version);
 
 BLIMP_COMMON_EXPORT std::unique_ptr<BlimpMessage> CreateCheckpointAckMessage(
     int64_t checkpoint_id);
+
+BLIMP_COMMON_EXPORT std::unique_ptr<BlimpMessage> CreateEndConnectionMessage(
+    EndConnectionMessage::Reason reason);
 
 }  // namespace blimp
 

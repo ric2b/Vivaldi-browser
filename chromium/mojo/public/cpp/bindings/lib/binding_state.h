@@ -8,22 +8,23 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
-#include "mojo/public/cpp/bindings/callback.h"
+#include "mojo/public/cpp/bindings/interface_endpoint_client.h"
+#include "mojo/public/cpp/bindings/interface_id.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/lib/filter_chain.h"
-#include "mojo/public/cpp/bindings/lib/interface_endpoint_client.h"
-#include "mojo/public/cpp/bindings/lib/interface_id.h"
-#include "mojo/public/cpp/bindings/lib/message_header_validator.h"
 #include "mojo/public/cpp/bindings/lib/multiplex_router.h"
 #include "mojo/public/cpp/bindings/lib/router.h"
+#include "mojo/public/cpp/bindings/message_header_validator.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/core.h"
 
@@ -44,16 +45,13 @@ class BindingState<Interface, false> {
     stub_.set_sink(impl_);
   }
 
-  ~BindingState() {
-    if (router_)
-      Close();
-  }
+  ~BindingState() { Close(); }
 
   void Bind(ScopedMessagePipeHandle handle,
             scoped_refptr<base::SingleThreadTaskRunner> runner) {
     DCHECK(!router_);
     internal::FilterChain filters;
-    filters.Append<internal::MessageHeaderValidator>();
+    filters.Append<MessageHeaderValidator>(Interface::Name_);
     filters.Append<typename Interface::RequestValidator_>();
 
     router_ =
@@ -61,7 +59,8 @@ class BindingState<Interface, false> {
                              Interface::HasSyncMethods_, std::move(runner));
     router_->set_incoming_receiver(&stub_);
     router_->set_connection_error_handler(
-        [this]() { connection_error_handler_.Run(); });
+        base::Bind(&BindingState::RunConnectionErrorHandler,
+                   base::Unretained(this)));
   }
 
   bool HasAssociatedInterfaces() const { return false; }
@@ -82,7 +81,9 @@ class BindingState<Interface, false> {
   }
 
   void Close() {
-    DCHECK(router_);
+    if (!router_)
+      return;
+
     router_->CloseMessagePipe();
     DestroyRouter();
   }
@@ -94,7 +95,7 @@ class BindingState<Interface, false> {
     return std::move(request);
   }
 
-  void set_connection_error_handler(const Closure& error_handler) {
+  void set_connection_error_handler(const base::Closure& error_handler) {
     DCHECK(is_bound());
     connection_error_handler_ = error_handler;
   }
@@ -117,16 +118,21 @@ class BindingState<Interface, false> {
 
  private:
   void DestroyRouter() {
-    router_->set_connection_error_handler(Closure());
+    router_->set_connection_error_handler(base::Closure());
     delete router_;
     router_ = nullptr;
-    connection_error_handler_.reset();
+    connection_error_handler_.Reset();
+  }
+
+  void RunConnectionErrorHandler() {
+    if (!connection_error_handler_.is_null())
+      connection_error_handler_.Run();
   }
 
   internal::Router* router_ = nullptr;
   typename Interface::Stub_ stub_;
   Interface* impl_;
-  Closure connection_error_handler_;
+  base::Closure connection_error_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(BindingState);
 };
@@ -140,25 +146,24 @@ class BindingState<Interface, true> {
     stub_.set_sink(impl_);
   }
 
-  ~BindingState() {
-    if (router_)
-      Close();
-  }
+  ~BindingState() { Close(); }
 
   void Bind(ScopedMessagePipeHandle handle,
             scoped_refptr<base::SingleThreadTaskRunner> runner) {
     DCHECK(!router_);
 
     router_ = new internal::MultiplexRouter(false, std::move(handle), runner);
-    stub_.serialization_context()->router = router_;
+    router_->SetMasterInterfaceName(Interface::Name_);
+    stub_.serialization_context()->group_controller = router_;
 
-    endpoint_client_.reset(new internal::InterfaceEndpointClient(
-        router_->CreateLocalEndpointHandle(internal::kMasterInterfaceId),
+    endpoint_client_.reset(new InterfaceEndpointClient(
+        router_->CreateLocalEndpointHandle(kMasterInterfaceId),
         &stub_, base::WrapUnique(new typename Interface::RequestValidator_()),
         Interface::HasSyncMethods_, std::move(runner)));
 
     endpoint_client_->set_connection_error_handler(
-        [this]() { connection_error_handler_.Run(); });
+        base::Bind(&BindingState::RunConnectionErrorHandler,
+                   base::Unretained(this)));
   }
 
   bool HasAssociatedInterfaces() const {
@@ -181,11 +186,13 @@ class BindingState<Interface, true> {
   }
 
   void Close() {
-    DCHECK(router_);
+    if (!router_)
+      return;
+
     endpoint_client_.reset();
     router_->CloseMessagePipe();
     router_ = nullptr;
-    connection_error_handler_.reset();
+    connection_error_handler_.Reset();
   }
 
   InterfaceRequest<Interface> Unbind() {
@@ -193,11 +200,11 @@ class BindingState<Interface, true> {
     InterfaceRequest<Interface> request =
         MakeRequest<Interface>(router_->PassMessagePipe());
     router_ = nullptr;
-    connection_error_handler_.reset();
+    connection_error_handler_.Reset();
     return request;
   }
 
-  void set_connection_error_handler(const Closure& error_handler) {
+  void set_connection_error_handler(const base::Closure& error_handler) {
     DCHECK(is_bound());
     connection_error_handler_ = error_handler;
   }
@@ -221,12 +228,17 @@ class BindingState<Interface, true> {
   }
 
  private:
+  void RunConnectionErrorHandler() {
+    if (!connection_error_handler_.is_null())
+      connection_error_handler_.Run();
+  }
+
   scoped_refptr<internal::MultiplexRouter> router_;
-  std::unique_ptr<internal::InterfaceEndpointClient> endpoint_client_;
+  std::unique_ptr<InterfaceEndpointClient> endpoint_client_;
 
   typename Interface::Stub_ stub_;
   Interface* impl_;
-  Closure connection_error_handler_;
+  base::Closure connection_error_handler_;
 
   DISALLOW_COPY_AND_ASSIGN(BindingState);
 };

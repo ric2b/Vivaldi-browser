@@ -8,7 +8,7 @@
         Vivaldi Technologies AS.
       </message>
       <message name="IDS_ABOUT_VERSION_COPYRIGHT" desc="Copyright information on the about pages">
-        Copyright <ph name="YEAR">$1</ph> Vivaldi Technologies AS. All rights reserved.
+        Copyright <ph name="YEAR">{0,date,y}<ex>2016</ex></ph> Vivaldi Technologies AS. All rights reserved.
       </message>
     </messages>
   </release>

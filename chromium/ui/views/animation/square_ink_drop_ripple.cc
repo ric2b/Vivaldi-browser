@@ -134,28 +134,28 @@ base::TimeDelta GetAnimationDuration(InkDropSubAnimations state) {
 }
 
 // Calculates a Transform for a circle layer. The transform will be set up to
-// translate the |drawn_center_point| to the origin, scale, and then translate
-// to the target point defined by |target_center_x| and |target_center_y|.
-gfx::Transform CalculateCircleTransform(const gfx::Point& drawn_center_point,
+// translate by -|center_offset|, scale, and then translate to the target point
+// defined by |target_center_x| and |target_center_y|.
+gfx::Transform CalculateCircleTransform(const gfx::Vector2dF& center_offset,
                                         float scale,
                                         float target_center_x,
                                         float target_center_y) {
   gfx::Transform transform;
   transform.Translate(target_center_x, target_center_y);
   transform.Scale(scale, scale);
-  transform.Translate(-drawn_center_point.x(), -drawn_center_point.y());
+  transform.Translate(-center_offset.x(), -center_offset.y());
   return transform;
 }
 
 // Calculates a Transform for a rectangle layer. The transform will be set up to
-// translate the |drawn_center_point| to the origin and then scale by the
-// |x_scale| and |y_scale| factors.
-gfx::Transform CalculateRectTransform(const gfx::Point& drawn_center_point,
+// translate by -|center_offset| and then scale by the |x_scale| and |y_scale|
+// factors.
+gfx::Transform CalculateRectTransform(const gfx::Vector2dF& center_offset,
                                       float x_scale,
                                       float y_scale) {
   gfx::Transform transform;
   transform.Scale(x_scale, y_scale);
-  transform.Translate(-drawn_center_point.x(), -drawn_center_point.y());
+  transform.Translate(-center_offset.x(), -center_offset.y());
   return transform;
 }
 
@@ -168,8 +168,11 @@ SquareInkDropRipple::SquareInkDropRipple(const gfx::Size& large_size,
                                          const gfx::Size& small_size,
                                          int small_corner_radius,
                                          const gfx::Point& center_point,
-                                         SkColor color)
-    : large_size_(large_size),
+                                         SkColor color,
+                                         float visible_opacity)
+    : activated_shape_(ROUNDED_RECT),
+      visible_opacity_(visible_opacity),
+      large_size_(large_size),
       large_corner_radius_(large_corner_radius),
       small_size_(small_size),
       small_corner_radius_(small_corner_radius),
@@ -201,7 +204,7 @@ SquareInkDropRipple::~SquareInkDropRipple() {
 
 void SquareInkDropRipple::SnapToActivated() {
   InkDropRipple::SnapToActivated();
-  SetOpacity(kVisibleOpacity);
+  SetOpacity(visible_opacity_);
   InkDropTransforms transforms;
   GetActivatedTargetTransforms(&transforms);
   SetTransforms(transforms);
@@ -264,11 +267,11 @@ void SquareInkDropRipple::AnimateStateChange(
       break;
     case InkDropState::ACTION_PENDING:
       DCHECK(old_ink_drop_state == InkDropState::HIDDEN);
-      AnimateToOpacity(kVisibleOpacity,
+      AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ACTION_PENDING_FADE_IN),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN, animation_observer);
-      AnimateToOpacity(kVisibleOpacity,
+      AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ACTION_PENDING_TRANSFORM),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN, animation_observer);
@@ -299,7 +302,7 @@ void SquareInkDropRipple::AnimateStateChange(
     }
     case InkDropState::ALTERNATE_ACTION_PENDING:
       DCHECK(old_ink_drop_state == InkDropState::ACTION_PENDING);
-      AnimateToOpacity(kVisibleOpacity,
+      AnimateToOpacity(visible_opacity_,
                        GetAnimationDuration(ALTERNATE_ACTION_PENDING),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN, animation_observer);
@@ -314,7 +317,7 @@ void SquareInkDropRipple::AnimateStateChange(
       base::TimeDelta visible_duration =
           GetAnimationDuration(ALTERNATE_ACTION_TRIGGERED_TRANSFORM) -
           GetAnimationDuration(ALTERNATE_ACTION_TRIGGERED_FADE_OUT);
-      AnimateToOpacity(kVisibleOpacity, visible_duration,
+      AnimateToOpacity(visible_opacity_, visible_duration,
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN_OUT, animation_observer);
       AnimateToOpacity(kHiddenOpacity, GetAnimationDuration(
@@ -331,7 +334,7 @@ void SquareInkDropRipple::AnimateStateChange(
     case InkDropState::ACTIVATED: {
       // Animate the opacity so that it cancels any opacity animations already
       // in progress.
-      AnimateToOpacity(kVisibleOpacity, base::TimeDelta(),
+      AnimateToOpacity(visible_opacity_, base::TimeDelta(),
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN_OUT, animation_observer);
 
@@ -361,15 +364,14 @@ void SquareInkDropRipple::AnimateStateChange(
       base::TimeDelta visible_duration =
           GetAnimationDuration(DEACTIVATED_TRANSFORM) -
           GetAnimationDuration(DEACTIVATED_FADE_OUT);
-      AnimateToOpacity(kVisibleOpacity, visible_duration,
+      AnimateToOpacity(visible_opacity_, visible_duration,
                        ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
                        gfx::Tween::EASE_IN_OUT, animation_observer);
-      CalculateRectTransforms(large_size_, large_corner_radius_, &transforms);
       AnimateToOpacity(kHiddenOpacity,
                        GetAnimationDuration(DEACTIVATED_FADE_OUT),
                        ui::LayerAnimator::ENQUEUE_NEW_ANIMATION,
                        gfx::Tween::EASE_IN_OUT, animation_observer);
-      CalculateRectTransforms(large_size_, large_corner_radius_, &transforms);
+      GetDeactivatedTargetTransforms(&transforms);
       AnimateToTransforms(transforms,
                           GetAnimationDuration(DEACTIVATED_TRANSFORM),
                           ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET,
@@ -475,35 +477,39 @@ void SquareInkDropRipple::CalculateRectTransforms(
   const float circle_target_x_offset = size.width() / 2.0f - corner_radius;
   const float circle_target_y_offset = size.height() / 2.0f - corner_radius;
 
+  const gfx::Vector2dF circle_center_offset =
+      circle_layer_delegate_->GetCenteringOffset();
   (*transforms_out)[TOP_LEFT_CIRCLE] = CalculateCircleTransform(
-      ToRoundedPoint(circle_layer_delegate_->GetCenterPoint()), circle_scale,
-      -circle_target_x_offset, -circle_target_y_offset);
+      circle_center_offset, circle_scale, -circle_target_x_offset,
+      -circle_target_y_offset);
 
-  (*transforms_out)[TOP_RIGHT_CIRCLE] = CalculateCircleTransform(
-      ToRoundedPoint(circle_layer_delegate_->GetCenterPoint()), circle_scale,
-      circle_target_x_offset, -circle_target_y_offset);
+  (*transforms_out)[TOP_RIGHT_CIRCLE] =
+      CalculateCircleTransform(circle_center_offset, circle_scale,
+                               circle_target_x_offset, -circle_target_y_offset);
 
-  (*transforms_out)[BOTTOM_RIGHT_CIRCLE] = CalculateCircleTransform(
-      ToRoundedPoint(circle_layer_delegate_->GetCenterPoint()), circle_scale,
-      circle_target_x_offset, circle_target_y_offset);
+  (*transforms_out)[BOTTOM_RIGHT_CIRCLE] =
+      CalculateCircleTransform(circle_center_offset, circle_scale,
+                               circle_target_x_offset, circle_target_y_offset);
 
-  (*transforms_out)[BOTTOM_LEFT_CIRCLE] = CalculateCircleTransform(
-      ToRoundedPoint(circle_layer_delegate_->GetCenterPoint()), circle_scale,
-      -circle_target_x_offset, circle_target_y_offset);
+  (*transforms_out)[BOTTOM_LEFT_CIRCLE] =
+      CalculateCircleTransform(circle_center_offset, circle_scale,
+                               -circle_target_x_offset, circle_target_y_offset);
 
   const float rect_delegate_width =
       static_cast<float>(rect_layer_delegate_->size().width());
   const float rect_delegate_height =
       static_cast<float>(rect_layer_delegate_->size().height());
 
+  const gfx::Vector2dF rect_center_offset =
+      rect_layer_delegate_->GetCenteringOffset();
   (*transforms_out)[HORIZONTAL_RECT] = CalculateRectTransform(
-      ToRoundedPoint(rect_layer_delegate_->GetCenterPoint()),
+      rect_center_offset,
       std::max(kMinimumRectScale, size.width() / rect_delegate_width),
       std::max(kMinimumRectScale,
                (size.height() - 2.0f * corner_radius) / rect_delegate_height));
 
   (*transforms_out)[VERTICAL_RECT] = CalculateRectTransform(
-      ToRoundedPoint(rect_layer_delegate_->GetCenterPoint()),
+      rect_center_offset,
       std::max(kMinimumRectScale,
                (size.width() - 2.0f * corner_radius) / rect_delegate_width),
       std::max(kMinimumRectScale, size.height() / rect_delegate_height));
@@ -517,7 +523,28 @@ void SquareInkDropRipple::GetCurrentTransforms(
 
 void SquareInkDropRipple::GetActivatedTargetTransforms(
     InkDropTransforms* transforms_out) const {
-  CalculateRectTransforms(small_size_, small_corner_radius_, transforms_out);
+  switch (activated_shape_) {
+    case CIRCLE:
+      CalculateCircleTransforms(small_size_, transforms_out);
+      break;
+    case ROUNDED_RECT:
+      CalculateRectTransforms(small_size_, small_corner_radius_,
+                              transforms_out);
+      break;
+  }
+}
+
+void SquareInkDropRipple::GetDeactivatedTargetTransforms(
+    InkDropTransforms* transforms_out) const {
+  switch (activated_shape_) {
+    case CIRCLE:
+      CalculateCircleTransforms(large_size_, transforms_out);
+      break;
+    case ROUNDED_RECT:
+      CalculateRectTransforms(large_size_, small_corner_radius_,
+                              transforms_out);
+      break;
+  }
 }
 
 void SquareInkDropRipple::AddPaintLayer(PaintedShape painted_shape) {

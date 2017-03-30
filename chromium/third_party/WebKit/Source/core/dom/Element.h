@@ -425,6 +425,7 @@ public:
     virtual bool isKeyboardFocusable() const;
     virtual bool isMouseFocusable() const;
     bool isFocusedElementInDocument() const;
+    Element* adjustedFocusedElementInTreeScope() const;
 
     virtual void dispatchFocusEvent(Element* oldFocusedElement, WebFocusType, InputDeviceCapabilities* sourceCapabilities = nullptr);
     virtual void dispatchBlurEvent(Element* newFocusedElement, WebFocusType, InputDeviceCapabilities* sourceCapabilities = nullptr);
@@ -875,8 +876,6 @@ inline Node::InsertionNotificationRequest Node::insertedInto(ContainerNode* inse
         setFlag(IsInShadowTreeFlag);
     if (childNeedsDistributionRecalc() && !insertionPoint->childNeedsDistributionRecalc())
         insertionPoint->markAncestorsWithChildNeedsDistributionRecalc();
-    if (document().shadowCascadeOrder() == ShadowCascadeOrder::ShadowCascadeV1)
-        updateAssignmentForInsertedInto(insertionPoint);
     return InsertionDone;
 }
 
@@ -887,7 +886,7 @@ inline void Node::removedFrom(ContainerNode* insertionPoint)
         clearFlag(InDocumentFlag);
         insertionPoint->document().decrementNodeCount();
     }
-    if (isInShadowTree() && !treeScope().rootNode().isShadowRoot())
+    if (isInShadowTree() && !containingTreeScope().rootNode().isShadowRoot())
         clearFlag(IsInShadowTreeFlag);
     if (AXObjectCache* cache = document().existingAXObjectCache())
         cache->remove(this);

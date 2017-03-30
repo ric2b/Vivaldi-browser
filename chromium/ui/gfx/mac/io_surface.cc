@@ -12,6 +12,8 @@
 #include "base/mac/mac_util.h"
 #include "base/mac/mach_logging.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/gfx/buffer_format_util.h"
 
 namespace gfx {
@@ -19,7 +21,7 @@ namespace gfx {
 namespace {
 
 const base::Feature kIOSurfaceClearYosemite{"IOSurfaceClearYosemite",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 void AddIntegerValue(CFMutableDictionaryRef dictionary,
                      const CFStringRef key,
@@ -54,7 +56,7 @@ int32_t BytesPerElement(gfx::BufferFormat format, int plane) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::YUV_420:
+    case gfx::BufferFormat::YVU_420:
       NOTREACHED();
       return 0;
   }
@@ -83,7 +85,7 @@ int32_t PixelFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::BGR_565:
     case gfx::BufferFormat::RGBA_4444:
     case gfx::BufferFormat::RGBX_8888:
-    case gfx::BufferFormat::YUV_420:
+    case gfx::BufferFormat::YVU_420:
       NOTREACHED();
       return 0;
   }
@@ -116,6 +118,9 @@ void IOSurfaceMachPortTraits::Release(mach_port_t port) {
 }  // namespace internal
 
 IOSurfaceRef CreateIOSurface(const gfx::Size& size, gfx::BufferFormat format) {
+  TRACE_EVENT0("ui", "CreateIOSurface");
+  base::TimeTicks start_time = base::TimeTicks::Now();
+
   size_t num_planes = gfx::NumberOfPlanesForBufferFormat(format);
   base::ScopedCFTypeRef<CFMutableArrayRef> planes(CFArrayCreateMutable(
       kCFAllocatorDefault, num_planes, &kCFTypeArrayCallBacks));
@@ -189,6 +194,8 @@ IOSurfaceRef CreateIOSurface(const gfx::Size& size, gfx::BufferFormat format) {
     IOSurfaceSetValue(surface, CFSTR("IOSurfaceColorSpace"), color_space_icc);
   }
 
+  UMA_HISTOGRAM_TIMES("GPU.IOSurface.CreateTime",
+                      base::TimeTicks::Now() - start_time);
   return surface;
 }
 

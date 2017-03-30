@@ -16,8 +16,9 @@ namespace blink {
 
 DisplayItem& DisplayItemList::appendByMoving(DisplayItem& item, const IntRect& visualRect, SkPictureGpuAnalyzer& gpuAnalyzer)
 {
-    if (item.isDrawing())
-        gpuAnalyzer.analyze(static_cast<const DrawingDisplayItem&>(item).picture());
+    // No reason to continue the analysis once we have a veto.
+    if (gpuAnalyzer.suitableForGpuRasterization())
+        item.analyzeForGpuRasterization(gpuAnalyzer);
 
 #ifndef NDEBUG
     String originalDebugString = item.asDebugString();
@@ -35,19 +36,6 @@ DisplayItem& DisplayItemList::appendByMoving(DisplayItem& item, const IntRect& v
     appendVisualRect(visualRect);
     return result;
 }
-
-#if ENABLE(ASSERT)
-void DisplayItemList::assertDisplayItemClientsAreAlive() const
-{
-    for (auto& item : *this) {
-#ifdef NDEBUG
-        DCHECK(DisplayItemClient::isAlive(item.client())) << "Short-lived DisplayItemClient. See crbug.com/570030.";
-#else
-        DCHECK(DisplayItemClient::isAlive(item.client())) << "Short-lived DisplayItemClient: " << item.clientDebugString() << ". See crbug.com/570030.";
-#endif
-    }
-}
-#endif
 
 void DisplayItemList::appendVisualRect(const IntRect& visualRect)
 {

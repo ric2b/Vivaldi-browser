@@ -18,7 +18,9 @@
 #include "content/common/content_constants_internal.h"
 #include "content/common/navigation_params.h"
 #include "content/common/page_state_serialization.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/site_isolation_policy.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/url_constants.h"
 #include "ui/gfx/text_elider.h"
@@ -419,14 +421,13 @@ int64_t NavigationEntryImpl::GetPostID() const {
   return frame_tree_->frame_entry->post_id();
 }
 
-void NavigationEntryImpl::SetBrowserInitiatedPostData(
-    const base::RefCountedMemory* data) {
-  browser_initiated_post_data_ = data;
+void NavigationEntryImpl::SetPostData(
+    const scoped_refptr<ResourceRequestBody>& data) {
+  post_data_ = static_cast<ResourceRequestBodyImpl*>(data.get());
 }
 
-const base::RefCountedMemory*
-NavigationEntryImpl::GetBrowserInitiatedPostData() const {
-  return browser_initiated_post_data_.get();
+scoped_refptr<ResourceRequestBody> NavigationEntryImpl::GetPostData() const {
+  return post_data_.get();
 }
 
 
@@ -550,7 +551,7 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
   copy->is_overriding_user_agent_ = is_overriding_user_agent_;
   copy->timestamp_ = timestamp_;
   copy->http_status_code_ = http_status_code_;
-  // ResetForCommit: browser_initiated_post_data_
+  // ResetForCommit: post_data_
   copy->screenshot_ = screenshot_;
   copy->extra_headers_ = extra_headers_;
   copy->base_url_for_data_url_ = base_url_for_data_url_;
@@ -571,6 +572,8 @@ std::unique_ptr<NavigationEntryImpl> NavigationEntryImpl::CloneAndReplace(
 }
 
 CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
+    const FrameNavigationEntry& frame_entry,
+    const scoped_refptr<ResourceRequestBodyImpl>& post_body,
     const GURL& dest_url,
     const Referrer& dest_referrer,
     FrameMsg_Navigate_Type::Value navigation_type,
@@ -585,24 +588,25 @@ CommonNavigationParams NavigationEntryImpl::ConstructCommonNavigationParams(
   ui_timestamp = intent_received_timestamp();
 #endif
 
+  std::string method;
+
+  // TODO(clamy): Consult the FrameNavigationEntry in all modes that use
+  // subframe navigation entries.
+  if (IsBrowserSideNavigationEnabled())
+    method = frame_entry.method();
+  else
+    method = (post_body.get() || GetHasPostData()) ? "POST" : "GET";
+
   return CommonNavigationParams(
       dest_url, dest_referrer, GetTransitionType(), navigation_type,
       !IsViewSourceMode(), should_replace_entry(), ui_timestamp, report_type,
       GetBaseURLForDataURL(), GetHistoryURLForDataURL(), lofi_state,
-      navigation_start, GetHasPostData() ? "POST" : "GET");
+      navigation_start, method, post_body ? post_body : post_data_);
 }
 
 StartNavigationParams NavigationEntryImpl::ConstructStartNavigationParams()
     const {
-  std::vector<unsigned char> browser_initiated_post_data;
-  if (GetBrowserInitiatedPostData()) {
-    browser_initiated_post_data.assign(
-        GetBrowserInitiatedPostData()->front(),
-        GetBrowserInitiatedPostData()->front() +
-            GetBrowserInitiatedPostData()->size());
-  }
-
-  return StartNavigationParams(extra_headers(), browser_initiated_post_data,
+  return StartNavigationParams(extra_headers(),
 #if defined(OS_ANDROID)
                                has_user_gesture(),
 #endif
@@ -666,7 +670,7 @@ void NavigationEntryImpl::ResetForCommit(FrameNavigationEntry* frame_entry) {
   // cleared here.
   // TODO(creis): This state should be moved to NavigationRequest once
   // PlzNavigate is enabled.
-  SetBrowserInitiatedPostData(nullptr);
+  SetPostData(nullptr);
   set_is_renderer_initiated(false);
   set_transferred_global_request_id(GlobalRequestID());
   set_should_replace_entry(false);
@@ -695,9 +699,25 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
     const PageState& page_state,
     const std::string& method,
     int64_t post_id) {
+  // If this is called for the main frame, the FrameNavigationEntry is
+  // guaranteed to exist, so just update it directly and return.
+  if (frame_tree_node->IsMainFrame()) {
+    // If the document of the FrameNavigationEntry is changing, we must clear
+    // any child FrameNavigationEntries.
+    if (root_node()->frame_entry->document_sequence_number() !=
+        document_sequence_number)
+      root_node()->children.clear();
+
+    root_node()->frame_entry->UpdateEntry(
+        frame_tree_node->unique_name(), item_sequence_number,
+        document_sequence_number, site_instance,
+        std::move(source_site_instance), url, referrer, page_state, method,
+        post_id);
+    return;
+  }
+
   // We should already have a TreeNode for the parent node by the time this node
   // commits.  Find it first.
-  DCHECK(frame_tree_node->parent());
   NavigationEntryImpl::TreeNode* parent_node =
       FindFrameEntry(frame_tree_node->parent());
   if (!parent_node) {

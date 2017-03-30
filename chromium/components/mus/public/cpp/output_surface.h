@@ -21,15 +21,17 @@ class OutputSurface : public cc::OutputSurface, public WindowSurfaceClient {
   ~OutputSurface() override;
 
   // cc::OutputSurface implementation.
-  void SwapBuffers(cc::CompositorFrame* frame) override;
+  void SwapBuffers(cc::CompositorFrame frame) override;
   bool BindToClient(cc::OutputSurfaceClient* client) override;
   void DetachFromClient() override;
+  void BindFramebuffer() override;
+  uint32_t GetFramebufferCopyTextureFormat() override;
 
  private:
   // WindowSurfaceClient implementation:
   void OnResourcesReturned(
       WindowSurface* surface,
-      mojo::Array<mojom::ReturnedResourcePtr> resources) override;
+      mojo::Array<cc::ReturnedResource> resources) override;
 
   void SwapBuffersComplete();
 

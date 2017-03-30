@@ -5,8 +5,8 @@
 #ifndef ASH_SYSTEM_CHROMEOS_BLUETOOTH_TRAY_BLUETOOTH_H_
 #define ASH_SYSTEM_CHROMEOS_BLUETOOTH_TRAY_BLUETOOTH_H_
 
-#include "ash/system/chromeos/bluetooth/bluetooth_observer.h"
-#include "ash/system/tray/system_tray_item.h"
+#include "ash/common/system/chromeos/bluetooth/bluetooth_observer.h"
+#include "ash/common/system/tray/system_tray_item.h"
 #include "base/macros.h"
 
 namespace ash {
@@ -22,13 +22,13 @@ class TrayBluetooth : public SystemTrayItem, public BluetoothObserver {
 
  private:
   // Overridden from SystemTrayItem.
-  views::View* CreateTrayView(user::LoginStatus status) override;
-  views::View* CreateDefaultView(user::LoginStatus status) override;
-  views::View* CreateDetailedView(user::LoginStatus status) override;
+  views::View* CreateTrayView(LoginStatus status) override;
+  views::View* CreateDefaultView(LoginStatus status) override;
+  views::View* CreateDetailedView(LoginStatus status) override;
   void DestroyTrayView() override;
   void DestroyDefaultView() override;
   void DestroyDetailedView() override;
-  void UpdateAfterLoginStatusChange(user::LoginStatus status) override;
+  void UpdateAfterLoginStatusChange(LoginStatus status) override;
 
   // Overridden from BluetoothObserver.
   void OnBluetoothRefresh() override;

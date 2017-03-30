@@ -18,6 +18,7 @@
 #include "core/css/parser/CSSTokenizer.h"
 #include "core/css/parser/CSSVariableParser.h"
 #include "core/layout/LayoutTheme.h"
+#include <memory>
 
 namespace blink {
 
@@ -66,8 +67,8 @@ bool CSSParser::parseValue(MutableStylePropertySet* declaration, CSSPropertyID u
     CSSParserMode parserMode = declaration->cssParserMode();
     CSSValue* value = CSSParserFastPaths::maybeParseValue(resolvedProperty, string, parserMode);
     if (value)
-        return declaration->setProperty(CSSProperty(resolvedProperty, value, important));
-    CSSParserContext context(parserMode, 0);
+        return declaration->setProperty(CSSProperty(resolvedProperty, *value, important));
+    CSSParserContext context(parserMode, nullptr);
     if (styleSheet) {
         context = styleSheet->parserContext();
         context.setMode(parserMode);
@@ -81,7 +82,7 @@ bool CSSParser::parseValueForCustomProperty(MutableStylePropertySet* declaration
     if (value.isEmpty())
         return false;
     CSSParserMode parserMode = declaration->cssParserMode();
-    CSSParserContext context(parserMode, 0);
+    CSSParserContext context(parserMode, nullptr);
     if (styleSheet) {
         context = styleSheet->parserContext();
         context.setMode(parserMode);
@@ -114,7 +115,7 @@ ImmutableStylePropertySet* CSSParser::parseInlineStyleDeclaration(const String& 
     return CSSParserImpl::parseInlineStyleDeclaration(styleString, element);
 }
 
-PassOwnPtr<Vector<double>> CSSParser::parseKeyframeKeyList(const String& keyList)
+std::unique_ptr<Vector<double>> CSSParser::parseKeyframeKeyList(const String& keyList)
 {
     return CSSParserImpl::parseKeyframeKeyList(keyList);
 }
@@ -158,24 +159,22 @@ bool CSSParser::parseColor(Color& color, const String& string, bool strict)
 
 bool CSSParser::parseSystemColor(Color& color, const String& colorString)
 {
-    CSSParserString cssColor;
-    cssColor.init(colorString);
-    CSSValueID id = cssValueKeywordID(cssColor);
-    if (!CSSPropertyParser::isSystemColor(id))
+    CSSValueID id = cssValueKeywordID(colorString);
+    if (!StyleColor::isSystemColor(id))
         return false;
 
     color = LayoutTheme::theme().systemColor(id);
     return true;
 }
 
-CSSValue* CSSParser::parseFontFaceDescriptor(CSSPropertyID propertyID, const String& propertyValue, const CSSParserContext& context)
+const CSSValue* CSSParser::parseFontFaceDescriptor(CSSPropertyID propertyID, const String& propertyValue, const CSSParserContext& context)
 {
     StringBuilder builder;
-    builder.appendLiteral("@font-face { ");
+    builder.append("@font-face { ");
     builder.append(getPropertyNameString(propertyID));
-    builder.appendLiteral(" : ");
+    builder.append(" : ");
     builder.append(propertyValue);
-    builder.appendLiteral("; }");
+    builder.append("; }");
     StyleRuleBase* rule = parseRule(context, nullptr, builder.toString());
     if (!rule || !rule->isFontFaceRule())
         return nullptr;

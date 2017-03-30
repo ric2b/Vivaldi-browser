@@ -4,7 +4,6 @@
 
 package org.chromium.device.bluetooth;
 
-import android.Manifest;
 import android.annotation.TargetApi;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.le.ScanFilter;
@@ -17,15 +16,16 @@ import android.content.IntentFilter;
 import android.os.Build;
 import android.os.ParcelUuid;
 
+import android.test.mock.MockContext;
+
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
+import org.chromium.components.location.LocationUtils;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -40,6 +40,32 @@ import java.util.UUID;
 @TargetApi(Build.VERSION_CODES.LOLLIPOP)
 class Fakes {
     private static final String TAG = "cr.Bluetooth";
+
+    /**
+     * Sets the factory for LocationUtils to return an instance whose
+     * hasAndroidLocationPermission and isSystemLocationSettingEnabled return
+     * values depend on |hasPermission| and |isEnabled| respectively.
+     */
+    @CalledByNative
+    public static void setLocationServicesState(
+            final boolean hasPermission, final boolean isEnabled) {
+        LocationUtils.setFactory(new LocationUtils.Factory() {
+            @Override
+            public LocationUtils create() {
+                return new LocationUtils() {
+                    @Override
+                    public boolean hasAndroidLocationPermission(Context context) {
+                        return hasPermission;
+                    }
+
+                    @Override
+                    public boolean isSystemLocationSettingEnabled(Context context) {
+                        return isEnabled;
+                    }
+                };
+            }
+        });
+    }
 
     /**
      * Fakes android.bluetooth.BluetoothAdapter.
@@ -64,11 +90,6 @@ class Fakes {
             mNativeBluetoothTestAndroid = nativeBluetoothTestAndroid;
             mFakeContext = (FakeContext) mContext;
             mFakeScanner = new FakeBluetoothLeScanner();
-        }
-
-        @CalledByNative("FakeBluetoothAdapter")
-        public void denyPermission() {
-            mFakeContext.mPermissions.clear();
         }
 
         /**
@@ -191,19 +212,11 @@ class Fakes {
     }
 
     /**
-     * Fakes android.content.Context.
+     * Fakes android.content.Context by extending MockContext.
      */
-    static class FakeContext extends Wrappers.ContextWrapper {
-        public final Set<String> mPermissions = new HashSet<String>();
-
+    static class FakeContext extends MockContext {
         public FakeContext() {
-            super(null);
-            mPermissions.add(Manifest.permission.ACCESS_COARSE_LOCATION);
-        }
-
-        @Override
-        public boolean checkPermission(String permission) {
-            return mPermissions.contains(permission);
+            super();
         }
 
         @Override

@@ -29,7 +29,7 @@
 #include "modules/ModulesExport.h"
 #include "modules/webaudio/AudioNode.h"
 #include "modules/webaudio/AudioParam.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -67,7 +67,7 @@ private:
     double tailTime() const override;
     double latencyTime() const override;
 
-    OwnPtr<DynamicsCompressor> m_dynamicsCompressor;
+    std::unique_ptr<DynamicsCompressor> m_dynamicsCompressor;
     RefPtr<AudioParamHandler> m_threshold;
     RefPtr<AudioParamHandler> m_knee;
     RefPtr<AudioParamHandler> m_ratio;
@@ -81,7 +81,7 @@ private:
 class MODULES_EXPORT DynamicsCompressorNode final : public AudioNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static DynamicsCompressorNode* create(AbstractAudioContext&, float sampleRate);
+    static DynamicsCompressorNode* create(AbstractAudioContext&, ExceptionState&);
     DECLARE_VIRTUAL_TRACE();
 
     AudioParam* threshold() const;
@@ -92,7 +92,7 @@ public:
     AudioParam* release() const;
 
 private:
-    DynamicsCompressorNode(AbstractAudioContext&, float sampleRate);
+    DynamicsCompressorNode(AbstractAudioContext&);
     DynamicsCompressorHandler& dynamicsCompressorHandler() const;
 
     Member<AudioParam> m_threshold;

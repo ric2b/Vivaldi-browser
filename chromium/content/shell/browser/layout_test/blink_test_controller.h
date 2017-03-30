@@ -141,7 +141,7 @@ class BlinkTestController : public base::NonThreadSafe,
   void OnTestFinishedInSecondaryRenderer();
 
   // Makes sure that the potentially new renderer associated with |frame| is 1)
-  // initialized for the test, 2) kept-up-to-date wrt test flags and 3)
+  // initialized for the test, 2) kept up to date wrt test flags and 3)
   // monitored for crashes.
   void HandleNewRenderFrameHost(RenderFrameHost* frame);
 
@@ -166,8 +166,6 @@ class BlinkTestController : public base::NonThreadSafe,
   void PluginCrashed(const base::FilePath& plugin_path,
                      base::ProcessId plugin_pid) override;
   void RenderFrameCreated(RenderFrameHost* render_frame_host) override;
-  void RenderFrameHostChanged(RenderFrameHost* old_host,
-                              RenderFrameHost* new_host) override;
   void WebContentsDestroyed() override;
 
   // RenderProcessHostObserver implementation.

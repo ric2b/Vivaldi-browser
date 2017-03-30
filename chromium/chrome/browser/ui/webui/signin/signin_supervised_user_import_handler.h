@@ -13,6 +13,7 @@
 #include "base/scoped_observer.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/supervised_user/supervised_users.h"
 #include "content/public/browser/web_ui_message_handler.h"
 
 namespace base {
@@ -49,10 +50,17 @@ class SigninSupervisedUserImportHandler : public content::WebUIMessageHandler {
   // browser is not tabbed.
   void OpenUrlInLastActiveProfileBrowser(const base::ListValue* args);
 
-  // Callback for the "getExistingSupervisedUsers" message.
-  // Checks the sign-in status of the custodian and accordingly
-  // sends an update to the WebUI.
+  // Used to cancel loading existing supervised users. Resets WebUI callback ID
+  // of the last in-flight async request.
+  void HandleCancelLoadSupervisedUsers(const base::ListValue* args);
+
+  // Callback for the "getExistingSupervisedUsers" message. Returns a list of
+  // supervised users attached to the given custodian profile.
   void GetExistingSupervisedUsers(const base::ListValue* args);
+
+  // Callback for the "authenticateCustodian" message. Authenticates the
+  // custodian profile with the given email address.
+  void AuthenticateCustodian(const base::ListValue* args);
 
   void LoadCustodianProfileCallback(Profile* custodian_profile,
                                     Profile::CreateStatus status);
@@ -60,9 +68,9 @@ class SigninSupervisedUserImportHandler : public content::WebUIMessageHandler {
   // Reject the WebUI callback with an error message.
   void RejectCallback(const base::string16& error);
 
-  base::string16 GetLocalErorrMessage() const;
+  base::string16 GetLocalErrorMessage() const;
 
-  base::string16 GetAuthErorrMessage() const;
+  base::string16 GetAuthErrorMessage(Profile* profile) const;
 
   // Sends an array of supervised users to WebUI. Each entry is of the form:
   //   supervisedProfile = {

@@ -5,10 +5,13 @@
 #ifndef CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_DATA_REDUCTION_PROXY_METRICS_OBSERVER_H_
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_DATA_REDUCTION_PROXY_METRICS_OBSERVER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 
 namespace content {
+class BrowserContext;
 class NavigationHandle;
 }
 
@@ -18,12 +21,22 @@ struct PageLoadTiming;
 }
 
 namespace data_reduction_proxy {
+class DataReductionProxyData;
+class DataReductionProxyPingbackClient;
 
 namespace internal {
 
 // Various UMA histogram names for DataReductionProxy core page load metrics.
-extern const char kHistogramFirstContentfulPaintDataReductionProxy[];
-extern const char kHistogramFirstContentfulPaintDataReductionProxyLoFiOn[];
+extern const char kHistogramDataReductionProxyPrefix[];
+extern const char kHistogramDataReductionProxyLoFiOnPrefix[];
+extern const char kHistogramDOMContentLoadedEventFiredSuffix[];
+extern const char kHistogramFirstLayoutSuffix[];
+extern const char kHistogramLoadEventFiredSuffix[];
+extern const char kHistogramFirstContentfulPaintSuffix[];
+extern const char kHistogramFirstImagePaintSuffix[];
+extern const char kHistogramFirstPaintSuffix[];
+extern const char kHistogramFirstTextPaintSuffix[];
+extern const char kHistogramParseStartSuffix[];
 
 }  // namespace internal
 
@@ -37,16 +50,39 @@ class DataReductionProxyMetricsObserver
 
   // page_load_metrics::PageLoadMetricsObserver:
   void OnCommit(content::NavigationHandle* navigation_handle) override;
+  void OnComplete(const page_load_metrics::PageLoadTiming& timing,
+                  const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnDomContentLoadedEventStart(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnLoadEventStart(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnFirstLayout(const page_load_metrics::PageLoadTiming& timing,
+                     const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnFirstPaint(const page_load_metrics::PageLoadTiming& timing,
+                    const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnFirstTextPaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnFirstImagePaint(
+      const page_load_metrics::PageLoadTiming& timing,
+      const page_load_metrics::PageLoadExtraInfo& info) override;
   void OnFirstContentfulPaint(
       const page_load_metrics::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
+  void OnParseStart(const page_load_metrics::PageLoadTiming& timing,
+                    const page_load_metrics::PageLoadExtraInfo& info) override;
 
  private:
-  // True if the navigation requested LoFi.
-  bool lofi_requested_;
+  // Gets the default DataReductionProxyPingbackClient. Overridden in testing.
+  virtual DataReductionProxyPingbackClient* GetPingbackClient() const;
 
-  // True if the navigation was proxied through the data reduction proxy.
-  bool used_data_reduction_proxy_;
+  // Data related to this navigation.
+  std::unique_ptr<DataReductionProxyData> data_;
+
+  // The browser context this navigation is operating in.
+  content::BrowserContext* browser_context_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyMetricsObserver);
 };

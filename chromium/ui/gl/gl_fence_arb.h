@@ -10,7 +10,7 @@
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_fence.h"
 
-namespace gfx {
+namespace gl {
 
 class GL_EXPORT GLFenceARB : public GLFence {
  public:
@@ -21,13 +21,14 @@ class GL_EXPORT GLFenceARB : public GLFence {
   bool HasCompleted() override;
   void ClientWait() override;
   void ServerWait() override;
+  void Invalidate() override;
 
  private:
-  GLsync sync_;
+  GLsync sync_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(GLFenceARB);
 };
 
-}  // namespace gfx
+}  // namespace gl
 
 #endif  // UI_GL_GL_FENCE_ARB_H_

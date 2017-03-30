@@ -33,8 +33,8 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
 #include "bindings/core/v8/Microtask.h"
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V0CustomElementConstructorBuilder.h"
 #include "bindings/core/v8/V8DOMWrapper.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
@@ -62,12 +62,12 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleResolverStats.h"
 #include "core/dom/AXObjectCache.h"
-#include "core/dom/AddConsoleMessageTask.h"
 #include "core/dom/Attr.h"
 #include "core/dom/CDATASection.h"
 #include "core/dom/ClientRect.h"
 #include "core/dom/Comment.h"
 #include "core/dom/ContextFeatures.h"
+#include "core/dom/CrossThreadTask.h"
 #include "core/dom/DOMImplementation.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/DocumentParserTiming.h"
@@ -105,6 +105,7 @@
 #include "core/dom/TreeWalker.h"
 #include "core/dom/VisitedLinkState.h"
 #include "core/dom/XMLDocument.h"
+#include "core/dom/custom/CustomElement.h"
 #include "core/dom/custom/V0CustomElementMicrotaskRunQueue.h"
 #include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "core/dom/shadow/ElementShadow.h"
@@ -126,14 +127,15 @@
 #include "core/events/ScopedEventQueue.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMTimer.h"
+#include "core/frame/DOMVisualViewport.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/History.h"
+#include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
-#include "core/frame/OriginsUsingFeatures.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/DocumentNameCollection.h"
@@ -193,9 +195,11 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
-#include "core/page/scrolling/RootScroller.h"
+#include "core/page/scrolling/RootScrollerController.h"
+#include "core/page/scrolling/ScrollStateCallback.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/page/scrolling/SnapCoordinator.h"
+#include "core/page/scrolling/ViewportScrollCallback.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "core/svg/SVGScriptElement.h"
 #include "core/svg/SVGTitleElement.h"
@@ -236,9 +240,15 @@
 #include "wtf/TemporaryChange.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/TextEncodingRegistry.h"
+#include <memory>
 
 using namespace WTF;
 using namespace Unicode;
+
+#ifndef NDEBUG
+using WeakDocumentSet = blink::PersistentHeapHashSet<blink::WeakMember<blink::Document>>;
+static WeakDocumentSet& liveDocumentSet();
+#endif
 
 namespace blink {
 
@@ -356,32 +366,15 @@ uint64_t Document::s_globalTreeVersion = 0;
 
 static bool s_threadedParsingEnabledForTesting = true;
 
-Document::WeakDocumentSet& Document::liveDocumentSet()
+// This doesn't work with non-Document ExecutionContext.
+static void runAutofocusTask(ExecutionContext* context)
 {
-    DEFINE_STATIC_LOCAL(WeakDocumentSet, set, (new WeakDocumentSet));
-    return set;
+    Document* document = toDocument(context);
+    if (Element* element = document->autofocusElement()) {
+        document->setAutofocusElement(0);
+        element->focus();
+    }
 }
-
-// This class doesn't work with non-Document ExecutionContext.
-class AutofocusTask final : public ExecutionContextTask {
-public:
-    static std::unique_ptr<AutofocusTask> create()
-    {
-        return wrapUnique(new AutofocusTask());
-    }
-    ~AutofocusTask() override { }
-
-private:
-    AutofocusTask() { }
-    void performTask(ExecutionContext* context) override
-    {
-        Document* document = toDocument(context);
-        if (Element* element = document->autofocusElement()) {
-            document->setAutofocusElement(0);
-            element->focus();
-        }
-    }
-};
 
 Document::Document(const DocumentInit& initializer, DocumentClassFlags documentClasses)
     : ContainerNode(0, CreateDocument)
@@ -415,7 +408,7 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     , m_containsPlugins(false)
     , m_updateFocusAppearanceSelectionBahavior(SelectionBehaviorOnFocus::Reset)
     , m_ignoreDestructiveWriteCount(0)
-    , m_markers(new DocumentMarkerController)
+    , m_markers(new DocumentMarkerController(*this))
     , m_updateFocusAppearanceTimer(this, &Document::updateFocusAppearanceTimerFired)
     , m_cssTarget(nullptr)
     , m_loadEventProgress(LoadEventNotRun)
@@ -467,6 +460,18 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
         m_fetcher = ResourceFetcher::create(nullptr);
     }
 
+    ViewportScrollCallback* applyScroll = nullptr;
+    if (isInMainFrame()) {
+        applyScroll = RootScrollerController::createViewportApplyScroll(
+            &frameHost()->topControls(), &frameHost()->overscrollController());
+    } else {
+        applyScroll =
+            RootScrollerController::createViewportApplyScroll(nullptr, nullptr);
+    }
+
+    m_rootScrollerController =
+        RootScrollerController::create(*this, applyScroll);
+
     // We depend on the url getting immediately set in subframes, but we
     // also depend on the url NOT getting immediately set in opened windows.
     // See fast/dom/early-frame-url.html
@@ -493,7 +498,9 @@ Document::Document(const DocumentInit& initializer, DocumentClassFlags documentC
     // ignoring the defersLoading flag.
     DCHECK(!parentDocument() || !parentDocument()->activeDOMObjectsAreSuspended());
 
+#ifndef NDEBUG
     liveDocumentSet().add(this);
+#endif
 }
 
 Document::~Document()
@@ -509,7 +516,7 @@ Document::~Document()
 SelectorQueryCache& Document::selectorQueryCache()
 {
     if (!m_selectorQueryCache)
-        m_selectorQueryCache = adoptPtr(new SelectorQueryCache());
+        m_selectorQueryCache = wrapUnique(new SelectorQueryCache());
     return *m_selectorQueryCache;
 }
 
@@ -590,52 +597,25 @@ void Document::childrenChanged(const ChildrenChange& change)
 
 void Document::setRootScroller(Element* newScroller, ExceptionState& exceptionState)
 {
-    DCHECK(newScroller);
-
-    if (!frame() || !frame()->isMainFrame()) {
-        exceptionState.throwDOMException(
-            WrongDocumentError,
-            "Root scroller can only be set on the top window's document.");
-        return;
-    }
-
-    if (newScroller->document() != this) {
-        exceptionState.throwDOMException(
-            WrongDocumentError,
-            "Element isn't in this document.");
-        return;
-    }
-
-    FrameHost* host = frameHost();
-    if (!host)
-        return;
-
-    RootScroller* rootScroller = host->rootScroller();
-    DCHECK(rootScroller);
-
-    if (!rootScroller->set(*newScroller)) {
-        exceptionState.throwDOMException(
-            InvalidStateError,
-            "Element cannot be set as root scroller. Must be block or iframe.");
-    }
+    m_rootScrollerController->set(newScroller);
 }
 
-Element* Document::rootScroller()
+Element* Document::rootScroller() const
 {
-    // TODO(bokan): Should child frames return the documentElement or nullptr?
-    if (!isInMainFrame())
-        return documentElement();
+    return m_rootScrollerController->get();
+}
 
-    FrameHost* host = frameHost();
-    if (!host)
-        return nullptr;
+const Element* Document::effectiveRootScroller() const
+{
+    return m_rootScrollerController->effectiveRootScroller();
+}
 
-    RootScroller* rootScroller = host->rootScroller();
-    DCHECK(rootScroller);
+bool Document::isViewportScrollCallback(const ScrollStateCallback* callback)
+{
+    if (!callback)
+        return false;
 
-    updateStyleAndLayoutIgnorePendingStylesheets();
-
-    return rootScroller->get();
+    return callback == m_rootScrollerController->viewportScrollCallback();
 }
 
 bool Document::isInMainFrame() const
@@ -655,8 +635,11 @@ Element* Document::createElement(const AtomicString& name, ExceptionState& excep
         return nullptr;
     }
 
-    if (isXHTMLDocument() || isHTMLDocument())
-        return HTMLElementFactory::createHTMLElement(convertLocalName(name), *this, 0, false);
+    if (isXHTMLDocument() || isHTMLDocument()) {
+        if (CustomElement::shouldCreateCustomElement(*this, name))
+            return CustomElement::createCustomElementSync(*this, name, exceptionState);
+        return HTMLElementFactory::createHTMLElement(convertLocalName(name), *this, 0, CreatedByCreateElement);
+    }
 
     return Element::create(QualifiedName(nullAtom, name, nullAtom), this);
 }
@@ -670,7 +653,9 @@ Element* Document::createElement(const AtomicString& localName, const AtomicStri
 
     Element* element;
 
-    if (V0CustomElement::isValidName(localName) && registrationContext()) {
+    if (CustomElement::shouldCreateCustomElement(*this, localName)) {
+        element = CustomElement::createCustomElementSync(*this, localName, exceptionState);
+    } else if (V0CustomElement::isValidName(localName) && registrationContext()) {
         element = registrationContext()->createCustomTagElement(*this, QualifiedName(nullAtom, convertLocalName(localName), xhtmlNamespaceURI));
     } else {
         element = createElement(localName, exceptionState);
@@ -705,7 +690,9 @@ Element* Document::createElementNS(const AtomicString& namespaceURI, const Atomi
     if (qName == QualifiedName::null())
         return nullptr;
 
-    return createElement(qName, false);
+    if (CustomElement::shouldCreateCustomElement(*this, qName))
+        return CustomElement::createCustomElementSync(*this, qName, exceptionState);
+    return createElement(qName, CreatedByCreateElement);
 }
 
 Element* Document::createElementNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, const AtomicString& typeExtension, ExceptionState& exceptionState)
@@ -715,10 +702,12 @@ Element* Document::createElementNS(const AtomicString& namespaceURI, const Atomi
         return nullptr;
 
     Element* element;
-    if (V0CustomElement::isValidName(qName.localName()) && registrationContext())
+    if (CustomElement::shouldCreateCustomElement(*this, qName))
+        element = CustomElement::createCustomElementSync(*this, qName, exceptionState);
+    else if (V0CustomElement::isValidName(qName.localName()) && registrationContext())
         element = registrationContext()->createCustomTagElement(*this, qName);
     else
-        element = createElement(qName, false);
+        element = createElement(qName, CreatedByCreateElement);
 
     if (!typeExtension.isEmpty())
         V0CustomElementRegistrationContext::setIsAttributeAndTypeExtension(element, typeExtension);
@@ -728,7 +717,7 @@ Element* Document::createElementNS(const AtomicString& namespaceURI, const Atomi
 
 ScriptValue Document::registerElement(ScriptState* scriptState, const AtomicString& name, const ElementRegistrationOptions& options, ExceptionState& exceptionState, V0CustomElement::NameSet validNames)
 {
-    OriginsUsingFeatures::countMainWorldOnly(scriptState, *this, OriginsUsingFeatures::Feature::DocumentRegisterElement);
+    HostsUsingFeatures::countMainWorldOnly(scriptState, *this, HostsUsingFeatures::Feature::DocumentRegisterElement);
 
     if (!registrationContext()) {
         exceptionState.throwDOMException(NotSupportedError, "No element registration context is available.");
@@ -869,7 +858,7 @@ Node* Document::importNode(Node* importedNode, bool deep, ExceptionState& except
             exceptionState.throwDOMException(NamespaceError, "The imported node has an invalid namespace.");
             return nullptr;
         }
-        Element* newElement = createElement(oldElement->tagQName(), false);
+        Element* newElement = createElement(oldElement->tagQName(), CreatedByImportNode);
 
         newElement->cloneDataFromElement(*oldElement);
 
@@ -974,15 +963,15 @@ bool Document::hasValidNamespaceForAttributes(const QualifiedName& qName)
 }
 
 // FIXME: This should really be in a possible ElementFactory class
-Element* Document::createElement(const QualifiedName& qName, bool createdByParser)
+Element* Document::createElement(const QualifiedName& qName, CreateElementFlags flags)
 {
     Element* e = nullptr;
 
     // FIXME: Use registered namespaces and look up in a hash to find the right factory.
     if (qName.namespaceURI() == xhtmlNamespaceURI)
-        e = HTMLElementFactory::createHTMLElement(qName.localName(), *this, 0, createdByParser);
+        e = HTMLElementFactory::createHTMLElement(qName.localName(), *this, 0, flags);
     else if (qName.namespaceURI() == SVGNames::svgNamespaceURI)
-        e = SVGElementFactory::createSVGElement(qName.localName(), *this, createdByParser);
+        e = SVGElementFactory::createSVGElement(qName.localName(), *this, flags);
 
     if (e)
         m_sawElementsInKnownNamespaces = true;
@@ -1170,13 +1159,6 @@ Element* Document::scrollingElement()
     }
 
     return body();
-}
-
-VisualViewport* Document::visualViewport()
-{
-    if (FrameHost* host = frameHost())
-        return &host->visualViewport();
-    return nullptr;
 }
 
 /*
@@ -1916,7 +1898,7 @@ void Document::layoutUpdated()
     if (frame() && frame()->page())
         frame()->page()->chromeClient().layoutUpdated(frame());
 
-    markers().updateRenderedRectsForMarkers();
+    markers().invalidateRectsForAllMarkers();
 
     // The layout system may perform layouts with pending stylesheets. When
     // recording first layout time, we ignore these layouts, since painting is
@@ -1931,11 +1913,7 @@ void Document::layoutUpdated()
             m_documentTiming.markFirstLayout();
     }
 
-    // TODO(bokan): Not sure how rootScroller can be null here if we're in the
-    // main frame. In any case, I'm moving rootScroller to be owned by Document
-    // soon so this will go away: https://codereview.chromium.org/1970763002/
-    if (isInMainFrame() && frameHost() && frameHost()->rootScroller())
-        frameHost()->rootScroller()->didUpdateTopDocumentLayout();
+    m_rootScrollerController->didUpdateLayout();
 }
 
 void Document::setNeedsFocusedElementCheck()
@@ -2107,10 +2085,8 @@ void Document::updateUseShadowTreesIfNeeded()
     if (m_useElementsNeedingUpdate.isEmpty())
         return;
 
-    HeapVector<Member<SVGUseElement>> elements;
-    copyToVector(m_useElementsNeedingUpdate, elements);
-    m_useElementsNeedingUpdate.clear();
-
+    HeapHashSet<Member<SVGUseElement>> elements;
+    m_useElementsNeedingUpdate.swap(elements);
     for (SVGUseElement* element : elements)
         element->buildPendingResource();
 }
@@ -2143,6 +2119,7 @@ void Document::attach(const AttachContext& context)
     if (TextAutosizer* autosizer = textAutosizer())
         autosizer->updatePageInfo();
 
+    m_frame->selection().documentAttached(this);
     m_lifecycle.advanceTo(DocumentLifecycle::StyleClean);
 }
 
@@ -2235,6 +2212,7 @@ void Document::detach(const AttachContext& context)
 
     frameHost()->eventHandlerRegistry().documentDetached(*this);
 
+    m_frame->selection().documentDetached(*this);
     m_frame->inputMethodController().documentDetached();
 
     // If this Document is associated with a live DocumentLoader, the
@@ -2913,11 +2891,9 @@ EventTarget* Document::errorEventTarget()
     return domWindow();
 }
 
-void Document::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
+void Document::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
-    consoleMessage->setScriptId(scriptId);
-    consoleMessage->setCallStack(callStack);
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location));
     addConsoleMessage(consoleMessage);
 }
 
@@ -3150,17 +3126,6 @@ void Document::updateViewportDescription()
     if (frame() && frame()->isMainFrame()) {
         frameHost()->chromeClient().dispatchViewportPropertiesDidChange(viewportDescription());
     }
-}
-
-void Document::processReferrerPolicy(const String& policy)
-{
-    ReferrerPolicy referrerPolicy;
-    if (!SecurityPolicy::referrerPolicyFromString(policy, &referrerPolicy)) {
-        addConsoleMessage(ConsoleMessage::create(RenderingMessageSource, ErrorMessageLevel, "Failed to set referrer policy: The value '" + policy + "' is not one of 'always', 'default', 'never', 'no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-crossorigin', or 'unsafe-url'. This document's referrer policy has been left unchanged."));
-        return;
-    }
-
-    setReferrerPolicy(referrerPolicy);
 }
 
 String Document::outgoingReferrer() const
@@ -3803,12 +3768,6 @@ void Document::moveNodeIteratorsToNewDocument(Node& node, Document& newDocument)
     }
 }
 
-void Document::updateRangesAfterChildrenChanged(ContainerNode* container)
-{
-    for (Range* range : m_ranges)
-        range->nodeChildrenChanged(container);
-}
-
 void Document::updateRangesAfterNodeMovedToAnotherDocument(const Node& node)
 {
     DCHECK_NE(node.document(), this);
@@ -3838,6 +3797,11 @@ void Document::nodeChildrenWillBeRemoved(ContainerNode& container)
             frame->page()->dragCaretController().nodeWillBeRemoved(n);
         }
     }
+
+    if (containsV1ShadowTree()) {
+        for (Node& n : NodeTraversal::childrenOf(container))
+            n.checkSlotChangeBeforeRemoved();
+    }
 }
 
 void Document::nodeWillBeRemoved(Node& n)
@@ -3853,6 +3817,9 @@ void Document::nodeWillBeRemoved(Node& n)
         frame->selection().nodeWillBeRemoved(n);
         frame->page()->dragCaretController().nodeWillBeRemoved(n);
     }
+
+    if (containsV1ShadowTree())
+        n.checkSlotChangeBeforeRemoved();
 }
 
 void Document::dataWillChange(const CharacterData& characterData)
@@ -3956,10 +3923,17 @@ void Document::enqueueMediaQueryChangeListeners(HeapVector<Member<MediaQueryList
     ensureScriptedAnimationController().enqueueMediaQueryChangeListeners(listeners);
 }
 
-void Document::enqueueVisualViewportChangedEvent()
+void Document::enqueueVisualViewportScrollEvent()
 {
-    Event* event = Event::create(EventTypeNames::visualviewportchanged);
-    event->setTarget(this);
+    Event* event = Event::create(EventTypeNames::scroll);
+    event->setTarget(domWindow()->visualViewport());
+    ensureScriptedAnimationController().enqueuePerFrameEvent(event);
+}
+
+void Document::enqueueVisualViewportResizeEvent()
+{
+    Event* event = Event::create(EventTypeNames::resize);
+    event->setTarget(domWindow()->visualViewport());
     ensureScriptedAnimationController().enqueuePerFrameEvent(event);
 }
 
@@ -3979,12 +3953,12 @@ Document::EventFactorySet& Document::eventFactories()
 const OriginAccessEntry& Document::accessEntryFromURL()
 {
     if (!m_accessEntryFromURL) {
-        m_accessEntryFromURL = adoptPtr(new OriginAccessEntry(url().protocol(), url().host(), OriginAccessEntry::AllowRegisterableDomains));
+        m_accessEntryFromURL = wrapUnique(new OriginAccessEntry(url().protocol(), url().host(), OriginAccessEntry::AllowRegisterableDomains));
     }
     return *m_accessEntryFromURL;
 }
 
-void Document::registerEventFactory(PassOwnPtr<EventFactoryBase> eventFactory)
+void Document::registerEventFactory(std::unique_ptr<EventFactoryBase> eventFactory)
 {
     DCHECK(!eventFactories().contains(eventFactory.get()));
     eventFactories().add(std::move(eventFactory));
@@ -4082,6 +4056,11 @@ String Document::cookie(ExceptionState& exceptionState) const
         return String();
     }
 
+    // Suborigins are cookie-averse and thus should always return the empty
+    // string, unless the 'unsafe-cookies' option is provided.
+    if (getSecurityOrigin()->hasSuborigin() && !getSecurityOrigin()->suborigin()->policyContains(Suborigin::SuboriginPolicyOptions::UnsafeCookies))
+        return String();
+
     KURL cookieURL = this->cookieURL();
     if (cookieURL.isEmpty())
         return String();
@@ -4107,6 +4086,11 @@ void Document::setCookie(const String& value, ExceptionState& exceptionState)
             exceptionState.throwSecurityError("Access is denied for this document.");
         return;
     }
+
+    // Suborigins are cookie-averse and thus setting should be a no-op, unless
+    // the 'unsafe-cookies' option is provided.
+    if (getSecurityOrigin()->hasSuborigin() && !getSecurityOrigin()->suborigin()->policyContains(Suborigin::SuboriginPolicyOptions::UnsafeCookies))
+        return;
 
     KURL cookieURL = this->cookieURL();
     if (cookieURL.isEmpty())
@@ -4187,22 +4171,29 @@ String Document::lastModified() const
 
 const KURL Document::firstPartyForCookies() const
 {
+    // TODO(mkwst): This doesn't properly handle HTML Import documents.
+
+    // If this is an imported document, grab its master document's first-party:
+    if (importsController() && importsController()->master() && importsController()->master() != this)
+        return importsController()->master()->firstPartyForCookies();
+
     if (!frame())
         return SecurityOrigin::urlWithUniqueSecurityOrigin();
 
     // TODO(mkwst): This doesn't correctly handle sandboxed documents; we want to look at their URL,
     // but we can't because we don't know what it is.
-    KURL topDocumentURL = frame()->tree().top()->isLocalFrame()
-        ? topDocument().url()
-        : KURL(KURL(), frame()->securityContext()->getSecurityOrigin()->toString());
+    Frame* top = frame()->tree().top();
+    KURL topDocumentURL = top->isLocalFrame()
+        ? toLocalFrame(top)->document()->url()
+        : KURL(KURL(), top->securityContext()->getSecurityOrigin()->toString());
     if (SchemeRegistry::shouldTreatURLSchemeAsFirstPartyWhenTopLevel(topDocumentURL.protocol()))
         return topDocumentURL;
 
     // We're intentionally using the URL of each document rather than the document's SecurityOrigin.
     // Sandboxing a document into a unique origin shouldn't effect first-/third-party status for
     // cookies and site data.
-    const OriginAccessEntry& accessEntry = frame()->tree().top()->isLocalFrame()
-        ? topDocument().accessEntryFromURL()
+    const OriginAccessEntry& accessEntry = top->isLocalFrame()
+        ? toLocalFrame(top)->document()->accessEntryFromURL()
         : OriginAccessEntry(topDocumentURL.protocol(), topDocumentURL.host(), OriginAccessEntry::AllowRegisterableDomains);
     const Frame* currentFrame = frame();
     while (currentFrame) {
@@ -4365,25 +4356,25 @@ bool Document::parseQualifiedName(const AtomicString& qualifiedName, AtomicStrin
         return true;
 
     StringBuilder message;
-    message.appendLiteral("The qualified name provided ('");
+    message.append("The qualified name provided ('");
     message.append(qualifiedName);
-    message.appendLiteral("') ");
+    message.append("') ");
 
     if (returnValue.status == QNMultipleColons) {
-        message.appendLiteral("contains multiple colons.");
+        message.append("contains multiple colons.");
     } else if (returnValue.status == QNInvalidStartChar) {
-        message.appendLiteral("contains the invalid name-start character '");
+        message.append("contains the invalid name-start character '");
         message.append(returnValue.character);
-        message.appendLiteral("'.");
+        message.append("'.");
     } else if (returnValue.status == QNInvalidChar) {
-        message.appendLiteral("contains the invalid character '");
+        message.append("contains the invalid character '");
         message.append(returnValue.character);
-        message.appendLiteral("'.");
+        message.append("'.");
     } else if (returnValue.status == QNEmptyPrefix) {
-        message.appendLiteral("has an empty namespace prefix.");
+        message.append("has an empty namespace prefix.");
     } else {
         DCHECK_EQ(returnValue.status, QNEmptyLocalName);
-        message.appendLiteral("has an empty local name.");
+        message.append("has an empty local name.");
     }
 
     if (returnValue.status == QNInvalidStartChar || returnValue.status == QNInvalidChar)
@@ -4408,7 +4399,7 @@ void Document::setEncodingData(const DocumentEncodingData& newData)
         && m_titleElement->textContent().containsOnlyLatin1()) {
 
         CString originalBytes = m_titleElement->textContent().latin1();
-        OwnPtr<TextCodec> codec = newTextCodec(newData.encoding());
+        std::unique_ptr<TextCodec> codec = newTextCodec(newData.encoding());
         String correctlyDecodedTitle = codec->decode(originalBytes.data(), originalBytes.length(), DataEOF);
         m_titleElement->setTextContent(correctlyDecodedTitle);
     }
@@ -4579,6 +4570,21 @@ KURL Document::openSearchDescriptionURL()
             continue;
         if (linkElement->href().isEmpty())
             continue;
+
+        // Count usage; perhaps we can lock this to secure contexts.
+        UseCounter::Feature osdDisposition;
+        RefPtr<SecurityOrigin> target = SecurityOrigin::create(linkElement->href());
+        if (isSecureContext()) {
+            osdDisposition = target->isPotentiallyTrustworthy()
+                ? UseCounter::OpenSearchSecureOriginSecureTarget
+                : UseCounter::OpenSearchSecureOriginInsecureTarget;
+        } else {
+            osdDisposition = target->isPotentiallyTrustworthy()
+                ? UseCounter::OpenSearchInsecureOriginSecureTarget
+                : UseCounter::OpenSearchInsecureOriginInsecureTarget;
+        }
+        UseCounter::count(*this, osdDisposition);
+
         return linkElement->href();
     }
 
@@ -4609,7 +4615,7 @@ void Document::popCurrentScript()
     m_currentScriptStack.removeLast();
 }
 
-void Document::setTransformSource(PassOwnPtr<TransformSource> source)
+void Document::setTransformSource(std::unique_ptr<TransformSource> source)
 {
     m_transformSource = std::move(source);
 }
@@ -4942,9 +4948,7 @@ void Document::initSecurityContext(const DocumentInit& initializer)
     // In the common case, create the security context from the currently
     // loading URL with a fresh content security policy.
     enforceSandboxFlags(initializer.getSandboxFlags());
-    if (initializer.shouldEnforceStrictMixedContentChecking())
-        enforceStrictMixedContentChecking();
-    setInsecureRequestsPolicy(initializer.getInsecureRequestsPolicy());
+    setInsecureRequestPolicy(initializer.getInsecureRequestPolicy());
     if (initializer.insecureNavigationsToUpgrade()) {
         for (auto toUpgrade : *initializer.insecureNavigationsToUpgrade())
             addInsecureNavigationUpgrade(toUpgrade);
@@ -5200,31 +5204,38 @@ void Document::reportBlockedScriptExecutionToInspector(const String& directiveTe
     InspectorInstrumentation::scriptExecutionBlockedByCSP(this, directiveText);
 }
 
+static void runAddConsoleMessageTask(MessageSource source, MessageLevel level, const String& message, ExecutionContext* context)
+{
+    context->addConsoleMessage(ConsoleMessage::create(source, level, message));
+}
+
 void Document::addConsoleMessage(ConsoleMessage* consoleMessage)
 {
     if (!isContextThread()) {
-        m_taskRunner->postTask(BLINK_FROM_HERE, AddConsoleMessageTask::create(consoleMessage->source(), consoleMessage->level(), consoleMessage->message()));
+        m_taskRunner->postTask(BLINK_FROM_HERE, createCrossThreadTask(&runAddConsoleMessageTask, consoleMessage->source(), consoleMessage->level(), consoleMessage->message()));
         return;
     }
 
     if (!m_frame)
         return;
 
-    if (!consoleMessage->getScriptState() && consoleMessage->url().isNull() && !consoleMessage->lineNumber()) {
-        consoleMessage->setURL(url().getString());
+    if (consoleMessage->location()->isUnknown()) {
+        // TODO(dgozman): capture correct location at call places instead.
+        unsigned lineNumber = 0;
         if (!isInDocumentWrite() && scriptableDocumentParser()) {
             ScriptableDocumentParser* parser = scriptableDocumentParser();
             if (parser->isParsingAtLineNumber())
-                consoleMessage->setLineNumber(parser->lineNumber().oneBasedInt());
+                lineNumber = parser->lineNumber().oneBasedInt();
         }
+        consoleMessage = ConsoleMessage::create(consoleMessage->source(), consoleMessage->level(), consoleMessage->message(), SourceLocation::create(url().getString(), lineNumber, 0, nullptr));
     }
     m_frame->console().addMessage(consoleMessage);
 }
 
 // FIXME(crbug.com/305497): This should be removed after ExecutionContext-LocalDOMWindow migration.
-void Document::postTask(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
+void Document::postTask(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task, const String& taskNameForInstrumentation)
 {
-    m_taskRunner->postTask(location, std::move(task));
+    m_taskRunner->postTask(location, std::move(task), taskNameForInstrumentation);
 }
 
 void Document::postInspectorTask(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
@@ -5316,8 +5327,8 @@ void Document::exitPointerLock()
     if (Element* target = page()->pointerLockController().element()) {
         if (target->document() != this)
             return;
+        page()->pointerLockController().requestPointerUnlock();
     }
-    page()->pointerLockController().requestPointerUnlock();
 }
 
 Element* Document::pointerLockElement() const
@@ -5365,7 +5376,6 @@ bool Document::isDelayingLoadEvent()
     }
     return m_loadEventDelayCount;
 }
-
 
 void Document::loadEventDelayTimerFired(Timer<Document>*)
 {
@@ -5777,7 +5787,7 @@ void Document::setAutofocusElement(Element* element)
     m_hasAutofocused = true;
     DCHECK(!m_autofocusElement);
     m_autofocusElement = element;
-    m_taskRunner->postTask(BLINK_FROM_HERE, AutofocusTask::create());
+    m_taskRunner->postTask(BLINK_FROM_HERE, createSameThreadTask(&runAutofocusTask));
 }
 
 Element* Document::activeElement() const
@@ -5899,11 +5909,16 @@ WebTaskRunner* Document::timerTaskRunner() const
     return Platform::current()->currentThread()->scheduler()->timerTaskRunner();
 }
 
-void Document::enforceStrictMixedContentChecking()
+void Document::enforceInsecureRequestPolicy(WebInsecureRequestPolicy policy)
 {
-    securityContext().setShouldEnforceStrictMixedContentChecking(true);
+    // Combine the new policy with the existing policy, as a base policy may be
+    // inherited from a remote parent before this page's policy is set. In other
+    // words, insecure requests should be upgraded or blocked if _either_ the
+    // existing policy or the newly enforced policy triggers upgrades or
+    // blockage.
+    setInsecureRequestPolicy(getInsecureRequestPolicy() | policy);
     if (frame())
-        frame()->loader().client()->didEnforceStrictMixedContentChecking();
+        frame()->loader().client()->didEnforceInsecureRequestPolicy(getInsecureRequestPolicy());
 }
 
 void Document::setShadowCascadeOrder(ShadowCascadeOrder order)
@@ -5945,6 +5960,7 @@ DEFINE_TRACE(Document)
     visitor->trace(m_hoverNode);
     visitor->trace(m_activeHoverElement);
     visitor->trace(m_documentElement);
+    visitor->trace(m_rootScrollerController);
     visitor->trace(m_titleElement);
     visitor->trace(m_axObjectCache);
     visitor->trace(m_markers);
@@ -6020,9 +6036,16 @@ template class CORE_TEMPLATE_EXPORT Supplement<Document>;
 
 #ifndef NDEBUG
 using namespace blink;
+
+static WeakDocumentSet& liveDocumentSet()
+{
+    DEFINE_STATIC_LOCAL(WeakDocumentSet, set, ());
+    return set;
+}
+
 void showLiveDocumentInstances()
 {
-    Document::WeakDocumentSet& set = Document::liveDocumentSet();
+    WeakDocumentSet& set = liveDocumentSet();
     fprintf(stderr, "There are %u documents currently alive:\n", set.size());
     for (Document* document : set)
         fprintf(stderr, "- Document %p URL: %s\n", document, document->url().getString().utf8().data());

@@ -45,7 +45,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_service_observer.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
-#include "components/omnibox/browser/omnibox_view.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
@@ -58,6 +58,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/geoposition.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -155,7 +156,12 @@ void NavigateToURL(chrome::NavigateParams* params) {
 void NavigateToURLWithPost(Browser* browser, const GURL& url) {
   chrome::NavigateParams params(browser, url,
                                 ui::PAGE_TRANSITION_FORM_SUBMIT);
+
+  std::string post_data("test=body");
+  params.post_data = content::ResourceRequestBody::CreateFromBytes(
+      post_data.data(), post_data.size());
   params.uses_post = true;
+
   NavigateToURL(&params);
 }
 
@@ -398,8 +404,8 @@ void GetCookies(const GURL& url,
     scoped_refptr<net::URLRequestContextGetter> context_getter =
         contents->GetRenderProcessHost()->GetStoragePartition()->
             GetURLRequestContext();
-    base::WaitableEvent event(true /* manual reset */,
-                              false /* not initially signaled */);
+    base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
+                              base::WaitableEvent::InitialState::NOT_SIGNALED);
     CHECK(content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
         base::Bind(&GetCookiesOnIOThread, url, context_getter, &event, value)));

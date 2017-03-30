@@ -21,6 +21,13 @@ class CrashesDOMHandler;
 class FlashDOMHandler;
 }
 
+namespace chrome {
+void AttemptRestart();
+namespace android {
+class ExternalDataUseObserverBridge;
+}
+}
+
 namespace chrome_browser {
 void SetupPreReadFieldTrial();
 }
@@ -55,10 +62,6 @@ class SafeBrowsingUIManager;
 class SRTFetcher;
 }
 
-namespace settings {
-class SystemHandler;
-}
-
 namespace speech {
 class ChromeSpeechRecognitionManagerDelegate;
 }
@@ -76,7 +79,9 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ::FlashDOMHandler;
   friend class ArcSupportHost;
   friend class BrowserProcessImpl;
+  friend void chrome::AttemptRestart();
   friend void chrome_browser::SetupPreReadFieldTrial();
+  friend class chrome::android::ExternalDataUseObserverBridge;
   friend class ChromeMetricsServicesManagerClient;
   friend class ChromeRenderMessageFilter;
   friend class DataReductionProxyChromeSettings;
@@ -97,7 +102,6 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class safe_browsing::DownloadSBClient;
   friend class safe_browsing::SafeBrowsingService;
   friend class safe_browsing::SafeBrowsingUIManager;
-  friend class settings::SystemHandler;
   friend void SyzyASANRegisterExperiment(const char*, const char*);
 
   FRIEND_TEST_ALL_PREFIXES(ChromeMetricsServiceAccessorTest,

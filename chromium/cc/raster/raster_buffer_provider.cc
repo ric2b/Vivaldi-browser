@@ -10,6 +10,7 @@
 #include "cc/playback/raster_source.h"
 #include "cc/raster/texture_compressor.h"
 #include "cc/resources/platform_color.h"
+#include "cc/resources/resource_format_utils.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
@@ -52,7 +53,8 @@ void RasterBufferProvider::PlaybackToMemory(
     const gfx::Rect& canvas_playback_rect,
     float scale,
     const RasterSource::PlaybackSettings& playback_settings) {
-  TRACE_EVENT0("cc", "RasterBufferProvider::PlaybackToMemory");
+  TRACE_EVENT0("disabled-by-default-cc.debug",
+               "RasterBufferProvider::PlaybackToMemory");
 
   DCHECK(IsSupportedPlaybackToMemoryFormat(format)) << format;
 
@@ -107,9 +109,7 @@ void RasterBufferProvider::PlaybackToMemory(
         TRACE_EVENT0("cc",
                      "RasterBufferProvider::PlaybackToMemory::ConvertRGBA4444");
         SkImageInfo dst_info =
-            SkImageInfo::Make(info.width(), info.height(),
-                              ResourceFormatToClosestSkColorType(format),
-                              info.alphaType(), info.profileType());
+            info.makeColorType(ResourceFormatToClosestSkColorType(format));
         bool rv = surface->readPixels(dst_info, memory, stride, 0, 0);
         DCHECK(rv);
       }

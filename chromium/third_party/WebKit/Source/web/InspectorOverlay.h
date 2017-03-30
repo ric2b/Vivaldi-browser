@@ -31,18 +31,16 @@
 
 #include "core/inspector/InspectorDOMAgent.h"
 #include "core/inspector/InspectorOverlayHost.h"
-#include "core/inspector/InspectorProfilerAgent.h"
 #include "platform/Timer.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
-#include "platform/inspector_protocol/TypeBuilder.h"
+#include "platform/inspector_protocol/Values.h"
 #include "public/web/WebInputEvent.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -52,11 +50,11 @@ class LocalFrame;
 class GraphicsContext;
 class GraphicsLayer;
 class InspectorCSSAgent;
-class InspectorDebuggerAgent;
 class LayoutEditor;
 class Node;
 class Page;
 class PageOverlay;
+class V8InspectorSession;
 class WebViewImpl;
 
 namespace protocol {
@@ -77,7 +75,7 @@ public:
     ~InspectorOverlay() override;
     DECLARE_TRACE();
 
-    void init(InspectorCSSAgent*, InspectorDebuggerAgent*, InspectorDOMAgent*);
+    void init(InspectorCSSAgent*, V8InspectorSession*, InspectorDOMAgent*);
 
     void clear();
     void suspend();
@@ -111,8 +109,8 @@ private:
     // InspectorDOMAgent::Client implementation.
     void hideHighlight() override;
     void highlightNode(Node*, const InspectorHighlightConfig&, bool omitTooltip) override;
-    void highlightQuad(PassOwnPtr<FloatQuad>, const InspectorHighlightConfig&) override;
-    void setInspectMode(InspectorDOMAgent::SearchMode, PassOwnPtr<InspectorHighlightConfig>) override;
+    void highlightQuad(std::unique_ptr<FloatQuad>, const InspectorHighlightConfig&) override;
+    void setInspectMode(InspectorDOMAgent::SearchMode, std::unique_ptr<InspectorHighlightConfig>) override;
     void setInspectedNode(Node*) override;
 
     void highlightNode(Node*, Node* eventTarget, const InspectorHighlightConfig&, bool omitTooltip);
@@ -122,11 +120,13 @@ private:
     void drawPausedInDebuggerMessage();
     void drawViewSize();
 
+    float windowToViewportScale() const;
+
     Page* overlayPage();
     LocalFrame* overlayMainFrame();
     void reset(const IntSize& viewportSize, const IntPoint& documentScrollOffset);
     void evaluateInOverlay(const String& method, const String& argument);
-    void evaluateInOverlay(const String& method, PassOwnPtr<protocol::Value> argument);
+    void evaluateInOverlay(const String& method, std::unique_ptr<protocol::Value> argument);
     void onTimer(Timer<InspectorOverlay>*);
     void rebuildOverlayPage();
     void invalidate();
@@ -146,7 +146,7 @@ private:
     Member<Node> m_highlightNode;
     Member<Node> m_eventTargetNode;
     InspectorHighlightConfig m_nodeHighlightConfig;
-    OwnPtr<FloatQuad> m_highlightQuad;
+    std::unique_ptr<FloatQuad> m_highlightQuad;
     Member<Page> m_overlayPage;
     Member<InspectorOverlayChromeClient> m_overlayChromeClient;
     Member<InspectorOverlayHost> m_overlayHost;
@@ -158,14 +158,14 @@ private:
     int m_suspendCount;
     bool m_inLayout;
     bool m_needsUpdate;
-    Member<InspectorDebuggerAgent> m_debuggerAgent;
+    V8InspectorSession* m_v8Session;
     Member<InspectorDOMAgent> m_domAgent;
     Member<InspectorCSSAgent> m_cssAgent;
     Member<LayoutEditor> m_layoutEditor;
-    OwnPtr<PageOverlay> m_pageOverlay;
+    std::unique_ptr<PageOverlay> m_pageOverlay;
     Member<Node> m_hoveredNodeForInspectMode;
     InspectorDOMAgent::SearchMode m_inspectMode;
-    OwnPtr<InspectorHighlightConfig> m_inspectModeHighlightConfig;
+    std::unique_ptr<InspectorHighlightConfig> m_inspectModeHighlightConfig;
 };
 
 } // namespace blink

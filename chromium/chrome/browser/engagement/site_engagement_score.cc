@@ -6,11 +6,13 @@
 
 #include <cmath>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/engagement/site_engagement_metrics.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/variations/variations_associated_data.h"
 
 namespace {
@@ -30,7 +32,7 @@ const int kMaxDaysSinceShortcutLaunch = 10;
 // SiteEngagementScore::Variation enum.
 const char* kVariationNames[] = {
     "max_points_per_day",
-    "decay_period_in_days",
+    "decay_period_in_hours",
     "decay_points",
     "navigation_points",
     "user_input_points",
@@ -38,8 +40,11 @@ const char* kVariationNames[] = {
     "hidden_media_playing_points",
     "web_app_installed_points",
     "first_daily_engagement_points",
+    "bootstrap_points",
     "medium_engagement_boundary",
     "high_engagement_boundary",
+    "max_decays_per_score",
+    "last_engagement_grace_period_in_hours",
 };
 
 bool DoublesConsideredDifferent(double value1, double value2, double delta) {
@@ -47,22 +52,42 @@ bool DoublesConsideredDifferent(double value1, double value2, double delta) {
   return abs_difference > delta;
 }
 
+std::unique_ptr<base::DictionaryValue> GetScoreDictForOrigin(
+    HostContentSettingsMap* settings,
+    const GURL& origin_url) {
+  if (!settings)
+    return std::unique_ptr<base::DictionaryValue>();
+
+  std::unique_ptr<base::Value> value = settings->GetWebsiteSetting(
+      origin_url, origin_url, CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
+      std::string(), NULL);
+  if (!value.get())
+    return base::WrapUnique(new base::DictionaryValue());
+
+  if (!value->IsType(base::Value::TYPE_DICTIONARY))
+    return base::WrapUnique(new base::DictionaryValue());
+
+  return base::WrapUnique(static_cast<base::DictionaryValue*>(value.release()));
+}
+
 }  // namespace
 
 const double SiteEngagementScore::kMaxPoints = 100;
 double SiteEngagementScore::param_values[] = {
-    5,     // MAX_POINTS_PER_DAY
-    7,     // DECAY_PERIOD_IN_DAYS
-    5,     // DECAY_POINTS
-    0.5,   // NAVIGATION_POINTS
-    0.2,   // USER_INPUT_POINTS
-    0.02,  // VISIBLE_MEDIA_POINTS
-    0.01,  // HIDDEN_MEDIA_POINTS
-    5,     // WEB_APP_INSTALLED_POINTS
-    0.5,   // FIRST_DAILY_ENGAGEMENT
-    8,     // BOOTSTRAP_POINTS
-    5,     // MEDIUM_ENGAGEMENT_BOUNDARY
-    50,    // HIGH_ENGAGEMENT_BOUNDARY
+    5,       // MAX_POINTS_PER_DAY
+    7 * 24,  // DECAY_PERIOD_IN_HOURS
+    5,       // DECAY_POINTS
+    0.5,     // NAVIGATION_POINTS
+    0.2,     // USER_INPUT_POINTS
+    0.02,    // VISIBLE_MEDIA_POINTS
+    0.01,    // HIDDEN_MEDIA_POINTS
+    5,       // WEB_APP_INSTALLED_POINTS
+    0.5,     // FIRST_DAILY_ENGAGEMENT
+    8,       // BOOTSTRAP_POINTS
+    5,       // MEDIUM_ENGAGEMENT_BOUNDARY
+    50,      // HIGH_ENGAGEMENT_BOUNDARY
+    1,       // MAX_DECAYS_PER_SCORE
+    72,      // LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS
 };
 
 const char* SiteEngagementScore::kRawScoreKey = "rawScore";
@@ -75,8 +100,8 @@ double SiteEngagementScore::GetMaxPointsPerDay() {
   return param_values[MAX_POINTS_PER_DAY];
 }
 
-double SiteEngagementScore::GetDecayPeriodInDays() {
-  return param_values[DECAY_PERIOD_IN_DAYS];
+double SiteEngagementScore::GetDecayPeriodInHours() {
+  return param_values[DECAY_PERIOD_IN_HOURS];
 }
 
 double SiteEngagementScore::GetDecayPoints() {
@@ -119,6 +144,14 @@ double SiteEngagementScore::GetHighEngagementBoundary() {
   return param_values[HIGH_ENGAGEMENT_BOUNDARY];
 }
 
+double SiteEngagementScore::GetMaxDecaysPerScore() {
+  return param_values[MAX_DECAYS_PER_SCORE];
+}
+
+double SiteEngagementScore::GetLastEngagementGracePeriodInHours() {
+  return param_values[LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS];
+}
+
 // static
 void SiteEngagementScore::UpdateFromVariations(const char* param_name) {
   double param_vals[MAX_VARIATION];
@@ -143,19 +176,23 @@ void SiteEngagementScore::UpdateFromVariations(const char* param_name) {
 }
 
 SiteEngagementScore::SiteEngagementScore(base::Clock* clock,
-                           const base::DictionaryValue& score_dict)
-    : SiteEngagementScore(clock) {
-  score_dict.GetDouble(kRawScoreKey, &raw_score_);
-  score_dict.GetDouble(kPointsAddedTodayKey, &points_added_today_);
+                                         const GURL& origin,
+                                         HostContentSettingsMap* settings_map)
+    : SiteEngagementScore(clock, GetScoreDictForOrigin(settings_map, origin)) {
+  static_assert(arraysize(SiteEngagementScore::param_values) ==
+                    arraysize(kVariationNames),
+                "param_values does not match kVariationNames");
 
-  double internal_time;
-  if (score_dict.GetDouble(kLastEngagementTimeKey, &internal_time))
-    last_engagement_time_ = base::Time::FromInternalValue(internal_time);
-  if (score_dict.GetDouble(kLastShortcutLaunchTimeKey, &internal_time))
-    last_shortcut_launch_time_ = base::Time::FromInternalValue(internal_time);
+  origin_ = origin;
+  settings_map_ = settings_map;
 }
 
+SiteEngagementScore::SiteEngagementScore(SiteEngagementScore&& other) = default;
+
 SiteEngagementScore::~SiteEngagementScore() {}
+
+SiteEngagementScore& SiteEngagementScore::operator=(
+    SiteEngagementScore&& other) = default;
 
 void SiteEngagementScore::AddPoints(double points) {
   DCHECK_NE(0, points);
@@ -198,6 +235,15 @@ double SiteEngagementScore::GetScore() const {
   return std::min(DecayedScore() + BonusScore(), kMaxPoints);
 }
 
+void SiteEngagementScore::Commit() {
+  if (!UpdateScoreDict(score_dict_.get()))
+    return;
+
+  settings_map_->SetWebsiteSettingDefaultScope(
+      origin_, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
+      std::move(score_dict_));
+}
+
 bool SiteEngagementScore::MaxPointsPerDayAdded() const {
   if (!last_engagement_time_.is_null() &&
       clock_->Now().LocalMidnight() != last_engagement_time_.LocalMidnight()) {
@@ -207,18 +253,13 @@ bool SiteEngagementScore::MaxPointsPerDayAdded() const {
   return points_added_today_ == GetMaxPointsPerDay();
 }
 
-void SiteEngagementScore::Reset(double points, const base::Time* updated_time) {
+void SiteEngagementScore::Reset(double points,
+                                const base::Time last_engagement_time) {
   raw_score_ = points;
   points_added_today_ = 0;
 
   // This must be set in order to prevent the score from decaying when read.
-  if (updated_time) {
-    last_engagement_time_ = *updated_time;
-    if (!last_shortcut_launch_time_.is_null())
-      last_shortcut_launch_time_ = *updated_time;
-  } else {
-    last_engagement_time_ = clock_->Now();
-  }
+  last_engagement_time_ = last_engagement_time;
 }
 
 bool SiteEngagementScore::UpdateScoreDict(base::DictionaryValue* score_dict) {
@@ -257,23 +298,39 @@ bool SiteEngagementScore::UpdateScoreDict(base::DictionaryValue* score_dict) {
   return true;
 }
 
-SiteEngagementScore::SiteEngagementScore(base::Clock* clock)
+SiteEngagementScore::SiteEngagementScore(
+    base::Clock* clock,
+    std::unique_ptr<base::DictionaryValue> score_dict)
     : clock_(clock),
       raw_score_(0),
       points_added_today_(0),
       last_engagement_time_(),
-      last_shortcut_launch_time_() {}
+      last_shortcut_launch_time_(),
+      score_dict_(score_dict.release()) {
+  if (!score_dict_)
+    return;
+
+  score_dict_->GetDouble(kRawScoreKey, &raw_score_);
+  score_dict_->GetDouble(kPointsAddedTodayKey, &points_added_today_);
+
+  double internal_time;
+  if (score_dict_->GetDouble(kLastEngagementTimeKey, &internal_time))
+    last_engagement_time_ = base::Time::FromInternalValue(internal_time);
+  if (score_dict_->GetDouble(kLastShortcutLaunchTimeKey, &internal_time))
+    last_shortcut_launch_time_ = base::Time::FromInternalValue(internal_time);
+}
 
 double SiteEngagementScore::DecayedScore() const {
   // Note that users can change their clock, so from this system's perspective
   // time can go backwards. If that does happen and the system detects that the
   // current day is earlier than the last engagement, no decay (or growth) is
   // applied.
-  int days_since_engagement = (clock_->Now() - last_engagement_time_).InDays();
-  if (days_since_engagement < 0)
+  int hours_since_engagement =
+      (clock_->Now() - last_engagement_time_).InHours();
+  if (hours_since_engagement < 0)
     return raw_score_;
 
-  int periods = days_since_engagement / GetDecayPeriodInDays();
+  int periods = hours_since_engagement / GetDecayPeriodInHours();
   return std::max(0.0, raw_score_ - periods * GetDecayPoints());
 }
 
@@ -288,7 +345,7 @@ double SiteEngagementScore::BonusScore() const {
 
 void SiteEngagementScore::SetParamValuesForTesting() {
   param_values[MAX_POINTS_PER_DAY] = 5;
-  param_values[DECAY_PERIOD_IN_DAYS] = 7;
+  param_values[DECAY_PERIOD_IN_HOURS] = 7 * 24;
   param_values[DECAY_POINTS] = 5;
   param_values[NAVIGATION_POINTS] = 0.5;
   param_values[USER_INPUT_POINTS] = 0.05;
@@ -298,6 +355,8 @@ void SiteEngagementScore::SetParamValuesForTesting() {
   param_values[BOOTSTRAP_POINTS] = 8;
   param_values[MEDIUM_ENGAGEMENT_BOUNDARY] = 5;
   param_values[HIGH_ENGAGEMENT_BOUNDARY] = 50;
+  param_values[MAX_DECAYS_PER_SCORE] = 1;
+  param_values[LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS] = 72;
 
   // This is set to zero to avoid interference with tests and is set when
   // testing this functionality.

@@ -37,19 +37,19 @@ AndroidDeferredRenderingBackingStrategy::
 AndroidDeferredRenderingBackingStrategy::
     ~AndroidDeferredRenderingBackingStrategy() {}
 
-gfx::ScopedJavaSurface AndroidDeferredRenderingBackingStrategy::Initialize(
+gl::ScopedJavaSurface AndroidDeferredRenderingBackingStrategy::Initialize(
     int surface_view_id) {
   shared_state_ = new AVDASharedState();
 
   bool using_virtual_context = false;
-  if (gfx::GLContext* context = gfx::GLContext::GetCurrent()) {
-    if (gfx::GLShareGroup* share_group = context->share_group())
+  if (gl::GLContext* context = gl::GLContext::GetCurrent()) {
+    if (gl::GLShareGroup* share_group = context->share_group())
       using_virtual_context = !!share_group->GetSharedContext();
   }
   UMA_HISTOGRAM_BOOLEAN("Media.AVDA.VirtualContext", using_virtual_context);
 
   // Acquire the SurfaceView surface if given a valid id.
-  if (surface_view_id != media::VideoDecodeAccelerator::Config::kNoSurfaceID) {
+  if (surface_view_id != VideoDecodeAccelerator::Config::kNoSurfaceID) {
     return gpu::GpuSurfaceLookup::GetInstance()->AcquireJavaSurface(
         surface_view_id);
   }
@@ -58,7 +58,7 @@ gfx::ScopedJavaSurface AndroidDeferredRenderingBackingStrategy::Initialize(
   GLuint service_id = 0;
   surface_texture_ = state_provider_->CreateAttachedSurfaceTexture(&service_id);
   shared_state_->SetSurfaceTexture(surface_texture_, service_id);
-  return gfx::ScopedJavaSurface(surface_texture_.get());
+  return gl::ScopedJavaSurface(surface_texture_.get());
 }
 
 void AndroidDeferredRenderingBackingStrategy::BeginCleanup(
@@ -83,7 +83,7 @@ void AndroidDeferredRenderingBackingStrategy::EndCleanup() {
     surface_texture_->ReleaseSurfaceTexture();
 }
 
-scoped_refptr<gfx::SurfaceTexture>
+scoped_refptr<gl::SurfaceTexture>
 AndroidDeferredRenderingBackingStrategy::GetSurfaceTexture() const {
   return surface_texture_;
 }
@@ -109,7 +109,7 @@ gfx::Size AndroidDeferredRenderingBackingStrategy::GetPictureBufferSize()
 }
 
 void AndroidDeferredRenderingBackingStrategy::SetImageForPicture(
-    const media::PictureBuffer& picture_buffer,
+    const PictureBuffer& picture_buffer,
     const scoped_refptr<gpu::gles2::GLStreamTextureImage>& image) {
   gpu::gles2::TextureRef* texture_ref =
       state_provider_->GetTextureForPicture(picture_buffer);
@@ -157,7 +157,7 @@ void AndroidDeferredRenderingBackingStrategy::SetImageForPicture(
 
 void AndroidDeferredRenderingBackingStrategy::UseCodecBufferForPictureBuffer(
     int32_t codec_buf_index,
-    const media::PictureBuffer& picture_buffer) {
+    const PictureBuffer& picture_buffer) {
   // Make sure that the decoder is available.
   RETURN_IF_NULL(state_provider_->GetGlDecoder());
 
@@ -177,7 +177,7 @@ void AndroidDeferredRenderingBackingStrategy::UseCodecBufferForPictureBuffer(
 }
 
 void AndroidDeferredRenderingBackingStrategy::AssignOnePictureBuffer(
-    const media::PictureBuffer& picture_buffer,
+    const PictureBuffer& picture_buffer,
     bool have_context) {
   // Attach a GLImage to each texture that will use the surface texture.
   // We use a refptr here in case SetImageForPicture fails.
@@ -204,7 +204,7 @@ void AndroidDeferredRenderingBackingStrategy::AssignOnePictureBuffer(
 }
 
 void AndroidDeferredRenderingBackingStrategy::ReleaseCodecBufferForPicture(
-    const media::PictureBuffer& picture_buffer) {
+    const PictureBuffer& picture_buffer) {
   AVDACodecImage* avda_image =
       shared_state_->GetImageForPicture(picture_buffer.id());
   RETURN_IF_NULL(avda_image);
@@ -212,7 +212,7 @@ void AndroidDeferredRenderingBackingStrategy::ReleaseCodecBufferForPicture(
 }
 
 void AndroidDeferredRenderingBackingStrategy::ReuseOnePictureBuffer(
-    const media::PictureBuffer& picture_buffer) {
+    const PictureBuffer& picture_buffer) {
   pictures_out_for_display_.erase(
       std::remove(pictures_out_for_display_.begin(),
                   pictures_out_for_display_.end(), picture_buffer.id()),
@@ -228,7 +228,7 @@ void AndroidDeferredRenderingBackingStrategy::ReuseOnePictureBuffer(
 
 void AndroidDeferredRenderingBackingStrategy::ReleaseCodecBuffers(
     const AndroidVideoDecodeAccelerator::OutputBufferMap& buffers) {
-  for (const std::pair<int, media::PictureBuffer>& entry : buffers)
+  for (const std::pair<int, PictureBuffer>& entry : buffers)
     ReleaseCodecBufferForPicture(entry.second);
 }
 
@@ -288,7 +288,7 @@ void AndroidDeferredRenderingBackingStrategy::MaybeRenderEarly() {
 }
 
 void AndroidDeferredRenderingBackingStrategy::CodecChanged(
-    media::VideoCodecBridge* codec) {
+    VideoCodecBridge* codec) {
   media_codec_ = codec;
   shared_state_->CodecChanged(codec);
 }
@@ -304,7 +304,7 @@ bool AndroidDeferredRenderingBackingStrategy::ArePicturesOverlayable() {
 }
 
 void AndroidDeferredRenderingBackingStrategy::UpdatePictureBufferSize(
-    media::PictureBuffer* picture_buffer,
+    PictureBuffer* picture_buffer,
     const gfx::Size& new_size) {
   // This strategy uses EGL images which manage the texture size for us.  We
   // simply update the PictureBuffer meta-data and leave the texture as-is.

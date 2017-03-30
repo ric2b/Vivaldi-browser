@@ -134,7 +134,7 @@ Node* PositionTemplate<Strategy>::computeContainerNode() const
     case PositionAnchorType::AfterAnchor:
         return Strategy::parent(*m_anchorNode);
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return 0;
 }
 
@@ -156,7 +156,7 @@ int PositionTemplate<Strategy>::computeOffsetInContainerNode() const
     case PositionAnchorType::AfterAnchor:
         return Strategy::index(*m_anchorNode) + 1;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return 0;
 }
 
@@ -218,7 +218,7 @@ Node* PositionTemplate<Strategy>::computeNodeBeforePosition() const
     case PositionAnchorType::AfterAnchor:
         return m_anchorNode.get();
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return 0;
 }
 
@@ -240,7 +240,7 @@ Node* PositionTemplate<Strategy>::computeNodeAfterPosition() const
     case PositionAnchorType::AfterAnchor:
         return Strategy::nextSibling(*m_anchorNode);
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return 0;
 }
 
@@ -355,7 +355,7 @@ bool PositionTemplate<Strategy>::atFirstEditingPositionForNode() const
         // of DOM tree version.
         return !EditingStrategy::lastOffsetForEditing(anchorNode());
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -388,6 +388,98 @@ bool PositionTemplate<Strategy>::atEndOfTree() const
     // TODO(yosin) We should use |Strategy::lastOffsetForEditing()| instead of
     // DOM tree version.
     return !Strategy::parent(*anchorNode()) && m_offset >= EditingStrategy::lastOffsetForEditing(anchorNode());
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::inParentBeforeNode(const Node& node)
+{
+    // FIXME: This should DCHECK(node.parentNode())
+    // At least one caller currently hits this ASSERT though, which indicates
+    // that the caller is trying to make a position relative to a disconnected node (which is likely an error)
+    // Specifically, editing/deleting/delete-ligature-001.html crashes with DCHECK(node->parentNode())
+    return PositionTemplate<Strategy>(Strategy::parent(node), Strategy::index(node));
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::inParentAfterNode(const Node& node)
+{
+    DCHECK(node.parentNode()) << node;
+    return PositionTemplate<Strategy>(Strategy::parent(node), Strategy::index(node) + 1);
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::beforeNode(Node* anchorNode)
+{
+    DCHECK(anchorNode);
+    return PositionTemplate<Strategy>(anchorNode, PositionAnchorType::BeforeAnchor);
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::afterNode(Node* anchorNode)
+{
+    DCHECK(anchorNode);
+    return PositionTemplate<Strategy>(anchorNode, PositionAnchorType::AfterAnchor);
+}
+
+// static
+template <typename Strategy>
+int PositionTemplate<Strategy>::lastOffsetInNode(Node* node)
+{
+    return node->offsetInCharacters() ? node->maxCharacterOffset() : static_cast<int>(Strategy::countChildren(*node));
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::firstPositionInNode(Node* anchorNode)
+{
+    if (anchorNode->isTextNode())
+        return PositionTemplate<Strategy>(anchorNode, 0);
+    return PositionTemplate<Strategy>(anchorNode, PositionAnchorType::BeforeChildren);
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::lastPositionInNode(Node* anchorNode)
+{
+    if (anchorNode->isTextNode())
+        return PositionTemplate<Strategy>(anchorNode, lastOffsetInNode(anchorNode));
+    return PositionTemplate<Strategy>(anchorNode, PositionAnchorType::AfterChildren);
+}
+
+// static
+template <typename Strategy>
+int PositionTemplate<Strategy>::minOffsetForNode(Node* anchorNode, int offset)
+{
+    if (anchorNode->offsetInCharacters())
+        return std::min(offset, anchorNode->maxCharacterOffset());
+
+    int newOffset = 0;
+    for (Node* node = Strategy::firstChild(*anchorNode); node && newOffset < offset; node = Strategy::nextSibling(*node))
+        newOffset++;
+
+    return newOffset;
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::firstPositionInOrBeforeNode(Node* node)
+{
+    if (!node)
+        return PositionTemplate<Strategy>();
+    return Strategy::editingIgnoresContent(node) ? beforeNode(node) : firstPositionInNode(node);
+}
+
+// static
+template <typename Strategy>
+PositionTemplate<Strategy> PositionTemplate<Strategy>::lastPositionInOrAfterNode(Node* node)
+{
+    if (!node)
+        return PositionTemplate<Strategy>();
+    return Strategy::editingIgnoresContent(node) ? afterNode(node) : lastPositionInNode(node);
 }
 
 template <typename Strategy>
@@ -473,7 +565,7 @@ Position toPositionInDOMTree(const PositionInFlatTree& position)
     case PositionAnchorType::BeforeChildren:
         return Position(anchorNode, PositionAnchorType::BeforeChildren);
     case PositionAnchorType::BeforeAnchor:
-        return positionBeforeNode(anchorNode);
+        return Position::beforeNode(anchorNode);
     case PositionAnchorType::OffsetInAnchor: {
         int offset = position.offsetInContainerNode();
         if (anchorNode->offsetInCharacters())
@@ -489,7 +581,7 @@ Position toPositionInDOMTree(const PositionInFlatTree& position)
         return Position(anchorNode, PositionAnchorType::AfterChildren);
     }
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return Position();
     }
 }
@@ -502,12 +594,12 @@ void PositionTemplate<Strategy>::formatForDebugger(char* buffer, unsigned length
     StringBuilder result;
 
     if (isNull()) {
-        result.appendLiteral("<null>");
+        result.append("<null>");
     } else {
         char s[1024];
-        result.appendLiteral("offset ");
+        result.append("offset ");
         result.appendNumber(m_offset);
-        result.appendLiteral(" of ");
+        result.append(" of ");
         anchorNode()->formatForDebugger(s, sizeof(s));
         result.append(s);
     }

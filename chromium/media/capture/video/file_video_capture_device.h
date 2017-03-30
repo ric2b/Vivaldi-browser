@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_VIDEO_CAPTURE_FILE_VIDEO_CAPTURE_DEVICE_H_
-#define MEDIA_VIDEO_CAPTURE_FILE_VIDEO_CAPTURE_DEVICE_H_
+#ifndef MEDIA_CAPTURE_VIDEO_FILE_VIDEO_CAPTURE_DEVICE_H_
+#define MEDIA_CAPTURE_VIDEO_FILE_VIDEO_CAPTURE_DEVICE_H_
 
 #include <stdint.h>
 
@@ -32,7 +32,7 @@ class VideoFileParser;
 // Example MJPEG videos can be found in media/data/test/bear.mjpeg.
 // Restrictions: Y4M videos should have .y4m file extension and MJPEG videos
 // should have .mjpeg file extension.
-class MEDIA_EXPORT FileVideoCaptureDevice : public VideoCaptureDevice {
+class CAPTURE_EXPORT FileVideoCaptureDevice : public VideoCaptureDevice {
  public:
   // Reads and parses the header of a |file_path|, returning the collected
   // pixel format in |video_format|. Returns true on file parsed successfully,
@@ -81,10 +81,12 @@ class MEDIA_EXPORT FileVideoCaptureDevice : public VideoCaptureDevice {
   VideoCaptureFormat capture_format_;
   // Target time for the next frame.
   base::TimeTicks next_frame_time_;
+  // The system time when we receive the first frame.
+  base::TimeTicks first_ref_time_;
 
   DISALLOW_COPY_AND_ASSIGN(FileVideoCaptureDevice);
 };
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_FILE_VIDEO_CAPTURE_DEVICE_H_
+#endif  // MEDIA_CAPTURE_VIDEO_FILE_VIDEO_CAPTURE_DEVICE_H_

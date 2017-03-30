@@ -21,26 +21,37 @@
 #include "core/page/ScopedPageLoadDeferrer.h"
 
 #include "core/dom/Document.h"
-#include "core/frame/LocalFrame.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/Page.h"
+#include "platform/heap/Handle.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
-#include "wtf/HashSet.h"
+#include "wtf/StdLibExtras.h"
+#include "wtf/Vector.h"
 
 namespace blink {
 
-ScopedPageLoadDeferrer::ScopedPageLoadDeferrer(Page* exclusion)
+namespace {
+
+unsigned s_deferralCount = 0;
+
+void setDefersLoading(bool isDeferred)
 {
-    for (const Page* page : Page::ordinaryPages()) {
-        if (page == exclusion || page->defersLoading())
-            continue;
+    // Make a copy of the collection. Undeferring loads can cause script to run,
+    // which would mutate ordinaryPages() in the middle of iteration.
+    HeapVector<Member<Page>> pages;
+    for (const auto& page : Page::ordinaryPages())
+        pages.append(page);
+    for (const auto& page : pages)
+        page->setDefersLoading(isDeferred);
+}
 
-        if (!page->mainFrame()->isLocalFrame())
-            continue;
+} // namespace
 
-        m_deferredFrames.append(page->deprecatedLocalMainFrame());
-    }
+ScopedPageLoadDeferrer::ScopedPageLoadDeferrer()
+{
+    if (++s_deferralCount > 1)
+        return;
 
     setDefersLoading(true);
     Platform::current()->currentThread()->scheduler()->suspendTimerQueue();
@@ -48,16 +59,16 @@ ScopedPageLoadDeferrer::ScopedPageLoadDeferrer(Page* exclusion)
 
 ScopedPageLoadDeferrer::~ScopedPageLoadDeferrer()
 {
+    if (--s_deferralCount > 0)
+        return;
+
     setDefersLoading(false);
     Platform::current()->currentThread()->scheduler()->resumeTimerQueue();
 }
 
-void ScopedPageLoadDeferrer::setDefersLoading(bool isDeferred)
+bool ScopedPageLoadDeferrer::isActive()
 {
-    for (const auto& frame : m_deferredFrames) {
-        if (Page* page = frame->page())
-            page->setDefersLoading(isDeferred);
-    }
+    return s_deferralCount > 0;
 }
 
 } // namespace blink

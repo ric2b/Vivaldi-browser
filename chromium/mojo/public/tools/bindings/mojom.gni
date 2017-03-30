@@ -25,13 +25,24 @@ mojom_generator_sources = [
   "$mojom_generator_script",
 ]
 
-_bindings_configuration_files = [
-  "//mojo/public/tools/bindings/chromium_bindings_configuration.gni",
-  "//mojo/public/tools/bindings/blink_bindings_configuration.gni",
-]
+if (!is_ios) {
+  _bindings_configuration_files = [
+    "//mojo/public/tools/bindings/chromium_bindings_configuration.gni",
+    "//mojo/public/tools/bindings/blink_bindings_configuration.gni",
+  ]
+} else {
+  _bindings_configuration_files =
+      [ "//mojo/public/tools/bindings/chromium_bindings_configuration.gni" ]
+}
 _bindings_configurations = []
 foreach(config_file, _bindings_configuration_files) {
   _bindings_configurations += [ read_file(config_file, "scope") ]
+}
+foreach(configuration, _bindings_configurations) {
+  foreach(typemap, configuration.typemaps) {
+    # Check that the mojom field of each typemap refers to a mojom that exists.
+    read_file(typemap.mojom, "")
+  }
 }
 
 # Generate C++/JavaScript/Java source files from mojom files. The output files
@@ -321,7 +332,7 @@ template("mojom") {
         # //mojo/something:something and we can append cpp_sources_suffix to
         # get the cpp dependency name.
         full_name = get_label_info("$d", "label_no_toolchain")
-        deps += [ "${full_name}${variant_suffix}_${cpp_sources_suffix}" ]
+        public_deps += [ "${full_name}${variant_suffix}_${cpp_sources_suffix}" ]
       }
       foreach(typemap, active_typemaps) {
         if (defined(typemap.public_headers)) {
@@ -332,6 +343,9 @@ template("mojom") {
         }
         if (defined(typemap.sources)) {
           sources += typemap.sources
+        }
+        if (defined(typemap.public_deps)) {
+          public_deps += typemap.public_deps
         }
         if (defined(typemap.deps)) {
           deps += typemap.deps

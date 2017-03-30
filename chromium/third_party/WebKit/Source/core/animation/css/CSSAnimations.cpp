@@ -34,10 +34,10 @@
 #include "core/animation/Animation.h"
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorAnimations.h"
-#include "core/animation/DeferredLegacyStyleInterpolation.h"
 #include "core/animation/ElementAnimations.h"
 #include "core/animation/Interpolation.h"
 #include "core/animation/KeyframeEffectModel.h"
+#include "core/animation/LegacyStyleInterpolation.h"
 #include "core/animation/css/CSSAnimatableValueFactory.h"
 #include "core/css/CSSKeyframeRule.h"
 #include "core/css/CSSPropertyEquality.h"
@@ -95,17 +95,12 @@ static StringKeyframeEffectModel* createKeyframeEffectModel(StyleResolver* resol
                 if (value->isInheritedValue() && parentStyle->animations()) {
                     timingFunction = parentStyle->animations()->timingFunctionList()[0];
                 } else if (value->isValueList()) {
-                    timingFunction = CSSToStyleMap::mapAnimationTimingFunction(*toCSSValueList(value)->item(0));
+                    timingFunction = CSSToStyleMap::mapAnimationTimingFunction(toCSSValueList(value)->item(0));
                 } else {
                     ASSERT(value->isCSSWideKeyword());
                     timingFunction = CSSTimingData::initialTimingFunction();
                 }
                 keyframe->setEasing(timingFunction.release());
-            } else if (property == CSSPropertyFilter) {
-                // TODO(alancutter): We will not support animating filter until -webkit-filter is an alias for it.
-                // This is to prevent animations on both -webkit-filter and filter from being run on the main thread when
-                // they would otherwise run on the compositor.
-                continue;
             } else if (CSSAnimations::isAnimatableProperty(property)) {
                 keyframe->setCSSPropertyValue(property, properties.propertyAt(j).value());
             }
@@ -233,31 +228,27 @@ void CSSAnimations::calculateCompositorAnimationUpdate(CSSAnimationUpdate& updat
     if (!oldStyle.shouldCompositeForCurrentAnimations())
         return;
 
-    CSSAnimations& cssAnimations = elementAnimations->cssAnimations();
-    for (auto& runningAnimation : cssAnimations.m_runningAnimations) {
-        Animation& animation = *runningAnimation->animation;
-        if (animation.effect() && animation.effect()->isKeyframeEffect()) {
-            EffectModel* model = toKeyframeEffect(animation.effect())->model();
-            if (model && model->isKeyframeEffectModel()) {
-                KeyframeEffectModelBase* keyframeEffect = toKeyframeEffectModelBase(model);
-                if (keyframeEffect->hasSyntheticKeyframes() && keyframeEffect->snapshotNeutralCompositorKeyframes(element, oldStyle, style))
-                    update.updateCompositorKeyframes(&animation);
-            }
-        }
-    }
+    bool transformZoomChanged = oldStyle.hasCurrentTransformAnimation() && oldStyle.effectiveZoom() != style.effectiveZoom();
+    for (auto& entry : elementAnimations->animations()) {
+        Animation& animation = *entry.key;
+        if (!animation.effect() || !animation.effect()->isKeyframeEffect())
+            continue;
+        EffectModel* model = toKeyframeEffect(animation.effect())->model();
+        if (!model || !model->isKeyframeEffectModel())
+            continue;
+        KeyframeEffectModelBase& keyframeEffect = toKeyframeEffectModelBase(*model);
 
-    if (oldStyle.hasCurrentTransformAnimation() && oldStyle.effectiveZoom() != style.effectiveZoom()) {
-        for (auto& entry : elementAnimations->animations()) {
-            Animation& animation = *entry.key;
-            if (animation.effect() && animation.effect()->isKeyframeEffect()) {
-                EffectModel* model = toKeyframeEffect(animation.effect())->model();
-                if (model && model->isKeyframeEffectModel()) {
-                    KeyframeEffectModelBase* keyframeEffect = toKeyframeEffectModelBase(model);
-                    if (keyframeEffect->affects(PropertyHandle(CSSPropertyTransform)) && keyframeEffect->snapshotAllCompositorKeyframes(element, &style))
-                        update.updateCompositorKeyframes(&animation);
-                }
-            }
+        bool updateCompositorKeyframes = false;
+        if (transformZoomChanged && keyframeEffect.affects(PropertyHandle(CSSPropertyTransform))
+            && keyframeEffect.snapshotAllCompositorKeyframes(element, &style)) {
+            updateCompositorKeyframes = true;
+        } else if (keyframeEffect.hasSyntheticKeyframes()
+            && keyframeEffect.snapshotNeutralCompositorKeyframes(element, oldStyle, style)) {
+            updateCompositorKeyframes = true;
         }
+
+        if (updateCompositorKeyframes)
+            update.updateCompositorKeyframes(&animation);
     }
 }
 
@@ -304,8 +295,10 @@ void CSSAnimations::calculateAnimationUpdate(CSSAnimationUpdate& update, const E
             timing.timingFunction = Timing::defaults().timingFunction;
 
             StyleRuleKeyframes* keyframesRule = resolver->findKeyframesRule(elementForScoping, name);
-            if (!keyframesRule)
+            if (!keyframesRule) {
+                element.document().styleEngine().setHasUnresolvedKeyframesRule();
                 continue; // Cancel the animation if there's no style rule for it.
+            }
 
             const RunningAnimation* existingAnimation = nullptr;
             size_t existingAnimationIndex = 0;

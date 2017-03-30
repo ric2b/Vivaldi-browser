@@ -260,16 +260,16 @@ void RenderWidgetHostViewGuest::SetTooltipText(
 
 void RenderWidgetHostViewGuest::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
 
-  last_scroll_offset_ = frame->metadata.root_scroll_offset;
+  last_scroll_offset_ = frame.metadata.root_scroll_offset;
 
   cc::RenderPass* root_pass =
-      frame->delegated_frame_data->render_pass_list.back().get();
+      frame.delegated_frame_data->render_pass_list.back().get();
 
   gfx::Size frame_size = root_pass->output_rect.size();
-  float scale_factor = frame->metadata.device_scale_factor;
+  float scale_factor = frame.metadata.device_scale_factor;
 
   // Check whether we need to recreate the cc::Surface, which means the child
   // frame renderer has changed its output surface, or size, or scale factor.
@@ -474,17 +474,6 @@ void RenderWidgetHostViewGuest::GetScreenInfo(blink::WebScreenInfo* results) {
     embedder_view->GetScreenInfo(results);
 }
 
-bool RenderWidgetHostViewGuest::GetScreenColorProfile(
-    std::vector<char>* color_profile) {
-  if (!guest_)
-    return false;
-  DCHECK(color_profile->empty());
-  RenderWidgetHostViewBase* embedder_view = GetOwnerRenderWidgetHostView();
-  if (embedder_view)
-    return embedder_view->GetScreenColorProfile(color_profile);
-  return false;
-}
-
 #if defined(OS_MACOSX)
 void RenderWidgetHostViewGuest::SetActive(bool active) {
   platform_view_->SetActive(active);
@@ -611,14 +600,16 @@ void RenderWidgetHostViewGuest::OnHandleInputEvent(
 
   if (event->type == blink::WebInputEvent::MouseWheel) {
     if (vivaldi::IsVivaldiRunning() &&
-       !((blink::WebMouseWheelEvent*)event)->canScroll &&
-       ((blink::WebMouseWheelEvent*)event)->hasPreciseScrollingDeltas) {
+       ((blink::WebMouseWheelEvent*)event)->wheelTicksX == 0 &&
+       ((blink::WebMouseWheelEvent*)event)->wheelTicksY == 0) {
       // Hook for pinching. The render translates a pinch event into a wheel
       // event and sends it back to the host for guest views. It simplifies
       // the code in the renderer to send a separate pinch message to the
       // renderer instead of let it handle the syntethic wheel event again.
       // Letting the render handle the initial pinch event means we support
-      // both tabs and panels.
+      // both tabs and panels. We set wheelTicksY to 0 to identify the pinch.
+      // Chrome sets ControlKey to the modifier mask but we can not use that
+      // since we map regular page zoom to this flag.
       blink::WebMouseWheelEvent* wheelEvent = (blink::WebMouseWheelEvent*)event;
       float scale = exp(wheelEvent->deltaY / 100.0f);
       host_->Send(new VivaldiMsg_SetPinchZoom(

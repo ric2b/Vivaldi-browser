@@ -22,7 +22,6 @@ enum class VectorIconId;
 
 namespace views {
 class BubbleDialogDelegateView;
-class InkDropDelegate;
 }
 
 // Represents an icon on the omnibox that shows a bubble when clicked.
@@ -72,8 +71,8 @@ class BubbleIconView : public views::InkDropHostView,
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  std::unique_ptr<views::InkDropHover> CreateInkDropHover() const override;
   SkColor GetInkDropBaseColor() const override;
+  bool ShouldShowInkDropForFocus() const override;
 
   // ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -129,9 +128,6 @@ class BubbleIconView : public views::InkDropHostView,
   // pressed event. If this is true then the mouse released event is ignored to
   // prevent the bubble from reshowing.
   bool suppress_mouse_released_action_;
-
-  // Animation delegate for the ink drop ripple effect.
-  std::unique_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(BubbleIconView);
 };

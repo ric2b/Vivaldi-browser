@@ -130,6 +130,7 @@ Vert</translation>
 <translation id="4156740505453712750">For å beskytte tilgangen til denne datamaskinen må du velge en PIN-kode bestående av <ph name="BOLD_START" />minst seks tall<ph name="BOLD_END" />. Denne PIN-koden kreves når man kobler til fra en annen posisjon.</translation>
 <translation id="4176825807642096119">Tilgangskode</translation>
 <translation id="4207623512727273241">Kjør installasjonsprogrammet før du fortsetter.</translation>
+<translation id="4227991223508142681">Verktøy for vertsidentitetshåndtering</translation>
 <translation id="4240294130679914010">Avinstalleringsprogram for Chromoting-vert</translation>
 <translation id="4277463233460010382">Denne datamaskinen er konfigurer for å la én eller flere klienter koble til uten å skrive inn noen PIN-kode.</translation>
 <translation id="4277736576214464567">Tilgangskoden er ugyldig. Prøv på nytt.</translation>
@@ -261,6 +262,7 @@ skrivebord-vert</translation>
 <translation id="7836926030608666805">Det mangler noen nødvendige komponenter. Kontrollér at du kjører den nyeste versjonen av Chrome, og prøv på nytt.</translation>
 <translation id="7868137160098754906">Skriv inn PIN-koden for den eksterne datamaskinen.</translation>
 <translation id="7869445566579231750">Du har ikke tillatelse til å kjøre dette programmet.</translation>
+<translation id="7895403300744144251">Sikkerhetsinnstillingene på den eksterne datamaskinen tillater ikke tilkoblinger fra kontoen din.</translation>
 <translation id="7948001860594368197">Skjermalternativer</translation>
 <translation id="7970576581263377361">Autentiseringen mislyktes. Logg på Chromium på nytt.</translation>
 <translation id="7981525049612125370">Den eksterne økten er utløpt.</translation>

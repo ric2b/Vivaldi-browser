@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 
+#include "base/i18n/number_formatting.h"
 #include "base/i18n/rtl.h"
 #include "base/strings/stringprintf.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -16,8 +17,8 @@
 #include "chrome/browser/ui/views/location_bar/zoom_view.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/ui/zoom/page_zoom.h"
-#include "components/ui/zoom/zoom_controller.h"
+#include "components/zoom/page_zoom.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/extension_zoom_request_client.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
@@ -50,9 +51,9 @@ void ZoomBubbleView::ShowBubble(content::WebContents* web_contents,
       browser_view->GetLocationBarView()->zoom_view() : NULL;
 
   // Find the extension that initiated the zoom change, if any.
-  ui_zoom::ZoomController* zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(web_contents);
-  const ui_zoom::ZoomRequestClient* client = zoom_controller->last_client();
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(web_contents);
+  const zoom::ZoomRequestClient* client = zoom_controller->last_client();
 
   // If the bubble is already showing in this window and the zoom change was not
   // initiated by an extension, then the bubble can be reused and only the label
@@ -173,11 +174,11 @@ void ZoomBubbleView::Init() {
   }
 
   // Add zoom label with the new zoom percent.
-  ui_zoom::ZoomController* zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(web_contents_);
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(web_contents_);
   int zoom_percent = zoom_controller->GetZoomPercent();
-  label_ = new views::Label(
-      l10n_util::GetStringFUTF16Int(IDS_TOOLTIP_ZOOM, zoom_percent));
+  label_ = new views::Label(l10n_util::GetStringFUTF16(
+      IDS_TOOLTIP_ZOOM, base::FormatPercent(zoom_percent)));
   label_->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
       ui::ResourceBundle::MediumFont));
   grid_layout->AddView(label_);
@@ -222,7 +223,7 @@ void ZoomBubbleView::ButtonPressed(views::Button* sender,
                                          extension_info_.id.c_str())),
         ui::PAGE_TRANSITION_FROM_API);
   } else {
-    ui_zoom::PageZoom::Zoom(web_contents_, content::PAGE_ZOOM_RESET);
+    zoom::PageZoom::Zoom(web_contents_, content::PAGE_ZOOM_RESET);
   }
 }
 
@@ -242,11 +243,11 @@ void ZoomBubbleView::OnExtensionIconImageChanged(
 }
 
 void ZoomBubbleView::Refresh() {
-  ui_zoom::ZoomController* zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(web_contents_);
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(web_contents_);
   int zoom_percent = zoom_controller->GetZoomPercent();
-  label_->SetText(
-      l10n_util::GetStringFUTF16Int(IDS_TOOLTIP_ZOOM, zoom_percent));
+  label_->SetText(l10n_util::GetStringFUTF16(
+      IDS_TOOLTIP_ZOOM, base::FormatPercent(zoom_percent)));
   StartTimerIfNecessary();
 }
 

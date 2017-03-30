@@ -14,7 +14,10 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/debug/alias.h"
+#include "base/location.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/windows_version.h"
@@ -25,6 +28,7 @@
 #include "ui/base/win/mouse_wheel_util.h"
 #include "ui/base/win/shell.h"
 #include "ui/base/win/touch_input.h"
+#include "ui/display/win/dpi.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_code_conversion_win.h"
@@ -422,7 +426,7 @@ void HWNDMessageHandler::Close() {
     // may delete ourselves on destroy and the ATL callback would still
     // dereference us when the callback returns).
     waiting_for_close_now_ = true;
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&HWNDMessageHandler::CloseNow, weak_factory_.GetWeakPtr()));
   }
@@ -520,6 +524,16 @@ void HWNDMessageHandler::SetBounds(const gfx::Rect& bounds_in_pixels,
                                    bool force_size_changed) {
   background_fullscreen_hack_ = false;
   SetBoundsInternal(bounds_in_pixels, force_size_changed);
+}
+
+void HWNDMessageHandler::SetDwmFrameExtension(DwmFrameState state) {
+  if (!delegate_->HasFrame() && ui::win::IsAeroGlassEnabled() &&
+      (window_ex_style() & WS_EX_COMPOSITED) == 0) {
+    MARGINS m = {0, 0, 0, 0};
+    if (state == DwmFrameState::ON)
+      m = {0, 0, 1, 0};
+    DwmExtendFrameIntoClientArea(hwnd(), &m);
+  }
 }
 
 void HWNDMessageHandler::SetSize(const gfx::Size& size) {
@@ -1255,11 +1269,9 @@ void HWNDMessageHandler::ForceRedrawWindow(int attempts) {
     // unavailable.
     if (--attempts <= 0)
       return;
-    base::MessageLoop::current()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&HWNDMessageHandler::ForceRedrawWindow,
-                   weak_factory_.GetWeakPtr(),
-                   attempts),
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::Bind(&HWNDMessageHandler::ForceRedrawWindow,
+                              weak_factory_.GetWeakPtr(), attempts),
         base::TimeDelta::FromMilliseconds(500));
     return;
   }
@@ -1394,6 +1406,18 @@ LRESULT HWNDMessageHandler::OnDwmCompositionChanged(UINT msg,
   }
 
   FrameTypeChanged();
+  return 0;
+}
+
+LRESULT HWNDMessageHandler::OnDpiChanged(UINT msg,
+                                         WPARAM w_param,
+                                         LPARAM l_param) {
+  if (LOWORD(w_param) != HIWORD(w_param))
+    NOTIMPLEMENTED() << "Received non-square scaling factors";
+
+  SetBoundsInternal(gfx::Rect(*reinterpret_cast<RECT*>(l_param)), false);
+  delegate_->HandleWindowScaleFactorChanged(
+      display::win::GetScalingFactorFromDPI(LOWORD(w_param)));
   return 0;
 }
 
@@ -2118,7 +2142,7 @@ void HWNDMessageHandler::OnSize(UINT param, const gfx::Size& size) {
   // don't get nested WM_SIZE messages.
   if (needs_scroll_styles_ && !in_size_loop_) {
     ShowScrollBar(hwnd(), SB_BOTH, FALSE);
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&AddScrollStylesToWindow, hwnd()));
   }
 }
@@ -2224,28 +2248,26 @@ LRESULT HWNDMessageHandler::OnTouchEvent(UINT message,
 
       gfx::Point touch_point(point.x, point.y);
       unsigned int touch_id = id_generator_.GetGeneratedID(input[i].dwID);
-      base::TimeDelta time_delta = event_time - base::TimeTicks();
 
       if (input[i].dwFlags & TOUCHEVENTF_DOWN) {
         touch_ids_.insert(input[i].dwID);
         GenerateTouchEvent(ui::ET_TOUCH_PRESSED, touch_point, touch_id,
-                           event_time, time_delta, &touch_events);
+                           event_time, &touch_events);
         touch_down_contexts_++;
-        base::MessageLoop::current()->PostDelayedTask(
-            FROM_HERE,
-            base::Bind(&HWNDMessageHandler::ResetTouchDownContext,
-                       weak_factory_.GetWeakPtr()),
+        base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+            FROM_HERE, base::Bind(&HWNDMessageHandler::ResetTouchDownContext,
+                                  weak_factory_.GetWeakPtr()),
             base::TimeDelta::FromMilliseconds(kTouchDownContextResetTimeout));
       } else {
         if (input[i].dwFlags & TOUCHEVENTF_MOVE) {
           GenerateTouchEvent(ui::ET_TOUCH_MOVED, touch_point, touch_id,
-                             event_time, time_delta, &touch_events);
+                             event_time, &touch_events);
         }
 
         if (input[i].dwFlags & TOUCHEVENTF_UP) {
           touch_ids_.erase(input[i].dwID);
           GenerateTouchEvent(ui::ET_TOUCH_RELEASED, touch_point, touch_id,
-                             event_time, time_delta, &touch_events);
+                             event_time, &touch_events);
           id_generator_.ReleaseNumber(input[i].dwID);
         }
       }
@@ -2253,10 +2275,9 @@ LRESULT HWNDMessageHandler::OnTouchEvent(UINT message,
     // Handle the touch events asynchronously. We need this because touch
     // events on windows don't fire if we enter a modal loop in the context of
     // a touch event.
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(&HWNDMessageHandler::HandleTouchEvents,
-                   weak_factory_.GetWeakPtr(), touch_events));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&HWNDMessageHandler::HandleTouchEvents,
+                              weak_factory_.GetWeakPtr(), touch_events));
   }
   CloseTouchInputHandle(reinterpret_cast<HTOUCHINPUT>(l_param));
   SetMsgHandled(FALSE);
@@ -2324,10 +2345,9 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
         // likes to (incorrectly) recalculate what our position/size should be
         // and send us further updates.
         ignore_window_pos_changes_ = true;
-        base::MessageLoop::current()->PostTask(
-            FROM_HERE,
-            base::Bind(&HWNDMessageHandler::StopIgnoringPosChanges,
-                       weak_factory_.GetWeakPtr()));
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::Bind(&HWNDMessageHandler::StopIgnoringPosChanges,
+                                  weak_factory_.GetWeakPtr()));
       }
       last_monitor_ = monitor;
       last_monitor_rect_ = monitor_rect;
@@ -2354,8 +2374,10 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
 
   if (window_pos->flags & SWP_SHOWWINDOW)
     delegate_->HandleVisibilityChanging(true);
-  else if (window_pos->flags & SWP_HIDEWINDOW)
+  else if (window_pos->flags & SWP_HIDEWINDOW) {
+    SetDwmFrameExtension(DwmFrameState::OFF);
     delegate_->HandleVisibilityChanging(false);
+  }
 
   SetMsgHandled(FALSE);
 }
@@ -2363,16 +2385,13 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
 void HWNDMessageHandler::OnWindowPosChanged(WINDOWPOS* window_pos) {
   if (DidClientAreaSizeChange(window_pos))
     ClientAreaSizeChanged();
-  if (!delegate_->HasFrame() && window_pos->flags & SWP_FRAMECHANGED &&
-      ui::win::IsAeroGlassEnabled() &&
-      (window_ex_style() & WS_EX_COMPOSITED) == 0) {
-    MARGINS m = {10, 10, 10, 10};
-    DwmExtendFrameIntoClientArea(hwnd(), &m);
-  }
+  if (window_pos->flags & SWP_FRAMECHANGED)
+    SetDwmFrameExtension(DwmFrameState::ON);
   if (window_pos->flags & SWP_SHOWWINDOW) {
     delegate_->HandleVisibilityChanged(true);
     if (direct_manipulation_helper_)
       direct_manipulation_helper_->Activate(hwnd());
+    SetDwmFrameExtension(DwmFrameState::ON);
   } else if (window_pos->flags & SWP_HIDEWINDOW) {
     delegate_->HandleVisibilityChanged(false);
     if (direct_manipulation_helper_)
@@ -2598,8 +2617,7 @@ void HWNDMessageHandler::PerformDwmTransition() {
 void HWNDMessageHandler::GenerateTouchEvent(ui::EventType event_type,
                                             const gfx::Point& point,
                                             unsigned int id,
-                                            base::TimeTicks event_time,
-                                            base::TimeDelta time_stamp,
+                                            base::TimeTicks time_stamp,
                                             TouchEvents* touch_events) {
   ui::TouchEvent event(event_type, point, id, time_stamp);
 
@@ -2609,7 +2627,7 @@ void HWNDMessageHandler::GenerateTouchEvent(ui::EventType event_type,
       ui::INPUT_EVENT_LATENCY_ORIGINAL_COMPONENT,
       0,
       0,
-      event_time,
+      time_stamp,
       1);
 
   touch_events->push_back(event);

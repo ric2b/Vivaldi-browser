@@ -35,6 +35,7 @@
 #include "WebAXObject.h"
 #include "WebDOMMessageEvent.h"
 #include "WebDataSource.h"
+#include "WebFileChooserParams.h"
 #include "WebFrame.h"
 #include "WebFrameOwnerProperties.h"
 #include "WebHistoryCommitType.h"
@@ -50,7 +51,9 @@
 #include "public/platform/WebEffectiveConnectionType.h"
 #include "public/platform/WebFileSystem.h"
 #include "public/platform/WebFileSystemType.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
+#include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebSetSinkIdCallbacks.h"
 #include "public/platform/WebStorageQuotaCallbacks.h"
@@ -77,6 +80,7 @@ class WebDataSource;
 class WebEncryptedMediaClient;
 class WebExternalPopupMenu;
 class WebExternalPopupMenuClient;
+class WebFileChooserCompletion;
 class WebFormElement;
 class WebInstalledAppClient;
 class WebMediaPlayer;
@@ -184,8 +188,8 @@ public:
     // This frame's name has changed.
     virtual void didChangeName(const WebString& name, const WebString& uniqueName) { }
 
-    // This frame has been set to enforce strict mixed content checking.
-    virtual void didEnforceStrictMixedContentChecking() {}
+    // This frame has set an insecure request policy.
+    virtual void didEnforceInsecureRequestPolicy(WebInsecureRequestPolicy) {}
 
     // This frame has been updated to a unique origin, which should be
     // considered potentially trustworthy if
@@ -440,12 +444,23 @@ public:
     // the user selects 'OK' or false otherwise.
     virtual bool runModalBeforeUnloadDialog(bool isReload) { return true; }
 
+    // This method returns immediately after showing the dialog. When the
+    // dialog is closed, it should call the WebFileChooserCompletion to
+    // pass the results of the dialog. Returns false if
+    // WebFileChooseCompletion will never be called.
+    virtual bool runFileChooser(
+        const blink::WebFileChooserParams& params,
+        WebFileChooserCompletion* chooserCompletion) { return false; }
 
     // UI ------------------------------------------------------------------
 
     // Shows a context menu with commands relevant to a specific element on
     // the given frame. Additional context data is supplied.
     virtual void showContextMenu(const WebContextMenuData&) { }
+
+    // This method is called in response to WebView's saveImageAt(x, y).
+    // A data url from <canvas> or <img> is passed to the method's argument.
+    virtual void saveImageFromDataURL(const WebString&) { }
 
     // Low-level resource notifications ------------------------------------
 
@@ -547,12 +562,6 @@ public:
     // where on the screen the selection rect is currently located.
     virtual void reportFindInPageSelection(
         int identifier, int activeMatchOrdinal, const WebRect& selection) { }
-
-    // Currently, TextFinder will report up the frame tree on certain events to
-    // form a tree of TextFinders. When we're experimenting with OOPIFs, this
-    // is precisely not what we want. Experiments that want to search per frame
-    // should override this to true.
-    virtual bool shouldSearchSingleFrame() { return false; }
 
     // Quota ---------------------------------------------------------
 
@@ -712,6 +721,14 @@ public:
 
     // Mojo ----------------------------------------------------------------
     virtual ServiceRegistry* serviceRegistry() { return nullptr; }
+
+    // Visibility ----------------------------------------------------------
+
+    // Returns the current visibility of the WebFrame.
+    virtual WebPageVisibilityState visibilityState() const
+    {
+        return WebPageVisibilityStateVisible;
+    }
 
 protected:
     virtual ~WebFrameClient() { }

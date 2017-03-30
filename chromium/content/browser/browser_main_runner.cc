@@ -6,6 +6,7 @@
 
 #include "base/base_switches.h"
 #include "base/command_line.h"
+#include "base/debug/debugger.h"
 #include "base/debug/leak_annotations.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -19,8 +20,8 @@
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
-#include "components/tracing/trace_config_file.h"
-#include "components/tracing/tracing_switches.h"
+#include "components/tracing/browser/trace_config_file.h"
+#include "components/tracing/common/tracing_switches.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browser_shutdown_profile_dumper.h"
 #include "content/browser/notification_service_impl.h"

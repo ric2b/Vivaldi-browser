@@ -173,10 +173,13 @@ TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   EXPECT_EQ(2, entry2_->GetPageID());
 
   // Transition type
-  EXPECT_EQ(ui::PAGE_TRANSITION_LINK, entry1_->GetTransitionType());
-  EXPECT_EQ(ui::PAGE_TRANSITION_TYPED, entry2_->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      entry1_->GetTransitionType(), ui::PAGE_TRANSITION_LINK));
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      entry2_->GetTransitionType(), ui::PAGE_TRANSITION_TYPED));
   entry2_->SetTransitionType(ui::PAGE_TRANSITION_RELOAD);
-  EXPECT_EQ(ui::PAGE_TRANSITION_RELOAD, entry2_->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      entry2_->GetTransitionType(), ui::PAGE_TRANSITION_RELOAD));
 
   // Is renderer initiated
   EXPECT_FALSE(entry1_->is_renderer_initiated());
@@ -213,18 +216,15 @@ TEST_F(NavigationEntryTest, NavigationEntryAccessors) {
   entry2_->SetIsOverridingUserAgent(true);
   EXPECT_TRUE(entry2_->GetIsOverridingUserAgent());
 
-  // Browser initiated post data
-  EXPECT_EQ(NULL, entry1_->GetBrowserInitiatedPostData());
-  EXPECT_EQ(NULL, entry2_->GetBrowserInitiatedPostData());
+  // Post data
+  EXPECT_FALSE(entry1_->GetPostData());
+  EXPECT_FALSE(entry2_->GetPostData());
   const int length = 11;
-  const unsigned char* raw_data =
-      reinterpret_cast<const unsigned char*>("post\n\n\0data");
-  std::vector<unsigned char> post_data_vector(raw_data, raw_data+length);
-  scoped_refptr<base::RefCountedBytes> post_data =
-      base::RefCountedBytes::TakeVector(&post_data_vector);
-  entry2_->SetBrowserInitiatedPostData(post_data.get());
-  EXPECT_EQ(post_data->front(),
-      entry2_->GetBrowserInitiatedPostData()->front());
+  const char* raw_data = "post\n\n\0data";
+  scoped_refptr<ResourceRequestBody> post_data =
+      ResourceRequestBody::CreateFromBytes(raw_data, length);
+  entry2_->SetPostData(post_data);
+  EXPECT_EQ(post_data, entry2_->GetPostData());
 }
 
 // Test basic Clone behavior.
@@ -242,7 +242,8 @@ TEST_F(NavigationEntryTest, NavigationEntryClone) {
   EXPECT_EQ(entry2_->GetTitle(), clone->GetTitle());
 
   // Value set after constructor.
-  EXPECT_EQ(entry2_->GetTransitionType(), clone->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      clone->GetTransitionType(), entry2_->GetTransitionType()));
 
   // Value not copied due to ResetForCommit.
   EXPECT_NE(entry2_->should_replace_entry(), clone->should_replace_entry());

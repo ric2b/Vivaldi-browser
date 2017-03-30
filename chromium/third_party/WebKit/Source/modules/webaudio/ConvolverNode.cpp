@@ -22,13 +22,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "modules/webaudio/ConvolverNode.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "modules/webaudio/AudioBuffer.h"
 #include "modules/webaudio/AudioNodeInput.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/ConvolverNode.h"
 #include "platform/audio/Reverb.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 // Note about empirical tuning:
 // The maximum FFT size affects reverb performance and accuracy.
@@ -127,7 +129,7 @@ void ConvolverHandler::setBuffer(AudioBuffer* buffer, ExceptionState& exceptionS
     bufferBus->setSampleRate(buffer->sampleRate());
 
     // Create the reverb with the given impulse response.
-    OwnPtr<Reverb> reverb = adoptPtr(new Reverb(bufferBus.get(), ProcessingSizeInFrames, MaxFFTSize, 2, context() && context()->hasRealtimeConstraint(), m_normalize));
+    std::unique_ptr<Reverb> reverb = wrapUnique(new Reverb(bufferBus.get(), ProcessingSizeInFrames, MaxFFTSize, 2, context() && context()->hasRealtimeConstraint(), m_normalize));
 
     {
         // Synchronize with process().
@@ -165,15 +167,22 @@ double ConvolverHandler::latencyTime() const
 
 // ----------------------------------------------------------------
 
-ConvolverNode::ConvolverNode(AbstractAudioContext& context, float sampleRate)
+ConvolverNode::ConvolverNode(AbstractAudioContext& context)
     : AudioNode(context)
 {
-    setHandler(ConvolverHandler::create(*this, sampleRate));
+    setHandler(ConvolverHandler::create(*this, context.sampleRate()));
 }
 
-ConvolverNode* ConvolverNode::create(AbstractAudioContext& context, float sampleRate)
+ConvolverNode* ConvolverNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
 {
-    return new ConvolverNode(context, sampleRate);
+    DCHECK(isMainThread());
+
+    if (context.isContextClosed()) {
+        context.throwExceptionForClosedState(exceptionState);
+        return nullptr;
+    }
+
+    return new ConvolverNode(context);
 }
 
 ConvolverHandler& ConvolverNode::convolverHandler() const

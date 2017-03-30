@@ -28,6 +28,7 @@
 #include "wtf/ListHashSet.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicStringHash.h"
+#include <memory>
 
 namespace blink {
 
@@ -72,7 +73,7 @@ inline void FormControlState::append(const String& value)
     m_values.append(value);
 }
 
-using SavedFormStateMap = HashMap<AtomicString, OwnPtr<SavedFormState>>;
+using SavedFormStateMap = HashMap<AtomicString, std::unique_ptr<SavedFormState>>;
 
 class DocumentState final : public GarbageCollected<DocumentState> {
 public:
@@ -103,6 +104,9 @@ public:
     DocumentState* formElementsState() const;
     // This should be callled only by Document::setStateForNewFormElements().
     void setStateForNewFormElements(const Vector<String>&);
+    // Returns true if saved state is set to this object and there are entries
+    // which are not consumed yet.
+    bool hasFormStates() const;
     void willDeleteForm(HTMLFormElement*);
     void restoreControlStateFor(HTMLFormControlElementWithState&);
     void restoreControlStateIn(HTMLFormElement&);

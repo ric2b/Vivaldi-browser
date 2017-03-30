@@ -63,7 +63,8 @@ ContextGroup::ContextGroup(
     const scoped_refptr<FramebufferCompletenessCache>&
         framebuffer_completeness_cache,
     const scoped_refptr<FeatureInfo>& feature_info,
-    bool bind_generates_resource)
+    bool bind_generates_resource,
+    gpu::ImageFactory* image_factory)
     : gpu_preferences_(gpu_preferences),
       mailbox_manager_(mailbox_manager),
       memory_tracker_(memory_tracker),
@@ -99,7 +100,8 @@ ContextGroup::ContextGroup(
       max_uniform_buffer_bindings_(0u),
       uniform_buffer_offset_alignment_(1u),
       program_cache_(NULL),
-      feature_info_(feature_info) {
+      feature_info_(feature_info),
+      image_factory_(image_factory) {
   {
     DCHECK(feature_info_);
     if (!mailbox_manager_.get())
@@ -168,7 +170,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
     DCHECK(max_dual_source_draw_buffers_ >= 1);
   }
 
-  if (feature_info_->gl_version_info().IsES3Capable()) {
+  if (feature_info_->gl_version_info().is_es3_capable) {
     const GLint kMinTransformFeedbackSeparateAttribs = 4;
     if (!QueryGLFeatureU(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS,
                          kMinTransformFeedbackSeparateAttribs,
@@ -255,7 +257,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
                 << kMinCubeMapSize << ").";
     return false;
   }
-  if (feature_info_->gl_version_info().IsES3Capable() &&
+  if (feature_info_->gl_version_info().is_es3_capable &&
       !QueryGLFeature(GL_MAX_3D_TEXTURE_SIZE, kMin3DTextureSize,
                       &max_3d_texture_size)) {
     DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
@@ -263,7 +265,7 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
                 << ", should be " << kMin3DTextureSize << ").";
     return false;
   }
-  if (feature_info_->gl_version_info().IsES3Capable() &&
+  if (feature_info_->gl_version_info().is_es3_capable &&
       !QueryGLFeature(GL_MAX_ARRAY_TEXTURE_LAYERS, kMinArrayTextureLayers,
                       &max_array_texture_layers)) {
     DLOG(ERROR) << "ContextGroup::Initialize failed because maximum "
@@ -289,11 +291,6 @@ bool ContextGroup::Initialize(GLES2Decoder* decoder,
     max_rectangle_texture_size = std::min(
         max_rectangle_texture_size,
         feature_info_->workarounds().max_texture_size);
-  }
-  if (feature_info_->workarounds().max_cube_map_texture_size) {
-    max_cube_map_texture_size = std::min(
-        max_cube_map_texture_size,
-        feature_info_->workarounds().max_cube_map_texture_size);
   }
 
   texture_manager_.reset(new TextureManager(memory_tracker_.get(),

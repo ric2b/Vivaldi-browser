@@ -6,6 +6,7 @@
 #include "base/debug/debugger.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/run_loop.h"
 #include "chrome/common/service_process_util.h"
 #include "chrome/service/service_process.h"
 #include "content/public/common/main_function_params.h"
@@ -17,8 +18,8 @@ int ServiceProcessMain(const content::MainFunctionParams& parameters) {
   // cookies should go through the browser process.
   net::URLRequest::SetDefaultCookiePolicyToBlock();
 
+  base::PlatformThread::SetName("CrServiceMain");
   base::MessageLoopForUI main_message_loop;
-  main_message_loop.set_thread_name("MainThread");
   if (parameters.command_line.HasSwitch(switches::kWaitForDebugger)) {
     base::debug::WaitForDebugger(60, true);
   }
@@ -26,7 +27,6 @@ int ServiceProcessMain(const content::MainFunctionParams& parameters) {
   VLOG(1) << "Service process launched: "
           << parameters.command_line.GetCommandLineString();
 
-  base::PlatformThread::SetName("CrServiceMain");
   base::StatisticsRecorder::Initialize();
 
   // If there is already a service process running, quit now.
@@ -38,7 +38,7 @@ int ServiceProcessMain(const content::MainFunctionParams& parameters) {
   if (service_process.Initialize(&main_message_loop,
                                  parameters.command_line,
                                  state.release())) {
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
   } else {
     LOG(ERROR) << "Service process failed to initialize";
   }

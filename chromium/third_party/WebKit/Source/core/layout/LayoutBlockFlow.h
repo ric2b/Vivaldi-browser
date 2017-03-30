@@ -43,15 +43,15 @@
 #include "core/layout/line/LineBoxList.h"
 #include "core/layout/line/RootInlineBox.h"
 #include "core/layout/line/TrailingObjects.h"
-#include "core/style/ComputedStyleConstants.h"
+#include <memory>
 
 namespace blink {
 
 class BlockChildrenLayoutInfo;
-class ClipScope;
 class MarginInfo;
-class LineBreaker;
+class LayoutInline;
 class LineInfo;
+class LineLayoutState;
 class LineWidth;
 class LayoutMultiColumnFlowThread;
 class LayoutMultiColumnSpannerPlaceholder;
@@ -155,6 +155,12 @@ public:
     bool containsFloat(LayoutBox*) const;
 
     void removeFloatingObjects();
+
+    LayoutBoxModelObject* virtualContinuation() const final { return continuation(); }
+    bool isAnonymousBlockContinuation() const { return continuation() && isAnonymousBlock(); }
+
+    using LayoutBoxModelObject::continuation;
+    using LayoutBoxModelObject::setContinuation;
 
     LayoutInline* inlineElementContinuation() const;
 
@@ -264,17 +270,6 @@ public:
         return child.y() + child.layoutObject()->marginTop();
     }
 
-    LayoutSize positionForFloatIncludingMargin(const FloatingObject& child) const
-    {
-        if (isHorizontalWritingMode()) {
-            return LayoutSize(child.x() + child.layoutObject()->marginLeft(),
-                child.y() + marginBeforeForChild(*child.layoutObject()));
-        }
-
-        return LayoutSize(child.x() + marginBeforeForChild(*child.layoutObject()),
-            child.y() + child.layoutObject()->marginTop());
-    }
-
     LayoutPoint flipFloatForWritingModeForChild(const FloatingObject&, const LayoutPoint&) const;
 
     const char* name() const override { return "LayoutBlockFlow"; }
@@ -293,7 +288,7 @@ public:
         return containsFloats() ? m_floatingObjects->set().last().get() : nullptr;
     }
 
-    void invalidateDisplayItemClientsOfFirstLine();
+    void setShouldDoFullPaintInvalidationForFirstLine();
 
     void simplifiedNormalFlowInlineLayout();
     bool recalcInlineChildrenOverflowAfterStyleChange();
@@ -308,7 +303,7 @@ public:
 
 protected:
     void rebuildFloatsFromIntruding();
-    void layoutInlineChildren(bool relayoutChildren, LayoutUnit& paintInvalidationLogicalTop, LayoutUnit& paintInvalidationLogicalBottom, LayoutUnit afterEdge);
+    void layoutInlineChildren(bool relayoutChildren, LayoutUnit afterEdge);
     void addLowestFloatFromChildren(LayoutBlockFlow*);
 
     void createFloatingObjects();
@@ -384,10 +379,8 @@ private:
     bool hitTestFloats(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset);
 
     void invalidatePaintForOverhangingFloats(bool paintAllDescendants) final;
-    void invalidatePaintForOverflow() final;
-    void invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason) const override;
+    void invalidateDisplayItemClients(PaintInvalidationReason) const override;
 
-    virtual void clipOutFloatingObjects(const LayoutBlock*, ClipScope&, const LayoutPoint&, const LayoutSize&) const;
     void clearFloats(EClear);
 
     LayoutUnit logicalRightFloatOffsetForLine(LayoutUnit logicalTop, LayoutUnit fixedOffset, LayoutUnit logicalHeight) const;
@@ -401,7 +394,7 @@ private:
 
     virtual RootInlineBox* createRootInlineBox(); // Subclassed by SVG
 
-    void dirtyLinesFromChangedChild(LayoutObject* child) final { m_lineBoxes.dirtyLinesFromChangedChild(LineLayoutItem(this), LineLayoutItem(child)); }
+    void dirtyLinesFromChangedChild(LayoutObject* child, MarkingBehavior markingBehaviour = MarkContainerChain) final { m_lineBoxes.dirtyLinesFromChangedChild(LineLayoutItem(this), LineLayoutItem(child), markingBehaviour == MarkContainerChain); }
 
     bool isPagedOverflow(const ComputedStyle&);
 
@@ -615,15 +608,12 @@ private:
 
     LayoutBlockFlowRareData& ensureRareData();
 
-    LayoutUnit m_paintInvalidationLogicalTop;
-    LayoutUnit m_paintInvalidationLogicalBottom;
-
     bool isSelfCollapsingBlock() const override;
     bool checkIfIsSelfCollapsingBlock() const;
 
 protected:
-    OwnPtr<LayoutBlockFlowRareData> m_rareData;
-    OwnPtr<FloatingObjects> m_floatingObjects;
+    std::unique_ptr<LayoutBlockFlowRareData> m_rareData;
+    std::unique_ptr<FloatingObjects> m_floatingObjects;
 
     friend class MarginInfo;
     friend class LineWidth; // needs to know FloatingObject

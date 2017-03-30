@@ -6,7 +6,6 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
 #include "base/time/time.h"
@@ -18,11 +17,11 @@
 #include "components/captive_portal/captive_portal_testing_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "net/base/net_errors.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_info.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_certificate_data.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 class SSLErrorHandlerForTest : public SSLErrorHandler {
@@ -176,7 +175,7 @@ TEST_F(SSLErrorHandlerTest,
   EXPECT_FALSE(error_handler()->captive_portal_interstitial_shown());
 
   error_handler()->ClearSeenOperations();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(error_handler()->IsTimerRunning());
   EXPECT_FALSE(error_handler()->captive_portal_checked());
@@ -197,7 +196,7 @@ TEST_F(SSLErrorHandlerTest,
   error_handler()->ClearSeenOperations();
   error_handler()->SendCaptivePortalNotification(
       captive_portal::RESULT_BEHIND_CAPTIVE_PORTAL);
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(error_handler()->IsTimerRunning());
   EXPECT_FALSE(error_handler()->captive_portal_checked());
@@ -220,7 +219,7 @@ TEST_F(SSLErrorHandlerTest,
   error_handler()->ClearSeenOperations();
   error_handler()->SendCaptivePortalNotification(
       captive_portal::RESULT_INTERNET_CONNECTED);
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_FALSE(error_handler()->IsTimerRunning());
   EXPECT_FALSE(error_handler()->captive_portal_checked());

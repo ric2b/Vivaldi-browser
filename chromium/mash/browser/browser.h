@@ -13,9 +13,14 @@
 #include "services/shell/public/cpp/shell_client.h"
 #include "services/tracing/public/cpp/tracing_impl.h"
 
+namespace navigation {
+class View;
+}
+
 namespace views {
 class AuraInit;
 class Widget;
+class WindowManagerConnection;
 }
 
 namespace mash {
@@ -33,6 +38,8 @@ class Browser : public shell::ShellClient,
   // own these widgets.
   void AddWindow(views::Widget* window);
   void RemoveWindow(views::Widget* window);
+
+  std::unique_ptr<navigation::View> CreateView();
 
  private:
   // shell::ShellClient:
@@ -54,6 +61,7 @@ class Browser : public shell::ShellClient,
 
   mojo::TracingImpl tracing_;
   std::unique_ptr<views::AuraInit> aura_init_;
+  std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(Browser);
 };

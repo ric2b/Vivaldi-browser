@@ -5,6 +5,7 @@
 #include "media/mojo/services/service_factory_impl.h"
 
 #include "base/logging.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/media_log.h"
 #include "media/mojo/services/mojo_media_client.h"
 #include "services/shell/public/interfaces/interface_provider.mojom.h"
@@ -12,6 +13,10 @@
 #if defined(ENABLE_MOJO_AUDIO_DECODER)
 #include "media/mojo/services/mojo_audio_decoder_service.h"
 #endif  // defined(ENABLE_MOJO_AUDIO_DECODER)
+
+#if defined(ENABLE_MOJO_VIDEO_DECODER)
+#include "media/mojo/services/mojo_video_decoder_service.h"
+#endif  // defined(ENABLE_MOJO_VIDEO_DECODER)
 
 #if defined(ENABLE_MOJO_RENDERER)
 #include "media/base/renderer_factory.h"
@@ -35,13 +40,11 @@ ServiceFactoryImpl::ServiceFactoryImpl(
 #if defined(ENABLE_MOJO_CDM)
       interfaces_(interfaces),
 #endif
-#if defined(ENABLE_MOJO_AUDIO_DECODER) || defined(ENABLE_MOJO_CDM) || \
-    defined(ENABLE_MOJO_RENDERER)
-      mojo_media_client_(mojo_media_client),
-#endif
       media_log_(media_log),
-      connection_ref_(std::move(connection_ref)) {
+      connection_ref_(std::move(connection_ref)),
+      mojo_media_client_(mojo_media_client) {
   DVLOG(1) << __FUNCTION__;
+  DCHECK(mojo_media_client_);
 }
 
 ServiceFactoryImpl::~ServiceFactoryImpl() {
@@ -54,7 +57,7 @@ void ServiceFactoryImpl::CreateAudioDecoder(
     mojo::InterfaceRequest<mojom::AudioDecoder> request) {
 #if defined(ENABLE_MOJO_AUDIO_DECODER)
   scoped_refptr<base::SingleThreadTaskRunner> task_runner(
-      base::MessageLoop::current()->task_runner());
+      base::ThreadTaskRunnerHandle::Get());
 
   std::unique_ptr<AudioDecoder> audio_decoder =
       mojo_media_client_->CreateAudioDecoder(task_runner);
@@ -68,13 +71,20 @@ void ServiceFactoryImpl::CreateAudioDecoder(
 #endif  // defined(ENABLE_MOJO_AUDIO_DECODER)
 }
 
+void ServiceFactoryImpl::CreateVideoDecoder(
+    mojom::VideoDecoderRequest request) {
+#if defined(ENABLE_MOJO_VIDEO_DECODER)
+  new MojoVideoDecoderService(std::move(request), mojo_media_client_);
+#endif  // defined(ENABLE_MOJO_VIDEO_DECODER)
+}
+
 void ServiceFactoryImpl::CreateRenderer(
     mojo::InterfaceRequest<mojom::Renderer> request) {
 #if defined(ENABLE_MOJO_RENDERER)
   // The created object is owned by the pipe.
   // The audio and video sinks are owned by the client.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner(
-      base::MessageLoop::current()->task_runner());
+      base::ThreadTaskRunnerHandle::Get());
   AudioRendererSink* audio_renderer_sink =
       mojo_media_client_->CreateAudioRendererSink();
   VideoRendererSink* video_renderer_sink =

@@ -78,8 +78,6 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
     const gfx::Vector2dF& elastic_overscroll,
     const LayerImpl* elastic_overscroll_application_layer,
     int max_texture_size,
-    bool can_use_lcd_text,
-    bool layers_always_allowed_lcd_text,
     bool can_render_to_separate_surface,
     bool can_adjust_raster_scales,
     bool verify_clip_tree_calculations,
@@ -97,8 +95,6 @@ LayerTreeHostCommon::CalcDrawPropsImplInputs::CalcDrawPropsImplInputs(
       elastic_overscroll_application_layer(
           elastic_overscroll_application_layer),
       max_texture_size(max_texture_size),
-      can_use_lcd_text(can_use_lcd_text),
-      layers_always_allowed_lcd_text(layers_always_allowed_lcd_text),
       can_render_to_separate_surface(can_render_to_separate_surface),
       can_adjust_raster_scales(can_adjust_raster_scales),
       verify_clip_tree_calculations(verify_clip_tree_calculations),
@@ -121,8 +117,6 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
                               gfx::Vector2dF(),
                               NULL,
                               std::numeric_limits<int>::max() / 2,
-                              false,
-                              false,
                               true,
                               false,
                               true,
@@ -192,26 +186,29 @@ void ScrollAndScaleSet::FromProtobuf(const proto::ScrollAndScaleSet& proto) {
 }
 
 static inline void SetMaskLayersAreDrawnRenderSurfaceLayerListMembers(
-    LayerImpl* layer) {
-  if (layer->mask_layer())
-    layer->mask_layer()->set_is_drawn_render_surface_layer_list_member(true);
-  if (layer->replica_layer() && layer->replica_layer()->mask_layer()) {
-    layer->replica_layer()
-        ->mask_layer()
-        ->set_is_drawn_render_surface_layer_list_member(true);
+    RenderSurfaceImpl* surface,
+    PropertyTrees* property_trees) {
+  LayerImpl* mask_layer = surface->MaskLayer();
+  LayerImpl* replica_mask_layer = surface->ReplicaMaskLayer();
+  if (mask_layer) {
+    mask_layer->set_is_drawn_render_surface_layer_list_member(true);
+    draw_property_utils::ComputeMaskDrawProperties(mask_layer, property_trees);
+  }
+  if (replica_mask_layer) {
+    replica_mask_layer->set_is_drawn_render_surface_layer_list_member(true);
+    draw_property_utils::ComputeMaskDrawProperties(replica_mask_layer,
+                                                   property_trees);
   }
 }
 
-static inline void ClearLayerIsDrawnRenderSurfaceLayerListMember(
-    LayerImpl* layer) {
-  layer->set_is_drawn_render_surface_layer_list_member(false);
-  if (layer->mask_layer())
-    layer->mask_layer()->set_is_drawn_render_surface_layer_list_member(false);
-  if (layer->replica_layer() && layer->replica_layer()->mask_layer()) {
-    layer->replica_layer()
-        ->mask_layer()
-        ->set_is_drawn_render_surface_layer_list_member(false);
-  }
+static inline void ClearMaskLayersAreDrawnRenderSurfaceLayerListMembers(
+    RenderSurfaceImpl* surface) {
+  LayerImpl* mask_layer = surface->MaskLayer();
+  LayerImpl* replica_mask_layer = surface->ReplicaMaskLayer();
+  if (mask_layer)
+    mask_layer->set_is_drawn_render_surface_layer_list_member(false);
+  if (replica_mask_layer)
+    replica_mask_layer->set_is_drawn_render_surface_layer_list_member(false);
 }
 
 static inline void ClearIsDrawnRenderSurfaceLayerListMember(
@@ -225,7 +222,7 @@ static inline void ClearIsDrawnRenderSurfaceLayerListMember(
       scroll_tree->Node(layer->scroll_tree_index())
           ->data.num_drawn_descendants--;
     }
-    ClearLayerIsDrawnRenderSurfaceLayerListMember(layer);
+    layer->set_is_drawn_render_surface_layer_list_member(false);
   }
 }
 
@@ -330,9 +327,12 @@ static void ComputeInitialRenderSurfaceLayerList(
   // all non-skipped layers to the layer list of their target surface, and
   // add their content rect to their target surface's accumulated content rect.
   for (LayerImpl* layer : *layer_tree_impl) {
-    if (layer->render_surface())
+    if (layer->render_surface()) {
       layer->ClearRenderSurfaceLayerList();
-    ClearLayerIsDrawnRenderSurfaceLayerListMember(layer);
+      ClearMaskLayersAreDrawnRenderSurfaceLayerListMembers(
+          layer->render_surface());
+    }
+    layer->set_is_drawn_render_surface_layer_list_member(false);
 
     bool layer_is_drawn =
         property_trees->effect_tree.Node(layer->effect_tree_index())
@@ -377,8 +377,8 @@ static void ComputeInitialRenderSurfaceLayerList(
       // same is true for layers with filters that move pixels.
       // TODO(senorblanco): make this smarter for the SkImageFilter case (check
       // for pixel-moving filters)
-      bool is_occlusion_immune = layer->HasCopyRequest() ||
-                                 layer->has_replica() ||
+      bool is_occlusion_immune = surface->HasCopyRequest() ||
+                                 surface->HasReplica() ||
                                  layer->filters().HasReferenceFilter() ||
                                  layer->filters().HasFilterThatMovesPixels();
       if (is_occlusion_immune) {
@@ -464,7 +464,7 @@ static void ComputeListOfNonEmptySurfaces(LayerTreeImpl* layer_tree_impl,
       }
       continue;
     }
-    SetMaskLayersAreDrawnRenderSurfaceLayerListMembers(layer);
+    SetMaskLayersAreDrawnRenderSurfaceLayerListMembers(surface, property_trees);
     final_surface_list->push_back(layer);
   }
 }
@@ -495,20 +495,6 @@ static void CalculateRenderSurfaceLayerList(
 
   ComputeLayerScrollsDrawnDescendants(layer_tree_impl,
                                       &property_trees->scroll_tree);
-}
-
-static void ComputeMaskLayerDrawProperties(const LayerImpl* layer,
-                                           LayerImpl* mask_layer) {
-  DrawProperties& mask_layer_draw_properties = mask_layer->draw_properties();
-  mask_layer_draw_properties.visible_layer_rect = gfx::Rect(layer->bounds());
-  mask_layer_draw_properties.target_space_transform =
-      layer->draw_properties().target_space_transform;
-  mask_layer_draw_properties.screen_space_transform =
-      layer->draw_properties().screen_space_transform;
-  mask_layer_draw_properties.maximum_animation_contents_scale =
-      layer->draw_properties().maximum_animation_contents_scale;
-  mask_layer_draw_properties.starting_animation_contents_scale =
-      layer->draw_properties().starting_animation_contents_scale;
 }
 
 void CalculateDrawPropertiesInternal(
@@ -594,15 +580,8 @@ void CalculateDrawPropertiesInternal(
   DCHECK(inputs->can_render_to_separate_surface ==
          inputs->property_trees->non_root_surfaces_enabled);
   for (LayerImpl* layer : visible_layer_list) {
-    draw_property_utils::ComputeLayerDrawProperties(
-        layer, inputs->property_trees, inputs->layers_always_allowed_lcd_text,
-        inputs->can_use_lcd_text);
-    if (layer->mask_layer())
-      ComputeMaskLayerDrawProperties(layer, layer->mask_layer());
-    LayerImpl* replica_mask_layer =
-        layer->replica_layer() ? layer->replica_layer()->mask_layer() : nullptr;
-    if (replica_mask_layer)
-      ComputeMaskLayerDrawProperties(layer, replica_mask_layer);
+    draw_property_utils::ComputeLayerDrawProperties(layer,
+                                                    inputs->property_trees);
   }
 
   CalculateRenderSurfaceLayerList(

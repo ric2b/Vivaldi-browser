@@ -66,7 +66,7 @@ CSSToLengthConversionData StyleResolverState::fontSizeConversionData() const
     float em = parentStyle()->specifiedFontSize();
     float rem = rootElementStyle() ? rootElementStyle()->specifiedFontSize() : 1;
     CSSToLengthConversionData::FontSizes fontSizes(em, rem, &parentStyle()->font());
-    CSSToLengthConversionData::ViewportSize viewportSize(document().layoutView());
+    CSSToLengthConversionData::ViewportSize viewportSize(document().layoutViewItem());
 
     return CSSToLengthConversionData(style(), fontSizes, viewportSize, 1);
 }
@@ -84,6 +84,16 @@ void StyleResolverState::setCustomPropertySetForApplyAtRule(const String& string
 StylePropertySet* StyleResolverState::customPropertySetForApplyAtRule(const String& string)
 {
     return m_customPropertySetsForApplyAtRule.get(string);
+}
+
+HeapHashMap<CSSPropertyID, Member<const CSSValue>>& StyleResolverState::parsedPropertiesForPendingSubstitution(const CSSPendingSubstitutionValue& value)
+{
+    HeapHashMap<CSSPropertyID, Member<const CSSValue>>* map = m_parsedPropertiesForPendingSubstitution.get(&value);
+    if (!map) {
+        map = new HeapHashMap<CSSPropertyID, Member<const CSSValue>>;
+        m_parsedPropertiesForPendingSubstitution.set(&value, map);
+    }
+    return *map;
 }
 
 } // namespace blink

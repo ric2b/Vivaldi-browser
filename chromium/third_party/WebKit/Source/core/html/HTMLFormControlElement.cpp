@@ -35,7 +35,7 @@
 #include "core/html/ValidityState.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/layout/LayoutBox.h"
+#include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/Page.h"
 #include "core/page/ValidationMessageClient.h"
@@ -179,7 +179,7 @@ void HTMLFormControlElement::disabledAttributeChanged()
     pseudoStateChanged(CSSSelector::PseudoEnabled);
     if (layoutObject())
         LayoutTheme::theme().controlStateChanged(*layoutObject(), EnabledControlState);
-    if (isDisabledFormControl() && treeScope().adjustedFocusedElement() == this) {
+    if (isDisabledFormControl() && adjustedFocusedElementInTreeScope() == this) {
         // We might want to call blur(), but it's dangerous to dispatch events
         // here.
         document().setNeedsFocusedElementCheck();

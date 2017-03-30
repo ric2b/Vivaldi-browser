@@ -30,11 +30,12 @@
 
 #include "platform/graphics/gpu/AcceleratedImageBufferSurface.h"
 
+#include "platform/graphics/skia/SkiaUtils.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "skia/ext/texture_handle.h"
 #include "third_party/skia/include/gpu/GrContext.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
 
 namespace blink {
@@ -42,7 +43,7 @@ namespace blink {
 AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(const IntSize& size, OpacityMode opacityMode)
     : ImageBufferSurface(size, opacityMode)
 {
-    m_contextProvider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    m_contextProvider = wrapUnique(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!m_contextProvider)
         return;
     GrContext* grContext = m_contextProvider->grContext();
@@ -61,7 +62,7 @@ AcceleratedImageBufferSurface::AcceleratedImageBufferSurface(const IntSize& size
 
 PassRefPtr<SkImage> AcceleratedImageBufferSurface::newImageSnapshot(AccelerationHint, SnapshotReason)
 {
-    return adoptRef(m_surface->newImageSnapshot());
+    return fromSkSp(m_surface->makeImageSnapshot());
 }
 
 GLuint AcceleratedImageBufferSurface::getBackingTextureHandleForOverwrite()

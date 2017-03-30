@@ -346,8 +346,6 @@ static const NSTimeInterval kAnimationContinuousCycleDuration = 0.4;
   [super setShowsBorderOnlyWhileMouseInside:showOnly];
   if (showOnly) {
     [self updateTrackingAreas];
-    if ([self tag] == kMaterialStandardButtonTypeWithLimitedClickFeedback)
-      [self setHighlighted:isMouseInside_];
   } else {
     if (trackingArea_) {
       [[self controlView] removeTrackingArea:trackingArea_];
@@ -585,26 +583,34 @@ static const NSTimeInterval kAnimationContinuousCycleDuration = 0.4;
                     innerPath:&innerPath
                      clipPath:NULL];
 
-  BOOL pressed = ([((NSControl*)[self controlView]) isEnabled] &&
-                  [self isHighlighted]);
+  BOOL enabled = [((NSControl*)[self controlView]) isEnabled];
+  BOOL pressed = enabled && [self isHighlighted];
   NSWindow* window = [controlView window];
   const ui::ThemeProvider* themeProvider = [window themeProvider];
   BOOL active = [window isKeyWindow] || [window isMainWindow];
 
   // Stroke the borders and appropriate fill gradient. If we're borderless, the
   // only time we want to draw the inner gradient is if we're highlighted or if
-  // we're drawing the focus ring manually.
+  // we're drawing the focus ring manually. In Material Design, the "border" is
+  // actually a highlight, which should be drawn if
+  // |showsBorderOnlyWhileMouseInside| is true.
+  BOOL hasMaterialHighlight =
+      [self tag] == kMaterialStandardButtonTypeWithLimitedClickFeedback &&
+      ![self showsBorderOnlyWhileMouseInside] &&
+      enabled;
   if (([self isBordered] && ![self showsBorderOnlyWhileMouseInside]) ||
-      pressed || [self isMouseInside] || [self isContinuousPulsing]) {
+      pressed || [self isMouseInside] || [self isContinuousPulsing] ||
+      hasMaterialHighlight) {
     // When pulsing we want the bookmark to stand out a little more.
     BOOL showClickedGradient = pressed ||
         (pulseState_ == gradient_button_cell::kPulsingContinuous);
+    BOOL showHighlightGradient = [self isHighlighted] || hasMaterialHighlight;
 
     [self drawBorderAndFillForTheme:themeProvider
                         controlView:controlView
                           innerPath:innerPath
                 showClickedGradient:showClickedGradient
-              showHighlightGradient:[self isHighlighted]
+              showHighlightGradient:showHighlightGradient
                          hoverAlpha:[self hoverAlpha]
                              active:active
                           cellFrame:cellFrame

@@ -199,6 +199,9 @@ const struct QuicErrorMapping {
   // A server config update arrived before the handshake is complete.
   { net::QUIC_CRYPTO_UPDATE_BEFORE_HANDSHAKE_COMPLETE,
    "quic.crypto.update_before_handshake_complete" },
+  // CHLO cannot fit in one packet.
+  { net::QUIC_CRYPTO_CHLO_TOO_LARGE,
+   "quic.crypto.chlo_too_large" },
   // This connection involved a version negotiation which appears to have been
   // tampered with.
   { net::QUIC_VERSION_NEGOTIATION_MISMATCH,
@@ -232,7 +235,13 @@ const struct QuicErrorMapping {
   { net::QUIC_LAST_ERROR, "quic.last_error"}
 };
 
-static_assert(arraysize(kQuicErrorMap) == net::kActiveQuicErrorCount,
+// Must be updated any time a net::QuicErrorCode is deprecated in
+// net/quic/quic_protocol.h.
+const int kDeprecatedQuicErrorCount = 4;
+const int kActiveQuicErrorCount =
+    net::QUIC_LAST_ERROR - kDeprecatedQuicErrorCount;
+
+static_assert(arraysize(kQuicErrorMap) == kActiveQuicErrorCount,
               "quic_error_map is not in sync with quic protocol!");
 
 }  // namespace

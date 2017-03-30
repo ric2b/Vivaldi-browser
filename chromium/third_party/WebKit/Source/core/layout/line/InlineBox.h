@@ -21,6 +21,7 @@
 #ifndef InlineBox_h
 #define InlineBox_h
 
+#include "core/CoreExport.h"
 #include "core/layout/api/LineLayoutBoxModel.h"
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/api/SelectionState.h"
@@ -38,7 +39,7 @@ enum MarkLineBoxes { MarkLineBoxesDirty, DontMarkLineBoxes };
 
 // InlineBox represents a rectangle that occurs on a line.  It corresponds to
 // some LayoutObject (i.e., it represents a portion of that LayoutObject).
-class InlineBox : public DisplayItemClient {
+class CORE_EXPORT InlineBox : public DisplayItemClient {
     WTF_MAKE_NONCOPYABLE(InlineBox);
 public:
     InlineBox(LineLayoutItem obj)
@@ -55,13 +56,13 @@ public:
 
     InlineBox(LineLayoutItem item, LayoutPoint topLeft, LayoutUnit logicalWidth, bool firstLine, bool constructed,
         bool dirty, bool extracted, bool isHorizontal, InlineBox* next, InlineBox* prev, InlineFlowBox* parent)
-        : m_next(next)
+        : m_bitfields(firstLine, constructed, dirty, extracted, isHorizontal)
+        , m_next(next)
         , m_prev(prev)
         , m_parent(parent)
         , m_lineLayoutItem(item)
         , m_topLeft(topLeft)
         , m_logicalWidth(logicalWidth)
-        , m_bitfields(firstLine, constructed, dirty, extracted, isHorizontal)
 #if ENABLE(ASSERT)
         , m_hasBadParent(false)
 #endif
@@ -288,6 +289,7 @@ public:
     // flipped for right-to-left text.
     void logicalRectToPhysicalRect(LayoutRect&) const;
 
+    // TODO(szager): The Rect versions should return a rect, not modify the argument.
     void flipForWritingMode(FloatRect&) const;
     FloatPoint flipForWritingMode(const FloatPoint&) const;
     void flipForWritingMode(LayoutRect&) const;
@@ -299,8 +301,8 @@ public:
     bool dirOverride() const { return m_bitfields.dirOverride(); }
     void setDirOverride(bool dirOverride) { m_bitfields.setDirOverride(dirOverride); }
 
-    // Invalidate display item clients in the whole sub inline box tree.
-    void invalidateDisplayItemClientsRecursively();
+    // Set all LineLayoutItems in the inline box subtree should do full paint invalidation.
+    void setShouldDoFullPaintInvalidationRecursively();
 
 #define ADD_BOOLEAN_BITFIELD(name, Name) \
     private:\
@@ -393,6 +395,10 @@ private:
     // containing block. The size indicates the size of the box whose point is being flipped.
     LayoutPoint logicalPositionToPhysicalPoint(const LayoutPoint&, const LayoutSize&) const;
 
+    void setLineLayoutItemShouldDoFullPaintInvalidationIfNeeded();
+
+    InlineBoxBitfields m_bitfields;
+
     InlineBox* m_next; // The next element on the same line as us.
     InlineBox* m_prev; // The previous element on the same line as us.
 
@@ -423,8 +429,6 @@ protected:
     LayoutUnit m_logicalWidth;
 
 private:
-    InlineBoxBitfields m_bitfields;
-
 #if ENABLE(ASSERT)
     bool m_hasBadParent;
 #endif

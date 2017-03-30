@@ -4,10 +4,13 @@
 
 #include "content/common/navigation_params.h"
 
+#include "base/logging.h"
 #include "build/build_config.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/url_constants.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace content {
 
@@ -21,6 +24,7 @@ bool ShouldMakeNetworkRequestForURL(const GURL& url) {
   // network stack. Neither should pushState/popState.
   return !url.SchemeIs(url::kDataScheme) && url != GURL(url::kAboutBlankURL) &&
          !url.SchemeIs(url::kJavaScriptScheme) && !url.is_empty() &&
+         !url.SchemeIs(url::kContentIDScheme) &&
          url != GURL(content::kAboutSrcDocURL);
 }
 
@@ -47,7 +51,8 @@ CommonNavigationParams::CommonNavigationParams(
     const GURL& history_url_for_data_url,
     LoFiState lofi_state,
     const base::TimeTicks& navigation_start,
-    std::string method)
+    std::string method,
+    const scoped_refptr<ResourceRequestBodyImpl>& post_data)
     : url(url),
       referrer(referrer),
       transition(transition),
@@ -60,7 +65,14 @@ CommonNavigationParams::CommonNavigationParams(
       history_url_for_data_url(history_url_for_data_url),
       lofi_state(lofi_state),
       navigation_start(navigation_start),
-      method(method) {}
+      method(method),
+      post_data(post_data) {
+  // |method != "POST"| should imply absence of |post_data|.
+  if (method != "POST" && post_data) {
+    NOTREACHED();
+    this->post_data = nullptr;
+  }
+}
 
 CommonNavigationParams::CommonNavigationParams(
     const CommonNavigationParams& other) = default;
@@ -100,14 +112,12 @@ StartNavigationParams::StartNavigationParams()
 
 StartNavigationParams::StartNavigationParams(
     const std::string& extra_headers,
-    const std::vector<unsigned char>& browser_initiated_post_data,
 #if defined(OS_ANDROID)
     bool has_user_gesture,
 #endif
     int transferred_request_child_id,
     int transferred_request_request_id)
     : extra_headers(extra_headers),
-      browser_initiated_post_data(browser_initiated_post_data),
 #if defined(OS_ANDROID)
       has_user_gesture(has_user_gesture),
 #endif
@@ -135,8 +145,7 @@ RequestNavigationParams::RequestNavigationParams()
       current_history_list_length(0),
       is_view_source(false),
       should_clear_history_list(false),
-      should_create_service_worker(false),
-      service_worker_provider_id(kInvalidServiceWorkerProviderId) {}
+      should_create_service_worker(false) {}
 
 RequestNavigationParams::RequestNavigationParams(
     bool is_overriding_user_agent,
@@ -169,8 +178,7 @@ RequestNavigationParams::RequestNavigationParams(
       current_history_list_length(current_history_list_length),
       is_view_source(is_view_source),
       should_clear_history_list(should_clear_history_list),
-      should_create_service_worker(false),
-      service_worker_provider_id(kInvalidServiceWorkerProviderId) {}
+      should_create_service_worker(false) {}
 
 RequestNavigationParams::RequestNavigationParams(
     const RequestNavigationParams& other) = default;

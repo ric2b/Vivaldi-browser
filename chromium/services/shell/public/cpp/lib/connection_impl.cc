@@ -19,31 +19,39 @@ namespace internal {
 ////////////////////////////////////////////////////////////////////////////////
 // ConnectionImpl, public:
 
+ConnectionImpl::ConnectionImpl()
+    : allow_all_interfaces_(true),
+      weak_factory_(this) {}
+
 ConnectionImpl::ConnectionImpl(
     const std::string& connection_name,
     const Identity& remote,
     uint32_t remote_id,
-    shell::mojom::InterfaceProviderPtr remote_interfaces,
-    shell::mojom::InterfaceProviderRequest local_interfaces,
     const CapabilityRequest& capability_request,
     State initial_state)
     : connection_name_(connection_name),
       remote_(remote),
       remote_id_(remote_id),
       state_(initial_state),
-      local_registry_(std::move(local_interfaces), this),
-      remote_interfaces_(std::move(remote_interfaces)),
       capability_request_(capability_request),
       allow_all_interfaces_(capability_request.interfaces.size() == 1 &&
                             capability_request.interfaces.count("*") == 1),
-      weak_factory_(this) {}
-
-ConnectionImpl::ConnectionImpl()
-    : local_registry_(shell::mojom::InterfaceProviderRequest(), this),
-      allow_all_interfaces_(true),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+}
 
 ConnectionImpl::~ConnectionImpl() {}
+
+void ConnectionImpl::SetExposedInterfaces(
+    std::unique_ptr<InterfaceRegistry> exposed_interfaces) {
+  exposed_interfaces_owner_ = std::move(exposed_interfaces);
+  set_exposed_interfaces(exposed_interfaces_owner_.get());
+}
+
+void ConnectionImpl::SetRemoteInterfaces(
+    std::unique_ptr<InterfaceProvider> remote_interfaces) {
+  remote_interfaces_owner_ = std::move(remote_interfaces);
+  set_remote_interfaces(remote_interfaces_owner_.get());
+}
 
 shell::mojom::Connector::ConnectCallback ConnectionImpl::GetConnectCallback() {
   return base::Bind(&ConnectionImpl::OnConnectionCompleted,
@@ -65,8 +73,8 @@ const Identity& ConnectionImpl::GetRemoteIdentity() const {
   return remote_;
 }
 
-void ConnectionImpl::SetConnectionLostClosure(const mojo::Closure& handler) {
-  remote_interfaces_.set_connection_error_handler(handler);
+void ConnectionImpl::SetConnectionLostClosure(const base::Closure& handler) {
+  remote_interfaces_->SetConnectionLostClosure(handler);
 }
 
 shell::mojom::ConnectResult ConnectionImpl::GetResult() const {
@@ -82,7 +90,7 @@ uint32_t ConnectionImpl::GetRemoteInstanceID() const {
 }
 
 void ConnectionImpl::AddConnectionCompletedClosure(
-    const mojo::Closure& callback) {
+    const base::Closure& callback) {
   if (IsPending())
     connection_completed_callbacks_.push_back(callback);
   else
@@ -94,12 +102,16 @@ bool ConnectionImpl::AllowsInterface(const std::string& interface_name) const {
          capability_request_.interfaces.count(interface_name);
 }
 
-shell::mojom::InterfaceProvider* ConnectionImpl::GetRemoteInterfaces() {
-  return remote_interfaces_.get();
+mojom::InterfaceProvider* ConnectionImpl::GetRemoteInterfaceProvider() {
+  return remote_interfaces_->get();
 }
 
-InterfaceRegistry* ConnectionImpl::GetLocalRegistry() {
-  return &local_registry_;
+InterfaceRegistry* ConnectionImpl::GetInterfaceRegistry() {
+  return exposed_interfaces_;
+}
+
+InterfaceProvider* ConnectionImpl::GetRemoteInterfaces() {
+  return remote_interfaces_;
 }
 
 base::WeakPtr<Connection> ConnectionImpl::GetWeakPtr() {
@@ -110,7 +122,7 @@ base::WeakPtr<Connection> ConnectionImpl::GetWeakPtr() {
 // ConnectionImpl, private:
 
 void ConnectionImpl::OnConnectionCompleted(shell::mojom::ConnectResult result,
-                                           const std::string& target_user_id,
+                                           mojo::String target_user_id,
                                            uint32_t target_application_id) {
   DCHECK(State::PENDING == state_);
 
@@ -119,7 +131,7 @@ void ConnectionImpl::OnConnectionCompleted(shell::mojom::ConnectResult result,
       State::CONNECTED : State::DISCONNECTED;
   remote_id_ = target_application_id;
   remote_.set_user_id(target_user_id);
-  std::vector<mojo::Closure> callbacks;
+  std::vector<base::Closure> callbacks;
   callbacks.swap(connection_completed_callbacks_);
   for (auto callback : callbacks)
     callback.Run();

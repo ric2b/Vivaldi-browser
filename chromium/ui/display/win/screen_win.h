@@ -89,6 +89,9 @@ class DISPLAY_EXPORT ScreenWin : public display::Screen {
   // The DPI scale is performed relative to the display nearest to |hwnd|.
   static gfx::Size DIPToScreenSize(HWND hwnd, const gfx::Size& dip_size);
 
+  // Returns the result of GetSystemMetrics for |metric| scaled to |hwnd|'s DPI.
+  static int GetSystemMetricsForHwnd(HWND hwnd, int metric);
+
   // Returns the HWND associated with the NativeView.
   virtual HWND GetHWNDFromNativeView(gfx::NativeView window) const;
 
@@ -111,6 +114,10 @@ class DISPLAY_EXPORT ScreenWin : public display::Screen {
   display::Display GetPrimaryDisplay() const override;
   void AddObserver(display::DisplayObserver* observer) override;
   void RemoveObserver(display::DisplayObserver* observer) override;
+  gfx::Rect ScreenToDIPRectInWindow(
+      gfx::NativeView view, const gfx::Rect& screen_rect) const override;
+  gfx::Rect DIPToScreenRectInWindow(
+      gfx::NativeView view, const gfx::Rect& dip_rect) const override;
 
   void UpdateFromDisplayInfos(const std::vector<DisplayInfo>& display_infos);
 
@@ -123,6 +130,7 @@ class DISPLAY_EXPORT ScreenWin : public display::Screen {
   virtual MONITORINFOEX MonitorInfoFromWindow(HWND hwnd, DWORD default_options)
       const;
   virtual HWND GetRootWindow(HWND hwnd) const;
+  virtual int GetSystemMetrics(int metric) const;
 
  private:
   void OnWndProc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam);
@@ -138,10 +146,26 @@ class DISPLAY_EXPORT ScreenWin : public display::Screen {
   ScreenWinDisplay GetScreenWinDisplayNearestScreenPoint(
       const gfx::Point& screen_point) const;
 
+  // Returns the ScreenWinDisplay closest to or enclosing |dip_point|.
+  ScreenWinDisplay GetScreenWinDisplayNearestDIPPoint(
+      const gfx::Point& dip_point) const;
+
+  // Returns the ScreenWinDisplay closest to or enclosing |dip_rect|.
+  ScreenWinDisplay GetScreenWinDisplayNearestDIPRect(
+      const gfx::Rect& dip_rect) const;
+
   // Returns the ScreenWinDisplay corresponding to the primary monitor.
   ScreenWinDisplay GetPrimaryScreenWinDisplay() const;
 
   ScreenWinDisplay GetScreenWinDisplay(const MONITORINFOEX& monitor_info) const;
+
+  static float GetScaleFactorForHWND(HWND hwnd);
+
+  // Returns the result of calling |getter| with |value| on the global
+  // ScreenWin if it exists, otherwise return the default ScreenWinDisplay.
+  template <typename Getter, typename GetterType>
+  static ScreenWinDisplay GetScreenWinDisplayVia(Getter getter,
+                                                 GetterType value);
 
   // Helper implementing the DisplayObserver handling.
   DisplayChangeNotifier change_notifier_;

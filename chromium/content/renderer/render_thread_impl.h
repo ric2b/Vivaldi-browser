@@ -22,13 +22,16 @@
 #include "base/threading/thread_checker.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/content_export.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/gpu_process_launch_causes.h"
 #include "content/common/storage_partition_service.mojom.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/renderer/gpu/compositor_dependencies.h"
+#include "content/renderer/layout_test_dependencies.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "net/base/network_change_notifier.h"
 #include "third_party/WebKit/public/platform/WebConnectionType.h"
@@ -63,6 +66,7 @@ class Thread;
 namespace cc {
 class ContextProvider;
 class ImageSerializationProcessor;
+class OutputSurface;
 class TaskGraphRunner;
 }
 
@@ -80,7 +84,6 @@ class GpuVideoAcceleratorFactories;
 }
 
 namespace scheduler {
-class RendererScheduler;
 class WebThreadBase;
 }
 
@@ -96,7 +99,6 @@ class AudioInputMessageFilter;
 class AudioMessageFilter;
 class AudioRendererMixerManager;
 class BlobMessageFilter;
-class BluetoothMessageFilter;
 class BrowserPluginManager;
 class CacheStorageDispatcher;
 class CompositorForwardingMessageFilter;
@@ -105,6 +107,7 @@ class DBMessageFilter;
 class DevToolsAgentFilter;
 class DomStorageDispatcher;
 class EmbeddedWorkerDispatcher;
+class FrameSwapMessageQueue;
 class IndexedDBDispatcher;
 class InputHandlerManager;
 class MediaStreamCenter;
@@ -114,7 +117,7 @@ class NetInfoDispatcher;
 class P2PSocketDispatcher;
 class PeerConnectionDependencyFactory;
 class PeerConnectionTracker;
-class RasterWorkerPool;
+class CategorizedWorkerPool;
 class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
 class RendererDemuxerAndroid;
@@ -148,6 +151,7 @@ class CONTENT_EXPORT RenderThreadImpl
     : public RenderThread,
       public ChildThreadImpl,
       public gpu::GpuChannelHostFactory,
+      public scheduler::RendererScheduler::RAILModeObserver,
       NON_EXPORTED_BASE(public CompositorDependencies) {
  public:
   static RenderThreadImpl* Create(const InProcessChildThreadParams& params);
@@ -195,7 +199,6 @@ class CONTENT_EXPORT RenderThreadImpl
   int PostTaskToAllWebWorkers(const base::Closure& closure) override;
   bool ResolveProxy(const GURL& url, std::string* proxy_list) override;
   base::WaitableEvent* GetShutdownEvent() override;
-  ServiceRegistry* GetServiceRegistry() override;
 
   // CompositorDependencies implementation.
   bool IsGpuRasterizationForced() override;
@@ -222,20 +225,28 @@ class CONTENT_EXPORT RenderThreadImpl
   bool AreImageDecodeTasksEnabled() override;
   bool IsThreadedAnimationEnabled() override;
 
+  // scheduler::RendererScheduler::RAILModeObserver implementation.
+  void OnRAILModeChanged(v8::RAILMode rail_mode) override;
+
   // Synchronously establish a channel to the GPU plugin if not previously
   // established or if it has been lost (for example if the GPU plugin crashed).
   // If there is a pending asynchronous request, it will be completed by the
   // time this routine returns.
   scoped_refptr<gpu::GpuChannelHost> EstablishGpuChannelSync(CauseForGpuLaunch);
 
+  std::unique_ptr<cc::OutputSurface> CreateCompositorOutputSurface(
+      bool use_software,
+      int routing_id,
+      scoped_refptr<FrameSwapMessageQueue> frame_swap_message_queue,
+      const GURL& url);
+
   // True if we are running layout tests. This currently disables forwarding
   // various status messages to the console, skips network error pages, and
   // short circuits size update and focus events.
-  bool layout_test_mode() const {
-    return layout_test_mode_;
-  }
-  void set_layout_test_mode(bool layout_test_mode) {
-    layout_test_mode_ = layout_test_mode;
+  bool layout_test_mode() const { return !!layout_test_deps_; }
+  void set_layout_test_dependencies(
+      std::unique_ptr<LayoutTestDependencies> deps) {
+    layout_test_deps_ = std::move(deps);
   }
 
   RendererBlinkPlatformImpl* blink_platform_impl() const {
@@ -446,10 +457,9 @@ class CONTENT_EXPORT RenderThreadImpl
   void AddEmbeddedWorkerRoute(int32_t routing_id, IPC::Listener* listener);
   void RemoveEmbeddedWorkerRoute(int32_t routing_id);
 
-  void RegisterPendingRenderFrameConnect(
-      int routing_id,
-      shell::mojom::InterfaceProviderRequest services,
-      shell::mojom::InterfaceProviderPtr exposed_services);
+  void RegisterPendingFrameCreate(int routing_id,
+                                  mojom::FrameRequest frame,
+                                  mojom::FrameHostPtr host);
 
   mojom::StoragePartitionService* GetStoragePartitionService();
 
@@ -592,8 +602,8 @@ class CONTENT_EXPORT RenderThreadImpl
 
   bool webkit_shared_timer_suspended_;
 
-  // The following flag is used to control layout test specific behavior.
-  bool layout_test_mode_;
+  // Used to control layout test specific behavior.
+  std::unique_ptr<LayoutTestDependencies> layout_test_deps_;
 
   // Timer that periodically calls IdleHandler.
   base::RepeatingTimer idle_timer_;
@@ -630,7 +640,7 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner_;
 
   // Pool of workers used for raster operations (e.g., tile rasterization).
-  scoped_refptr<RasterWorkerPool> raster_worker_pool_;
+  scoped_refptr<CategorizedWorkerPool> categorized_worker_pool_;
 
   base::CancelableCallback<void(const IPC::Message&)> main_input_callback_;
   scoped_refptr<IPC::MessageFilter> input_event_filter_;
@@ -641,8 +651,6 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<SynchronousCompositorFilter> sync_compositor_message_filter_;
   scoped_refptr<StreamTextureFactory> stream_texture_factory_;
 #endif
-
-  scoped_refptr<BluetoothMessageFilter> bluetooth_message_filter_;
 
   scoped_refptr<ContextProviderCommandBuffer> shared_main_thread_contexts_;
 
@@ -682,36 +690,34 @@ class CONTENT_EXPORT RenderThreadImpl
   bool are_image_decode_tasks_enabled_;
   bool is_threaded_animation_enabled_;
 
-  class PendingRenderFrameConnect
-      : public base::RefCounted<PendingRenderFrameConnect> {
+  class PendingFrameCreate : public base::RefCounted<PendingFrameCreate> {
    public:
-    PendingRenderFrameConnect(
-        int routing_id,
-        shell::mojom::InterfaceProviderRequest services,
-        shell::mojom::InterfaceProviderPtr exposed_services);
+     PendingFrameCreate(int routing_id,
+                        mojom::FrameRequest frame_request,
+                        mojom::FrameHostPtr frame_host);
 
-    shell::mojom::InterfaceProviderRequest& services() { return services_; }
-
-    shell::mojom::InterfaceProviderPtr& exposed_services() {
-      return exposed_services_;
+    mojom::FrameRequest TakeFrameRequest() { return std::move(frame_request_); }
+    mojom::FrameHostPtr TakeFrameHost() {
+      frame_host_.set_connection_error_handler(base::Closure());
+      return std::move(frame_host_);
     }
 
    private:
-    friend class base::RefCounted<PendingRenderFrameConnect>;
+    friend class base::RefCounted<PendingFrameCreate>;
 
-    ~PendingRenderFrameConnect();
+    ~PendingFrameCreate();
 
     // Mojo error handler.
     void OnConnectionError();
 
     int routing_id_;
-    shell::mojom::InterfaceProviderRequest services_;
-    shell::mojom::InterfaceProviderPtr exposed_services_;
+    mojom::FrameRequest frame_request_;
+    mojom::FrameHostPtr frame_host_;
   };
 
-  typedef std::map<int, scoped_refptr<PendingRenderFrameConnect>>
-      PendingRenderFrameConnectMap;
-  PendingRenderFrameConnectMap pending_render_frame_connects_;
+  using PendingFrameCreateMap =
+      std::map<int, scoped_refptr<PendingFrameCreate>>;
+  PendingFrameCreateMap pending_frame_creates_;
 
   mojom::StoragePartitionServicePtr storage_partition_service_;
 

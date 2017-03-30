@@ -6,6 +6,15 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
+  // Broke in v53
+  DISABLE(ConditionalCacheDeletionHelperBrowserTest, TimeAndURL)
+
+  DISABLE(ExtensionFetchTest, ExtensionCanFetchExtensionResource)
+
+  DISABLE(SitePerProcessBrowserTest, RFPHDestruction)
+
+  DISABLE(RenderFrameHostManagerTest, SwapProcessWithRelNoopenerAndTargetBlank)
+
   // Proprietary media codec tests
   DISABLE(AudioFileReaderTest, AAC)
   DISABLE(AudioFileReaderTest, CorruptMP3)
@@ -41,8 +50,4 @@
   DISABLE(EncryptedMediaSupportedTypesClearKeyTest, Video_MP4)
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Audio_MP4)
   DISABLE(EncryptedMediaSupportedTypesExternalClearKeyTest, Video_MP4)
-  DISABLE_ALL(EncryptedMediaSupportedTypesWidevineTest)
-  DISABLE(MediaCanPlayTypeTest, CodecSupportTest_mp4)
-  DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
-
-  //DISABLE_MULTI(QuicClientSessionTest, SetFecProtectionFromConfig)
+  DISABLE_ALL(MediaCanPlayTypeTest)

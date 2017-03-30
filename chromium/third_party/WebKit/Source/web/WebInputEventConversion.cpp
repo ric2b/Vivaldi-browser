@@ -40,7 +40,6 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/VisualViewport.h"
-#include "core/layout/LayoutObject.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "platform/KeyboardCodes.h"
@@ -188,7 +187,8 @@ PlatformMouseEventBuilder::PlatformMouseEventBuilder(Widget* widget, const WebMo
 
     switch (e.type) {
     case WebInputEvent::MouseMove:
-    case WebInputEvent::MouseLeave:  // synthesize a move event
+    case WebInputEvent::MouseEnter: // synthesize a move event
+    case WebInputEvent::MouseLeave: // synthesize a move event
         m_type = PlatformEvent::MouseMoved;
         break;
 
@@ -231,7 +231,6 @@ PlatformWheelEventBuilder::PlatformWheelEventBuilder(Widget* widget, const WebMo
     m_dispatchType = toPlatformDispatchType(e.dispatchType);
 
     m_hasPreciseScrollingDeltas = e.hasPreciseScrollingDeltas;
-    m_canScroll = e.canScroll;
     m_resendingPluginId = e.resendingPluginId;
     m_railsMode = static_cast<PlatformEvent::RailsMode>(e.railsMode);
 #if OS(MACOSX)
@@ -345,6 +344,8 @@ PlatformGestureEventBuilder::PlatformGestureEventBuilder(Widget* widget, const W
     case WebGestureDeviceUninitialized:
         NOTREACHED();
     }
+
+    m_uniqueTouchEventId = e.uniqueTouchEventId;
 }
 
 // MakePlatformKeyboardEvent --------------------------------------------------
@@ -492,6 +493,7 @@ PlatformTouchEventBuilder::PlatformTouchEventBuilder(Widget* widget, const WebTo
         m_touchPoints.append(PlatformTouchPointBuilder(widget, event.touches[i]));
 
     m_dispatchType = toPlatformDispatchType(event.dispatchType);
+    m_uniqueTouchEventId = event.uniqueTouchEventId;
 }
 
 static FloatPoint convertAbsoluteLocationForLayoutObjectFloat(const LayoutPoint& location, const LayoutItem layoutItem)
@@ -637,7 +639,6 @@ WebMouseWheelEventBuilder::WebMouseWheelEventBuilder(const Widget* widget, const
     wheelTicksX = event.ticksX();
     wheelTicksY = event.ticksY();
     scrollByPage = event.deltaMode() == WheelEvent::DOM_DELTA_PAGE;
-    canScroll = event.canScroll();
     resendingPluginId = event.resendingPluginId();
     railsMode = static_cast<RailsMode>(event.getRailsMode());
     hasPreciseScrollingDeltas = event.hasPreciseScrollingDeltas();

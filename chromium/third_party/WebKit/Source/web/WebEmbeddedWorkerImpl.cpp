@@ -30,6 +30,7 @@
 
 #include "web/WebEmbeddedWorkerImpl.h"
 
+#include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/CrossThreadTask.h"
 #include "core/dom/Document.h"
 #include "core/dom/SecurityContext.h"
@@ -70,12 +71,14 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WorkerContentSettingsClient.h"
 #include "wtf/Functional.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
 WebEmbeddedWorker* WebEmbeddedWorker::create(WebServiceWorkerContextClient* client, WebWorkerContentSettingsClientProxy* contentSettingsClient)
 {
-    return new WebEmbeddedWorkerImpl(adoptPtr(client), adoptPtr(contentSettingsClient));
+    return new WebEmbeddedWorkerImpl(wrapUnique(client), wrapUnique(contentSettingsClient));
 }
 
 static HashSet<WebEmbeddedWorkerImpl*>& runningWorkerInstances()
@@ -84,7 +87,7 @@ static HashSet<WebEmbeddedWorkerImpl*>& runningWorkerInstances()
     return set;
 }
 
-WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(PassOwnPtr<WebServiceWorkerContextClient> client, PassOwnPtr<WebWorkerContentSettingsClientProxy> contentSettingsClient)
+WebEmbeddedWorkerImpl::WebEmbeddedWorkerImpl(std::unique_ptr<WebServiceWorkerContextClient> client, std::unique_ptr<WebWorkerContentSettingsClientProxy> contentSettingsClient)
     : m_workerContextClient(std::move(client))
     , m_contentSettingsClient(std::move(contentSettingsClient))
     , m_workerInspectorProxy(WorkerInspectorProxy::create())
@@ -242,7 +245,7 @@ void WebEmbeddedWorkerImpl::addMessageToConsole(const WebConsoleMessage& message
         return;
     }
 
-    m_mainFrame->frame()->document()->addConsoleMessage(ConsoleMessage::create(OtherMessageSource, webCoreMessageLevel, message.text, message.url, message.lineNumber, message.columnNumber));
+    m_mainFrame->frame()->document()->addConsoleMessage(ConsoleMessage::create(OtherMessageSource, webCoreMessageLevel, message.text, SourceLocation::create(message.url, message.lineNumber, message.columnNumber, nullptr)));
 }
 
 void WebEmbeddedWorkerImpl::postMessageToPageInspector(const String& message)
@@ -273,7 +276,7 @@ void WebEmbeddedWorkerImpl::prepareShadowPageForLoader()
     // This code, and probably most of the code in this class should be shared
     // with SharedWorker.
     DCHECK(!m_webView);
-    m_webView = WebView::create(0);
+    m_webView = WebView::create(nullptr, WebPageVisibilityStateVisible);
     WebSettings* settings = m_webView->settings();
     // FIXME: http://crbug.com/363843. This needs to find a better way to
     // not create graphics layers.
@@ -326,7 +329,7 @@ void WebEmbeddedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame)
     DCHECK(m_loadingShadowPage);
     DCHECK(!m_askedToTerminate);
     m_loadingShadowPage = false;
-    m_networkProvider = adoptPtr(m_workerContextClient->createServiceWorkerNetworkProvider(frame->dataSource()));
+    m_networkProvider = wrapUnique(m_workerContextClient->createServiceWorkerNetworkProvider(frame->dataSource()));
     m_mainScriptLoader = WorkerScriptLoader::create();
     m_mainScriptLoader->setRequestContext(WebURLRequest::RequestContextServiceWorker);
     m_mainScriptLoader->loadAsynchronously(
@@ -335,7 +338,7 @@ void WebEmbeddedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame)
         DenyCrossOriginRequests,
         m_workerStartData.addressSpace,
         nullptr,
-        bind(&WebEmbeddedWorkerImpl::onScriptLoaderFinished, this));
+        bind(&WebEmbeddedWorkerImpl::onScriptLoaderFinished, WTF::unretained(this)));
     // Do nothing here since onScriptLoaderFinished() might have been already
     // invoked and |this| might have been deleted at this point.
 }
@@ -405,21 +408,24 @@ void WebEmbeddedWorkerImpl::startWorkerThread()
     provideContentSettingsClientToWorker(workerClients, std::move(m_contentSettingsClient));
     provideIndexedDBClientToWorker(workerClients, IndexedDBClientImpl::create());
     provideServiceWorkerGlobalScopeClientToWorker(workerClients, ServiceWorkerGlobalScopeClientImpl::create(*m_workerContextClient));
-    provideServiceWorkerContainerClientToWorker(workerClients, adoptPtr(m_workerContextClient->createServiceWorkerProvider()));
+    provideServiceWorkerContainerClientToWorker(workerClients, wrapUnique(m_workerContextClient->createServiceWorkerProvider()));
 
     // We need to set the CSP to both the shadow page's document and the ServiceWorkerGlobalScope.
     document->initContentSecurityPolicy(m_mainScriptLoader->releaseContentSecurityPolicy());
+    if (!m_mainScriptLoader->referrerPolicy().isNull())
+        document->parseAndSetReferrerPolicy(m_mainScriptLoader->referrerPolicy());
 
     KURL scriptURL = m_mainScriptLoader->url();
     WorkerThreadStartMode startMode = m_workerInspectorProxy->workerStartMode(document);
 
-    OwnPtr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
+    std::unique_ptr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
         scriptURL,
         m_workerStartData.userAgent,
         m_mainScriptLoader->script(),
         m_mainScriptLoader->releaseCachedMetadata(),
         startMode,
         document->contentSecurityPolicy()->headers().get(),
+        m_mainScriptLoader->referrerPolicy(),
         starterOrigin,
         workerClients,
         m_mainScriptLoader->responseAddressSpace(),

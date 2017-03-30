@@ -15,6 +15,8 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheError.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -95,7 +97,7 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
-        Cache* cache = Cache::create(m_cacheStorage->m_scopedFetcher, adoptPtr(webCache.release()));
+        Cache* cache = Cache::create(m_cacheStorage->m_scopedFetcher, wrapUnique(webCache.release()));
         m_cacheStorage->m_nameToCacheMap.set(m_cacheName, cache);
         m_resolver->resolve(cache);
         m_resolver.clear();
@@ -129,6 +131,7 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
+        ScriptState::Scope scope(m_resolver->getScriptState());
         m_resolver->resolve(Response::create(m_resolver->getScriptState(), webResponse));
         m_resolver.clear();
     }
@@ -216,7 +219,7 @@ private:
 
 CacheStorage* CacheStorage::create(GlobalFetch::ScopedFetcher* fetcher, WebServiceWorkerCacheStorage* webCacheStorage)
 {
-    return new CacheStorage(fetcher, adoptPtr(webCacheStorage));
+    return new CacheStorage(fetcher, wrapUnique(webCacheStorage));
 }
 
 ScriptPromise CacheStorage::open(ScriptState* scriptState, const String& cacheName, ExceptionState& exceptionState)
@@ -325,7 +328,7 @@ ScriptPromise CacheStorage::matchImpl(ScriptState* scriptState, const Request* r
     return promise;
 }
 
-CacheStorage::CacheStorage(GlobalFetch::ScopedFetcher* fetcher, PassOwnPtr<WebServiceWorkerCacheStorage> webCacheStorage)
+CacheStorage::CacheStorage(GlobalFetch::ScopedFetcher* fetcher, std::unique_ptr<WebServiceWorkerCacheStorage> webCacheStorage)
     : m_scopedFetcher(fetcher)
     , m_webCacheStorage(std::move(webCacheStorage))
 {
@@ -337,7 +340,7 @@ CacheStorage::~CacheStorage()
 
 void CacheStorage::dispose()
 {
-    m_webCacheStorage.clear();
+    m_webCacheStorage.reset();
 }
 
 DEFINE_TRACE(CacheStorage)

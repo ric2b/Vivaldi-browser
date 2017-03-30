@@ -35,7 +35,7 @@ class ShellDelegateImpl : public ash::ShellDelegate {
   bool IsIncognitoAllowed() const override;
   bool IsMultiProfilesEnabled() const override;
   bool IsRunningInForcedAppMode() const override;
-  bool CanShowWindowForUser(aura::Window* window) const override;
+  bool CanShowWindowForUser(WmWindow* window) const override;
   bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
   void PreShutdown() override;
@@ -46,7 +46,7 @@ class ShellDelegateImpl : public ash::ShellDelegate {
       VirtualKeyboardStateObserver* observer) override;
   void RemoveVirtualKeyboardStateObserver(
       VirtualKeyboardStateObserver* observer) override;
-  void OpenUrl(const GURL& url) override;
+  void OpenUrlFromArc(const GURL& url) override;
   app_list::AppListPresenter* GetAppListPresenter() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   ash::SystemTrayDelegate* CreateSystemTrayDelegate() override;
@@ -55,11 +55,10 @@ class ShellDelegateImpl : public ash::ShellDelegate {
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
   ash::NewWindowDelegate* CreateNewWindowDelegate() override;
   ash::MediaDelegate* CreateMediaDelegate() override;
-  std::unique_ptr<ContainerDelegate> CreateContainerDelegate() override;
   std::unique_ptr<PointerWatcherDelegate> CreatePointerWatcherDelegate()
       override;
-  ui::MenuModel* CreateContextMenu(ash::Shelf* shelf,
-                                   const ash::ShelfItem* item) override;
+  ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
+                                   const ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;

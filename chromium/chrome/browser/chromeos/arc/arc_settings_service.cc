@@ -10,6 +10,7 @@
 #include "base/json/json_writer.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
@@ -63,7 +64,8 @@ namespace arc {
 // about and sends the new values to Android to keep the state in sync.
 class ArcSettingsServiceImpl
     : public chromeos::system::TimezoneSettings::Observer,
-      public device::BluetoothAdapter::Observer {
+      public device::BluetoothAdapter::Observer,
+      public ArcAuthService::Observer {
  public:
   explicit ArcSettingsServiceImpl(ArcBridgeService* arc_bridge_service);
   ~ArcSettingsServiceImpl() override;
@@ -72,12 +74,15 @@ class ArcSettingsServiceImpl
   // Obtains the new pref value and sends it to Android.
   void OnPrefChanged(const std::string& pref_name) const;
 
-  // TimezoneSettings::Observer
+  // TimezoneSettings::Observer:
   void TimezoneChanged(const icu::TimeZone& timezone) override;
 
-  // BluetoothAdapter::Observer
+  // BluetoothAdapter::Observer:
   void AdapterPoweredChanged(device::BluetoothAdapter* adapter,
                              bool powered) override;
+
+  // ArcAuthService::Observer:
+  void OnInitialStart() override;
 
  private:
   // Registers to observe changes for Chrome settings we care about.
@@ -86,8 +91,12 @@ class ArcSettingsServiceImpl
   // Stops listening for Chrome settings changes.
   void StopObservingSettingsChanges();
 
-  // Retrives Chrome's state for the settings and send it to Android.
-  void SyncAllPrefs() const;
+  // Retrieves Chrome's state for the settings that need to be synced on each
+  // Android boot and send it to Android.
+  void SyncRuntimeSettings() const;
+  // Send settings that need to be synced only on Android first start to
+  // Android.
+  void SyncInitialSettings() const;
   void SyncFontSize() const;
   void SyncLocale() const;
   void SyncProxySettings() const;
@@ -95,6 +104,8 @@ class ArcSettingsServiceImpl
   void SyncSpokenFeedbackEnabled() const;
   void SyncTimeZone() const;
   void SyncUse24HourClock() const;
+  void SyncBackupEnabled() const;
+  void SyncLocationServiceEnabled() const;
 
   void OnBluetoothAdapterInitialized(
       scoped_refptr<device::BluetoothAdapter> adapter);
@@ -104,6 +115,10 @@ class ArcSettingsServiceImpl
 
   // Returns the integer value of the pref.  pref_name must exist.
   int GetIntegerPref(const std::string& pref_name) const;
+
+  // Sends boolean pref broadcast to the delegate.
+  void SendBoolPrefSettingsBroadcast(const std::string& pref_name,
+                                     const std::string& action) const;
 
   // Sends a broadcast to the delegate.
   void SendSettingsBroadcast(const std::string& action,
@@ -128,15 +143,20 @@ ArcSettingsServiceImpl::ArcSettingsServiceImpl(
     ArcBridgeService* arc_bridge_service)
     : arc_bridge_service_(arc_bridge_service), weak_factory_(this) {
   StartObservingSettingsChanges();
-  SyncAllPrefs();
+  SyncRuntimeSettings();
+  DCHECK(ArcAuthService::Get());
+  ArcAuthService::Get()->AddObserver(this);
 }
 
 ArcSettingsServiceImpl::~ArcSettingsServiceImpl() {
   StopObservingSettingsChanges();
 
-  if (bluetooth_adapter_) {
+  ArcAuthService* arc_auth_service = ArcAuthService::Get();
+  if (arc_auth_service)
+    arc_auth_service->RemoveObserver(this);
+
+  if (bluetooth_adapter_)
     bluetooth_adapter_->RemoveObserver(this);
-  }
 }
 
 void ArcSettingsServiceImpl::StartObservingSettingsChanges() {
@@ -149,6 +169,7 @@ void ArcSettingsServiceImpl::StartObservingSettingsChanges() {
   AddPrefToObserve(prefs::kAccessibilitySpokenFeedbackEnabled);
   AddPrefToObserve(prefs::kUse24HourClock);
   AddPrefToObserve(proxy_config::prefs::kProxy);
+  AddPrefToObserve(prefs::kArcBackupRestoreEnabled);
 
   reporting_consent_subscription_ = CrosSettings::Get()->AddSettingsObserver(
       chromeos::kStatsReportingPref,
@@ -173,7 +194,11 @@ void ArcSettingsServiceImpl::OnBluetoothAdapterInitialized(
   AdapterPoweredChanged(adapter.get(), adapter->IsPowered());
 }
 
-void ArcSettingsServiceImpl::SyncAllPrefs() const {
+void ArcSettingsServiceImpl::OnInitialStart() {
+  SyncInitialSettings();
+}
+
+void ArcSettingsServiceImpl::SyncRuntimeSettings() const {
   SyncFontSize();
   SyncLocale();
   SyncProxySettings();
@@ -181,6 +206,18 @@ void ArcSettingsServiceImpl::SyncAllPrefs() const {
   SyncSpokenFeedbackEnabled();
   SyncTimeZone();
   SyncUse24HourClock();
+
+  const PrefService* const prefs =
+      ProfileManager::GetActiveUserProfile()->GetPrefs();
+  if (prefs->IsManagedPreference(prefs::kArcBackupRestoreEnabled))
+    SyncBackupEnabled();
+  if (prefs->IsManagedPreference(prefs::kArcLocationServiceEnabled))
+    SyncLocationServiceEnabled();
+}
+
+void ArcSettingsServiceImpl::SyncInitialSettings() const {
+  SyncBackupEnabled();
+  SyncLocationServiceEnabled();
 }
 
 void ArcSettingsServiceImpl::StopObservingSettingsChanges() {
@@ -248,17 +285,25 @@ void ArcSettingsServiceImpl::SyncFontSize() const {
                         extras);
 }
 
-void ArcSettingsServiceImpl::SyncSpokenFeedbackEnabled() const {
-  const PrefService::Preference* pref = registrar_.prefs()->FindPreference(
-      prefs::kAccessibilitySpokenFeedbackEnabled);
+void ArcSettingsServiceImpl::SendBoolPrefSettingsBroadcast(
+    const std::string& pref_name,
+    const std::string& action) const {
+  const PrefService::Preference* pref =
+      registrar_.prefs()->FindPreference(pref_name);
   DCHECK(pref);
   bool enabled = false;
   bool value_exists = pref->GetValue()->GetAsBoolean(&enabled);
   DCHECK(value_exists);
   base::DictionaryValue extras;
   extras.SetBoolean("enabled", enabled);
-  SendSettingsBroadcast(
-      "org.chromium.arc.intent_helper.SET_SPOKEN_FEEDBACK_ENABLED", extras);
+  extras.SetBoolean("managed", !pref->IsUserModifiable());
+  SendSettingsBroadcast(action, extras);
+}
+
+void ArcSettingsServiceImpl::SyncSpokenFeedbackEnabled() const {
+  SendBoolPrefSettingsBroadcast(
+      prefs::kAccessibilitySpokenFeedbackEnabled,
+      "org.chromium.arc.intent_helper.SET_SPOKEN_FEEDBACK_ENABLED");
 }
 
 void ArcSettingsServiceImpl::SyncLocale() const {
@@ -362,10 +407,22 @@ void ArcSettingsServiceImpl::SyncProxySettings() const {
   SendSettingsBroadcast("org.chromium.arc.intent_helper.SET_PROXY", extras);
 }
 
+void ArcSettingsServiceImpl::SyncBackupEnabled() const {
+  SendBoolPrefSettingsBroadcast(
+      prefs::kArcBackupRestoreEnabled,
+      "org.chromium.arc.intent_helper.SET_BACKUP_ENABLED");
+}
+
+void ArcSettingsServiceImpl::SyncLocationServiceEnabled() const {
+  SendBoolPrefSettingsBroadcast(
+      prefs::kArcLocationServiceEnabled,
+      "org.chromium.arc.intent_helper.SET_LOCATION_SERVICE_ENABLED");
+}
+
 void ArcSettingsServiceImpl::SendSettingsBroadcast(
     const std::string& action,
     const base::DictionaryValue& extras) const {
-  if (!arc_bridge_service_->intent_helper_instance()) {
+  if (!arc_bridge_service_->intent_helper()->instance()) {
     LOG(ERROR) << "IntentHelper instance is not ready.";
     return;
   }
@@ -374,8 +431,8 @@ void ArcSettingsServiceImpl::SendSettingsBroadcast(
   bool write_success = base::JSONWriter::Write(extras, &extras_json);
   DCHECK(write_success);
 
-  if (arc_bridge_service_->intent_helper_version() >= 1) {
-    arc_bridge_service_->intent_helper_instance()->SendBroadcast(
+  if (arc_bridge_service_->intent_helper()->version() >= 1) {
+    arc_bridge_service_->intent_helper()->instance()->SendBroadcast(
         action, "org.chromium.arc.intent_helper",
         "org.chromium.arc.intent_helper.SettingsReceiver", extras_json);
   }
@@ -383,18 +440,18 @@ void ArcSettingsServiceImpl::SendSettingsBroadcast(
 
 ArcSettingsService::ArcSettingsService(ArcBridgeService* bridge_service)
     : ArcService(bridge_service) {
-  arc_bridge_service()->AddObserver(this);
+  arc_bridge_service()->intent_helper()->AddObserver(this);
 }
 
 ArcSettingsService::~ArcSettingsService() {
-  arc_bridge_service()->RemoveObserver(this);
+  arc_bridge_service()->intent_helper()->RemoveObserver(this);
 }
 
-void ArcSettingsService::OnIntentHelperInstanceReady() {
+void ArcSettingsService::OnInstanceReady() {
   impl_.reset(new ArcSettingsServiceImpl(arc_bridge_service()));
 }
 
-void ArcSettingsService::OnIntentHelperInstanceClosed() {
+void ArcSettingsService::OnInstanceClosed() {
   impl_.reset();
 }
 

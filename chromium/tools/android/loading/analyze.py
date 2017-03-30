@@ -25,6 +25,7 @@ import devil_chromium
 from pylib import constants
 
 import activity_lens
+import clovis_constants
 import content_classification_lens
 import controller
 import device_setup
@@ -116,11 +117,16 @@ def _LogRequests(url, clear_cache_override=None):
     chrome_ctl.SetDeviceEmulation(OPTIONS.emulate_device)
   if OPTIONS.emulate_network:
     chrome_ctl.SetNetworkEmulation(OPTIONS.emulate_network)
-  with chrome_ctl.Open() as connection:
-    if clear_cache:
-      connection.ClearCache()
-    trace = loading_trace.LoadingTrace.RecordUrlNavigation(
-        url, connection, chrome_ctl.ChromeMetadata())
+  try:
+    with chrome_ctl.Open() as connection:
+      if clear_cache:
+        connection.ClearCache()
+      trace = loading_trace.LoadingTrace.RecordUrlNavigation(
+          url, connection, chrome_ctl.ChromeMetadata(),
+          categories=clovis_constants.DEFAULT_CATEGORIES)
+  except controller.ChromeControllerError as e:
+    e.Dump(sys.stderr)
+    raise
 
   if xvfb_process:
     xvfb_process.terminate()

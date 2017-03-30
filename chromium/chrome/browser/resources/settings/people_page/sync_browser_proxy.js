@@ -12,6 +12,7 @@ cr.exportPath('settings');
 /**
  * @typedef {{actionLinkText: (string|undefined),
  *            childUser: (boolean|undefined),
+ *            domain: (string|undefined),
  *            hasError: (boolean|undefined),
  *            hasUnrecoverableError: (boolean|undefined),
  *            managed: (boolean|undefined),
@@ -19,7 +20,6 @@ cr.exportPath('settings');
  *            setupInProgress: (boolean|undefined),
  *            signedIn: (boolean|undefined),
  *            signinAllowed: (boolean|undefined),
- *            signoutAllowed: (boolean|undefined),
  *            statusText: (string|undefined),
  *            supervisedUser: (boolean|undefined),
  *            syncSystemEnabled: (boolean|undefined)}}
@@ -55,6 +55,7 @@ settings.SyncStatus;
  *   passwordsEnforced: boolean,
  *   passwordsRegistered: boolean,
  *   passwordsSynced: boolean,
+ *   paymentsIntegrationEnabled: boolean,
  *   preferencesEnforced: boolean,
  *   preferencesRegistered: boolean,
  *   preferencesSynced: boolean,
@@ -149,7 +150,7 @@ cr.define('settings', function() {
 
   /**
    * @constructor
-   * @implements {SyncBrowserProxy}
+   * @implements {settings.SyncBrowserProxy}
    */
   function SyncBrowserProxyImpl() {}
   cr.addSingletonGetter(SyncBrowserProxyImpl);
@@ -211,6 +212,7 @@ cr.define('settings', function() {
   };
 
   return {
+    SyncBrowserProxy: SyncBrowserProxy,
     SyncBrowserProxyImpl: SyncBrowserProxyImpl,
   };
 });

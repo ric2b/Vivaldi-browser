@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/shell_window_ids.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_util.h"
@@ -40,7 +40,7 @@ TEST_F(StackingControllerTest, TransientParent) {
   std::unique_ptr<Window> w2(CreateTestWindow());
   w2->SetBounds(gfx::Rect(10, 11, 250, 251));
   aura::Window* launcher = Shell::GetContainer(Shell::GetPrimaryRootWindow(),
-      kShellWindowId_ShelfContainer);
+                                               kShellWindowId_ShelfContainer);
   launcher->AddChild(w2.get());
   w2->Show();
 

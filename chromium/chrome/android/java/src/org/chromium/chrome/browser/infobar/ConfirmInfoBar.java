@@ -20,6 +20,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ContentSettingsType;
 import org.chromium.chrome.browser.ResourceId;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.base.WindowAndroid.PermissionCallback;
 
@@ -76,6 +77,11 @@ public class ConfirmInfoBar extends InfoBar {
     public void createContent(InfoBarLayout layout) {
         setButtons(layout, mPrimaryButtonText, mSecondaryButtonText);
         if (mLinkText != null) layout.setMessageLinkText(mLinkText);
+    }
+
+    @Override
+    public void onTabReparented(Tab tab) {
+        mWindowAndroid = tab.getWindowAndroid();
     }
 
     /**

@@ -13,9 +13,11 @@
 #include "cc/output/ca_layer_overlay.h"
 #include "cc/output/overlay_processor.h"
 #include "cc/output/renderer.h"
+#include "cc/quads/tile_draw_quad.h"
 #include "cc/raster/task_graph_runner.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/resources/scoped_resource.h"
+#include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/gfx/geometry/quad_f.h"
 
 namespace cc {
@@ -34,10 +36,18 @@ class CC_EXPORT DirectRenderer : public Renderer {
   bool HasAllocatedResourcesForTesting(RenderPassId id) const override;
   void DrawFrame(RenderPassList* render_passes_in_draw_order,
                  float device_scale_factor,
+                 const gfx::ColorSpace& device_color_space,
                  const gfx::Rect& device_viewport_rect,
                  const gfx::Rect& device_clip_rect,
                  bool disable_picture_quad_image_filtering) override;
   virtual void SwapBuffersComplete() {}
+  virtual void DidReceiveTextureInUseResponses(
+      const gpu::TextureInUseResponses& responses) {}
+
+  // If a pass contains a single tile draw quad and can be drawn without
+  // a render pass (e.g. applying a filter directly to the tile quad)
+  // return that quad, otherwise return null.
+  virtual const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass);
 
   struct CC_EXPORT DrawingFrame {
     DrawingFrame();
@@ -61,7 +71,12 @@ class CC_EXPORT DirectRenderer : public Renderer {
     CALayerOverlayList ca_layer_overlay_list;
   };
 
-  void SetEnlargePassTextureAmountForTesting(const gfx::Vector2d& amount);
+  // Allow tests to enlarge the texture size of non-root render passes to
+  // verify cases where the texture doesn't match the render pass size.
+  void SetEnlargePassTextureAmount(const gfx::Size& amount) {
+    enlarge_pass_texture_amount_ = amount;
+  }
+
   void DoDrawPolygon(const DrawPolygon& poly,
                      DrawingFrame* frame,
                      const gfx::Rect& render_pass_scissor,
@@ -147,6 +162,8 @@ class CC_EXPORT DirectRenderer : public Renderer {
                      std::unique_ptr<ScopedResource>,
                      RenderPassIdHash>
       render_pass_textures_;
+  std::unordered_map<RenderPassId, TileDrawQuad, RenderPassIdHash>
+      render_pass_bypass_quads_;
   OutputSurface* output_surface_;
   ResourceProvider* resource_provider_;
   std::unique_ptr<OverlayProcessor> overlay_processor_;
@@ -162,7 +179,7 @@ class CC_EXPORT DirectRenderer : public Renderer {
   gfx::Rect current_window_space_viewport_;
 
  private:
-  gfx::Vector2d enlarge_pass_texture_amount_;
+  gfx::Size enlarge_pass_texture_amount_;
 
   DISALLOW_COPY_AND_ASSIGN(DirectRenderer);
 };

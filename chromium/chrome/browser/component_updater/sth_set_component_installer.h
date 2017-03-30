@@ -41,8 +41,7 @@ class ComponentUpdateService;
 class STHSetComponentInstallerTraits : public ComponentInstallerTraits {
  public:
   // The |sth_distributor| will be notified each time a new STH is observed.
-  explicit STHSetComponentInstallerTraits(
-      std::unique_ptr<net::ct::STHObserver> sth_observer);
+  explicit STHSetComponentInstallerTraits(net::ct::STHObserver* sth_observer);
   ~STHSetComponentInstallerTraits() override;
 
  private:
@@ -61,7 +60,7 @@ class STHSetComponentInstallerTraits : public ComponentInstallerTraits {
   base::FilePath GetRelativeInstallDir() const override;
   void GetHash(std::vector<uint8_t>* hash) const override;
   std::string GetName() const override;
-  std::string GetAp() const override;
+  update_client::InstallerAttributes GetInstallerAttributes() const override;
 
   // Reads and parses the on-disk json.
   void LoadSTHsFromDisk(const base::FilePath& sths_file_path,
@@ -74,7 +73,10 @@ class STHSetComponentInstallerTraits : public ComponentInstallerTraits {
   // STH parsing failed - do nothing.
   void OnJsonParseError(const std::string& log_id, const std::string& error);
 
-  std::unique_ptr<net::ct::STHObserver> sth_observer_;
+  // The observer is not owned by this class, so the code creating an instance
+  // of this class is expected to ensure the STHObserver lives as long as
+  // this class does. Typically the observer provided will be a global.
+  net::ct::STHObserver* sth_observer_;
 
   base::WeakPtrFactory<STHSetComponentInstallerTraits> weak_ptr_factory_;
 

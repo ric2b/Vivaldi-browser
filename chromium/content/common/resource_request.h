@@ -11,7 +11,7 @@
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
 #include "content/common/navigation_params.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/appcache_info.h"
 #include "content/public/common/request_context_frame_type.h"
@@ -93,8 +93,8 @@ struct CONTENT_EXPORT ResourceRequest {
   // fetch() in the Service Worker script.
   bool originated_from_service_worker = false;
 
-  // True if the request should not be handled by the ServiceWorker.
-  bool skip_service_worker = false;
+  // Indicates which types of ServiceWorkers should skip handling this request.
+  SkipServiceWorker skip_service_worker = SkipServiceWorker::NONE;
 
   // The request mode passed to the ServiceWorker.
   FetchRequestMode fetch_request_mode = FETCH_REQUEST_MODE_SAME_ORIGIN;
@@ -114,7 +114,7 @@ struct CONTENT_EXPORT ResourceRequest {
       REQUEST_CONTEXT_FRAME_TYPE_AUXILIARY;
 
   // Optional resource request body (may be null).
-  scoped_refptr<ResourceRequestBody> request_body;
+  scoped_refptr<ResourceRequestBodyImpl> request_body;
 
   bool download_to_file = false;
 
@@ -150,7 +150,7 @@ struct CONTENT_EXPORT ResourceRequest {
   bool should_replace_current_entry = false;
 
   // The following two members identify a previous request that has been
-  // created before this navigation has been transferred to a new render view.
+  // created before this navigation has been transferred to a new process.
   // This serves the purpose of recycling the old request.
   // Unless this refers to a transferred navigation, these values are -1 and -1.
   int transferred_request_child_id = -1;
@@ -170,6 +170,9 @@ struct CONTENT_EXPORT ResourceRequest {
   // access to the body of the response that has already been fetched by the
   // browser.
   GURL resource_body_stream_url;
+
+  // Wether or not the initiator of this request is a secure context.
+  bool initiated_in_secure_context = false;
 };
 
 }  // namespace content

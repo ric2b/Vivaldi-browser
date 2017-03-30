@@ -287,7 +287,8 @@ WebMediaPlayerAndroid::~WebMediaPlayerAndroid() {
     // Part of |media_source_delegate_| needs to be stopped on the media thread.
     // Wait until |media_source_delegate_| is fully stopped before tearing
     // down other objects.
-    base::WaitableEvent waiter(false, false);
+    base::WaitableEvent waiter(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                               base::WaitableEvent::InitialState::NOT_SIGNALED);
     media_source_delegate_->Stop(
         base::Bind(&base::WaitableEvent::Signal, base::Unretained(&waiter)));
     waiter.Wait();
@@ -865,7 +866,7 @@ void WebMediaPlayerAndroid::OnPlaybackComplete() {
   // If the loop attribute is set, timeChanged() will update the current time
   // to 0. It will perform a seek to 0. Issue a command to the player to start
   // playing after seek completes.
-  if (seeking_ && seek_time_.is_zero())
+  if (is_playing_ && seeking_ && seek_time_.is_zero())
     player_manager_->Start(player_id_);
   else
     playback_completed_ = true;
@@ -1513,11 +1514,6 @@ void WebMediaPlayerAndroid::OnWaitingForDecryptionKey() {
 }
 
 void WebMediaPlayerAndroid::OnHidden() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kDisableMediaSuspend)) {
-    return;
-  }
-
   OnSuspendRequested(false);
 }
 
@@ -1527,6 +1523,12 @@ void WebMediaPlayerAndroid::OnShown() {
 }
 
 void WebMediaPlayerAndroid::OnSuspendRequested(bool must_suspend) {
+  if (!must_suspend &&
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableMediaSuspend)) {
+    return;
+  }
+
   // If we're idle or playing video, pause and release resources; audio only
   // players are allowed to continue unless indicated otherwise by the call.
   if (must_suspend || (paused() && playback_completed_) || hasVideo())

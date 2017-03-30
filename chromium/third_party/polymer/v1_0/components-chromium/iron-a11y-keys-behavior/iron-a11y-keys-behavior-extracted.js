@@ -168,7 +168,7 @@
       return transformKey(keyEvent.key, noSpecialChars) ||
         transformKeyIdentifier(keyEvent.keyIdentifier) ||
         transformKeyCode(keyEvent.keyCode) ||
-        transformKey(keyEvent.detail.key, noSpecialChars) || '';
+        transformKey(keyEvent.detail ? keyEvent.detail.key : keyEvent.detail, noSpecialChars) || '';
     }
 
     function keyComboMatchesEvent(keyCombo, event) {
@@ -236,7 +236,9 @@
     Polymer.IronA11yKeysBehavior = {
       properties: {
         /**
-         * The HTMLElement that will be firing relevant KeyboardEvents.
+         * The EventTarget that will be firing relevant KeyboardEvents. Set it to
+         * `null` to disable the listeners.
+         * @type {?EventTarget}
          */
         keyEventTarget: {
           type: Object,
@@ -382,6 +384,9 @@
       },
 
       _listenKeyEventListeners: function() {
+        if (!this.keyEventTarget) {
+          return;
+        }
         Object.keys(this._keyBindings).forEach(function(eventName) {
           var keyBindings = this._keyBindings[eventName];
           var boundKeyHandler = this._onKeyBindingEvent.bind(this, keyBindings);

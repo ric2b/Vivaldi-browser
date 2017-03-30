@@ -23,7 +23,10 @@ group("test") {
 }
 
 # GYP version: chrome/chrome_tests_unit.gypi:test_support_common
-source_set("test_support") {
+#
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+static_library("test_support") {
   defines = []
   testonly = true
 
@@ -110,8 +113,8 @@ source_set("test_support") {
     "//components/sync_sessions:test_support",
     "//components/syncable_prefs:test_support",
     "//components/toolbar:test_support",
-    "//components/ui/zoom:test_support",
     "//components/update_client:test_support",
+    "//components/zoom:test_support",
     "//content/public/app:both",
     "//content/test:test_support",
     "//net",
@@ -134,6 +137,7 @@ source_set("test_support") {
       "//chrome/utility",
       "//components/autofill/core/browser:test_support",
       "//components/captive_portal:test_support",
+      "//components/chooser_controller:test_support",
       "//components/gcm_driver/crypto:test_support",
       "//components/guest_view/browser:test_support",
       "//components/infobars/core",
@@ -195,12 +199,6 @@ source_set("test_support") {
       "//components/crash/content/app",
       "//third_party/wtl",
     ]
-    if (use_aura) {
-      public_deps += [
-        "//win8:test_registrar_constants",
-        "//win8:test_support_win8",
-      ]
-    }
   }
   if (is_chromeos) {
     public_deps += [
@@ -278,9 +276,42 @@ group("telemetry_gpu_test") {
   ]
 }
 
+# TODO(GYP_GONE): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("telemetry_gpu_integration_test_run") {
+  testonly = true
+  deps = [
+    ":telemetry_gpu_integration_test",
+  ]
+}
+
+group("telemetry_gpu_integration_test") {
+  testonly = true
+  deps = [
+    "//tools/perf/chrome_telemetry_build:telemetry_chrome_test",
+  ]
+
+  data = [
+    # For isolate contract.
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_gpu_integration_test_as_googletest.py",
+
+    "//content/test/gpu/",
+    "//content/test/data/gpu/",
+
+    # For GpuProcess.video
+    "//content/test/data/media/bear.ogv",
+
+    # For webgl_conformance
+    "//third_party/webgl/",
+    "//content/test/gpu/run_gpu_integration_test.py",
+  ]
+}
+
 if (!is_android) {
   # GYP version: chrome/chrome_tests.gypi:test_support_ui
-  source_set("test_support_ui") {
+  static_library("test_support_ui") {
     defines = []
     testonly = true
 
@@ -299,6 +330,7 @@ if (!is_android) {
     ]
     deps = [
       "//components/metrics:test_support",
+      "//components/os_crypt:test_support",
       "//skia",
       "//testing/gtest",
     ]
@@ -333,7 +365,6 @@ if (!is_android) {
     data = [
       "data/",
       "//content/test/data/",
-      "//net/data/ssl/certificates/",
       "//net/tools/testserver/",
       "//ppapi/tests/test_case.html",
       "//ppapi/tests/test_case.html.mock-http-headers",
@@ -350,9 +381,7 @@ if (!is_android) {
     if (is_linux || is_win) {
       data += [
         "$root_out_dir/chrome_100_percent.pak",
-        "$root_out_dir/chrome_material_100_percent.pak",
         "$root_out_dir/chrome_200_percent.pak",
-        "$root_out_dir/chrome_material_200_percent.pak",
         "$root_out_dir/locales/en-US.pak",
         "$root_out_dir/locales/fr.pak",
       ]
@@ -360,6 +389,7 @@ if (!is_android) {
     if (is_linux) {
       data += [ "$root_out_dir/libppapi_tests.so" ]
     }
+
     if (!is_mac) {
       data_deps += [ "//chrome:packed_extra_resources" ]
     }
@@ -388,9 +418,9 @@ if (!is_android) {
       "//net:test_support",
       "//skia",
       "//sync",
+      "//sync:test_support_sync_api",
       "//testing/gmock",
       "//testing/gtest",
-      "//third_party/cld_2:cld2_platform_impl",
       "//third_party/hunspell",
       "//third_party/icu",
       "//third_party/libpng",
@@ -449,6 +479,10 @@ if (!is_android) {
         ]
       }
       if (use_aura) {
+        # TODO(ekaramad): These tests are activated for aura only. They should
+        # be moved to 'interactive_ui_tests' sources for all platforms once bug
+        # 578168 is fixed.
+        sources += [ "//chrome/browser/renderer_host/site_per_process_text_input_browsertest.cc" ]
         deps += [ "//ui/touch_selection" ]
       }
     }
@@ -470,14 +504,22 @@ if (!is_android) {
 
       deps += [
         "//ash/resources",
-        "//ash/wm/common/resources",
         "//chromeos",
       ]
+
+      data += [
+        "//chrome/browser/chromeos/login/test/https_forwarder.py",
+        "//google_apis/test/",
+        "$root_out_dir/resources/chromeos/",
+      ]
+
+      data_deps += [ "//ui/keyboard:resources" ]
 
       if (enable_nacl) {
         data_deps += [
           "//components/nacl/loader:nacl_helper",
           "//components/nacl/loader:helper_nonsfi",
+          "//ppapi/native_client:irt",
         ]
       }
 
@@ -532,12 +574,10 @@ if (!is_android) {
     }
 
     if (is_mac) {
-      data_deps += [ "//chrome" ]
-
-      # TODO(mark): We really want this for all non-static library targets, but
-      # when we tried to pull it up to the common.gypi level, it broke other
-      # things like the ui and startup tests. *shrug*
-      ldflags += [ "-Wl,-ObjC" ]
+      data_deps += [
+        "//chrome",
+        "//chrome:chrome_framework",
+      ]
 
       # The browser window can be views or Cocoa on Mac. Test accordingly.
       if (mac_views_browser) {
@@ -547,10 +587,7 @@ if (!is_android) {
                 "//chrome")
 
         # Aura depended tests.
-        sources -= [
-          "../browser/ui/views/bookmarks/bookmark_bar_view_test.cc",
-          "../browser/ui/views/tabs/tab_drag_controller_interactive_uitest.cc",
-        ]
+        sources -= [ "../browser/ui/views/bookmarks/bookmark_bar_view_test.cc" ]
       } else {
         sources += rebase_path(
                 chrome_tests_gypi_values.chrome_interactive_ui_test_cocoa_sources,
@@ -682,8 +719,16 @@ if (!is_android) {
     }
     if (!is_chromeos) {
       sources -= [
+        "../browser/sync/test/integration/sync_arc_package_helper.cc",
+        "../browser/sync/test/integration/sync_arc_package_helper.h",
         "../browser/sync/test/integration/wifi_credentials_helper.cc",
         "../browser/sync/test/integration/wifi_credentials_helper.h",
+      ]
+    }
+    if (is_chromeos) {
+      deps += [
+        "//components/arc:arc_test_support",
+        "//components/user_manager:test_support",
       ]
     }
   }
@@ -704,6 +749,8 @@ if (!is_android) {
         "data/webui/settings/bluetooth_page_browsertest_chromeos.js",
         "data/webui/settings/easy_unlock_browsertest_chromeos.js",
       ]
+    } else {
+      sources -= [ "data/webui/md_user_manager/user_manager_browsertest.js" ]
     }
     if (is_mac) {
       sources -= [
@@ -732,29 +779,6 @@ if (!is_android) {
       "//skia",
     ]
     defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-  }
-
-  # TODO(GYP_GONE): Delete this after we've converted everything to GN.
-  # The _run targets exist only for compatibility w/ GYP.
-  group("telemetry_perf_unittests_run") {
-    testonly = true
-    deps = [
-      ":telemetry_perf_unittests",
-    ]
-  }
-
-  group("telemetry_perf_unittests") {
-    testonly = true
-    deps = [
-      "//tools/perf:perf",
-    ]
-
-    data = [
-      # For isolate contract.
-      "//testing/scripts/common.py",
-      "//testing/xvfb.py",
-      "//testing/scripts/run_telemetry_as_googletest.py",
-    ]
   }
 
   # TODO(GYP_GONE): Delete this after we've converted everything to GN.
@@ -857,7 +881,10 @@ if (!is_android) {
             ".",
             "//chrome")
 
-    configs += [ "//build/config:precompiled_headers" ]
+    configs += [
+      "//build/config:precompiled_headers",
+      "//third_party/WebKit/public:debug_devtools",
+    ]
 
     data = [
       "data/",
@@ -868,7 +895,6 @@ if (!is_android) {
       "//content/test/data/",
       "//google_apis/test/",
       "//media/test/data/",
-      "//net/data/",
       "//net/tools/testserver/",
       "//ppapi/tests/test_case.html",
       "//ppapi/tests/test_case.html.mock-http-headers",
@@ -880,16 +906,13 @@ if (!is_android) {
       "//third_party/mocha/mocha.js",
       "//third_party/pyftpdlib/",
       "//third_party/pywebsocket/",
-      "//third_party/safe_browsing/",
       "//third_party/simplejson/",
       "//third_party/tlslite/",
       "//ui/webui/resources/js/",
       "$root_out_dir/pyproto/",
       "$root_out_dir/browser_tests.pak",
       "$root_out_dir/chrome_100_percent.pak",
-      "$root_out_dir/chrome_material_100_percent.pak",
       "$root_out_dir/chrome_200_percent.pak",
-      "$root_out_dir/chrome_material_200_percent.pak",
       "$root_out_dir/remoting/unittests/",
       "$root_out_dir/resources/extension/",
       "$root_out_dir/test_case.html",
@@ -901,6 +924,46 @@ if (!is_android) {
     ]
     if (is_win) {
       data += [ "$root_out_dir/chrome_200_percent.pak" ]
+    }
+    if (is_mac) {
+      data += [
+        "$root_out_dir/chrome_material_100_percent.pak",
+        "$root_out_dir/chrome_material_200_percent.pak",
+      ]
+    }
+    if (is_chromeos) {
+      data += [
+        # TODO(GYP): figure out which of these things are
+        # actually needed and also which should be pulled in via
+        # data or data_deps and through which dependencies.
+        "//chrome/browser/chromeos/login/test/https_forwarder.py",
+        "//chrome/browser/resources/chromeos/wallpaper_manager/",
+        "//chromeos/test/data/",
+        "//components/chrome_apps/webstore_widget/cws_widget/",
+        "//ui/file_manager/file_manager/",
+        "//ui/file_manager/gallery/",
+        "//ui/file_manager/image_loader/",
+        "//ui/file_manager/integration_tests/",
+        "//third_party/analytics/",
+        "//third_party/polymer/v1_0/components-chromium/polymer/",
+        "$root_out_dir/chromevox_test_data/",
+        "$root_out_dir/content_shell.pak",
+        "$root_out_dir/locales/",
+        "$root_out_dir/resources/chromeos/",
+      ]
+
+      data_deps = [
+        "//ui/keyboard:resources",
+      ]
+
+      if (enable_nacl) {
+        data_deps += [
+          "//components/nacl/loader:nacl_helper",
+          "//ppapi/native_client:irt",
+        ]
+      }
+    } else {
+      data_deps = []
     }
 
     deps = [
@@ -937,6 +1000,7 @@ if (!is_android) {
       "//crypto:test_support",
       "//device/bluetooth:mocks",
       "//device/serial:test_support",
+      "//device/usb:test_support",
       "//extensions/common/api",
       "//google_apis:test_support",
       "//media",
@@ -952,11 +1016,9 @@ if (!is_android) {
       "//testing/gtest",
       "//testing/perf",
       "//third_party/cacheinvalidation",
-      "//third_party/cld_2:cld2_platform_impl",
       "//third_party/icu",
       "//third_party/leveldatabase",
       "//third_party/libjingle",
-      "//third_party/safe_browsing:test_support",
       "//third_party/webrtc/modules/desktop_capture",
       "//third_party/widevine/cdm:version_h",
       "//ui/accessibility:test_support",
@@ -973,7 +1035,8 @@ if (!is_android) {
     deps += [ "//extensions:chrome_extensions_browsertests" ]
 
     # Runtime dependencies
-    data_deps = [
+    data_deps += [
+      "//chrome",
       "//ppapi:ppapi_tests",
       "//ppapi:power_saver_test_plugin",
       "//remoting/webapp:browser_test_resources",
@@ -1041,9 +1104,6 @@ if (!is_android) {
         ]
       }
     }
-    if (debug_devtools) {
-      defines += [ "DEBUG_DEVTOOLS=1" ]
-    }
     if (use_ash) {
       sources +=
           rebase_path(chrome_tests_gypi_values.chrome_browser_tests_ash_sources,
@@ -1090,8 +1150,7 @@ if (!is_android) {
               "//chrome")
       sources -= [
         "../../apps/load_and_launch_browsertest.cc",
-        "../browser/printing/cloud_print/test/cloud_print_policy_browsertest.cc",
-        "../browser/printing/cloud_print/test/cloud_print_proxy_process_browsertest.cc",
+        "../browser/policy/policy_startup_browsertest.cc",
 
         # chromeos does not support profile list avatar menu
         "../browser/profiles/profile_list_desktop_browsertest.cc",
@@ -1110,10 +1169,12 @@ if (!is_android) {
         "//chromeos/ime:gencode",
         "//components/arc:arc_test_support",
         "//components/user_manager:test_support",
-        "//dbus",
-        "//dbus:test_support",
         "//ui/login:resources",
       ]
+
+      if (use_dbus) {
+        deps += [ "//dbus:test_support" ]
+      }
     } else {
       sources -= [
         "../browser/extensions/api/enterprise_device_attributes/enterprise_device_attributes_apitest.cc",
@@ -1194,7 +1255,7 @@ if (!is_android) {
         # TODO: enable these on windows and linux.
         "../browser/ui/ash/accelerator_commands_browsertest.cc",
         "../browser/ui/ash/accelerator_controller_browsertest.cc",
-        "../browser/ui/ash/launcher/chrome_launcher_controller_browsertest.cc",
+        "../browser/ui/ash/launcher/chrome_launcher_controller_impl_browsertest.cc",
         "../browser/ui/ash/launcher/launcher_favicon_loader_browsertest.cc",
         "../browser/ui/ash/shelf_browsertest.cc",
       ]
@@ -1232,10 +1293,10 @@ if (!is_android) {
         # "//components/crash/content/app:breakpad_stubs",
         "//third_party/ocmock",
       ]
-      sources += [
-        "../browser/renderer_host/chrome_render_widget_host_view_mac_history_swiper_browsertest.mm",
-        "../browser/spellchecker/spellcheck_message_filter_platform_mac_browsertest.cc",
-      ]
+      sources +=
+          rebase_path(chrome_tests_gypi_values.chrome_browser_tests_mac_sources,
+                      ".",
+                      "//chrome")
       sources -= [
         # TODO(groby): This test depends on hunspell and we cannot run it on
         # Mac, which does not use hunspell by default.
@@ -1243,10 +1304,6 @@ if (!is_android) {
 
         # ProcessSingletonMac doesn"t do anything.
         "../browser/process_singleton_browsertest.cc",
-
-        # This test depends on GetCommandLineForRelaunch, which is not
-        # available on Mac.
-        "../browser/printing/cloud_print/test/cloud_print_policy_browsertest.cc",
       ]
 
       if (safe_browsing_mode == 1) {
@@ -1352,11 +1409,6 @@ if (!is_android) {
               "//chrome")
     }
     if (enable_pepper_cdms) {
-      sources += [
-        "../browser/media/pepper_cdm_test_helper.cc",
-        "../browser/media/pepper_cdm_test_helper.h",
-      ]
-
       # Runtime dependencies.
       data_deps += [
         "//media/cdm/ppapi:clearkeycdmadapter",
@@ -1366,14 +1418,25 @@ if (!is_android) {
     if (!enable_print_preview) {
       sources -= [
         "../browser/extensions/api/cloud_print_private/cloud_print_private_apitest.cc",
-        "../browser/printing/cloud_print/test/cloud_print_policy_browsertest.cc",
-        "../browser/printing/cloud_print/test/cloud_print_proxy_process_browsertest.cc",
         "../browser/printing/print_preview_dialog_controller_browsertest.cc",
         "../browser/printing/print_preview_pdf_generated_browsertest.cc",
         "../browser/service_process/service_process_control_browsertest.cc",
         "../browser/ui/webui/print_preview/print_preview_ui_browsertest.cc",
         "data/webui/print_preview.cc",
         "data/webui/print_preview.h",
+      ]
+    }
+    if (!enable_print_preview || is_mac || is_chromeos) {
+      sources -= [
+        # This test depends on GetCommandLineForRelaunch, which is not
+        # available on Mac. It is also not intended to run on ChromeOS.
+        "../browser/printing/cloud_print/test/cloud_print_policy_browsertest.cc",
+      ]
+    }
+    if (!enable_print_preview || is_chromeos) {
+      sources -= [
+        # Not intended to run on ChromeOS.
+        "../browser/printing/cloud_print/test/cloud_print_proxy_process_browsertest.cc",
       ]
     }
     if (enable_mdns) {
@@ -1456,9 +1519,7 @@ if (!is_android) {
     if (is_linux || is_win) {
       data += [
         "$root_out_dir/chrome_100_percent.pak",
-        "$root_out_dir/chrome_material_100_percent.pak",
         "$root_out_dir/chrome_200_percent.pak",
-        "$root_out_dir/chrome_material_200_percent.pak",
         "$root_out_dir/locales/en-US.pak",
       ]
     }
@@ -1481,10 +1542,6 @@ if (!is_android) {
       "//testing/gmock",
       "//testing/gtest",
       "//third_party/WebKit/public:blink",
-
-      # Language detection is irrelevant to sync, so it can depend on any
-      # implementation for CLD2. Dynamic is smaller, so go with dynamic.
-      "//third_party/cld_2:cld2_dynamic",
       "//third_party/icu",
       "//third_party/leveldatabase",
     ]
@@ -1504,9 +1561,10 @@ if (!is_android) {
         "../browser/sync/test/integration/two_client_dictionary_sync_test.cc",
       ]
 
-      # The sync_integration_tests do not run on mac without this flag.
-      # Search for comments about "xcode_settings" elsewhere in this file.
-      ldflags = [ "-Wl,-ObjC" ]
+      data_deps += [
+        "//chrome",
+        "//chrome:chrome_framework",
+      ]
     }
     if (is_win) {
       deps += [
@@ -1523,7 +1581,9 @@ if (!is_android) {
     }
     if (!is_chromeos) {
       sources -= [
+        "../browser/sync/test/integration/single_client_arc_package_sync_test.cc",
         "../browser/sync/test/integration/single_client_wifi_credentials_sync_test.cc",
+        "../browser/sync/test/integration/two_client_arc_package_sync_test.cc",
         "../browser/sync/test/integration/two_client_wifi_credentials_sync_test.cc",
       ]
     }
@@ -1560,10 +1620,6 @@ if (!is_android) {
       "//sync",
       "//testing/gmock",
       "//testing/gtest",
-
-      # Language detection is irrelevant to sync, so it can depend on any
-      # implementation for CLD2. Dynamic is smaller, so go with dynamic.
-      "//third_party/cld_2:cld2_dynamic",
     ]
 
     if (is_mac) {
@@ -1602,6 +1658,11 @@ if (!is_android) {
       "../browser/load_library_perf_test.cc",
     ]
 
+    # This test deliberately does not depend in chrome's test support targets.
+    # This is a small test and Chrome's test support targets bring in the
+    # world, causing link time to explode. Please don't add more dependencies
+    # here without understanding how it affects link time (and factor them
+    # differently if possible).
     deps = [
       "//base/test:test_support_perf",
       "//testing/gtest",
@@ -1610,6 +1671,10 @@ if (!is_android) {
     ]
 
     if (enable_pepper_cdms) {
+      deps += [
+        "//chrome/browser:pepper_cdm_test_constants",
+        "//media:cdm_paths",
+      ]
       data_deps = [
         "//media/cdm/ppapi:clearkeycdmadapter",
         "//third_party/widevine/cdm:widevinecdmadapter",
@@ -1619,6 +1684,29 @@ if (!is_android) {
     # This target should not require the Chrome executable to run.
     assert_no_deps = [ "//chrome" ]
   }
+}
+
+# TODO(GYP_GONE): Delete this after we've converted everything to GN.
+# The _run targets exist only for compatibility w/ GYP.
+group("telemetry_perf_unittests_run") {
+  testonly = true
+  deps = [
+    ":telemetry_perf_unittests",
+  ]
+}
+
+group("telemetry_perf_unittests") {
+  testonly = true
+  deps = [
+    "//tools/perf:perf",
+  ]
+
+  data = [
+    # For isolate contract.
+    "//testing/scripts/common.py",
+    "//testing/xvfb.py",
+    "//testing/scripts/run_telemetry_as_googletest.py",
+  ]
 }
 
 js2gtest("unit_tests_js") {
@@ -1657,7 +1745,6 @@ test("unit_tests") {
     "//components/test/data/",
     "//extensions/test/data/",
     "//google_apis/test/data/",
-    "//net/data/",
     "//net/tools/testserver/",
     "//third_party/accessibility-audit/axs_testing.js",
     "//third_party/chaijs/chai.js",
@@ -1676,11 +1763,7 @@ test("unit_tests") {
     ]
   }
   if (is_linux || is_win) {
-    data += [
-      "$root_out_dir/chrome_200_percent.pak",
-      "$root_out_dir/chrome_material_100_percent.pak",
-      "$root_out_dir/chrome_material_200_percent.pak",
-    ]
+    data += [ "$root_out_dir/chrome_200_percent.pak" ]
   }
 
   defines = []
@@ -1715,16 +1798,14 @@ test("unit_tests") {
     # 3) anything tests directly depend on
     "//chrome:resources",
     "//chrome:strings",
+    "//components/component_updater:test_support",
     "//components/safe_browsing_db:test_database_manager",
+    "//components/subresource_filter/core/browser:test_support",
     "//components/version_info:generate_version_info",
     "//courgette:courgette_lib",
     "//google_apis",
     "//skia",
     "//third_party/cacheinvalidation",
-
-    # Unit tests should be independent of the CLD2 access mechanism, just use
-    # static for simplicity.
-    "//third_party/cld_2:cld2_static",
     "//third_party/icu",
     "//third_party/libxml",
     "//ui/base:test_support",
@@ -1740,6 +1821,7 @@ test("unit_tests") {
       "//components/data_reduction_proxy/core/browser:test_support",
       "//components/data_use_measurement/core",
       "//components/metrics/proto",
+      "//components/os_crypt:test_support",
       "//components/safe_browsing_db",
       "//components/safe_json:test_support",
       "//components/strings",
@@ -1747,7 +1829,7 @@ test("unit_tests") {
       "//content/app/resources",
       "//device/bluetooth:mocks",
       "//device/core:mocks",
-      "//device/usb:mocks",
+      "//device/usb:test_support",
       "//gpu:test_support",
       "//media:test_support",
       "//third_party/leveldatabase",
@@ -1778,7 +1860,6 @@ test("unit_tests") {
       ":unit_tests_java",
       "//components/offline_pages:test_support",
       "//v8:v8_external_startup_data_assets",
-      google_play_services_resources,
     ]
     deps -= [ "//third_party/libaddressinput" ]
 
@@ -1882,7 +1963,6 @@ test("unit_tests") {
       "//ash:test_support",
       "//ash/resources",
       "//ash/strings",
-      "//ash/wm/common/resources",
     ]
 
     # We eventually want to compile both in Win Aura builds, see
@@ -1909,6 +1989,7 @@ test("unit_tests") {
       "../browser/net/disk_cache_dir_policy_handler_unittest.cc",
       "//chrome/browser/profiles/profile_list_desktop_unittest.cc",
       "//chrome/browser/profiles/profile_statistics_unittest.cc",
+      "//chrome/browser/ui/startup/default_browser_infobar_delegate_unittest.cc",
     ]
   }
   if (!is_chromeos && !use_ozone && is_linux) {
@@ -2048,11 +2129,10 @@ test("unit_tests") {
     deps += [ "//third_party/libsecret" ]
   }
   if (is_linux && use_aura) {
-    deps += [
-      "//dbus",
-      "//dbus:test_support",
-      "//ui/aura:test_support",
-    ]
+    deps += [ "//ui/aura:test_support" ]
+    if (use_dbus) {
+      deps += [ "//dbus:test_support" ]
+    }
   }
   if (is_linux && is_chrome_branded && current_cpu == "x86") {
     ldflags = [ "-Wl,--strip-debug" ]
@@ -2293,9 +2373,6 @@ if (!is_android) {
       "../app/chrome_watcher_client_win.cc",
       "../app/chrome_watcher_command_line_win.cc",
       "../app/chrome_watcher_command_line_win_unittest.cc",
-      "../app/delay_load_hook_unittest_win.cc",
-      "../app/delay_load_hook_win.cc",
-      "../app/delay_load_hook_win.h",
       "../app/resources/resources_unittest.cc",
       "../common/crash_keys.cc",
       "../common/crash_keys.h",
@@ -2309,13 +2386,12 @@ if (!is_android) {
       "//chrome/child",
       "//components/crash/core/common",
       "//components/flags_ui:switches",
-      "//third_party/cld_2:cld2_platform_impl",
       "//third_party/kasko:kasko_features",
     ]
   }
 }
 
-if (is_win || (is_linux && !is_chromeos)) {
+if (!is_android && !is_ios && !is_chromecast) {
   test("performance_browser_tests") {
     sources =
         rebase_path(chrome_tests_gypi_values.performance_browser_tests_sources,
@@ -2339,7 +2415,6 @@ if (is_win || (is_linux && !is_chromeos)) {
       "//testing/gmock",
       "//testing/gtest",
       "//testing/perf",
-      "//third_party/cld_2:cld2_platform_impl",
     ]
 
     if (is_win) {

@@ -16,6 +16,7 @@
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluez/bluetooth_adapter_bluez.h"
@@ -1441,8 +1442,8 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterBeforeStartDiscovery) {
 
   TestBluetoothAdapterObserver observer(adapter_);
 
-  BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+  BluetoothDiscoveryFilter* df =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
   df->SetRSSI(-60);
   df->AddUUID(BluetoothUUID("1000"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(df);
@@ -1501,8 +1502,8 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterBeforeStartDiscoveryFail) {
 
   TestBluetoothAdapterObserver observer(adapter_);
 
-  BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+  BluetoothDiscoveryFilter* df =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
   df->SetRSSI(-60);
   df->AddUUID(BluetoothUUID("1000"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(df);
@@ -1544,14 +1545,14 @@ TEST_F(BluetoothBlueZTest, QueuedSetDiscoveryFilterBeforeStartDiscovery) {
 
   TestBluetoothAdapterObserver observer(adapter_);
 
-  BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+  BluetoothDiscoveryFilter* df =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
   df->SetRSSI(-60);
   df->AddUUID(BluetoothUUID("1000"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(df);
 
-  BluetoothDiscoveryFilter* df2 = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_CLASSIC);
+  BluetoothDiscoveryFilter* df2 =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_CLASSIC);
   df2->SetRSSI(-65);
   df2->AddUUID(BluetoothUUID("1002"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter2(df2);
@@ -1639,14 +1640,14 @@ TEST_F(BluetoothBlueZTest, QueuedSetDiscoveryFilterBeforeStartDiscoveryFail) {
 
   TestBluetoothAdapterObserver observer(adapter_);
 
-  BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+  BluetoothDiscoveryFilter* df =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
   df->SetRSSI(-60);
   df->AddUUID(BluetoothUUID("1000"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(df);
 
-  BluetoothDiscoveryFilter* df2 = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_CLASSIC);
+  BluetoothDiscoveryFilter* df2 =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_CLASSIC);
   df2->SetRSSI(-65);
   df2->AddUUID(BluetoothUUID("1002"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter2(df2);
@@ -1758,8 +1759,8 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterAfterStartDiscovery) {
   auto filter = fake_bluetooth_adapter_client_->GetDiscoveryFilter();
   EXPECT_EQ(nullptr, filter);
 
-  BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+  BluetoothDiscoveryFilter* df =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
   df->SetRSSI(-60);
   df->AddUUID(BluetoothUUID("1000"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(df);
@@ -1822,21 +1823,21 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterBeforeStartDiscoveryMultiple) {
   for (int i = 0; i < 3; i++) {
     std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter;
     if (i == 0) {
-      BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+      BluetoothDiscoveryFilter* df =
+          new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
       df->SetRSSI(-85);
       df->AddUUID(BluetoothUUID("1000"));
       discovery_filter.reset(df);
     } else if (i == 1) {
-      BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+      BluetoothDiscoveryFilter* df =
+          new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
       df->SetRSSI(-60);
       df->AddUUID(BluetoothUUID("1020"));
       df->AddUUID(BluetoothUUID("1001"));
       discovery_filter.reset(df);
     } else if (i == 2) {
-      BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+      BluetoothDiscoveryFilter* df =
+          new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
       df->SetRSSI(-65);
       df->AddUUID(BluetoothUUID("1020"));
       df->AddUUID(BluetoothUUID("1003"));
@@ -1946,21 +1947,21 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterBeforeStartDiscoveryMultiple) {
     std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter;
 
     if (i == 0) {
-      BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+      BluetoothDiscoveryFilter* df =
+          new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
       df->SetRSSI(-85);
       df->AddUUID(BluetoothUUID("1000"));
       discovery_filter.reset(df);
     } else if (i == 1) {
-      BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+      BluetoothDiscoveryFilter* df =
+          new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
       df->SetRSSI(-60);
       df->AddUUID(BluetoothUUID("1020"));
       df->AddUUID(BluetoothUUID("1001"));
       discovery_filter.reset(df);
     } else if (i == 2) {
-      BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+      BluetoothDiscoveryFilter* df =
+          new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
       df->SetRSSI(-65);
       df->AddUUID(BluetoothUUID("1020"));
       df->AddUUID(BluetoothUUID("1003"));
@@ -2043,8 +2044,8 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterMergingTest) {
       true, base::Bind(&BluetoothBlueZTest::Callback, base::Unretained(this)),
       base::Bind(&BluetoothBlueZTest::ErrorCallback, base::Unretained(this)));
 
-  BluetoothDiscoveryFilter* df = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+  BluetoothDiscoveryFilter* df =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
   df->SetRSSI(-15);
   df->AddUUID(BluetoothUUID("1000"));
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(df);
@@ -2064,8 +2065,7 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterMergingTest) {
   std::vector<std::string> uuids = *filter->uuids;
   EXPECT_NE(uuids.end(), std::find(uuids.begin(), uuids.end(), "1000"));
 
-  df = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_LE);
+  df = new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_LE);
   df->SetRSSI(-60);
   df->AddUUID(BluetoothUUID("1020"));
   df->AddUUID(BluetoothUUID("1001"));
@@ -2088,8 +2088,8 @@ TEST_F(BluetoothBlueZTest, SetDiscoveryFilterMergingTest) {
   EXPECT_NE(uuids.end(), std::find(uuids.begin(), uuids.end(), "1001"));
   EXPECT_NE(uuids.end(), std::find(uuids.begin(), uuids.end(), "1020"));
 
-  BluetoothDiscoveryFilter* df3 = new BluetoothDiscoveryFilter(
-      BluetoothDiscoveryFilter::Transport::TRANSPORT_CLASSIC);
+  BluetoothDiscoveryFilter* df3 =
+      new BluetoothDiscoveryFilter(device::BLUETOOTH_TRANSPORT_CLASSIC);
   df3->SetRSSI(-65);
   df3->AddUUID(BluetoothUUID("1020"));
   df3->AddUUID(BluetoothUUID("1003"));
@@ -2153,7 +2153,7 @@ TEST_F(BluetoothBlueZTest, DeviceProperties) {
   // Verify the other device properties.
   EXPECT_EQ(
       base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceName),
-      devices[idx]->GetName());
+      devices[idx]->GetNameForDisplay());
   EXPECT_EQ(BluetoothDevice::DEVICE_COMPUTER, devices[idx]->GetDeviceType());
   EXPECT_TRUE(devices[idx]->IsPaired());
   EXPECT_FALSE(devices[idx]->IsConnected());
@@ -2328,7 +2328,7 @@ TEST_F(BluetoothBlueZTest, DeviceNameChanged) {
             devices[idx]->GetAddress());
   ASSERT_EQ(
       base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceName),
-      devices[idx]->GetName());
+      devices[idx]->GetNameForDisplay());
 
   // Install an observer; expect the DeviceChanged method to be called when
   // we change the alias of the device.
@@ -2344,7 +2344,7 @@ TEST_F(BluetoothBlueZTest, DeviceNameChanged) {
   EXPECT_EQ(1, observer.device_changed_count());
   EXPECT_EQ(devices[idx], observer.last_device());
 
-  EXPECT_EQ(base::UTF8ToUTF16(new_name), devices[idx]->GetName());
+  EXPECT_EQ(base::UTF8ToUTF16(new_name), devices[idx]->GetNameForDisplay());
 }
 
 TEST_F(BluetoothBlueZTest, DeviceAddressChanged) {
@@ -2361,7 +2361,7 @@ TEST_F(BluetoothBlueZTest, DeviceAddressChanged) {
             devices[idx]->GetAddress());
   ASSERT_EQ(
       base::UTF8ToUTF16(bluez::FakeBluetoothDeviceClient::kPairedDeviceName),
-      devices[idx]->GetName());
+      devices[idx]->GetNameForDisplay());
 
   // Install an observer; expect the DeviceAddressChanged method to be called
   // when we change the alias of the device.
@@ -4162,6 +4162,22 @@ TEST_F(BluetoothBlueZTest, GetConnectionInfoForConnectedDevice) {
   EXPECT_EQ(4, conn_info.max_transmit_power);
 }
 
+TEST_F(BluetoothBlueZTest, GetDiscoverableTimeout) {
+  constexpr uint32_t kShortDiscoverableTimeout = 30;
+  constexpr uint32_t kLongDiscoverableTimeout = 240;
+  GetAdapter();
+  BluetoothAdapterBlueZ* adapter_bluez =
+      static_cast<BluetoothAdapterBlueZ*>(adapter_.get());
+
+  fake_bluetooth_adapter_client_->SetDiscoverableTimeout(
+      kShortDiscoverableTimeout);
+  EXPECT_EQ(kShortDiscoverableTimeout, adapter_bluez->GetDiscoverableTimeout());
+
+  fake_bluetooth_adapter_client_->SetDiscoverableTimeout(
+      kLongDiscoverableTimeout);
+  EXPECT_EQ(kLongDiscoverableTimeout, adapter_bluez->GetDiscoverableTimeout());
+}
+
 // Verifies Shutdown shuts down the adapter as expected.
 TEST_F(BluetoothBlueZTest, Shutdown) {
   // Set up adapter. Set powered & discoverable, start discovery.
@@ -4311,7 +4327,7 @@ TEST_F(BluetoothBlueZTest, Shutdown) {
   // SetAdapter will DCHECK after Shutdown().
   // SetDefaultAdapterName will DCHECK after Shutdown().
   // RemoveAdapter will DCHECK after Shutdown().
-  adapter_bluez->PoweredChanged(false);
+  adapter_bluez->NotifyAdapterPoweredChanged(false);
   adapter_bluez->DiscoverableChanged(false);
   adapter_bluez->DiscoveringChanged(false);
   adapter_bluez->PresentChanged(false);

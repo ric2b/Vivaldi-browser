@@ -126,6 +126,13 @@ class CONTENT_EXPORT RequestExtraData
     stream_override_ = std::move(stream_override);
   }
 
+  bool initiated_in_secure_context() const {
+    return initiated_in_secure_context_;
+  }
+  void set_initiated_in_secure_context(bool secure) {
+    initiated_in_secure_context_ = secure;
+  }
+
  private:
   blink::WebPageVisibilityState visibility_state_;
   int render_frame_id_;
@@ -143,6 +150,7 @@ class CONTENT_EXPORT RequestExtraData
   blink::WebString custom_user_agent_;
   blink::WebString requested_with_;
   std::unique_ptr<StreamOverrideParameters> stream_override_;
+  bool initiated_in_secure_context_;
 
   DISALLOW_COPY_AND_ASSIGN(RequestExtraData);
 };

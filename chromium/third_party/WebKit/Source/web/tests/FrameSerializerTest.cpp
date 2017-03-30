@@ -184,7 +184,7 @@ private:
 
         StringBuilder uriBuilder;
         uriBuilder.append(m_rewriteFolder);
-        uriBuilder.appendLiteral("/");
+        uriBuilder.append("/");
         uriBuilder.append(m_rewriteURLs.get(completeURL));
         rewrittenLink = uriBuilder.toString();
         return true;
@@ -403,7 +403,7 @@ TEST_F(FrameSerializerTest, CSSImport)
 
 TEST_F(FrameSerializerTest, XMLDeclaration)
 {
-    V8TestingScope scope(v8::Isolate::GetCurrent());
+    V8TestingScope scope;
     setBaseFolder("frameserializer/xml/");
 
     registerURL("xmldecl.xml", "text/xml");

@@ -8,8 +8,8 @@
 #include <map>
 
 #include "ash/ash_export.h"
+#include "ash/common/shell_observer.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/shell_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "chromeos/accelerometer/accelerometer_reader.h"
@@ -56,6 +56,9 @@ class ASH_EXPORT ScreenOrientationController
       aura::Window* requesting_windowwindow,
       blink::WebScreenOrientationLockType lock_orientation);
   void UnlockOrientationForWindow(aura::Window* window);
+
+  // Unlock all and set the rotation back to the user specified rotation.
+  void UnlockAll();
 
   bool ScreenOrientationProviderSupported() const;
 

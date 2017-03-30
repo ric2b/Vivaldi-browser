@@ -52,6 +52,7 @@ class BlimpCompositorClient {
   virtual gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() = 0;
   virtual cc::ImageSerializationProcessor* GetImageSerializationProcessor() = 0;
   virtual void DidCompleteSwapBuffers() = 0;
+  virtual void DidCommitAndDrawFrame() = 0;
 
   // Should send web gesture events which could not be handled locally by the
   // compositor to the engine.
@@ -149,9 +150,6 @@ class BlimpCompositor
   void DidCommitAndDrawFrame() override;
   void DidCompleteSwapBuffers() override;
   void DidCompletePageScaleAnimation() override;
-  void ReportFixedRasterScaleUseCounters(
-      bool has_blurry_content,
-      bool has_potential_performance_regression) override {}
 
   // RemoteProtoChannel implementation.
   void SetProtoReceiver(ProtoReceiver* receiver) override;

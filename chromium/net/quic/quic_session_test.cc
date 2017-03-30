@@ -5,6 +5,7 @@
 #include "net/quic/quic_session.h"
 
 #include <set>
+#include <utility>
 
 #include "base/rand_util.h"
 #include "base/stl_util.h"
@@ -815,12 +816,12 @@ TEST_P(QuicSessionTestServer,
     headers["header"] = base::Uint64ToString(base::RandUint64()) +
                         base::Uint64ToString(base::RandUint64()) +
                         base::Uint64ToString(base::RandUint64());
-    headers_stream->WriteHeaders(stream_id, headers, true, 0, nullptr);
+    headers_stream->WriteHeaders(stream_id, headers.Clone(), true, 0, nullptr);
     stream_id += 2;
   }
   // Write once more to ensure that the headers stream has buffered data. The
   // random headers may have exactly filled the flow control window.
-  headers_stream->WriteHeaders(stream_id, headers, true, 0, nullptr);
+  headers_stream->WriteHeaders(stream_id, std::move(headers), true, 0, nullptr);
   EXPECT_TRUE(headers_stream->HasBufferedData());
 
   EXPECT_TRUE(headers_stream->flow_controller()->IsBlocked());
@@ -876,20 +877,21 @@ TEST_P(QuicSessionTestServer, ConnectionFlowControlAccountingFinAndLocalReset) {
   TestStream* stream = session_.CreateOutgoingDynamicStream(kDefaultPriority);
 
   const QuicStreamOffset kByteOffset =
-      kInitialSessionFlowControlWindowForTest / 2;
-  QuicStreamFrame frame(stream->id(), true, kByteOffset, StringPiece());
+      kInitialSessionFlowControlWindowForTest / 2 - 1;
+  QuicStreamFrame frame(stream->id(), true, kByteOffset, ".");
   session_.OnStreamFrame(frame);
   session_.PostProcessAfterData();
   EXPECT_TRUE(connection_->connected());
 
   EXPECT_EQ(0u, stream->flow_controller()->bytes_consumed());
-  EXPECT_EQ(kByteOffset,
+  EXPECT_EQ(kByteOffset + frame.data_length,
             stream->flow_controller()->highest_received_byte_offset());
 
   // Reset stream locally.
   EXPECT_CALL(*connection_, SendRstStream(stream->id(), _, _));
   stream->Reset(QUIC_STREAM_CANCELLED);
-  EXPECT_EQ(kByteOffset, session_.flow_controller()->bytes_consumed());
+  EXPECT_EQ(kByteOffset + frame.data_length,
+            session_.flow_controller()->bytes_consumed());
 }
 
 TEST_P(QuicSessionTestServer, ConnectionFlowControlAccountingFinAfterRst) {

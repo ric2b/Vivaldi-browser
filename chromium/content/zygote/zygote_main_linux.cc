@@ -64,7 +64,7 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
-#include "third_party/libjingle/overrides/init_webrtc.h"
+#include "third_party/webrtc_overrides/init_webrtc.h"
 #endif
 
 #if defined(SANITIZER_COVERAGE)
@@ -329,7 +329,6 @@ static void ZygotePreSandboxInit() {
   base::RandUint64();
 
   base::SysInfo::AmountOfPhysicalMemory();
-  base::SysInfo::MaxSharedMemorySize();
   base::SysInfo::NumberOfProcessors();
 
   // ICU DateFormat class (used in base/time_format.cc) needs to get the

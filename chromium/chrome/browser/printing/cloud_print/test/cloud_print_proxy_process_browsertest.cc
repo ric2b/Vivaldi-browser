@@ -21,6 +21,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/test/multiprocess_test.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/platform_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
@@ -50,6 +51,7 @@
 #include "ipc/ipc_descriptors.h"
 #include "ipc/ipc_multiprocess_test.h"
 #include "ipc/ipc_switches.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/multiprocess_func_list.h"
@@ -214,8 +216,8 @@ typedef base::Callback<void(MockServiceIPCServer* server)>
 // service process. Any non-zero return value will be printed out and can help
 // determine the failure.
 int CloudPrintMockService_Main(SetExpectationsCallback set_expectations) {
+  base::PlatformThread::SetName("Main Thread");
   base::MessageLoopForUI main_message_loop;
-  main_message_loop.set_thread_name("Main Thread");
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   content::RegisterPathProvider();
 
@@ -247,6 +249,9 @@ int CloudPrintMockService_Main(SetExpectationsCallback set_expectations) {
   // Takes ownership of the pointer, but we can use it since we have the same
   // lifetime.
   EXPECT_TRUE(service_process.Initialize(&main_message_loop, state));
+
+  // Needed for IPC.
+  mojo::edk::Init();
 
   MockServiceIPCServer server(&service_process,
                               service_process.io_task_runner(),

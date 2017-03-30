@@ -6,6 +6,7 @@
 
 #include <jni.h>
 
+#include "base/android/callback_android.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
@@ -27,6 +28,7 @@ using base::android::ConvertJavaStringToUTF8;
 using base::android::JavaParamRef;
 using base::android::ToJavaArrayOfStrings;
 using base::android::ToJavaLongArray;
+using base::android::ToJavaFloatArray;
 using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 
@@ -38,10 +40,7 @@ void SnippetVisitedHistoryRequestCallback(
       const history::URLRow& row,
       const history::VisitVector& visitVector) {
   bool visited = success && row.visit_count() != 0;
-
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_SnippetsBridge_runCallback(env, callback.obj(),
-                                  static_cast<jboolean>(visited));
+  base::android::RunCallbackAndroid(callback, visited);
 }
 
 } // namespace
@@ -119,6 +118,11 @@ void NTPSnippetsBridge::SnippetVisited(JNIEnv* env,
       &tracker_);
 }
 
+int NTPSnippetsBridge::GetDisabledReason(JNIEnv* env,
+                                         const JavaParamRef<jobject>& obj) {
+  return static_cast<int>(ntp_snippets_service_->disabled_reason());
+}
+
 NTPSnippetsBridge::~NTPSnippetsBridge() {}
 
 void NTPSnippetsBridge::NTPSnippetsServiceLoaded() {
@@ -137,6 +141,7 @@ void NTPSnippetsBridge::NTPSnippetsServiceLoaded() {
   std::vector<std::string> snippets;
   std::vector<int64_t> timestamps;
   std::vector<std::string> publishers;
+  std::vector<float> scores;
   for (const std::unique_ptr<ntp_snippets::NTPSnippet>& snippet :
        ntp_snippets_service_->snippets()) {
     ids.push_back(snippet->id());
@@ -149,6 +154,7 @@ void NTPSnippetsBridge::NTPSnippetsServiceLoaded() {
     snippets.push_back(snippet->snippet());
     timestamps.push_back(snippet->publish_date().ToJavaTime());
     publishers.push_back(snippet->best_source().publisher_name);
+    scores.push_back(snippet->score());
   }
 
   JNIEnv* env = base::android::AttachCurrentThread();
@@ -160,7 +166,8 @@ void NTPSnippetsBridge::NTPSnippetsServiceLoaded() {
       ToJavaArrayOfStrings(env, thumbnail_urls).obj(),
       ToJavaArrayOfStrings(env, snippets).obj(),
       ToJavaLongArray(env, timestamps).obj(),
-      ToJavaArrayOfStrings(env, publishers).obj());
+      ToJavaArrayOfStrings(env, publishers).obj(),
+      ToJavaFloatArray(env, scores).obj());
 }
 
 void NTPSnippetsBridge::NTPSnippetsServiceShutdown() {
@@ -168,24 +175,23 @@ void NTPSnippetsBridge::NTPSnippetsServiceShutdown() {
   snippet_service_observer_.Remove(ntp_snippets_service_);
 }
 
-void NTPSnippetsBridge::NTPSnippetsServiceDisabled() {
+void NTPSnippetsBridge::NTPSnippetsServiceDisabledReasonChanged(
+    ntp_snippets::DisabledReason disabled_reason) {
   // The user signed out or disabled sync. Since snippets rely on those, we
   // clear them to be consistent with the initially signed out state.
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_SnippetsBridge_onSnippetsDisabled(env, observer_.obj());
+  Java_SnippetsBridge_onDisabledReasonChanged(
+      env, observer_.obj(), static_cast<int>(disabled_reason));
 }
 
 void NTPSnippetsBridge::OnImageFetched(ScopedJavaGlobalRef<jobject> callback,
                                        const std::string& snippet_id,
                                        const gfx::Image& image) {
-  JNIEnv* env = AttachCurrentThread();
-
   ScopedJavaLocalRef<jobject> j_bitmap;
   if (!image.IsEmpty())
     j_bitmap = gfx::ConvertToJavaBitmap(image.ToSkBitmap());
 
-  Java_FetchSnippetImageCallback_onSnippetImageAvailable(env, callback.obj(),
-                                                         j_bitmap.obj());
+  base::android::RunCallbackAndroid(callback, j_bitmap);
 }
 
 // static

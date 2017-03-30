@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/ash_constants.h"
+#include "ash/common/ash_constants.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/frame/custom_frame_view_ash.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/cursor_manager_test_api.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/resize_shadow.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/window_state_aura.h"
@@ -64,8 +64,8 @@ class ResizeShadowAndCursorTest : public AshTestBase {
     // Add a child window to |window_| in order to properly test that the resize
     // handles and the resize shadows are shown when the mouse is
     // ash::kResizeInsideBoundsSize inside of |window_|'s edges.
-    aura::Window* child = CreateTestWindowInShell(
-        SK_ColorWHITE, 0, gfx::Rect(0, 10, 200, 90));
+    aura::Window* child =
+        CreateTestWindowInShell(SK_ColorWHITE, 0, gfx::Rect(0, 10, 200, 90));
     window_->AddChild(child);
   }
 
@@ -79,9 +79,7 @@ class ResizeShadowAndCursorTest : public AshTestBase {
   }
 
   // Returns true if there is a resize shadow.
-  bool HasResizeShadow() const {
-    return ResizeShadowHitTest() != HTNOWHERE;
-  }
+  bool HasResizeShadow() const { return ResizeShadowHitTest() != HTNOWHERE; }
 
   // Returns the current cursor type.
   int GetCurrentCursorType() const {
@@ -101,9 +99,7 @@ class ResizeShadowAndCursorTest : public AshTestBase {
     }
   }
 
-  aura::Window* window() {
-    return window_;
-  }
+  aura::Window* window() { return window_; }
 
  private:
   aura::Window* window_;
@@ -186,10 +182,8 @@ TEST_F(ResizeShadowAndCursorTest, Touch) {
   int start_x = 200 + ash::kResizeOutsideBoundsSize - 1;
   int start_y = 100 + ash::kResizeOutsideBoundsSize - 1;
   generator.GestureScrollSequenceWithCallback(
-      gfx::Point(start_x, start_y),
-      gfx::Point(start_x + 50, start_y + 50),
-      base::TimeDelta::FromMilliseconds(200),
-      3,
+      gfx::Point(start_x, start_y), gfx::Point(start_x + 50, start_y + 50),
+      base::TimeDelta::FromMilliseconds(200), 3,
       base::Bind(&ResizeShadowAndCursorTest::ProcessBottomRightResizeGesture,
                  base::Unretained(this)));
 }

@@ -15,15 +15,71 @@ webview,
   width: 100%;
 }
 
+::-webkit-scrollbar {
+  background: transparent;
+  height: 4px;
+  width: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  height: 16px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+#arc-support {
+  flex: auto;
+  overflow: hidden;
+  width: 960px;
+}
+
+#terms-view {
+  width: 640px;
+}
+
+.bubble-button > div {
+  height: 12px;
+  top: -8px;
+  width: 12px;
+}
+
 .button-separator {
   width: 1px;
 }
 
-.checkbox-metrics {
-  height: 16px;
+.checkbox-option {
+  height: 12px;
   margin: 0;
-  padding: 0 8px 0 0;
-  width: 16px;
+  padding: 0;
+  width: 12px;
+}
+
+.checkbox-text {
+  color: rgba(0, 0, 0, 0.54);
+  font-size: 10px;
+  font-weight: 400;
+  line-height: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.content {
+  /* Default window inner height (688px) minus image caption height (300px) */
+  height: 388px;
+  margin: 0;
+  padding: 0;
+}
+
+.controlled-setting-indicator {
+  -webkit-margin-end: 3px;
+  -webkit-margin-start: 2px;
+}
+
+.controlled-setting-indicator[controlled-by] > div {
+  background-size: 16px;
 }
 
 .image-header {
@@ -33,37 +89,50 @@ webview,
   width: 960px;
 }
 
+.scrollable {
+  flex: auto;
+  margin: 0;
+  overflow: auto;
+  padding: 0;
+}
+
 .section {
+  display: flex;
+  flex-direction: column;
   text-align: center;
 }
 
 .section-buttons {
   margin: auto;
   padding: 16px 0 24px 0;
-  width: 468px;
+  width: 640px;
 }
 
 .section-flex {
   display: flex;
   flex-direction: column;
-  height: 688px;
 }
 
-.section-metrics {
+.section-checkbox-container {
   margin: auto;
-  padding: 16px 0 0 0;
+  padding: 8px 0 0 0;
   text-align: left;
-  width: 468px;
+  width: 640px;
+}
+
+.section-checkbox-container > input[type='checkbox'] {
+  flex-shrink: 0;
+  margin: 0 8px 0 0;
 }
 
 .section-terms {
   border: 1px solid #e6e6e6;
   color: rgba(0, 0, 0, 0.54);
   flex: auto;
-  margin: auto;
+  margin: 0 auto 8px auto;
   overflow: hidden;
   padding: 0;
-  width: 468px;
+  width: 640px;
 }
 
 .text-desc {
@@ -73,16 +142,7 @@ webview,
   line-height: 24px;
   margin: auto;
   padding: 16px 0 0 0;
-  width: 600px;
-}
-
-.text-metrics {
-  color: rgba(0, 0, 0, 0.54);
-  font-size: 10px;
-  font-weight: 400;
-  line-height: 16px;
-  margin: 0;
-  padding: 0;
+  width: 640px;
 }
 
 .text-status {
@@ -98,9 +158,9 @@ webview,
   font-size: 10px;
   font-weight: 500;
   margin: auto;
-  padding: 14px 0 8px 0;
+  padding: 10px 0 8px 0;
   text-align: left;
-  width: 468px;
+  width: 640px;
 }
 
 .text-title {

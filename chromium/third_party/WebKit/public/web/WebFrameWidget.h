@@ -37,6 +37,7 @@
 
 namespace blink {
 
+class CompositorProxyClient;
 class WebLocalFrame;
 class WebView;
 class WebWidgetClient;
@@ -53,7 +54,7 @@ public:
     // We still track page-level visibility, but additionally we need to notify a WebFrameWidget
     // when its owning RenderWidget receives a Show or Hide directive, so that it knows whether
     // it needs to draw or not.
-    virtual void setVisibilityState(WebPageVisibilityState visibilityState, bool isInitialState) { }
+    virtual void setVisibilityState(WebPageVisibilityState visibilityState) {}
 
     // Makes the WebFrameWidget transparent.  This is useful if you want to have
     // some custom background rendered behind it.
@@ -76,6 +77,7 @@ public:
     // blink.
     virtual bool forSubframe() const { return true; }
     virtual void scheduleAnimation() = 0;
+    virtual CompositorProxyClient* createCompositorProxyClient() = 0;
     virtual WebWidgetClient* client() const = 0;
 };
 

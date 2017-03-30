@@ -9,14 +9,14 @@
 #include "cc/output/compositor_frame_ack.h"
 #include "cc/output/output_surface_client.h"
 #include "components/mus/public/cpp/window_surface.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
 
 namespace mus {
 
 OutputSurface::OutputSurface(
     const scoped_refptr<cc::ContextProvider>& context_provider,
     std::unique_ptr<mus::WindowSurface> surface)
-    : cc::OutputSurface(context_provider), surface_(std::move(surface)) {
+    : cc::OutputSurface(context_provider, nullptr, nullptr),
+      surface_(std::move(surface)) {
   capabilities_.delegated_rendering = true;
 }
 
@@ -33,20 +33,31 @@ void OutputSurface::DetachFromClient() {
   cc::OutputSurface::DetachFromClient();
 }
 
-void OutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
+void OutputSurface::BindFramebuffer() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+}
+
+uint32_t OutputSurface::GetFramebufferCopyTextureFormat() {
+  // This is a delegating output surface, no framebuffer/direct drawing support.
+  NOTREACHED();
+  return 0;
+}
+
+void OutputSurface::SwapBuffers(cc::CompositorFrame frame) {
   // TODO(fsamuel, rjkroege): We should probably throttle compositor frames.
   client_->DidSwapBuffers();
   // OutputSurface owns WindowSurface, and so if OutputSurface is
   // destroyed then SubmitCompositorFrame's callback will never get called.
   // Thus, base::Unretained is safe here.
   surface_->SubmitCompositorFrame(
-      mojom::CompositorFrame::From(*frame),
+      std::move(frame),
       base::Bind(&OutputSurface::SwapBuffersComplete, base::Unretained(this)));
 }
 
 void OutputSurface::OnResourcesReturned(
     mus::WindowSurface* surface,
-    mojo::Array<mojom::ReturnedResourcePtr> resources) {
+    mojo::Array<cc::ReturnedResource> resources) {
   cc::CompositorFrameAck cfa;
   cfa.resources = resources.To<cc::ReturnedResourceArray>();
   ReclaimResources(&cfa);

@@ -14,12 +14,12 @@
 #include "media/base/cdm_config.h"
 #include "media/base/mock_filters.h"
 #include "media/base/test_helpers.h"
+#include "media/mojo/clients/mojo_demuxer_stream_impl.h"
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/interfaces/content_decryption_module.mojom.h"
 #include "media/mojo/interfaces/decryptor.mojom.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
 #include "media/mojo/interfaces/service_factory.mojom.h"
-#include "media/mojo/services/mojo_demuxer_stream_impl.h"
 #include "services/shell/public/cpp/shell_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -48,13 +48,7 @@ class MockRendererClient : public mojom::RendererClient {
   MOCK_METHOD0(OnEnded, void());
   MOCK_METHOD0(OnError, void());
   MOCK_METHOD1(OnVideoOpacityChange, void(bool opaque));
-
-  // TODO(alokp): gmock does not support move-only function arguments.
-  // Convert this into MOCK_METHOD after gmock implements this feature.
-  // https://github.com/google/googletest/issues/395
-  // If we need to use this mock method before the gmock bug gets fixed, we
-  // would need to define a MOCK_METHOD using non movable type which calls this.
-  void OnVideoNaturalSizeChange(mojo::SizePtr size) override {}
+  MOCK_METHOD1(OnVideoNaturalSizeChange, void(const gfx::Size& size));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockRendererClient);
@@ -65,7 +59,7 @@ class MediaShellTest : public shell::test::ShellTest {
   MediaShellTest()
       : ShellTest("exe:media_mojo_unittests"),
         renderer_client_binding_(&renderer_client_),
-        video_demuxer_stream_(DemuxerStream::VIDEO) {}
+        video_stream_(DemuxerStream::VIDEO) {}
   ~MediaShellTest() override {}
 
   void SetUp() override {
@@ -108,16 +102,17 @@ class MediaShellTest : public shell::test::ShellTest {
                           bool expected_result) {
     service_factory_->CreateRenderer(mojo::GetProxy(&renderer_));
 
-    video_demuxer_stream_.set_video_decoder_config(video_config);
+    video_stream_.set_video_decoder_config(video_config);
 
-    mojom::DemuxerStreamPtr video_stream;
-    new MojoDemuxerStreamImpl(&video_demuxer_stream_, GetProxy(&video_stream));
+    mojom::DemuxerStreamPtr video_stream_proxy;
+    mojo_video_stream_.reset(new MojoDemuxerStreamImpl(
+        &video_stream_, GetProxy(&video_stream_proxy)));
 
     EXPECT_CALL(*this, OnRendererInitialized(expected_result))
         .Times(Exactly(1))
         .WillOnce(InvokeWithoutArgs(run_loop_.get(), &base::RunLoop::Quit));
     renderer_->Initialize(renderer_client_binding_.CreateInterfacePtrAndBind(),
-                          nullptr, std::move(video_stream),
+                          nullptr, std::move(video_stream_proxy),
                           base::Bind(&MediaShellTest::OnRendererInitialized,
                                      base::Unretained(this)));
   }
@@ -134,7 +129,8 @@ class MediaShellTest : public shell::test::ShellTest {
   StrictMock<MockRendererClient> renderer_client_;
   mojo::Binding<mojom::RendererClient> renderer_client_binding_;
 
-  StrictMock<MockDemuxerStream> video_demuxer_stream_;
+  StrictMock<MockDemuxerStream> video_stream_;
+  std::unique_ptr<MojoDemuxerStreamImpl> mojo_video_stream_;
 
  private:
   std::unique_ptr<shell::Connection> connection_;

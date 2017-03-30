@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 #include "ash/wm/ash_native_cursor_manager.h"
 
-#include "ash/display/display_info.h"
+#include "ash/common/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_interactive_ui_test_base.h"
@@ -36,23 +36,14 @@ DisplayInfo CreateDisplayInfo(int64_t id,
 
 void MoveMouseSync(aura::Window* window, int x, int y) {
 #if defined(USE_X11)
-  XWarpPointer(gfx::GetXDisplay(),
-               None,
-               window->GetHost()->GetAcceleratedWidget(),
-               0, 0, 0, 0,
-               x, y);
+  XWarpPointer(gfx::GetXDisplay(), None,
+               window->GetHost()->GetAcceleratedWidget(), 0, 0, 0, 0, x, y);
 #endif
   // Send and wait for a key event to make sure that mouse
   // events are fully processed.
   base::RunLoop loop;
-  ui_controls::SendKeyPressNotifyWhenDone(
-      window,
-      ui::VKEY_SPACE,
-      false,
-      false,
-      false,
-      false,
-      loop.QuitClosure());
+  ui_controls::SendKeyPressNotifyWhenDone(window, ui::VKEY_SPACE, false, false,
+                                          false, false, loop.QuitClosure());
   loop.Run();
 }
 

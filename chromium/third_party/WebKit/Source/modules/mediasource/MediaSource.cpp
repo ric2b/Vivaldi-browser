@@ -36,8 +36,9 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
+#include "core/frame/Deprecation.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLMediaElement.h"
-#include "core/html/TimeRanges.h"
 #include "modules/mediasource/MediaSourceRegistry.h"
 #include "platform/ContentType.h"
 #include "platform/Logging.h"
@@ -46,19 +47,32 @@
 #include "platform/TraceEvent.h"
 #include "public/platform/WebMediaSource.h"
 #include "public/platform/WebSourceBuffer.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/CString.h"
+#include <memory>
 
 using blink::WebMediaSource;
 using blink::WebSourceBuffer;
 
+#define MSLOG DVLOG(3)
+
 namespace blink {
 
-static bool throwExceptionIfClosedOrUpdating(bool isOpen, bool isUpdating, ExceptionState& exceptionState)
+static bool throwExceptionIfClosed(bool isOpen, ExceptionState& exceptionState)
 {
     if (!isOpen) {
         MediaSource::logAndThrowDOMException(exceptionState, InvalidStateError, "The MediaSource's readyState is not 'open'.");
         return true;
     }
+
+    return false;
+}
+
+static bool throwExceptionIfClosedOrUpdating(bool isOpen, bool isUpdating, ExceptionState& exceptionState)
+{
+    if (throwExceptionIfClosed(isOpen, exceptionState))
+        return true;
+
     if (isUpdating) {
         MediaSource::logAndThrowDOMException(exceptionState, InvalidStateError, "The 'updating' attribute is true on one or more of this MediaSource's SourceBuffers.");
         return true;
@@ -100,26 +114,27 @@ MediaSource::MediaSource(ExecutionContext* context)
     , m_attachedElement(nullptr)
     , m_sourceBuffers(SourceBufferList::create(getExecutionContext(), m_asyncEventQueue.get()))
     , m_activeSourceBuffers(SourceBufferList::create(getExecutionContext(), m_asyncEventQueue.get()))
+    , m_liveSeekableRange(TimeRanges::create())
     , m_isAddedToRegistry(false)
 {
-    WTF_LOG(Media, "MediaSource::MediaSource %p", this);
+    MSLOG << __FUNCTION__ << " this=" << this;
 }
 
 MediaSource::~MediaSource()
 {
-    WTF_LOG(Media, "MediaSource::~MediaSource %p", this);
-    ASSERT(isClosed());
+    MSLOG << __FUNCTION__ << " this=" << this;
+    DCHECK(isClosed());
 }
 
 void MediaSource::logAndThrowDOMException(ExceptionState& exceptionState, const ExceptionCode& error, const String& message)
 {
-    WTF_LOG(Media, "throwDOMException: error=%d msg=%s", error, message.utf8().data());
+    MSLOG << __FUNCTION__ << " (error=" << error << ", message=" << message << ")";
     exceptionState.throwDOMException(error, message);
 }
 
 SourceBuffer* MediaSource::addSourceBuffer(const String& type, ExceptionState& exceptionState)
 {
-    WTF_LOG(Media, "MediaSource::addSourceBuffer(%s) %p", type.ascii().data(), this);
+    MSLOG << __FUNCTION__ << " this=" << this << " type=" << type;
 
     // 2.2 https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-MediaSource-addSourceBuffer-SourceBuffer-DOMString-type
     // 1. If type is an empty string then throw an InvalidAccessError exception
@@ -146,10 +161,10 @@ SourceBuffer* MediaSource::addSourceBuffer(const String& type, ExceptionState& e
     // 5. Create a new SourceBuffer object and associated resources.
     ContentType contentType(type);
     String codecs = contentType.parameter("codecs");
-    OwnPtr<WebSourceBuffer> webSourceBuffer = createWebSourceBuffer(contentType.type(), codecs, exceptionState);
+    std::unique_ptr<WebSourceBuffer> webSourceBuffer = createWebSourceBuffer(contentType.type(), codecs, exceptionState);
 
     if (!webSourceBuffer) {
-        ASSERT(exceptionState.code() == NotSupportedError || exceptionState.code() == QuotaExceededError);
+        DCHECK(exceptionState.code() == NotSupportedError || exceptionState.code() == QuotaExceededError);
         // 2. If type contains a MIME type that is not supported ..., then throw a NotSupportedError exception and abort these steps.
         // 3. If the user agent can't handle any more SourceBuffer objects then throw a QuotaExceededError exception and abort these steps
         return 0;
@@ -160,13 +175,13 @@ SourceBuffer* MediaSource::addSourceBuffer(const String& type, ExceptionState& e
     m_sourceBuffers->add(buffer);
 
     // 7. Return the new object to the caller.
-    WTF_LOG(Media, "MediaSource::addSourceBuffer(%s) %p -> %p", type.ascii().data(), this, buffer);
+    MSLOG << __FUNCTION__ << " this=" << this << " type=" << type << " -> " << buffer;
     return buffer;
 }
 
 void MediaSource::removeSourceBuffer(SourceBuffer* buffer, ExceptionState& exceptionState)
 {
-    WTF_LOG(Media, "MediaSource::removeSourceBuffer() %p", this);
+    MSLOG << __FUNCTION__ << " this=" << this << " buffer=" << buffer;
 
     // 2.2 https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-MediaSource-removeSourceBuffer-void-SourceBuffer-sourceBuffer
 
@@ -203,7 +218,7 @@ void MediaSource::onReadyStateChange(const AtomicString& oldState, const AtomicS
         return;
     }
 
-    ASSERT(isClosed());
+    DCHECK(isClosed());
 
     m_activeSourceBuffers->clear();
 
@@ -234,7 +249,7 @@ bool MediaSource::isTypeSupported(const String& type)
     // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-MediaSource-isTypeSupported-boolean-DOMString-type
     // 1. If type is an empty string, then return false.
     if (type.isEmpty()) {
-        WTF_LOG(Media, "MediaSource::isTypeSupported(%s) -> false (empty input)", type.ascii().data());
+        MSLOG << __FUNCTION__ << "(" << type << ") -> false (empty input)";
         return false;
     }
 
@@ -243,7 +258,7 @@ bool MediaSource::isTypeSupported(const String& type)
 
     // 2. If type does not contain a valid MIME type string, then return false.
     if (contentType.type().isEmpty()) {
-        WTF_LOG(Media, "MediaSource::isTypeSupported(%s) -> false (invalid mime type)", type.ascii().data());
+        MSLOG << __FUNCTION__ << "(" << type << ") -> false (invalid mime type)";
         return false;
     }
 
@@ -253,7 +268,7 @@ bool MediaSource::isTypeSupported(const String& type)
     // Note: MediaSource.isTypeSupported() returning true implies that HTMLMediaElement.canPlayType() will return "maybe" or "probably"
     // since it does not make sense for a MediaSource to support a type the HTMLMediaElement knows it cannot play.
     if (HTMLMediaElement::supportsType(contentType) == WebMimeRegistry::IsNotSupported) {
-        WTF_LOG(Media, "MediaSource::isTypeSupported(%s) -> false (not supported by HTMLMediaElement)", type.ascii().data());
+        MSLOG << __FUNCTION__ << "(" << type << ") -> false (not supported by HTMLMediaElement)";
         return false;
     }
 #endif
@@ -263,7 +278,7 @@ bool MediaSource::isTypeSupported(const String& type)
     // 5. If the MediaSource does not support the specified combination of media type, media subtype, and codecs then return false.
     // 6. Return true.
     bool result = MIMETypeRegistry::isSupportedMediaSourceMIMEType(contentType.type(), codecs);
-    WTF_LOG(Media, "MediaSource::isTypeSupported(%s) -> %s", type.ascii().data(), result ? "true" : "false");
+    MSLOG << __FUNCTION__ << "(" << type << ") -> " << (result ? "true" : "false");
     return result;
 }
 
@@ -283,29 +298,30 @@ DEFINE_TRACE(MediaSource)
     visitor->trace(m_attachedElement);
     visitor->trace(m_sourceBuffers);
     visitor->trace(m_activeSourceBuffers);
+    visitor->trace(m_liveSeekableRange);
     EventTargetWithInlineData::trace(visitor);
     ActiveDOMObject::trace(visitor);
 }
 
-void MediaSource::setWebMediaSourceAndOpen(PassOwnPtr<WebMediaSource> webMediaSource)
+void MediaSource::setWebMediaSourceAndOpen(std::unique_ptr<WebMediaSource> webMediaSource)
 {
     TRACE_EVENT_ASYNC_END0("media", "MediaSource::attachToElement", this);
-    ASSERT(webMediaSource);
-    ASSERT(!m_webMediaSource);
-    ASSERT(m_attachedElement);
+    DCHECK(webMediaSource);
+    DCHECK(!m_webMediaSource);
+    DCHECK(m_attachedElement);
     m_webMediaSource = std::move(webMediaSource);
     setReadyState(openKeyword());
 }
 
 void MediaSource::addedToRegistry()
 {
-    ASSERT(!m_isAddedToRegistry);
+    DCHECK(!m_isAddedToRegistry);
     m_isAddedToRegistry = true;
 }
 
 void MediaSource::removedFromRegistry()
 {
-    ASSERT(m_isAddedToRegistry);
+    DCHECK(m_isAddedToRegistry);
     m_isAddedToRegistry = false;
 }
 
@@ -363,7 +379,7 @@ TimeRanges* MediaSource::buffered() const
 TimeRanges* MediaSource::seekable() const
 {
     // Implements MediaSource algorithm for HTMLMediaElement.seekable.
-    // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#htmlmediaelement-extensions
+    // http://w3c.github.io/media-source/#htmlmediaelement-extensions
 
     double sourceDuration = duration();
     // If duration equals NaN: Return an empty TimeRanges object.
@@ -374,13 +390,27 @@ TimeRanges* MediaSource::seekable() const
     if (sourceDuration == std::numeric_limits<double>::infinity()) {
         TimeRanges* buffered = m_attachedElement->buffered();
 
-        // 1. If the HTMLMediaElement.buffered attribute returns an empty TimeRanges object, then
-        // return an empty TimeRanges object and abort these steps.
+        // 1. If live seekable range is not empty:
+        if (m_liveSeekableRange->length() != 0) {
+            // 1.1. Let union ranges be the union of live seekable range and the
+            //      HTMLMediaElement.buffered attribute.
+            // 1.2. Return a single range with a start time equal to the
+            //      earliest start time in union ranges and an end time equal to
+            //      the highest end time in union ranges and abort these steps.
+            if (buffered->length() == 0) {
+                return TimeRanges::create(m_liveSeekableRange->start(0, ASSERT_NO_EXCEPTION), m_liveSeekableRange->end(0, ASSERT_NO_EXCEPTION));
+            }
+
+            return TimeRanges::create(std::min(m_liveSeekableRange->start(0, ASSERT_NO_EXCEPTION), buffered->start(0, ASSERT_NO_EXCEPTION)),
+                std::max(m_liveSeekableRange->end(0, ASSERT_NO_EXCEPTION), buffered->end(buffered->length() - 1, ASSERT_NO_EXCEPTION)));
+        }
+        // 2. If the HTMLMediaElement.buffered attribute returns an empty TimeRanges object, then
+        //    return an empty TimeRanges object and abort these steps.
         if (buffered->length() == 0)
             return TimeRanges::create();
 
-        // 2. Return a single range with a start time of 0 and an end time equal to the highest end
-        // time reported by the HTMLMediaElement.buffered attribute.
+        // 3. Return a single range with a start time of 0 and an end time equal to the highest end
+        //    time reported by the HTMLMediaElement.buffered attribute.
         return TimeRanges::create(0, buffered->end(buffered->length() - 1, ASSERT_NO_EXCEPTION));
     }
 
@@ -411,27 +441,49 @@ void MediaSource::setDuration(double duration, ExceptionState& exceptionState)
 
     // 4. Run the duration change algorithm with new duration set to the value being
     // assigned to this attribute.
-    durationChangeAlgorithm(duration);
+    durationChangeAlgorithm(duration, exceptionState);
 }
 
-void MediaSource::durationChangeAlgorithm(double newDuration)
+void MediaSource::durationChangeAlgorithm(double newDuration, ExceptionState& exceptionState)
 {
-    // Section 2.6.4 Duration change
-    // https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#duration-change-algorithm
+    // http://w3c.github.io/media-source/#duration-change-algorithm
     // 1. If the current value of duration is equal to new duration, then return.
     if (newDuration == duration())
         return;
 
-    // 2. Set old duration to the current value of duration.
+    // 2. If new duration is less than the highest starting presentation
+    // timestamp of any buffered coded frames for all SourceBuffer objects in
+    // sourceBuffers, then throw an InvalidStateError exception and abort these
+    // steps. Note: duration reductions that would truncate currently buffered
+    // media are disallowed. When truncation is necessary, use remove() to
+    // reduce the buffered range before updating duration.
+    double highestBufferedPresentationTimestamp = 0;
+    for (size_t i = 0; i < m_sourceBuffers->length(); ++i) {
+        highestBufferedPresentationTimestamp = std::max(highestBufferedPresentationTimestamp, m_sourceBuffers->item(i)->highestPresentationTimestamp());
+    }
+
+    if (newDuration < highestBufferedPresentationTimestamp) {
+        if (RuntimeEnabledFeatures::mediaSourceNewAbortAndDurationEnabled()) {
+            logAndThrowDOMException(exceptionState, InvalidStateError, "Setting duration below highest presentation timestamp of any buffered coded frames is disallowed. Instead, first do asynchronous remove(newDuration, oldDuration) on all sourceBuffers, where newDuration < oldDuration.");
+            return;
+        }
+
+        Deprecation::countDeprecation(m_attachedElement->document(), UseCounter::MediaSourceDurationTruncatingBuffered);
+        // See also deprecated remove(new duration, old duration) behavior below.
+    }
+
+    // 3. Set old duration to the current value of duration.
     double oldDuration = duration();
+    DCHECK_LE(highestBufferedPresentationTimestamp, std::isnan(oldDuration) ? 0 : oldDuration);
 
+    // 4. Update duration to new duration.
     bool requestSeek = m_attachedElement->currentTime() > newDuration;
-
-    // 3. Update duration to new duration.
     m_webMediaSource->setDuration(newDuration);
 
-    // 4. If the new duration is less than old duration, then call remove(new duration, old duration) on all all objects in sourceBuffers.
-    if (newDuration < oldDuration) {
+    if (!RuntimeEnabledFeatures::mediaSourceNewAbortAndDurationEnabled() && newDuration < oldDuration) {
+        // Deprecated behavior: if the new duration is less than old duration,
+        // then call remove(new duration, old duration) on all all objects in
+        // sourceBuffers.
         for (size_t i = 0; i < m_sourceBuffers->length(); ++i)
             m_sourceBuffers->item(i)->remove(newDuration, oldDuration, ASSERT_NO_EXCEPTION);
     }
@@ -446,13 +498,13 @@ void MediaSource::durationChangeAlgorithm(double newDuration)
 
 void MediaSource::setReadyState(const AtomicString& state)
 {
-    ASSERT(state == openKeyword() || state == closedKeyword() || state == endedKeyword());
+    DCHECK(state == openKeyword() || state == closedKeyword() || state == endedKeyword());
 
     AtomicString oldState = readyState();
-    WTF_LOG(Media, "MediaSource::setReadyState() %p : %s -> %s", this, oldState.ascii().data(), state.ascii().data());
+    MSLOG << __FUNCTION__ << " this=" << this << " : " << oldState << " -> " << state;
 
     if (state == closedKeyword()) {
-        m_webMediaSource.clear();
+        m_webMediaSource.reset();
     }
 
     if (oldState == state)
@@ -473,13 +525,58 @@ void MediaSource::endOfStream(const AtomicString& error, ExceptionState& excepti
     } else if (error == decode) {
         endOfStreamInternal(WebMediaSource::EndOfStreamStatusDecodeError, exceptionState);
     } else {
-        ASSERT_NOT_REACHED(); // IDL enforcement should prevent this case.
+        NOTREACHED(); // IDL enforcement should prevent this case.
     }
 }
 
 void MediaSource::endOfStream(ExceptionState& exceptionState)
 {
     endOfStreamInternal(WebMediaSource::EndOfStreamStatusNoError, exceptionState);
+}
+
+void MediaSource::setLiveSeekableRange(double start, double end, ExceptionState& exceptionState)
+{
+    // http://w3c.github.io/media-source/#widl-MediaSource-setLiveSeekableRange-void-double-start-double-end
+    // 1. If the readyState attribute is not "open" then throw an
+    //    InvalidStateError exception and abort these steps.
+    // 2. If the updating attribute equals true on any SourceBuffer in
+    //    SourceBuffers, then throw an InvalidStateError exception and abort
+    //    these steps.
+    //    Note: https://github.com/w3c/media-source/issues/118, once fixed, will
+    //    remove the updating check (step 2). We skip that check here already.
+    if (throwExceptionIfClosed(isOpen(), exceptionState))
+        return;
+
+    // 3. If start is negative or greater than end, then throw a TypeError
+    //    exception and abort these steps.
+    if (start < 0 || start > end) {
+        exceptionState.throwTypeError(ExceptionMessages::indexOutsideRange("start value", start, 0.0, ExceptionMessages::InclusiveBound, end, ExceptionMessages::InclusiveBound));
+        return;
+    }
+
+    // 4. Set live seekable range to be a new normalized TimeRanges object
+    //    containing a single range whose start position is start and end
+    //    position is end.
+    m_liveSeekableRange = TimeRanges::create(start, end);
+}
+
+void MediaSource::clearLiveSeekableRange(ExceptionState& exceptionState)
+{
+    // http://w3c.github.io/media-source/#widl-MediaSource-clearLiveSeekableRange-void
+    // 1. If the readyState attribute is not "open" then throw an
+    //    InvalidStateError exception and abort these steps.
+    // 2. If the updating attribute equals true on any SourceBuffer in
+    //    SourceBuffers, then throw an InvalidStateError exception and abort
+    //    these steps.
+    //    Note: https://github.com/w3c/media-source/issues/118, once fixed, will
+    //    remove the updating check (step 2). We skip that check here already.
+    if (throwExceptionIfClosed(isOpen(), exceptionState))
+        return;
+
+    // 3. If live seekable range contains a range, then set live seekable range
+    //    to be a new empty TimeRanges object.
+    if (m_liveSeekableRange->length() != 0)
+        m_liveSeekableRange = TimeRanges::create();
 }
 
 void MediaSource::endOfStreamInternal(const WebMediaSource::EndOfStreamStatus eosStatus, ExceptionState& exceptionState)
@@ -508,7 +605,7 @@ bool MediaSource::isOpen() const
 
 void MediaSource::setSourceBufferActive(SourceBuffer* sourceBuffer)
 {
-    ASSERT(!m_activeSourceBuffers->contains(sourceBuffer));
+    DCHECK(!m_activeSourceBuffers->contains(sourceBuffer));
 
     // https://dvcs.w3.org/hg/html-media/raw-file/tip/media-source/media-source.html#widl-MediaSource-activeSourceBuffers
     // SourceBuffer objects in SourceBuffer.activeSourceBuffers must appear in
@@ -517,7 +614,7 @@ void MediaSource::setSourceBufferActive(SourceBuffer* sourceBuffer)
     // same order as buffers in |m_sourceBuffers|, so this method needs to
     // insert |sourceBuffer| into |m_activeSourceBuffers|.
     size_t indexInSourceBuffers = m_sourceBuffers->find(sourceBuffer);
-    ASSERT(indexInSourceBuffers != kNotFound);
+    DCHECK(indexInSourceBuffers != kNotFound);
 
     size_t insertPosition = 0;
     while (insertPosition < m_activeSourceBuffers->length()
@@ -548,7 +645,7 @@ bool MediaSource::attachToElement(HTMLMediaElement* element)
     if (m_attachedElement)
         return false;
 
-    ASSERT(isClosed());
+    DCHECK(isClosed());
 
     TRACE_EVENT_ASYNC_BEGIN0("media", "MediaSource::attachToElement", this);
     m_attachedElement = element;
@@ -576,18 +673,18 @@ void MediaSource::stop()
     m_asyncEventQueue->close();
     if (!isClosed())
         setReadyState(closedKeyword());
-    m_webMediaSource.clear();
+    m_webMediaSource.reset();
 }
 
-PassOwnPtr<WebSourceBuffer> MediaSource::createWebSourceBuffer(const String& type, const String& codecs, ExceptionState& exceptionState)
+std::unique_ptr<WebSourceBuffer> MediaSource::createWebSourceBuffer(const String& type, const String& codecs, ExceptionState& exceptionState)
 {
     WebSourceBuffer* webSourceBuffer = 0;
 
     switch (m_webMediaSource->addSourceBuffer(type, codecs, &webSourceBuffer)) {
     case WebMediaSource::AddStatusOk:
-        return adoptPtr(webSourceBuffer);
+        return wrapUnique(webSourceBuffer);
     case WebMediaSource::AddStatusNotSupported:
-        ASSERT(!webSourceBuffer);
+        DCHECK(!webSourceBuffer);
         // 2.2 https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-MediaSource-addSourceBuffer-SourceBuffer-DOMString-type
         // Step 2: If type contains a MIME type ... that is not supported with the types
         // specified for the other SourceBuffer objects in sourceBuffers, then throw
@@ -595,7 +692,7 @@ PassOwnPtr<WebSourceBuffer> MediaSource::createWebSourceBuffer(const String& typ
         logAndThrowDOMException(exceptionState, NotSupportedError, "The type provided ('" + type + "') is not supported.");
         return nullptr;
     case WebMediaSource::AddStatusReachedIdLimit:
-        ASSERT(!webSourceBuffer);
+        DCHECK(!webSourceBuffer);
         // 2.2 https://dvcs.w3.org/hg/html-media/raw-file/default/media-source/media-source.html#widl-MediaSource-addSourceBuffer-SourceBuffer-DOMString-type
         // Step 3: If the user agent can't handle any more SourceBuffer objects then throw
         // a QuotaExceededError exception and abort these steps.
@@ -603,13 +700,13 @@ PassOwnPtr<WebSourceBuffer> MediaSource::createWebSourceBuffer(const String& typ
         return nullptr;
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
 }
 
 void MediaSource::scheduleEvent(const AtomicString& eventName)
 {
-    ASSERT(m_asyncEventQueue);
+    DCHECK(m_asyncEventQueue);
 
     Event* event = Event::create(eventName);
     event->setTarget(this);

@@ -6,13 +6,14 @@
 #define InspectorEmulationAgent_h
 
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/Emulation.h"
 
 namespace blink {
 
 class WebLocalFrameImpl;
 class WebViewImpl;
 
-class InspectorEmulationAgent final : public InspectorBaseAgent<InspectorEmulationAgent, protocol::Frontend::Emulation>, public protocol::Backend::Emulation {
+class InspectorEmulationAgent final : public InspectorBaseAgent<protocol::Emulation::Metainfo> {
     WTF_MAKE_NONCOPYABLE(InspectorEmulationAgent);
 public:
     class Client {

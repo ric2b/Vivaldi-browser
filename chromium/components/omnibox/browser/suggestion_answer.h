@@ -75,12 +75,16 @@ class SuggestionAnswer {
 
     const base::string16& text() const { return text_; }
     int type() const { return type_; }
+    bool has_num_lines() const { return has_num_lines_; }
+    int num_lines() const { return num_lines_; }
 
     bool Equals(const TextField& field) const;
 
    private:
     base::string16 text_;
     int type_;
+    bool has_num_lines_;
+    int num_lines_;
 
     FRIEND_TEST_ALL_PREFIXES(SuggestionAnswerTest, DifferentValuesAreUnequal);
 
@@ -101,6 +105,7 @@ class SuggestionAnswer {
                                ImageLine* image_line);
 
     const TextFields& text_fields() const { return text_fields_; }
+    int num_text_lines() const { return num_text_lines_; }
     const TextField* additional_text() const { return additional_text_.get(); }
     const TextField* status_text() const { return status_text_.get(); }
     const GURL& image_url() const { return image_url_; }
@@ -116,6 +121,7 @@ class SuggestionAnswer {
     ImageLine& operator=(const ImageLine&);
 
     TextFields text_fields_;
+    int num_text_lines_;
     std::unique_ptr<TextField> additional_text_;
     std::unique_ptr<TextField> status_text_;
     GURL image_url_;
@@ -124,7 +130,7 @@ class SuggestionAnswer {
   };
 
   SuggestionAnswer();
-  SuggestionAnswer(const SuggestionAnswer& answer);
+  SuggestionAnswer(const SuggestionAnswer& answer) = default;
   ~SuggestionAnswer();
 
   // Parses |answer_json| and returns a SuggestionAnswer containing the

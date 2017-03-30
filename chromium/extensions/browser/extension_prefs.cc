@@ -628,11 +628,11 @@ static base::ListValue* CreatePermissionList(const T& permissions) {
       i != permissions.end(); ++i) {
     std::unique_ptr<base::Value> detail(i->ToValue());
     if (detail) {
-      base::DictionaryValue* tmp = new base::DictionaryValue();
+      std::unique_ptr<base::DictionaryValue> tmp(new base::DictionaryValue());
       tmp->Set(i->name(), detail.release());
-      values->Append(tmp);
+      values->Append(std::move(tmp));
     } else {
-      values->Append(new base::StringValue(i->name()));
+      values->AppendString(i->name());
     }
   }
   return values;
@@ -1838,7 +1838,7 @@ void ExtensionPrefs::SetExtensionPrefFromContainer(
   list_of_values->Clear();
   for (typename ExtensionIdContainer::const_iterator iter = strings.begin();
        iter != strings.end(); ++iter) {
-    list_of_values->Append(new base::StringValue(*iter));
+    list_of_values->AppendString(*iter);
   }
 }
 

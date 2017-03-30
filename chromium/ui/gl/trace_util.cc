@@ -7,7 +7,7 @@
 #include "base/format_macros.h"
 #include "base/strings/stringprintf.h"
 
-namespace gfx {
+namespace gl {
 
 base::trace_event::MemoryAllocatorDumpGuid GetGLTextureClientGUIDForTracing(
     uint64_t share_group_guid,
@@ -40,4 +40,4 @@ base::trace_event::MemoryAllocatorDumpGuid GetGLRenderbufferGUIDForTracing(
                          share_group_guid, renderbuffer_id));
 }
 
-}  // namespace ui
+}  // namespace gl

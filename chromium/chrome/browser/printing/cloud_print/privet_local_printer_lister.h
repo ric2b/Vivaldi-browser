@@ -9,7 +9,6 @@
 #include <memory>
 #include <string>
 
-#include "base/memory/linked_ptr.h"
 #include "chrome/browser/local_discovery/service_discovery_client.h"
 #include "chrome/browser/printing/cloud_print/privet_device_lister.h"
 #include "chrome/browser/printing/cloud_print/privet_http.h"
@@ -25,8 +24,7 @@ class PrivetLocalPrinterLister : PrivetDeviceLister::Delegate {
   class Delegate {
    public:
     virtual ~Delegate() {}
-    virtual void LocalPrinterChanged(bool added,
-                                     const std::string& name,
+    virtual void LocalPrinterChanged(const std::string& name,
                                      bool has_local_printing,
                                      const DeviceDescription& description) = 0;
     virtual void LocalPrinterRemoved(const std::string& name) = 0;
@@ -37,7 +35,7 @@ class PrivetLocalPrinterLister : PrivetDeviceLister::Delegate {
       local_discovery::ServiceDiscoveryClient* service_discovery_client,
       net::URLRequestContextGetter* request_context,
       Delegate* delegate);
-  virtual ~PrivetLocalPrinterLister();
+  ~PrivetLocalPrinterLister() override;
 
   void Start();
 
@@ -47,8 +45,7 @@ class PrivetLocalPrinterLister : PrivetDeviceLister::Delegate {
   const DeviceDescription* GetDeviceDescription(const std::string& name);
 
   // PrivetDeviceLister::Delegate implementation.
-  void DeviceChanged(bool added,
-                     const std::string& name,
+  void DeviceChanged(const std::string& name,
                      const DeviceDescription& description) override;
   void DeviceRemoved(const std::string& name) override;
   void DeviceCacheFlushed() override;
@@ -56,7 +53,8 @@ class PrivetLocalPrinterLister : PrivetDeviceLister::Delegate {
  private:
   struct DeviceContext;
 
-  typedef std::map<std::string, linked_ptr<DeviceContext> > DeviceContextMap;
+  using DeviceContextMap =
+      std::map<std::string, std::unique_ptr<DeviceContext>>;
 
   void OnPrivetInfoDone(DeviceContext* context,
                         const std::string& name,
@@ -67,7 +65,7 @@ class PrivetLocalPrinterLister : PrivetDeviceLister::Delegate {
 
   std::unique_ptr<PrivetHTTPAsynchronousFactory> privet_http_factory_;
   DeviceContextMap device_contexts_;
-  Delegate* delegate_;
+  Delegate* const delegate_;
 
   std::unique_ptr<PrivetDeviceLister> privet_lister_;
 };

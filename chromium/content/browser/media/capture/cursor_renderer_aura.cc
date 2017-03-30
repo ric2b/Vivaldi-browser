@@ -11,6 +11,7 @@
 
 #include "base/logging.h"
 #include "base/time/default_tick_clock.h"
+#include "skia/ext/image_operations.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
 #include "ui/aura/window.h"
@@ -102,7 +103,11 @@ bool CursorRendererAura::SnapshotCursorState(const gfx::Rect& region_in_frame) {
   if (!window_->IsRootWindow()) {
     aura::client::ActivationClient* activation_client =
         aura::client::GetActivationClient(window_->GetRootWindow());
-    DCHECK(activation_client);
+    if (!activation_client) {
+      DVLOG(2) << "Assume window inactive with invalid activation_client";
+      Clear();
+      return false;
+    }
     aura::Window* active_window = activation_client->GetActiveWindow();
     if (!active_window->Contains(window_)) {
       // Return early if the target window is not active.
@@ -115,7 +120,7 @@ bool CursorRendererAura::SnapshotCursorState(const gfx::Rect& region_in_frame) {
   if (cursor_display_setting_ == kCursorEnabledOnMouseMovement) {
     if (cursor_displayed_) {
       // Stop displaying cursor if there has been no mouse movement
-      base::TimeDelta now = tick_clock_->NowTicks() - base::TimeTicks();
+      base::TimeTicks now = tick_clock_->NowTicks();
       if ((now - last_mouse_movement_timestamp_) >
           base::TimeDelta::FromSeconds(MAX_IDLE_TIME_SECONDS)) {
         cursor_displayed_ = false;

@@ -12,7 +12,9 @@
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "wtf/Allocator.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/TextPosition.h"
+#include <memory>
 
 namespace blink {
 
@@ -23,9 +25,9 @@ class PreloadRequest {
 public:
     enum RequestType { RequestTypePreload, RequestTypePreconnect, RequestTypeLinkRelPreload };
 
-    static PassOwnPtr<PreloadRequest> create(const String& initiatorName, const TextPosition& initiatorPosition, const String& resourceURL, const KURL& baseURL, Resource::Type resourceType, const ReferrerPolicy referrerPolicy, const FetchRequest::ResourceWidth& resourceWidth = FetchRequest::ResourceWidth(), const ClientHintsPreferences& clientHintsPreferences = ClientHintsPreferences(), RequestType requestType = RequestTypePreload)
+    static std::unique_ptr<PreloadRequest> create(const String& initiatorName, const TextPosition& initiatorPosition, const String& resourceURL, const KURL& baseURL, Resource::Type resourceType, const ReferrerPolicy referrerPolicy, const FetchRequest::ResourceWidth& resourceWidth = FetchRequest::ResourceWidth(), const ClientHintsPreferences& clientHintsPreferences = ClientHintsPreferences(), RequestType requestType = RequestTypePreload)
     {
-        return adoptPtr(new PreloadRequest(initiatorName, initiatorPosition, resourceURL, baseURL, resourceType, resourceWidth, clientHintsPreferences, requestType, referrerPolicy));
+        return wrapUnique(new PreloadRequest(initiatorName, initiatorPosition, resourceURL, baseURL, resourceType, resourceWidth, clientHintsPreferences, requestType, referrerPolicy));
     }
 
     bool isSafeToSendToAnotherThread() const;
@@ -44,6 +46,10 @@ public:
     {
         return m_crossOrigin;
     }
+
+    void setNonce(const String& nonce) { m_nonce = nonce.isolatedCopy(); }
+    const String& nonce() const { return m_nonce; }
+
     Resource::Type resourceType() const { return m_resourceType; }
 
     const String& resourceURL() const { return m_resourceURL; }
@@ -95,6 +101,7 @@ private:
     String m_charset;
     Resource::Type m_resourceType;
     CrossOriginAttributeValue m_crossOrigin;
+    String m_nonce;
     double m_discoveryTime;
     FetchRequest::DeferOption m_defer;
     FetchRequest::ResourceWidth m_resourceWidth;
@@ -104,7 +111,7 @@ private:
     IntegrityMetadataSet m_integrityMetadata;
 };
 
-typedef Vector<OwnPtr<PreloadRequest>> PreloadRequestStream;
+typedef Vector<std::unique_ptr<PreloadRequest>> PreloadRequestStream;
 
 } // namespace blink
 

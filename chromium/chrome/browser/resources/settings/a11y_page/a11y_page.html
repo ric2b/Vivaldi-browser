@@ -1,9 +1,9 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <if expr="chromeos">
-<link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
+<link rel="import" href="/controls/settings_checkbox.html">
 </if>
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
+<link rel="import" href="/settings_shared_css.html">
 
 <dom-module id="settings-a11y-page">
   <template>
@@ -48,11 +48,11 @@
       <div class="list-item settings-checkbox-spacer">
         <div>$i18n{delayBeforeClickLabel}</div>
         <select value="{{prefs.settings.a11y.autoclick_delay_ms::change}}">
-          <option value="200">$i18n{delayBeforeClickExtremelyShort}</option>
-          <option value="400">$i18n{delayBeforeClickVeryShort}</option>
-          <option value="600">$i18n{delayBeforeClickShort}</option>
-          <option value="800">$i18n{delayBeforeClickLong}</option>
-          <option value="1000">$i18n{delayBeforeClickVeryLong}</option>
+          <option value="600">$i18n{delayBeforeClickExtremelyShort}</option>
+          <option value="800">$i18n{delayBeforeClickVeryShort}</option>
+          <option value="1000">$i18n{delayBeforeClickShort}</option>
+          <option value="2000">$i18n{delayBeforeClickLong}</option>
+          <option value="4000">$i18n{delayBeforeClickVeryLong}</option>
         </select>
       </div>
 
@@ -62,16 +62,16 @@
       <settings-checkbox pref="{{prefs.settings.a11y.mono_audio}}"
           label="$i18n{monoAudioLabel}">
       </settings-checkbox>
+      <settings-checkbox pref="{{prefs.settings.a11y.caret_highlight}}"
+          label="$i18n{caretHighlightLabel}">
+      </settings-checkbox>
+      <settings-checkbox pref="{{prefs.settings.a11y.cursor_highlight}}"
+          label="$i18n{cursorHighlightLabel}">
+      </settings-checkbox>
+      <settings-checkbox pref="{{prefs.settings.a11y.focus_highlight}}"
+          label="$i18n{focusHighlightLabel}">
+      </settings-checkbox>
       <template is="dom-if" if="[[showExperimentalFeatures_]]">
-        <settings-checkbox pref="{{prefs.settings.a11y.caret_highlight}}"
-            label="$i18n{caretHighlightLabel}">
-        </settings-checkbox>
-        <settings-checkbox pref="{{prefs.settings.a11y.cursor_highlight}}"
-            label="$i18n{cursorHighlightLabel}">
-        </settings-checkbox>
-        <settings-checkbox pref="{{prefs.settings.a11y.focus_highlight}}"
-            label="$i18n{focusHighlightLabel}">
-        </settings-checkbox>
         <settings-checkbox pref="{{prefs.settings.a11y.select_to_speak}}"
             label="$i18n{selectToSpeakLabel}">
         </settings-checkbox>
@@ -88,10 +88,9 @@
 <if expr="not chromeos">
     <div class="settings-box first">
 </if>
-      <div class="button-strip">
-        <paper-button class="primary-button"
-            on-tap="onMoreFeaturesTap_">$i18n{moreFeaturesLink}</paper-button>
-      </div>
+      <paper-button class="primary-button" on-tap="onMoreFeaturesTap_">
+        $i18n{moreFeaturesLink}
+      </paper-button>
     </div>
   </template>
   <script src="a11y_page.js"></script>

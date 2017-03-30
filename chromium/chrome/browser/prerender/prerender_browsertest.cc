@@ -4,6 +4,9 @@
 
 #include <stddef.h>
 #include <deque>
+#include <set>
+#include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -50,7 +53,7 @@
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/renderer_host/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/safe_browsing/local_database_manager.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/task_management/mock_web_contents_task_manager.h"
 #include "chrome/browser/task_management/providers/web_contents/web_contents_tags_manager.h"
 #include "chrome/browser/task_management/task_manager_browsertest_util.h"
@@ -91,6 +94,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/ppapi_test_utils.h"
@@ -107,8 +111,10 @@
 #include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_server_config.h"
+#include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
+#include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -732,20 +738,12 @@ class TestPrerenderContentsFactory : public PrerenderContents::Factory {
   std::deque<ExpectedContents> expected_contents_queue_;
 };
 
-// TODO(nparker): Switch this to use TestSafeBrowsingDatabaseManager and run
-// with SAFE_BROWSING_DB_LOCAL || SAFE_BROWSING_DB_REMOTE.
-// Note: don't forget to override GetProtocolManagerDelegate and return NULL,
-// because FakeSafeBrowsingDatabaseManager does not implement
-// LocalSafeBrowsingDatabaseManager.
-#if defined(FULL_SAFE_BROWSING)
 // A SafeBrowsingDatabaseManager implementation that returns a fixed result for
 // a given URL.
 class FakeSafeBrowsingDatabaseManager
-    : public LocalSafeBrowsingDatabaseManager {
+    : public safe_browsing::TestSafeBrowsingDatabaseManager {
  public:
-  explicit FakeSafeBrowsingDatabaseManager(SafeBrowsingService* service)
-      : LocalSafeBrowsingDatabaseManager(service),
-        threat_type_(safe_browsing::SB_THREAT_TYPE_SAFE) {}
+  FakeSafeBrowsingDatabaseManager() {}
 
   // Called on the IO thread to check if the given url is safe or not.  If we
   // can synchronously determine that the url is safe, CheckUrl returns true.
@@ -757,8 +755,10 @@ class FakeSafeBrowsingDatabaseManager
   // client, and false will be returned).
   // Overrides SafeBrowsingDatabaseManager::CheckBrowseUrl.
   bool CheckBrowseUrl(const GURL& gurl, Client* client) override {
-    if (gurl != url_ || threat_type_ == safe_browsing::SB_THREAT_TYPE_SAFE)
+    if (bad_urls_.find(gurl.spec()) == bad_urls_.end() ||
+        bad_urls_[gurl.spec()] == safe_browsing::SB_THREAT_TYPE_SAFE) {
       return true;
+    }
 
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -768,8 +768,20 @@ class FakeSafeBrowsingDatabaseManager
   }
 
   void SetThreatTypeForUrl(const GURL& url, SBThreatType threat_type) {
-    url_ = url;
-    threat_type_ = threat_type;
+    bad_urls_[url.spec()] = threat_type;
+  }
+
+  // These are called when checking URLs, so we implement them.
+  bool IsSupported() const override { return true; }
+  bool ChecksAreAlwaysAsync() const override { return false; }
+  bool CanCheckResourceType(
+      content::ResourceType /* resource_type */) const override {
+    return true;
+  }
+
+  bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
+                         Client* client) override {
+    return true;
   }
 
  private:
@@ -787,60 +799,13 @@ class FakeSafeBrowsingDatabaseManager
         client,
         safe_browsing::MALWARE,
         expected_threats);
-    sb_check.url_results[0] = threat_type_;
+    sb_check.url_results[0] = bad_urls_[gurl.spec()];
     sb_check.OnSafeBrowsingResult();
   }
 
-  GURL url_;
-  SBThreatType threat_type_;
+  std::unordered_map<std::string, SBThreatType> bad_urls_;
   DISALLOW_COPY_AND_ASSIGN(FakeSafeBrowsingDatabaseManager);
 };
-
-class FakeSafeBrowsingService : public SafeBrowsingService {
- public:
-  FakeSafeBrowsingService() { }
-
-  // Returned pointer has the same lifespan as the database_manager_ refcounted
-  // object.
-  FakeSafeBrowsingDatabaseManager* fake_database_manager() {
-    return fake_database_manager_;
-  }
-
- protected:
-  ~FakeSafeBrowsingService() override {}
-
-  safe_browsing::SafeBrowsingDatabaseManager* CreateDatabaseManager() override {
-    fake_database_manager_ = new FakeSafeBrowsingDatabaseManager(this);
-    return fake_database_manager_;
-  }
-
- private:
-  FakeSafeBrowsingDatabaseManager* fake_database_manager_;
-
-  DISALLOW_COPY_AND_ASSIGN(FakeSafeBrowsingService);
-};
-
-// Factory that creates FakeSafeBrowsingService instances.
-class TestSafeBrowsingServiceFactory
-    : public safe_browsing::SafeBrowsingServiceFactory {
- public:
-  TestSafeBrowsingServiceFactory() :
-      most_recent_service_(NULL) { }
-  ~TestSafeBrowsingServiceFactory() override {}
-
-  SafeBrowsingService* CreateSafeBrowsingService() override {
-    most_recent_service_ =  new FakeSafeBrowsingService();
-    return most_recent_service_;
-  }
-
-  FakeSafeBrowsingService* most_recent_service() const {
-    return most_recent_service_;
-  }
-
- private:
-  FakeSafeBrowsingService* most_recent_service_;
-};
-#endif
 
 class FakeDevToolsClient : public content::DevToolsAgentHostClient {
  public:
@@ -1121,14 +1086,12 @@ class PrerenderBrowserTest : virtual public InProcessBrowserTest {
   PrerenderBrowserTest()
       : autostart_test_server_(true),
         prerender_contents_factory_(NULL),
-#if defined(FULL_SAFE_BROWSING)
-        safe_browsing_factory_(new TestSafeBrowsingServiceFactory()),
-#endif
+        safe_browsing_factory_(
+            new safe_browsing::TestSafeBrowsingServiceFactory()),
         call_javascript_(true),
         check_load_events_(true),
         loader_path_("/prerender/prerender_loader.html"),
-        explicitly_set_browser_(NULL) {
-  }
+        explicitly_set_browser_(NULL) {}
 
   ~PrerenderBrowserTest() override {}
 
@@ -1140,15 +1103,13 @@ class PrerenderBrowserTest : virtual public InProcessBrowserTest {
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-#if defined(FULL_SAFE_BROWSING)
-    SafeBrowsingService::RegisterFactory(safe_browsing_factory_.get());
-#endif
+    safe_browsing_factory_->SetTestDatabaseManager(
+        new FakeSafeBrowsingDatabaseManager());
+    SafeBrowsingService::RegisterFactory(safe_browsing_factory_);
   }
 
   void TearDownInProcessBrowserTestFixture() override {
-#if defined(FULL_SAFE_BROWSING)
     SafeBrowsingService::RegisterFactory(NULL);
-#endif
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -1176,7 +1137,9 @@ class PrerenderBrowserTest : virtual public InProcessBrowserTest {
     prerender_manager->mutable_config().rate_limit_enabled = false;
     ASSERT_TRUE(prerender_contents_factory_ == NULL);
     prerender_contents_factory_ = new TestPrerenderContentsFactory;
-    prerender_manager->SetPrerenderContentsFactory(prerender_contents_factory_);
+    prerender_manager->SetPrerenderContentsFactoryForTest(
+        prerender_contents_factory_);
+    ASSERT_TRUE(safe_browsing_factory_->test_safe_browsing_service());
   }
 
   // Convenience function to get the currently active WebContents in
@@ -1469,12 +1432,12 @@ class PrerenderBrowserTest : virtual public InProcessBrowserTest {
     return static_cast<int>(history_list->GetSize());
   }
 
-#if defined(FULL_SAFE_BROWSING)
   FakeSafeBrowsingDatabaseManager* GetFakeSafeBrowsingDatabaseManager() {
-    return safe_browsing_factory_->most_recent_service()->
-        fake_database_manager();
+    return static_cast<FakeSafeBrowsingDatabaseManager*>(
+        safe_browsing_factory_->test_safe_browsing_service()
+            ->database_manager()
+            .get());
   }
-#endif
 
   TestPrerenderContents* GetPrerenderContentsFor(const GURL& url) const {
     PrerenderManager::PrerenderData* prerender_data =
@@ -1711,9 +1674,7 @@ class PrerenderBrowserTest : virtual public InProcessBrowserTest {
   }
 
   TestPrerenderContentsFactory* prerender_contents_factory_;
-#if defined(FULL_SAFE_BROWSING)
-  std::unique_ptr<TestSafeBrowsingServiceFactory> safe_browsing_factory_;
-#endif
+  safe_browsing::TestSafeBrowsingServiceFactory* safe_browsing_factory_;
   NeverRunsExternalProtocolHandlerDelegate external_protocol_handler_delegate_;
   GURL dest_url_;
   std::unique_ptr<net::EmbeddedTestServer> https_src_server_;
@@ -2882,22 +2843,26 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderTargetHasPopup) {
 
 class TestClientCertStore : public net::ClientCertStore {
  public:
-  TestClientCertStore() {}
+  explicit TestClientCertStore(const net::CertificateList& certs)
+      : certs_(certs) {}
   ~TestClientCertStore() override {}
 
   // net::ClientCertStore:
   void GetClientCerts(const net::SSLCertRequestInfo& cert_request_info,
                       net::CertificateList* selected_certs,
                       const base::Closure& callback) override {
-    *selected_certs = net::CertificateList(
-        1, scoped_refptr<net::X509Certificate>(
-        new net::X509Certificate("test", "test", base::Time(), base::Time())));
+    *selected_certs = certs_;
     callback.Run();
   }
+
+ private:
+  net::CertificateList certs_;
 };
 
-std::unique_ptr<net::ClientCertStore> CreateCertStore() {
-  return std::unique_ptr<net::ClientCertStore>(new TestClientCertStore);
+std::unique_ptr<net::ClientCertStore> CreateCertStore(
+    scoped_refptr<net::X509Certificate> available_cert) {
+  return std::unique_ptr<net::ClientCertStore>(
+      new TestClientCertStore(net::CertificateList(1, available_cert)));
 }
 
 // Checks that a top-level page which would normally request an SSL client
@@ -2905,9 +2870,10 @@ std::unique_ptr<net::ClientCertStore> CreateCertStore() {
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                        PrerenderSSLClientCertTopLevel) {
   ProfileIOData::FromResourceContext(
-      current_browser()->profile()->GetResourceContext())->
-          set_client_cert_store_factory_for_testing(
-              base::Bind(&CreateCertStore));
+      current_browser()->profile()->GetResourceContext())
+      ->set_client_cert_store_factory_for_testing(base::Bind(
+          &CreateCertStore, net::ImportCertFromFile(
+                                net::GetTestCertsDirectory(), "ok_cert.pem")));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
   ssl_config.client_cert_type =
@@ -2924,9 +2890,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
                        PrerenderSSLClientCertSubresource) {
   ProfileIOData::FromResourceContext(
-      current_browser()->profile()->GetResourceContext())->
-          set_client_cert_store_factory_for_testing(
-              base::Bind(&CreateCertStore));
+      current_browser()->profile()->GetResourceContext())
+      ->set_client_cert_store_factory_for_testing(base::Bind(
+          &CreateCertStore, net::ImportCertFromFile(
+                                net::GetTestCertsDirectory(), "ok_cert.pem")));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
   ssl_config.client_cert_type =
@@ -2951,9 +2918,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
 // iframe will cancel the prerendered page.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLClientCertIframe) {
   ProfileIOData::FromResourceContext(
-      current_browser()->profile()->GetResourceContext())->
-          set_client_cert_store_factory_for_testing(
-              base::Bind(&CreateCertStore));
+      current_browser()->profile()->GetResourceContext())
+      ->set_client_cert_store_factory_for_testing(base::Bind(
+          &CreateCertStore, net::ImportCertFromFile(
+                                net::GetTestCertsDirectory(), "ok_cert.pem")));
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   net::SSLServerConfig ssl_config;
   ssl_config.client_cert_type =
@@ -2975,7 +2943,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSSLClientCertIframe) {
                    0);
 }
 
-#if defined(FULL_SAFE_BROWSING)
 // Ensures that we do not prerender pages with a safe browsing
 // interstitial.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSafeBrowsingTopLevel) {
@@ -3040,8 +3007,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderSafeBrowsingIframe) {
                    FINAL_STATUS_SAFE_BROWSING,
                    0);
 }
-
-#endif
 
 // Checks that a local storage read will not cause prerender to fail.
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderLocalStorageRead) {
@@ -3272,7 +3237,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   const char* url = "/prerender/prerender_page.html";
   PrerenderTestURL(url, FINAL_STATUS_DEVTOOLS_ATTACHED, 1);
   NavigateToURLWithDisposition(url, CURRENT_TAB, false);
-  agent->DetachClient();
+  agent->DetachClient(&client);
 }
 
 // Validate that the sessionStorage namespace remains the same when swapping
@@ -3743,8 +3708,8 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
   content::OpenURLParams params(dest_url(), Referrer(), CURRENT_TAB,
                                 ui::PAGE_TRANSITION_TYPED, false);
   params.uses_post = true;
-  params.browser_initiated_post_data =
-      base::RefCountedString::TakeString(&post_data);
+  params.post_data = content::ResourceRequestBody::CreateFromBytes(
+      post_data.data(), post_data.size());
   NavigateToURLWithParams(params, false);
 }
 

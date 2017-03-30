@@ -47,8 +47,8 @@
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerThreadStartupData.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/ThreadSafeFunctional.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/network/ResourceResponse.h"
@@ -72,6 +72,8 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WorkerContentSettingsClient.h"
 #include "wtf/Functional.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -125,7 +127,7 @@ void WebSharedWorkerImpl::initializeLoader()
     // loading requests from the worker context to the rest of WebKit and Chromium
     // infrastructure.
     DCHECK(!m_webView);
-    m_webView = WebView::create(0);
+    m_webView = WebView::create(nullptr, WebPageVisibilityStateVisible);
     // FIXME: http://crbug.com/363843. This needs to find a better way to
     // not create graphics layers.
     m_webView->settings()->setAcceleratedCompositingEnabled(false);
@@ -170,7 +172,7 @@ void WebSharedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame)
 {
     DCHECK(!m_loadingDocument);
     DCHECK(!m_mainScriptLoader);
-    m_networkProvider = adoptPtr(m_client->createServiceWorkerNetworkProvider(frame->dataSource()));
+    m_networkProvider = wrapUnique(m_client->createServiceWorkerNetworkProvider(frame->dataSource()));
     m_mainScriptLoader = WorkerScriptLoader::create();
     m_mainScriptLoader->setRequestContext(WebURLRequest::RequestContextSharedWorker);
     m_loadingDocument = toWebLocalFrameImpl(frame)->frame()->document();
@@ -179,8 +181,8 @@ void WebSharedWorkerImpl::didFinishDocumentLoad(WebLocalFrame* frame)
         m_url,
         DenyCrossOriginRequests,
         m_creationAddressSpace,
-        bind(&WebSharedWorkerImpl::didReceiveScriptLoaderResponse, this),
-        bind(&WebSharedWorkerImpl::onScriptLoaderFinished, this));
+        bind(&WebSharedWorkerImpl::didReceiveScriptLoaderResponse, WTF::unretained(this)),
+        bind(&WebSharedWorkerImpl::onScriptLoaderFinished, WTF::unretained(this)));
     // Do nothing here since onScriptLoaderFinished() might have been already
     // invoked and |this| might have been deleted at this point.
 }
@@ -217,7 +219,7 @@ WebDevToolsAgentClient::WebKitClientMessageLoop* WebSharedWorkerImpl::createClie
 
 // WorkerReportingProxy --------------------------------------------------------
 
-void WebSharedWorkerImpl::reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, int exceptionId)
+void WebSharedWorkerImpl::reportException(const String& errorMessage, std::unique_ptr<SourceLocation>)
 {
     // Not suppported in SharedWorker.
 }
@@ -229,7 +231,7 @@ void WebSharedWorkerImpl::reportConsoleMessage(ConsoleMessage*)
 
 void WebSharedWorkerImpl::postMessageToPageInspector(const String& message)
 {
-    m_mainFrame->frame()->document()->postInspectorTask(BLINK_FROM_HERE, createCrossThreadTask(&WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread, AllowCrossThreadAccess(this), message));
+    m_mainFrame->frame()->document()->postInspectorTask(BLINK_FROM_HERE, createCrossThreadTask(&WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread, crossThreadUnretained(this), message));
 }
 
 void WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread(const String& message)
@@ -239,7 +241,7 @@ void WebSharedWorkerImpl::postMessageToPageInspectorOnMainThread(const String& m
 
 void WebSharedWorkerImpl::workerGlobalScopeClosed()
 {
-    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&WebSharedWorkerImpl::workerGlobalScopeClosedOnMainThread, AllowCrossThreadAccess(this)));
+    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&WebSharedWorkerImpl::workerGlobalScopeClosedOnMainThread, crossThreadUnretained(this)));
 }
 
 void WebSharedWorkerImpl::workerGlobalScopeClosedOnMainThread()
@@ -255,7 +257,7 @@ void WebSharedWorkerImpl::workerGlobalScopeStarted(WorkerGlobalScope*)
 
 void WebSharedWorkerImpl::workerThreadTerminated()
 {
-    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&WebSharedWorkerImpl::workerThreadTerminatedOnMainThread, AllowCrossThreadAccess(this)));
+    Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&WebSharedWorkerImpl::workerThreadTerminatedOnMainThread, crossThreadUnretained(this)));
 }
 
 void WebSharedWorkerImpl::workerThreadTerminatedOnMainThread()
@@ -281,10 +283,10 @@ bool WebSharedWorkerImpl::postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionC
 void WebSharedWorkerImpl::connect(WebMessagePortChannel* webChannel)
 {
     workerThread()->postTask(
-        BLINK_FROM_HERE, createCrossThreadTask(&connectTask, passed(adoptPtr(webChannel))));
+        BLINK_FROM_HERE, createCrossThreadTask(&connectTask, passed(WebMessagePortChannelUniquePtr(webChannel))));
 }
 
-void WebSharedWorkerImpl::connectTask(PassOwnPtr<WebMessagePortChannel> channel, ExecutionContext* context)
+void WebSharedWorkerImpl::connectTask(WebMessagePortChannelUniquePtr channel, ExecutionContext* context)
 {
     // Wrap the passed-in channel in a MessagePort, and send it off via a connect event.
     MessagePort* port = MessagePort::create(*context);
@@ -331,17 +333,18 @@ void WebSharedWorkerImpl::onScriptLoaderFinished()
     WorkerClients* workerClients = WorkerClients::create();
     provideLocalFileSystemToWorker(workerClients, LocalFileSystemClient::create());
     WebSecurityOrigin webSecurityOrigin(m_loadingDocument->getSecurityOrigin());
-    provideContentSettingsClientToWorker(workerClients, adoptPtr(m_client->createWorkerContentSettingsClientProxy(webSecurityOrigin)));
+    provideContentSettingsClientToWorker(workerClients, wrapUnique(m_client->createWorkerContentSettingsClientProxy(webSecurityOrigin)));
     provideIndexedDBClientToWorker(workerClients, IndexedDBClientImpl::create());
     ContentSecurityPolicy* contentSecurityPolicy = m_mainScriptLoader->releaseContentSecurityPolicy();
     WorkerThreadStartMode startMode = m_workerInspectorProxy->workerStartMode(document);
-    OwnPtr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
+    std::unique_ptr<WorkerThreadStartupData> startupData = WorkerThreadStartupData::create(
         m_url,
         m_loadingDocument->userAgent(),
         m_mainScriptLoader->script(),
         nullptr,
         startMode,
         contentSecurityPolicy ? contentSecurityPolicy->headers().get() : nullptr,
+        m_mainScriptLoader->referrerPolicy(),
         starterOrigin,
         workerClients,
         m_mainScriptLoader->responseAddressSpace(),

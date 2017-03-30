@@ -20,6 +20,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "content/common/media/media_stream_messages.h"
 #include "content/public/common/content_client.h"
@@ -29,13 +30,12 @@
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/webrtc_ip_handling_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
+#include "content/renderer/media/gpu/rtc_video_decoder_factory.h"
+#include "content/renderer/media/gpu/rtc_video_encoder_factory.h"
 #include "content/renderer/media/media_stream.h"
 #include "content/renderer/media/media_stream_video_source.h"
 #include "content/renderer/media/media_stream_video_track.h"
-#include "content/renderer/media/peer_connection_identity_store.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
-#include "content/renderer/media/rtc_video_decoder_factory.h"
-#include "content/renderer/media/rtc_video_encoder_factory.h"
 #include "content/renderer/media/webrtc/stun_field_trial.h"
 #include "content/renderer/media/webrtc/webrtc_video_capturer_adapter.h"
 #include "content/renderer/media/webrtc_audio_device_impl.h"
@@ -61,7 +61,6 @@
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFrame.h"
-#include "third_party/webrtc/api/dtlsidentitystore.h"
 #include "third_party/webrtc/api/mediaconstraintsinterface.h"
 #include "third_party/webrtc/base/ssladapter.h"
 #include "third_party/webrtc/modules/video_coding/codecs/h264/include/h264.h"
@@ -186,13 +185,17 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
   CHECK(chrome_signaling_thread_.Start());
   CHECK(chrome_worker_thread_.Start());
 
-  base::WaitableEvent start_worker_event(true, false);
+  base::WaitableEvent start_worker_event(
+      base::WaitableEvent::ResetPolicy::MANUAL,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
   chrome_worker_thread_.task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&PeerConnectionDependencyFactory::InitializeWorkerThread,
                  base::Unretained(this), &worker_thread_, &start_worker_event));
 
-  base::WaitableEvent create_network_manager_event(true, false);
+  base::WaitableEvent create_network_manager_event(
+      base::WaitableEvent::ResetPolicy::MANUAL,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
   chrome_worker_thread_.task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&PeerConnectionDependencyFactory::
@@ -211,7 +214,9 @@ void PeerConnectionDependencyFactory::CreatePeerConnectionFactory() {
     return;
   }
 
-  base::WaitableEvent start_signaling_event(true, false);
+  base::WaitableEvent start_signaling_event(
+      base::WaitableEvent::ResetPolicy::MANUAL,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
   chrome_signaling_thread_.task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&PeerConnectionDependencyFactory::InitializeSignalingThread,
@@ -289,12 +294,6 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
   CHECK(observer);
   if (!GetPcFactory().get())
     return NULL;
-
-  std::unique_ptr<PeerConnectionIdentityStore> identity_store(
-      new PeerConnectionIdentityStore(
-          base::ThreadTaskRunnerHandle::Get(), GetWebRtcSignalingThread(),
-          GURL(web_frame->document().url()),
-          GURL(web_frame->document().firstPartyForCookies())));
 
   // Copy the flag from Preference associated with this WebFrame.
   P2PPortAllocator::Config port_config;
@@ -387,34 +386,18 @@ PeerConnectionDependencyFactory::CreatePeerConnection(
     FilteringNetworkManager* filtering_network_manager =
         new FilteringNetworkManager(network_manager_, requesting_origin,
                                     media_permission);
-    if (media_permission) {
-      // Start permission check earlier to reduce any impact to call set up
-      // time. It's safe to use Unretained here since both destructor and
-      // Initialize can only be called on the worker thread.
-      chrome_worker_thread_.task_runner()->PostTask(
-          FROM_HERE, base::Bind(&FilteringNetworkManager::Initialize,
-                                base::Unretained(filtering_network_manager)));
-    }
     network_manager.reset(filtering_network_manager);
   } else {
     network_manager.reset(new EmptyNetworkManager(network_manager_));
   }
   std::unique_ptr<P2PPortAllocator> port_allocator(new P2PPortAllocator(
       p2p_socket_dispatcher_, std::move(network_manager), socket_factory_.get(),
-      port_config, requesting_origin, chrome_worker_thread_.task_runner()));
+      port_config, requesting_origin));
 
   return GetPcFactory()
       ->CreatePeerConnection(config, std::move(port_allocator),
-                             std::move(identity_store), observer)
+                             nullptr, observer)
       .get();
-}
-
-// static
-rtc::scoped_refptr<rtc::RTCCertificate>
-PeerConnectionDependencyFactory::GenerateDefaultCertificate() {
-  std::unique_ptr<rtc::SSLIdentity> identity(rtc::SSLIdentity::Generate(
-      webrtc::kIdentityName, rtc::KeyParams::ECDSA(rtc::EC_NIST_P256)));
-  return rtc::RTCCertificate::Create(std::move(identity));
 }
 
 scoped_refptr<webrtc::MediaStreamInterface>
@@ -496,7 +479,7 @@ void PeerConnectionDependencyFactory::TryScheduleStunProbeTrial() {
   // The underneath IPC channel has to be connected before sending any IPC
   // message.
   if (!p2p_socket_dispatcher_->connected()) {
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::Bind(&PeerConnectionDependencyFactory::TryScheduleStunProbeTrial,
                    base::Unretained(this)),

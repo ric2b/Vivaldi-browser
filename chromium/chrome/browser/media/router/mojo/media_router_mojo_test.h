@@ -57,7 +57,8 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
                     bool off_the_record,
                     const JoinRouteCallback& callback));
   MOCK_METHOD1(DetachRoute, void(const mojo::String& route_id));
-  MOCK_METHOD1(TerminateRoute, void(const mojo::String& route_id));
+  MOCK_METHOD2(TerminateRoute, void(const mojo::String& route_id,
+                                    const TerminateRouteCallback& callback));
   MOCK_METHOD1(StartObservingMediaSinks, void(const mojo::String& source));
   MOCK_METHOD1(StopObservingMediaSinks, void(const mojo::String& source));
   MOCK_METHOD3(SendRouteMessage,
@@ -74,9 +75,8 @@ class MockMediaRouteProvider : public interfaces::MediaRouteProvider {
                void(const mojo::String& media_route_id,
                     const std::vector<uint8_t>& data,
                     const SendRouteMessageCallback& callback));
-  MOCK_METHOD2(ListenForRouteMessages,
-               void(const mojo::String& route_id,
-                    const ListenForRouteMessagesCallback& callback));
+  MOCK_METHOD1(StartListeningForRouteMessages,
+               void(const mojo::String& route_id));
   MOCK_METHOD1(StopListeningForRouteMessages,
                void(const mojo::String& route_id));
   MOCK_METHOD1(OnPresentationSessionDetached,

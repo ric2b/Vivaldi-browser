@@ -4,7 +4,10 @@
 
 #include "ash/app_list/app_list_presenter_delegate.h"
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -12,7 +15,6 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_window_ids.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/command_line.h"
 #include "ui/app_list/app_list_constants.h"
@@ -46,12 +48,12 @@ views::BubbleBorder::Arrow GetBubbleArrow(aura::Window* window) {
 gfx::Vector2d GetAnchorPositionOffsetToShelf(const gfx::Rect& button_bounds,
                                              views::Widget* widget) {
   DCHECK(Shell::HasInstance());
-  wm::ShelfAlignment shelf_alignment =
+  ShelfAlignment shelf_alignment =
       Shelf::ForWindow(widget->GetNativeView()->GetRootWindow())->alignment();
   gfx::Point anchor(button_bounds.CenterPoint());
   switch (shelf_alignment) {
-    case wm::SHELF_ALIGNMENT_BOTTOM:
-    case wm::SHELF_ALIGNMENT_BOTTOM_LOCKED:
+    case SHELF_ALIGNMENT_BOTTOM:
+    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
       if (base::i18n::IsRTL()) {
         int screen_width = widget->GetWorkAreaBoundsInScreen().width();
         return gfx::Vector2d(
@@ -61,10 +63,10 @@ gfx::Vector2d GetAnchorPositionOffsetToShelf(const gfx::Rect& button_bounds,
       }
       return gfx::Vector2d(
           std::max(kMinimalAnchorPositionOffset - anchor.x(), 0), 0);
-    case wm::SHELF_ALIGNMENT_LEFT:
+    case SHELF_ALIGNMENT_LEFT:
       return gfx::Vector2d(
           0, std::max(kMinimalAnchorPositionOffset - anchor.y(), 0));
-    case wm::SHELF_ALIGNMENT_RIGHT:
+    case SHELF_ALIGNMENT_RIGHT:
       return gfx::Vector2d(
           0, std::max(kMinimalAnchorPositionOffset - anchor.y(), 0));
   }
@@ -117,7 +119,7 @@ AppListPresenterDelegate::AppListPresenterDelegate(
     app_list::AppListPresenter* presenter,
     app_list::AppListViewDelegateFactory* view_delegate_factory)
     : presenter_(presenter), view_delegate_factory_(view_delegate_factory) {
-  Shell::GetInstance()->AddShellObserver(this);
+  WmShell::Get()->AddShellObserver(this);
 }
 
 AppListPresenterDelegate::~AppListPresenterDelegate() {
@@ -129,7 +131,7 @@ AppListPresenterDelegate::~AppListPresenterDelegate() {
   views::Widget* widget = view_->GetWidget();
   Shell::GetInstance()->RemovePreTargetHandler(this);
   Shelf::ForWindow(widget->GetNativeWindow())->RemoveIconObserver(this);
-  Shell::GetInstance()->RemoveShellObserver(this);
+  WmShell::Get()->RemoveShellObserver(this);
 }
 
 app_list::AppListViewDelegate* AppListPresenterDelegate::GetViewDelegate() {
@@ -312,8 +314,7 @@ void AppListPresenterDelegate::OnKeyboardBoundsChanging(
 
 ////////////////////////////////////////////////////////////////////////////////
 // AppListPresenterDelegate, ShellObserver implementation:
-void AppListPresenterDelegate::OnShelfAlignmentChanged(
-    aura::Window* root_window) {
+void AppListPresenterDelegate::OnShelfAlignmentChanged(WmWindow* root_window) {
   if (view_)
     view_->SetBubbleArrow(GetBubbleArrow(view_->GetWidget()->GetNativeView()));
 }

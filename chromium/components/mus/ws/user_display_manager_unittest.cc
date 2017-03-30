@@ -23,6 +23,7 @@
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/test_utils.h"
 #include "components/mus/ws/window_manager_state.h"
+#include "components/mus/ws/window_manager_window_tree_factory_set.h"
 #include "components/mus/ws/window_server.h"
 #include "components/mus/ws/window_server_delegate.h"
 #include "components/mus/ws/window_tree.h"
@@ -81,11 +82,7 @@ class TestDisplayManagerObserver : public mojom::DisplayManagerObserver {
 };
 
 mojom::FrameDecorationValuesPtr CreateDefaultFrameDecorationValues() {
-  mojom::FrameDecorationValuesPtr frame_decoration_values =
-      mojom::FrameDecorationValues::New();
-  frame_decoration_values->normal_client_area_insets = mojo::Insets::New();
-  frame_decoration_values->maximized_client_area_insets = mojo::Insets::New();
-  return frame_decoration_values;
+  return mojom::FrameDecorationValues::New();
 }
 
 }  // namespace
@@ -113,7 +110,6 @@ class UserDisplayManagerTest : public testing::Test {
   TestWindowServerDelegate window_server_delegate_;
   std::unique_ptr<WindowServer> window_server_;
   base::MessageLoop message_loop_;
-  TestWindowManagerFactory test_window_manager_factory_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(UserDisplayManagerTest);
@@ -125,9 +121,9 @@ TEST_F(UserDisplayManagerTest, OnlyNotifyWhenFrameDecorationsSet) {
   const UserId kUserId1 = "2";
   TestDisplayManagerObserver display_manager_observer1;
   DisplayManager* display_manager = window_server_->display_manager();
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kUserId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kUserId1);
   UserDisplayManager* user_display_manager1 =
       display_manager->GetUserDisplayManager(kUserId1);
   ASSERT_TRUE(user_display_manager1);
@@ -139,9 +135,9 @@ TEST_F(UserDisplayManagerTest, OnlyNotifyWhenFrameDecorationsSet) {
 
   // Set the frame decoration values, which should trigger sending immediately.
   ASSERT_EQ(1u, display_manager->displays().size());
-  Display* display1 = *display_manager->displays().begin();
-  display1->GetWindowManagerStateForUser(kUserId1)->SetFrameDecorationValues(
-      CreateDefaultFrameDecorationValues());
+  window_server_->window_manager_window_tree_factory_set()
+      ->GetWindowManagerStateForUser(kUserId1)
+      ->SetFrameDecorationValues(CreateDefaultFrameDecorationValues());
   EXPECT_EQ("OnDisplays 1",
             display_manager_observer1.GetAndClearObserverCalls());
 
@@ -154,16 +150,16 @@ TEST_F(UserDisplayManagerTest, AddObserverAfterFrameDecorationsSet) {
   const UserId kUserId1 = "2";
   TestDisplayManagerObserver display_manager_observer1;
   DisplayManager* display_manager = window_server_->display_manager();
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kUserId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kUserId1);
   UserDisplayManager* user_display_manager1 =
       display_manager->GetUserDisplayManager(kUserId1);
   ASSERT_TRUE(user_display_manager1);
   ASSERT_EQ(1u, display_manager->displays().size());
-  Display* display1 = *display_manager->displays().begin();
-  display1->GetWindowManagerStateForUser(kUserId1)->SetFrameDecorationValues(
-      CreateDefaultFrameDecorationValues());
+  window_server_->window_manager_window_tree_factory_set()
+      ->GetWindowManagerStateForUser(kUserId1)
+      ->SetFrameDecorationValues(CreateDefaultFrameDecorationValues());
 
   UserDisplayManagerTestApi(user_display_manager1)
       .SetTestObserver(&display_manager_observer1);
@@ -179,16 +175,16 @@ TEST_F(UserDisplayManagerTest, AddRemoveDisplay) {
   const UserId kUserId1 = "2";
   TestDisplayManagerObserver display_manager_observer1;
   DisplayManager* display_manager = window_server_->display_manager();
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kUserId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kUserId1);
   UserDisplayManager* user_display_manager1 =
       display_manager->GetUserDisplayManager(kUserId1);
   ASSERT_TRUE(user_display_manager1);
   ASSERT_EQ(1u, display_manager->displays().size());
-  Display* display1 = *display_manager->displays().begin();
-  display1->GetWindowManagerStateForUser(kUserId1)->SetFrameDecorationValues(
-      CreateDefaultFrameDecorationValues());
+  window_server_->window_manager_window_tree_factory_set()
+      ->GetWindowManagerStateForUser(kUserId1)
+      ->SetFrameDecorationValues(CreateDefaultFrameDecorationValues());
   UserDisplayManagerTestApi(user_display_manager1)
       .SetTestObserver(&display_manager_observer1);
   EXPECT_EQ("OnDisplays 1",
@@ -199,10 +195,7 @@ TEST_F(UserDisplayManagerTest, AddRemoveDisplay) {
       new Display(window_server_.get(), PlatformDisplayInitParams());
   display2->Init(nullptr);
 
-  // Observer should not have been notified yet as frame decorations not set.
-  EXPECT_EQ("", display_manager_observer1.GetAndClearObserverCalls());
-  display2->GetWindowManagerStateForUser(kUserId1)->SetFrameDecorationValues(
-      CreateDefaultFrameDecorationValues());
+  // Observer should be notified immediately as frame decorations were set.
   EXPECT_EQ("OnDisplaysChanged 2",
             display_manager_observer1.GetAndClearObserverCalls());
 
@@ -221,9 +214,9 @@ TEST_F(UserDisplayManagerTest, NegativeCoordinates) {
   const UserId kUserId1 = "2";
   TestDisplayManagerObserver display_manager_observer1;
   DisplayManager* display_manager = window_server_->display_manager();
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kUserId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kUserId1);
   UserDisplayManager* user_display_manager1 =
       display_manager->GetUserDisplayManager(kUserId1);
   ASSERT_TRUE(user_display_manager1);
@@ -233,12 +226,11 @@ TEST_F(UserDisplayManagerTest, NegativeCoordinates) {
   base::subtle::Atomic32* cursor_location_memory = nullptr;
   mojo::ScopedSharedBufferHandle handle =
       user_display_manager1->GetCursorLocationMemory();
-  MojoResult result = mojo::MapBuffer(
-      handle.get(), 0,
-      sizeof(base::subtle::Atomic32),
-      reinterpret_cast<void**>(&cursor_location_memory),
-      MOJO_MAP_BUFFER_FLAG_NONE);
-  ASSERT_EQ(MOJO_RESULT_OK, result);
+  mojo::ScopedSharedBufferMapping cursor_location_mapping =
+      handle->Map(sizeof(base::subtle::Atomic32));
+  ASSERT_TRUE(cursor_location_mapping);
+  cursor_location_memory =
+      reinterpret_cast<base::subtle::Atomic32*>(cursor_location_mapping.get());
 
   base::subtle::Atomic32 location =
       base::subtle::NoBarrier_Load(cursor_location_memory);

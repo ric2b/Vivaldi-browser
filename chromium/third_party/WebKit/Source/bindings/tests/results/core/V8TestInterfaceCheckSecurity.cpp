@@ -39,7 +39,7 @@ static void readonlyLongAttributeAttributeGetter(const v8::FunctionCallbackInfo<
     v8::Local<v8::Object> holder = info.Holder();
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
     ExceptionState exceptionState(ExceptionState::GetterContext, "readonlyLongAttribute", "TestInterfaceCheckSecurity", holder, info.GetIsolate());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         v8SetReturnValueNull(info);
         exceptionState.throwIfNeeded();
         return;
@@ -57,7 +57,7 @@ static void longAttributeAttributeGetter(const v8::FunctionCallbackInfo<v8::Valu
     v8::Local<v8::Object> holder = info.Holder();
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
     ExceptionState exceptionState(ExceptionState::GetterContext, "longAttribute", "TestInterfaceCheckSecurity", holder, info.GetIsolate());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         v8SetReturnValueNull(info);
         exceptionState.throwIfNeeded();
         return;
@@ -75,7 +75,7 @@ static void longAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8:
     v8::Local<v8::Object> holder = info.Holder();
     ExceptionState exceptionState(ExceptionState::SetterContext, "longAttribute", "TestInterfaceCheckSecurity", holder, info.GetIsolate());
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         v8SetReturnValue(info, v8Value);
         exceptionState.throwIfNeeded();
         return;
@@ -177,7 +177,7 @@ static void doNotCheckSecurityReplaceableReadonlyLongAttributeAttributeGetterCal
 static void doNotCheckSecurityReplaceableReadonlyLongAttributeAttributeSetter(v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "doNotCheckSecurityReplaceableReadonlyLongAttribute");
-    v8CallBoolean(info.This()->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), propertyName, v8Value));
+    v8CallBoolean(info.Holder()->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), propertyName, v8Value));
 }
 
 static void doNotCheckSecurityReplaceableReadonlyLongAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
@@ -188,16 +188,15 @@ static void doNotCheckSecurityReplaceableReadonlyLongAttributeAttributeSetterCal
 
 bool securityCheck(v8::Local<v8::Context> accessingContext, v8::Local<v8::Object> accessedObject, v8::Local<v8::Value> data)
 {
-    // TODO(jochen): Take accessingContext into account.
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(accessedObject);
-    return BindingSecurity::shouldAllowAccessTo(v8::Isolate::GetCurrent(), callingDOMWindow(v8::Isolate::GetCurrent()), impl, DoNotReportSecurityError);
+    return BindingSecurity::shouldAllowAccessTo(v8::Isolate::GetCurrent(), toLocalDOMWindow(toDOMWindow(accessingContext)), impl, DoNotReportSecurityError);
 }
 
 static void voidMethodMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
 {
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "voidMethod", "TestInterfaceCheckSecurity", info.Holder(), info.GetIsolate());
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         exceptionState.throwIfNeeded();
         return;
     }
@@ -233,11 +232,11 @@ static void doNotCheckSecurityVoidMethodOriginSafeMethodGetter(const v8::Propert
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }
 
-    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityVoidMethod"));
+    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityVoidMethod"));
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
     }
@@ -272,11 +271,11 @@ static void doNotCheckSecurityPerWorldBindingsVoidMethodOriginSafeMethodGetter(c
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }
 
-    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityPerWorldBindingsVoidMethod"));
+    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityPerWorldBindingsVoidMethod"));
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
     }
@@ -311,11 +310,11 @@ static void doNotCheckSecurityPerWorldBindingsVoidMethodOriginSafeMethodGetterFo
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }
 
-    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityPerWorldBindingsVoidMethod"));
+    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityPerWorldBindingsVoidMethod"));
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
     }
@@ -350,11 +349,11 @@ static void doNotCheckSecurityUnforgeableVoidMethodOriginSafeMethodGetter(const 
     v8SetReturnValue(info, methodTemplate->GetFunction(info.GetIsolate()->GetCurrentContext()).ToLocalChecked());
 
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(info.Holder());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, DoNotReportSecurityError)) {
         return;
     }
 
-    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityUnforgeableVoidMethod"));
+    v8::Local<v8::Value> hiddenValue = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), v8AtomicString(info.GetIsolate(), "doNotCheckSecurityUnforgeableVoidMethod"));
     if (!hiddenValue.IsEmpty()) {
         v8SetReturnValue(info, hiddenValue);
     }
@@ -369,18 +368,18 @@ static void TestInterfaceCheckSecurityOriginSafeMethodSetter(v8::Local<v8::Name>
 {
     if (!name->IsString())
         return;
-    v8::Local<v8::Object> holder = V8TestInterfaceCheckSecurity::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
+    v8::Local<v8::Object> holder = V8TestInterfaceCheckSecurity::findInstanceInPrototypeChain(info.Holder(), info.GetIsolate());
     if (holder.IsEmpty())
         return;
     TestInterfaceCheckSecurity* impl = V8TestInterfaceCheckSecurity::toImpl(holder);
     v8::String::Utf8Value attributeName(name);
     ExceptionState exceptionState(ExceptionState::SetterContext, *attributeName, "TestInterfaceCheckSecurity", info.Holder(), info.GetIsolate());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         exceptionState.throwIfNeeded();
         return;
     }
 
-    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), name.As<v8::String>(), v8Value);
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), name.As<v8::String>(), v8Value);
 }
 
 static void TestInterfaceCheckSecurityOriginSafeMethodSetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
@@ -439,6 +438,7 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceCheckSecurity::domTemplate(v8::Is
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceCheckSecurityTemplate);
 }
 
+
 bool V8TestInterfaceCheckSecurity::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
@@ -451,7 +451,7 @@ v8::Local<v8::Object> V8TestInterfaceCheckSecurity::findInstanceInPrototypeChain
 
 TestInterfaceCheckSecurity* V8TestInterfaceCheckSecurity::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
 }
 
 } // namespace blink

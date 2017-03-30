@@ -35,7 +35,6 @@
 #include "core/events/KeyboardEvent.h"
 #include "core/html/HTMLInputElement.h"
 #include "platform/text/PlatformLocale.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -61,8 +60,8 @@ String CheckboxInputType::valueMissingText() const
 
 void CheckboxInputType::handleKeyupEvent(KeyboardEvent* event)
 {
-    const String& key = event->keyIdentifier();
-    if (key != "U+0020")
+    const String& key = event->key();
+    if (key != " ")
         return;
     dispatchSimulatedClickIfActive(event);
 }

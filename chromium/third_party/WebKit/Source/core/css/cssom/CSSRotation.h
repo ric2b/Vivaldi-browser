@@ -5,12 +5,13 @@
 #ifndef CSSRotation_h
 #define CSSRotation_h
 
-#include "core/css/cssom/MatrixTransformComponent.h"
-#include "core/css/cssom/TransformComponent.h"
+#include "core/css/cssom/CSSAngleValue.h"
+#include "core/css/cssom/CSSMatrixTransformComponent.h"
+#include "core/css/cssom/CSSTransformComponent.h"
 
 namespace blink {
 
-class CORE_EXPORT CSSRotation final : public TransformComponent {
+class CORE_EXPORT CSSRotation final : public CSSTransformComponent {
     WTF_MAKE_NONCOPYABLE(CSSRotation);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -19,10 +20,22 @@ public:
         return new CSSRotation(angle);
     }
 
-    static CSSRotation* create(double angle, double x, double y, double z)
+    static CSSRotation* create(const CSSAngleValue* angleValue)
     {
-        return new CSSRotation(angle, x, y, z);
+        return new CSSRotation(angleValue->degrees());
     }
+
+    static CSSRotation* create(double x, double y, double z, double angle)
+    {
+        return new CSSRotation(x, y, z, angle);
+    }
+
+    static CSSRotation* create(double x, double y, double z, const CSSAngleValue* angleValue)
+    {
+        return new CSSRotation(x, y, z, angleValue->degrees());
+    }
+
+    static CSSRotation* fromCSSValue(const CSSFunctionValue&);
 
     double angle() const { return m_angle; }
     double x() const { return m_x; }
@@ -31,35 +44,35 @@ public:
 
     TransformComponentType type() const override { return m_is2D ? RotationType : Rotation3DType; }
 
-    MatrixTransformComponent* asMatrix() const override
+    CSSMatrixTransformComponent* asMatrix() const override
     {
-        return m_is2D ? MatrixTransformComponent::rotate(m_angle)
-            : MatrixTransformComponent::rotate3d(m_angle, m_x, m_y, m_z);
+        return m_is2D ? CSSMatrixTransformComponent::rotate(m_angle)
+            : CSSMatrixTransformComponent::rotate3d(m_angle, m_x, m_y, m_z);
     }
 
     CSSFunctionValue* toCSSValue() const override;
 
 private:
     CSSRotation(double angle)
-        : m_angle(angle)
-        , m_x(0)
+        : m_x(0)
         , m_y(0)
         , m_z(1)
+        , m_angle(angle)
         , m_is2D(true)
     { }
 
-    CSSRotation(double angle, double x, double y, double z)
-        : m_angle(angle)
-        , m_x(x)
+    CSSRotation(double x, double y, double z, double angle)
+        : m_x(x)
         , m_y(y)
         , m_z(z)
+        , m_angle(angle)
         , m_is2D(false)
     { }
 
-    double m_angle;
     double m_x;
     double m_y;
     double m_z;
+    double m_angle;
     bool m_is2D;
 };
 

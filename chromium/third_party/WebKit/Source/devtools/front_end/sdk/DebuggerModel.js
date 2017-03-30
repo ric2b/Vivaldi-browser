@@ -320,29 +320,6 @@ WebInspector.DebuggerModel.prototype = {
     },
 
     /**
-     * @param {string} objectId
-     * @param {function(?Array.<!DebuggerAgent.CollectionEntry>)} callback
-     */
-    getCollectionEntries: function(objectId, callback)
-    {
-        this._agent.getCollectionEntries(objectId, innerCallback);
-
-        /**
-         * @param {?Protocol.Error} error
-         * @param {?Array.<!DebuggerAgent.CollectionEntry>} response
-         */
-        function innerCallback(error, response)
-        {
-            if (error) {
-                console.error(error);
-                callback(null);
-                return;
-            }
-            callback(response);
-        }
-    },
-
-    /**
      * @param {!DebuggerAgent.BreakpointId} breakpointId
      * @param {!DebuggerAgent.Location} location
      */
@@ -815,7 +792,7 @@ WebInspector.DebuggerModel.prototype = {
     _targetDisposed: function(event)
     {
         var target = /** @type {!WebInspector.Target} */ (event.data);
-        if (target != this.target())
+        if (target !== this.target())
             return;
         WebInspector.moduleSetting("pauseOnExceptionEnabled").removeChangeListener(this._pauseOnExceptionStateChanged, this);
         WebInspector.moduleSetting("pauseOnCaughtException").removeChangeListener(this._pauseOnExceptionStateChanged, this);
@@ -1192,7 +1169,7 @@ WebInspector.DebuggerModel.CallFrame.prototype = {
         {
             for (var i = 0; properties && i < properties.length; ++i)
                 result[properties[i].name] = true;
-            if (--pendingRequests == 0)
+            if (--pendingRequests === 0)
                 callback(result);
         }
 

@@ -29,6 +29,9 @@
 
 #define IPC_MESSAGE_START AutofillMsgStart
 
+IPC_ENUM_TRAITS_MAX_VALUE(autofill::FormFieldData::CheckStatus,
+                          autofill::FormFieldData::CheckStatus::CHECKED)
+
 IPC_ENUM_TRAITS_MAX_VALUE(autofill::FormFieldData::RoleAttribute,
                           autofill::FormFieldData::ROLE_ATTRIBUTE_OTHER)
 
@@ -49,8 +52,7 @@ IPC_STRUCT_TRAITS_BEGIN(autofill::FormFieldData)
   IPC_STRUCT_TRAITS_MEMBER(role)
   IPC_STRUCT_TRAITS_MEMBER(max_length)
   IPC_STRUCT_TRAITS_MEMBER(is_autofilled)
-  IPC_STRUCT_TRAITS_MEMBER(is_checked)
-  IPC_STRUCT_TRAITS_MEMBER(is_checkable)
+  IPC_STRUCT_TRAITS_MEMBER(check_status)
   IPC_STRUCT_TRAITS_MEMBER(is_focusable)
   IPC_STRUCT_TRAITS_MEMBER(should_autocomplete)
   IPC_STRUCT_TRAITS_MEMBER(text_direction)
@@ -166,6 +168,9 @@ IPC_MESSAGE_ROUTED1(AutofillMsg_AcceptDataListSuggestion,
 IPC_MESSAGE_ROUTED1(AutofillMsg_GeneratedPasswordAccepted,
                     base::string16 /* generated_password */)
 
+// Tells the renderer to enable the form classifier.
+IPC_MESSAGE_ROUTED0(AutofillMsg_AllowToRunFormClassifier)
+
 // Tells the renderer to fill the username and password with with given
 // values.
 IPC_MESSAGE_ROUTED2(AutofillMsg_FillPasswordSuggestion,
@@ -177,6 +182,12 @@ IPC_MESSAGE_ROUTED2(AutofillMsg_FillPasswordSuggestion,
 IPC_MESSAGE_ROUTED2(AutofillMsg_PreviewPasswordSuggestion,
                     base::string16 /* username */,
                     base::string16 /* password */)
+
+// Sent when a password form is initially detected and suggestions should be
+// shown. Used by the fill-on-select experiment.
+IPC_MESSAGE_ROUTED2(AutofillMsg_ShowInitialPasswordAccountSuggestions,
+                    int /* key */,
+                    autofill::PasswordFormFillData /* the fill form data */)
 
 // Tells the renderer to find the focused password form (assuming it exists).
 // Renderer is expected to respond with the message
@@ -324,6 +335,12 @@ IPC_MESSAGE_ROUTED1(AutofillHostMsg_PresaveGeneratedPassword,
 // the presaved form should be removed.
 IPC_MESSAGE_ROUTED1(AutofillHostMsg_PasswordNoLongerGenerated,
                     autofill::PasswordForm)
+
+// Sends the outcome of HTML parsing based form classifier that detects the
+// forms where password generation should be available.
+IPC_MESSAGE_ROUTED2(AutofillHostMsg_SaveGenerationFieldDetectedByClassifier,
+                    autofill::PasswordForm,
+                    base::string16 /* generation field */)
 
 // Instruct the browser to show a popup with suggestions filled from data
 // associated with |key|. The popup will use |text_direction| for displaying

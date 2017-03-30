@@ -49,6 +49,7 @@ class BluetoothTestBase : public testing::Test {
 
   static const std::string kTestDeviceAddress1;
   static const std::string kTestDeviceAddress2;
+  static const std::string kTestDeviceAddress3;
 
   static const std::string kTestUUIDGenericAccess;
   static const std::string kTestUUIDGenericAttribute;
@@ -103,7 +104,13 @@ class BluetoothTestBase : public testing::Test {
   //      kTestDeviceAddress2.
   //   5: Device with no name, with no advertised UUIDs and address
   //      kTestDeviceAddress1.
+  //   6: kTestDeviceName with no advertised UUIDs and address
+  //      kTestDeviceAddress2, but which also supports BR/EDR.
   virtual BluetoothDevice* SimulateLowEnergyDevice(int device_ordinal);
+
+  // Create a fake classic device and discover it. The device will have
+  // name kTestDeviceName, no advertised UUIDs and address kTestDeviceAddress3.
+  virtual BluetoothDevice* SimulateClassicDevice();
 
   // Simulates success of implementation details of CreateGattConnection.
   virtual void SimulateGattConnection(BluetoothDevice* device) {}
@@ -363,6 +370,8 @@ class BluetoothTestBase : public testing::Test {
 
   // Reset all event count members to 0.
   void ResetEventCounts();
+
+  void RemoveTimedOutDevices();
 
   // A Message loop is required by some implementations that will PostTasks and
   // by base::RunLoop().RunUntilIdle() use in this fixture.

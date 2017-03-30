@@ -149,7 +149,10 @@ int32_t PepperVideoDecoderHost::OnHostMsgInitialize(
     // it is okay to immediately send IPC messages.
     if (command_buffer->channel()) {
       decoder_.reset(new media::GpuVideoDecodeAcceleratorHost(command_buffer));
-      if (decoder_->Initialize(profile_, this)) {
+      media::VideoDecodeAccelerator::Config vda_config(profile_);
+      vda_config.supported_output_formats.assign(
+          {media::PIXEL_FORMAT_XRGB, media::PIXEL_FORMAT_ARGB});
+      if (decoder_->Initialize(vda_config, this)) {
         initialized_ = true;
         return PP_OK;
       }
@@ -351,6 +354,7 @@ int32_t PepperVideoDecoderHost::OnHostMsgReset(
 
 void PepperVideoDecoderHost::ProvidePictureBuffers(
     uint32_t requested_num_of_buffers,
+    media::VideoPixelFormat format,
     uint32_t textures_per_buffer,
     const gfx::Size& dimensions,
     uint32_t texture_target) {

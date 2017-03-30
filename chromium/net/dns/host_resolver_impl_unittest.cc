@@ -211,7 +211,7 @@ class Request {
   Request(const HostResolver::RequestInfo& info,
           RequestPriority priority,
           size_t index,
-          HostResolver* resolver,
+          HostResolverImpl* resolver,
           Handler* handler)
       : info_(info),
         priority_(priority),
@@ -244,6 +244,13 @@ class Request {
     return resolver_->ResolveFromCache(info_, &list_, BoundNetLog());
   }
 
+  int ResolveStaleFromCache() {
+    DCHECK(resolver_);
+    DCHECK(!handle_);
+    return resolver_->ResolveStaleFromCache(info_, &list_, &staleness_,
+                                            BoundNetLog());
+  }
+
   void ChangePriority(RequestPriority priority) {
     DCHECK(resolver_);
     DCHECK(handle_);
@@ -262,6 +269,7 @@ class Request {
   size_t index() const { return index_; }
   const AddressList& list() const { return list_; }
   int result() const { return result_; }
+  const HostCache::EntryStaleness staleness() const { return staleness_; }
   bool completed() const { return result_ != ERR_IO_PENDING; }
   bool pending() const { return handle_ != NULL; }
 
@@ -286,7 +294,7 @@ class Request {
     base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, closure.callback(), TestTimeouts::action_max_timeout());
     quit_on_complete_ = true;
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
     bool did_quit = !quit_on_complete_;
     quit_on_complete_ = false;
     closure.Cancel();
@@ -318,13 +326,14 @@ class Request {
   HostResolver::RequestInfo info_;
   RequestPriority priority_;
   size_t index_;
-  HostResolver* resolver_;
+  HostResolverImpl* resolver_;
   Handler* handler_;
   bool quit_on_complete_;
 
   AddressList list_;
   int result_;
   HostResolver::RequestHandle handle_;
+  HostCache::EntryStaleness staleness_;
 
   DISALLOW_COPY_AND_ASSIGN(Request);
 };
@@ -603,6 +612,11 @@ class HostResolverImplTest : public testing::Test {
 
   bool IsIPv6Reachable(const BoundNetLog& net_log) {
     return resolver_->IsIPv6Reachable(net_log);
+  }
+
+  void MakeCacheStale() {
+    DCHECK(resolver_.get());
+    resolver_->GetHostCache()->OnNetworkChange();
   }
 
   scoped_refptr<MockHostResolverProc> proc_;
@@ -918,7 +932,7 @@ TEST_F(HostResolverImplTest, DeleteWithinCallback) {
   proc_->SignalMultiple(1u);  // One for "a".
 
   // |MyHandler| will send quit message once all the requests have finished.
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 TEST_F(HostResolverImplTest, DeleteWithinAbortedCallback) {
@@ -951,7 +965,7 @@ TEST_F(HostResolverImplTest, DeleteWithinAbortedCallback) {
   NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
 
   // |MyHandler| will send quit message once all the requests have finished.
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_EQ(ERR_NETWORK_CHANGED, requests_[0]->result());
   EXPECT_EQ(ERR_IO_PENDING, requests_[1]->result());
@@ -1022,7 +1036,7 @@ TEST_F(HostResolverImplTest, BypassCache) {
   proc_->SignalMultiple(3u);  // Only need two, but be generous.
 
   // |verifier| will send quit message once all the requests have finished.
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   EXPECT_EQ(2u, proc_->GetCaptureList().size());
 }
 
@@ -1045,7 +1059,7 @@ TEST_F(HostResolverImplTest, FlushCacheOnIPAddressChange) {
 
   // Flush cache by triggering an IP address change.
   NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
-  base::MessageLoop::current()->RunUntilIdle();  // Notification happens async.
+  base::RunLoop().RunUntilIdle();  // Notification happens async.
 
   // Resolve "host1" again -- this time it won't be served from cache, so it
   // will complete asynchronously.
@@ -1062,7 +1076,7 @@ TEST_F(HostResolverImplTest, AbortOnIPAddressChanged) {
   EXPECT_TRUE(proc_->WaitFor(1u));
   // Triggering an IP address change.
   NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
-  base::MessageLoop::current()->RunUntilIdle();  // Notification happens async.
+  base::RunLoop().RunUntilIdle();  // Notification happens async.
   proc_->SignalAll();
 
   EXPECT_EQ(ERR_NETWORK_CHANGED, req->WaitForResult());
@@ -1077,7 +1091,7 @@ TEST_F(HostResolverImplTest, DontAbortOnInitialDNSConfigRead) {
   EXPECT_TRUE(proc_->WaitFor(1u));
   // Triggering initial DNS config read signal.
   NetworkChangeNotifier::NotifyObserversOfInitialDNSConfigReadForTests();
-  base::MessageLoop::current()->RunUntilIdle();  // Notification happens async.
+  base::RunLoop().RunUntilIdle();  // Notification happens async.
   proc_->SignalAll();
 
   EXPECT_EQ(OK, req->WaitForResult());
@@ -1094,7 +1108,7 @@ TEST_F(HostResolverImplTest, ObeyPoolConstraintsAfterIPAddressChange) {
   EXPECT_TRUE(proc_->WaitFor(1u));
   // Triggering an IP address change.
   NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
-  base::MessageLoop::current()->RunUntilIdle();  // Notification happens async.
+  base::RunLoop().RunUntilIdle();  // Notification happens async.
   proc_->SignalMultiple(3u);  // Let the false-start go so that we can catch it.
 
   EXPECT_EQ(ERR_NETWORK_CHANGED, requests_[0]->WaitForResult());
@@ -1138,7 +1152,7 @@ TEST_F(HostResolverImplTest, AbortOnlyExistingRequestsOnIPAddressChange) {
   // Trigger an IP address change.
   NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
   // This should abort all running jobs.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(ERR_NETWORK_CHANGED, requests_[0]->result());
   EXPECT_EQ(ERR_NETWORK_CHANGED, requests_[1]->result());
   EXPECT_EQ(ERR_NETWORK_CHANGED, requests_[2]->result());
@@ -1379,6 +1393,38 @@ TEST_F(HostResolverImplTest, ResolveFromCache) {
   EXPECT_TRUE(requests_[2]->HasOneAddress("192.168.1.42", 80));
 }
 
+TEST_F(HostResolverImplTest, ResolveStaleFromCache) {
+  proc_->AddRuleForAllFamilies("just.testing", "192.168.1.42");
+  proc_->SignalMultiple(1u);  // Need only one.
+
+  HostResolver::RequestInfo info(HostPortPair("just.testing", 80));
+
+  // First hit will miss the cache.
+  EXPECT_EQ(ERR_DNS_CACHE_MISS,
+            CreateRequest(info, DEFAULT_PRIORITY)->ResolveFromCache());
+
+  // This time, we fetch normally.
+  EXPECT_EQ(ERR_IO_PENDING, CreateRequest(info, DEFAULT_PRIORITY)->Resolve());
+  EXPECT_EQ(OK, requests_[1]->WaitForResult());
+
+  // Now we should be able to fetch from the cache.
+  EXPECT_EQ(OK, CreateRequest(info, DEFAULT_PRIORITY)->ResolveFromCache());
+  EXPECT_TRUE(requests_[2]->HasOneAddress("192.168.1.42", 80));
+  EXPECT_EQ(OK, CreateRequest(info, DEFAULT_PRIORITY)->ResolveStaleFromCache());
+  EXPECT_TRUE(requests_[3]->HasOneAddress("192.168.1.42", 80));
+  EXPECT_FALSE(requests_[3]->staleness().is_stale());
+
+  MakeCacheStale();
+
+  // Now we should be able to fetch from the cache only if we use
+  // ResolveStaleFromCache.
+  EXPECT_EQ(ERR_DNS_CACHE_MISS,
+            CreateRequest(info, DEFAULT_PRIORITY)->ResolveFromCache());
+  EXPECT_EQ(OK, CreateRequest(info, DEFAULT_PRIORITY)->ResolveStaleFromCache());
+  EXPECT_TRUE(requests_[5]->HasOneAddress("192.168.1.42", 80));
+  EXPECT_TRUE(requests_[5]->staleness().is_stale());
+}
+
 // Test the retry attempts simulating host resolver proc that takes too long.
 TEST_F(HostResolverImplTest, MultipleAttempts) {
   // Total number of attempts would be 3 and we want the 3rd attempt to resolve
@@ -1412,7 +1458,7 @@ TEST_F(HostResolverImplTest, MultipleAttempts) {
 
   resolver_proc->WaitForAllAttemptsToFinish(
       base::TimeDelta::FromMilliseconds(60000));
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(resolver_proc->total_attempts_resolved(), kTotalAttempts);
   EXPECT_EQ(resolver_proc->resolved_attempt_number(), kAttemptNumberToResolve);
@@ -1573,7 +1619,7 @@ class HostResolverImplDnsTest : public HostResolverImplTest {
   void ChangeDnsConfig(const DnsConfig& config) {
     NetworkChangeNotifier::SetDnsConfig(config);
     // Notification is delivered asynchronously.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   MockDnsClientRuleList dns_rules_;
@@ -1678,7 +1724,7 @@ TEST_F(HostResolverImplDnsTest, OnDnsTaskFailureAbortedJob) {
   CreateResolver();
   proc_->SignalMultiple(requests_.size());
   // Run to completion.
-  base::MessageLoop::current()->RunUntilIdle();  // Notification happens async.
+  base::RunLoop().RunUntilIdle();  // Notification happens async.
   // It shouldn't crash during OnDnsTaskFailure callbacks.
   EXPECT_EQ(ERR_IO_PENDING, requests_[0]->result());
 
@@ -1689,7 +1735,7 @@ TEST_F(HostResolverImplDnsTest, OnDnsTaskFailureAbortedJob) {
   // Abort all jobs here.
   CreateResolver();
   // Run to completion.
-  base::MessageLoop::current()->RunUntilIdle();  // Notification happens async.
+  base::RunLoop().RunUntilIdle();  // Notification happens async.
   // It shouldn't crash during OnDnsTaskFailure callbacks.
   EXPECT_EQ(ERR_IO_PENDING, requests_[1]->result());
 }

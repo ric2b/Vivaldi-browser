@@ -122,7 +122,7 @@ bool TestExtensionsBrowserClient::AllowCrossRendererResourceLoad(
 
 PrefService* TestExtensionsBrowserClient::GetPrefServiceForContext(
     BrowserContext* context) {
-  return NULL;
+  return nullptr;
 }
 
 void TestExtensionsBrowserClient::GetEarlyExtensionPrefsObservers(
@@ -150,11 +150,6 @@ bool TestExtensionsBrowserClient::IsRunningInForcedAppMode() { return false; }
 
 bool TestExtensionsBrowserClient::IsLoggedInAsPublicAccount() {
   return false;
-}
-
-ApiActivityMonitor* TestExtensionsBrowserClient::GetApiActivityMonitor(
-    BrowserContext* context) {
-  return NULL;
 }
 
 ExtensionSystemProvider*

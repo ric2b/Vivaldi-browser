@@ -153,10 +153,12 @@ const base::FilePath::CharType kLocalStorePoolName[] = FPL("LocalStorePool");
 const base::FilePath::CharType kMediaCacheDirname[] = FPL("Media Cache");
 const base::FilePath::CharType kNetworkPersistentStateFilename[] =
     FPL("Network Persistent State");
-const base::FilePath::CharType kOfflinePageArchviesDirname[] =
+const base::FilePath::CharType kOfflinePageArchivesDirname[] =
     FPL("Offline Pages/archives");
 const base::FilePath::CharType kOfflinePageMetadataDirname[] =
     FPL("Offline Pages/metadata");
+const base::FilePath::CharType kOfflinePageRequestQueueDirname[] =
+    FPL("Offline Pages/request_queue");
 const base::FilePath::CharType kPreferencesFilename[] = FPL("Preferences");
 const base::FilePath::CharType kProtectedPreferencesFilenameDeprecated[] =
     FPL("Protected Preferences");

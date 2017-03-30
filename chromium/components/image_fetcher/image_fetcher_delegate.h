@@ -5,9 +5,9 @@
 #ifndef COMPONENTS_IMAGE_FETCHER_IMAGE_FETCHER_DELEGATE_H_
 #define COMPONENTS_IMAGE_FETCHER_IMAGE_FETCHER_DELEGATE_H_
 
-#include "base/macros.h"
+#include <string>
 
-class GURL;
+#include "base/macros.h"
 
 namespace gfx {
 class Image;
@@ -19,10 +19,18 @@ class ImageFetcherDelegate {
  public:
   ImageFetcherDelegate() {}
 
-  // Called when an image was fetched. |url| represents the website for which
-  // the image was fetched. |image| stores image data owned by the caller, and
-  // can be an empty gfx::Image.
-  virtual void OnImageFetched(const GURL& url, const gfx::Image& image) = 0;
+  // Called when the data for an image was fetched. |id| is an identifier for
+  // the fetch (as passed to ImageFetcher::StartOrQueueNetworkRequest); |data|
+  // stores (generally compressed) image data owned by the caller, and can be
+  // empty if the fetch failed.
+  virtual void OnImageDataFetched(const std::string& id,
+                                  const std::string& data) {};
+
+  // Called when an image was fetched and decoded. |id| is an identifier for the
+  // fetch (as passed to ImageFetcher::StartOrQueueNetworkRequest); |image|
+  // stores image data owned by the caller, and can be an empty gfx::Image.
+  virtual void OnImageFetched(const std::string& id,
+                              const gfx::Image& image) {};
 
  protected:
   virtual ~ImageFetcherDelegate() {}

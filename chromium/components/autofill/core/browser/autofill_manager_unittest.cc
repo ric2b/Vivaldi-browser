@@ -43,6 +43,7 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/prefs/pref_service.h"
+#include "components/rappor/test_rappor_service.h"
 #include "grit/components_strings.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -3514,7 +3515,7 @@ TEST_F(AutofillManagerTest, DeterminePossibleFieldTypesForUpload) {
   profiles.push_back(profile);
   test::SetProfileInfo(&profile, "Charles", "", "Baudelaire",
                        "lesfleursdumal@gmail.com", "", "108 Rue Saint-Lazare",
-                       "Apt. 10", "Paris", "Ile de France", "75008", "FR",
+                       "Apt. 10", "Paris", "Île de France", "75008", "FR",
                        "+33 2 49 19 70 70");
   profile.set_guid("00000000-0000-0000-0000-000000000001");
   profiles.push_back(profile);
@@ -3558,9 +3559,12 @@ TEST_F(AutofillManagerTest, DeterminePossibleFieldTypesForUpload) {
       {"567", PHONE_HOME_NUMBER},
       {"8901", PHONE_HOME_NUMBER},
 
-      // Test an european profile.
+      // Test a European profile.
       {"Paris", ADDRESS_HOME_CITY},
-      {"Ile de France", ADDRESS_HOME_STATE},
+      {"Île de France", ADDRESS_HOME_STATE},  // Exact match
+      {"Ile de France", ADDRESS_HOME_STATE},  // Missing accent.
+      {"-Ile-de-France-", ADDRESS_HOME_STATE},  // Extra punctuation.
+      {"île dÉ FrÃÑÇË", ADDRESS_HOME_STATE},  // Other accents & case mismatch.
       {"75008", ADDRESS_HOME_ZIP},
       {"FR", ADDRESS_HOME_COUNTRY},
       {"France", ADDRESS_HOME_COUNTRY},
@@ -3582,7 +3586,7 @@ TEST_F(AutofillManagerTest, DeterminePossibleFieldTypesForUpload) {
       {"99", CREDIT_CARD_EXP_2_DIGIT_YEAR},
       {"04/2999", CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR},
 
-      // Make sure whitespaces and invalid characters are handled properly.
+      // Make sure whitespace and invalid characters are handled properly.
       {"", EMPTY_TYPE},
       {" ", EMPTY_TYPE},
       {"***", UNKNOWN_TYPE},
@@ -3622,7 +3626,7 @@ TEST_F(AutofillManagerTest, DeterminePossibleFieldTypesForUpload) {
 
     FormFieldData field;
     test::CreateTestFormField("", "1", "", "text", &field);
-    field.value = ASCIIToUTF16(test_case.input_value);
+    field.value = UTF8ToUTF16(test_case.input_value);
     form.fields.push_back(field);
 
     FormStructure form_structure(form);
@@ -3635,7 +3639,8 @@ TEST_F(AutofillManagerTest, DeterminePossibleFieldTypesForUpload) {
         form_structure.field(0)->possible_types();
     EXPECT_EQ(1U, possible_types.size());
 
-    EXPECT_NE(possible_types.end(), possible_types.find(test_case.field_type));
+    EXPECT_NE(possible_types.end(), possible_types.find(test_case.field_type))
+        << "Failed to determine type for: \"" << test_case.input_value << "\"";
   }
 }
 
@@ -4350,6 +4355,16 @@ TEST_F(AutofillManagerTest, UploadCreditCard_CvcUnavailable) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_CVC, 1);
+
+  rappor::TestRapporService* rappor_service =
+      autofill_client_.test_rappor_service();
+  EXPECT_EQ(1, rappor_service->GetReportsCount());
+  std::string sample;
+  rappor::RapporType type;
+  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
+      "Autofill.CardUploadNotOfferedNoCvc", &sample, &type));
+  EXPECT_EQ("myform.com", sample);
+  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_MultipleCvcFields) {
@@ -4440,6 +4455,16 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoProfileAvailable) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_ADDRESS, 1);
+
+  rappor::TestRapporService* rappor_service =
+      autofill_client_.test_rappor_service();
+  EXPECT_EQ(1, rappor_service->GetReportsCount());
+  std::string sample;
+  rappor::RapporType type;
+  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
+      "Autofill.CardUploadNotOfferedNoAddress", &sample, &type));
+  EXPECT_EQ("myform.com", sample);
+  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
@@ -4477,6 +4502,16 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NoNameAvailable) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_NO_NAME, 1);
+
+  rappor::TestRapporService* rappor_service =
+      autofill_client_.test_rappor_service();
+  EXPECT_EQ(1, rappor_service->GetReportsCount());
+  std::string sample;
+  rappor::RapporType type;
+  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
+      "Autofill.CardUploadNotOfferedNoName", &sample, &type));
+  EXPECT_EQ("myform.com", sample);
+  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_ZipCodesConflict) {
@@ -4704,6 +4739,16 @@ TEST_F(AutofillManagerTest, UploadCreditCard_NamesHaveToMatch) {
   histogram_tester.ExpectUniqueSample(
       "Autofill.CardUploadDecisionExpanded",
       AutofillMetrics::UPLOAD_NOT_OFFERED_CONFLICTING_NAMES, 1);
+
+  rappor::TestRapporService* rappor_service =
+      autofill_client_.test_rappor_service();
+  EXPECT_EQ(1, rappor_service->GetReportsCount());
+  std::string sample;
+  rappor::RapporType type;
+  EXPECT_TRUE(rappor_service->GetRecordedSampleForMetric(
+      "Autofill.CardUploadNotOfferedConflictingNames", &sample, &type));
+  EXPECT_EQ("myform.com", sample);
+  EXPECT_EQ(rappor::ETLD_PLUS_ONE_RAPPOR_TYPE, type);
 }
 
 TEST_F(AutofillManagerTest, UploadCreditCard_UploadDetailsFails) {

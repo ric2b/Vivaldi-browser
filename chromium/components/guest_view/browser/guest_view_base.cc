@@ -14,10 +14,8 @@
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/common/guest_view_constants.h"
 #include "components/guest_view/common/guest_view_messages.h"
-#include "components/ui/zoom/page_zoom.h"
-#include "components/ui/zoom/zoom_controller.h"
-#include "content/browser/browser_plugin/browser_plugin_guest.h"
-#include "content/browser/web_contents/web_contents_impl.h"
+#include "components/zoom/page_zoom.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -27,13 +25,15 @@
 #include "content/public/common/browser_plugin_guest_mode.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/url_constants.h"
-#include "extensions/helper/vivaldi_app_helper.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 
 #ifdef VIVALDI_BUILD
 #include "app/vivaldi_apptools.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "content/browser/browser_plugin/browser_plugin_guest.h"
+#include "content/browser/web_contents/web_contents_impl.h"
+#include "extensions/helper/vivaldi_app_helper.h"
 #endif //VIVALDI_BUILD
 
 using content::WebContents;
@@ -232,7 +232,7 @@ void GuestViewBase::InitWithWebContents(
   // in DidNavigateMainFrame, but since ZoomController always resets to default
   // zoom mode on this event, GuestViewBase would need to do so after
   // ZoomController::DidNavigateMainFrame has completed.
-  ui_zoom::ZoomController::CreateForWebContents(guest_web_contents);
+  zoom::ZoomController::CreateForWebContents(guest_web_contents);
 
   AttachWebContentsObservers(guest_web_contents);
 
@@ -256,8 +256,7 @@ void GuestViewBase::InitWithWebContents(
     SetUpSizing(create_params);
 
   // Observe guest zoom changes.
-  auto zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(web_contents());
+  auto zoom_controller = zoom::ZoomController::FromWebContents(web_contents());
   zoom_controller->AddObserver(this);
 
   // Give the derived class an opportunity to perform additional initialization.
@@ -667,9 +666,9 @@ void GuestViewBase::ContentsMouseEvent(WebContents* source,
 }
 
 void GuestViewBase::ContentsZoomChange(bool zoom_in) {
-  ui_zoom::PageZoom::Zoom(
-      embedder_web_contents(),
-      zoom_in ? content::PAGE_ZOOM_IN : content::PAGE_ZOOM_OUT);
+  zoom::PageZoom::Zoom(embedder_web_contents(), zoom_in
+                                                    ? content::PAGE_ZOOM_IN
+                                                    : content::PAGE_ZOOM_OUT);
 }
 
 void GuestViewBase::HandleKeyboardEvent(
@@ -708,12 +707,13 @@ void GuestViewBase::ResizeDueToAutoResize(WebContents* web_contents,
   guest_host_->GuestResizeDueToAutoResize(new_size);
 }
 
-void GuestViewBase::RunFileChooser(WebContents* web_contents,
+void GuestViewBase::RunFileChooser(content::RenderFrameHost* render_frame_host,
                                    const content::FileChooserParams& params) {
   if (!attached() || !embedder_web_contents()->GetDelegate())
     return;
 
-  embedder_web_contents()->GetDelegate()->RunFileChooser(web_contents, params);
+  embedder_web_contents()->GetDelegate()->RunFileChooser(render_frame_host,
+                                                         params);
 }
 
 bool GuestViewBase::ShouldFocusPageAfterCrash() {
@@ -769,7 +769,7 @@ void GuestViewBase::FindReply(WebContents* source,
 }
 
 void GuestViewBase::OnZoomChanged(
-    const ui_zoom::ZoomController::ZoomChangedEventData& data) {
+    const zoom::ZoomController::ZoomChangedEventData& data) {
   // NOTE(arnar@vivaldi.com): Do not update guest zoom level if embedder
   // is Vivaldi app. (UI Zoom)
   if (embedder_web_contents()) {
@@ -783,7 +783,7 @@ void GuestViewBase::OnZoomChanged(
   if (data.web_contents == embedder_web_contents()) {
     // The embedder's zoom level has changed.
     auto guest_zoom_controller =
-        ui_zoom::ZoomController::FromWebContents(web_contents());
+        zoom::ZoomController::FromWebContents(web_contents());
     if (content::ZoomValuesEqual(data.new_zoom_level,
                                  guest_zoom_controller->GetZoomLevel())) {
       return;
@@ -846,7 +846,7 @@ double GuestViewBase::GetEmbedderZoomFactor() const {
     return 1.0;
 
   return content::ZoomLevelToZoomFactor(
-      ui_zoom::ZoomController::GetZoomLevelForWebContents(
+      zoom::ZoomController::GetZoomLevelForWebContents(
           embedder_web_contents()));
 }
 
@@ -900,7 +900,7 @@ void GuestViewBase::SetUpSizing(const base::DictionaryValue& params) {
 
 void GuestViewBase::SetGuestZoomLevelToMatchEmbedder() {
   auto embedder_zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(owner_web_contents());
+      zoom::ZoomController::FromWebContents(owner_web_contents());
   if (!embedder_zoom_controller)
     return;
 
@@ -914,7 +914,7 @@ void GuestViewBase::SetGuestZoomLevelToMatchEmbedder() {
     }
   }
 
-  ui_zoom::ZoomController::FromWebContents(web_contents())
+  zoom::ZoomController::FromWebContents(web_contents())
       ->SetZoomLevel(embedder_zoom_controller->GetZoomLevel());
 }
 
@@ -923,7 +923,7 @@ void GuestViewBase::StartTrackingEmbedderZoomLevel() {
     return;
 
   auto embedder_zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(owner_web_contents());
+      zoom::ZoomController::FromWebContents(owner_web_contents());
   // Chrome Apps do not have a ZoomController.
   if (!embedder_zoom_controller)
     return;
@@ -941,7 +941,7 @@ void GuestViewBase::StopTrackingEmbedderZoomLevel() {
     return;
 
   auto embedder_zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(owner_web_contents());
+      zoom::ZoomController::FromWebContents(owner_web_contents());
   // Chrome Apps do not have a ZoomController.
   if (!embedder_zoom_controller)
     return;

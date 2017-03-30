@@ -9,6 +9,7 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/ScriptWrappable.h"
 #include "modules/ModulesExport.h"
+#include "modules/payments/PaymentCurrencyAmount.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/modules/payments/payment_request.mojom-blink.h"
 #include "wtf/Noncopyable.h"
@@ -17,6 +18,7 @@
 namespace blink {
 
 class ExceptionState;
+class PaymentAddress;
 class PaymentCompleter;
 class ScriptState;
 
@@ -30,14 +32,22 @@ public:
 
     const String& methodName() const { return m_methodName; }
     ScriptValue details(ScriptState*, ExceptionState&) const;
+    PaymentAddress* shippingAddress() const { return m_shippingAddress.get(); }
+    const String& shippingOption() const { return m_shippingOption; }
+    const String& payerEmail() const { return m_payerEmail; }
+    const String& payerPhone() const { return m_payerPhone; }
 
-    ScriptPromise complete(ScriptState*, bool success);
+    ScriptPromise complete(ScriptState*, const String& result = "");
 
     DECLARE_TRACE();
 
 private:
     String m_methodName;
     String m_stringifiedDetails;
+    Member<PaymentAddress> m_shippingAddress;
+    String m_shippingOption;
+    String m_payerEmail;
+    String m_payerPhone;
     Member<PaymentCompleter> m_paymentCompleter;
 };
 

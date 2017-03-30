@@ -25,6 +25,7 @@
   ],
   'xcode_settings': {
     'INFOPLIST_FILE': 'shell/Info.plist',
+    'CLANG_ENABLE_OBJC_ARC': 'YES',
   },
   'sources': [
     'shell/app_delegate.h',
@@ -54,7 +55,6 @@
     ],
     'mac_bundle_resources': [
       'shell/Default.png',
-      'shell/MainView.xib',
       'shell/textfield_background@2x.png',
       'shell/toolbar_back@2x.png',
       'shell/toolbar_forward@2x.png',

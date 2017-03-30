@@ -105,6 +105,15 @@ void ContentPasswordManagerDriver::PreviewSuggestion(
                                                        username, password));
 }
 
+void ContentPasswordManagerDriver::ShowInitialPasswordAccountSuggestions(
+    const autofill::PasswordFormFillData& form_data) {
+  const int key = next_free_key_++;
+  password_autofill_manager_.OnAddPasswordFormMapping(key, form_data);
+  render_frame_host_->Send(
+      new AutofillMsg_ShowInitialPasswordAccountSuggestions(
+          render_frame_host_->GetRoutingID(), key, form_data));
+}
+
 void ContentPasswordManagerDriver::ClearPreviewedForm() {
   content::RenderFrameHost* host = render_frame_host_;
   host->Send(new AutofillMsg_ClearPreviewedForm(host->GetRoutingID()));
@@ -125,6 +134,11 @@ void ContentPasswordManagerDriver::SendLoggingAvailability() {
   render_frame_host_->Send(new AutofillMsg_SetLoggingState(
       render_frame_host_->GetRoutingID(),
       client_->GetLogManager()->IsLoggingActive()));
+}
+
+void ContentPasswordManagerDriver::AllowToRunFormClassifier() {
+  render_frame_host_->Send(new AutofillMsg_AllowToRunFormClassifier(
+      render_frame_host_->GetRoutingID()));
 }
 
 PasswordGenerationManager*
@@ -153,6 +167,8 @@ bool ContentPasswordManagerDriver::HandleMessage(const IPC::Message& message) {
   IPC_MESSAGE_HANDLER(AutofillHostMsg_InPageNavigation, OnInPageNavigation)
   IPC_MESSAGE_HANDLER(AutofillHostMsg_PresaveGeneratedPassword,
                       OnPresaveGeneratedPassword)
+  IPC_MESSAGE_HANDLER(AutofillHostMsg_SaveGenerationFieldDetectedByClassifier,
+                      OnSaveGenerationFieldDetectedByClassifier)
   IPC_MESSAGE_HANDLER(AutofillHostMsg_PasswordNoLongerGenerated,
                       OnPasswordNoLongerGenerated)
   IPC_MESSAGE_HANDLER(AutofillHostMsg_FocusedPasswordFormFound,
@@ -183,6 +199,7 @@ void ContentPasswordManagerDriver::OnPasswordFormsParsed(
 void ContentPasswordManagerDriver::OnPasswordFormsParsedNoRenderCheck(
     const std::vector<autofill::PasswordForm>& forms) {
   GetPasswordManager()->OnPasswordFormsParsed(this, forms);
+  GetPasswordGenerationManager()->CheckIfFormClassifierShouldRun();
 }
 
 void ContentPasswordManagerDriver::OnPasswordFormsRendered(
@@ -250,6 +267,18 @@ void ContentPasswordManagerDriver::OnPasswordNoLongerGenerated(
     return;
   GetPasswordManager()->SetHasGeneratedPasswordForForm(this, password_form,
                                                        false);
+}
+
+void ContentPasswordManagerDriver::OnSaveGenerationFieldDetectedByClassifier(
+    const autofill::PasswordForm& password_form,
+    const base::string16& generation_field) {
+  if (!CheckChildProcessSecurityPolicy(
+          password_form.origin,
+          BadMessageReason::
+              CPMD_BAD_ORIGIN_SAVE_GENERATION_FIELD_DETECTED_BY_CLASSIFIER))
+    return;
+  GetPasswordManager()->SaveGenerationFieldDetectedByClassifier(
+      password_form, generation_field);
 }
 
 bool ContentPasswordManagerDriver::CheckChildProcessSecurityPolicy(

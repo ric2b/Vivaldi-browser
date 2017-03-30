@@ -11,6 +11,7 @@
 
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
@@ -67,10 +68,11 @@ class FakeScreenCapturer : public webrtc::ScreenCapturer {
 
   void Capture(const webrtc::DesktopRegion& region) override {
     DCHECK(callback_);
-    webrtc::DesktopFrame* frame =
-        new webrtc::BasicDesktopFrame(webrtc::DesktopSize(10, 10));
+    std::unique_ptr<webrtc::DesktopFrame> frame(
+        new webrtc::BasicDesktopFrame(webrtc::DesktopSize(10, 10)));
     memset(frame->data(), 0, frame->stride() * frame->size().height());
-    callback_->OnCaptureCompleted(frame);
+    callback_->OnCaptureResult(webrtc::DesktopCapturer::Result::SUCCESS,
+                               std::move(frame));
   }
 
   bool GetScreenList(ScreenList* screens) override {
@@ -121,10 +123,11 @@ class FakeWindowCapturer : public webrtc::WindowCapturer {
     std::map<WindowId, int8_t>::iterator it =
         frame_values_.find(selected_window_id_);
     int8_t value = (it != frame_values_.end()) ? it->second : 0;
-    webrtc::DesktopFrame* frame =
-        new webrtc::BasicDesktopFrame(webrtc::DesktopSize(10, 10));
+    std::unique_ptr<webrtc::DesktopFrame> frame(
+        new webrtc::BasicDesktopFrame(webrtc::DesktopSize(10, 10)));
     memset(frame->data(), value, frame->stride() * frame->size().height());
-    callback_->OnCaptureCompleted(frame);
+    callback_->OnCaptureResult(webrtc::DesktopCapturer::Result::SUCCESS,
+                               std::move(frame));
   }
 
   bool GetWindowList(WindowList* windows) override {
@@ -320,7 +323,7 @@ class NativeDesktopMediaListTest : public views::ViewsTestBase {
           .WillOnce(QuitMessageLoop(message_loop()));
     }
     model_->StartUpdating(&observer_);
-    message_loop()->Run();
+    base::RunLoop().Run();
 
     if (screen) {
       EXPECT_EQ(model_->GetSource(0).id.type, DesktopMediaID::TYPE_SCREEN);
@@ -388,7 +391,7 @@ TEST_F(NativeDesktopMediaListTest, AddNativeWindow) {
   AddNativeWindow(index);
   window_capturer_->SetWindowList(window_list_);
 
-  message_loop()->Run();
+  base::RunLoop().Run();
 
   EXPECT_EQ(model_->GetSource(index).id.type, DesktopMediaID::TYPE_WINDOW);
   EXPECT_EQ(model_->GetSource(index).id.id, index);
@@ -426,7 +429,7 @@ TEST_F(NativeDesktopMediaListTest, RemoveNativeWindow) {
   window_list_.erase(window_list_.begin());
   window_capturer_->SetWindowList(window_list_);
 
-  message_loop()->Run();
+  base::RunLoop().Run();
 }
 
 #if defined(ENABLE_AURA_WINDOW_TESTS)
@@ -460,7 +463,7 @@ TEST_F(NativeDesktopMediaListTest, RemoveAllWindows) {
   window_list_.clear();
   window_capturer_->SetWindowList(window_list_);
 
-  message_loop()->Run();
+  base::RunLoop().Run();
 }
 
 TEST_F(NativeDesktopMediaListTest, UpdateTitle) {
@@ -473,7 +476,7 @@ TEST_F(NativeDesktopMediaListTest, UpdateTitle) {
   window_list_[0].title = kTestTitle;
   window_capturer_->SetWindowList(window_list_);
 
-  message_loop()->Run();
+  base::RunLoop().Run();
 
   EXPECT_EQ(model_->GetSource(1).name, base::UTF8ToUTF16(kTestTitle));
 }
@@ -481,13 +484,20 @@ TEST_F(NativeDesktopMediaListTest, UpdateTitle) {
 TEST_F(NativeDesktopMediaListTest, UpdateThumbnail) {
   AddWindowsAndVerify(true, kDefaultWindowCount, kDefaultAuraCount, false);
 
+  // Aura windows' thumbnails may unpredictably change over time.
+  for (size_t i = kDefaultWindowCount - kDefaultAuraCount;
+       i < kDefaultWindowCount; ++i) {
+    EXPECT_CALL(observer_, OnSourceThumbnailChanged(model_.get(), i + 1))
+        .Times(testing::AnyNumber());
+  }
+
   EXPECT_CALL(observer_, OnSourceThumbnailChanged(model_.get(), 1))
       .WillOnce(QuitMessageLoop(message_loop()));
 
   // Update frame for the window and verify that we get notification about it.
   window_capturer_->SetNextFrameValue(1, 10);
 
-  message_loop()->Run();
+  base::RunLoop().Run();
 }
 
 TEST_F(NativeDesktopMediaListTest, MoveWindow) {
@@ -503,5 +513,5 @@ TEST_F(NativeDesktopMediaListTest, MoveWindow) {
   window_list_[1] = temp;
   window_capturer_->SetWindowList(window_list_);
 
-  message_loop()->Run();
+  base::RunLoop().Run();
 }

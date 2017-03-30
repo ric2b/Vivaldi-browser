@@ -69,7 +69,8 @@ class BackgroundThread : public Thread {
   ~BackgroundThread() override { Stop(); }
 
   void CreateArrowFromTarget(Arrow** arrow, Target* target) {
-    WaitableEvent completion(true, false);
+    WaitableEvent completion(WaitableEvent::ResetPolicy::MANUAL,
+                             WaitableEvent::InitialState::NOT_SIGNALED);
     task_runner()->PostTask(
         FROM_HERE, base::Bind(&BackgroundThread::DoCreateArrowFromTarget, arrow,
                               target, &completion));
@@ -77,7 +78,8 @@ class BackgroundThread : public Thread {
   }
 
   void CreateArrowFromArrow(Arrow** arrow, const Arrow* other) {
-    WaitableEvent completion(true, false);
+    WaitableEvent completion(WaitableEvent::ResetPolicy::MANUAL,
+                             WaitableEvent::InitialState::NOT_SIGNALED);
     task_runner()->PostTask(
         FROM_HERE, base::Bind(&BackgroundThread::DoCreateArrowFromArrow, arrow,
                               other, &completion));
@@ -85,7 +87,8 @@ class BackgroundThread : public Thread {
   }
 
   void DeleteTarget(Target* object) {
-    WaitableEvent completion(true, false);
+    WaitableEvent completion(WaitableEvent::ResetPolicy::MANUAL,
+                             WaitableEvent::InitialState::NOT_SIGNALED);
     task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&BackgroundThread::DoDeleteTarget, object, &completion));
@@ -93,7 +96,8 @@ class BackgroundThread : public Thread {
   }
 
   void CopyAndAssignArrow(Arrow* object) {
-    WaitableEvent completion(true, false);
+    WaitableEvent completion(WaitableEvent::ResetPolicy::MANUAL,
+                             WaitableEvent::InitialState::NOT_SIGNALED);
     task_runner()->PostTask(
         FROM_HERE, base::Bind(&BackgroundThread::DoCopyAndAssignArrow, object,
                               &completion));
@@ -101,7 +105,8 @@ class BackgroundThread : public Thread {
   }
 
   void CopyAndAssignArrowBase(Arrow* object) {
-    WaitableEvent completion(true, false);
+    WaitableEvent completion(WaitableEvent::ResetPolicy::MANUAL,
+                             WaitableEvent::InitialState::NOT_SIGNALED);
     task_runner()->PostTask(
         FROM_HERE, base::Bind(&BackgroundThread::DoCopyAndAssignArrowBase,
                               object, &completion));
@@ -109,7 +114,8 @@ class BackgroundThread : public Thread {
   }
 
   void DeleteArrow(Arrow* object) {
-    WaitableEvent completion(true, false);
+    WaitableEvent completion(WaitableEvent::ResetPolicy::MANUAL,
+                             WaitableEvent::InitialState::NOT_SIGNALED);
     task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&BackgroundThread::DoDeleteArrow, object, &completion));
@@ -117,7 +123,8 @@ class BackgroundThread : public Thread {
   }
 
   Target* DeRef(const Arrow* arrow) {
-    WaitableEvent completion(true, false);
+    WaitableEvent completion(WaitableEvent::ResetPolicy::MANUAL,
+                             WaitableEvent::InitialState::NOT_SIGNALED);
     Target* result = nullptr;
     task_runner()->PostTask(FROM_HERE, base::Bind(&BackgroundThread::DoDeRef,
                                                   arrow, &result, &completion));
@@ -194,6 +201,16 @@ TEST(WeakPtrFactoryTest, Comparison) {
   WeakPtr<int> ptr = factory.GetWeakPtr();
   WeakPtr<int> ptr2 = ptr;
   EXPECT_EQ(ptr.get(), ptr2.get());
+}
+
+TEST(WeakPtrFactoryTest, Move) {
+  int data;
+  WeakPtrFactory<int> factory(&data);
+  WeakPtr<int> ptr = factory.GetWeakPtr();
+  WeakPtr<int> ptr2 = factory.GetWeakPtr();
+  WeakPtr<int> ptr3 = std::move(ptr2);
+  EXPECT_NE(ptr.get(), ptr2.get());
+  EXPECT_EQ(ptr.get(), ptr3.get());
 }
 
 TEST(WeakPtrFactoryTest, OutOfScope) {
@@ -299,6 +316,19 @@ TEST(WeakPtrFactoryTest, BooleanTesting) {
   } else {
     ADD_FAILURE() << "Null pointer should result in !x being true.";
   }
+}
+
+TEST(WeakPtrFactoryTest, ComparisonToNull) {
+  int data;
+  WeakPtrFactory<int> factory(&data);
+
+  WeakPtr<int> ptr_to_an_instance = factory.GetWeakPtr();
+  EXPECT_NE(nullptr, ptr_to_an_instance);
+  EXPECT_NE(ptr_to_an_instance, nullptr);
+
+  WeakPtr<int> null_ptr;
+  EXPECT_EQ(null_ptr, nullptr);
+  EXPECT_EQ(nullptr, null_ptr);
 }
 
 TEST(WeakPtrTest, InvalidateWeakPtrs) {

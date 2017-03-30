@@ -31,9 +31,9 @@ class SkBitmap;
 struct ANativeWindow;
 
 namespace cc {
+class Display;
 class Layer;
 class LayerTreeHost;
-class OnscreenDisplayClient;
 class SurfaceIdAllocator;
 class SurfaceManager;
 class VulkanInProcessContextProvider;
@@ -110,15 +110,13 @@ class CONTENT_EXPORT CompositorImpl
   void DidCommitAndDrawFrame() override {}
   void DidCompleteSwapBuffers() override;
   void DidCompletePageScaleAnimation() override {}
-  void ReportFixedRasterScaleUseCounters(
-      bool has_blurry_content,
-      bool has_potential_performance_regression) override {}
 
   // LayerTreeHostSingleThreadClient implementation.
   void DidPostSwapBuffers() override;
   void DidAbortSwapBuffers() override;
 
   // WindowAndroidCompositor implementation.
+  void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) override;
   void RequestCopyOfOutputOnRootLayer(
       std::unique_ptr<cc::CopyOutputRequest> request) override;
   void OnVSync(base::TimeTicks frame_time,
@@ -142,7 +140,7 @@ class CONTENT_EXPORT CompositorImpl
   std::unique_ptr<cc::LayerTreeHost> host_;
   ui::ResourceManagerImpl resource_manager_;
 
-  std::unique_ptr<cc::OnscreenDisplayClient> display_client_;
+  std::unique_ptr<cc::Display> display_;
 
   gfx::Size size_;
   bool has_transparent_background_;

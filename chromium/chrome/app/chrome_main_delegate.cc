@@ -60,6 +60,7 @@
 #include <malloc.h>
 #include <algorithm>
 #include "base/debug/close_handle_hook_win.h"
+#include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/common/child_process_logging.h"
 #include "chrome/common/v8_breakpad_support_win.h"
 #include "components/crash/content/app/crashpad.h"
@@ -125,6 +126,10 @@
 
 #if defined(OS_MACOSX) || defined(OS_WIN)
 #include "chrome/browser/policy/policy_path_parser.h"
+#endif
+
+#if defined(OS_CHROMEOS)
+#include "components/metrics/leak_detector/leak_detector.h"
 #endif
 
 #if !defined(DISABLE_NACL)
@@ -644,13 +649,16 @@ bool ChromeMainDelegate::BasicStartupComplete(int* exit_code) {
   }
 #endif
 
-  if (command_line.HasSwitch(switches::kOriginTrialPublicKey)) {
-    chrome_content_client_.origin_trial_key_manager()
-        ->SetPublicKeyFromASCIIString(
-            command_line.GetSwitchValueASCII(switches::kOriginTrialPublicKey));
-  }
-
   content::SetContentClient(&chrome_content_client_);
+
+#if defined (OS_CHROMEOS)
+  // The TLS slot used by metrics::LeakDetector needs to be initialized early to
+  // ensure that it gets assigned a low slow number. If it gets initialized too
+  // late, the glibc TLS system will require a malloc call in order to allocate
+  // storage for a higher slot number. Normally that's not a problem, but in
+  // LeakDetector it will result in recursive alloc hook function calls.
+  metrics::LeakDetector::InitTLSSlot();
+#endif
 
   return false;
 }
@@ -732,12 +740,22 @@ void ChromeMainDelegate::PreSandboxStartup() {
 #endif
 
   // Initialize the user data dir for any process type that needs it.
-  if (chrome::ProcessNeedsProfileDir(process_type))
+  if (chrome::ProcessNeedsProfileDir(process_type)) {
     InitializeUserDataDir();
+#if defined(OS_WIN) && !defined(CHROME_MULTIPLE_DLL_CHILD)
+    if (downgrade::IsMSIInstall()) {
+      downgrade::MoveUserDataForFirstRunAfterDowngrade();
+      base::FilePath user_data_dir;
+      if (PathService::Get(chrome::DIR_USER_DATA, &user_data_dir))
+        downgrade::UpdateLastVersion(user_data_dir);
+    }
+#endif
+  }
 
   // Register component_updater PathProvider after DIR_USER_DATA overidden by
   // command line flags. Maybe move the chrome PathProvider down here also?
   component_updater::RegisterPathProvider(chrome::DIR_COMPONENTS,
+                                          chrome::DIR_INTERNAL_PLUGINS,
                                           chrome::DIR_USER_DATA);
 
   // Enable Message Loop related state asap.

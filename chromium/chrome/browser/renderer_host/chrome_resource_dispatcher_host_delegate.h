@@ -58,7 +58,6 @@ class ChromeResourceDispatcherHostDelegate
       content::ResourceContext* resource_context,
       int child_id,
       int route_id,
-      int request_id,
       bool is_content_initiated,
       bool must_download,
       ScopedVector<content::ResourceThrottle>* throttles) override;
@@ -72,7 +71,8 @@ class ChromeResourceDispatcherHostDelegate
           web_contents_getter,
       bool is_main_frame,
       ui::PageTransition page_transition,
-      bool has_user_gesture) override;
+      bool has_user_gesture,
+      content::ResourceContext* resource_context) override;
   bool ShouldForceDownloadResource(const GURL& url,
                                    const std::string& mime_type) override;
   bool ShouldInterceptResourceAsStream(net::URLRequest* request,
@@ -96,6 +96,8 @@ class ChromeResourceDispatcherHostDelegate
       content::ResourceContext* resource_context) override;
   content::NavigationData* GetNavigationData(
       net::URLRequest* request) const override;
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
+      content::ResourceContext* resource_context) override;
 
   // Called on the UI thread. Allows switching out the
   // ExternalProtocolHandler::Delegate for testing code.

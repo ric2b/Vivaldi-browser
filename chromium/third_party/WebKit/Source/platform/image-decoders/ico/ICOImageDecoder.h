@@ -33,6 +33,7 @@
 
 #include "platform/image-decoders/FastSharedBufferReader.h"
 #include "platform/image-decoders/bmp/BMPImageReader.h"
+#include <memory>
 
 namespace blink {
 
@@ -40,6 +41,7 @@ class PNGImageDecoder;
 
 // This class decodes the ICO and CUR image formats.
 class PLATFORM_EXPORT ICOImageDecoder final : public ImageDecoder {
+    WTF_MAKE_NONCOPYABLE(ICOImageDecoder);
 public:
     ICOImageDecoder(AlphaOption, GammaAndColorProfileOption, size_t maxDecodedBytes);
     ~ICOImageDecoder() override;
@@ -50,6 +52,7 @@ public:
     IntSize size() const override;
     IntSize frameSizeAtIndex(size_t) const override;
     bool setSize(unsigned width, unsigned height) override;
+    bool frameIsCompleteAtIndex(size_t) const override;
     // CAUTION: setFailed() deletes all readers and decoders.  Be careful to
     // avoid accessing deleted memory, especially when calling this from
     // inside BMPImageReader!
@@ -74,6 +77,7 @@ private:
         uint16_t m_bitCount;
         IntPoint m_hotSpot;
         uint32_t m_imageOffset;
+        uint32_t m_byteSize;
     };
 
     // Returns true if |a| is a preferable icon entry to |b|.
@@ -81,7 +85,7 @@ private:
     static bool compareEntries(const IconDirectoryEntry& a, const IconDirectoryEntry& b);
 
     // ImageDecoder:
-    virtual void decodeSize() { decode(0, true); }
+    void decodeSize() override { decode(0, true); }
     size_t decodeFrameCount() override;
     void decode(size_t index) override { decode(index, false); }
 
@@ -156,10 +160,15 @@ private:
     typedef Vector<IconDirectoryEntry> IconDirectoryEntries;
     IconDirectoryEntries m_dirEntries;
 
+    // Count of directory entries is parsed from header before initializing
+    // m_dirEntries. m_dirEntries is populated only when full header
+    // information including directory entries is available.
+    size_t m_dirEntriesCount;
+
     // The image decoders for the various frames.
-    typedef Vector<OwnPtr<BMPImageReader>> BMPReaders;
+    typedef Vector<std::unique_ptr<BMPImageReader>> BMPReaders;
     BMPReaders m_bmpReaders;
-    typedef Vector<OwnPtr<PNGImageDecoder>> PNGDecoders;
+    typedef Vector<std::unique_ptr<PNGImageDecoder>> PNGDecoders;
     PNGDecoders m_pngDecoders;
 
     // Valid only while a BMPImageReader is decoding, this holds the size

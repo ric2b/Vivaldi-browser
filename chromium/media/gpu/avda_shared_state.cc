@@ -14,7 +14,9 @@
 namespace media {
 
 AVDASharedState::AVDASharedState()
-    : surface_texture_service_id_(0), frame_available_event_(false, false) {}
+    : surface_texture_service_id_(0),
+      frame_available_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
 AVDASharedState::~AVDASharedState() {
   if (!surface_texture_service_id_)
@@ -62,17 +64,17 @@ void AVDASharedState::WaitForFrameAvailable() {
 }
 
 void AVDASharedState::SetSurfaceTexture(
-    scoped_refptr<gfx::SurfaceTexture> surface_texture,
+    scoped_refptr<gl::SurfaceTexture> surface_texture,
     GLuint attached_service_id) {
   surface_texture_ = surface_texture;
   surface_texture_service_id_ = attached_service_id;
-  context_ = gfx::GLContext::GetCurrent();
-  surface_ = gfx::GLSurface::GetCurrent();
+  context_ = gl::GLContext::GetCurrent();
+  surface_ = gl::GLSurface::GetCurrent();
   DCHECK(context_);
   DCHECK(surface_);
 }
 
-void AVDASharedState::CodecChanged(media::MediaCodecBridge* codec) {
+void AVDASharedState::CodecChanged(MediaCodecBridge* codec) {
   for (auto& image_kv : codec_images_)
     image_kv.second->CodecChanged(codec);
   release_time_ = base::TimeTicks();
@@ -97,7 +99,7 @@ AVDACodecImage* AVDASharedState::GetImageForPicture(
 }
 
 void AVDASharedState::RenderCodecBufferToSurfaceTexture(
-    media::MediaCodecBridge* codec,
+    MediaCodecBridge* codec,
     int codec_buffer_index) {
   if (!release_time_.is_null())
     WaitForFrameAvailable();

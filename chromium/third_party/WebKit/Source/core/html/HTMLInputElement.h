@@ -165,8 +165,6 @@ public:
 
     String altText() const final;
 
-    int maxResults() const { return m_maxResults; }
-
     const AtomicString& defaultValue() const;
 
     Vector<String> acceptMIMETypes();
@@ -353,6 +351,7 @@ private:
     bool isRequiredFormControl() const final;
     bool recalcWillValidate() const final;
     void requiredAttributeChanged() final;
+    void disabledAttributeChanged() final;
 
     void updateTouchEventHandlerRegistry();
     void initializeTypeInParsing();
@@ -380,7 +379,6 @@ private:
     int m_size;
     int m_maxLength;
     int m_minLength;
-    short m_maxResults;
     // https://html.spec.whatwg.org/multipage/forms.html#concept-fe-checked
     unsigned m_isChecked : 1;
     // https://html.spec.whatwg.org/multipage/forms.html#concept-input-checked-dirty-flag

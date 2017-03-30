@@ -8,12 +8,13 @@
 #include <utility>
 #include <vector>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "content/public/common/presentation_constants.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/renderer/presentation/presentation_connection_client.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/modules/presentation/WebPresentationAvailabilityObserver.h"
@@ -308,6 +309,10 @@ void PresentationDispatcher::DidCommitProvisionalLoad(
   std::swap(message_request_queue_, empty);
 }
 
+void PresentationDispatcher::OnDestruct() {
+  delete this;
+}
+
 void PresentationDispatcher::OnScreenAvailabilityUpdated(
     const mojo::String& url, bool available) {
   const std::string& availability_url = url.get();
@@ -450,8 +455,7 @@ void PresentationDispatcher::ConnectToPresentationServiceIfNeeded() {
   if (presentation_service_.get())
     return;
 
-  render_frame()->GetServiceRegistry()->ConnectToRemoteService(
-      mojo::GetProxy(&presentation_service_));
+  render_frame()->GetRemoteInterfaces()->GetInterface(&presentation_service_);
   presentation_service_->SetClient(binding_.CreateInterfacePtrAndBind());
 }
 

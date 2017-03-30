@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//ios/build/config.gni")
 import("//ios/web/js_compile.gni")
 import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
@@ -16,8 +17,8 @@ source_set("web") {
     "//components/url_formatter",
     "//ios/net",
     "//ios/third_party/blink:html_tokenizer",
-    "//mojo/edk/system",
     "//mojo/public/cpp/system",
+    "//mojo/public/js",
     "//net",
     "//services/shell/public/cpp",
     "//ui/base",
@@ -106,6 +107,9 @@ source_set("web") {
     "public/favicon_url.h",
     "public/interstitials/web_interstitial.h",
     "public/interstitials/web_interstitial_delegate.h",
+    "public/java_script_dialog_callback.h",
+    "public/java_script_dialog_presenter.h",
+    "public/java_script_dialog_type.h",
     "public/load_committed_details.h",
     "public/navigation_item.h",
     "public/navigation_manager.h",
@@ -123,7 +127,6 @@ source_set("web") {
     "public/url_schemes.h",
     "public/url_schemes.mm",
     "public/url_util.h",
-    "public/user_metrics.h",
     "public/web_capabilities.cc",
     "public/web_capabilities.h",
     "public/web_client.h",
@@ -163,7 +166,6 @@ source_set("web") {
     "string_util.cc",
     "url_scheme_util.mm",
     "url_util.cc",
-    "user_metrics.cc",
     "web_kit_constants.cc",
     "web_state/blocked_popup_info.h",
     "web_state/blocked_popup_info.mm",
@@ -237,6 +239,8 @@ source_set("web") {
     "webui/crw_web_ui_page_builder.mm",
     "webui/mojo_facade.h",
     "webui/mojo_facade.mm",
+    "webui/mojo_js_constants.cc",
+    "webui/mojo_js_constants.h",
     "webui/shared_resources_data_source_ios.h",
     "webui/shared_resources_data_source_ios.mm",
     "webui/url_data_manager_ios.cc",
@@ -348,6 +352,8 @@ source_set("test_support") {
     "public/test/scoped_testing_web_client.mm",
     "public/test/test_browser_state.cc",
     "public/test/test_browser_state.h",
+    "public/test/test_redirect_observer.h",
+    "public/test/test_redirect_observer.mm",
     "public/test/test_web_client.h",
     "public/test/test_web_client.mm",
     "public/test/test_web_state.h",
@@ -356,6 +362,11 @@ source_set("test_support") {
     "public/test/test_web_thread_bundle.h",
     "public/test/test_web_view_content_view.h",
     "public/test/test_web_view_content_view.mm",
+    "public/test/web_test.h",
+    "public/test/web_test.mm",
+    "public/test/web_test_suite.h",
+    "public/test/web_test_with_web_state.h",
+    "public/test/web_test_with_web_state.mm",
     "test/crw_fake_web_controller_observer.h",
     "test/crw_fake_web_controller_observer.mm",
     "test/test_url_constants.cc",
@@ -364,12 +375,24 @@ source_set("test_support") {
     "test/test_web_thread_bundle.cc",
     "test/web_int_test.h",
     "test/web_int_test.mm",
-    "test/web_test.h",
-    "test/web_test.mm",
-    "test/web_test_suite.h",
     "test/web_test_suite.mm",
+    "test/web_test_with_web_controller.h",
+    "test/web_test_with_web_controller.mm",
     "test/wk_web_view_crash_utils.h",
     "test/wk_web_view_crash_utils.mm",
+  ]
+}
+
+source_set("run_all_unittests") {
+  testonly = true
+  sources = [
+    "test/run_all_unittests.cc",
+  ]
+  deps = [
+    ":test_support",
+    "//base",
+    "//base/test:test_support",
+    "//mojo/edk/system",
   ]
 }
 
@@ -391,6 +414,7 @@ test("ios_web_unittests") {
   deps = [
     ":core",
     ":ios_web_unittests_bundle_data",
+    ":run_all_unittests",
     ":test_support",
     ":web",
     "//base",
@@ -398,7 +422,6 @@ test("ios_web_unittests") {
     "//ios/net",
     "//ios/testing:ocmock_support",
     "//ios/web/test:mojo_bindings",
-    "//mojo/edk/system",
     "//net:test_support",
     "//services/shell/public/cpp",
     "//testing/gmock",
@@ -432,11 +455,11 @@ test("ios_web_unittests") {
     "public/web_state/page_viewport_state_unittest.mm",
     "string_util_unittest.cc",
     "test/crw_fake_web_controller_observer_unittest.mm",
-    "test/run_all_unittests.cc",
     "url_scheme_util_unittest.mm",
     "url_util_unittest.cc",
     "web_state/crw_pass_kit_downloader_unittest.mm",
     "web_state/crw_web_view_scroll_view_proxy_unittest.mm",
+    "web_state/error_translation_util_unittest.mm",
     "web_state/js/common_js_unittest.mm",
     "web_state/js/core_js_unittest.mm",
     "web_state/js/credential_util_unittest.mm",
@@ -463,6 +486,8 @@ test("ios_web_unittests") {
     "webui/mojo_facade_unittest.mm",
     "webui/url_fetcher_block_adapter_unittest.mm",
   ]
+
+  assert_no_deps = ios_assert_no_deps
 }
 
 test("ios_web_inttests") {
@@ -470,8 +495,13 @@ test("ios_web_inttests") {
     ":test_support",
     ":web",
     "//base/test:test_support",
+    "//ios/public/provider/web",
+    "//ios/web/test:mojo_bindings",
+    "//ios/web/test:packed_resources",
+    "//ios/web/test:resources",
     "//mojo/edk/system",
     "//net:test_support",
+    "//services/shell/public/cpp",
     "//testing/gtest",
     "//ui/base:test_support",
   ]
@@ -479,7 +509,10 @@ test("ios_web_inttests") {
     "browser_state_web_view_partition_inttest.mm",
     "public/test/http_server_inttest.mm",
     "test/run_all_unittests.cc",
+    "webui/web_ui_mojo_inttest.mm",
   ]
+
+  assert_no_deps = ios_assert_no_deps
 }
 
 js_compile_bundle("web_ui_bundle") {
@@ -531,9 +564,5 @@ grit("resources") {
   outputs = [
     "grit/ios_web_resources.h",
     "ios_web_resources.pak",
-  ]
-  grit_flags = [
-    "-E",
-    "root_out_dir=" + rebase_path(root_out_dir, root_build_dir),
   ]
 }

@@ -20,7 +20,7 @@
 #include "chrome/browser/ui/omnibox/chrome_omnibox_edit_controller.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/prefs/pref_member.h"
-#include "components/ui/zoom/zoom_event_manager_observer.h"
+#include "components/zoom/zoom_event_manager_observer.h"
 
 @class AutocompleteTextField;
 class CommandUpdater;
@@ -46,7 +46,7 @@ class ZoomDecorationTest;
 class LocationBarViewMac : public LocationBar,
                            public LocationBarTesting,
                            public ChromeOmniboxEditController,
-                           public ui_zoom::ZoomEventManagerObserver {
+                           public zoom::ZoomEventManagerObserver {
  public:
   LocationBarViewMac(AutocompleteTextField* field,
                      CommandUpdater* command_updater,
@@ -178,7 +178,6 @@ class LocationBarViewMac : public LocationBar,
   // ChromeOmniboxEditController:
   void UpdateWithoutTabRestore() override;
   void OnChanged() override;
-  void OnSetFocus() override;
   void ShowURL() override;
   ToolbarModel* GetToolbarModel() override;
   const ToolbarModel* GetToolbarModel() const override;
@@ -201,6 +200,11 @@ class LocationBarViewMac : public LocationBar,
   // ZoomManagerObserver:
   // Updates the view for the zoom icon when default zoom levels change.
   void OnDefaultZoomLevelChanged() override;
+
+  // Returns the decoration accessibility views for all of this
+  // LocationBarViewMac's decorations. The returned NSViews may not have been
+  // positioned yet.
+  std::vector<NSView*> GetDecorationAccessibilityViews();
 
  private:
   friend ZoomDecorationTest;
@@ -238,6 +242,15 @@ class LocationBarViewMac : public LocationBar,
   // Updates the zoom decoration in the omnibox with the current zoom level.
   // Returns whether any updates were made.
   bool UpdateZoomDecoration(bool default_zoom_changed);
+
+  // Returns pointers to all of the LocationBarDecorations owned by this
+  // LocationBarViewMac. This helper function is used for positioning and
+  // re-positioning accessibility views.
+  std::vector<LocationBarDecoration*> GetDecorations();
+
+  // Updates |decoration|'s accessibility view's position to match the computed
+  // position the decoration will be drawn at.
+  void UpdateAccessibilityViewPosition(LocationBarDecoration* decoration);
 
   std::unique_ptr<OmniboxViewMac> omnibox_view_;
 

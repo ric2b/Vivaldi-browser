@@ -10,6 +10,8 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "base/threading/non_thread_safe.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_log.h"
@@ -20,7 +22,6 @@
 #include "ui/gfx/geometry/size.h"
 
 namespace base {
-class MessageLoop;
 class RunLoop;
 class TimeDelta;
 }
@@ -39,9 +40,10 @@ PipelineStatusCB NewExpectedStatusCB(PipelineStatus status);
 // testing classes that run on more than a single thread.
 //
 // Events are intended for single use and cannot be reset.
-class WaitableMessageLoopEvent {
+class WaitableMessageLoopEvent : public base::NonThreadSafe {
  public:
   WaitableMessageLoopEvent();
+  explicit WaitableMessageLoopEvent(base::TimeDelta timeout);
   ~WaitableMessageLoopEvent();
 
   // Returns a thread-safe closure that will signal |this| when executed.
@@ -65,10 +67,10 @@ class WaitableMessageLoopEvent {
   void OnCallback(PipelineStatus status);
   void OnTimeout();
 
-  base::MessageLoop* message_loop_;
   bool signaled_;
   PipelineStatus status_;
   std::unique_ptr<base::RunLoop> run_loop_;
+  const base::TimeDelta timeout_;
 
   DISALLOW_COPY_AND_ASSIGN(WaitableMessageLoopEvent);
 };

@@ -5,12 +5,14 @@
 #ifndef ASH_SHELF_SHELF_H_
 #define ASH_SHELF_SHELF_H_
 
+#include <stdint.h>
+
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_types.h"
 #include "ash/shelf/shelf_locking_manager.h"
-#include "ash/shelf/shelf_types.h"
 #include "ash/shelf/shelf_widget.h"
 #include "base/macros.h"
 #include "ui/gfx/geometry/size.h"
@@ -38,23 +40,27 @@ class ShelfDelegate;
 class ShelfIconObserver;
 class ShelfModel;
 class ShelfView;
-
-namespace wm {
-class WmShelfAura;
-}
+class WmShelf;
 
 namespace test {
 class ShelfTestAPI;
 }
 
+// Controller for shelf state. All access to state (visibility, auto-hide, etc.)
+// should occur via this class.
 class ASH_EXPORT Shelf {
  public:
   static const char kNativeViewName[];
 
-  Shelf(ShelfModel* model, ShelfDelegate* delegate, ShelfWidget* widget);
+  Shelf(ShelfModel* model,
+        ShelfDelegate* delegate,
+        WmShelf* wm_shelf,
+        ShelfWidget* widget);
   virtual ~Shelf();
 
   // Return the shelf for the primary display. NULL if no user is logged in yet.
+  // Useful for tests. For production code use ForWindow() because the user may
+  // have multiple displays.
   static Shelf* ForPrimaryDisplay();
 
   // Return the shelf for the display that |window| is currently on, or a shelf
@@ -62,8 +68,8 @@ class ASH_EXPORT Shelf {
   // user is logged in yet.
   static Shelf* ForWindow(const aura::Window* window);
 
-  void SetAlignment(wm::ShelfAlignment alignment);
-  wm::ShelfAlignment alignment() const { return alignment_; }
+  void SetAlignment(ShelfAlignment alignment);
+  ShelfAlignment alignment() const { return alignment_; }
   bool IsHorizontalAlignment() const;
 
   // Sets the ShelfAutoHideBehavior. See enum description for details.
@@ -72,19 +78,20 @@ class ASH_EXPORT Shelf {
     return auto_hide_behavior_;
   }
 
-  // TODO(msw): Remove this accessor, kept temporarily to simplify changes.
-  ShelfAutoHideBehavior GetAutoHideBehavior() const;
+  ShelfAutoHideState GetAutoHideState() const;
+
+  ShelfVisibilityState GetVisibilityState() const;
 
   // A helper functions that chooses values specific to a shelf alignment.
   template <typename T>
   T SelectValueForShelfAlignment(T bottom, T left, T right) const {
     switch (alignment_) {
-      case wm::SHELF_ALIGNMENT_BOTTOM:
-      case wm::SHELF_ALIGNMENT_BOTTOM_LOCKED:
+      case SHELF_ALIGNMENT_BOTTOM:
+      case SHELF_ALIGNMENT_BOTTOM_LOCKED:
         return bottom;
-      case wm::SHELF_ALIGNMENT_LEFT:
+      case SHELF_ALIGNMENT_LEFT:
         return left;
-      case wm::SHELF_ALIGNMENT_RIGHT:
+      case SHELF_ALIGNMENT_RIGHT:
         return right;
     }
     NOTREACHED();
@@ -145,18 +152,17 @@ class ASH_EXPORT Shelf {
   // Returns ApplicationDragAndDropHost for this shelf.
   app_list::ApplicationDragAndDropHost* GetDragAndDropHostForAppList();
 
-  wm::WmShelfAura* wm_shelf() { return wm_shelf_.get(); }
-
  private:
   friend class test::ShelfTestAPI;
 
-  std::unique_ptr<wm::WmShelfAura> wm_shelf_;
   ShelfDelegate* delegate_;
+  // The shelf controller. Owned by the root window controller.
+  WmShelf* wm_shelf_;
   ShelfWidget* shelf_widget_;
   ShelfView* shelf_view_;
   ShelfLockingManager shelf_locking_manager_;
 
-  wm::ShelfAlignment alignment_ = wm::SHELF_ALIGNMENT_BOTTOM;
+  ShelfAlignment alignment_ = SHELF_ALIGNMENT_BOTTOM;
   ShelfAutoHideBehavior auto_hide_behavior_ = SHELF_AUTO_HIDE_BEHAVIOR_NEVER;
 
   DISALLOW_COPY_AND_ASSIGN(Shelf);

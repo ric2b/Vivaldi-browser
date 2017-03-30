@@ -424,15 +424,17 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         this._appendHeader(WebInspector.UIString("Interactions"), this._interactionsHeaderLevel1);
         this._appendInteractionRecords();
 
-        var asyncEventGroups = WebInspector.TimelineUIUtils.asyncEventGroups();
+        var asyncEventGroups = WebInspector.TimelineModel.AsyncEventGroup;
         var inputLatencies = this._model.mainThreadAsyncEvents().get(asyncEventGroups.input);
-        if (inputLatencies && inputLatencies.length)
-            this._appendAsyncEventsGroup(asyncEventGroups.input.title, inputLatencies, this._interactionsHeaderLevel2);
-
+        if (inputLatencies && inputLatencies.length) {
+            var title = WebInspector.TimelineUIUtils.titleForAsyncEventGroup(asyncEventGroups.input);
+            this._appendAsyncEventsGroup(title, inputLatencies, this._interactionsHeaderLevel2);
+        }
         var animations = this._model.mainThreadAsyncEvents().get(asyncEventGroups.animation);
-        if (animations && animations.length)
-            this._appendAsyncEventsGroup(asyncEventGroups.animation.title, animations, this._interactionsHeaderLevel2);
-
+        if (animations && animations.length) {
+            var title = WebInspector.TimelineUIUtils.titleForAsyncEventGroup(asyncEventGroups.animation);
+            this._appendAsyncEventsGroup(title, animations, this._interactionsHeaderLevel2);
+        }
         var threads = this._model.virtualThreads();
         this._appendThreadTimelineData(WebInspector.UIString("Main"), this._model.mainThreadEvents(), this._model.mainThreadAsyncEvents(), true);
         var compositorThreads = threads.filter(thread => thread.name.startsWith("CompositorTileWorker"));
@@ -465,7 +467,7 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
     /**
      * @param {string} threadTitle
      * @param {!Array<!WebInspector.TracingModel.Event>} syncEvents
-     * @param {!Map<!WebInspector.AsyncEventGroup, !Array<!WebInspector.TracingModel.AsyncEvent>>} asyncEvents
+     * @param {!Map<!WebInspector.TimelineModel.AsyncEventGroup, !Array<!WebInspector.TracingModel.AsyncEvent>>} asyncEvents
      * @param {boolean=} forceExpanded
      */
     _appendThreadTimelineData: function(threadTitle, syncEvents, asyncEvents, forceExpanded)
@@ -488,7 +490,7 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         var maxStackDepth = 0;
         for (var i = 0; i < events.length; ++i) {
             var e = events[i];
-            if (WebInspector.TimelineUIUtils.isMarkerEvent(e))
+            if (WebInspector.TimelineModel.isMarkerEvent(e))
                 this._markers.push(new WebInspector.TimelineFlameChartMarker(e.startTime, e.startTime - this._model.minimumRecordTime(), WebInspector.TimelineUIUtils.markerStyleForEvent(e)));
             if (!WebInspector.TracingModel.isFlowPhase(e.phase)) {
                 if (!e.endTime && e.phase !== WebInspector.TracingModel.Phase.Instant)
@@ -547,11 +549,11 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
     },
 
     /**
-     * @param {!Map<!WebInspector.AsyncEventGroup, !Array<!WebInspector.TracingModel.AsyncEvent>>} asyncEvents
+     * @param {!Map<!WebInspector.TimelineModel.AsyncEventGroup, !Array<!WebInspector.TracingModel.AsyncEvent>>} asyncEvents
      */
     _appendAsyncEvents: function(asyncEvents)
     {
-        var groups = WebInspector.TimelineUIUtils.asyncEventGroups();
+        var groups = WebInspector.TimelineModel.AsyncEventGroup;
         var groupArray = Object.values(groups);
 
         groupArray.remove(groups.animation);
@@ -560,8 +562,10 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         for (var groupIndex = 0; groupIndex < groupArray.length; ++groupIndex) {
             var group = groupArray[groupIndex];
             var events = asyncEvents.get(group);
-            if (events)
-                this._appendAsyncEventsGroup(group.title, events, this._headerLevel1);
+            if (!events)
+                continue;
+            var title = WebInspector.TimelineUIUtils.titleForAsyncEventGroup(group);
+            this._appendAsyncEventsGroup(title, events, this._headerLevel1);
         }
     },
 
@@ -635,7 +639,7 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
      */
     prepareHighlightedEntryInfo: function(entryIndex)
     {
-        var time;
+        var time = "";
         var title;
         var warning;
         var type = this._entryType(entryIndex);
@@ -644,9 +648,11 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
             var totalTime = event.duration;
             var selfTime = event.selfTime;
             var /** @const */ eps = 1e-6;
-            time = typeof totalTime === "number" && Math.abs(totalTime - selfTime) > eps && selfTime > eps ?
-                WebInspector.UIString("%s (self %s)", Number.millisToString(totalTime, true), Number.millisToString(selfTime, true)) :
-                Number.millisToString(totalTime, true);
+            if (typeof totalTime === "number") {
+                time = Math.abs(totalTime - selfTime) > eps && selfTime > eps ?
+                    WebInspector.UIString("%s (self %s)", Number.millisToString(totalTime, true), Number.millisToString(selfTime, true)) :
+                    Number.millisToString(totalTime, true);
+            }
             title = this.entryTitle(entryIndex);
             warning = WebInspector.TimelineUIUtils.eventWarning(event);
         } else if (type === WebInspector.TimelineFlameChartEntryType.Frame) {
@@ -822,7 +828,12 @@ WebInspector.TimelineFlameChartDataProvider.prototype = {
         var index = this._entryData.length;
         this._entryData.push(event);
         this._timelineData.entryLevels[index] = level;
-        this._timelineData.entryTotalTimes[index] = event.duration || WebInspector.TimelineFlameChartDataProvider.InstantEventVisibleDurationMs;
+        var duration;
+        if (WebInspector.TimelineModel.isMarkerEvent(event))
+            duration = undefined;
+        else
+            duration = event.duration || WebInspector.TimelineFlameChartDataProvider.InstantEventVisibleDurationMs;
+        this._timelineData.entryTotalTimes[index] = duration;
         this._timelineData.entryStartTimes[index] = event.startTime;
     },
 

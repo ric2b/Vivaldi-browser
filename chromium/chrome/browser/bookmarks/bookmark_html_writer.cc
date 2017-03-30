@@ -14,10 +14,12 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file.h"
+#include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -40,7 +42,7 @@ using content::BrowserThread;
 
 namespace {
 
-static BookmarkFaviconFetcher* fetcher = NULL;
+BookmarkFaviconFetcher* g_fetcher = nullptr;
 
 // File header.
 const char kHeader[] =
@@ -429,9 +431,10 @@ void BookmarkFaviconFetcher::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  if (chrome::NOTIFICATION_PROFILE_DESTROYED == type && fetcher != NULL) {
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, fetcher);
-    fetcher = NULL;
+  DCHECK_EQ(chrome::NOTIFICATION_PROFILE_DESTROYED, type);
+  if (g_fetcher) {
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, g_fetcher);
+    g_fetcher = nullptr;
   }
 }
 
@@ -457,9 +460,9 @@ void BookmarkFaviconFetcher::ExecuteWriter() {
                  new Writer(codec.Encode(BookmarkModelFactory::GetForProfile(
                                 profile_)),
                             path_, favicons_map_.release(), observer_)));
-  if (fetcher != NULL) {
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, fetcher);
-    fetcher = NULL;
+  if (g_fetcher) {
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, g_fetcher);
+    g_fetcher = nullptr;
   }
 }
 
@@ -516,9 +519,9 @@ void WriteBookmarks(Profile* profile,
   // BookmarkModel isn't thread safe (nor would we want to lock it down
   // for the duration of the write), as such we make a copy of the
   // BookmarkModel using BookmarkCodec then write from that.
-  if (fetcher == NULL) {
-    fetcher = new BookmarkFaviconFetcher(profile, path, observer);
-    fetcher->ExportBookmarks();
+  if (!g_fetcher) {
+    g_fetcher = new BookmarkFaviconFetcher(profile, path, observer);
+    g_fetcher->ExportBookmarks();
   }
 }
 

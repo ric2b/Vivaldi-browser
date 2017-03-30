@@ -5,19 +5,21 @@
 #include "ash/display/display_manager.h"
 
 #include "ash/accelerators/accelerator_commands.h"
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/display/display_configuration_controller.h"
-#include "ash/display/display_info.h"
 #include "ash/display/display_layout_store.h"
 #include "ash/display/display_util.h"
 #include "ash/display/mirror_window_controller.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
+#include "ash/test/ash_md_test_base.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/mirror_window_test_api.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "base/format_macros.h"
@@ -51,26 +53,25 @@ std::string ToDisplayName(int64_t id) {
 
 }  // namespace
 
-class DisplayManagerTest : public test::AshTestBase,
+class DisplayManagerTest : public test::AshMDTestBase,
                            public display::DisplayObserver,
                            public aura::WindowObserver {
  public:
   DisplayManagerTest()
       : removed_count_(0U),
         root_window_destroyed_(false),
-        changed_metrics_(0U) {
-  }
+        changed_metrics_(0U) {}
   ~DisplayManagerTest() override {}
 
   void SetUp() override {
-    AshTestBase::SetUp();
+    AshMDTestBase::SetUp();
     display::Screen::GetScreen()->AddObserver(this);
     Shell::GetPrimaryRootWindow()->AddObserver(this);
   }
   void TearDown() override {
     Shell::GetPrimaryRootWindow()->RemoveObserver(this);
     display::Screen::GetScreen()->RemoveObserver(this);
-    AshTestBase::TearDown();
+    AshMDTestBase::TearDown();
   }
 
   DisplayManager* display_manager() {
@@ -81,8 +82,8 @@ class DisplayManagerTest : public test::AshTestBase,
   uint32_t changed_metrics() const { return changed_metrics_; }
 
   string GetCountSummary() const {
-    return StringPrintf("%" PRIuS " %" PRIuS " %" PRIuS,
-                        changed_.size(), added_.size(), removed_count_);
+    return StringPrintf("%" PRIuS " %" PRIuS " %" PRIuS, changed_.size(),
+                        added_.size(), removed_count_);
   }
 
   void reset() {
@@ -93,9 +94,7 @@ class DisplayManagerTest : public test::AshTestBase,
     root_window_destroyed_ = false;
   }
 
-  bool root_window_destroyed() const {
-    return root_window_destroyed_;
-  }
+  bool root_window_destroyed() const { return root_window_destroyed_; }
 
   const DisplayInfo& GetDisplayInfo(const display::Display& display) {
     return display_manager()->GetDisplayInfo(display.id());
@@ -142,7 +141,14 @@ class DisplayManagerTest : public test::AshTestBase,
   DISALLOW_COPY_AND_ASSIGN(DisplayManagerTest);
 };
 
-TEST_F(DisplayManagerTest, UpdateDisplayTest) {
+INSTANTIATE_TEST_CASE_P(
+    /* prefix intentionally left blank due to only one parameterization */,
+    DisplayManagerTest,
+    testing::Values(MaterialDesignController::NON_MATERIAL,
+                    MaterialDesignController::MATERIAL_NORMAL,
+                    MaterialDesignController::MATERIAL_EXPERIMENTAL));
+
+TEST_P(DisplayManagerTest, UpdateDisplayTest) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -154,10 +160,12 @@ TEST_F(DisplayManagerTest, UpdateDisplayTest) {
   EXPECT_EQ("0,0 500x500",
             display_manager()->GetDisplayAt(0).bounds().ToString());
 
-  EXPECT_EQ("1 1 0", GetCountSummary());
-  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[0].id());
+  EXPECT_EQ("2 1 0", GetCountSummary());
+  EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), changed()[0].id());
+  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[1].id());
   EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), added()[0].id());
-  EXPECT_EQ("0,0 500x500", changed()[0].bounds().ToString());
+  EXPECT_EQ("500,0 400x400", changed()[0].bounds().ToString());
+  EXPECT_EQ("0,0 500x500", changed()[1].bounds().ToString());
   // Secondary display is on right.
   EXPECT_EQ("500,0 400x400", added()[0].bounds().ToString());
   EXPECT_EQ("0,501 400x400",
@@ -179,7 +187,8 @@ TEST_F(DisplayManagerTest, UpdateDisplayTest) {
   // Add secondary.
   UpdateDisplay("1+1-1000x600,1002+0-600x400");
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
-  EXPECT_EQ("0 1 0", GetCountSummary());
+  EXPECT_EQ("1 1 0", GetCountSummary());
+  EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), changed()[0].id());
   EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), added()[0].id());
   // Secondary display is on right.
   EXPECT_EQ("1000,0 600x400", added()[0].bounds().ToString());
@@ -244,7 +253,7 @@ TEST_F(DisplayManagerTest, UpdateDisplayTest) {
             display_manager()->GetDisplayAt(1).bounds().ToString());
 }
 
-TEST_F(DisplayManagerTest, ScaleOnlyChange) {
+TEST_P(DisplayManagerTest, ScaleOnlyChange) {
   if (!SupportsMultipleDisplays())
     return;
   display_manager()->ToggleDisplayScaleFactor();
@@ -255,7 +264,7 @@ TEST_F(DisplayManagerTest, ScaleOnlyChange) {
 }
 
 // Test in emulation mode (use_fullscreen_host_window=false)
-TEST_F(DisplayManagerTest, EmulatorTest) {
+TEST_P(DisplayManagerTest, EmulatorTest) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -264,7 +273,7 @@ TEST_F(DisplayManagerTest, EmulatorTest) {
   display_manager()->AddRemoveDisplay();
   // Update primary and add seconary.
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
-  EXPECT_EQ("0 1 0", GetCountSummary());
+  EXPECT_EQ("1 1 0", GetCountSummary());
   reset();
 
   display_manager()->AddRemoveDisplay();
@@ -274,11 +283,11 @@ TEST_F(DisplayManagerTest, EmulatorTest) {
 
   display_manager()->AddRemoveDisplay();
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
-  EXPECT_EQ("0 1 0", GetCountSummary());
+  EXPECT_EQ("1 1 0", GetCountSummary());
 }
 
 // Tests support for 3 displays.
-TEST_F(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
+TEST_P(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -296,11 +305,15 @@ TEST_F(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
   EXPECT_EQ("960,0 400x300",
             display_manager()->GetDisplayAt(2).bounds().ToString());
 
-  EXPECT_EQ("1 2 0", GetCountSummary());
-  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[0].id());
+  EXPECT_EQ("3 2 0", GetCountSummary());
+  EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), changed()[0].id());
+  EXPECT_EQ(display_manager()->GetDisplayAt(2).id(), changed()[1].id());
+  EXPECT_EQ(display_manager()->GetDisplayAt(0).id(), changed()[2].id());
   EXPECT_EQ(display_manager()->GetDisplayAt(1).id(), added()[0].id());
   EXPECT_EQ(display_manager()->GetDisplayAt(2).id(), added()[1].id());
-  EXPECT_EQ("0,0 640x480", changed()[0].bounds().ToString());
+  EXPECT_EQ("640,0 320x200", changed()[0].bounds().ToString());
+  EXPECT_EQ("960,0 400x300", changed()[1].bounds().ToString());
+  EXPECT_EQ("0,0 640x480", changed()[2].bounds().ToString());
   // Secondary and terniary displays are on right.
   EXPECT_EQ("640,0 320x200", added()[0].bounds().ToString());
   EXPECT_EQ("1000,0 320x200",
@@ -336,7 +349,7 @@ TEST_F(DisplayManagerTest, UpdateThreeDisplaysWithDefaultLayout) {
             display_manager()->GetDisplayAt(2).bounds().ToString());
 }
 
-TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
+TEST_P(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -451,7 +464,7 @@ TEST_F(DisplayManagerTest, LayoutMorethanThreeDisplaysTest) {
   }
 }
 
-TEST_F(DisplayManagerTest, NoMirrorInThreeDisplays) {
+TEST_P(DisplayManagerTest, NoMirrorInThreeDisplays) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -466,7 +479,7 @@ TEST_F(DisplayManagerTest, NoMirrorInThreeDisplays) {
 #endif
 }
 
-TEST_F(DisplayManagerTest, OverscanInsetsTest) {
+TEST_P(DisplayManagerTest, OverscanInsetsTest) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -475,19 +488,17 @@ TEST_F(DisplayManagerTest, OverscanInsetsTest) {
   ASSERT_EQ(2u, display_manager()->GetNumDisplays());
   const DisplayInfo& display_info1 = GetDisplayInfoAt(0);
   const DisplayInfo& display_info2 = GetDisplayInfoAt(1);
-  display_manager()->SetOverscanInsets(
-      display_info2.id(), gfx::Insets(13, 12, 11, 10));
+  display_manager()->SetOverscanInsets(display_info2.id(),
+                                       gfx::Insets(13, 12, 11, 10));
 
   std::vector<display::Display> changed_displays = changed();
   EXPECT_EQ(1u, changed_displays.size());
   EXPECT_EQ(display_info2.id(), changed_displays[0].id());
-  EXPECT_EQ("0,0 500x500",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
+  EXPECT_EQ("0,0 500x500", GetDisplayInfoAt(0).bounds_in_native().ToString());
   DisplayInfo updated_display_info2 = GetDisplayInfoAt(1);
   EXPECT_EQ("0,501 400x400",
             updated_display_info2.bounds_in_native().ToString());
-  EXPECT_EQ("378x376",
-            updated_display_info2.size_in_pixel().ToString());
+  EXPECT_EQ("378x376", updated_display_info2.size_in_pixel().ToString());
   EXPECT_EQ("13,12,11,10",
             updated_display_info2.overscan_insets_in_dip().ToString());
   EXPECT_EQ("500,0 378x376",
@@ -495,24 +506,20 @@ TEST_F(DisplayManagerTest, OverscanInsetsTest) {
 
   // Make sure that SetOverscanInsets() is idempotent.
   display_manager()->SetOverscanInsets(display_info1.id(), gfx::Insets());
-  display_manager()->SetOverscanInsets(
-      display_info2.id(), gfx::Insets(13, 12, 11, 10));
-  EXPECT_EQ("0,0 500x500",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
+  display_manager()->SetOverscanInsets(display_info2.id(),
+                                       gfx::Insets(13, 12, 11, 10));
+  EXPECT_EQ("0,0 500x500", GetDisplayInfoAt(0).bounds_in_native().ToString());
   updated_display_info2 = GetDisplayInfoAt(1);
   EXPECT_EQ("0,501 400x400",
             updated_display_info2.bounds_in_native().ToString());
-  EXPECT_EQ("378x376",
-            updated_display_info2.size_in_pixel().ToString());
+  EXPECT_EQ("378x376", updated_display_info2.size_in_pixel().ToString());
   EXPECT_EQ("13,12,11,10",
             updated_display_info2.overscan_insets_in_dip().ToString());
 
-  display_manager()->SetOverscanInsets(
-      display_info2.id(), gfx::Insets(10, 11, 12, 13));
-  EXPECT_EQ("0,0 500x500",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
-  EXPECT_EQ("376x378",
-            GetDisplayInfoAt(1).size_in_pixel().ToString());
+  display_manager()->SetOverscanInsets(display_info2.id(),
+                                       gfx::Insets(10, 11, 12, 13));
+  EXPECT_EQ("0,0 500x500", GetDisplayInfoAt(0).bounds_in_native().ToString());
+  EXPECT_EQ("376x378", GetDisplayInfoAt(1).size_in_pixel().ToString());
   EXPECT_EQ("10,11,12,13",
             GetDisplayInfoAt(1).overscan_insets_in_dip().ToString());
 
@@ -520,10 +527,8 @@ TEST_F(DisplayManagerTest, OverscanInsetsTest) {
   // new display has a different ID.
   UpdateDisplay("0+0-500x500");
   UpdateDisplay("0+0-500x500,0+501-400x400");
-  EXPECT_EQ("0,0 500x500",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
-  EXPECT_EQ("0,501 400x400",
-            GetDisplayInfoAt(1).bounds_in_native().ToString());
+  EXPECT_EQ("0,0 500x500", GetDisplayInfoAt(0).bounds_in_native().ToString());
+  EXPECT_EQ("0,501 400x400", GetDisplayInfoAt(1).bounds_in_native().ToString());
 
   // Recreate the displays with the same ID.  It should apply the overscan
   // inset.
@@ -532,25 +537,21 @@ TEST_F(DisplayManagerTest, OverscanInsetsTest) {
   display_info_list.push_back(display_info1);
   display_info_list.push_back(display_info2);
   display_manager()->OnNativeDisplaysChanged(display_info_list);
-  EXPECT_EQ("1,1 500x500",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
+  EXPECT_EQ("1,1 500x500", GetDisplayInfoAt(0).bounds_in_native().ToString());
   updated_display_info2 = GetDisplayInfoAt(1);
-  EXPECT_EQ("376x378",
-            updated_display_info2.size_in_pixel().ToString());
+  EXPECT_EQ("376x378", updated_display_info2.size_in_pixel().ToString());
   EXPECT_EQ("10,11,12,13",
             updated_display_info2.overscan_insets_in_dip().ToString());
 
   // HiDPI but overscan display. The specified insets size should be doubled.
   UpdateDisplay("0+0-500x500,0+501-400x400*2");
-  display_manager()->SetOverscanInsets(
-      display_manager()->GetDisplayAt(1).id(), gfx::Insets(4, 5, 6, 7));
-  EXPECT_EQ("0,0 500x500",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
+  display_manager()->SetOverscanInsets(display_manager()->GetDisplayAt(1).id(),
+                                       gfx::Insets(4, 5, 6, 7));
+  EXPECT_EQ("0,0 500x500", GetDisplayInfoAt(0).bounds_in_native().ToString());
   updated_display_info2 = GetDisplayInfoAt(1);
   EXPECT_EQ("0,501 400x400",
             updated_display_info2.bounds_in_native().ToString());
-  EXPECT_EQ("376x380",
-            updated_display_info2.size_in_pixel().ToString());
+  EXPECT_EQ("376x380", updated_display_info2.size_in_pixel().ToString());
   EXPECT_EQ("4,5,6,7",
             updated_display_info2.overscan_insets_in_dip().ToString());
   EXPECT_EQ("8,10,12,14",
@@ -561,9 +562,9 @@ TEST_F(DisplayManagerTest, OverscanInsetsTest) {
       ScreenUtil::GetSecondaryDisplay().id());
   EXPECT_EQ("-500,0 500x500",
             ScreenUtil::GetSecondaryDisplay().bounds().ToString());
-  EXPECT_EQ("0,0 500x500",
-            GetDisplayInfo(ScreenUtil::GetSecondaryDisplay()).
-            bounds_in_native().ToString());
+  EXPECT_EQ("0,0 500x500", GetDisplayInfo(ScreenUtil::GetSecondaryDisplay())
+                               .bounds_in_native()
+                               .ToString());
   EXPECT_EQ("0,501 400x400",
             GetDisplayInfo(display::Screen::GetScreen()->GetPrimaryDisplay())
                 .bounds_in_native()
@@ -599,7 +600,7 @@ TEST_F(DisplayManagerTest, OverscanInsetsTest) {
       display::Screen::GetScreen()->GetPrimaryDisplay().bounds().ToString());
 }
 
-TEST_F(DisplayManagerTest, ZeroOverscanInsets) {
+TEST_P(DisplayManagerTest, ZeroOverscanInsets) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -623,7 +624,7 @@ TEST_F(DisplayManagerTest, ZeroOverscanInsets) {
   EXPECT_EQ(display2_id, changed()[0].id());
 }
 
-TEST_F(DisplayManagerTest, TestDeviceScaleOnlyChange) {
+TEST_P(DisplayManagerTest, TestDeviceScaleOnlyChange) {
   if (!SupportsHostWindowResize())
     return;
 
@@ -647,7 +648,7 @@ DisplayInfo CreateDisplayInfo(int64_t id, const gfx::Rect& bounds) {
   return info;
 }
 
-TEST_F(DisplayManagerTest, TestNativeDisplaysChanged) {
+TEST_P(DisplayManagerTest, TestNativeDisplaysChanged) {
   const int64_t internal_display_id =
       test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
   const int external_id = 10;
@@ -787,8 +788,7 @@ TEST_F(DisplayManagerTest, TestNativeDisplaysChanged) {
   EXPECT_FALSE(display_manager()->IsInMirrorMode());
   EXPECT_EQ("0,0 500x500",
             GetDisplayForId(internal_display_id).bounds().ToString());
-  EXPECT_EQ("500,0 100x100",
-            GetDisplayForId(10).bounds().ToString());
+  EXPECT_EQ("500,0 100x100", GetDisplayForId(10).bounds().ToString());
 
   // Turn off internal
   display_info_list.clear();
@@ -815,7 +815,7 @@ TEST_F(DisplayManagerTest, TestNativeDisplaysChanged) {
 
 // Make sure crash does not happen if add and remove happens at the same time.
 // See: crbug.com/414394
-TEST_F(DisplayManagerTest, DisplayAddRemoveAtTheSameTime) {
+TEST_P(DisplayManagerTest, DisplayAddRemoveAtTheSameTime) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -844,16 +844,10 @@ TEST_F(DisplayManagerTest, DisplayAddRemoveAtTheSameTime) {
   EXPECT_EQ("600x600", GetDisplayForId(third_id).size().ToString());
 }
 
-#if defined(OS_WIN)
 // TODO(scottmg): RootWindow doesn't get resized on Windows
 // Ash. http://crbug.com/247916.
-#define MAYBE_TestNativeDisplaysChangedNoInternal \
-        DISABLED_TestNativeDisplaysChangedNoInternal
-#else
-#define MAYBE_TestNativeDisplaysChangedNoInternal \
-        TestNativeDisplaysChangedNoInternal
-#endif
-TEST_F(DisplayManagerTest, MAYBE_TestNativeDisplaysChangedNoInternal) {
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, TestNativeDisplaysChangedNoInternal) {
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
 
   // Don't change the display info if all displays are disconnected.
@@ -869,11 +863,15 @@ TEST_F(DisplayManagerTest, MAYBE_TestNativeDisplaysChangedNoInternal) {
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_EQ("1,1 100x100",
             GetDisplayInfoForId(10).bounds_in_native().ToString());
-  EXPECT_EQ("100x100", ash::Shell::GetPrimaryRootWindow()->GetHost()->
-      GetBounds().size().ToString());
+  EXPECT_EQ("100x100", ash::Shell::GetPrimaryRootWindow()
+                           ->GetHost()
+                           ->GetBounds()
+                           .size()
+                           .ToString());
 }
+#endif  // defined(OS_CHROMEOS)
 
-TEST_F(DisplayManagerTest, NativeDisplaysChangedAfterPrimaryChange) {
+TEST_P(DisplayManagerTest, NativeDisplaysChangedAfterPrimaryChange) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -907,13 +905,9 @@ TEST_F(DisplayManagerTest, NativeDisplaysChangedAfterPrimaryChange) {
   EXPECT_EQ("0,0 100x100", GetDisplayForId(10).bounds().ToString());
 }
 
-#if defined(OS_WIN)
 // TODO(msw): Broken on Windows. http://crbug.com/584038
-#define MAYBE_DontRememberBestResolution DISABLED_DontRememberBestResolution
-#else
-#define MAYBE_DontRememberBestResolution DontRememberBestResolution
-#endif
-TEST_F(DisplayManagerTest, MAYBE_DontRememberBestResolution) {
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, DontRememberBestResolution) {
   int display_id = 1000;
   DisplayInfo native_display_info =
       CreateDisplayInfo(display_id, gfx::Rect(0, 0, 1000, 500));
@@ -968,14 +962,11 @@ TEST_F(DisplayManagerTest, MAYBE_DontRememberBestResolution) {
   EXPECT_TRUE(expected_mode.IsEquivalent(
       display_manager()->GetActiveModeForDisplayId(display_id)));
 }
+#endif  // defined(OS_CHROMEOS)
 
-#if defined(OS_WIN)
 // TODO(msw): Broken on Windows. http://crbug.com/584038
-#define MAYBE_ResolutionFallback DISABLED_ResolutionFallback
-#else
-#define MAYBE_ResolutionFallback ResolutionFallback
-#endif
-TEST_F(DisplayManagerTest, MAYBE_ResolutionFallback) {
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, ResolutionFallback) {
   int display_id = 1000;
   DisplayInfo native_display_info =
       CreateDisplayInfo(display_id, gfx::Rect(0, 0, 1000, 500));
@@ -1029,35 +1020,28 @@ TEST_F(DisplayManagerTest, MAYBE_ResolutionFallback) {
     EXPECT_TRUE(mode.native);
   }
 }
+#endif  // defined(OS_CHROMEOS)
 
-TEST_F(DisplayManagerTest, Rotate) {
+TEST_P(DisplayManagerTest, Rotate) {
   if (!SupportsMultipleDisplays())
     return;
 
   UpdateDisplay("100x200/r,300x400/l");
-  EXPECT_EQ("1,1 100x200",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
-  EXPECT_EQ("200x100",
-            GetDisplayInfoAt(0).size_in_pixel().ToString());
+  EXPECT_EQ("1,1 100x200", GetDisplayInfoAt(0).bounds_in_native().ToString());
+  EXPECT_EQ("200x100", GetDisplayInfoAt(0).size_in_pixel().ToString());
 
-  EXPECT_EQ("1,201 300x400",
-            GetDisplayInfoAt(1).bounds_in_native().ToString());
-  EXPECT_EQ("400x300",
-            GetDisplayInfoAt(1).size_in_pixel().ToString());
+  EXPECT_EQ("1,201 300x400", GetDisplayInfoAt(1).bounds_in_native().ToString());
+  EXPECT_EQ("400x300", GetDisplayInfoAt(1).size_in_pixel().ToString());
   reset();
   UpdateDisplay("100x200/b,300x400");
   EXPECT_EQ("2 0 0", GetCountSummary());
   reset();
 
-  EXPECT_EQ("1,1 100x200",
-            GetDisplayInfoAt(0).bounds_in_native().ToString());
-  EXPECT_EQ("100x200",
-            GetDisplayInfoAt(0).size_in_pixel().ToString());
+  EXPECT_EQ("1,1 100x200", GetDisplayInfoAt(0).bounds_in_native().ToString());
+  EXPECT_EQ("100x200", GetDisplayInfoAt(0).size_in_pixel().ToString());
 
-  EXPECT_EQ("1,201 300x400",
-            GetDisplayInfoAt(1).bounds_in_native().ToString());
-  EXPECT_EQ("300x400",
-            GetDisplayInfoAt(1).size_in_pixel().ToString());
+  EXPECT_EQ("1,201 300x400", GetDisplayInfoAt(1).bounds_in_native().ToString());
+  EXPECT_EQ("300x400", GetDisplayInfoAt(1).size_in_pixel().ToString());
 
   // Just Rotating display will change the bounds on both display.
   UpdateDisplay("100x200/l,300x400");
@@ -1122,13 +1106,9 @@ TEST_F(DisplayManagerTest, Rotate) {
             post_rotation_info.GetActiveRotation());
 }
 
-#if defined(OS_WIN)
 // TODO(msw): Broken on Windows. http://crbug.com/584038
-#define MAYBE_UIScale DISABLED_UIScale
-#else
-#define MAYBE_UIScale UIScale
-#endif
-TEST_F(DisplayManagerTest, MAYBE_UIScale) {
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, UIScale) {
   test::ScopedDisable125DSFForUIScaling disable;
 
   UpdateDisplay("1280x800");
@@ -1221,14 +1201,14 @@ TEST_F(DisplayManagerTest, MAYBE_UIScale) {
   EXPECT_EQ(1.0f, display.device_scale_factor());
   EXPECT_EQ("1280x850", display.bounds().size().ToString());
 }
+#endif  // defined(OS_CHROMEOS)
 
-TEST_F(DisplayManagerTest, UIScaleWithDisplayMode) {
+TEST_P(DisplayManagerTest, UIScaleWithDisplayMode) {
   int display_id = 1000;
 
   // Setup the display modes with UI-scale.
   DisplayInfo native_display_info =
       CreateDisplayInfo(display_id, gfx::Rect(0, 0, 1280, 800));
-  std::vector<DisplayMode> display_modes;
   const DisplayMode base_mode(gfx::Size(1280, 800), 60.0f, false, false);
   std::vector<DisplayMode> mode_list = CreateInternalDisplayModeList(base_mode);
   native_display_info.SetDisplayModes(mode_list);
@@ -1281,16 +1261,12 @@ TEST_F(DisplayManagerTest, UIScaleWithDisplayMode) {
       display_manager()->GetActiveModeForDisplayId(display_id)));
 }
 
-#if defined(OS_WIN) && !defined(USE_ASH)
 // TODO(msw): Broken on Windows. http://crbug.com/584038
-#define MAYBE_Use125DSFForUIScaling DISABLED_Use125DSFForUIScaling
-#else
-#define MAYBE_Use125DSFForUIScaling Use125DSFForUIScaling
-#endif
-TEST_F(DisplayManagerTest, MAYBE_Use125DSFForUIScaling) {
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, Use125DSFForUIScaling) {
   int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-  test::ScopedSetInternalDisplayId set_internal(display_id);
 
+  test::ScopedSetInternalDisplayId set_internal(display_id);
   UpdateDisplay("1920x1080*1.25");
   EXPECT_EQ(1.0f, GetDisplayInfoAt(0).GetEffectiveDeviceScaleFactor());
   EXPECT_EQ(1.0f, GetDisplayInfoAt(0).GetEffectiveUIScale());
@@ -1310,20 +1286,80 @@ TEST_F(DisplayManagerTest, MAYBE_Use125DSFForUIScaling) {
   EXPECT_EQ(1.25f, GetDisplayInfoAt(0).GetEffectiveUIScale());
   EXPECT_EQ("2400x1350", GetDisplayForId(display_id).size().ToString());
 }
+#endif  // defined(OS_CHROMEOS)
 
-TEST_F(DisplayManagerTest, ResolutionChangeInUnifiedMode) {
+// TODO(msw): Broken on Windows. http://crbug.com/584038
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, FHD125DefaultsTo08UIScaling) {
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+
+  display_id++;
+  test::ScopedSetInternalDisplayId set_internal(display_id);
+
+  // Setup the display modes with UI-scale.
+  DisplayInfo native_display_info =
+      CreateDisplayInfo(display_id, gfx::Rect(0, 0, 1920, 1080));
+  native_display_info.set_device_scale_factor(1.25);
+
+  const DisplayMode base_mode(gfx::Size(1920, 1080), 60.0f, false, false);
+  std::vector<DisplayMode> mode_list = CreateInternalDisplayModeList(base_mode);
+  native_display_info.SetDisplayModes(mode_list);
+
+  std::vector<DisplayInfo> display_info_list;
+  display_info_list.push_back(native_display_info);
+
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+
+  EXPECT_EQ(1.25f, GetDisplayInfoAt(0).GetEffectiveDeviceScaleFactor());
+  EXPECT_EQ(1.0f, GetDisplayInfoAt(0).GetEffectiveUIScale());
+}
+#endif  // defined(OS_CHROMEOS)
+
+// TODO(msw): Broken on Windows. http://crbug.com/584038
+#if defined(OS_CHROMEOS)
+// Don't default to 1.25 DSF if the user already has a prefrence stored for
+// the internal display.
+TEST_P(DisplayManagerTest, FHD125DefaultsTo08UIScalingNoOverride) {
+  int64_t display_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
+
+  display_id++;
+  test::ScopedSetInternalDisplayId set_internal(display_id);
+  const gfx::Insets dummy_overscan_insets;
+  display_manager()->RegisterDisplayProperty(
+      display_id, display::Display::ROTATE_0, 1.0f, &dummy_overscan_insets,
+      gfx::Size(), 1.0f, ui::ColorCalibrationProfile());
+
+  // Setup the display modes with UI-scale.
+  DisplayInfo native_display_info =
+      CreateDisplayInfo(display_id, gfx::Rect(0, 0, 1920, 1080));
+  native_display_info.set_device_scale_factor(1.25);
+
+  const DisplayMode base_mode(gfx::Size(1920, 1080), 60.0f, false, false);
+  std::vector<DisplayMode> mode_list = CreateInternalDisplayModeList(base_mode);
+  native_display_info.SetDisplayModes(mode_list);
+
+  std::vector<DisplayInfo> display_info_list;
+  display_info_list.push_back(native_display_info);
+
+  display_manager()->OnNativeDisplaysChanged(display_info_list);
+
+  EXPECT_EQ(1.0f, GetDisplayInfoAt(0).GetEffectiveDeviceScaleFactor());
+  EXPECT_EQ(1.0f, GetDisplayInfoAt(0).GetEffectiveUIScale());
+}
+#endif  // defined(OS_CHROMEOS)
+
+TEST_P(DisplayManagerTest, ResolutionChangeInUnifiedMode) {
   if (!SupportsMultipleDisplays())
     return;
   // Don't check root window destruction in unified mode.
   Shell::GetPrimaryRootWindow()->RemoveObserver(this);
 
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  display_manager->SetUnifiedDesktopEnabled(true);
+  display_manager()->SetUnifiedDesktopEnabled(true);
 
   UpdateDisplay("200x200, 400x400");
 
   int64_t unified_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
-  DisplayInfo info = display_manager->GetDisplayInfo(unified_id);
+  DisplayInfo info = display_manager()->GetDisplayInfo(unified_id);
   ASSERT_EQ(2u, info.display_modes().size());
   EXPECT_EQ("400x200", info.display_modes()[0].size.ToString());
   EXPECT_TRUE(info.display_modes()[0].native);
@@ -1333,7 +1369,7 @@ TEST_F(DisplayManagerTest, ResolutionChangeInUnifiedMode) {
       "400x200",
       display::Screen::GetScreen()->GetPrimaryDisplay().size().ToString());
   DisplayMode active_mode =
-      display_manager->GetActiveModeForDisplayId(unified_id);
+      display_manager()->GetActiveModeForDisplayId(unified_id);
   EXPECT_EQ(1.0f, active_mode.ui_scale);
   EXPECT_EQ("400x200", active_mode.size.ToString());
 
@@ -1342,7 +1378,7 @@ TEST_F(DisplayManagerTest, ResolutionChangeInUnifiedMode) {
       "800x400",
       display::Screen::GetScreen()->GetPrimaryDisplay().size().ToString());
 
-  active_mode = display_manager->GetActiveModeForDisplayId(unified_id);
+  active_mode = display_manager()->GetActiveModeForDisplayId(unified_id);
   EXPECT_EQ(1.0f, active_mode.ui_scale);
   EXPECT_EQ("800x400", active_mode.size.ToString());
 
@@ -1351,21 +1387,16 @@ TEST_F(DisplayManagerTest, ResolutionChangeInUnifiedMode) {
   EXPECT_EQ(
       "1200x600",
       display::Screen::GetScreen()->GetPrimaryDisplay().size().ToString());
-  active_mode = display_manager->GetActiveModeForDisplayId(unified_id);
+  active_mode = display_manager()->GetActiveModeForDisplayId(unified_id);
   EXPECT_EQ(1.0f, active_mode.ui_scale);
   EXPECT_TRUE(active_mode.native);
   EXPECT_EQ("1200x600", active_mode.size.ToString());
 }
 
-#if defined(OS_WIN)
 // TODO(scottmg): RootWindow doesn't get resized on Windows
 // Ash. http://crbug.com/247916.
-#define MAYBE_UpdateMouseCursorAfterRotateZoom \
-  DISABLED_UpdateMouseCursorAfterRotateZoom
-#else
-#define MAYBE_UpdateMouseCursorAfterRotateZoom UpdateMouseCursorAfterRotateZoom
-#endif
-TEST_F(DisplayManagerTest, MAYBE_UpdateMouseCursorAfterRotateZoom) {
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, UpdateMouseCursorAfterRotateZoom) {
   // Make sure just rotating will not change native location.
   UpdateDisplay("300x200,200x150");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
@@ -1412,6 +1443,7 @@ TEST_F(DisplayManagerTest, MAYBE_UpdateMouseCursorAfterRotateZoom) {
   UpdateDisplay("600x400,400x200*2@1.5");
   EXPECT_EQ("750,75", env->last_mouse_location().ToString());
 }
+#endif  // defined(OS_CHROMEOS)
 
 class TestDisplayObserver : public display::DisplayObserver {
  public:
@@ -1446,7 +1478,7 @@ class TestDisplayObserver : public display::DisplayObserver {
   DISALLOW_COPY_AND_ASSIGN(TestDisplayObserver);
 };
 
-TEST_F(DisplayManagerTest, SoftwareMirroring) {
+TEST_P(DisplayManagerTest, SoftwareMirroring) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1512,7 +1544,7 @@ TEST_F(DisplayManagerTest, SoftwareMirroring) {
   display::Screen::GetScreen()->RemoveObserver(&display_observer);
 }
 
-TEST_F(DisplayManagerTest, RotateInSoftwareMirroring) {
+TEST_P(DisplayManagerTest, RotateInSoftwareMirroring) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1527,7 +1559,7 @@ TEST_F(DisplayManagerTest, RotateInSoftwareMirroring) {
   display_manager->SetMirrorMode(false);
 }
 
-TEST_F(DisplayManagerTest, SingleDisplayToSoftwareMirroring) {
+TEST_P(DisplayManagerTest, SingleDisplayToSoftwareMirroring) {
   if (!SupportsMultipleDisplays())
     return;
   UpdateDisplay("600x400");
@@ -1554,7 +1586,7 @@ TEST_F(DisplayManagerTest, SingleDisplayToSoftwareMirroring) {
 // Make sure this does not cause any crashes. See http://crbug.com/412910
 // This test is limited to OS_CHROMEOS because CursorCompositingEnabled is only
 // for ChromeOS.
-TEST_F(DisplayManagerTest, SoftwareMirroringWithCompositingCursor) {
+TEST_P(DisplayManagerTest, SoftwareMirroringWithCompositingCursor) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1564,8 +1596,8 @@ TEST_F(DisplayManagerTest, SoftwareMirroringWithCompositingCursor) {
   EXPECT_EQ(nullptr, test_api.GetHost());
 
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-  DisplayInfo secondary_info = display_manager->GetDisplayInfo(
-      ScreenUtil::GetSecondaryDisplay().id());
+  DisplayInfo secondary_info =
+      display_manager->GetDisplayInfo(ScreenUtil::GetSecondaryDisplay().id());
 
   display_manager->SetSoftwareMirroring(true);
   display_manager->UpdateDisplays();
@@ -1590,7 +1622,7 @@ TEST_F(DisplayManagerTest, SoftwareMirroringWithCompositingCursor) {
 }
 #endif  // OS_CHROMEOS
 
-TEST_F(DisplayManagerTest, MirroredLayout) {
+TEST_P(DisplayManagerTest, MirroredLayout) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1611,7 +1643,7 @@ TEST_F(DisplayManagerTest, MirroredLayout) {
   EXPECT_EQ(2U, display_manager->num_connected_displays());
 }
 
-TEST_F(DisplayManagerTest, InvertLayout) {
+TEST_P(DisplayManagerTest, InvertLayout) {
   EXPECT_EQ("left, 0",
             display::DisplayPlacement(display::DisplayPlacement::RIGHT, 0)
                 .Swap()
@@ -1665,7 +1697,7 @@ TEST_F(DisplayManagerTest, InvertLayout) {
                 .ToString());
 }
 
-TEST_F(DisplayManagerTest, NotifyPrimaryChange) {
+TEST_P(DisplayManagerTest, NotifyPrimaryChange) {
   if (!SupportsMultipleDisplays())
     return;
   UpdateDisplay("500x500,500x500");
@@ -1690,7 +1722,7 @@ TEST_F(DisplayManagerTest, NotifyPrimaryChange) {
               display::DisplayObserver::DISPLAY_METRIC_PRIMARY);
 }
 
-TEST_F(DisplayManagerTest, NotifyPrimaryChangeUndock) {
+TEST_P(DisplayManagerTest, NotifyPrimaryChangeUndock) {
   if (!SupportsMultipleDisplays())
     return;
   // Assume the default display is an external display, and
@@ -1709,15 +1741,10 @@ TEST_F(DisplayManagerTest, NotifyPrimaryChangeUndock) {
               display::DisplayObserver::DISPLAY_METRIC_PRIMARY);
 }
 
-#if defined(OS_WIN)
 // TODO(scottmg): RootWindow doesn't get resized on Windows
 // Ash. http://crbug.com/247916.
-#define MAYBE_UpdateDisplayWithHostOrigin DISABLED_UpdateDisplayWithHostOrigin
-#else
-#define MAYBE_UpdateDisplayWithHostOrigin UpdateDisplayWithHostOrigin
-#endif
-
-TEST_F(DisplayManagerTest, MAYBE_UpdateDisplayWithHostOrigin) {
+#if defined(OS_CHROMEOS)
+TEST_P(DisplayManagerTest, UpdateDisplayWithHostOrigin) {
   UpdateDisplay("100x200,300x400");
   ASSERT_EQ(2, display::Screen::GetScreen()->GetNumDisplays());
   aura::Window::Windows root_windows =
@@ -1753,8 +1780,9 @@ TEST_F(DisplayManagerTest, MAYBE_UpdateDisplayWithHostOrigin) {
   EXPECT_EQ("300,500", host1->GetBounds().origin().ToString());
   EXPECT_EQ("200x300", host1->GetBounds().size().ToString());
 }
+#endif  // defined(OS_CHROMEOS)
 
-TEST_F(DisplayManagerTest, UnifiedDesktopBasic) {
+TEST_P(DisplayManagerTest, UnifiedDesktopBasic) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1813,7 +1841,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopBasic) {
                 .size());
 }
 
-TEST_F(DisplayManagerTest, UnifiedDesktopWithHardwareMirroring) {
+TEST_P(DisplayManagerTest, UnifiedDesktopWithHardwareMirroring) {
   if (!SupportsMultipleDisplays())
     return;
   // Don't check root window destruction in unified mode.
@@ -1853,7 +1881,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopWithHardwareMirroring) {
   EXPECT_TRUE(display_manager()->IsInUnifiedMode());
 }
 
-TEST_F(DisplayManagerTest, UnifiedDesktopEnabledWithExtended) {
+TEST_P(DisplayManagerTest, UnifiedDesktopEnabledWithExtended) {
   if (!SupportsMultipleDisplays())
     return;
   // Don't check root window destruction in unified mode.
@@ -1870,7 +1898,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopEnabledWithExtended) {
   EXPECT_FALSE(display_manager()->IsInUnifiedMode());
 }
 
-TEST_F(DisplayManagerTest, UnifiedDesktopWith2xDSF) {
+TEST_P(DisplayManagerTest, UnifiedDesktopWith2xDSF) {
   if (!SupportsMultipleDisplays())
     return;
   // Don't check root window destruction in unified mode.
@@ -1974,7 +2002,7 @@ TEST_F(DisplayManagerTest, UnifiedDesktopWith2xDSF) {
 
 // Updating displays again in unified desktop mode should not crash.
 // crbug.com/491094.
-TEST_F(DisplayManagerTest, ConfigureUnifiedTwice) {
+TEST_P(DisplayManagerTest, ConfigureUnifiedTwice) {
   if (!SupportsMultipleDisplays())
     return;
   // Don't check root window destruction in unified mode.
@@ -1988,7 +2016,7 @@ TEST_F(DisplayManagerTest, ConfigureUnifiedTwice) {
   RunAllPendingInMessageLoop();
 }
 
-TEST_F(DisplayManagerTest, NoRotateUnifiedDesktop) {
+TEST_P(DisplayManagerTest, NoRotateUnifiedDesktop) {
   if (!SupportsMultipleDisplays())
     return;
   display_manager()->SetUnifiedDesktopEnabled(true);
@@ -2016,9 +2044,10 @@ TEST_F(DisplayManagerTest, NoRotateUnifiedDesktop) {
 
 // Makes sure the transition from unified to single won't crash
 // with docked windows.
-TEST_F(DisplayManagerTest, UnifiedWithDockWindows) {
+TEST_P(DisplayManagerTest, UnifiedWithDockWindows) {
   if (!SupportsMultipleDisplays())
     return;
+  const int height_offset = GetMdMaximizedWindowHeightOffset();
   display_manager()->SetUnifiedDesktopEnabled(true);
 
   // Don't check root window destruction in unified mode.
@@ -2030,15 +2059,18 @@ TEST_F(DisplayManagerTest, UnifiedWithDockWindows) {
       CreateTestWindowInShellWithBounds(gfx::Rect(10, 10, 50, 50)));
   docked->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_DOCKED);
   ASSERT_TRUE(wm::GetWindowState(docked.get())->IsDocked());
-  // 47 pixels reserved for launcher shelf height.
-  EXPECT_EQ("0,0 250x453", docked->bounds().ToString());
+  // 47 pixels reserved for launcher shelf height in non-material design, and
+  // 48 pixels reserved in material design.
+  EXPECT_EQ(gfx::Rect(0, 0, 250, 453 + height_offset).ToString(),
+            docked->bounds().ToString());
   UpdateDisplay("300x300");
   // Make sure the window is still docked.
   EXPECT_TRUE(wm::GetWindowState(docked.get())->IsDocked());
-  EXPECT_EQ("0,0 250x253", docked->bounds().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 250, 253 + height_offset).ToString(),
+            docked->bounds().ToString());
 }
 
-TEST_F(DisplayManagerTest, DockMode) {
+TEST_P(DisplayManagerTest, DockMode) {
   if (!SupportsMultipleDisplays())
     return;
   const int64_t internal_id = 1;
@@ -2080,7 +2112,7 @@ TEST_F(DisplayManagerTest, DockMode) {
 }
 
 // Make sure that bad layout information is ignored and does not crash.
-TEST_F(DisplayManagerTest, DontRegisterBadConfig) {
+TEST_P(DisplayManagerTest, DontRegisterBadConfig) {
   if (!SupportsMultipleDisplays())
     return;
   display::DisplayIdList list = ash::test::CreateDisplayIdList2(1, 2);
@@ -2094,8 +2126,7 @@ TEST_F(DisplayManagerTest, DontRegisterBadConfig) {
 
 class ScreenShutdownTest : public test::AshTestBase {
  public:
-  ScreenShutdownTest() {
-  }
+  ScreenShutdownTest() {}
   ~ScreenShutdownTest() override {}
 
   void TearDown() override {
@@ -2130,10 +2161,7 @@ namespace {
 // initialization process.
 class FontTestHelper : public test::AshTestBase {
  public:
-  enum DisplayType {
-    INTERNAL,
-    EXTERNAL
-  };
+  enum DisplayType { INTERNAL, EXTERNAL };
 
   FontTestHelper(float scale, DisplayType display_type) {
     gfx::ClearFontRenderParamsCacheForTest();
@@ -2153,7 +2181,6 @@ class FontTestHelper : public test::AshTestBase {
  private:
   DISALLOW_COPY_AND_ASSIGN(FontTestHelper);
 };
-
 
 bool IsTextSubpixelPositioningEnabled() {
   gfx::FontRenderParams params =
@@ -2254,7 +2281,7 @@ TEST_F(DisplayManagerFontTest,
   EXPECT_EQ(gfx::FontRenderParams::HINTING_NONE, GetFontHintingParams());
 }
 
-TEST_F(DisplayManagerTest, CheckInitializationOfRotationProperty) {
+TEST_P(DisplayManagerTest, CheckInitializationOfRotationProperty) {
   int64_t id = display_manager()->GetDisplayAt(0).id();
   display_manager()->RegisterDisplayProperty(id, display::Display::ROTATE_90,
                                              1.0f, nullptr, gfx::Size(), 1.0f,
@@ -2268,7 +2295,7 @@ TEST_F(DisplayManagerTest, CheckInitializationOfRotationProperty) {
             info.GetRotation(display::Display::ROTATION_SOURCE_ACTIVE));
 }
 
-TEST_F(DisplayManagerTest, RejectInvalidLayoutData) {
+TEST_P(DisplayManagerTest, RejectInvalidLayoutData) {
   DisplayLayoutStore* layout_store = display_manager()->layout_store();
   int64_t id1 = 10001;
   int64_t id2 = 10002;
@@ -2292,7 +2319,7 @@ TEST_F(DisplayManagerTest, RejectInvalidLayoutData) {
             layout_store->GetRegisteredDisplayLayout(good_list).ToString());
 }
 
-TEST_F(DisplayManagerTest, GuessDisplayIdFieldsInDisplayLayout) {
+TEST_P(DisplayManagerTest, GuessDisplayIdFieldsInDisplayLayout) {
   int64_t id1 = 10001;
   int64_t id2 = 10002;
 

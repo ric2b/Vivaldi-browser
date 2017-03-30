@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/logging.h"
@@ -121,17 +123,17 @@ void StartupPagesHandler::OnModelChanged() {
   int page_count = startup_custom_pages_table_model_->RowCount();
   std::vector<GURL> urls = startup_custom_pages_table_model_->GetURLs();
   for (int i = 0; i < page_count; ++i) {
-    base::DictionaryValue* entry = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
     entry->SetString("title", startup_custom_pages_table_model_->GetText(i, 0));
     entry->SetString("url", urls[i].spec());
     entry->SetString("tooltip",
                      startup_custom_pages_table_model_->GetTooltip(i));
     entry->SetInteger("modelIndex", i);
-    startup_pages.Append(entry);
+    startup_pages.Append(std::move(entry));
   }
 
-  web_ui()->CallJavascriptFunction("StartupOverlay.updateStartupPages",
-                                   startup_pages);
+  web_ui()->CallJavascriptFunctionUnsafe("StartupOverlay.updateStartupPages",
+                                         startup_pages);
 }
 
 void StartupPagesHandler::OnItemsChanged(int start, int length) {
@@ -262,7 +264,7 @@ void StartupPagesHandler::OnResultChanged(bool default_match_changed) {
   const AutocompleteResult& result = autocomplete_controller_->result();
   base::ListValue suggestions;
   OptionsUI::ProcessAutocompleteSuggestions(result, &suggestions);
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "StartupOverlay.updateAutocompleteSuggestions", suggestions);
 }
 

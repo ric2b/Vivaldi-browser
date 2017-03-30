@@ -13,6 +13,8 @@
 #include "base/debug/stack_trace.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -132,7 +134,7 @@ class VideoRendererImplTest : public testing::Test {
         base::TimeDelta::FromMilliseconds(milliseconds);
     time_source_.SetMediaTime(media_time);
     renderer_->StartPlayingFrom(media_time);
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void Flush() {
@@ -145,7 +147,7 @@ class VideoRendererImplTest : public testing::Test {
   void Destroy() {
     SCOPED_TRACE("Destroy()");
     renderer_.reset();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   // Parses a string representation of video frames and generates corresponding
@@ -238,8 +240,9 @@ class VideoRendererImplTest : public testing::Test {
     // Post tasks for OutputCB and DecodeCB.
     scoped_refptr<VideoFrame> frame = decode_results_.front().second;
     if (frame.get())
-      message_loop_.PostTask(FROM_HERE, base::Bind(output_cb_, frame));
-    message_loop_.PostTask(
+      message_loop_.task_runner()->PostTask(FROM_HERE,
+                                            base::Bind(output_cb_, frame));
+    message_loop_.task_runner()->PostTask(
         FROM_HERE, base::Bind(base::ResetAndReturn(&decode_cb_),
                               decode_results_.front().first));
     decode_results_.pop_front();
@@ -254,13 +257,13 @@ class VideoRendererImplTest : public testing::Test {
                                  DecoderBuffer::CreateEOSBuffer()));
 
     // Satify pending |decode_cb_| to trigger a new DemuxerStream::Read().
-    message_loop_.PostTask(
+    message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
 
     WaitForPendingDecode();
 
-    message_loop_.PostTask(
+    message_loop_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(base::ResetAndReturn(&decode_cb_), DecodeStatus::OK));
   }
@@ -467,7 +470,7 @@ class VideoRendererImplTest : public testing::Test {
       SatisfyPendingDecode();
     }
 
-    message_loop_.PostTask(FROM_HERE, callback);
+    message_loop_.task_runner()->PostTask(FROM_HERE, callback);
   }
 
   // Used to protect |time_|.
@@ -570,6 +573,31 @@ TEST_F(VideoRendererImplTest, FlushWithNothingBuffered) {
   // We shouldn't expect a buffering state change since we never reached
   // BUFFERING_HAVE_ENOUGH.
   Flush();
+  Destroy();
+}
+
+// Verify that the flush callback is invoked outside of VideoRenderer lock, so
+// we should be able to call other renderer methods from the Flush callback.
+static void VideoRendererImplTest_FlushDoneCB(VideoRendererImplTest* test,
+                                              VideoRenderer* renderer,
+                                              const base::Closure& success_cb) {
+  test->QueueFrames("0 10 20 30");
+  renderer->StartPlayingFrom(base::TimeDelta::FromSeconds(0));
+  success_cb.Run();
+}
+
+TEST_F(VideoRendererImplTest, FlushCallbackNoLock) {
+  Initialize();
+  EXPECT_CALL(mock_cb_, FrameReceived(HasTimestamp(0)));
+  EXPECT_CALL(mock_cb_, OnStatisticsUpdate(_)).Times(AnyNumber());
+  EXPECT_CALL(mock_cb_, OnVideoNaturalSizeChange(_)).Times(1);
+  EXPECT_CALL(mock_cb_, OnVideoOpacityChange(_)).Times(1);
+  StartPlayingFrom(0);
+  WaitableMessageLoopEvent event;
+  renderer_->Flush(
+      base::Bind(&VideoRendererImplTest_FlushDoneCB, base::Unretained(this),
+                 base::Unretained(renderer_.get()), event.GetClosure()));
+  event.RunAndWait();
   Destroy();
 }
 
@@ -1099,12 +1127,12 @@ TEST_F(VideoRendererImplAsyncAddFrameReadyTest, InitializeAndStartPlayingFrom) {
   uint32_t frame_ready_index = 0;
   while (frame_ready_index < frame_ready_cbs_.size()) {
     frame_ready_cbs_[frame_ready_index++].Run();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
   Destroy();
 }
 
-TEST_F(VideoRendererImplAsyncAddFrameReadyTest, SequenceTokenDiscardOneFrame) {
+TEST_F(VideoRendererImplAsyncAddFrameReadyTest, WeakFactoryDiscardsOneFrame) {
   Initialize();
   QueueFrames("0 10 20 30");
   StartPlayingFrom(0);

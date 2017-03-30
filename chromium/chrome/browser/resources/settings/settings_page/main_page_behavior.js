@@ -7,6 +7,23 @@ var EASING_FUNCTION = 'cubic-bezier(0.4, 0, 0.2, 1)';
 var EXPAND_DURATION = 350;
 
 /**
+ * Calls |readyTest| repeatedly until it returns true, then calls
+ * |readyCallback|.
+ * @param {function():boolean} readyTest
+ * @param {!Function} readyCallback
+ */
+function doWhenReady(readyTest, readyCallback) {
+  // TODO(dschuyler): Determine whether this hack can be removed.
+  // See also: https://github.com/Polymer/polymer/issues/3629
+  var intervalId = setInterval(function() {
+    if (readyTest()) {
+      clearInterval(intervalId);
+      readyCallback();
+    }
+  }, 10);
+}
+
+/**
  * Provides animations to expand and collapse individual sections in a page.
  * Expanded sections take up the full height of the container. At most one
  * section should be expanded at any given time.
@@ -19,8 +36,13 @@ var MainPageBehaviorImpl = {
    */
   sectionSelector: '',
 
-  /** @type {?Element} The scrolling container. Elements must set this. */
+  /** @type {?Element} The scrolling container. */
   scroller: null,
+
+  /** @override */
+  attached: function() {
+    this.scroller = this.domHost && this.domHost.parentNode.$.mainContainer;
+  },
 
   /**
    * Hides or unhides the sections not being expanded.
@@ -212,7 +234,7 @@ var MainPageBehaviorImpl = {
     var card = section.$.card;
 
     // The card should start at the top of the page.
-    var targetTop = this.parentElement.getBoundingClientRect().top;
+    var targetTop = this.scroller.getBoundingClientRect().top;
 
     section.classList.add('expanding');
 
@@ -251,6 +273,7 @@ var MainPageBehaviorImpl = {
       // Whether finished or canceled, clean up the animation.
       section.classList.remove('expanding');
       card.style.height = '';
+      card.style.width = '';
     });
 
     return promise;
@@ -268,9 +291,10 @@ var MainPageBehaviorImpl = {
     this.style.margin = '';
     section.$.header.hidden = false;
 
-    var startingTop = this.parentElement.getBoundingClientRect().top;
+    var startingTop = this.scroller.getBoundingClientRect().top;
 
     var cardHeightStart = card.clientHeight;
+    var cardWidthStart = card.clientWidth;
 
     section.classList.add('collapsing');
     section.classList.remove('expanding', 'expanded');
@@ -309,7 +333,13 @@ var MainPageBehaviorImpl = {
     var options = /** @type {!KeyframeEffectOptions} */({
       duration: EXPAND_DURATION
     });
-    return this.animateElement('section', card, keyframes, options);
+
+    card.style.width = cardWidthStart + 'px';
+    var promise = this.animateElement('section', card, keyframes, options);
+    promise.then(function() {
+      card.style.width = '';
+    });
+    return promise;
   },
 };
 
@@ -337,22 +367,15 @@ var RoutableBehaviorImpl = {
 
   /** @private */
   scrollToSection_: function() {
-    // TODO(dschuyler): Determine whether this setTimeout can be removed.
-    // See also: https://github.com/Polymer/polymer/issues/3629
-    setTimeout(function pollForScrollHeight() {
-      // If the current section changes while we are waiting for the page to be
-      // ready, scroll to the newest requested section.
-      var element = this.getSection_(this.currentRoute.section);
-      if (!element)
-        return;
-
-      if (element.parentNode.host.scrollHeight == 0) {
-        setTimeout(pollForScrollHeight.bind(this), 100);
-        return;
-      }
-
-      element.scrollIntoView();
-    }.bind(this));
+    doWhenReady(
+        function() {
+          return this.scrollHeight > 0;
+        }.bind(this),
+        function() {
+          // If the current section changes while we are waiting for the page to
+          // be ready, scroll to the newest requested section.
+          this.getSection_(this.currentRoute.section).scrollIntoView();
+        }.bind(this));
   },
 
   /** @private */
@@ -380,7 +403,8 @@ var RoutableBehaviorImpl = {
       var section = this.getSection_(newRoute.section);
       if (section)
         this.expandSection(section);
-    } else if (newRoute && newRoute.section) {
+    } else if (newRoute && newRoute.section &&
+        this.$$('[data-page=' + newRoute.page + ']')) {
       this.scrollToSection_();
     }
   },

@@ -5,8 +5,9 @@
 #ifndef CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_TAB_LIST_SCENE_LAYER_H_
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_SCENE_LAYER_TAB_LIST_SCENE_LAYER_H_
 
+#include <map>
 #include <memory>
-#include <vector>
+#include <set>
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_weak_ref.h"
@@ -92,6 +93,7 @@ class TabListSceneLayer : public SceneLayer {
       jfloat saturation,
       jfloat brightness,
       jboolean show_toolbar,
+      jint default_theme_color,
       jint toolbar_background_color,
       jboolean anonymize_toolbar,
       jint toolbar_textbox_resource_id,
@@ -110,20 +112,15 @@ class TabListSceneLayer : public SceneLayer {
   SkColor GetBackgroundColor() override;
 
  private:
-  void RemoveAllRemainingTabLayers();
-  void RemoveTabLayersInRange(unsigned start_index, unsigned end_index);
-
-  typedef std::vector<scoped_refptr<TabLayer>> TabLayerList;
-
-  scoped_refptr<TabLayer> GetNextLayer(bool incognito);
+  typedef std::map<int, scoped_refptr<TabLayer>> TabMap;
+  TabMap tab_map_;
+  std::set<int> visible_tabs_this_frame_;
 
   base::android::ScopedJavaGlobalRef<jobject> java_obj_;
   bool content_obscures_self_;
-  unsigned write_index_;
   ui::ResourceManager* resource_manager_;
   LayerTitleCache* layer_title_cache_;
   TabContentManager* tab_content_manager_;
-  TabLayerList layers_;
   SkColor background_color_;
 
   scoped_refptr<cc::Layer> own_tree_;

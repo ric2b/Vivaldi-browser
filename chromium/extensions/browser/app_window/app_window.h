@@ -396,7 +396,7 @@ class AppWindow : public content::WebContentsDelegate,
       content::WebContents* web_contents,
       SkColor color,
       const std::vector<content::ColorSuggestion>& suggestions) override;
-  void RunFileChooser(content::WebContents* tab,
+  void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       const content::FileChooserParams& params) override;
   bool IsPopupOrPanel(const content::WebContents* source) const override;
   void MoveContents(content::WebContents* source,
@@ -437,6 +437,9 @@ class AppWindow : public content::WebContentsDelegate,
                           bool last_unlocked_by_target) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;
+  std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
+      content::RenderFrameHost* frame,
+      const content::BluetoothChooser::EventHandler& event_handler) override;
 
   // content::WebContentsObserver implementation.
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;

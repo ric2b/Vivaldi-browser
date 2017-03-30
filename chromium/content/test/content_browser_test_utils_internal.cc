@@ -24,8 +24,12 @@
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_throttle.h"
+#include "content/public/browser/web_contents.h"
+#include "content/public/common/file_chooser_file_info.h"
+#include "content/public/common/file_chooser_params.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -73,6 +77,10 @@ void SetShouldProceedOnBeforeUnload(Shell* shell, bool proceed) {
       static_cast<ShellJavaScriptDialogManager*>(
           shell->GetJavaScriptDialogManager(shell->web_contents()));
   manager->set_should_proceed_on_beforeunload(proceed);
+}
+
+RenderFrameHost* ConvertToRenderFrameHost(FrameTreeNode* frame_tree_node) {
+  return frame_tree_node->current_frame_host();
 }
 
 FrameTreeVisualizer::FrameTreeVisualizer() {
@@ -417,6 +425,21 @@ void TestNavigationManager::OnWillStartRequest() {
   navigation_paused_ = true;
   if (loop_runner_)
     loop_runner_->Quit();
+}
+
+FileChooserDelegate::FileChooserDelegate(const base::FilePath& file)
+      : file_(file), file_chosen_(false) {}
+
+void FileChooserDelegate::RunFileChooser(RenderFrameHost* render_frame_host,
+                                         const FileChooserParams& params) {
+  // Send the selected file to the renderer process.
+  FileChooserFileInfo file_info;
+  file_info.file_path = file_;
+  std::vector<FileChooserFileInfo> files;
+  files.push_back(file_info);
+  render_frame_host->FilesSelectedInChooser(files, FileChooserParams::Open);
+
+  file_chosen_ = true;
 }
 
 }  // namespace content

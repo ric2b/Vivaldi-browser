@@ -38,8 +38,8 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebURLRequest.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
+#include <memory>
 
 namespace blink {
 
@@ -50,6 +50,7 @@ enum ResourceRequestBlockedReason {
     ResourceRequestBlockedReasonMixedContent,
     ResourceRequestBlockedReasonOrigin,
     ResourceRequestBlockedReasonInspector,
+    ResourceRequestBlockedReasonSubresourceFilter,
     ResourceRequestBlockedReasonOther,
     ResourceRequestBlockedReasonNone
 };
@@ -65,6 +66,8 @@ struct CrossThreadResourceRequestData;
 class PLATFORM_EXPORT ResourceRequest final {
     DISALLOW_NEW();
 public:
+    enum class RedirectStatus { FollowedRedirect, NoRedirect };
+
     class ExtraData : public RefCounted<ExtraData> {
     public:
         virtual ~ExtraData() { }
@@ -88,7 +91,7 @@ public:
     explicit ResourceRequest(CrossThreadResourceRequestData*);
 
     // Gets a copy of the data suitable for passing to another thread.
-    PassOwnPtr<CrossThreadResourceRequestData> copyData() const;
+    std::unique_ptr<CrossThreadResourceRequestData> copyData() const;
 
     bool isNull() const;
     bool isEmpty() const;
@@ -194,9 +197,9 @@ public:
     bool useStreamOnResponse() const { return m_useStreamOnResponse; }
     void setUseStreamOnResponse(bool useStreamOnResponse) { m_useStreamOnResponse = useStreamOnResponse; }
 
-    // True if the request should not be handled by the ServiceWorker.
-    bool skipServiceWorker() const { return m_skipServiceWorker; }
-    void setSkipServiceWorker(bool skipServiceWorker) { m_skipServiceWorker = skipServiceWorker; }
+    // Indicates which types of ServiceWorkers should skip handling this request.
+    WebURLRequest::SkipServiceWorker skipServiceWorker() const { return m_skipServiceWorker; }
+    void setSkipServiceWorker(WebURLRequest::SkipServiceWorker skipServiceWorker) { m_skipServiceWorker = skipServiceWorker; }
 
     // True if corresponding AppCache group should be resetted.
     bool shouldResetAppCache() { return m_shouldResetAppCache; }
@@ -241,8 +244,8 @@ public:
     InputToLoadPerfMetricReportPolicy inputPerfMetricReportPolicy() const { return m_inputPerfMetricReportPolicy; }
     void setInputPerfMetricReportPolicy(InputToLoadPerfMetricReportPolicy inputPerfMetricReportPolicy) { m_inputPerfMetricReportPolicy = inputPerfMetricReportPolicy; }
 
-    void setFollowedRedirect(bool followed) { m_followedRedirect = followed; }
-    bool followedRedirect() const { return m_followedRedirect; }
+    void setRedirectStatus(RedirectStatus status) { m_redirectStatus = status; }
+    RedirectStatus redirectStatus() const { return m_redirectStatus; }
 
 private:
     void initialize(const KURL&);
@@ -264,8 +267,8 @@ private:
     bool m_hasUserGesture : 1;
     bool m_downloadToFile : 1;
     bool m_useStreamOnResponse : 1;
-    bool m_skipServiceWorker : 1;
     bool m_shouldResetAppCache : 1;
+    WebURLRequest::SkipServiceWorker m_skipServiceWorker;
     ResourceLoadPriority m_priority;
     int m_intraPriorityValue;
     int m_requestorID;
@@ -289,7 +292,7 @@ private:
 
     static double s_defaultTimeoutInterval;
 
-    bool m_followedRedirect;
+    RedirectStatus m_redirectStatus;
 };
 
 struct CrossThreadResourceRequestData {
@@ -304,14 +307,14 @@ public:
     RefPtr<SecurityOrigin> m_requestorOrigin;
 
     String m_httpMethod;
-    OwnPtr<CrossThreadHTTPHeaderMapData> m_httpHeaders;
+    std::unique_ptr<CrossThreadHTTPHeaderMapData> m_httpHeaders;
     RefPtr<EncodedFormData> m_httpBody;
     RefPtr<EncodedFormData> m_attachedCredential;
     bool m_allowStoredCredentials;
     bool m_reportUploadProgress;
     bool m_hasUserGesture;
     bool m_downloadToFile;
-    bool m_skipServiceWorker;
+    WebURLRequest::SkipServiceWorker m_skipServiceWorker;
     bool m_useStreamOnResponse;
     bool m_shouldResetAppCache;
     ResourceLoadPriority m_priority;
@@ -331,7 +334,7 @@ public:
     double m_uiStartTime;
     bool m_isExternalRequest;
     InputToLoadPerfMetricReportPolicy m_inputPerfMetricReportPolicy;
-    bool m_followedRedirect;
+    ResourceRequest::RedirectStatus m_redirectStatus;
 };
 
 } // namespace blink

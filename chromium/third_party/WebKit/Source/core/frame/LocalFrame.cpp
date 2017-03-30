@@ -50,7 +50,6 @@
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/input/EventHandler.h"
-#include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutView.h"
@@ -69,6 +68,7 @@
 #include "core/paint/TransformRecorder.h"
 #include "core/svg/SVGDocumentExtensions.h"
 #include "platform/DragImage.h"
+#include "platform/JSONValues.h"
 #include "platform/PluginScriptForbiddenScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
@@ -85,8 +85,9 @@
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/WebViewScheduler.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 namespace blink {
 
@@ -101,19 +102,15 @@ namespace {
 class DragImageBuilder {
     STACK_ALLOCATED();
 public:
-    DragImageBuilder(const LocalFrame* localFrame, const FloatRect& bounds, Node* draggedNode, float opacity = 1)
-        : m_localFrame(localFrame)
-        , m_draggedNode(draggedNode)
+    DragImageBuilder(const LocalFrame& localFrame, const FloatRect& bounds)
+        : m_localFrame(&localFrame)
         , m_bounds(bounds)
-        , m_opacity(opacity)
     {
-        if (m_draggedNode && m_draggedNode->layoutObject())
-            m_draggedNode->layoutObject()->updateDragState(true);
-
-        float deviceScaleFactor = m_localFrame->host()->deviceScaleFactor();
+        // TODO(oshima): Remove this when all platforms are migrated to use-zoom-for-dsf.
+        float deviceScaleFactor = m_localFrame->host()->deviceScaleFactorDeprecated();
         m_bounds.setWidth(m_bounds.width() * deviceScaleFactor);
         m_bounds.setHeight(m_bounds.height() * deviceScaleFactor);
-        m_pictureBuilder = adoptPtr(new SkPictureBuilder(SkRect::MakeIWH(m_bounds.width(), m_bounds.height())));
+        m_pictureBuilder = wrapUnique(new SkPictureBuilder(SkRect::MakeIWH(m_bounds.width(), m_bounds.height())));
 
         AffineTransform transform;
         transform.scale(deviceScaleFactor, deviceScaleFactor);
@@ -123,30 +120,105 @@ public:
 
     GraphicsContext& context() { return m_pictureBuilder->context(); }
 
-    PassOwnPtr<DragImage> createImage()
+    std::unique_ptr<DragImage> createImage(
+        float opacity,
+        RespectImageOrientationEnum imageOrientation = DoNotRespectImageOrientation)
     {
-        if (m_draggedNode && m_draggedNode->layoutObject())
-            m_draggedNode->layoutObject()->updateDragState(false);
         context().getPaintController().endItem<EndTransformDisplayItem>(*m_pictureBuilder);
-        RefPtr<const SkPicture> recording = m_pictureBuilder->endRecording();
-        RefPtr<SkImage> skImage = adoptRef(SkImage::NewFromPicture(recording.get(),
+        // TODO(fmalita): endRecording() should return a non-const SKP.
+        sk_sp<SkPicture> recording(const_cast<SkPicture*>(m_pictureBuilder->endRecording().leakRef()));
+        RefPtr<SkImage> skImage = fromSkSp(SkImage::MakeFromPicture(std::move(recording),
             SkISize::Make(m_bounds.width(), m_bounds.height()), nullptr, nullptr));
         RefPtr<Image> image = StaticBitmapImage::create(skImage.release());
-        RespectImageOrientationEnum imageOrientation = DoNotRespectImageOrientation;
-        if (m_draggedNode && m_draggedNode->layoutObject())
-            imageOrientation = LayoutObject::shouldRespectImageOrientation(m_draggedNode->layoutObject());
-
         float screenDeviceScaleFactor = m_localFrame->page()->chromeClient().screenInfo().deviceScaleFactor;
 
-        return DragImage::create(image.get(), imageOrientation, screenDeviceScaleFactor, InterpolationHigh, m_opacity);
+        return DragImage::create(image.get(), imageOrientation, screenDeviceScaleFactor, InterpolationHigh, opacity);
     }
 
 private:
-    Member<const LocalFrame> m_localFrame;
-    Member<Node> m_draggedNode;
+    const Member<const LocalFrame> m_localFrame;
     FloatRect m_bounds;
-    float m_opacity;
-    OwnPtr<SkPictureBuilder> m_pictureBuilder;
+    std::unique_ptr<SkPictureBuilder> m_pictureBuilder;
+};
+
+class NodeImageBuilder {
+    STACK_ALLOCATED();
+public:
+    NodeImageBuilder(const LocalFrame& localFrame, const Node& node)
+        : m_localFrame(&localFrame)
+        , m_draggedLayoutObject(draggedLayoutObjectOf(localFrame, node))
+#if DCHECK_IS_ON()
+        , m_layoutCount(m_localFrame->view()->layoutCount())
+#endif
+    {
+    }
+
+    ~NodeImageBuilder()
+    {
+        DCHECK(isValid());
+        if (!m_draggedLayoutObject)
+            return;
+        DCHECK(m_draggedLayoutObject->isDragging());
+        m_draggedLayoutObject->updateDragState(false);
+    }
+
+    std::unique_ptr<DragImage> createImage()
+    {
+        DCHECK(isValid());
+        if (!m_draggedLayoutObject)
+            return nullptr;
+        // Paint starting at the nearest stacking context, clipped to the object
+        // itself. This will also paint the contents behind the object if the
+        // object contains transparency and there are other elements in the same
+        // stacking context which stacked below.
+        PaintLayer* layer = m_draggedLayoutObject->enclosingLayer();
+        if (!layer->stackingNode()->isStackingContext())
+            layer = layer->stackingNode()->ancestorStackingContextNode()->layer();
+        IntRect absoluteBoundingBox = m_draggedLayoutObject->absoluteBoundingBoxRectIncludingDescendants();
+        FloatRect boundingBox = layer->layoutObject()->absoluteToLocalQuad(FloatQuad(absoluteBoundingBox), UseTransforms).boundingBox();
+        DragImageBuilder dragImageBuilder(*m_localFrame, boundingBox);
+        {
+            PaintLayerPaintingInfo paintingInfo(layer, LayoutRect(boundingBox), GlobalPaintFlattenCompositingLayers, LayoutSize());
+            PaintLayerFlags flags = PaintLayerHaveTransparency | PaintLayerAppliedTransform | PaintLayerUncachedClipRects;
+            PaintLayerPainter(*layer).paintLayer(dragImageBuilder.context(), paintingInfo, flags);
+        }
+        return dragImageBuilder.createImage(1.0f, LayoutObject::shouldRespectImageOrientation(m_draggedLayoutObject));
+    }
+
+private:
+    static LayoutObject* draggedLayoutObjectOf(const LocalFrame& localFrame, const Node& node)
+    {
+        // TODO(yosin): We should handle pseudo-class ":-webkit-drag" as similar
+        // as ":hover" and ":active", rather than using flag in |LayoutObject|,
+        // to avoid update layout tree here.
+        localFrame.view()->updateAllLifecyclePhasesExceptPaint();
+        LayoutObject* layoutObject = node.layoutObject();
+        if (!layoutObject)
+            return nullptr;
+        // Update layout object for |node| with pseudo-class ":-webkit-drag".
+        layoutObject->updateDragState(true);
+        localFrame.view()->updateAllLifecyclePhasesExceptPaint();
+        // |node| with pseudo-class ":-webkit-drag" may blow away layout object.
+        return node.layoutObject();
+    }
+
+    bool isValid() const
+    {
+#if DCHECK_IS_ON()
+        return m_layoutCount == m_localFrame->view()->layoutCount();
+#else
+        return true;
+#endif
+    }
+
+    const Member<const LocalFrame> m_localFrame;
+
+    // This class manages |isDrag()| of |m_draggedLayoutObject|.
+    LayoutObject* const m_draggedLayoutObject;
+
+#if DCHECK_IS_ON()
+    const int m_layoutCount;
+#endif
 };
 
 inline float parentPageZoomFactor(LocalFrame* frame)
@@ -271,20 +343,7 @@ WindowProxy* LocalFrame::windowProxy(DOMWrapperWorld& world)
 
 void LocalFrame::navigate(Document& originDocument, const KURL& url, bool replaceCurrentItem, UserGestureStatus userGestureStatus)
 {
-    // TODO(dcheng): Special case for window.open("about:blank") to ensure it loads synchronously into
-    // a new window. This is our historical behavior, and it's consistent with the creation of
-    // a new iframe with src="about:blank". Perhaps we could get rid of this if we started reporting
-    // the initial empty document's url as about:blank? See crbug.com/471239.
-    // TODO(japhet): This special case is also necessary for behavior asserted by some extensions tests.
-    // Using NavigationScheduler::scheduleNavigationChange causes the navigation to be flagged as a
-    // client redirect, which is observable via the webNavigation extension api.
-    if (isMainFrame() && !m_loader.stateMachine()->committedFirstRealDocumentLoad()) {
-        FrameLoadRequest request(&originDocument, url);
-        request.resourceRequest().setHasUserGesture(userGestureStatus == UserGestureStatus::Active);
-        navigate(request);
-    } else {
-        m_navigationScheduler->scheduleLocationChange(&originDocument, url.getString(), replaceCurrentItem);
-    }
+    m_navigationScheduler->scheduleLocationChange(&originDocument, url.getString(), replaceCurrentItem);
 }
 
 void LocalFrame::navigate(const FrameLoadRequest& request)
@@ -318,7 +377,7 @@ void LocalFrame::detach(FrameDetachType type)
     SubframeLoadingDisabler disabler(*document());
     m_loader.dispatchUnloadEvent();
     detachChildren();
-    m_frameScheduler.clear();
+    m_frameScheduler.reset();
 
     // All done if detaching the subframes brought about a detach of this frame also.
     if (!client())
@@ -335,6 +394,8 @@ void LocalFrame::detach(FrameDetachType type)
     // - Document::detach()'s deferred widget updates can run script.
     ScriptForbiddenScope forbidScript;
     m_loader.clear();
+    // Clear FrameScheduler again in case it is recreated in scripting.
+    m_frameScheduler.reset();
     if (!client())
         return;
 
@@ -416,8 +477,6 @@ void LocalFrame::setDOMWindow(LocalDOMWindow* domWindow)
     //    die with the window. And the registered DOMWindowProperty instances that don't,
     //    only keep a weak reference to this frame, so there's no need to be
     //    explicitly notified that this frame is going away.
-    if (m_domWindow && host())
-        host()->consoleMessageStorage().frameWindowDiscarded(m_domWindow.get());
     if (domWindow)
         script().clearWindowProxy();
 
@@ -463,27 +522,6 @@ LocalFrame* LocalFrame::localFrameRoot()
     return curFrame;
 }
 
-String LocalFrame::layerTreeAsText(LayerTreeFlags flags) const
-{
-    TextStream textStream;
-    textStream << localLayerTreeAsText(flags);
-
-    for (Frame* child = tree().firstChild(); child; child = child->tree().traverseNext(this)) {
-        if (!child->isLocalFrame())
-            continue;
-        String childLayerTree = toLocalFrame(child)->localLayerTreeAsText(flags);
-        if (!childLayerTree.length())
-            continue;
-
-        textStream << "\n\n--------\nFrame: '";
-        textStream << child->tree().uniqueName();
-        textStream << "'\n--------\n";
-        textStream << childLayerTree;
-    }
-
-    return textStream.release();
-}
-
 void LocalFrame::setPrinting(bool printing, const FloatSize& pageSize, const FloatSize& originalPageSize, float maximumShrinkRatio)
 {
     // In setting printing, we should not validate resources already cached for the document.
@@ -522,10 +560,10 @@ bool LocalFrame::shouldUsePrintingLayout() const
 FloatSize LocalFrame::resizePageRectsKeepingRatio(const FloatSize& originalSize, const FloatSize& expectedSize)
 {
     FloatSize resultSize;
-    if (!contentLayoutObject())
+    if (contentLayoutItem().isNull())
         return FloatSize();
 
-    if (contentLayoutObject()->style()->isHorizontalWritingMode()) {
+    if (contentLayoutItem().style()->isHorizontalWritingMode()) {
         ASSERT(fabs(originalSize.width()) > std::numeric_limits<float>::epsilon());
         float ratio = originalSize.height() / originalSize.width();
         resultSize.setWidth(floorf(expectedSize.width()));
@@ -588,6 +626,7 @@ void LocalFrame::setPageAndTextZoomFactors(float pageZoomFactor, float textZoomF
             toLocalFrame(child)->setPageAndTextZoomFactors(m_pageZoomFactor, m_textZoomFactor);
     }
 
+    document->mediaQueryAffectingValueChanged();
     document->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Zoom));
     document->updateStyleAndLayoutIgnorePendingStylesheets();
 }
@@ -606,35 +645,18 @@ double LocalFrame::devicePixelRatio() const
     if (!m_host)
         return 0;
 
-    double ratio = m_host->deviceScaleFactor();
+    double ratio = m_host->deviceScaleFactorDeprecated();
     ratio *= pageZoomFactor();
     return ratio;
 }
 
-PassOwnPtr<DragImage> LocalFrame::nodeImage(Node& node)
+std::unique_ptr<DragImage> LocalFrame::nodeImage(Node& node)
 {
-    m_view->updateAllLifecyclePhasesExceptPaint();
-    LayoutObject* layoutObject = node.layoutObject();
-    if (!layoutObject)
-        return nullptr;
-
-    // Paint starting at the nearest self painting layer, clipped to the object itself.
-    // TODO(pdr): This will also paint the content behind the object if the object contains
-    // transparency but the layer is opaque. We could directly call layoutObject->paint(...)
-    // (see ObjectPainter::paintAllPhasesAtomically) but this would skip self-painting children.
-    PaintLayer* layer = layoutObject->enclosingLayer()->enclosingSelfPaintingLayer();
-    IntRect absoluteBoundingBox = layoutObject->absoluteBoundingBoxRectIncludingDescendants();
-    FloatRect boundingBox = layer->layoutObject()->absoluteToLocalQuad(FloatQuad(absoluteBoundingBox), UseTransforms).boundingBox();
-    DragImageBuilder dragImageBuilder(this, boundingBox, &node);
-    {
-        PaintLayerPaintingInfo paintingInfo(layer, LayoutRect(boundingBox), GlobalPaintFlattenCompositingLayers, LayoutSize(), 0);
-        PaintLayerFlags flags = PaintLayerHaveTransparency | PaintLayerAppliedTransform | PaintLayerUncachedClipRects;
-        PaintLayerPainter(*layer).paintLayer(dragImageBuilder.context(), paintingInfo, flags);
-    }
-    return dragImageBuilder.createImage();
+    NodeImageBuilder imageNode(*this, node);
+    return imageNode.createImage();
 }
 
-PassOwnPtr<DragImage> LocalFrame::dragImageForSelection(float opacity)
+std::unique_ptr<DragImage> LocalFrame::dragImageForSelection(float opacity)
 {
     if (!selection().isRange())
         return nullptr;
@@ -643,10 +665,10 @@ PassOwnPtr<DragImage> LocalFrame::dragImageForSelection(float opacity)
     ASSERT(document()->isActive());
 
     FloatRect paintingRect = FloatRect(selection().bounds());
-    DragImageBuilder dragImageBuilder(this, paintingRect, nullptr, opacity);
+    DragImageBuilder dragImageBuilder(*this, paintingRect);
     GlobalPaintFlags paintFlags = GlobalPaintSelectionOnly | GlobalPaintFlattenCompositingLayers;
     m_view->paintContents(dragImageBuilder.context(), paintFlags, enclosingIntRect(paintingRect));
-    return dragImageBuilder.createImage();
+    return dragImageBuilder.createImage(opacity);
 }
 
 String LocalFrame::selectedText() const
@@ -681,7 +703,7 @@ Document* LocalFrame::documentAtPoint(const IntPoint& pointInRootFrame)
 
     IntPoint pt = view()->rootFrameToContents(pointInRootFrame);
 
-    if (!contentLayoutObject())
+    if (contentLayoutItem().isNull())
         return nullptr;
     HitTestResult result = eventHandler().hitTestResultAtPoint(pt, HitTestRequest::ReadOnly | HitTestRequest::Active);
     return result.innerNode() ? &result.innerNode()->document() : nullptr;
@@ -749,12 +771,23 @@ void LocalFrame::removeSpellingMarkersUnderWords(const Vector<String>& words)
     spellChecker().removeSpellingMarkersUnderWords(words);
 }
 
-String LocalFrame::localLayerTreeAsText(unsigned flags) const
+String LocalFrame::layerTreeAsText(unsigned flags) const
 {
-    if (!contentLayoutObject())
+    if (contentLayoutItem().isNull())
         return String();
 
-    return contentLayoutObject()->compositor()->layerTreeAsText(static_cast<LayerTreeFlags>(flags));
+    RefPtr<JSONObject> layerTree = contentLayoutItem().compositor()->layerTreeAsJSON(static_cast<LayerTreeFlags>(flags));
+
+    if (flags & LayerTreeIncludesPaintInvalidations) {
+        RefPtr<JSONArray> objectPaintInvalidations = m_view->trackedObjectPaintInvalidationsAsJSON();
+        if (objectPaintInvalidations) {
+            if (!layerTree)
+                layerTree = JSONObject::create();
+            layerTree->setArray("objectPaintInvalidations", objectPaintInvalidations);
+        }
+    }
+
+    return layerTree ? layerTree->toPrettyJSONString() : String();
 }
 
 bool LocalFrame::shouldThrottleRendering() const
@@ -824,6 +857,19 @@ FrameNavigationDisabler::FrameNavigationDisabler(LocalFrame& frame)
 FrameNavigationDisabler::~FrameNavigationDisabler()
 {
     m_frame->enableNavigation();
+}
+
+ScopedFrameBlamer::ScopedFrameBlamer(LocalFrame* frame)
+    : m_frame(frame)
+{
+    if (m_frame && m_frame->client() && m_frame->client()->frameBlameContext())
+        m_frame->client()->frameBlameContext()->Enter();
+}
+
+ScopedFrameBlamer::~ScopedFrameBlamer()
+{
+    if (m_frame && m_frame->client() && m_frame->client()->frameBlameContext())
+        m_frame->client()->frameBlameContext()->Leave();
 }
 
 } // namespace blink

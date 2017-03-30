@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/common/shell_observer.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/shell_observer.h"
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -97,7 +97,7 @@ class ASH_EXPORT DesktopBackgroundController
   void OnDisplayConfigurationChanged() override;
 
   // ShellObserver:
-  void OnRootWindowAdded(aura::Window* root_window) override;
+  void OnRootWindowAdded(WmWindow* root_window) override;
 
   // Returns the maximum size of all displays combined in native
   // resolutions.  Note that this isn't the bounds of the display who

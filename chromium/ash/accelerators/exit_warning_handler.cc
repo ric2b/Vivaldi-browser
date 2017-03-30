@@ -4,10 +4,10 @@
 
 #include "ash/accelerators/exit_warning_handler.h"
 
-#include "ash/metrics/user_metrics_recorder.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_window_ids.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -98,9 +98,7 @@ class ExitWarningWidgetDelegateView : public views::WidgetDelegateView {
 }  // namespace
 
 ExitWarningHandler::ExitWarningHandler()
-    : state_(IDLE),
-      stub_timer_for_test_(false) {
-}
+    : state_(IDLE), stub_timer_for_test_(false) {}
 
 ExitWarningHandler::~ExitWarningHandler() {
   // Note: If a timer is outstanding, it is stopped in its destructor.
@@ -114,15 +112,13 @@ void ExitWarningHandler::HandleAccelerator() {
       state_ = WAIT_FOR_DOUBLE_PRESS;
       Show();
       StartTimer();
-      Shell::GetInstance()->
-          metrics()->RecordUserMetricsAction(UMA_ACCEL_EXIT_FIRST_Q);
+      WmShell::Get()->RecordUserMetricsAction(UMA_ACCEL_EXIT_FIRST_Q);
       break;
     case WAIT_FOR_DOUBLE_PRESS:
       state_ = EXITING;
       CancelTimer();
       Hide();
-      Shell::GetInstance()->
-          metrics()->RecordUserMetricsAction(UMA_ACCEL_EXIT_SECOND_Q);
+      WmShell::Get()->RecordUserMetricsAction(UMA_ACCEL_EXIT_SECOND_Q);
       shell_delegate->Exit();
       break;
     case EXITING:
@@ -143,8 +139,7 @@ void ExitWarningHandler::StartTimer() {
   if (stub_timer_for_test_)
     return;
   timer_.Start(FROM_HERE,
-               base::TimeDelta::FromMilliseconds(kTimeOutMilliseconds),
-               this,
+               base::TimeDelta::FromMilliseconds(kTimeOutMilliseconds), this,
                &ExitWarningHandler::TimerAction);
 }
 
@@ -160,8 +155,7 @@ void ExitWarningHandler::Show() {
   gfx::Size rs = root_window->bounds().size();
   gfx::Size ps = delegate->GetPreferredSize();
   gfx::Rect bounds((rs.width() - ps.width()) / 2,
-                   (rs.height() - ps.height()) / 3,
-                   ps.width(), ps.height());
+                   (rs.height() - ps.height()) / 3, ps.width(), ps.height());
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_POPUP;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;

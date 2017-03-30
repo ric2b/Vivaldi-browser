@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 # Copyright (C) 2013 Adobe Systems Incorporated. All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -27,11 +25,12 @@
 # THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 
+import HTMLParser
 import logging
 import re
 
 from webkitpy.common.host import Host
-from webkitpy.thirdparty.BeautifulSoup import BeautifulSoup as Parser
+from webkitpy.thirdparty.BeautifulSoup import BeautifulSoup
 
 
 _log = logging.getLogger(__name__)
@@ -52,10 +51,13 @@ class TestParser(object):
     def load_file(self, filename, is_ref=False):
         if self.filesystem.isfile(filename):
             try:
-                doc = Parser(self.filesystem.read_binary_file(filename))
-            except:
+                doc = BeautifulSoup(self.filesystem.read_binary_file(filename))
+            except IOError:
+                _log.error("IOError: Failed to read %s", filename)
+                doc = None
+            except HTMLParser.HTMLParseError:
                 # FIXME: Figure out what to do if we can't parse the file.
-                _log.error("Failed to parse %s", filename)
+                _log.error("HTMLParseError: Failed to parse %s", filename)
                 doc = None
         else:
             if self.filesystem.isdir(filename):
@@ -69,18 +71,25 @@ class TestParser(object):
             self.test_doc = doc
 
     def analyze_test(self, test_contents=None, ref_contents=None):
-        """ Analyzes a file to determine if it's a test, what type of test, and what reference or support files it requires. Returns all of the test info """
+        """Analyzes a file to determine if it's a test, what type of test, and what reference or support files it requires.
 
+        Returns: A dict which can have the properties:
+            "test": test file name.
+            "reference": related reference test file name if this is a reference test.
+            "reference_support_info": extra information about the related reference test and any support files.
+            "jstest": A boolean, whether this is a JS test.
+            If the given contents are empty, then None is returned.
+        """
         test_info = None
 
         if test_contents is None and self.test_doc is None:
             return test_info
 
         if test_contents is not None:
-            self.test_doc = Parser(test_contents)
+            self.test_doc = BeautifulSoup(test_contents)
 
         if ref_contents is not None:
-            self.ref_doc = Parser(ref_contents)
+            self.ref_doc = BeautifulSoup(ref_contents)
 
         # First check if it's a reftest
         matches = self.reference_links_of_type('match') + self.reference_links_of_type('mismatch')
@@ -92,7 +101,7 @@ class TestParser(object):
 
             try:
                 ref_file = self.filesystem.join(self.filesystem.dirname(self.filename), matches[0]['href'])
-            except KeyError as e:
+            except KeyError:
                 # FIXME: Figure out what to do w/ invalid test files.
                 _log.error('%s has a reference link but is missing the "href"', self.filesystem)
                 return None
@@ -102,7 +111,7 @@ class TestParser(object):
 
             test_info = {'test': self.filename, 'reference': ref_file}
 
-            # If the ref file does not live in the same directory as the test file, check it for support files
+            # If the ref file does not live in the same directory as the test file, check it for support files.
             test_info['reference_support_info'] = {}
             if self.filesystem.dirname(ref_file) != self.filesystem.dirname(self.filename):
                 reference_support_files = self.support_files(self.ref_doc)
@@ -113,7 +122,7 @@ class TestParser(object):
 
         elif self.is_jstest():
             test_info = {'test': self.filename, 'jstest': True}
-        elif self.options['all'] is True and not('-ref' in self.filename) and not('reference' in self.filename):
+        elif self.options['all'] and '-ref' not in self.filename and 'reference' not in self.filename:
             test_info = {'test': self.filename}
 
         return test_info
@@ -126,7 +135,7 @@ class TestParser(object):
         return bool(self.test_doc.find(src=re.compile('[\'\"/]?/resources/testharness')))
 
     def support_files(self, doc):
-        """ Searches the file for all paths specified in url()'s or src attributes."""
+        """Searches the file for all paths specified in url()s or src attributes."""
         support_files = []
 
         if doc is None:
@@ -135,12 +144,12 @@ class TestParser(object):
         elements_with_src_attributes = doc.findAll(src=re.compile('.*'))
         elements_with_href_attributes = doc.findAll(href=re.compile('.*'))
 
-        url_pattern = re.compile('url\(.*\)')
+        url_pattern = re.compile(r'url\(.*\)')
         urls = []
         for url in doc.findAll(text=url_pattern):
             url = re.search(url_pattern, url)
-            url = re.sub('url\([\'\"]?', '', url.group(0))
-            url = re.sub('[\'\"]?\)', '', url)
+            url = re.sub(r'url\([\'\"]?', '', url.group(0))
+            url = re.sub(r'[\'\"]?\)', '', url)
             urls.append(url)
 
         src_paths = [src_tag['src'] for src_tag in elements_with_src_attributes]
@@ -148,8 +157,8 @@ class TestParser(object):
 
         paths = src_paths + href_paths + urls
         for path in paths:
-            if not(path.startswith('http:')) and not(path.startswith('mailto:')):
-                uri_scheme_pattern = re.compile(r"[A-Za-z][A-Za-z+.-]*:")
+            if not path.startswith('http:') and not path.startswith('mailto:'):
+                uri_scheme_pattern = re.compile(r'[A-Za-z][A-Za-z+.-]*:')
                 if not uri_scheme_pattern.match(path):
                     support_files.append(path)
 

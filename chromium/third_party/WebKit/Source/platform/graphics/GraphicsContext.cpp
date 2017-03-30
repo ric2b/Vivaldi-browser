@@ -27,9 +27,10 @@
 #include "platform/graphics/GraphicsContext.h"
 
 #include "platform/TraceEvent.h"
+#include "platform/geometry/FloatRect.h"
+#include "platform/geometry/FloatRoundedRect.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/ColorSpace.h"
-#include "platform/graphics/Gradient.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/Path.h"
@@ -48,6 +49,7 @@
 #include "third_party/skia/include/utils/SkNullCanvas.h"
 #include "wtf/Assertions.h"
 #include "wtf/MathExtras.h"
+#include <memory>
 
 namespace blink {
 
@@ -167,33 +169,6 @@ void GraphicsContext::setInDrawingRecorder(bool val)
 }
 #endif
 
-void GraphicsContext::setStrokeGradient(PassRefPtr<Gradient> gradient, float alpha)
-{
-    if (contextDisabled())
-        return;
-
-    ASSERT(gradient);
-    if (!gradient) {
-        setStrokeColor(Color::black);
-        return;
-    }
-    mutableState()->setStrokeGradient(gradient, alpha);
-}
-
-void GraphicsContext::setFillGradient(PassRefPtr<Gradient> gradient, float alpha)
-{
-    if (contextDisabled())
-        return;
-
-    ASSERT(gradient);
-    if (!gradient) {
-        setFillColor(Color::black);
-        return;
-    }
-
-    mutableState()->setFillGradient(gradient, alpha);
-}
-
 void GraphicsContext::setShadow(const FloatSize& offset, float blur, const Color& color,
     DrawLooperBuilder::ShadowTransformMode shadowTransformMode,
     DrawLooperBuilder::ShadowAlphaMode shadowAlphaMode, ShadowMode shadowMode)
@@ -201,13 +176,13 @@ void GraphicsContext::setShadow(const FloatSize& offset, float blur, const Color
     if (contextDisabled())
         return;
 
-    OwnPtr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
+    std::unique_ptr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
     if (!color.alpha()) {
         // When shadow-only but there is no shadow, we use an empty draw looper
         // to disable rendering of the source primitive.  When not shadow-only, we
         // clear the looper.
         if (shadowMode != DrawShadowOnly)
-            drawLooperBuilder.clear();
+            drawLooperBuilder.reset();
 
         setDrawLooper(std::move(drawLooperBuilder));
         return;
@@ -220,7 +195,7 @@ void GraphicsContext::setShadow(const FloatSize& offset, float blur, const Color
     setDrawLooper(std::move(drawLooperBuilder));
 }
 
-void GraphicsContext::setDrawLooper(PassOwnPtr<DrawLooperBuilder> drawLooperBuilder)
+void GraphicsContext::setDrawLooper(std::unique_ptr<DrawLooperBuilder> drawLooperBuilder)
 {
     if (contextDisabled())
         return;
@@ -351,24 +326,6 @@ void GraphicsContext::compositePicture(PassRefPtr<SkPicture> picture, const Floa
     m_canvas->restore();
 }
 
-void GraphicsContext::fillPolygon(size_t numPoints, const FloatPoint* points, const Color& color,
-    bool shouldAntialias)
-{
-    if (contextDisabled())
-        return;
-
-    ASSERT(numPoints > 2);
-
-    SkPath path;
-    setPathFromPoints(&path, numPoints, points);
-
-    SkPaint paint(immutableState()->fillPaint());
-    paint.setAntiAlias(shouldAntialias);
-    paint.setColor(color.rgb());
-
-    drawPath(path, paint);
-}
-
 void GraphicsContext::drawFocusRingPath(const SkPath& path, const Color& color, int width)
 {
     drawPlatformFocusRing(path, m_canvas, color.rgb(), width);
@@ -477,7 +434,7 @@ void GraphicsContext::drawInnerShadow(const FloatRoundedRect& rect, const Color&
         clip(rect.rect());
     }
 
-    OwnPtr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
+    std::unique_ptr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
     drawLooperBuilder->addShadow(FloatSize(shadowOffset), shadowBlur, shadowColor,
         DrawLooperBuilder::ShadowRespectsTransforms, DrawLooperBuilder::ShadowIgnoresAlpha);
     setDrawLooper(std::move(drawLooperBuilder));
@@ -809,6 +766,49 @@ void GraphicsContext::drawImage(Image* image, const FloatRect& dest, const Float
     m_paintController.setImagePainted();
 }
 
+void GraphicsContext::drawImageRRect(Image* image, const FloatRoundedRect& dest,
+    const FloatRect& srcRect, SkXfermode::Mode op, RespectImageOrientationEnum respectOrientation)
+{
+    if (contextDisabled() || !image)
+        return;
+
+    if (!dest.isRounded()) {
+        drawImage(image, dest.rect(), &srcRect, op, respectOrientation);
+        return;
+    }
+
+    DCHECK(dest.isRenderable());
+
+    const FloatRect visibleSrc = intersection(srcRect, image->rect());
+    if (dest.isEmpty() || visibleSrc.isEmpty())
+        return;
+
+    SkPaint imagePaint = immutableState()->fillPaint();
+    imagePaint.setXfermodeMode(op);
+    imagePaint.setColor(SK_ColorBLACK);
+    imagePaint.setFilterQuality(computeFilterQuality(image, dest.rect(), srcRect));
+    imagePaint.setAntiAlias(shouldAntialias());
+
+    bool useShader = (visibleSrc == srcRect) && (respectOrientation == DoNotRespectImageOrientation);
+    if (useShader) {
+        const SkMatrix localMatrix =
+            SkMatrix::MakeRectToRect(visibleSrc, dest.rect(), SkMatrix::kFill_ScaleToFit);
+        useShader = image->applyShader(imagePaint, localMatrix);
+    }
+
+    if (useShader) {
+        // Shader-based fast path.
+        m_canvas->drawRRect(dest, imagePaint);
+    } else {
+        // Clip-based fallback.
+        SkAutoCanvasRestore autoRestore(m_canvas, true);
+        m_canvas->clipRRect(dest, SkRegion::kIntersect_Op, imagePaint.isAntiAlias());
+        image->draw(m_canvas, imagePaint, dest.rect(), srcRect, respectOrientation, Image::ClampImageToSourceRect);
+    }
+
+    m_paintController.setImagePainted();
+}
+
 SkFilterQuality GraphicsContext::computeFilterQuality(Image* image, const FloatRect& dest, const FloatRect& src) const
 {
     InterpolationQuality resampling;
@@ -1087,18 +1087,6 @@ void GraphicsContext::clipOut(const Path& pathToClip)
     path.toggleInverseFillType();
 }
 
-void GraphicsContext::clipPolygon(size_t numPoints, const FloatPoint* points, bool antialiased)
-{
-    if (contextDisabled())
-        return;
-
-    ASSERT(numPoints > 2);
-
-    SkPath path;
-    setPathFromPoints(&path, numPoints, points);
-    clipPath(path, antialiased ? AntiAliased : NotAntiAliased);
-}
-
 void GraphicsContext::clipOutRoundedRect(const FloatRoundedRect& rect)
 {
     if (contextDisabled())
@@ -1235,17 +1223,6 @@ void GraphicsContext::adjustLineToPixelBoundaries(FloatPoint& p1, FloatPoint& p2
             p1.setY(p1.y() + 0.5f);
             p2.setY(p2.y() + 0.5f);
         }
-    }
-}
-
-void GraphicsContext::setPathFromPoints(SkPath* path, size_t numPoints, const FloatPoint* points)
-{
-    path->incReserve(numPoints);
-    path->moveTo(WebCoreFloatToSkScalar(points[0].x()),
-                 WebCoreFloatToSkScalar(points[0].y()));
-    for (size_t i = 1; i < numPoints; ++i) {
-        path->lineTo(WebCoreFloatToSkScalar(points[i].x()),
-                     WebCoreFloatToSkScalar(points[i].y()));
     }
 }
 

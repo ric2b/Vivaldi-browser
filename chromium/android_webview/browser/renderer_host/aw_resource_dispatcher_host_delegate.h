@@ -9,10 +9,12 @@
 
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "content/public/browser/resource_context.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 
 namespace content {
 class ResourceDispatcherHostLoginDelegate;
+class ResourceContext;
 struct ResourceResponse;
 }  // namespace content
 
@@ -41,7 +43,6 @@ class AwResourceDispatcherHostDelegate
       content::ResourceContext* resource_context,
       int child_id,
       int route_id,
-      int request_id,
       bool is_content_initiated,
       bool must_download,
       ScopedVector<content::ResourceThrottle>* throttles) override;
@@ -55,7 +56,8 @@ class AwResourceDispatcherHostDelegate
           web_contents_getter,
       bool is_main_frame,
       ui::PageTransition page_transition,
-      bool has_user_gesture) override;
+      bool has_user_gesture,
+      content::ResourceContext* resource_context) override;
   void OnResponseStarted(net::URLRequest* request,
                          content::ResourceContext* resource_context,
                          content::ResourceResponse* response,

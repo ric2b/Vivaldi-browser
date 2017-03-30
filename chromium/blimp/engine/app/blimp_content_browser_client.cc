@@ -5,11 +5,35 @@
 #include "blimp/engine/app/blimp_content_browser_client.h"
 #include "blimp/engine/app/blimp_browser_main_parts.h"
 #include "blimp/engine/app/settings_manager.h"
+#include "blimp/engine/feature/geolocation/blimp_location_provider.h"
 #include "blimp/engine/mojo/blob_channel_service.h"
-#include "content/public/common/service_registry.h"
+#include "content/public/browser/geolocation_delegate.h"
+#include "services/shell/public/cpp/interface_registry.h"
 
 namespace blimp {
 namespace engine {
+
+namespace {
+// A provider of services needed by Geolocation.
+class BlimpGeolocationDelegate : public content::GeolocationDelegate {
+ public:
+  BlimpGeolocationDelegate() = default;
+
+  bool UseNetworkLocationProviders() final { return false; }
+
+  content::LocationProvider* OverrideSystemLocationProvider() final {
+    if (!location_provider_)
+      location_provider_ = base::WrapUnique(new BlimpLocationProvider());
+    return location_provider_.get();
+  }
+
+ private:
+  std::unique_ptr<BlimpLocationProvider> location_provider_;
+
+  DISALLOW_COPY_AND_ASSIGN(BlimpGeolocationDelegate);
+};
+
+}  // anonymous namespace
 
 BlimpContentBrowserClient::BlimpContentBrowserClient() {}
 
@@ -39,10 +63,17 @@ BlimpBrowserContext* BlimpContentBrowserClient::GetBrowserContext() {
   return blimp_browser_main_parts_->GetBrowserContext();
 }
 
-void BlimpContentBrowserClient::RegisterRenderProcessMojoServices(
-    content::ServiceRegistry* registry) {
-  registry->AddService<mojom::BlobChannel>(
-      base::Bind(&BlobChannelService::Create));
+content::GeolocationDelegate*
+BlimpContentBrowserClient::CreateGeolocationDelegate() {
+  return new BlimpGeolocationDelegate();
+}
+
+void BlimpContentBrowserClient::ExposeInterfacesToRenderer(
+    shell::InterfaceRegistry* registry,
+    content::RenderProcessHost* render_process_host) {
+  registry->AddInterface<mojom::BlobChannel>(
+      base::Bind(&BlobChannelService::Create,
+                 blimp_browser_main_parts_->GetBlobChannelSender()));
 }
 
 }  // namespace engine

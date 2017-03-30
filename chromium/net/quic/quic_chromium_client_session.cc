@@ -26,8 +26,6 @@
 #include "net/quic/quic_chromium_connection_helper.h"
 #include "net/quic/quic_client_promised_info.h"
 #include "net/quic/quic_crypto_client_stream_factory.h"
-#include "net/quic/quic_protocol.h"
-#include "net/quic/quic_server_id.h"
 #include "net/quic/quic_stream_factory.h"
 #include "net/spdy/spdy_session.h"
 #include "net/ssl/channel_id_service.h"
@@ -143,6 +141,22 @@ std::unique_ptr<base::Value> NetLogQuicPushPromiseReceivedCallback(
   return std::move(dict);
 }
 
+class HpackEncoderDebugVisitor : public QuicHeadersStream::HpackDebugVisitor {
+  void OnUseEntry(QuicTime::Delta elapsed) override {
+    UMA_HISTOGRAM_TIMES(
+        "Net.QuicHpackEncoder.IndexedEntryAge",
+        base::TimeDelta::FromMicroseconds(elapsed.ToMicroseconds()));
+  }
+};
+
+class HpackDecoderDebugVisitor : public QuicHeadersStream::HpackDebugVisitor {
+  void OnUseEntry(QuicTime::Delta elapsed) override {
+    UMA_HISTOGRAM_TIMES(
+        "Net.QuicHpackDecoder.IndexedEntryAge",
+        base::TimeDelta::FromMicroseconds(elapsed.ToMicroseconds()));
+  }
+};
+
 }  // namespace
 
 QuicChromiumClientSession::StreamRequest::StreamRequest() : stream_(nullptr) {}
@@ -211,6 +225,7 @@ QuicChromiumClientSession::QuicChromiumClientSession(
       stream_factory_(stream_factory),
       transport_security_state_(transport_security_state),
       server_info_(std::move(server_info)),
+      pkp_bypassed_(false),
       num_total_streams_(0),
       task_runner_(task_runner),
       net_log_(BoundNetLog::Make(net_log, NetLog::SOURCE_QUIC_SESSION)),
@@ -368,6 +383,14 @@ QuicChromiumClientSession::~QuicChromiumClientSession() {
       static_cast<base::HistogramBase::Sample>(stats.max_sequence_reordering));
 }
 
+void QuicChromiumClientSession::Initialize() {
+  QuicClientSessionBase::Initialize();
+  headers_stream()->SetHpackEncoderDebugVisitor(
+      base::WrapUnique(new HpackEncoderDebugVisitor()));
+  headers_stream()->SetHpackDecoderDebugVisitor(
+      base::WrapUnique(new HpackDecoderDebugVisitor()));
+}
+
 void QuicChromiumClientSession::OnHeadersHeadOfLineBlocking(
     QuicTime::Delta delta) {
   UMA_HISTOGRAM_TIMES(
@@ -491,7 +514,7 @@ QuicChromiumClientSession::CreateOutgoingReliableStreamImpl() {
 
 QuicCryptoClientStream* QuicChromiumClientSession::GetCryptoStream() {
   return crypto_stream_.get();
-};
+}
 
 // TODO(rtenneti): Add unittests for GetSSLInfo which exercise the various ways
 // we learn about SSL info (sync vs async vs cached).
@@ -532,6 +555,7 @@ bool QuicChromiumClientSession::GetSSLInfo(SSLInfo* ssl_info) const {
   ssl_info->public_key_hashes = cert_verify_result_->public_key_hashes;
   ssl_info->is_issued_by_known_root =
       cert_verify_result_->is_issued_by_known_root;
+  ssl_info->pkp_bypassed = pkp_bypassed_;
 
   ssl_info->connection_status = ssl_connection_status;
   ssl_info->client_cert_sent = false;
@@ -839,10 +863,10 @@ void QuicChromiumClientSession::OnConnectionClosed(
             connection()->sent_packet_manager().HasUnackedPackets());
         UMA_HISTOGRAM_COUNTS(
             "Net.QuicSession.TimedOutWithOpenStreams.ConsecutiveRTOCount",
-            connection()->sent_packet_manager().consecutive_rto_count());
+            connection()->sent_packet_manager().GetConsecutiveRtoCount());
         UMA_HISTOGRAM_COUNTS(
             "Net.QuicSession.TimedOutWithOpenStreams.ConsecutiveTLPCount",
-            connection()->sent_packet_manager().consecutive_tlp_count());
+            connection()->sent_packet_manager().GetConsecutiveTlpCount());
       }
       if (connection()->sent_packet_manager().HasUnackedPackets()) {
         UMA_HISTOGRAM_TIMES(
@@ -943,13 +967,14 @@ void QuicChromiumClientSession::OnProofVerifyDetailsAvailable(
     const ProofVerifyDetails& verify_details) {
   const ProofVerifyDetailsChromium* verify_details_chromium =
       reinterpret_cast<const ProofVerifyDetailsChromium*>(&verify_details);
-  cert_verify_result_.reset(new CertVerifyResult);
-  cert_verify_result_->CopyFrom(verify_details_chromium->cert_verify_result);
+  cert_verify_result_.reset(
+      new CertVerifyResult(verify_details_chromium->cert_verify_result));
   pinning_failure_log_ = verify_details_chromium->pinning_failure_log;
   std::unique_ptr<ct::CTVerifyResult> ct_verify_result_copy(
       new ct::CTVerifyResult(verify_details_chromium->ct_verify_result));
   ct_verify_result_ = std::move(ct_verify_result_copy);
   logger_->OnCertificateVerified(*cert_verify_result_);
+  pkp_bypassed_ = verify_details_chromium->pkp_bypassed;
 }
 
 void QuicChromiumClientSession::StartReading() {
@@ -1020,8 +1045,7 @@ std::unique_ptr<base::Value> QuicChromiumClientSession::GetInfoAsValue(
   std::unique_ptr<base::ListValue> stream_list(new base::ListValue());
   for (StreamMap::const_iterator it = dynamic_streams().begin();
        it != dynamic_streams().end(); ++it) {
-    stream_list->Append(
-        new base::StringValue(base::UintToString(it->second->id())));
+    stream_list->AppendString(base::UintToString(it->second->id()));
   }
   dict->Set("active_streams", std::move(stream_list));
 
@@ -1039,7 +1063,7 @@ std::unique_ptr<base::Value> QuicChromiumClientSession::GetInfoAsValue(
   std::unique_ptr<base::ListValue> alias_list(new base::ListValue());
   for (std::set<HostPortPair>::const_iterator it = aliases.begin();
        it != aliases.end(); it++) {
-    alias_list->Append(new base::StringValue(it->ToString()));
+    alias_list->AppendString(it->ToString());
   }
   dict->Set("aliases", std::move(alias_list));
 
@@ -1116,7 +1140,6 @@ void QuicChromiumClientSession::NotifyFactoryOfSessionClosed() {
 
 void QuicChromiumClientSession::OnConnectTimeout() {
   DCHECK(callback_.is_null());
-  DCHECK(IsEncryptionEstablished());
 
   if (IsCryptoHandshakeConfirmed())
     return;

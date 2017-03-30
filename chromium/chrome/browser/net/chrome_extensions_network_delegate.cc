@@ -20,6 +20,7 @@
 #include "extensions/browser/api/web_request/web_request_api.h"
 #include "extensions/browser/info_map.h"
 #include "extensions/browser/process_manager.h"
+#include "extensions/common/constants.h"
 #include "net/url_request/url_request.h"
 
 using content::BrowserThread;
@@ -96,11 +97,11 @@ class ChromeExtensionsNetworkDelegateImpl
   int OnBeforeURLRequest(net::URLRequest* request,
                          const net::CompletionCallback& callback,
                          GURL* new_url) override;
-  int OnBeforeSendHeaders(net::URLRequest* request,
-                          const net::CompletionCallback& callback,
-                          net::HttpRequestHeaders* headers) override;
-  void OnSendHeaders(net::URLRequest* request,
-                     const net::HttpRequestHeaders& headers) override;
+  int OnBeforeStartTransaction(net::URLRequest* request,
+                               const net::CompletionCallback& callback,
+                               net::HttpRequestHeaders* headers) override;
+  void OnStartTransaction(net::URLRequest* request,
+                          const net::HttpRequestHeaders& headers) override;
   int OnHeadersReceived(
       net::URLRequest* request,
       const net::CompletionCallback& callback,
@@ -159,11 +160,26 @@ int ChromeExtensionsNetworkDelegateImpl::OnBeforeURLRequest(
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     GURL* new_url) {
+  const content::ResourceRequestInfo* info =
+      content::ResourceRequestInfo::ForRequest(request);
+  GURL url(request->url());
+
+  // Block top-level navigations to blob: or filesystem: URLs with extension
+  // origin from non-extension processes.  See https://crbug.com/645028.
+  bool is_nested_url = url.SchemeIsFileSystem() || url.SchemeIsBlob();
+  bool is_navigation =
+      info && content::IsResourceTypeFrame(info->GetResourceType());
+  if (is_nested_url && is_navigation && info->IsMainFrame() &&
+      url::Origin(url).scheme() == extensions::kExtensionScheme &&
+      !extension_info_map_->process_map().Contains(info->GetChildID())) {
+    return net::ERR_ABORTED;
+  }
+
   return ExtensionWebRequestEventRouter::GetInstance()->OnBeforeRequest(
       profile_, extension_info_map_.get(), request, callback, new_url);
 }
 
-int ChromeExtensionsNetworkDelegateImpl::OnBeforeSendHeaders(
+int ChromeExtensionsNetworkDelegateImpl::OnBeforeStartTransaction(
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     net::HttpRequestHeaders* headers) {
@@ -171,7 +187,7 @@ int ChromeExtensionsNetworkDelegateImpl::OnBeforeSendHeaders(
       profile_, extension_info_map_.get(), request, callback, headers);
 }
 
-void ChromeExtensionsNetworkDelegateImpl::OnSendHeaders(
+void ChromeExtensionsNetworkDelegateImpl::OnStartTransaction(
     net::URLRequest* request,
     const net::HttpRequestHeaders& headers) {
   ExtensionWebRequestEventRouter::GetInstance()->OnSendHeaders(
@@ -303,17 +319,16 @@ int ChromeExtensionsNetworkDelegate::OnBeforeURLRequest(
   return net::OK;
 }
 
-int ChromeExtensionsNetworkDelegate::OnBeforeSendHeaders(
+int ChromeExtensionsNetworkDelegate::OnBeforeStartTransaction(
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     net::HttpRequestHeaders* headers) {
   return net::OK;
 }
 
-void ChromeExtensionsNetworkDelegate::OnSendHeaders(
+void ChromeExtensionsNetworkDelegate::OnStartTransaction(
     net::URLRequest* request,
-    const net::HttpRequestHeaders& headers) {
-}
+    const net::HttpRequestHeaders& headers) {}
 
 int ChromeExtensionsNetworkDelegate::OnHeadersReceived(
     net::URLRequest* request,

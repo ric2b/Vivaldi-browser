@@ -5,13 +5,12 @@
 #include "modules/worklet/Worklet.h"
 
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "modules/worklet/WorkletGlobalScope.h"
+#include "core/workers/WorkletGlobalScopeProxy.h"
 
 namespace blink {
 
@@ -43,16 +42,15 @@ ScriptPromise Worklet::import(ScriptState* scriptState, const String& url)
     m_scriptLoaders.append(WorkerScriptLoader::create());
     m_scriptLoaders.last()->loadAsynchronously(*getExecutionContext(), scriptURL, DenyCrossOriginRequests,
         getExecutionContext()->securityContext().addressSpace(),
-        bind(&Worklet::onResponse, this),
-        bind(&Worklet::onFinished, this, m_scriptLoaders.last().get(), resolver));
+        bind(&Worklet::onResponse, wrapPersistent(this), WTF::unretained(m_scriptLoaders.last().get())),
+        bind(&Worklet::onFinished, wrapPersistent(this), WTF::unretained(m_scriptLoaders.last().get()), wrapPersistent(resolver)));
 
     return promise;
 }
 
-void Worklet::onResponse()
+void Worklet::onResponse(WorkerScriptLoader* scriptLoader)
 {
-    // TODO(ikilpatrick): Add devtools instrumentation on worklet script
-    // resource loading.
+    InspectorInstrumentation::didReceiveScriptResponse(getExecutionContext(), scriptLoader->identifier());
 }
 
 void Worklet::onFinished(WorkerScriptLoader* scriptLoader, ScriptPromiseResolver* resolver)
@@ -63,8 +61,8 @@ void Worklet::onFinished(WorkerScriptLoader* scriptLoader, ScriptPromiseResolver
         // TODO(ikilpatrick): Worklets don't have the same error behaviour
         // as workers, etc. For a SyntaxError we should reject, however if
         // the script throws a normal error, resolve. For now just resolve.
-        workletGlobalScope()->scriptController()->evaluate(ScriptSourceCode(scriptLoader->script(), scriptLoader->url()));
-        InspectorInstrumentation::scriptImported(workletGlobalScope(), scriptLoader->identifier(), scriptLoader->script());
+        workletGlobalScopeProxy()->evaluateScript(scriptLoader->script(), scriptLoader->url());
+        InspectorInstrumentation::scriptImported(getExecutionContext(), scriptLoader->identifier(), scriptLoader->script());
         resolver->resolve();
     }
 
@@ -79,7 +77,7 @@ void Worklet::onFinished(WorkerScriptLoader* scriptLoader, ScriptPromiseResolver
 
 void Worklet::stop()
 {
-    workletGlobalScope()->dispose();
+    workletGlobalScopeProxy()->terminateWorkletGlobalScope();
 
     for (auto scriptLoader : m_scriptLoaders) {
         scriptLoader->cancel();

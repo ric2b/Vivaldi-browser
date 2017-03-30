@@ -12,8 +12,13 @@
 #include "base/process/process_handle.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 
+#if defined(OS_ANDROID)
+#include "content/public/browser/android/service_registry_android.h"
+#endif
+
 namespace shell {
 class Connection;
+class Connector;
 }
 
 namespace content {
@@ -26,8 +31,11 @@ class MojoChildConnection {
   // Prepares a new child connection for a child process which will be
   // identified to the shell as |application_name|. |instance_id| must be
   // unique among all child connections using the same |application_name|.
+  // |connector| is the connector to use to establish the connection.
   MojoChildConnection(const std::string& application_name,
-                      const std::string& instance_id);
+                      const std::string& instance_id,
+                      const std::string& child_token,
+                      shell::Connector* connector);
   ~MojoChildConnection();
 
   shell::Connection* connection() const {
@@ -44,10 +52,19 @@ class MojoChildConnection {
   // functional until this is called.
   void SetProcessHandle(base::ProcessHandle handle);
 
+#if defined(OS_ANDROID)
+  ServiceRegistryAndroid* service_registry_android() {
+    return service_registry_android_.get();
+  }
+#endif
+
  private:
   const std::string shell_client_token_;
   std::unique_ptr<shell::Connection> connection_;
   shell::mojom::PIDReceiverPtr pid_receiver_;
+#if defined(OS_ANDROID)
+  std::unique_ptr<ServiceRegistryAndroid> service_registry_android_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(MojoChildConnection);
 };

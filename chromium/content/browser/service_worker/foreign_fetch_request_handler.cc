@@ -10,7 +10,7 @@
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_interceptor.h"
@@ -51,27 +51,34 @@ void ForeignFetchRequestHandler::InitializeHandler(
     storage::BlobStorageContext* blob_storage_context,
     int process_id,
     int provider_id,
-    bool skip_service_worker,
+    SkipServiceWorker skip_service_worker,
     FetchRequestMode request_mode,
     FetchCredentialsMode credentials_mode,
     FetchRedirectMode redirect_mode,
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBody> body) {
-  if (!context_wrapper) {
+    scoped_refptr<ResourceRequestBodyImpl> body,
+    bool initiated_in_secure_context) {
+  if (!context_wrapper)
     return;
-  }
+
+  if (skip_service_worker == SkipServiceWorker::ALL)
+    return;
+
+  if (!initiated_in_secure_context)
+    return;
+
+  if (ServiceWorkerUtils::IsMainResourceType(resource_type))
+    return;
+
+  if (request->initiator().IsSameOriginWith(url::Origin(request->url())))
+    return;
 
   if (!context_wrapper->OriginHasForeignFetchRegistrations(
           request->url().GetOrigin())) {
     return;
   }
-
-  if (request->initiator().IsSameOriginWith(url::Origin(request->url())))
-    return;
-  if (ServiceWorkerUtils::IsMainResourceType(resource_type))
-    return;
 
   // Any more precise checks to see if the request should be intercepted are
   // asynchronous, so just create our handler in all cases.
@@ -152,7 +159,7 @@ ForeignFetchRequestHandler::ForeignFetchRequestHandler(
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBody> body)
+    scoped_refptr<ResourceRequestBodyImpl> body)
     : context_(context),
       blob_storage_context_(blob_storage_context),
       resource_type_(resource_type),

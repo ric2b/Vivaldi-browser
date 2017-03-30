@@ -258,9 +258,14 @@ String AbstractPropertySetCSSStyleDeclaration::removeProperty(const String& prop
     return result;
 }
 
-CSSValue* AbstractPropertySetCSSStyleDeclaration::getPropertyCSSValueInternal(CSSPropertyID propertyID)
+const CSSValue* AbstractPropertySetCSSStyleDeclaration::getPropertyCSSValueInternal(CSSPropertyID propertyID)
 {
     return propertySet().getPropertyCSSValue(propertyID);
+}
+
+const CSSValue* AbstractPropertySetCSSStyleDeclaration::getPropertyCSSValueInternal(AtomicString customPropertyName)
+{
+    return propertySet().getPropertyCSSValue(customPropertyName);
 }
 
 String AbstractPropertySetCSSStyleDeclaration::getPropertyValueInternal(CSSPropertyID propertyID)

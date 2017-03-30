@@ -83,6 +83,7 @@
     return;
   }
 
+  NSColor* strokeColor;
   if (themeProvider->HasCustomImage(IDR_THEME_TOOLBAR) ||
       themeProvider->HasCustomColor(ThemeProperties::COLOR_TOOLBAR)) {
     // First draw the toolbar bitmap, so that theme colors can shine through.
@@ -96,15 +97,21 @@
     // which helped dark toolbars stand out from dark frames. Lay down a thin
     // highlight in MD also.
     if ([window isMainWindow]) {
-      [themeProvider->GetNSColor(
-          ThemeProperties::COLOR_TOOLBAR_STROKE_THEME) set];
+      strokeColor = themeProvider->GetNSColor(
+          ThemeProperties::COLOR_TOOLBAR_STROKE_THEME);
     } else {
-      [themeProvider->GetNSColor(
-          ThemeProperties::COLOR_TOOLBAR_STROKE_THEME_INACTIVE) set];
+      strokeColor = themeProvider->GetNSColor(
+          ThemeProperties::COLOR_TOOLBAR_STROKE_THEME_INACTIVE);
     }
   } else {
-    [themeProvider->GetNSColor(ThemeProperties::COLOR_TOOLBAR_STROKE) set];
+    strokeColor =
+        themeProvider->GetNSColor(ThemeProperties::COLOR_TOOLBAR_STROKE);
   }
+
+  if (themeProvider->ShouldIncreaseContrast())
+    strokeColor = [strokeColor colorWithAlphaComponent:100];
+  [strokeColor set];
+
   NSRect borderRect = NSMakeRect(0.0, 0.0, self.bounds.size.width,
       [self cr_lineWidth]);
   NSRectFillUsingOperation(NSIntersectionRect(dirtyRect, borderRect),
@@ -225,6 +232,17 @@
 // background.
 - (BOOL)acceptsFirstMouse:(NSEvent*)event {
   return YES;
+}
+
+// When displaying a modal sheet, interaction with the tabs (e.g. middle-click
+// to close a tab) should be blocked. -[NSWindow sendEvent] blocks left-click,
+// but not others. To prevent clicks going to subviews, absorb them here. This
+// is also done in FastResizeView, but TabStripView is in the title bar, so is
+// not contained in a FastResizeView.
+- (NSView*)hitTest:(NSPoint)aPoint {
+  if ([[self window] attachedSheet])
+    return self;
+  return [super hitTest:aPoint];
 }
 
 // Trap double-clicks and make them miniaturize the browser window.

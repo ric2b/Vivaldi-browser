@@ -84,6 +84,7 @@ source_set("browser") {
     "//chromecast/base:cast_sys_info",
     "//chromecast/base:cast_version",
     "//chromecast/common",
+    "//chromecast/common/media",
     "//chromecast/media",
     "//chromecast/net",
     "//chromecast/service",
@@ -99,6 +100,7 @@ source_set("browser") {
     # isn't needed. crbug.com/541577
     "//components/metrics:ui",
     "//components/network_hints/browser",
+    "//components/network_session_configurator:switches",
     "//components/prefs",
     "//content",
     "//content/public/browser",

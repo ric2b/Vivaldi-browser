@@ -14,23 +14,8 @@ namespace blink {
 PassRefPtr<SerializedScriptValue> SerializedScriptValueForModulesFactory::create(v8::Isolate* isolate, v8::Local<v8::Value> value, Transferables* transferables, WebBlobInfoArray* blobInfo, ExceptionState& exceptionState)
 {
     SerializedScriptValueWriterForModules writer;
-    return SerializedScriptValueFactory::create(isolate, value, writer, transferables, blobInfo, exceptionState);
-}
-
-PassRefPtr<SerializedScriptValue> SerializedScriptValueForModulesFactory::create(v8::Isolate* isolate, const String& data)
-{
-    SerializedScriptValueWriterForModules writer;
-    writer.writeWebCoreString(data);
-    String wireData = writer.takeWireString();
-    return createFromWire(wireData);
-}
-
-ScriptValueSerializer::Status SerializedScriptValueForModulesFactory::doSerialize(v8::Local<v8::Value> value, SerializedScriptValueWriter& writer, Transferables* transferables, WebBlobInfoArray* blobInfo, BlobDataHandleMap& blobDataHandles, v8::TryCatch& tryCatch, String& errorMessage, v8::Isolate* isolate)
-{
-    ScriptValueSerializerForModules serializer(writer, transferables, blobInfo, blobDataHandles, tryCatch, ScriptState::current(isolate));
-    ScriptValueSerializer::Status status = serializer.serialize(value);
-    errorMessage = serializer.errorMessage();
-    return status;
+    ScriptValueSerializerForModules serializer(writer, blobInfo, ScriptState::current(isolate));
+    return serializer.serialize(value, transferables, exceptionState);
 }
 
 v8::Local<v8::Value> SerializedScriptValueForModulesFactory::deserialize(String& data, BlobDataHandleMap& blobDataHandles, ArrayBufferContentsArray* arrayBufferContentsArray, ImageBitmapContentsArray* imageBitmapContentsArray, v8::Isolate* isolate, MessagePortArray* messagePorts, const WebBlobInfoArray* blobInfo)
@@ -49,4 +34,3 @@ v8::Local<v8::Value> SerializedScriptValueForModulesFactory::deserialize(String&
 }
 
 } // namespace blink
-

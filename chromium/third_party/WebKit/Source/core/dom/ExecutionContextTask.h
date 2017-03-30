@@ -45,7 +45,6 @@ public:
     ExecutionContextTask() { }
     virtual ~ExecutionContextTask() { }
     virtual void performTask(ExecutionContext*) = 0;
-    virtual String taskNameForInstrumentation() const { return String(); }
 };
 
 namespace internal {
@@ -104,7 +103,7 @@ template<typename FunctionType, typename... P>
 std::unique_ptr<ExecutionContextTask> createSameThreadTask(
     FunctionType function, P&&... parameters)
 {
-    return internal::createCallClosureTask(bind(function, std::forward<P>(parameters)...));
+    return internal::createCallClosureTask(WTF::bind(function, std::forward<P>(parameters)...));
 }
 
 } // namespace blink

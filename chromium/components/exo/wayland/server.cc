@@ -4,54 +4,79 @@
 
 #include "components/exo/wayland/server.h"
 
-#include <alpha-compositing-unstable-v1-server-protocol.h>
 #include <grp.h>
 #include <linux/input.h>
-#include <scaler-server-protocol.h>
-#include <secure-output-unstable-v1-server-protocol.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <viewporter-server-protocol.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol-core.h>
-#include <xdg-shell-unstable-v5-server-protocol.h>
+
+// Note: core wayland headers need to be included before protocol headers.
+#include <alpha-compositing-unstable-v1-server-protocol.h>  // NOLINT
+#include <gaming-input-unstable-v1-server-protocol.h>       // NOLINT
+#include <remote-shell-unstable-v1-server-protocol.h>       // NOLINT
+#include <secure-output-unstable-v1-server-protocol.h>      // NOLINT
+#include <stylus-unstable-v1-server-protocol.h>             // NOLINT
+#include <xdg-shell-unstable-v5-server-protocol.h>          // NOLINT
+#include <vsync-feedback-unstable-v1-server-protocol.h>     // NOLINT
 
 #include <algorithm>
+#include <cstdlib>
 #include <iterator>
 #include <string>
 #include <utility>
 
-#include "ash/display/display_info.h"
+#include "ash/common/display/display_info.h"
+#include "ash/common/shell_observer.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/bind.h"
 #include "base/cancelable_callback.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/free_deleter.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/weak_ptr.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
+#include "components/exo/gamepad.h"
+#include "components/exo/gamepad_delegate.h"
 #include "components/exo/keyboard.h"
 #include "components/exo/keyboard_delegate.h"
+#include "components/exo/notification_surface.h"
+#include "components/exo/notification_surface_manager.h"
 #include "components/exo/pointer.h"
 #include "components/exo/pointer_delegate.h"
+#include "components/exo/pointer_stylus_delegate.h"
 #include "components/exo/shared_memory.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/sub_surface.h"
 #include "components/exo/surface.h"
+#include "components/exo/surface_property.h"
 #include "components/exo/touch.h"
 #include "components/exo/touch_delegate.h"
 #include "ipc/unix_domain_socket_util.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window_property.h"
 #include "ui/base/hit_test.h"
+#include "ui/compositor/compositor_vsync_manager.h"
 #include "ui/display/display_observer.h"
 #include "ui/display/screen.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
+#include "ui/gfx/buffer_format_util.h"
+#include "ui/gfx/buffer_types.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
+#include "ui/wm/public/activation_change_observer.h"
+#include "ui/wm/public/activation_client.h"
 
 #if defined(USE_OZONE)
 #include <drm_fourcc.h>
@@ -64,11 +89,16 @@
 #include "ui/events/keycodes/scoped_xkb.h"  // nogncheck
 #endif
 
-DECLARE_WINDOW_PROPERTY_TYPE(wl_resource*);
+DECLARE_SURFACE_PROPERTY_TYPE(wl_resource*);
+DECLARE_SURFACE_PROPERTY_TYPE(bool);
 
 namespace exo {
 namespace wayland {
 namespace {
+
+// We don't send configure immediately after tablet mode switch
+// because layout can change due to orientation lock state or accelerometer.
+const int kConfigureDelayAfterLayoutSwitchMs = 300;
 
 // Default wayland socket name.
 const base::FilePath::CharType kSocketName[] = FILE_PATH_LITERAL("wayland-0");
@@ -101,21 +131,36 @@ void SetImplementation(wl_resource* resource,
                                  DestroyUserData<T>);
 }
 
+// Convert a timestamp to a time value that can be used when interfacing
+// with wayland. Note that we cast a int64_t value to uint32_t which can
+// potentially overflow.
+uint32_t TimeTicksToMilliseconds(base::TimeTicks ticks) {
+  return (ticks - base::TimeTicks()).InMilliseconds();
+}
+
+uint32_t NowInMilliseconds() {
+  return TimeTicksToMilliseconds(base::TimeTicks::Now());
+}
+
 // A property key containing the surface resource that is associated with
 // window. If unset, no surface resource is associated with window.
-DEFINE_WINDOW_PROPERTY_KEY(wl_resource*, kSurfaceResourceKey, nullptr);
+DEFINE_SURFACE_PROPERTY_KEY(wl_resource*, kSurfaceResourceKey, nullptr);
 
 // A property key containing a boolean set to true if a viewport is associated
 // with window.
-DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasViewportKey, false);
+DEFINE_SURFACE_PROPERTY_KEY(bool, kSurfaceHasViewportKey, false);
 
 // A property key containing a boolean set to true if a security object is
 // associated with window.
-DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasSecurityKey, false);
+DEFINE_SURFACE_PROPERTY_KEY(bool, kSurfaceHasSecurityKey, false);
 
 // A property key containing a boolean set to true if a blending object is
 // associated with window.
-DEFINE_WINDOW_PROPERTY_KEY(bool, kSurfaceHasBlendingKey, false);
+DEFINE_SURFACE_PROPERTY_KEY(bool, kSurfaceHasBlendingKey, false);
+
+wl_resource* GetSurfaceResource(Surface* surface) {
+  return surface->GetProperty(kSurfaceResourceKey);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 // wl_buffer_interface:
@@ -163,8 +208,7 @@ void surface_damage(wl_client* client,
 void HandleSurfaceFrameCallback(wl_resource* resource,
                                 base::TimeTicks frame_time) {
   if (!frame_time.is_null()) {
-    wl_callback_send_done(resource,
-                          (frame_time - base::TimeTicks()).InMilliseconds());
+    wl_callback_send_done(resource, TimeTicksToMilliseconds(frame_time));
     // TODO(reveman): Remove this potentially blocking flush and instead watch
     // the file descriptor to be ready for write without blocking.
     wl_client_flush(wl_resource_get_client(resource));
@@ -432,7 +476,8 @@ const struct drm_supported_format {
     {WL_DRM_FORMAT_XBGR8888, gfx::BufferFormat::RGBX_8888},
     {WL_DRM_FORMAT_ABGR8888, gfx::BufferFormat::RGBA_8888},
     {WL_DRM_FORMAT_XRGB8888, gfx::BufferFormat::BGRX_8888},
-    {WL_DRM_FORMAT_ARGB8888, gfx::BufferFormat::BGRA_8888}};
+    {WL_DRM_FORMAT_ARGB8888, gfx::BufferFormat::BGRA_8888},
+    {WL_DRM_FORMAT_YVU420, gfx::BufferFormat::YVU_420}};
 
 void drm_authenticate(wl_client* client, wl_resource* resource, uint32_t id) {
   wl_drm_send_authenticated(resource);
@@ -493,10 +538,20 @@ void drm_create_prime_buffer(wl_client* client,
     return;
   }
 
+  std::vector<int> strides{stride0, stride1, stride2};
+  std::vector<int> offsets{offset0, offset1, offset2};
+  std::vector<base::ScopedFD> fds;
+
+  int planes =
+      gfx::NumberOfPlanesForBufferFormat(supported_format->buffer_format);
+  strides.resize(planes);
+  offsets.resize(planes);
+  fds.push_back(base::ScopedFD(name));
+
   std::unique_ptr<Buffer> buffer =
       GetUserDataAs<Display>(resource)->CreateLinuxDMABufBuffer(
-          base::ScopedFD(name), gfx::Size(width, height),
-          supported_format->buffer_format, stride0);
+          gfx::Size(width, height), supported_format->buffer_format, strides,
+          offsets, std::move(fds));
   if (!buffer) {
     wl_resource_post_no_memory(resource);
     return;
@@ -541,16 +596,20 @@ const struct dmabuf_supported_format {
     {DRM_FORMAT_XBGR8888, gfx::BufferFormat::RGBX_8888},
     {DRM_FORMAT_ABGR8888, gfx::BufferFormat::RGBA_8888},
     {DRM_FORMAT_XRGB8888, gfx::BufferFormat::BGRX_8888},
-    {DRM_FORMAT_ARGB8888, gfx::BufferFormat::BGRA_8888}};
+    {DRM_FORMAT_ARGB8888, gfx::BufferFormat::BGRA_8888},
+    {DRM_FORMAT_YVU420, gfx::BufferFormat::YVU_420}};
 
 struct LinuxBufferParams {
-  explicit LinuxBufferParams(Display* display)
-      : display(display), stride(0), offset(0) {}
+  struct Plane {
+    base::ScopedFD fd;
+    uint32_t stride;
+    uint32_t offset;
+  };
+
+  explicit LinuxBufferParams(Display* display) : display(display) {}
 
   Display* const display;
-  base::ScopedFD fd;
-  uint32_t stride;
-  uint32_t offset;
+  std::map<uint32_t, Plane> planes;
 };
 
 void linux_buffer_params_destroy(wl_client* client, wl_resource* resource) {
@@ -565,23 +624,19 @@ void linux_buffer_params_add(wl_client* client,
                              uint32_t stride,
                              uint32_t modifier_hi,
                              uint32_t modifier_lo) {
-  if (plane_idx) {
-    wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX,
-                           "plane_idx too large");
-    return;
-  }
-
   LinuxBufferParams* linux_buffer_params =
       GetUserDataAs<LinuxBufferParams>(resource);
-  if (linux_buffer_params->fd.is_valid()) {
+
+  LinuxBufferParams::Plane plane{base::ScopedFD(fd), stride, offset};
+
+  const auto& inserted = linux_buffer_params->planes.insert(
+      std::pair<uint32_t, LinuxBufferParams::Plane>(plane_idx,
+                                                    std::move(plane)));
+  if (!inserted.second) {  // The plane was already there.
     wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_SET,
                            "plane already set");
     return;
   }
-
-  linux_buffer_params->fd.reset(fd);
-  linux_buffer_params->stride = stride;
-  linux_buffer_params->offset = offset;
 }
 
 void linux_buffer_params_create(wl_client* client,
@@ -619,17 +674,39 @@ void linux_buffer_params_create(wl_client* client,
 
   LinuxBufferParams* linux_buffer_params =
       GetUserDataAs<LinuxBufferParams>(resource);
-  if (linux_buffer_params->offset) {
-    wl_resource_post_error(resource,
-                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_OUT_OF_BOUNDS,
-                           "offset not supported");
+
+  size_t num_planes =
+      gfx::NumberOfPlanesForBufferFormat(supported_format->buffer_format);
+
+  if (linux_buffer_params->planes.size() != num_planes) {
+    wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX,
+                           "plane idx out of bounds");
     return;
+  }
+
+  std::vector<int> strides;
+  std::vector<int> offsets;
+  std::vector<base::ScopedFD> fds;
+
+  for (uint32_t i = 0; i < num_planes; ++i) {
+    auto plane_it = linux_buffer_params->planes.find(i);
+    if (plane_it == linux_buffer_params->planes.end()) {
+      wl_resource_post_error(resource,
+                             ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
+                             "missing a plane");
+      return;
+    }
+    LinuxBufferParams::Plane& plane = plane_it->second;
+    strides.push_back(plane.stride);
+    offsets.push_back(plane.offset);
+    if (plane.fd.is_valid())
+      fds.push_back(std::move(plane.fd));
   }
 
   std::unique_ptr<Buffer> buffer =
       linux_buffer_params->display->CreateLinuxDMABufBuffer(
-          std::move(linux_buffer_params->fd), gfx::Size(width, height),
-          supported_format->buffer_format, linux_buffer_params->stride);
+          gfx::Size(width, height), supported_format->buffer_format, strides,
+          offsets, std::move(fds));
   if (!buffer) {
     zwp_linux_buffer_params_v1_send_failed(resource);
     return;
@@ -640,6 +717,8 @@ void linux_buffer_params_create(wl_client* client,
 
   buffer->set_release_callback(base::Bind(&HandleBufferReleaseCallback,
                                           base::Unretained(buffer_resource)));
+
+  SetImplementation(buffer_resource, &buffer_implementation, std::move(buffer));
 
   zwp_linux_buffer_params_v1_send_created(resource, buffer_resource);
 }
@@ -961,15 +1040,14 @@ wl_output_transform OutputTransform(display::Display::Rotation rotation) {
   return WL_OUTPUT_TRANSFORM_NORMAL;
 }
 
-class WaylandDisplayObserver : public display::DisplayObserver {
+class WaylandPrimaryDisplayObserver : public display::DisplayObserver {
  public:
-  WaylandDisplayObserver(const display::Display& display,
-                         wl_resource* output_resource)
-      : display_id_(display.id()), output_resource_(output_resource) {
+  WaylandPrimaryDisplayObserver(wl_resource* output_resource)
+      : output_resource_(output_resource) {
     display::Screen::GetScreen()->AddObserver(this);
-    SendDisplayMetrics(display);
+    SendDisplayMetrics();
   }
-  ~WaylandDisplayObserver() override {
+  ~WaylandPrimaryDisplayObserver() override {
     display::Screen::GetScreen()->RemoveObserver(this);
   }
 
@@ -978,18 +1056,29 @@ class WaylandDisplayObserver : public display::DisplayObserver {
   void OnDisplayRemoved(const display::Display& new_display) override {}
   void OnDisplayMetricsChanged(const display::Display& display,
                                uint32_t changed_metrics) override {
-    if (display.id() != display_id_)
+    if (display::Screen::GetScreen()->GetPrimaryDisplay().id() != display.id())
       return;
 
+    // There is no need to check DISPLAY_METRIC_PRIMARY because when primary
+    // changes, bounds always changes. (new primary should have had non
+    // 0,0 origin).
+    // Only exception is when switching to newly connected primary with
+    // the same bounds. This happens whenyou're in docked mode, suspend,
+    // unplug the dislpay, then resume to the internal display which has
+    // the same resolution. Since metrics does not change, there is no need
+    // to notify clients.
     if (changed_metrics &
         (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_DEVICE_SCALE_FACTOR |
          DISPLAY_METRIC_ROTATION)) {
-      SendDisplayMetrics(display);
+      SendDisplayMetrics();
     }
   }
 
  private:
-  void SendDisplayMetrics(const display::Display& display) {
+  void SendDisplayMetrics() {
+    display::Display display =
+        display::Screen::GetScreen()->GetPrimaryDisplay();
+
     const ash::DisplayInfo& info =
         ash::Shell::GetInstance()->display_manager()->GetDisplayInfo(
             display.id());
@@ -1022,13 +1111,10 @@ class WaylandDisplayObserver : public display::DisplayObserver {
     }
   }
 
-  // The identifier associated with the observed display.
-  int64_t display_id_;
-
   // The output resource associated with the display.
   wl_resource* const output_resource_;
 
-  DISALLOW_COPY_AND_ASSIGN(WaylandDisplayObserver);
+  DISALLOW_COPY_AND_ASSIGN(WaylandPrimaryDisplayObserver);
 };
 
 const uint32_t output_version = 2;
@@ -1037,14 +1123,9 @@ void bind_output(wl_client* client, void* data, uint32_t version, uint32_t id) {
   wl_resource* resource = wl_resource_create(
       client, &wl_output_interface, std::min(version, output_version), id);
 
-  // TODO(reveman): Multi-display support.
-  const display::Display& display = ash::Shell::GetInstance()
-                                        ->display_manager()
-                                        ->GetPrimaryDisplayCandidate();
-
   SetImplementation(
       resource, nullptr,
-      base::WrapUnique(new WaylandDisplayObserver(display, resource)));
+      base::WrapUnique(new WaylandPrimaryDisplayObserver(resource)));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1165,7 +1246,7 @@ void xdg_surface_unset_fullscreen(wl_client* client, wl_resource* resource) {
 }
 
 void xdg_surface_set_minimized(wl_client* client, wl_resource* resource) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<ShellSurface>(resource)->Minimize();
 }
 
 const struct xdg_surface_interface xdg_surface_implementation = {
@@ -1293,7 +1374,7 @@ void xdg_shell_get_xdg_popup(wl_client* client,
                              int32_t y) {
   // Parent widget can be found by locating the closest ancestor with a widget.
   views::Widget* parent_widget = nullptr;
-  aura::Window* parent_window = GetUserDataAs<Surface>(parent);
+  aura::Window* parent_window = GetUserDataAs<Surface>(parent)->window();
   while (parent_window) {
     parent_widget = views::Widget::GetWidgetForNativeWindow(parent_window);
     if (parent_widget)
@@ -1353,6 +1434,601 @@ void bind_xdg_shell(wl_client* client,
 
   wl_resource_set_implementation(resource, &xdg_shell_implementation, data,
                                  nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// remote_surface_interface:
+
+void remote_surface_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void remote_surface_set_app_id(wl_client* client,
+                               wl_resource* resource,
+                               const char* app_id) {
+  GetUserDataAs<ShellSurface>(resource)->SetApplicationId(app_id);
+}
+
+void remote_surface_set_window_geometry(wl_client* client,
+                                        wl_resource* resource,
+                                        int32_t x,
+                                        int32_t y,
+                                        int32_t width,
+                                        int32_t height) {
+  GetUserDataAs<ShellSurface>(resource)->SetGeometry(
+      gfx::Rect(x, y, width, height));
+}
+
+void remote_surface_set_scale(wl_client* client,
+                              wl_resource* resource,
+                              wl_fixed_t scale) {
+  GetUserDataAs<ShellSurface>(resource)->SetScale(wl_fixed_to_double(scale));
+}
+
+void remote_surface_fullscreen(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(true);
+}
+
+void remote_surface_maximize(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->Maximize();
+}
+
+void remote_surface_minimize(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->Minimize();
+}
+
+void remote_surface_restore(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->Restore();
+}
+
+void remote_surface_pin(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetPinned(true);
+}
+
+void remote_surface_unpin(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetPinned(false);
+}
+
+void remote_surface_unfullscreen(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetFullscreen(false);
+}
+
+void remote_surface_set_rectangular_shadow(wl_client* client,
+                                           wl_resource* resource,
+                                           int32_t x,
+                                           int32_t y,
+                                           int32_t width,
+                                           int32_t height) {
+  GetUserDataAs<ShellSurface>(resource)->SetRectangularShadow(
+      gfx::Rect(x, y, width, height));
+}
+
+void remote_surface_set_title(wl_client* client,
+                              wl_resource* resource,
+                              const char* title) {
+  GetUserDataAs<ShellSurface>(resource)->SetTitle(
+      base::string16(base::UTF8ToUTF16(title)));
+}
+
+void remote_surface_set_top_inset(wl_client* client,
+                                  wl_resource* resource,
+                                  int32_t height) {
+  GetUserDataAs<ShellSurface>(resource)->SetTopInset(height);
+}
+
+void remote_surface_set_system_modal(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetSystemModal(true);
+}
+
+void remote_surface_unset_system_modal(wl_client* client,
+                                       wl_resource* resource) {
+  GetUserDataAs<ShellSurface>(resource)->SetSystemModal(false);
+}
+
+void remote_surface_set_rectangular_shadow_background_opacity(
+    wl_client* client,
+    wl_resource* resource,
+    wl_fixed_t opacity) {
+  GetUserDataAs<ShellSurface>(resource)->SetRectangularShadowBackgroundOpacity(
+      wl_fixed_to_double(opacity));
+}
+
+void remote_surface_activate(wl_client* client,
+                             wl_resource* resource,
+                             uint32_t serial) {
+  GetUserDataAs<ShellSurface>(resource)->Activate();
+}
+
+const struct zwp_remote_surface_v1_interface remote_surface_implementation = {
+    remote_surface_destroy,
+    remote_surface_set_app_id,
+    remote_surface_set_window_geometry,
+    remote_surface_set_scale,
+    remote_surface_fullscreen,
+    remote_surface_maximize,
+    remote_surface_minimize,
+    remote_surface_restore,
+    remote_surface_pin,
+    remote_surface_unpin,
+    remote_surface_unfullscreen,
+    remote_surface_set_rectangular_shadow,
+    remote_surface_set_title,
+    remote_surface_set_top_inset,
+    remote_surface_set_system_modal,
+    remote_surface_unset_system_modal,
+    remote_surface_set_rectangular_shadow_background_opacity,
+    remote_surface_activate};
+
+////////////////////////////////////////////////////////////////////////////////
+// notification_surface_interface:
+
+void notification_surface_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct zwp_notification_surface_v1_interface
+    notification_surface_implementation = {notification_surface_destroy};
+
+////////////////////////////////////////////////////////////////////////////////
+// remote_shell_interface:
+
+// Implements remote shell interface and monitors workspace state needed
+// for the remote shell interface.
+class WaylandRemoteShell : public ash::ShellObserver,
+                           public aura::client::ActivationChangeObserver,
+                           public display::DisplayObserver {
+ public:
+  WaylandRemoteShell(Display* display,
+                     wl_resource* remote_shell_resource)
+      : display_(display),
+        remote_shell_resource_(remote_shell_resource),
+        weak_ptr_factory_(this) {
+    ash::WmShell::Get()->AddShellObserver(this);
+    ash::Shell* shell = ash::Shell::GetInstance();
+    shell->activation_client()->AddObserver(this);
+    display::Screen::GetScreen()->AddObserver(this);
+
+    layout_mode_ = ash::Shell::GetInstance()
+                           ->maximize_mode_controller()
+                           ->IsMaximizeModeWindowManagerEnabled()
+                       ? ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
+                       : ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
+
+    SendPrimaryDisplayMetrics();
+    SendActivated(shell->activation_client()->GetActiveWindow(), nullptr);
+  }
+  ~WaylandRemoteShell() override {
+    ash::WmShell::Get()->RemoveShellObserver(this);
+    ash::Shell::GetInstance()->activation_client()->RemoveObserver(this);
+    display::Screen::GetScreen()->RemoveObserver(this);
+  }
+
+  std::unique_ptr<ShellSurface> CreateShellSurface(Surface* surface,
+                                                   int container) {
+    return display_->CreateRemoteShellSurface(surface, container);
+  }
+
+  std::unique_ptr<NotificationSurface> CreateNotificationSurface(
+      Surface* surface,
+      const std::string& notification_id) {
+    return display_->CreateNotificationSurface(surface, notification_id);
+  }
+
+  // Overridden from display::DisplayObserver:
+  void OnDisplayAdded(const display::Display& new_display) override {}
+  void OnDisplayRemoved(const display::Display& new_display) override {}
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t changed_metrics) override {
+    if (display::Screen::GetScreen()->GetPrimaryDisplay().id() != display.id())
+      return;
+
+    // No need to update when a primary dislpay has changed without bounds
+    // change. See WaylandPrimaryDisplayObserver::OnDisplayMetricsChanged
+    // for more details.
+    if (changed_metrics &
+        (DISPLAY_METRIC_BOUNDS | DISPLAY_METRIC_DEVICE_SCALE_FACTOR |
+         DISPLAY_METRIC_ROTATION | DISPLAY_METRIC_WORK_AREA)) {
+      SendDisplayMetrics(display);
+    }
+    SendConfigure_DEPRECATED(display);
+  }
+
+  // Overridden from ash::ShellObserver:
+  void OnMaximizeModeStarted() override {
+    layout_mode_ = ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET;
+    SendLayoutModeChange_DEPRECATED();
+
+    send_configure_after_layout_change_ = true;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::Bind(&WaylandRemoteShell::MaybeSendConfigure,
+                              weak_ptr_factory_.GetWeakPtr()),
+        base::TimeDelta::FromMilliseconds(kConfigureDelayAfterLayoutSwitchMs));
+  }
+  void OnMaximizeModeEnded() override {
+    layout_mode_ = ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
+    SendLayoutModeChange_DEPRECATED();
+    send_configure_after_layout_change_ = true;
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::Bind(&WaylandRemoteShell::MaybeSendConfigure,
+                              weak_ptr_factory_.GetWeakPtr()),
+        base::TimeDelta::FromMilliseconds(kConfigureDelayAfterLayoutSwitchMs));
+  }
+
+  // Overridden from aura::client::ActivationChangeObserver:
+  void OnWindowActivated(
+      aura::client::ActivationChangeObserver::ActivationReason reason,
+      aura::Window* gained_active,
+      aura::Window* lost_active) override {
+    SendActivated(gained_active, lost_active);
+  }
+
+ private:
+  void SendPrimaryDisplayMetrics() {
+    const display::Display primary =
+        display::Screen::GetScreen()->GetPrimaryDisplay();
+
+    SendConfigure_DEPRECATED(primary);
+    SendDisplayMetrics(primary);
+  }
+
+  void MaybeSendConfigure() {
+    if (send_configure_after_layout_change_)
+      SendPrimaryDisplayMetrics();
+  }
+
+  void SendDisplayMetrics(const display::Display& display) {
+    send_configure_after_layout_change_ = false;
+
+    if (wl_resource_get_version(remote_shell_resource_) < 9)
+      return;
+
+    const gfx::Insets& work_area_insets = display.GetWorkAreaInsets();
+
+    zwp_remote_shell_v1_send_configuration_changed(
+        remote_shell_resource_, display.size().width(), display.size().height(),
+        OutputTransform(display.rotation()),
+        wl_fixed_from_double(display.device_scale_factor()),
+        work_area_insets.left(), work_area_insets.top(),
+        work_area_insets.right(), work_area_insets.bottom(), layout_mode_);
+
+    wl_client_flush(wl_resource_get_client(remote_shell_resource_));
+  }
+
+  void SendConfigure_DEPRECATED(const display::Display& display) {
+    send_configure_after_layout_change_ = false;
+
+    if (wl_resource_get_version(remote_shell_resource_) >= 9)
+      return;
+
+    const gfx::Insets& work_area_insets = display.GetWorkAreaInsets();
+    zwp_remote_shell_v1_send_configure(
+        remote_shell_resource_, display.size().width(), display.size().height(),
+        work_area_insets.left(), work_area_insets.top(),
+        work_area_insets.right(), work_area_insets.bottom());
+    wl_client_flush(wl_resource_get_client(remote_shell_resource_));
+  }
+
+  void SendLayoutModeChange_DEPRECATED() {
+    if (wl_resource_get_version(remote_shell_resource_) < 8)
+      return;
+    zwp_remote_shell_v1_send_layout_mode_changed(remote_shell_resource_,
+                                                 layout_mode_);
+    wl_client_flush(wl_resource_get_client(remote_shell_resource_));
+  }
+
+  void SendActivated(aura::Window* gained_active, aura::Window* lost_active) {
+    Surface* gained_active_surface =
+        gained_active ? ShellSurface::GetMainSurface(gained_active) : nullptr;
+    Surface* lost_active_surface =
+        lost_active ? ShellSurface::GetMainSurface(lost_active) : nullptr;
+    wl_resource* gained_active_surface_resource =
+        gained_active_surface ? GetSurfaceResource(gained_active_surface)
+                              : nullptr;
+    wl_resource* lost_active_surface_resource =
+        lost_active_surface ? GetSurfaceResource(lost_active_surface) : nullptr;
+
+    wl_client* client = wl_resource_get_client(remote_shell_resource_);
+
+    // If surface that gained active is not owned by remote shell client then
+    // set it to null.
+    if (gained_active_surface_resource &&
+        wl_resource_get_client(gained_active_surface_resource) != client) {
+      gained_active_surface_resource = nullptr;
+    }
+
+    // If surface that lost active is not owned by remote shell client then
+    // set it to null.
+    if (lost_active_surface_resource &&
+        wl_resource_get_client(lost_active_surface_resource) != client) {
+      lost_active_surface_resource = nullptr;
+    }
+
+    zwp_remote_shell_v1_send_activated(remote_shell_resource_,
+                                       gained_active_surface_resource,
+                                       lost_active_surface_resource);
+    wl_client_flush(client);
+  }
+
+  // The exo display instance. Not owned.
+  Display* const display_;
+
+  // The remote shell resource associated with observer.
+  wl_resource* const remote_shell_resource_;
+
+  bool send_configure_after_layout_change_ = false;
+
+  int layout_mode_ = ZWP_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
+
+  base::WeakPtrFactory<WaylandRemoteShell> weak_ptr_factory_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandRemoteShell);
+};
+
+void remote_shell_destroy(wl_client* client, wl_resource* resource) {
+  // Nothing to do here.
+}
+
+int RemoteSurfaceContainer(uint32_t container) {
+  switch (container) {
+    case ZWP_REMOTE_SHELL_V1_CONTAINER_DEFAULT:
+      return ash::kShellWindowId_DefaultContainer;
+    case ZWP_REMOTE_SHELL_V1_CONTAINER_OVERLAY:
+      return ash::kShellWindowId_SystemModalContainer;
+    default:
+      DLOG(WARNING) << "Unsupported container: " << container;
+      return ash::kShellWindowId_DefaultContainer;
+  }
+}
+
+void HandleRemoteSurfaceCloseCallback(wl_resource* resource) {
+  zwp_remote_surface_v1_send_close(resource);
+  wl_client_flush(wl_resource_get_client(resource));
+}
+
+void HandleRemoteSurfaceStateChangedCallback(
+    wl_resource* resource,
+    ash::wm::WindowStateType old_state_type,
+    ash::wm::WindowStateType new_state_type) {
+  DCHECK_NE(old_state_type, new_state_type);
+
+  switch (old_state_type) {
+    case ash::wm::WINDOW_STATE_TYPE_MINIMIZED:
+      if (wl_resource_get_version(resource) >= 2)
+        zwp_remote_surface_v1_send_unset_minimized(resource);
+      break;
+    case ash::wm::WINDOW_STATE_TYPE_MAXIMIZED:
+      if (wl_resource_get_version(resource) >= 2)
+        zwp_remote_surface_v1_send_unset_maximized(resource);
+      break;
+    case ash::wm::WINDOW_STATE_TYPE_FULLSCREEN:
+      zwp_remote_surface_v1_send_unset_fullscreen(resource);
+      break;
+    case ash::wm::WINDOW_STATE_TYPE_PINNED:
+      if (wl_resource_get_version(resource) >= 3)
+        zwp_remote_surface_v1_send_unset_pinned(resource);
+      break;
+    default:
+      break;
+  }
+
+  uint32_t state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_NORMAL;
+  switch (new_state_type) {
+    case ash::wm::WINDOW_STATE_TYPE_MINIMIZED:
+      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_MINIMIZED;
+      if (wl_resource_get_version(resource) >= 2)
+        zwp_remote_surface_v1_send_set_minimized(resource);
+      break;
+    case ash::wm::WINDOW_STATE_TYPE_MAXIMIZED:
+      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_MAXIMIZED;
+      if (wl_resource_get_version(resource) >= 2)
+        zwp_remote_surface_v1_send_set_maximized(resource);
+      break;
+    case ash::wm::WINDOW_STATE_TYPE_FULLSCREEN:
+      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_FULLSCREEN;
+      zwp_remote_surface_v1_send_set_fullscreen(resource);
+      break;
+    case ash::wm::WINDOW_STATE_TYPE_PINNED:
+      state_type = ZWP_REMOTE_SHELL_V1_STATE_TYPE_PINNED;
+      if (wl_resource_get_version(resource) >= 3)
+        zwp_remote_surface_v1_send_set_pinned(resource);
+      break;
+    default:
+      break;
+  }
+
+  if (wl_resource_get_version(resource) >= 7)
+    zwp_remote_surface_v1_send_state_type_changed(resource, state_type);
+
+  wl_client_flush(wl_resource_get_client(resource));
+}
+
+void remote_shell_get_remote_surface(wl_client* client,
+                                     wl_resource* resource,
+                                     uint32_t id,
+                                     wl_resource* surface,
+                                     uint32_t container) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      GetUserDataAs<WaylandRemoteShell>(resource)->CreateShellSurface(
+          GetUserDataAs<Surface>(surface), RemoteSurfaceContainer(container));
+  if (!shell_surface) {
+    wl_resource_post_error(resource, ZWP_REMOTE_SHELL_V1_ERROR_ROLE,
+                           "surface has already been assigned a role");
+    return;
+  }
+
+  wl_resource* remote_surface_resource =
+      wl_resource_create(client, &zwp_remote_surface_v1_interface,
+                         wl_resource_get_version(resource), id);
+
+  shell_surface->set_close_callback(
+      base::Bind(&HandleRemoteSurfaceCloseCallback,
+                 base::Unretained(remote_surface_resource)));
+  shell_surface->set_state_changed_callback(
+      base::Bind(&HandleRemoteSurfaceStateChangedCallback,
+                 base::Unretained(remote_surface_resource)));
+
+  SetImplementation(remote_surface_resource, &remote_surface_implementation,
+                    std::move(shell_surface));
+}
+
+void remote_shell_get_notification_surface(wl_client* client,
+                                           wl_resource* resource,
+                                           uint32_t id,
+                                           wl_resource* surface,
+                                           const char* notification_id) {
+  if (GetUserDataAs<Surface>(surface)->HasSurfaceDelegate()) {
+    wl_resource_post_error(resource, ZWP_REMOTE_SHELL_V1_ERROR_ROLE,
+                           "surface has already been assigned a role");
+    return;
+  }
+
+  std::unique_ptr<NotificationSurface> notification_surface =
+      GetUserDataAs<WaylandRemoteShell>(resource)->CreateNotificationSurface(
+          GetUserDataAs<Surface>(surface), std::string(notification_id));
+  if (!notification_surface) {
+    wl_resource_post_error(resource,
+                           ZWP_REMOTE_SHELL_V1_ERROR_INVALID_NOTIFICATION_ID,
+                           "invalid notification id");
+    return;
+  }
+
+  wl_resource* notification_surface_resource =
+      wl_resource_create(client, &zwp_notification_surface_v1_interface,
+                         wl_resource_get_version(resource), id);
+  SetImplementation(notification_surface_resource,
+                    &notification_surface_implementation,
+                    std::move(notification_surface));
+}
+
+const struct zwp_remote_shell_v1_interface remote_shell_implementation = {
+    remote_shell_destroy, remote_shell_get_remote_surface,
+    remote_shell_get_notification_surface};
+
+const uint32_t remote_shell_version = 10;
+
+void bind_remote_shell(wl_client* client,
+                       void* data,
+                       uint32_t version,
+                       uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_remote_shell_v1_interface,
+                         std::min(version, remote_shell_version), id);
+
+  SetImplementation(resource, &remote_shell_implementation,
+                    base::WrapUnique(new WaylandRemoteShell(
+                        static_cast<Display*>(data), resource)));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// zwp_vsync_timing_v1_interface:
+
+// Implements VSync timing interface by monitoring a compositor for updates
+// to VSync parameters.
+class VSyncTiming : public ui::CompositorVSyncManager::Observer {
+ public:
+  ~VSyncTiming() { vsync_manager_->RemoveObserver(this); }
+
+  static std::unique_ptr<VSyncTiming> Create(ui::Compositor* compositor,
+                                             wl_resource* timing_resource) {
+    std::unique_ptr<VSyncTiming> vsync_timing(
+        new VSyncTiming(compositor, timing_resource));
+    // Note: AddObserver() will call OnUpdateVSyncParameters.
+    vsync_timing->vsync_manager_->AddObserver(vsync_timing.get());
+    return vsync_timing;
+  }
+
+  // Overridden from ui::CompositorVSyncManager::Observer:
+  void OnUpdateVSyncParameters(base::TimeTicks timebase,
+                               base::TimeDelta interval) override {
+    uint64_t timebase_us = timebase.ToInternalValue();
+    uint64_t interval_us = interval.ToInternalValue();
+
+    // Ignore updates with interval 0.
+    if (!interval_us)
+      return;
+
+    uint64_t offset_us = timebase_us % interval_us;
+
+    // Avoid sending update events if interval did not change.
+    if (interval_us == last_interval_us_) {
+      int64_t offset_delta_us =
+          static_cast<int64_t>(last_offset_us_ - offset_us);
+
+      // Reduce the amount of events by only sending an update if the offset
+      // changed compared to the last offset sent to the client by this amount.
+      const int64_t kOffsetDeltaThresholdInMicroseconds = 25;
+
+      if (std::abs(offset_delta_us) < kOffsetDeltaThresholdInMicroseconds)
+        return;
+    }
+
+    zwp_vsync_timing_v1_send_update(timing_resource_, timebase_us & 0xffffffff,
+                                    timebase_us >> 32, interval_us & 0xffffffff,
+                                    interval_us >> 32);
+    wl_client_flush(wl_resource_get_client(timing_resource_));
+
+    last_interval_us_ = interval_us;
+    last_offset_us_ = offset_us;
+  }
+
+ private:
+  VSyncTiming(ui::Compositor* compositor, wl_resource* timing_resource)
+      : vsync_manager_(compositor->vsync_manager()),
+        timing_resource_(timing_resource) {}
+
+  // The VSync manager being observed.
+  scoped_refptr<ui::CompositorVSyncManager> vsync_manager_;
+
+  // The VSync timing resource.
+  wl_resource* const timing_resource_;
+
+  uint64_t last_interval_us_{0};
+  uint64_t last_offset_us_{0};
+
+  DISALLOW_COPY_AND_ASSIGN(VSyncTiming);
+};
+
+void vsync_timing_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct zwp_vsync_timing_v1_interface vsync_timing_implementation = {
+    vsync_timing_destroy};
+
+////////////////////////////////////////////////////////////////////////////////
+// zwp_vsync_feedback_v1_interface:
+
+void vsync_feedback_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void vsync_feedback_get_vsync_timing(wl_client* client,
+                                     wl_resource* resource,
+                                     uint32_t id,
+                                     wl_resource* output) {
+  wl_resource* timing_resource =
+      wl_resource_create(client, &zwp_vsync_timing_v1_interface, 1, id);
+
+  // TODO(reveman): Multi-display support.
+  ui::Compositor* compositor =
+      ash::Shell::GetPrimaryRootWindow()->layer()->GetCompositor();
+
+  SetImplementation(timing_resource, &vsync_timing_implementation,
+                    VSyncTiming::Create(compositor, timing_resource));
+}
+
+const struct zwp_vsync_feedback_v1_interface vsync_feedback_implementation = {
+    vsync_feedback_destroy, vsync_feedback_get_vsync_timing};
+
+void bind_vsync_feedback(wl_client* client,
+                         void* data,
+                         uint32_t version,
+                         uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_vsync_feedback_v1_interface, 1, id);
+
+  wl_resource_set_implementation(resource, &vsync_feedback_implementation,
+                                 nullptr, nullptr);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1426,7 +2102,7 @@ class WaylandPointerDelegate : public PointerDelegate {
   // Overridden from PointerDelegate:
   void OnPointerDestroying(Pointer* pointer) override { delete this; }
   bool CanAcceptPointerEventsForSurface(Surface* surface) const override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     // We can accept events for this surface if the client is the same as the
     // pointer.
     return surface_resource &&
@@ -1435,7 +2111,7 @@ class WaylandPointerDelegate : public PointerDelegate {
   void OnPointerEnter(Surface* surface,
                       const gfx::PointF& location,
                       int button_flags) override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     DCHECK(surface_resource);
     // Should we be sending button events to the client before the enter event
     // if client's pressed button state is different from |button_flags|?
@@ -1444,17 +2120,17 @@ class WaylandPointerDelegate : public PointerDelegate {
                           wl_fixed_from_double(location.y()));
   }
   void OnPointerLeave(Surface* surface) override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     DCHECK(surface_resource);
     wl_pointer_send_leave(pointer_resource_, next_serial(), surface_resource);
   }
-  void OnPointerMotion(base::TimeDelta time_stamp,
+  void OnPointerMotion(base::TimeTicks time_stamp,
                        const gfx::PointF& location) override {
-    wl_pointer_send_motion(pointer_resource_, time_stamp.InMilliseconds(),
-                           wl_fixed_from_double(location.x()),
-                           wl_fixed_from_double(location.y()));
+    wl_pointer_send_motion(
+        pointer_resource_, TimeTicksToMilliseconds(time_stamp),
+        wl_fixed_from_double(location.x()), wl_fixed_from_double(location.y()));
   }
-  void OnPointerButton(base::TimeDelta time_stamp,
+  void OnPointerButton(base::TimeTicks time_stamp,
                        int button_flags,
                        bool pressed) override {
     struct {
@@ -1470,15 +2146,14 @@ class WaylandPointerDelegate : public PointerDelegate {
     uint32_t serial = next_serial();
     for (auto button : buttons) {
       if (button_flags & button.flag) {
-        wl_pointer_send_button(pointer_resource_, serial,
-                               time_stamp.InMilliseconds(), button.value,
-                               pressed ? WL_POINTER_BUTTON_STATE_PRESSED
-                                       : WL_POINTER_BUTTON_STATE_RELEASED);
+        wl_pointer_send_button(
+            pointer_resource_, serial, TimeTicksToMilliseconds(time_stamp),
+            button.value, pressed ? WL_POINTER_BUTTON_STATE_PRESSED
+                                  : WL_POINTER_BUTTON_STATE_RELEASED);
       }
     }
   }
-
-  void OnPointerScroll(base::TimeDelta time_stamp,
+  void OnPointerScroll(base::TimeTicks time_stamp,
                        const gfx::Vector2dF& offset,
                        bool discrete) override {
     // Same as Weston, the reference compositor.
@@ -1492,33 +2167,32 @@ class WaylandPointerDelegate : public PointerDelegate {
     }
 
     double x_value = offset.x() * kAxisStepDistance;
-    wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
+    wl_pointer_send_axis(pointer_resource_, TimeTicksToMilliseconds(time_stamp),
                          WL_POINTER_AXIS_HORIZONTAL_SCROLL,
                          wl_fixed_from_double(-x_value));
 
     double y_value = offset.y() * kAxisStepDistance;
-    wl_pointer_send_axis(pointer_resource_, time_stamp.InMilliseconds(),
+    wl_pointer_send_axis(pointer_resource_, TimeTicksToMilliseconds(time_stamp),
                          WL_POINTER_AXIS_VERTICAL_SCROLL,
                          wl_fixed_from_double(-y_value));
   }
-
-  void OnPointerScrollCancel(base::TimeDelta time_stamp) override {
+  void OnPointerScrollCancel(base::TimeTicks time_stamp) override {
     // Wayland doesn't know the concept of a canceling kinetic scrolling.
     // But we can send a 0 distance scroll to emulate this behavior.
     OnPointerScroll(time_stamp, gfx::Vector2dF(0, 0), false);
     OnPointerScrollStop(time_stamp);
   }
-
-  void OnPointerScrollStop(base::TimeDelta time_stamp) override {
+  void OnPointerScrollStop(base::TimeTicks time_stamp) override {
     if (wl_resource_get_version(pointer_resource_) >=
         WL_POINTER_AXIS_STOP_SINCE_VERSION) {
-      wl_pointer_send_axis_stop(pointer_resource_, time_stamp.InMilliseconds(),
+      wl_pointer_send_axis_stop(pointer_resource_,
+                                TimeTicksToMilliseconds(time_stamp),
                                 WL_POINTER_AXIS_HORIZONTAL_SCROLL);
-      wl_pointer_send_axis_stop(pointer_resource_, time_stamp.InMilliseconds(),
+      wl_pointer_send_axis_stop(pointer_resource_,
+                                TimeTicksToMilliseconds(time_stamp),
                                 WL_POINTER_AXIS_VERTICAL_SCROLL);
     }
   }
-
   void OnPointerFrame() override {
     if (wl_resource_get_version(pointer_resource_) >=
         WL_POINTER_FRAME_SINCE_VERSION) {
@@ -1596,7 +2270,7 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
   // Overridden from KeyboardDelegate:
   void OnKeyboardDestroying(Keyboard* keyboard) override { delete this; }
   bool CanAcceptKeyboardEventsForSurface(Surface* surface) const override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     // We can accept events for this surface if the client is the same as the
     // keyboard.
     return surface_resource &&
@@ -1604,7 +2278,7 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
   }
   void OnKeyboardEnter(Surface* surface,
                        const std::vector<ui::DomCode>& pressed_keys) override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     DCHECK(surface_resource);
     wl_array keys;
     wl_array_init(&keys);
@@ -1620,16 +2294,16 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
     wl_client_flush(client());
   }
   void OnKeyboardLeave(Surface* surface) override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     DCHECK(surface_resource);
     wl_keyboard_send_leave(keyboard_resource_, next_serial(), surface_resource);
     wl_client_flush(client());
   }
-  void OnKeyboardKey(base::TimeDelta time_stamp,
+  void OnKeyboardKey(base::TimeTicks time_stamp,
                      ui::DomCode key,
                      bool pressed) override {
     wl_keyboard_send_key(keyboard_resource_, next_serial(),
-                         time_stamp.InMilliseconds(), DomCodeToKey(key),
+                         TimeTicksToMilliseconds(time_stamp), DomCodeToKey(key),
                          pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
                                  : WL_KEYBOARD_KEY_STATE_RELEASED);
     wl_client_flush(client());
@@ -1727,34 +2401,34 @@ class WaylandTouchDelegate : public TouchDelegate {
   // Overridden from TouchDelegate:
   void OnTouchDestroying(Touch* touch) override { delete this; }
   bool CanAcceptTouchEventsForSurface(Surface* surface) const override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     // We can accept events for this surface if the client is the same as the
     // touch resource.
     return surface_resource &&
            wl_resource_get_client(surface_resource) == client();
   }
   void OnTouchDown(Surface* surface,
-                   base::TimeDelta time_stamp,
+                   base::TimeTicks time_stamp,
                    int id,
                    const gfx::Point& location) override {
-    wl_resource* surface_resource = surface->GetProperty(kSurfaceResourceKey);
+    wl_resource* surface_resource = GetSurfaceResource(surface);
     DCHECK(surface_resource);
     wl_touch_send_down(touch_resource_, next_serial(),
-                       time_stamp.InMilliseconds(), surface_resource, id,
-                       wl_fixed_from_int(location.x()),
+                       TimeTicksToMilliseconds(time_stamp), surface_resource,
+                       id, wl_fixed_from_int(location.x()),
                        wl_fixed_from_int(location.y()));
     wl_client_flush(client());
   }
-  void OnTouchUp(base::TimeDelta time_stamp, int id) override {
+  void OnTouchUp(base::TimeTicks time_stamp, int id) override {
     wl_touch_send_up(touch_resource_, next_serial(),
-                     time_stamp.InMilliseconds(), id);
+                     TimeTicksToMilliseconds(time_stamp), id);
     wl_client_flush(client());
   }
-  void OnTouchMotion(base::TimeDelta time_stamp,
+  void OnTouchMotion(base::TimeTicks time_stamp,
                      int id,
                      const gfx::Point& location) override {
-    wl_touch_send_motion(touch_resource_, time_stamp.InMilliseconds(), id,
-                         wl_fixed_from_int(location.x()),
+    wl_touch_send_motion(touch_resource_, TimeTicksToMilliseconds(time_stamp),
+                         id, wl_fixed_from_int(location.x()),
                          wl_fixed_from_int(location.y()));
     wl_client_flush(client());
   }
@@ -1849,7 +2523,7 @@ void bind_seat(wl_client* client, void* data, uint32_t version, uint32_t id) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// wl_viewport_interface:
+// wp_viewport_interface:
 
 // Implements the viewport interface to a Surface. The "viewport"-state is set
 // to null upon destruction. A window property will be set during the lifetime
@@ -1864,9 +2538,15 @@ class Viewport : public SurfaceObserver {
   ~Viewport() override {
     if (surface_) {
       surface_->RemoveSurfaceObserver(this);
+      surface_->SetCrop(gfx::RectF());
       surface_->SetViewport(gfx::Size());
       surface_->SetProperty(kSurfaceHasViewportKey, false);
     }
+  }
+
+  void SetSource(const gfx::RectF& rect) {
+    if (surface_)
+      surface_->SetCrop(rect);
   }
 
   void SetDestination(const gfx::Size& size) {
@@ -1890,24 +2570,29 @@ void viewport_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-void viewport_set(wl_client* client,
-                  wl_resource* resource,
-                  wl_fixed_t src_x,
-                  wl_fixed_t src_y,
-                  wl_fixed_t src_width,
-                  wl_fixed_t src_height,
-                  int32_t dst_width,
-                  int32_t dst_height) {
-  NOTIMPLEMENTED();
-}
-
 void viewport_set_source(wl_client* client,
                          wl_resource* resource,
                          wl_fixed_t x,
                          wl_fixed_t y,
                          wl_fixed_t width,
                          wl_fixed_t height) {
-  NOTIMPLEMENTED();
+  if (x == wl_fixed_from_int(-1) && y == wl_fixed_from_int(-1) &&
+      width == wl_fixed_from_int(-1) && height == wl_fixed_from_int(-1)) {
+    GetUserDataAs<Viewport>(resource)->SetSource(gfx::RectF());
+    return;
+  }
+
+  if (x < 0 || y < 0 || width <= 0 || height <= 0) {
+    wl_resource_post_error(resource, WP_VIEWPORT_ERROR_BAD_VALUE,
+                           "source rectangle must be non-empty (%dx%d) and"
+                           "have positive origin (%d,%d)",
+                           width, height, x, y);
+    return;
+  }
+
+  GetUserDataAs<Viewport>(resource)->SetSource(
+      gfx::RectF(wl_fixed_to_double(x), wl_fixed_to_double(y),
+                 wl_fixed_to_double(width), wl_fixed_to_double(height)));
 }
 
 void viewport_set_destination(wl_client* client,
@@ -1920,7 +2605,7 @@ void viewport_set_destination(wl_client* client,
   }
 
   if (width <= 0 || height <= 0) {
-    wl_resource_post_error(resource, WL_VIEWPORT_ERROR_BAD_VALUE,
+    wl_resource_post_error(resource, WP_VIEWPORT_ERROR_BAD_VALUE,
                            "destination size must be positive (%dx%d)", width,
                            height);
     return;
@@ -1929,45 +2614,45 @@ void viewport_set_destination(wl_client* client,
   GetUserDataAs<Viewport>(resource)->SetDestination(gfx::Size(width, height));
 }
 
-const struct wl_viewport_interface viewport_implementation = {
-    viewport_destroy, viewport_set, viewport_set_source,
-    viewport_set_destination};
+const struct wp_viewport_interface viewport_implementation = {
+    viewport_destroy, viewport_set_source, viewport_set_destination};
 
 ////////////////////////////////////////////////////////////////////////////////
-// wl_scaler_interface:
+// wp_viewporter_interface:
 
-void scaler_destroy(wl_client* client, wl_resource* resource) {
+void viewporter_destroy(wl_client* client, wl_resource* resource) {
   wl_resource_destroy(resource);
 }
 
-void scaler_get_viewport(wl_client* client,
-                         wl_resource* resource,
-                         uint32_t id,
-                         wl_resource* surface_resource) {
+void viewporter_get_viewport(wl_client* client,
+                             wl_resource* resource,
+                             uint32_t id,
+                             wl_resource* surface_resource) {
   Surface* surface = GetUserDataAs<Surface>(surface_resource);
   if (surface->GetProperty(kSurfaceHasViewportKey)) {
-    wl_resource_post_error(resource, WL_SCALER_ERROR_VIEWPORT_EXISTS,
+    wl_resource_post_error(resource, WP_VIEWPORTER_ERROR_VIEWPORT_EXISTS,
                            "a viewport for that surface already exists");
     return;
   }
 
   wl_resource* viewport_resource = wl_resource_create(
-      client, &wl_viewport_interface, wl_resource_get_version(resource), id);
+      client, &wp_viewport_interface, wl_resource_get_version(resource), id);
 
   SetImplementation(viewport_resource, &viewport_implementation,
                     base::WrapUnique(new Viewport(surface)));
 }
 
-const struct wl_scaler_interface scaler_implementation = {scaler_destroy,
-                                                          scaler_get_viewport};
+const struct wp_viewporter_interface viewporter_implementation = {
+    viewporter_destroy, viewporter_get_viewport};
 
-const uint32_t scaler_version = 2;
+void bind_viewporter(wl_client* client,
+                     void* data,
+                     uint32_t version,
+                     uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &wp_viewporter_interface, 1, id);
 
-void bind_scaler(wl_client* client, void* data, uint32_t version, uint32_t id) {
-  wl_resource* resource = wl_resource_create(
-      client, &wl_scaler_interface, std::min(version, scaler_version), id);
-
-  wl_resource_set_implementation(resource, &scaler_implementation, data,
+  wl_resource_set_implementation(resource, &viewporter_implementation, data,
                                  nullptr);
 }
 
@@ -2178,6 +2863,171 @@ void bind_alpha_compositing(wl_client* client,
                                  data, nullptr);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// gaming_input_interface:
+
+// Gamepad delegate class that forwards gamepad events to the client resource.
+class WaylandGamepadDelegate : public GamepadDelegate {
+ public:
+  explicit WaylandGamepadDelegate(wl_resource* gamepad_resource)
+      : gamepad_resource_(gamepad_resource) {}
+
+  // Overridden from GamepadDelegate:
+  void OnGamepadDestroying(Gamepad* gamepad) override { delete this; }
+  bool CanAcceptGamepadEventsForSurface(Surface* surface) const override {
+    wl_resource* surface_resource = GetSurfaceResource(surface);
+    return surface_resource &&
+           wl_resource_get_client(surface_resource) == client();
+  }
+  void OnStateChange(bool connected) override {
+    uint32_t status = connected ? ZWP_GAMEPAD_V1_GAMEPAD_STATE_ON
+                                : ZWP_GAMEPAD_V1_GAMEPAD_STATE_OFF;
+    zwp_gamepad_v1_send_state_change(gamepad_resource_, status);
+    wl_client_flush(client());
+  }
+  void OnAxis(int axis, double value) override {
+    zwp_gamepad_v1_send_axis(gamepad_resource_, NowInMilliseconds(), axis,
+                             wl_fixed_from_double(value));
+  }
+  void OnButton(int button, bool pressed, double value) override {
+    uint32_t state = pressed ? ZWP_GAMEPAD_V1_BUTTON_STATE_PRESSED
+                             : ZWP_GAMEPAD_V1_BUTTON_STATE_RELEASED;
+    zwp_gamepad_v1_send_button(gamepad_resource_, NowInMilliseconds(), button,
+                               state, wl_fixed_from_double(value));
+  }
+  void OnFrame() override {
+    zwp_gamepad_v1_send_frame(gamepad_resource_, NowInMilliseconds());
+    wl_client_flush(client());
+  }
+
+ private:
+  // The client who own this gamepad instance.
+  wl_client* client() const {
+    return wl_resource_get_client(gamepad_resource_);
+  }
+
+  // The gamepad resource associated with the gamepad.
+  wl_resource* const gamepad_resource_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandGamepadDelegate);
+};
+
+void gamepad_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct zwp_gamepad_v1_interface gamepad_implementation = {
+    gamepad_destroy};
+
+void gaming_input_get_gamepad(wl_client* client,
+                              wl_resource* resource,
+                              uint32_t id,
+                              wl_resource* seat) {
+  wl_resource* gamepad_resource = wl_resource_create(
+      client, &zwp_gamepad_v1_interface, wl_resource_get_version(resource), id);
+
+  base::Thread* gaming_input_thread = GetUserDataAs<base::Thread>(resource);
+
+  SetImplementation(
+      gamepad_resource, &gamepad_implementation,
+      base::WrapUnique(new Gamepad(new WaylandGamepadDelegate(gamepad_resource),
+                                   gaming_input_thread->task_runner().get())));
+}
+
+const struct zwp_gaming_input_v1_interface gaming_input_implementation = {
+    gaming_input_get_gamepad};
+
+void bind_gaming_input(wl_client* client,
+                       void* data,
+                       uint32_t version,
+                       uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_gaming_input_v1_interface, version, id);
+
+  std::unique_ptr<base::Thread> gaming_input_thread(
+      new base::Thread("Exo gaming input polling thread."));
+  gaming_input_thread->StartWithOptions(
+      base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
+
+  SetImplementation(resource, &gaming_input_implementation,
+                    std::move(gaming_input_thread));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// pointer_stylus interface:
+
+class WaylandPointerStylusDelegate : public PointerStylusDelegate {
+ public:
+  WaylandPointerStylusDelegate(wl_resource* resource, Pointer* pointer)
+      : resource_(resource), pointer_(pointer) {
+    pointer_->SetStylusDelegate(this);
+  }
+  ~WaylandPointerStylusDelegate() override {
+    if (pointer_ != nullptr)
+      pointer_->SetStylusDelegate(nullptr);
+  }
+  void OnPointerDestroying(Pointer* pointer) override { pointer_ = nullptr; }
+  void OnPointerToolChange(ui::EventPointerType type) override {
+    uint wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_MOUSE;
+    if (type == ui::EventPointerType::POINTER_TYPE_PEN)
+      wayland_type = ZWP_POINTER_STYLUS_V1_TOOL_TYPE_PEN;
+    zwp_pointer_stylus_v1_send_tool_change(resource_, wayland_type);
+  }
+  void OnPointerForce(base::TimeTicks time_stamp, float force) override {
+    zwp_pointer_stylus_v1_send_force(resource_,
+                                     TimeTicksToMilliseconds(time_stamp),
+                                     wl_fixed_from_double(force));
+  }
+  void OnPointerTilt(base::TimeTicks time_stamp, gfx::Vector2dF tilt) override {
+    zwp_pointer_stylus_v1_send_tilt(
+        resource_, TimeTicksToMilliseconds(time_stamp),
+        wl_fixed_from_double(tilt.x()), wl_fixed_from_double(tilt.y()));
+  }
+
+ private:
+  wl_resource* resource_;
+  Pointer* pointer_;
+
+  // The client who own this pointer stylus instance.
+  wl_client* client() const { return wl_resource_get_client(resource_); }
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandPointerStylusDelegate);
+};
+
+void pointer_stylus_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+const struct zwp_pointer_stylus_v1_interface pointer_stylus_implementation = {
+    pointer_stylus_destroy};
+
+////////////////////////////////////////////////////////////////////////////////
+// stylus interface:
+
+void stylus_get_pointer_stylus(wl_client* client,
+                               wl_resource* resource,
+                               uint32_t id,
+                               wl_resource* pointer_resource) {
+  Pointer* pointer = GetUserDataAs<Pointer>(pointer_resource);
+
+  wl_resource* stylus_resource =
+      wl_resource_create(client, &zwp_pointer_stylus_v1_interface, 1, id);
+
+  SetImplementation(stylus_resource, &pointer_stylus_implementation,
+                    base::WrapUnique(new WaylandPointerStylusDelegate(
+                        stylus_resource, pointer)));
+}
+
+const struct zwp_stylus_v1_interface stylus_implementation = {
+    stylus_get_pointer_stylus};
+
+void bind_stylus(wl_client* client, void* data, uint32_t version, uint32_t id) {
+  wl_resource* resource =
+      wl_resource_create(client, &zwp_stylus_v1_interface, version, id);
+  wl_resource_set_implementation(resource, &stylus_implementation, data,
+                                 nullptr);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2202,16 +3052,24 @@ Server::Server(Display* display)
                    display_, bind_output);
   wl_global_create(wl_display_.get(), &xdg_shell_interface, 1, display_,
                    bind_xdg_shell);
+  wl_global_create(wl_display_.get(), &zwp_vsync_feedback_v1_interface, 1,
+                   display_, bind_vsync_feedback);
   wl_global_create(wl_display_.get(), &wl_data_device_manager_interface, 1,
                    display_, bind_data_device_manager);
   wl_global_create(wl_display_.get(), &wl_seat_interface, seat_version,
                    display_, bind_seat);
-  wl_global_create(wl_display_.get(), &wl_scaler_interface, scaler_version,
-                   display_, bind_scaler);
+  wl_global_create(wl_display_.get(), &wp_viewporter_interface, 1, display_,
+                   bind_viewporter);
   wl_global_create(wl_display_.get(), &zwp_secure_output_v1_interface, 1,
                    display_, bind_secure_output);
   wl_global_create(wl_display_.get(), &zwp_alpha_compositing_v1_interface, 1,
                    display_, bind_alpha_compositing);
+  wl_global_create(wl_display_.get(), &zwp_remote_shell_v1_interface,
+                   remote_shell_version, display_, bind_remote_shell);
+  wl_global_create(wl_display_.get(), &zwp_gaming_input_v1_interface, 1,
+                   display_, bind_gaming_input);
+  wl_global_create(wl_display_.get(), &zwp_stylus_v1_interface, 1, display_,
+                   bind_stylus);
 }
 
 Server::~Server() {}

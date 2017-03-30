@@ -30,9 +30,11 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/V8ThrowException.h"
+#include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fetch/CachedMetadata.h"
 #include "core/fetch/ScriptResource.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/inspector/ThreadDebugger.h"
 #include "platform/Histogram.h"
@@ -268,7 +270,7 @@ typedef Function<v8::MaybeLocal<v8::Script>(v8::Isolate*, v8::Local<v8::String>,
 template<typename... A>
 std::unique_ptr<CompileFn> bind(const A&... args)
 {
-    return WTF::bind<v8::Isolate*, v8::Local<v8::String>, v8::ScriptOrigin>(args...);
+    return WTF::bind(args...);
 }
 
 // Select a compile function from any of the above, mainly depending on
@@ -294,7 +296,7 @@ std::unique_ptr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, Ca
     switch (cacheOptions) {
     case V8CacheOptionsParse:
         // Use parser-cache; in-memory only.
-        return bind(compileAndConsumeOrProduce, cacheHandler, cacheTag(CacheTagParser, cacheHandler), v8::ScriptCompiler::kConsumeParserCache, v8::ScriptCompiler::kProduceParserCache, CachedMetadataHandler::CacheLocally);
+        return bind(compileAndConsumeOrProduce, wrapPersistent(cacheHandler), cacheTag(CacheTagParser, cacheHandler), v8::ScriptCompiler::kConsumeParserCache, v8::ScriptCompiler::kProduceParserCache, CachedMetadataHandler::CacheLocally);
         break;
 
     case V8CacheOptionsDefault:
@@ -305,12 +307,12 @@ std::unique_ptr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, Ca
         unsigned codeCacheTag = cacheTag(CacheTagCode, cacheHandler);
         CachedMetadata* codeCache = cacheHandler->cachedMetadata(codeCacheTag);
         if (codeCache)
-            return bind(compileAndConsumeCache, cacheHandler, codeCacheTag, v8::ScriptCompiler::kConsumeCodeCache);
+            return bind(compileAndConsumeCache, wrapPersistent(cacheHandler), codeCacheTag, v8::ScriptCompiler::kConsumeCodeCache);
         if (cacheOptions != V8CacheOptionsAlways && !isResourceHotForCaching(cacheHandler, hotHours)) {
             V8ScriptRunner::setCacheTimeStamp(cacheHandler);
             return bind(compileWithoutOptions, V8CompileHistogram::Cacheable);
         }
-        return bind(compileAndProduceCache, cacheHandler, codeCacheTag, v8::ScriptCompiler::kProduceCodeCache, CachedMetadataHandler::SendToPlatform);
+        return bind(compileAndProduceCache, wrapPersistent(cacheHandler), codeCacheTag, v8::ScriptCompiler::kProduceCodeCache, CachedMetadataHandler::SendToPlatform);
         break;
     }
 
@@ -336,7 +338,7 @@ std::unique_ptr<CompileFn> selectCompileFunction(V8CacheOptions cacheOptions, Sc
     ASSERT(!resource->errorOccurred());
     ASSERT(streamer->isFinished());
     ASSERT(!streamer->streamingSuppressed());
-    return WTF::bind<v8::Isolate*, v8::Local<v8::String>, v8::ScriptOrigin>(postStreamCompile, cacheOptions, resource->cacheHandler(), streamer);
+    return WTF::bind(postStreamCompile, cacheOptions, wrapPersistent(resource->cacheHandler()), wrapPersistent(streamer));
 }
 } // namespace
 
@@ -441,8 +443,49 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::runCompiledInternalScript(v8::Isolate*
     return result;
 }
 
+v8::MaybeLocal<v8::Value> V8ScriptRunner::callAsConstructor(v8::Isolate* isolate, v8::Local<v8::Object> constructor, ExecutionContext* context, int argc, v8::Local<v8::Value> argv[])
+{
+    TRACE_EVENT0("v8", "v8.callAsConstructor");
+    TRACE_EVENT_SCOPED_SAMPLING_STATE("v8", "V8Execution");
+
+    int depth = v8::MicrotasksScope::GetCurrentDepth(isolate);
+    if (depth >= kMaxRecursionDepth)
+        return v8::MaybeLocal<v8::Value>(throwStackOverflowExceptionIfNeeded(isolate));
+
+    CHECK(!context->isIteratingOverObservers());
+
+    if (ScriptForbiddenScope::isScriptForbidden()) {
+        throwScriptForbiddenException(isolate);
+        return v8::MaybeLocal<v8::Value>();
+    }
+
+    // TODO(dominicc): When inspector supports tracing object
+    // invocation, change this to use v8::Object instead of
+    // v8::Function. All callers use functions because
+    // CustomElementsRegistry#define's IDL signature is Function.
+    CHECK(constructor->IsFunction());
+    v8::Local<v8::Function> function = constructor.As<v8::Function>();
+
+    if (!depth)
+        TRACE_EVENT_BEGIN1("devtools.timeline", "FunctionCall", "data", InspectorFunctionCallEvent::data(context, function));
+    v8::MaybeLocal<v8::Value> result;
+    {
+        // Create an extra block so FunctionCall trace event end phase is recorded after
+        // v8::MicrotasksScope destructor, as the latter is running microtasks.
+        v8::MicrotasksScope microtasksScope(isolate, v8::MicrotasksScope::kRunMicrotasks);
+        ThreadDebugger::willExecuteScript(isolate, function->ScriptId());
+        result = constructor->CallAsConstructor(isolate->GetCurrentContext(), argc, argv);
+        crashIfIsolateIsDead(isolate);
+        ThreadDebugger::didExecuteScript(isolate);
+    }
+    if (!depth)
+        TRACE_EVENT_END0("devtools.timeline", "FunctionCall");
+    return result;
+}
+
 v8::MaybeLocal<v8::Value> V8ScriptRunner::callFunction(v8::Local<v8::Function> function, ExecutionContext* context, v8::Local<v8::Value> receiver, int argc, v8::Local<v8::Value> args[], v8::Isolate* isolate)
 {
+    ScopedFrameBlamer frameBlamer(context->isDocument() ? toDocument(context)->frame() : nullptr);
     TRACE_EVENT0("v8", "v8.callFunction");
     TRACE_EVENT_SCOPED_SAMPLING_STATE("v8", "V8Execution");
 

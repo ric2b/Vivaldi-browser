@@ -4,8 +4,8 @@
 
 // Implementation of a fake VideoCaptureDeviceFactory class.
 
-#ifndef MEDIA_VIDEO_CAPTURE_FAKE_VIDEO_CAPTURE_DEVICE_FACTORY_H_
-#define MEDIA_VIDEO_CAPTURE_FAKE_VIDEO_CAPTURE_DEVICE_FACTORY_H_
+#ifndef MEDIA_CAPTURE_VIDEO_FAKE_VIDEO_CAPTURE_DEVICE_FACTORY_H_
+#define MEDIA_CAPTURE_VIDEO_FAKE_VIDEO_CAPTURE_DEVICE_FACTORY_H_
 
 #include "media/capture/video/fake_video_capture_device.h"
 #include "media/capture/video/video_capture_device_factory.h"
@@ -14,7 +14,7 @@ namespace media {
 
 // Extension of VideoCaptureDeviceFactory to create and manipulate fake devices,
 // not including file-based ones.
-class MEDIA_EXPORT FakeVideoCaptureDeviceFactory
+class CAPTURE_EXPORT FakeVideoCaptureDeviceFactory
     : public VideoCaptureDeviceFactory {
  public:
   FakeVideoCaptureDeviceFactory();
@@ -46,4 +46,4 @@ class MEDIA_EXPORT FakeVideoCaptureDeviceFactory
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_FAKE_VIDEO_CAPTURE_DEVICE_FACTORY_H_
+#endif  // MEDIA_CAPTURE_VIDEO_FAKE_VIDEO_CAPTURE_DEVICE_FACTORY_H_

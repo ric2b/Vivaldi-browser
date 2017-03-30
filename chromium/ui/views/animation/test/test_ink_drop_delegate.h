@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #include "ui/views/animation/ink_drop_delegate.h"
+#include "ui/views/animation/test/test_ink_drop.h"
 
 namespace views {
 namespace test {
@@ -16,18 +17,17 @@ class TestInkDropDelegate : public InkDropDelegate {
   TestInkDropDelegate();
   ~TestInkDropDelegate() override;
 
-  bool is_hovered() const { return is_hovered_; }
+  bool is_hovered() const { return ink_drop_.is_hovered(); }
 
   // InkDropDelegate:
   void OnAction(InkDropState state) override;
   void SnapToActivated() override;
   void SetHovered(bool is_hovered) override;
   InkDropState GetTargetInkDropState() const override;
+  InkDrop* GetInkDrop() override;
 
  private:
-  InkDropState state_;
-
-  bool is_hovered_;
+  TestInkDrop ink_drop_;
 
   DISALLOW_COPY_AND_ASSIGN(TestInkDropDelegate);
 };

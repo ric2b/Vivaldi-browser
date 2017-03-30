@@ -17,7 +17,11 @@ namespace prefs {
 // Profile prefs. Please add Local State prefs below instead.
 #if defined(OS_CHROMEOS) && defined(ENABLE_APP_LIST)
 extern const char kArcApps[];
+extern const char kArcBackupRestoreEnabled[];
 extern const char kArcEnabled[];
+extern const char kArcLocationServiceEnabled[];
+extern const char kArcPackages[];
+extern const char kArcSetNotificationsEnabledDeferred[];
 extern const char kArcSignedIn[];
 #endif
 extern const char kChildAccountStatusKnown[];
@@ -33,6 +37,8 @@ extern const char kProfileIconVersion[];
 extern const char kRestoreOnStartup[];
 extern const char kSessionExitedCleanly[];
 extern const char kSessionExitType[];
+extern const char kSiteEngagementLastUpdateTime[];
+extern const char kSupervisedUserApprovedExtensions[];
 extern const char kSupervisedUserCustodianEmail[];
 extern const char kSupervisedUserCustodianName[];
 extern const char kSupervisedUserCustodianProfileImageURL[];
@@ -48,9 +54,10 @@ extern const char kSupervisedUserSharedSettings[];
 extern const char kSupervisedUserWhitelists[];
 extern const char kURLsToRestoreOnStartup[];
 
-// For OS_CHROMEOS we maintain kApplicationLocale property in both local state
-// and user's profile.  Global property determines locale of login screen,
-// while user's profile determines his personal locale preference.
+// For OS_CHROMEOS we maintain the kApplicationLocale property in both local
+// state and the user's profile.  The global property determines the locale of
+// the login screen, while the user's profile determines their personal locale
+// preference.
 extern const char kApplicationLocale[];
 #if defined(OS_CHROMEOS)
 extern const char kApplicationLocaleBackup[];
@@ -289,6 +296,10 @@ extern const char kPlatformKeys[];
 extern const char kUnifiedDesktopEnabledByDefault[];
 extern const char kAllowScreenLock[];
 extern const char kHatsLastInteractionTimestamp[];
+extern const char kQuickUnlockPinSalt[];
+extern const char kQuickUnlockPinSecret[];
+extern const char kEolStatus[];
+extern const char kEolNotificationDismissed[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kRecentlySelectedEncoding[];
@@ -299,7 +310,7 @@ extern const char kDeleteCookies[];
 extern const char kDeletePasswords[];
 extern const char kDeleteFormData[];
 extern const char kDeleteHostedAppsData[];
-extern const char kDeauthorizeContentLicenses[];
+extern const char kDeleteMediaLicenses[];
 extern const char kEnableContinuousSpellcheck[];
 extern const char kSpeechRecognitionFilterProfanities[];
 extern const char kSavingBrowserHistoryDisabled[];
@@ -307,6 +318,7 @@ extern const char kAllowDeletingBrowserHistory[];
 extern const char kForceGoogleSafeSearch[];
 extern const char kForceYouTubeSafetyMode[];
 extern const char kForceSessionSync[];
+extern const char kAllowedDomainsForApps[];
 extern const char kDeleteTimePeriod[];
 extern const char kLastClearBrowsingDataTime[];
 extern const char kClearBrowsingDataHistoryNoticeShownTimes[];
@@ -402,6 +414,10 @@ extern const char kFullscreenAllowed[];
 
 extern const char kLocalDiscoveryNotificationsEnabled[];
 
+#if defined(OS_ANDROID)
+extern const char kNotificationsVibrateEnabled[];
+#endif
+
 extern const char kPushMessagingAppIdentifierMap[];
 extern const char kBackgroundBudgetMap[];
 
@@ -434,8 +450,6 @@ extern const char kGLVersionString[];
 #if BUILDFLAG(ANDROID_JAVA_UI)
 extern const char kCrashReportingEnabled[];
 #endif
-
-extern const char kMetricsDefaultOptIn[];
 
 extern const char kDeviceOpenNetworkConfiguration[];
 
@@ -805,6 +819,9 @@ extern const char kMediaRouterEnableCloudServices[];
 #endif  // defined(GOOGLE_CHROME_BUILD)
 extern const char kMediaRouterFirstRunFlowAcknowledged[];
 #endif
+
+extern const char kOriginTrialPublicKey[];
+extern const char kOriginTrialDisabledFeatures[];
 
 }  // namespace prefs
 

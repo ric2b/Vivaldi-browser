@@ -16,13 +16,16 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/sys_info.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/threading/worker_pool.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
+#include "components/user_manager/user_manager.h"
 #include "ipc/unix_domain_socket_util.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
@@ -40,13 +43,35 @@ const base::FilePath::CharType kArcBridgeSocketPath[] =
 
 const char kArcBridgeSocketGroup[] = "arc-bridge";
 
-class ArcBridgeBootstrapImpl : public ArcBridgeBootstrap {
+const base::FilePath::CharType kDiskCheckPath[] = "/home";
+
+const int64_t kCriticalDiskFreeBytes = 64 << 20;  // 64MB
+
+// This is called when StopArcInstance D-Bus method completes. Since we have the
+// ArcInstanceStopped() callback and are notified if StartArcInstance fails, we
+// don't need to do anything when StopArcInstance completes.
+void DoNothingInstanceStopped(bool) {}
+
+chromeos::SessionManagerClient* GetSessionManagerClient() {
+  // If the DBusThreadManager or the SessionManagerClient aren't available,
+  // there isn't much we can do. This should only happen when running tests.
+  if (!chromeos::DBusThreadManager::IsInitialized() ||
+      !chromeos::DBusThreadManager::Get() ||
+      !chromeos::DBusThreadManager::Get()->GetSessionManagerClient())
+    return nullptr;
+  return chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
+}
+
+class ArcBridgeBootstrapImpl : public ArcBridgeBootstrap,
+                               public chromeos::SessionManagerClient::Observer {
  public:
   // The possible states of the bootstrap connection.  In the normal flow,
   // the state changes in the following sequence:
   //
   // STOPPED
   //   Start() ->
+  // DISK_SPACE_CHECKING
+  //   CheckDiskSpace() -> OnDiskSpaceChecked() ->
   // SOCKET_CREATING
   //   CreateSocket() -> OnSocketCreated() ->
   // STARTING
@@ -55,11 +80,11 @@ class ArcBridgeBootstrapImpl : public ArcBridgeBootstrap {
   //   AcceptInstanceConnection() -> OnInstanceConnected() ->
   // READY
   //
-  // When Stop() is called from any state, either because an operation
-  // resulted in an error or because the user is logging out:
+  // When Stop() or AbortBoot() is called from any state, either because an
+  // operation resulted in an error or because the user is logging out:
   //
   // (any)
-  //   Stop() ->
+  //   Stop()/AbortBoot() ->
   // STOPPING
   //   StopInstance() ->
   // STOPPED
@@ -67,10 +92,16 @@ class ArcBridgeBootstrapImpl : public ArcBridgeBootstrap {
   // When the instance crashes while it was ready, it will be stopped:
   //   READY -> STOPPING -> STOPPED
   // and then restarted:
-  //   STOPPED -> SOCKET_CREATING -> ... -> READY).
+  //   STOPPED -> DISK_SPACE_CHECKING -> ... -> READY).
+  //
+  // Note: Order of constants below matters. Please make sure to sort them
+  // in chronological order.
   enum class State {
     // ARC is not currently running.
     STOPPED,
+
+    // Checking the disk space.
+    DISK_SPACE_CHECKING,
 
     // An UNIX socket is being created.
     SOCKET_CREATING,
@@ -96,6 +127,13 @@ class ArcBridgeBootstrapImpl : public ArcBridgeBootstrap {
   void Stop() override;
 
  private:
+  // Aborts ARC instance boot. This is called from various state-machine
+  // functions when they encounter an error during boot.
+  void AbortBoot(ArcBridgeService::StopReason reason);
+
+  // Called after getting the device free disk space.
+  void OnDiskSpaceChecked(int64_t disk_free_bytes);
+
   // Creates the UNIX socket on the bootstrap thread and then processes its
   // file descriptor.
   static base::ScopedFD CreateSocket();
@@ -110,10 +148,16 @@ class ArcBridgeBootstrapImpl : public ArcBridgeBootstrap {
 
   // DBus callbacks.
   void OnInstanceStarted(base::ScopedFD socket_fd, bool success);
-  void OnInstanceStopped(bool success);
+
+  // chromeos::SessionManagerClient::Observer:
+  void ArcInstanceStopped(bool clean) override;
 
   // The state of the bootstrap connection.
   State state_ = State::STOPPED;
+
+  // The reason the ARC instance is stopped.
+  ArcBridgeService::StopReason stop_reason_ =
+      ArcBridgeService::StopReason::SHUTDOWN;
 
   base::ThreadChecker thread_checker_;
 
@@ -124,11 +168,21 @@ class ArcBridgeBootstrapImpl : public ArcBridgeBootstrap {
   DISALLOW_COPY_AND_ASSIGN(ArcBridgeBootstrapImpl);
 };
 
-ArcBridgeBootstrapImpl::ArcBridgeBootstrapImpl() : weak_factory_(this) {}
+ArcBridgeBootstrapImpl::ArcBridgeBootstrapImpl()
+    : weak_factory_(this) {
+  chromeos::SessionManagerClient* client = GetSessionManagerClient();
+  if (client == nullptr)
+    return;
+  client->AddObserver(this);
+}
 
 ArcBridgeBootstrapImpl::~ArcBridgeBootstrapImpl() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(state_ == State::STOPPED || state_ == State::STOPPING);
+  chromeos::SessionManagerClient* client = GetSessionManagerClient();
+  if (client == nullptr)
+    return;
+  client->RemoveObserver(this);
 }
 
 void ArcBridgeBootstrapImpl::Start() {
@@ -136,6 +190,33 @@ void ArcBridgeBootstrapImpl::Start() {
   DCHECK(delegate_);
   if (state_ != State::STOPPED) {
     VLOG(1) << "Start() called when instance is not stopped";
+    return;
+  }
+  stop_reason_ = ArcBridgeService::StopReason::SHUTDOWN;
+  // TODO(crbug.com/628124): Move disk space checking logic to session_manager.
+  SetState(State::DISK_SPACE_CHECKING);
+  base::PostTaskAndReplyWithResult(
+      base::WorkerPool::GetTaskRunner(true).get(), FROM_HERE,
+      base::Bind(&base::SysInfo::AmountOfFreeDiskSpace,
+                 base::FilePath(kDiskCheckPath)),
+      base::Bind(&ArcBridgeBootstrapImpl::OnDiskSpaceChecked,
+                 weak_factory_.GetWeakPtr()));
+}
+
+void ArcBridgeBootstrapImpl::OnDiskSpaceChecked(int64_t disk_free_bytes) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (state_ != State::DISK_SPACE_CHECKING) {
+    VLOG(1) << "Stop() called while checking disk space";
+    return;
+  }
+  if (disk_free_bytes < 0) {
+    LOG(ERROR) << "ARC: Failed to get free disk space";
+    AbortBoot(ArcBridgeService::StopReason::GENERIC_BOOT_FAILURE);
+    return;
+  }
+  if (disk_free_bytes < kCriticalDiskFreeBytes) {
+    LOG(ERROR) << "ARC: The device is too low on disk space to start ARC";
+    AbortBoot(ArcBridgeService::StopReason::LOW_DISK_SPACE);
     return;
   }
   SetState(State::SOCKET_CREATING);
@@ -206,13 +287,19 @@ void ArcBridgeBootstrapImpl::OnSocketCreated(base::ScopedFD socket_fd) {
 
   if (!socket_fd.is_valid()) {
     LOG(ERROR) << "ARC: Error creating socket";
-    Stop();
+    AbortBoot(ArcBridgeService::StopReason::GENERIC_BOOT_FAILURE);
     return;
   }
+
+  user_manager::UserManager* user_manager = user_manager::UserManager::Get();
+  DCHECK(user_manager->GetPrimaryUser());
+  const cryptohome::Identification cryptohome_id(
+      user_manager->GetPrimaryUser()->GetAccountId());
+
   chromeos::SessionManagerClient* session_manager_client =
       chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
   session_manager_client->StartArcInstance(
-      kArcBridgeSocketPath,
+      cryptohome_id,
       base::Bind(&ArcBridgeBootstrapImpl::OnInstanceStarted,
                  weak_factory_.GetWeakPtr(), base::Passed(&socket_fd)));
 }
@@ -220,16 +307,16 @@ void ArcBridgeBootstrapImpl::OnSocketCreated(base::ScopedFD socket_fd) {
 void ArcBridgeBootstrapImpl::OnInstanceStarted(base::ScopedFD socket_fd,
                                                bool success) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (state_ != State::STARTING) {
-    VLOG(1) << "Stop() called when ARC is not running";
-    return;
-  }
   if (!success) {
     LOG(ERROR) << "Failed to start ARC instance";
     // Roll back the state to SOCKET_CREATING to avoid sending the D-Bus signal
     // to stop the failed instance.
     SetState(State::SOCKET_CREATING);
-    Stop();
+    AbortBoot(ArcBridgeService::StopReason::GENERIC_BOOT_FAILURE);
+    return;
+  }
+  if (state_ != State::STARTING) {
+    VLOG(1) << "Stop() called when ARC is not running";
     return;
   }
   SetState(State::STARTED);
@@ -253,11 +340,14 @@ base::ScopedFD ArcBridgeBootstrapImpl::AcceptInstanceConnection(
 
   // Hardcode pid 0 since it is unused in mojo.
   const base::ProcessHandle kUnusedChildProcessHandle = 0;
-  mojo::edk::ScopedPlatformHandle child_handle =
-      mojo::edk::ChildProcessLaunched(kUnusedChildProcessHandle);
+  mojo::edk::PlatformChannelPair channel_pair;
+  mojo::edk::ChildProcessLaunched(kUnusedChildProcessHandle,
+                                  channel_pair.PassServerHandle(),
+                                  mojo::edk::GenerateRandomToken());
 
   mojo::edk::ScopedPlatformHandleVectorPtr handles(
-      new mojo::edk::PlatformHandleVector{child_handle.release()});
+      new mojo::edk::PlatformHandleVector{
+          channel_pair.PassClientHandle().release()});
 
   struct iovec iov = {const_cast<char*>(""), 1};
   ssize_t result = mojo::edk::PlatformChannelSendmsgWithHandles(
@@ -279,12 +369,14 @@ void ArcBridgeBootstrapImpl::OnInstanceConnected(base::ScopedFD fd) {
   }
   if (!fd.is_valid()) {
     LOG(ERROR) << "Invalid handle";
+    AbortBoot(ArcBridgeService::StopReason::GENERIC_BOOT_FAILURE);
     return;
   }
   mojo::ScopedMessagePipeHandle server_pipe = mojo::edk::CreateMessagePipe(
       mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(fd.release())));
   if (!server_pipe.is_valid()) {
     LOG(ERROR) << "Invalid pipe";
+    AbortBoot(ArcBridgeService::StopReason::GENERIC_BOOT_FAILURE);
     return;
   }
   SetState(State::READY);
@@ -300,28 +392,40 @@ void ArcBridgeBootstrapImpl::Stop() {
     VLOG(1) << "Stop() called when ARC is not running";
     return;
   }
-  if (state_ == State::SOCKET_CREATING) {
+  if (state_ < State::STARTING) {
     // This was stopped before the D-Bus command to start the instance. Skip
     // the D-Bus command to stop it.
-    SetState(State::STOPPING);
-    OnInstanceStopped(true);
+    SetState(State::STOPPED);
     return;
   }
   SetState(State::STOPPING);
+  // Notification will arrive through ArcInstanceStopped().
   chromeos::SessionManagerClient* session_manager_client =
       chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
-  session_manager_client->StopArcInstance(base::Bind(
-      &ArcBridgeBootstrapImpl::OnInstanceStopped, weak_factory_.GetWeakPtr()));
+  session_manager_client->StopArcInstance(
+      base::Bind(&DoNothingInstanceStopped));
 }
 
-void ArcBridgeBootstrapImpl::OnInstanceStopped(bool success) {
+void ArcBridgeBootstrapImpl::AbortBoot(ArcBridgeService::StopReason reason) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // STOPPING is the only valid state for this function.
-  // DCHECK on enum classes not supported.
-  DCHECK(state_ == State::STOPPING);
-  DCHECK(delegate_);
+  DCHECK(reason != ArcBridgeService::StopReason::SHUTDOWN);
+  // In case of multiple errors, report the first one.
+  if (stop_reason_ == ArcBridgeService::StopReason::SHUTDOWN) {
+    stop_reason_ = reason;
+  }
+  Stop();
+}
+
+void ArcBridgeBootstrapImpl::ArcInstanceStopped(bool clean) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (!clean) {
+    LOG(ERROR) << "ARC instance crashed";
+    // In case of multiple errors, report the first one.
+    if (stop_reason_ == ArcBridgeService::StopReason::SHUTDOWN) {
+      stop_reason_ = ArcBridgeService::StopReason::CRASH;
+    }
+  }
   SetState(State::STOPPED);
-  delegate_->OnStopped();
 }
 
 void ArcBridgeBootstrapImpl::SetState(State state) {
@@ -330,6 +434,10 @@ void ArcBridgeBootstrapImpl::SetState(State state) {
   DCHECK(state_ != state);
   state_ = state;
   VLOG(2) << "State: " << static_cast<uint32_t>(state_);
+  if (state_ == State::STOPPED) {
+    DCHECK(delegate_);
+    delegate_->OnStopped(stop_reason_);
+  }
 }
 
 }  // namespace

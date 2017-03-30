@@ -9,20 +9,15 @@ static_library("arc") {
   sources = [
     "arc_bridge_bootstrap.cc",
     "arc_bridge_bootstrap.h",
-    "arc_bridge_service.cc",
-    "arc_bridge_service.h",
     "arc_bridge_service_impl.cc",
     "arc_bridge_service_impl.h",
-    "arc_service.cc",
-    "arc_service.h",
     "arc_service_manager.cc",
     "arc_service_manager.h",
     "audio/arc_audio_bridge.cc",
     "audio/arc_audio_bridge.h",
-    "bitmap/bitmap_type_converters.cc",
-    "bitmap/bitmap_type_converters.h",
     "bluetooth/arc_bluetooth_bridge.cc",
     "bluetooth/arc_bluetooth_bridge.h",
+    "bluetooth/bluetooth_struct_traits.h",
     "bluetooth/bluetooth_type_converters.cc",
     "bluetooth/bluetooth_type_converters.h",
     "clipboard/arc_clipboard_bridge.cc",
@@ -40,8 +35,12 @@ static_library("arc") {
     "intent_helper/arc_intent_helper_bridge.h",
     "intent_helper/font_size_util.cc",
     "intent_helper/font_size_util.h",
+    "intent_helper/intent_filter.cc",
+    "intent_helper/intent_filter.h",
     "intent_helper/link_handler_model_impl.cc",
     "intent_helper/link_handler_model_impl.h",
+    "intent_helper/local_activity_resolver.cc",
+    "intent_helper/local_activity_resolver.h",
     "metrics/arc_metrics_service.cc",
     "metrics/arc_metrics_service.h",
     "metrics/oom_kills_histogram.h",
@@ -49,25 +48,34 @@ static_library("arc") {
     "metrics/oom_kills_monitor.h",
     "net/arc_net_host_impl.cc",
     "net/arc_net_host_impl.h",
+    "obb_mounter/arc_obb_mounter_bridge.cc",
+    "obb_mounter/arc_obb_mounter_bridge.h",
     "power/arc_power_bridge.cc",
     "power/arc_power_bridge.h",
+    "set_wallpaper_delegate.h",
+    "storage_manager/arc_storage_manager.cc",
+    "storage_manager/arc_storage_manager.h",
+    "user_data/arc_user_data_service.cc",
+    "user_data/arc_user_data_service.h",
     "window_manager/arc_window_manager_bridge.cc",
     "window_manager/arc_window_manager_bridge.h",
   ]
 
   deps = [
+    ":arc_base",
     "//ash:ash",
     "//base",
     "//chromeos",
     "//chromeos:power_manager_proto",
     "//components/exo",
+    "//components/google/core/browser",
     "//components/onc",
     "//components/prefs",
     "//components/signin/core/account_id",
+    "//components/user_manager",
     "//device/bluetooth",
     "//google_apis",
     "//ipc:ipc",
-    "//ipc/mojo:mojo",
     "//mojo/edk/system",
     "//skia",
     "//third_party/re2:re2",
@@ -78,7 +86,42 @@ static_library("arc") {
     "//ui/display:display",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
+    "//ui/keyboard:keyboard",
     "//url:url",
+  ]
+
+  public_deps = [
+    ":arc_bindings",
+  ]
+}
+
+static_library("arc_base") {
+  sources = [
+    "arc_bridge_service.cc",
+    "arc_bridge_service.h",
+    "arc_service.cc",
+    "arc_service.h",
+    "instance_holder.h",
+  ]
+
+  deps = [
+    "//base",
+    "//chromeos",
+  ]
+
+  public_deps = [
+    ":arc_bindings",
+  ]
+}
+
+static_library("arc_bitmap") {
+  sources = [
+    "bitmap/bitmap_type_converters.cc",
+    "bitmap/bitmap_type_converters.h",
+  ]
+
+  deps = [
+    "//skia",
   ]
 
   public_deps = [
@@ -96,18 +139,28 @@ mojom("arc_bindings") {
     "common/bluetooth.mojom",
     "common/clipboard.mojom",
     "common/crash_collector.mojom",
+    "common/enterprise_reporting.mojom",
+    "common/file_system.mojom",
     "common/ime.mojom",
     "common/intent_helper.mojom",
     "common/metrics.mojom",
     "common/net.mojom",
     "common/notifications.mojom",
+    "common/obb_mounter.mojom",
     "common/policy.mojom",
     "common/power.mojom",
     "common/process.mojom",
     "common/scale_factor.mojom",
+    "common/screen_rect.mojom",
+    "common/storage_manager.mojom",
     "common/video.mojom",
     "common/video_accelerator.mojom",
     "common/window_manager.mojom",
+  ]
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//ui/gfx/geometry/mojo",
   ]
 }
 
@@ -124,10 +177,13 @@ static_library("arc_test_support") {
     "test/fake_arc_bridge_service.h",
     "test/fake_notifications_instance.cc",
     "test/fake_notifications_instance.h",
+    "test/fake_policy_instance.cc",
+    "test/fake_policy_instance.h",
   ]
 
   deps = [
     ":arc",
+    ":arc_base",
     ":arc_bindings",
     "//base",
     "//mojo/common:common_base",
@@ -140,7 +196,10 @@ source_set("unit_tests") {
     "arc_bridge_service_unittest.cc",
     "ime/arc_ime_service_unittest.cc",
     "intent_helper/activity_icon_loader_unittest.cc",
+    "intent_helper/arc_intent_helper_bridge_unittest.cc",
     "intent_helper/font_size_util_unittest.cc",
+    "intent_helper/intent_filter_unittest.cc",
+    "intent_helper/link_handler_model_impl_unittest.cc",
   ]
 
   deps = [
@@ -149,7 +208,6 @@ source_set("unit_tests") {
     ":arc_test_support",
     "//base",
     "//chromeos",
-    "//ipc/mojo:mojo",
     "//mojo/public/cpp/system:system",
     "//testing/gtest",
     "//ui/aura",
@@ -157,6 +215,7 @@ source_set("unit_tests") {
     "//ui/base/ime",
     "//ui/events",
     "//ui/events:dom_keycode_converter",
+    "//url:url",
   ]
 }
 
@@ -182,8 +241,6 @@ static_library("arc_standalone") {
     ":arc_standalone_service",
     "//base",
     "//ipc:ipc",
-    "//ipc/mojo:mojo",
-    "//mojo/edk/system",
   ]
 }
 
@@ -209,7 +266,6 @@ executable("arc_standalone_bridge") {
     ":arc_standalone_service",
     "//base",
     "//ipc:ipc",
-    "//ipc/mojo:mojo",
     "//mojo/edk/system",
   ]
 }

@@ -26,6 +26,8 @@ namespace {
 // it can be used inline in other SQL statements below.
 #define OFFLINE_PAGES_TABLE_NAME "offlinepages_v1"
 
+// New columns should be added at the end of the list in order to avoid
+// complicated table upgrade.
 const char kOfflinePagesColumns[] =
     "(offline_id INTEGER PRIMARY KEY NOT NULL,"
     " creation_time INTEGER NOT NULL,"
@@ -38,6 +40,7 @@ const char kOfflinePagesColumns[] =
     // later use.  We will treat NULL as "Unknown" in any subsequent queries
     // for user_initiated values.
     " user_initiated INTEGER,"  // this is actually a boolean
+    " expiration_time INTEGER NOT NULL DEFAULT 0,"
     " client_namespace VARCHAR NOT NULL,"
     " client_id VARCHAR NOT NULL,"
     " online_url VARCHAR NOT NULL,"
@@ -65,11 +68,12 @@ enum : int {
   OP_ACCESS_COUNT,
   OP_STATUS,
   OP_USER_INITIATED,
+  OP_EXPIRATION_TIME,
   OP_CLIENT_NAMESPACE,
   OP_CLIENT_ID,
   OP_ONLINE_URL,
   OP_OFFLINE_URL,
-  OP_FILE_PATH
+  OP_FILE_PATH,
 };
 
 bool CreateTable(sql::Connection* db, const TableInfo& table_info) {
@@ -79,17 +83,47 @@ bool CreateTable(sql::Connection* db, const TableInfo& table_info) {
   return db->Execute(sql.c_str());
 }
 
+bool RefreshColumns(sql::Connection* db) {
+  if (!db->Execute("ALTER TABLE " OFFLINE_PAGES_TABLE_NAME
+                   " RENAME TO temp_" OFFLINE_PAGES_TABLE_NAME)) {
+    return false;
+  }
+  if (!CreateTable(db, kOfflinePagesTable))
+    return false;
+  if (!db->Execute(
+          "INSERT INTO " OFFLINE_PAGES_TABLE_NAME
+          " (offline_id, creation_time, file_size, version, last_access_time, "
+          "access_count, status, user_initiated, client_namespace, client_id, "
+          "online_url, offline_url, file_path) "
+          "SELECT offline_id, creation_time, file_size, version, "
+          "last_access_time, "
+          "access_count, status, user_initiated, client_namespace, client_id, "
+          "online_url, offline_url, file_path "
+          "FROM temp_" OFFLINE_PAGES_TABLE_NAME)) {
+    return false;
+  }
+  if (!db->Execute("DROP TABLE IF EXISTS temp_" OFFLINE_PAGES_TABLE_NAME))
+    return false;
+
+  return true;
+}
+
 bool CreateSchema(sql::Connection* db) {
   // If you create a transaction but don't Commit() it is automatically
   // rolled back by its destructor when it falls out of scope.
   sql::Transaction transaction(db);
   if (!transaction.Begin())
     return false;
-  if (db->DoesTableExist(kOfflinePagesTable.table_name))
-    return true;
 
-  if (!CreateTable(db, kOfflinePagesTable))
-    return false;
+  if (!db->DoesTableExist(kOfflinePagesTable.table_name)) {
+    if (!CreateTable(db, kOfflinePagesTable))
+      return false;
+  }
+
+  if (!db->DoesColumnExist(kOfflinePagesTable.table_name, "expiration_time")) {
+    if (!RefreshColumns(db))
+      return false;
+  }
 
   // TODO(bburns): Add indices here.
   return transaction.Commit();
@@ -126,6 +160,8 @@ OfflinePageItem MakeOfflinePageItem(sql::Statement* statement) {
       statement->ColumnInt64(OP_LAST_ACCESS_TIME));
   item.version = statement->ColumnInt(OP_VERSION);
   item.access_count = statement->ColumnInt(OP_ACCESS_COUNT);
+  item.expiration_time =
+      base::Time::FromInternalValue(statement->ColumnInt64(OP_EXPIRATION_TIME));
   return item;
 }
 
@@ -133,9 +169,10 @@ bool InsertOrReplace(sql::Connection* db, const OfflinePageItem& item) {
   const char kSql[] =
       "INSERT OR REPLACE INTO " OFFLINE_PAGES_TABLE_NAME
       " (offline_id, online_url, client_namespace, client_id, file_path, "
-      "file_size, creation_time, last_access_time, version, access_count)"
+      "file_size, creation_time, last_access_time, version, access_count, "
+      "expiration_time)"
       " VALUES "
-      " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+      " (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
   statement.BindInt64(0, item.offline_id);
@@ -155,6 +192,7 @@ bool InsertOrReplace(sql::Connection* db, const OfflinePageItem& item) {
   statement.BindInt64(7, item.last_access_time.ToInternalValue());
   statement.BindInt(8, item.version);
   statement.BindInt(9, item.access_count);
+  statement.BindInt64(10, item.expiration_time.ToInternalValue());
   return statement.Run();
 }
 
@@ -261,7 +299,7 @@ void OfflinePageMetadataStoreSQL::ResetSync(
     std::unique_ptr<sql::Connection> db,
     scoped_refptr<base::SingleThreadTaskRunner> runner,
     const ResetCallback& callback) {
-  const char kSql[] = "DELETE * FROM " OFFLINE_PAGES_TABLE_NAME;
+  const char kSql[] = "DELETE FROM " OFFLINE_PAGES_TABLE_NAME;
   sql::Statement statement(db->GetCachedStatement(SQL_FROM_HERE, kSql));
   runner->PostTask(FROM_HERE, base::Bind(callback, statement.Run()));
 }
@@ -275,7 +313,8 @@ void OfflinePageMetadataStoreSQL::NotifyLoadResult(
   UMA_HISTOGRAM_ENUMERATION("OfflinePages.LoadStatus", status,
                             OfflinePageMetadataStore::LOAD_STATUS_COUNT);
   if (status == LOAD_SUCCEEDED) {
-    UMA_HISTOGRAM_COUNTS("OfflinePages.SavedPageCount", result.size());
+    UMA_HISTOGRAM_COUNTS("OfflinePages.SavedPageCount",
+                         static_cast<int32_t>(result.size()));
   } else {
     DVLOG(1) << "Offline pages database loading failed: " << status;
   }

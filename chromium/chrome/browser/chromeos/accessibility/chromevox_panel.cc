@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/accessibility_types.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/chromevox_panel.h"
@@ -14,7 +15,6 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/view_type_utils.h"
-#include "ui/chromeos/accessibility_types.h"
 #include "ui/display/screen.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/layout/fill_layout.h"
@@ -139,7 +139,7 @@ void ChromeVoxPanel::ExitFullscreen() {
 
 void ChromeVoxPanel::DisableSpokenFeedback() {
   chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
 }
 
 void ChromeVoxPanel::Focus() {

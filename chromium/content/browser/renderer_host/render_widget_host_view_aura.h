@@ -27,6 +27,7 @@
 #include "content/browser/compositor/owned_mailbox.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
+#include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/public/common/context_menu_params.h"
@@ -37,11 +38,11 @@
 #include "ui/aura/window_tracker.h"
 #include "ui/aura/window_tree_host_observer.h"
 #include "ui/base/ime/text_input_client.h"
-#include "ui/base/touch/selection_bound.h"
 #include "ui/display/display_observer.h"
 #include "ui/events/gestures/motion_event_aura.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/selection_bound.h"
 #include "ui/wm/public/activation_delegate.h"
 
 namespace aura {
@@ -59,6 +60,7 @@ class DelegatedFrameData;
 namespace gfx {
 class Canvas;
 class Display;
+class Point;
 class Rect;
 }
 
@@ -70,6 +72,9 @@ namespace ui {
 class CompositorLock;
 class InputMethod;
 class LocatedEvent;
+#if defined(OS_WIN)
+class OnScreenKeyboardObserver;
+#endif
 class Texture;
 class TouchSelectionController;
 }
@@ -91,6 +96,7 @@ struct TextInputState;
 class CONTENT_EXPORT RenderWidgetHostViewAura
     : public RenderWidgetHostViewBase,
       public DelegatedFrameHostClient,
+      public TextInputManager::Observer,
       public ui::TextInputClient,
       public display::DisplayObserver,
       public aura::WindowTreeHostObserver,
@@ -128,6 +134,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void SetBackgroundColor(SkColor color) override;
   gfx::Size GetVisibleViewportSize() const override;
   void SetInsets(const gfx::Insets& insets) override;
+  void FocusedNodeTouched(const gfx::Point& location_dips_screen,
+                          bool editable) override;
 
   // Overridden from RenderWidgetHostViewBase:
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -136,8 +144,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputStateChanged(const TextInputState& params) override;
-  void ImeCancelComposition() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) override;
@@ -166,7 +172,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void EndFrameSubscription() override;
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void GetScreenInfo(blink::WebScreenInfo* results) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
   void WheelEventAck(const blink::WebMouseWheelEvent& event,
                      InputEventAckState ack_result) override;
@@ -184,9 +189,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  void OnSwapCompositorFrame(
-      uint32_t output_surface_id,
-      std::unique_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
+                             cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
   void DidStopFlinging() override;
   void OnDidNavigateMainFrameToNewPage() override;
@@ -196,8 +200,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   uint32_t SurfaceIdNamespaceAtPoint(cc::SurfaceHittestDelegate* delegate,
                                      const gfx::Point& point,
                                      gfx::Point* transformed_point) override;
-  void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
-  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
+  void ProcessMouseEvent(const blink::WebMouseEvent& event,
+                         const ui::LatencyInfo& latency) override;
+  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
+                              const ui::LatencyInfo& latency) override;
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
@@ -205,6 +211,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void TransformPointToLocalCoordSpace(const gfx::Point& point,
                                        cc::SurfaceId original_surface,
                                        gfx::Point* transformed_point) override;
+  void FocusedNodeChanged(bool is_editable_node) override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -214,6 +221,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   ui::TextInputMode GetTextInputMode() const override;
+  base::i18n::TextDirection GetTextDirection() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
@@ -232,8 +240,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
   void EnsureCaretInRect(const gfx::Rect& rect) override;
-  bool IsEditCommandEnabled(int command_id) override;
-  void SetEditCommandForNextKeyEvent(int command_id) override;
+  bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
+  void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
 
   // Overridden from display::DisplayObserver:
   void OnDisplayAdded(const display::Display& new_display) override;
@@ -343,7 +351,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   const ui::MotionEventAura& pointer_state() const { return pointer_state_; }
 
  private:
+  friend class InputMethodResultAuraTest;
   friend class RenderWidgetHostViewAuraCopyRequestTest;
+  friend class TestInputMethodObserver;
+  FRIEND_TEST_ALL_PREFIXES(InputMethodResultAuraTest,
+                           FinishImeCompositionSession);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest,
                            PopupRetainsCaptureAfterMouseRelease);
   FRIEND_TEST_ALL_PREFIXES(RenderWidgetHostViewAuraTest, SetCompositionText);
@@ -460,6 +472,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void SetBeginFrameSource(cc::BeginFrameSource* source) override;
   bool IsAutoResizeEnabled() const override;
 
+  // TextInputManager::Observer implementation.
+  void OnUpdateTextInputStateCalled(TextInputManager* text_input_manager,
+                                    RenderWidgetHostViewBase* updated_view,
+                                    bool did_update_state) override;
+  void OnImeCancelComposition(TextInputManager* text_input_manager,
+                              RenderWidgetHostViewBase* updated_view) override;
+
   // cc::BeginFrameObserver implementation.
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
   const cc::BeginFrameArgs& LastUsedBeginFrameArgs() const override;
@@ -509,8 +528,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // received. It will update selection controller.
   void SelectionUpdated(bool is_editable,
                         bool is_empty_text_form_control,
-                        const ui::SelectionBound& start,
-                        const ui::SelectionBound& end);
+                        const gfx::SelectionBound& start,
+                        const gfx::SelectionBound& end);
 
   // Helper function to create a selection controller.
   void CreateSelectionController();
@@ -569,17 +588,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // object.
   ui::MotionEventAura pointer_state_;
 
-  // The current text input type.
-  ui::TextInputType text_input_type_;
-  // The current text input mode corresponding to HTML5 inputmode attribute.
-  ui::TextInputMode text_input_mode_;
-  // The current text input flags.
-  int text_input_flags_;
-  bool can_compose_inline_;
-
   // Bounds for the selection.
-  ui::SelectionBound selection_anchor_;
-  ui::SelectionBound selection_focus_;
+  gfx::SelectionBound selection_anchor_;
+  gfx::SelectionBound selection_focus_;
 
   // The current composition character bounds.
   std::vector<gfx::Rect> composition_character_bounds_;
@@ -646,6 +657,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Contains a copy of the last context menu request parameters. Only set when
   // we receive a request to show the context menu on a long press.
   std::unique_ptr<ContextMenuParams> last_context_menu_params_;
+
+  // Set to true if we requested the on screen keyboard to be displayed.
+  bool virtual_keyboard_requested_;
+
+  std::unique_ptr<ui::OnScreenKeyboardObserver> keyboard_observer_;
 #endif
 
   bool has_snapped_to_boundary_;

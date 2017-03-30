@@ -70,6 +70,10 @@ bool IsIncludedInLoFiControlFieldTrial();
 // trial.
 bool IsIncludedInLoFiPreviewFieldTrial();
 
+// Returns true if this client is part of the field trial that should enable
+// server experiments for the data reduction proxy.
+bool IsIncludedInServerExperimentsFieldTrial();
+
 // Returns true if this client is part of the tamper detection experiment.
 bool IsIncludedInTamperDetectionExperiment();
 
@@ -99,6 +103,10 @@ bool IsLoFiDisabledViaFlags();
 // whenever Lo-Fi mode is on.
 bool AreLoFiPreviewsEnabledViaFlags();
 
+// Returns true if this client has the command line switch to enable forced
+// pageload metrics pingbacks on every page load.
+bool IsForcePingbackEnabledViaFlags();
+
 // Returns true if this client has the command line switch to show
 // interstitials for data reduction proxy bypasses.
 bool WarnIfNoDataReductionProxy();
@@ -111,6 +119,10 @@ const char* GetQuicFieldTrialName();
 
 // Returns true if the Data Reduction Proxy config client should be used.
 bool IsConfigClientEnabled();
+
+// If the Data Reduction Proxy is used for a page load, the URL for the
+// Data Reduction Proxy Pageload Metrics service.
+GURL GetPingbackURL();
 
 // If the Data Reduction Proxy config client is being used, the URL for the
 // Data Reduction Proxy config service.
@@ -144,14 +156,14 @@ const char* GetServerExperimentsFieldTrialName();
 }  // namespace params
 
 // Contains information about a given proxy server. |proxies_for_http| contains
-// the configured data reduction proxy servers. |is_fallback| notes whether the
-// given proxy is a fallback.
+// the configured data reduction proxy servers. |proxy_index| notes the index
+// of the data reduction proxy used in the list of all data reduction proxies.
 struct DataReductionProxyTypeInfo {
   DataReductionProxyTypeInfo();
   DataReductionProxyTypeInfo(const DataReductionProxyTypeInfo& other);
   ~DataReductionProxyTypeInfo();
   std::vector<net::ProxyServer> proxy_servers;
-  bool is_fallback;
+  size_t proxy_index;
 };
 
 // Provides initialization parameters. Proxy origins, and the secure proxy

@@ -2,11 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/accessibility_types.h"
+#include "ash/common/login_status.h"
+#include "ash/common/system/tray_accessibility.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray_accessibility.h"
-#include "ash/system/user/login_status.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "base/callback.h"
@@ -140,13 +141,11 @@ class TrayAccessibilityTest
     return menu_item_view != NULL;
   }
 
-  void SetLoginStatus(ash::user::LoginStatus status) {
+  void SetLoginStatus(ash::LoginStatus status) {
     tray()->UpdateAfterLoginStatusChange(status);
   }
 
-  ash::user::LoginStatus GetLoginStatus() {
-    return tray()->login_;
-  }
+  ash::LoginStatus GetLoginStatus() { return tray()->login_; }
 
   bool CreateDetailedMenu() {
     tray()->PopupDetailedView(0, false);
@@ -268,18 +267,18 @@ class TrayAccessibilityTest
 };
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, LoginStatus) {
-  EXPECT_EQ(ash::user::LOGGED_IN_NONE, GetLoginStatus());
+  EXPECT_EQ(ash::LoginStatus::NOT_LOGGED_IN, GetLoginStatus());
 
   user_manager::UserManager::Get()->UserLoggedIn(
       AccountId::FromUserEmail("owner@invalid.domain"), "owner@invalid.domain",
       true);
   user_manager::UserManager::Get()->SessionStarted();
 
-  EXPECT_EQ(ash::user::LOGGED_IN_USER, GetLoginStatus());
+  EXPECT_EQ(ash::LoginStatus::USER, GetLoginStatus());
 }
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowTrayIcon) {
-  SetLoginStatus(ash::user::LOGGED_IN_NONE);
+  SetLoginStatus(ash::LoginStatus::NOT_LOGGED_IN);
 
   // Confirms that the icon is invisible before login.
   EXPECT_FALSE(IsTrayIconVisible());
@@ -294,10 +293,10 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowTrayIcon) {
 
   // Toggling spoken feedback changes the visibillity of the icon.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(IsTrayIconVisible());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_FALSE(IsTrayIconVisible());
 
   // Toggling high contrast the visibillity of the icon.
@@ -325,12 +324,12 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowTrayIcon) {
   AccessibilityManager::Get()->EnableHighContrast(true);
   EXPECT_TRUE(IsTrayIconVisible());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(IsTrayIconVisible());
   AccessibilityManager::Get()->EnableVirtualKeyboard(true);
   EXPECT_TRUE(IsTrayIconVisible());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(IsTrayIconVisible());
   AccessibilityManager::Get()->EnableHighContrast(false);
   EXPECT_TRUE(IsTrayIconVisible());
@@ -362,10 +361,10 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenu) {
 
   // Toggling spoken feedback changes the visibillity of the menu.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_FALSE(CanCreateMenuItem());
 
   // Toggling high contrast changes the visibillity of the menu.
@@ -398,7 +397,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenu) {
   AccessibilityManager::Get()->EnableHighContrast(true);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableAutoclick(true);
   EXPECT_TRUE(CanCreateMenuItem());
@@ -409,7 +408,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenu) {
   AccessibilityManager::Get()->EnableAutoclick(false);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableHighContrast(false);
   EXPECT_TRUE(CanCreateMenuItem());
@@ -431,10 +430,10 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenuWithShowMenuOption) {
 
   // The menu remains visible regardless of toggling spoken feedback.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
 
   // The menu remains visible regardless of toggling high contrast.
@@ -467,7 +466,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenuWithShowMenuOption) {
   AccessibilityManager::Get()->EnableHighContrast(true);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableAutoclick(true);
   EXPECT_TRUE(CanCreateMenuItem());
@@ -478,7 +477,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenuWithShowMenuOption) {
   AccessibilityManager::Get()->EnableAutoclick(false);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableHighContrast(false);
   EXPECT_TRUE(CanCreateMenuItem());
@@ -492,17 +491,17 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenuWithShowMenuOption) {
 }
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenuWithShowOnLoginScreen) {
-  SetLoginStatus(ash::user::LOGGED_IN_NONE);
+  SetLoginStatus(ash::LoginStatus::NOT_LOGGED_IN);
 
   // Confirms that the menu is visible.
   EXPECT_TRUE(CanCreateMenuItem());
 
   // The menu remains visible regardless of toggling spoken feedback.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
 
   // The menu remains visible regardless of toggling high contrast.
@@ -529,14 +528,14 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenuWithShowOnLoginScreen) {
   AccessibilityManager::Get()->EnableHighContrast(true);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableVirtualKeyboard(true);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableVirtualKeyboard(false);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CanCreateMenuItem());
   AccessibilityManager::Get()->EnableHighContrast(false);
   EXPECT_TRUE(CanCreateMenuItem());
@@ -566,7 +565,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowNotification) {
 
   // Enabling spoken feedback should show the notification.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_SHOW);
+      true, ash::A11Y_NOTIFICATION_SHOW);
   EXPECT_EQ(CHROMEVOX_ENABLED, GetNotificationText());
 
   // Connecting a braille display when spoken feedback is already enabled
@@ -580,7 +579,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowNotification) {
   EXPECT_TRUE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
   EXPECT_FALSE(IsNotificationShown());
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_SHOW);
+      false, ash::A11Y_NOTIFICATION_SHOW);
   EXPECT_FALSE(IsNotificationShown());
   EXPECT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
 
@@ -597,7 +596,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, KeepMenuVisibilityOnLockScreen) {
   EXPECT_TRUE(CanCreateMenuItem());
 
   // Locks the screen.
-  SetLoginStatus(ash::user::LOGGED_IN_LOCKED);
+  SetLoginStatus(ash::LoginStatus::LOCKED);
   EXPECT_TRUE(CanCreateMenuItem());
 
   // Disables high contrast mode.
@@ -608,7 +607,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, KeepMenuVisibilityOnLockScreen) {
 }
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ClickDetailMenu) {
-  SetLoginStatus(ash::user::LOGGED_IN_USER);
+  SetLoginStatus(ash::LoginStatus::USER);
 
   // Confirms that the check item toggles the spoken feedback.
   EXPECT_FALSE(AccessibilityManager::Get()->IsSpokenFeedbackEnabled());
@@ -668,7 +667,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ClickDetailMenu) {
 }
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMarksOnDetailMenu) {
-  SetLoginStatus(ash::user::LOGGED_IN_NONE);
+  SetLoginStatus(ash::LoginStatus::NOT_LOGGED_IN);
 
   // At first, all of the check is unchecked.
   EXPECT_TRUE(CreateDetailedMenu());
@@ -682,7 +681,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMarksOnDetailMenu) {
 
   // Enabling spoken feedback.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CreateDetailedMenu());
   EXPECT_TRUE(IsSpokenFeedbackEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighContrastEnabledOnDetailMenu());
@@ -694,7 +693,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMarksOnDetailMenu) {
 
   // Disabling spoken feedback.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(CreateDetailedMenu());
   EXPECT_FALSE(IsSpokenFeedbackEnabledOnDetailMenu());
   EXPECT_FALSE(IsHighContrastEnabledOnDetailMenu());
@@ -794,7 +793,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMarksOnDetailMenu) {
 
   // Enabling all of the a11y features.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   AccessibilityManager::Get()->EnableHighContrast(true);
   SetMagnifierEnabled(true);
   AccessibilityManager::Get()->EnableLargeCursor(true);
@@ -810,7 +809,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMarksOnDetailMenu) {
 
   // Disabling all of the a11y features.
   AccessibilityManager::Get()->EnableSpokenFeedback(
-      false, ui::A11Y_NOTIFICATION_NONE);
+      false, ash::A11Y_NOTIFICATION_NONE);
   AccessibilityManager::Get()->EnableHighContrast(false);
   SetMagnifierEnabled(false);
   AccessibilityManager::Get()->EnableLargeCursor(false);
@@ -825,7 +824,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMarksOnDetailMenu) {
   CloseDetailMenu();
 
   // Autoclick is disabled on login screen.
-  SetLoginStatus(ash::user::LOGGED_IN_USER);
+  SetLoginStatus(ash::LoginStatus::USER);
 
   // Enabling autoclick.
   AccessibilityManager::Get()->EnableAutoclick(true);
@@ -851,7 +850,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMarksOnDetailMenu) {
 }
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMenuVisibilityOnDetailMenu) {
-  SetLoginStatus(ash::user::LOGGED_IN_NONE);
+  SetLoginStatus(ash::LoginStatus::NOT_LOGGED_IN);
   EXPECT_TRUE(CreateDetailedMenu());
   EXPECT_TRUE(IsSpokenFeedbackMenuShownOnDetailMenu());
   EXPECT_TRUE(IsHighContrastMenuShownOnDetailMenu());
@@ -863,7 +862,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMenuVisibilityOnDetailMenu) {
   EXPECT_FALSE(IsSettingsShownOnDetailMenu());
   CloseDetailMenu();
 
-  SetLoginStatus(ash::user::LOGGED_IN_USER);
+  SetLoginStatus(ash::LoginStatus::USER);
   EXPECT_TRUE(CreateDetailedMenu());
   EXPECT_TRUE(IsSpokenFeedbackMenuShownOnDetailMenu());
   EXPECT_TRUE(IsHighContrastMenuShownOnDetailMenu());
@@ -875,7 +874,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMenuVisibilityOnDetailMenu) {
   EXPECT_TRUE(IsSettingsShownOnDetailMenu());
   CloseDetailMenu();
 
-  SetLoginStatus(ash::user::LOGGED_IN_LOCKED);
+  SetLoginStatus(ash::LoginStatus::LOCKED);
   EXPECT_TRUE(CreateDetailedMenu());
   EXPECT_TRUE(IsSpokenFeedbackMenuShownOnDetailMenu());
   EXPECT_TRUE(IsHighContrastMenuShownOnDetailMenu());
@@ -892,7 +891,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMenuVisibilityOnDetailMenu) {
   ash::test::ShellTestApi test_api(ash::Shell::GetInstance());
   test_api.SetSessionStateDelegate(session_state_delegate);
   session_state_delegate->SetUserAddingScreenRunning(true);
-  SetLoginStatus(ash::user::LOGGED_IN_USER);
+  SetLoginStatus(ash::LoginStatus::USER);
   EXPECT_TRUE(CreateDetailedMenu());
   EXPECT_TRUE(IsSpokenFeedbackMenuShownOnDetailMenu());
   EXPECT_TRUE(IsHighContrastMenuShownOnDetailMenu());

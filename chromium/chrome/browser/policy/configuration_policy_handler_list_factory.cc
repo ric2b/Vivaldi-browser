@@ -26,6 +26,7 @@
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/certificate_transparency/pref_names.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
@@ -53,14 +54,15 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "ash/common/accessibility_types.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions_policy_handler.h"
 #include "chrome/browser/chromeos/policy/configuration_policy_handler_chromeos.h"
+#include "chrome/browser/policy/default_geolocation_policy_handler.h"
 #include "chromeos/chromeos_pref_names.h"
 #include "chromeos/dbus/power_policy_controller.h"
 #include "components/drive/drive_pref_names.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
-#include "ui/chromeos/accessibility_types.h"
 #endif
 
 #if !defined(OS_ANDROID)
@@ -352,6 +354,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kAllowDinosaurEasterEgg,
     prefs::kAllowDinosaurEasterEgg,
     base::Value::TYPE_BOOLEAN },
+  { key::kAllowedDomainsForApps,
+    prefs::kAllowedDomainsForApps,
+    base::Value::TYPE_STRING },
 
 #if defined(ENABLE_SPELLCHECK)
   { key::kSpellCheckServiceEnabled,
@@ -386,11 +391,8 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kForceEphemeralProfiles,
     prefs::kForceEphemeralProfiles,
     base::Value::TYPE_BOOLEAN },
-  { key::kSSLVersionFallbackMin,
-    ssl_config::prefs::kSSLVersionFallbackMin,
-    base::Value::TYPE_STRING },
-  { key::kRC4Enabled,
-    ssl_config::prefs::kRC4Enabled,
+  { key::kDHEEnabled,
+    ssl_config::prefs::kDHEEnabled,
     base::Value::TYPE_BOOLEAN },
 #if defined(ENABLE_MEDIA_ROUTER)
   { key::kEnableMediaRouter,
@@ -510,6 +512,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::TYPE_BOOLEAN },
   { key::kArcEnabled,
     prefs::kArcEnabled,
+    base::Value::TYPE_BOOLEAN },
+  { key::kArcBackupRestoreEnabled,
+    prefs::kArcBackupRestoreEnabled,
     base::Value::TYPE_BOOLEAN },
 #endif  // defined(OS_CHROMEOS)
 
@@ -661,6 +666,12 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       base::WrapUnique(new ManagedBookmarksPolicyHandler(chrome_schema)));
   handlers->AddHandler(base::WrapUnique(new ProxyPolicyHandler()));
   handlers->AddHandler(base::WrapUnique(new URLBlacklistPolicyHandler()));
+
+  handlers->AddHandler(base::WrapUnique(new SimpleSchemaValidatingPolicyHandler(
+      key::kCertificateTransparencyEnforcementDisabledForUrls,
+      certificate_transparency::prefs::kCTExcludedHosts, chrome_schema,
+      SCHEMA_STRICT, SimpleSchemaValidatingPolicyHandler::RECOMMENDED_ALLOWED,
+      SimpleSchemaValidatingPolicyHandler::MANDATORY_ALLOWED)));
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
   handlers->AddHandler(
@@ -830,7 +841,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       key::kUptimeLimit, prefs::kUptimeLimit, 3600, INT_MAX, true)));
   handlers->AddHandler(base::WrapUnique(new IntRangePolicyHandler(
       key::kDeviceLoginScreenDefaultScreenMagnifierType, NULL, 0,
-      ui::MAGNIFIER_FULL, false)));
+      ash::MAGNIFIER_FULL, false)));
   // TODO(binjin): Remove LegacyPoliciesDeprecatingPolicyHandler for these two
   // policies once deprecation of legacy power management policies is done.
   // http://crbug.com/346229
@@ -853,6 +864,7 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
       SimpleSchemaValidatingPolicyHandler::MANDATORY_PROHIBITED)));
   handlers->AddHandler(base::WrapUnique(
       new chromeos::KeyPermissionsPolicyHandler(chrome_schema)));
+  handlers->AddHandler(base::WrapUnique(new DefaultGeolocationPolicyHandler()));
 #endif  // defined(OS_CHROMEOS)
 
   return handlers;

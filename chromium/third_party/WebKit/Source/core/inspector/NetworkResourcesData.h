@@ -114,9 +114,6 @@ public:
         String textEncodingName() const { return m_textEncodingName; }
         void setTextEncodingName(const String& textEncodingName) { m_textEncodingName = textEncodingName; }
 
-        TextResourceDecoder* decoder() const { return m_decoder.get(); }
-        void setDecoder(PassOwnPtr<TextResourceDecoder> decoder) { m_decoder = std::move(decoder); }
-
         PassRefPtr<SharedBuffer> buffer() const { return m_buffer; }
         void setBuffer(PassRefPtr<SharedBuffer> buffer) { m_buffer = buffer; }
 
@@ -131,7 +128,7 @@ public:
 
         DECLARE_TRACE();
     private:
-        bool hasData() const { return m_dataBuffer; }
+        bool hasData() const { return m_dataBuffer.get(); }
         size_t dataLength() const;
         void appendData(const char* data, size_t dataLength);
         size_t decodeDataToContent();
@@ -152,7 +149,6 @@ public:
 
         String m_mimeType;
         String m_textEncodingName;
-        OwnPtr<TextResourceDecoder> m_decoder;
 
         RefPtr<SharedBuffer> m_buffer;
         WeakMember<Resource> m_cachedResource;

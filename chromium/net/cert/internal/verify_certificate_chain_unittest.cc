@@ -10,9 +10,10 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "net/cert/internal/parse_certificate.h"
+#include "net/cert/internal/parsed_certificate.h"
 #include "net/cert/internal/signature_policy.h"
 #include "net/cert/internal/test_helpers.h"
+#include "net/cert/internal/trust_store.h"
 #include "net/cert/pem_tokenizer.h"
 #include "net/der/input.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -75,7 +76,10 @@ void ReadTestFromFile(const std::string& file_name,
     if (block_type == kCertificateHeader) {
       chain->push_back(block_data);
     } else if (block_type == kTrustedCertificateHeader) {
-      ASSERT_TRUE(trust_store->AddTrustedCertificate(block_data));
+      scoped_refptr<ParsedCertificate> cert(
+          ParsedCertificate::CreateFromCertificateCopy(block_data, {}));
+      ASSERT_TRUE(cert);
+      trust_store->AddTrustedCertificate(std::move(cert));
     } else if (block_type == kTimeHeader) {
       ASSERT_FALSE(has_time) << "Duplicate " << kTimeHeader;
       has_time = true;
@@ -101,14 +105,27 @@ void RunTest(const char* file_name) {
 
   ReadTestFromFile(file_name, &chain, &trust_store, &time, &expected_result);
 
-  std::vector<der::Input> input_chain;
-  for (const auto& cert_str : chain)
-    input_chain.push_back(der::Input(&cert_str));
+  std::vector<scoped_refptr<net::ParsedCertificate>> input_chain;
+  for (const auto& cert_der : chain) {
+    ASSERT_TRUE(net::ParsedCertificate::CreateAndAddToVector(
+        reinterpret_cast<const uint8_t*>(cert_der.data()), cert_der.size(),
+        net::ParsedCertificate::DataSource::EXTERNAL_REFERENCE, {},
+        &input_chain));
+  }
 
   SimpleSignaturePolicy signature_policy(1024);
 
-  bool result = VerifyCertificateChain(input_chain, {}, trust_store,
-                                       &signature_policy, time);
+  std::vector<scoped_refptr<ParsedCertificate>> trusted_chain;
+  bool result = VerifyCertificateChain(input_chain, trust_store,
+                                       &signature_policy, time, &trusted_chain);
+  if (result) {
+    ASSERT_EQ(trusted_chain.size(), input_chain.size() + 1);
+    ASSERT_TRUE(std::equal(input_chain.begin(), input_chain.end(),
+                           trusted_chain.begin()));
+    ASSERT_TRUE(trust_store.IsTrustedCertificate(trusted_chain.back().get()));
+  } else {
+    ASSERT_EQ(trusted_chain.size(), 0u);
+  }
 
   ASSERT_EQ(expected_result, result);
 }
@@ -225,11 +242,11 @@ TEST(VerifyCertificateChainTest, NonSelfSignedRoot) {
 TEST(VerifyCertificateChainTest, EmptyChainIsInvalid) {
   TrustStore trust_store;
   der::GeneralizedTime time;
-  std::vector<der::Input> chain;
+  std::vector<scoped_refptr<ParsedCertificate>> chain;
   SimpleSignaturePolicy signature_policy(2048);
 
-  ASSERT_FALSE(
-      VerifyCertificateChain(chain, {}, trust_store, &signature_policy, time));
+  ASSERT_FALSE(VerifyCertificateChain(chain, trust_store, &signature_policy,
+                                      time, nullptr));
 }
 
 // TODO(eroman): Add test that invalidate validity dates where the day or month

@@ -22,7 +22,6 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/stringprintf.h"
@@ -43,7 +42,6 @@
 
 #if BUILDFLAG(ENABLE_KASKO)
 #include "base/win/scoped_handle.h"
-#include "base/win/win_util.h"
 #include "third_party/crashpad/crashpad/snapshot/api/module_annotations_win.h"
 #endif
 
@@ -106,10 +104,59 @@ void DumpWithoutCrashing() {
 }
 
 #if BUILDFLAG(ENABLE_KASKO)
+// TODO(ananta)
+// We cannot depend on functionality in base which pulls in dependencies on
+// user32 directly or indirectly. The GetLoadedModulesSnapshot is a copy of the
+// function in base/win/win_util.cc. Depending on the base function pulls in
+// dependencies on user32 due to other functionality in win_util.cc. This
+// function should be removed when KASKO is removed.
+bool GetLoadedModulesSnapshot(HANDLE process, std::vector<HMODULE>* snapshot) {
+  DCHECK(snapshot);
+  DCHECK_EQ(0u, snapshot->size());
+  snapshot->resize(128);
+
+  // We will retry at least once after first determining |bytes_required|. If
+  // the list of modules changes after we receive |bytes_required| we may retry
+  // more than once.
+  int retries_remaining = 5;
+  do {
+    DWORD bytes_required = 0;
+    // EnumProcessModules returns 'success' even if the buffer size is too
+    // small.
+    DCHECK_GE(std::numeric_limits<DWORD>::max(),
+      snapshot->size() * sizeof(HMODULE));
+    if (!::EnumProcessModules(
+      process, &(*snapshot)[0],
+      static_cast<DWORD>(snapshot->size() * sizeof(HMODULE)),
+      &bytes_required)) {
+      DPLOG(ERROR) << "::EnumProcessModules failed.";
+      return false;
+    }
+    DCHECK_EQ(0u, bytes_required % sizeof(HMODULE));
+    size_t num_modules = bytes_required / sizeof(HMODULE);
+    if (num_modules <= snapshot->size()) {
+      // Buffer size was too big, presumably because a module was unloaded.
+      snapshot->erase(snapshot->begin() + num_modules, snapshot->end());
+      return true;
+    } else if (num_modules == 0) {
+      DLOG(ERROR) << "Can't determine the module list size.";
+      return false;
+    } else {
+      // Buffer size was too small. Try again with a larger buffer. A little
+      // more room is given to avoid multiple expensive calls to
+      // ::EnumProcessModules() just because one module has been added.
+      snapshot->resize(num_modules + 8, NULL);
+    }
+  } while (--retries_remaining);
+
+  DLOG(ERROR) << "Failed to enumerate modules.";
+  return false;
+}
+
 HMODULE GetModuleInProcess(base::ProcessHandle process,
                            const wchar_t* module_name) {
   std::vector<HMODULE> modules_snapshot;
-  if (!base::win::GetLoadedModulesSnapshot(process, &modules_snapshot))
+  if (!GetLoadedModulesSnapshot(process, &modules_snapshot))
     return nullptr;
 
   for (HMODULE module : modules_snapshot) {
@@ -269,8 +316,8 @@ bool GetUploadsEnabled() {
   return false;
 }
 
-void GetUploadedReports(std::vector<UploadedReport>* uploaded_reports) {
-  uploaded_reports->clear();
+void GetReports(std::vector<Report>* reports) {
+  reports->clear();
 
   if (!g_database) {
     return;
@@ -283,21 +330,41 @@ void GetUploadedReports(std::vector<UploadedReport>* uploaded_reports) {
     return;
   }
 
-  for (const crashpad::CrashReportDatabase::Report& completed_report :
-       completed_reports) {
-    if (completed_report.uploaded) {
-      UploadedReport uploaded_report;
-      uploaded_report.local_id = completed_report.uuid.ToString();
-      uploaded_report.remote_id = completed_report.id;
-      uploaded_report.creation_time = completed_report.creation_time;
-
-      uploaded_reports->push_back(uploaded_report);
-    }
+  std::vector<crashpad::CrashReportDatabase::Report> pending_reports;
+  status = g_database->GetPendingReports(&pending_reports);
+  if (status != crashpad::CrashReportDatabase::kNoError) {
+    return;
   }
 
-  std::sort(uploaded_reports->begin(), uploaded_reports->end(),
-            [](const UploadedReport& a, const UploadedReport& b) {
-              return a.creation_time > b.creation_time;
+  for (const crashpad::CrashReportDatabase::Report& completed_report :
+       completed_reports) {
+    Report report;
+    report.local_id = completed_report.uuid.ToString();
+    report.capture_time = completed_report.creation_time;
+    report.remote_id = completed_report.id;
+    if (completed_report.uploaded) {
+      report.upload_time = completed_report.last_upload_attempt_time;
+      report.state = ReportUploadState::Uploaded;
+    } else {
+      report.upload_time = 0;
+      report.state = ReportUploadState::NotUploaded;
+    }
+    reports->push_back(report);
+  }
+
+  for (const crashpad::CrashReportDatabase::Report& pending_report :
+       pending_reports) {
+    Report report;
+    report.local_id = pending_report.uuid.ToString();
+    report.capture_time = pending_report.creation_time;
+    report.upload_time = 0;
+    report.state = ReportUploadState::Pending;
+    reports->push_back(report);
+  }
+
+  std::sort(reports->begin(), reports->end(),
+            [](const Report& a, const Report& b) {
+              return a.capture_time > b.capture_time;
             });
 }
 
@@ -368,8 +435,11 @@ void ReadMainModuleAnnotationsForKasko(
 
   // The executable name is the same for the browser process and the crash
   // reporter.
-  base::FilePath exe_path;
-  base::PathService::Get(base::FILE_EXE, &exe_path);
+  wchar_t exe_file[MAX_PATH] = {};
+  CHECK(::GetModuleFileName(nullptr, exe_file, arraysize(exe_file)));
+
+  base::FilePath exe_path(exe_file);
+
   HMODULE module = GetModuleInProcess(process_handle.Get(),
                                       exe_path.BaseName().value().c_str());
   if (!module)

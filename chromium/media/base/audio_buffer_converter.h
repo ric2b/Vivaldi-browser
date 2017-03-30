@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_BASE_AUDIO_BUFFER_CONVERTER
-#define MEDIA_BASE_AUDIO_BUFFER_CONVERTER
+#ifndef MEDIA_BASE_AUDIO_BUFFER_CONVERTER_H_
+#define MEDIA_BASE_AUDIO_BUFFER_CONVERTER_H_
 
 #include <deque>
 #include <memory>
@@ -51,8 +51,7 @@ class MEDIA_EXPORT AudioBufferConverter : public AudioConverter::InputCallback {
 
  private:
   // Callback to provide data to the AudioConverter
-  double ProvideInput(AudioBus* audio_bus,
-                      base::TimeDelta buffer_delay) override;
+  double ProvideInput(AudioBus* audio_bus, uint32_t frames_delayed) override;
 
   // Reset the converter in response to a configuration change.
   void ResetConverter(const scoped_refptr<AudioBuffer>& input_buffer);
@@ -105,4 +104,4 @@ class MEDIA_EXPORT AudioBufferConverter : public AudioConverter::InputCallback {
 
 }  // namespace media
 
-#endif  // MEDIA_BASE_AUDIO_BUFFER_CONVERTER
+#endif  // MEDIA_BASE_AUDIO_BUFFER_CONVERTER_H_

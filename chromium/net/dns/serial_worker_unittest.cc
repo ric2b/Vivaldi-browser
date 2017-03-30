@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
@@ -57,7 +58,7 @@ class SerialWorkerTest : public testing::Test {
   }
 
   void OnWorkFinished() {
-    EXPECT_TRUE(message_loop_ == base::MessageLoop::current());
+    EXPECT_TRUE(message_loop_->task_runner()->BelongsToCurrentThread());
     EXPECT_EQ(output_value_, input_value_);
     BreakNow("OnWorkFinished");
   }
@@ -75,17 +76,18 @@ class SerialWorkerTest : public testing::Test {
   }
 
   void RunUntilBreak(const std::string& b) {
-    message_loop_->Run();
+    base::RunLoop().Run();
     ASSERT_EQ(breakpoint_, b);
   }
 
   SerialWorkerTest()
       : input_value_(0),
         output_value_(-1),
-        work_allowed_(false, false),
-        work_called_(false, false),
-        work_running_(false) {
-  }
+        work_allowed_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                      base::WaitableEvent::InitialState::NOT_SIGNALED),
+        work_called_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                     base::WaitableEvent::InitialState::NOT_SIGNALED),
+        work_running_(false) {}
 
   // Helpers for tests.
 

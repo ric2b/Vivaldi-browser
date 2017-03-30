@@ -37,7 +37,6 @@
           'utility',
           '../content/content.gyp:content_gpu',
           '../content/content.gyp:content_ppapi_plugin',
-          '../third_party/cld_2/cld_2.gyp:cld2_platform_impl',
           '../third_party/WebKit/public/blink_devtools.gyp:blink_devtools_frontend_resources',
         ],
         'conditions': [
@@ -297,6 +296,7 @@
           'dependencies': [
             'chrome_resources.gyp:chrome_strings',
             '../base/base.gyp:base',
+            '../base/base.gyp:base_i18n',
             '../ui/base/ui_base.gyp:ui_data_pack',
           ],
           'include_dirs': [
@@ -418,31 +418,6 @@
         'chrome_process_finder.gypi',
       ],
     }],  # OS=="win"
-    ['OS=="win" and target_arch=="ia32"',
-      { 'targets': [
-        {
-          'target_name': 'chrome_user32_delay_imports',
-          'type': 'none',
-          'variables': {
-            'lib_dir': '<(INTERMEDIATE_DIR)',
-          },
-          'sources': [
-              'chrome.user32.delay.imports'
-          ],
-          'includes': [
-              '../build/win/importlibs/create_import_lib.gypi',
-          ],
-          'direct_dependent_settings': {
-            'msvs_settings': {
-              'VCLinkerTool': {
-                'AdditionalLibraryDirectories': ['<(lib_dir)', ],
-                'AdditionalDependencies': ['chrome.user32.delay.lib', ],
-              },
-            },
-          },
-        },
-      ]},  # 'targets'
-    ],  # OS=="win" and target_arch=="ia32"
     ['chromeos==1', {
       'includes': [ 'chrome_browser_chromeos.gypi' ],
     }],  # chromeos==1
@@ -490,6 +465,8 @@
             '../components/components.gyp:instance_id_driver_java',
             '../components/components.gyp:invalidation_java',
             '../components/components.gyp:investigated_scenario_java',
+            '../components/components.gyp:ntp_tiles_enums_java',
+            '../components/components.gyp:ntp_tiles_java',
             '../components/components.gyp:navigation_interception_java',
             '../components/components.gyp:offline_page_model_enums_java',
             '../components/components.gyp:policy_java',
@@ -656,6 +633,7 @@
             '../components/components.gyp:cloud_devices_common',
             '../google_apis/google_apis.gyp:google_apis',
             '../jingle/jingle.gyp:notifier',
+            '../mojo/mojo_edk.gyp:mojo_system_impl',
             '../net/net.gyp:net',
             '../printing/printing.gyp:printing',
             '../skia/skia.gyp:skia',
@@ -708,7 +686,7 @@
            # '<(grit_out_dir)',
           ],
           'conditions': [
-            ['use_cups==1', {
+            ['use_cups==1 and OS!="chromeos"', {
               'dependencies': [
                 '../printing/printing.gyp:cups',
               ],
@@ -725,11 +703,6 @@
               'sources': [
                 'service/service_utility_process_host.cc',
                 'service/service_utility_process_host.h',
-              ],
-              'deps': [
-                # TODO(fdoray): Remove this once the PreRead field trial has
-                # expired. crbug.com/577698
-                '../components/components.gyp:startup_metric_utils_common',
               ],
             }],
           ],

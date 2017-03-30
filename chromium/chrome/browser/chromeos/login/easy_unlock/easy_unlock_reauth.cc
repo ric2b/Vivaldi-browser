@@ -3,8 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/login/easy_unlock/easy_unlock_reauth.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
@@ -94,8 +96,8 @@ class ReauthHandler : public content::NotificationObserver,
   void OnAuthSuccess(const chromeos::UserContext& user_context) override {
     callback_.Run(user_context);
     // Schedule deletion.
-    base::MessageLoopForUI::current()->PostTask(FROM_HERE,
-                                                base::Bind(&EndReauthAttempt));
+    base::MessageLoopForUI::current()->task_runner()->PostTask(
+        FROM_HERE, base::Bind(&EndReauthAttempt));
   }
 
   void OnAuthFailure(const chromeos::AuthFailure& error) override {}

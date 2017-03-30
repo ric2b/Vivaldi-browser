@@ -8,8 +8,6 @@
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/WebTopControlsState.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 class FrameHost;
@@ -41,7 +39,10 @@ public:
     float shownRatio() const { return m_shownRatio; }
     void setShownRatio(float);
 
-    void updateConstraints(WebTopControlsState constraints);
+    void updateConstraintsAndState(
+        WebTopControlsState constraints,
+        WebTopControlsState current,
+        bool animate);
 
     void scrollBegin();
 

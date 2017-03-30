@@ -12,9 +12,10 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
-#include "content/browser/gamepad/gamepad_test_helpers.h"
+#include "content/browser/gamepad/gamepad_service_test_helpers.h"
 #include "content/browser/renderer_host/pepper/browser_ppapi_host_test.h"
 #include "content/common/gamepad_hardware_buffer.h"
+#include "device/gamepad/gamepad_test_helpers.h"
 #include "ppapi/c/pp_errors.h"
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/proxy/gamepad_resource.h"
@@ -151,7 +152,7 @@ TEST_F(PepperGamepadHostTest, MAYBE_WaitForReply) {
             gamepad_host.OnResourceMessageReceived(
                 PpapiHostMsg_Gamepad_RequestMemory(), &context));
 
-  MockGamepadDataFetcher* fetcher = service_->data_fetcher();
+  device::MockGamepadDataFetcher* fetcher = service_->data_fetcher();
   fetcher->WaitForDataReadAndCallbacksIssued();
 
   // It should not have sent the callback message.

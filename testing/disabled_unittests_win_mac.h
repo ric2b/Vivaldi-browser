@@ -8,5 +8,5 @@
 
   DISABLE(PipelineIntegrationTest, BasicPlaybackHi10P)
 
-// TODO: failing after Chromium 51 upgrade
+  // TODO: failing after Chromium 51 upgrade
   DISABLE_ALL(PlatformMediaPipelineIntegrationTest)

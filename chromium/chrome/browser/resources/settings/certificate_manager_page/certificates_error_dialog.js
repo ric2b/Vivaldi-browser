@@ -16,16 +16,16 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.$.dialog.open();
+    /** @type {!CrDialogElement} */ (this.$.dialog).open();
   },
 
   /** @private */
   onOkTap_: function() {
-    this.$.dialog.close();
+    /** @type {!CrDialogElement} */ (this.$.dialog).close();
   },
 
   /**
-   * @param {{certificateName: string, error: string}} importError
+   * @param {{name: string, error: string}} importError
    * @return {string}
    * @private
    */

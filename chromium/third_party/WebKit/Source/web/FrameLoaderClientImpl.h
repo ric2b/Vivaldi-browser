@@ -35,8 +35,9 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
-#include "wtf/PassOwnPtr.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -130,8 +131,8 @@ public:
         HTMLPlugInElement*, const KURL&,
         const Vector<WTF::String>&, const Vector<WTF::String>&,
         const WTF::String&, bool loadManually, DetachedPluginPolicy) override;
-    PassOwnPtr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebMediaPlayerSource&, WebMediaPlayerClient*) override;
-    PassOwnPtr<WebMediaSession> createWebMediaSession() override;
+    std::unique_ptr<WebMediaPlayer> createWebMediaPlayer(HTMLMediaElement&, const WebMediaPlayerSource&, WebMediaPlayerClient*) override;
+    std::unique_ptr<WebMediaSession> createWebMediaSession() override;
     ObjectContentType getObjectContentType(
         const KURL&, const WTF::String& mimeType, bool shouldPreferPlugInsForImages) override;
     void didChangeScrollOffset() override;
@@ -140,7 +141,6 @@ public:
     bool allowScriptFromSource(bool enabledPerSettings, const KURL& scriptURL) override;
     bool allowPlugins(bool enabledPerSettings) override;
     bool allowImage(bool enabledPerSettings, const KURL& imageURL) override;
-    bool allowMedia(const KURL& mediaURL) override;
     bool allowDisplayingInsecureContent(bool enabledPerSettings, const KURL&) override;
     bool allowRunningInsecureContent(bool enabledPerSettings, SecurityOrigin*, const KURL&) override;
     bool allowAutoplay(bool defaultValue) override;
@@ -151,7 +151,7 @@ public:
     WebCookieJar* cookieJar() const override;
     void frameFocused() const override;
     void didChangeName(const String& name, const String& uniqueName) override;
-    void didEnforceStrictMixedContentChecking() override;
+    void didEnforceInsecureRequestPolicy(WebInsecureRequestPolicy) override;
     void didUpdateToUniqueOrigin() override;
     void didChangeSandboxFlags(Frame* childFrame, SandboxFlags) override;
     void didAddContentSecurityPolicy(const String& headerValue, ContentSecurityPolicyHeaderType, ContentSecurityPolicyHeaderSource) override;
@@ -165,12 +165,12 @@ public:
 
     void dispatchWillInsertBody() override;
 
-    PassOwnPtr<WebServiceWorkerProvider> createServiceWorkerProvider() override;
+    std::unique_ptr<WebServiceWorkerProvider> createServiceWorkerProvider() override;
     bool isControlledByServiceWorker(DocumentLoader&) override;
     int64_t serviceWorkerID(DocumentLoader&) override;
     SharedWorkerRepositoryClient* sharedWorkerRepositoryClient() override;
 
-    PassOwnPtr<WebApplicationCacheHost> createApplicationCacheHost(WebApplicationCacheHostClient*) override;
+    std::unique_ptr<WebApplicationCacheHost> createApplicationCacheHost(WebApplicationCacheHostClient*) override;
 
     void dispatchDidChangeManifest() override;
 

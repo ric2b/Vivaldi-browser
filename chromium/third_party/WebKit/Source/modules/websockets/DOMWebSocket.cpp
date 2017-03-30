@@ -32,6 +32,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/modules/v8/StringOrStringSequence.h"
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMArrayBufferView.h"
@@ -54,13 +55,14 @@
 #include "platform/weborigin/KnownPorts.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/Assertions.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -189,7 +191,7 @@ static String encodeSubprotocolString(const String& protocol)
         if (protocol[i] < 0x20 || protocol[i] > 0x7E)
             builder.append(String::format("\\u%04X", protocol[i]));
         else if (protocol[i] == 0x5c)
-            builder.appendLiteral("\\\\");
+            builder.append("\\\\");
         else
             builder.append(protocol[i]);
     }
@@ -283,7 +285,7 @@ void DOMWebSocket::connect(const String& url, const Vector<String>& protocols, E
     WTF_LOG(Network, "WebSocket %p connect() url='%s'", this, url.utf8().data());
     m_url = KURL(KURL(), url);
 
-    if (getExecutionContext()->securityContext().getInsecureRequestsPolicy() == SecurityContext::InsecureRequestsUpgrade && m_url.protocol() == "ws") {
+    if (getExecutionContext()->securityContext().getInsecureRequestPolicy() & kUpgradeInsecureRequests && m_url.protocol() == "ws") {
         UseCounter::count(getExecutionContext(), UseCounter::UpgradeInsecureRequestsUpgradedRequest);
         m_url.setProtocol("wss");
         if (m_url.port() == 80)
@@ -510,7 +512,7 @@ void DOMWebSocket::closeInternal(int code, const String& reason, ExceptionState&
         return;
     if (m_state == CONNECTING) {
         m_state = CLOSING;
-        m_channel->fail("WebSocket is closed before the connection is established.", WarningMessageLevel, String(), 0);
+        m_channel->fail("WebSocket is closed before the connection is established.", WarningMessageLevel, SourceLocation::create(String(), 0, 0, nullptr));
         return;
     }
     m_state = CLOSING;
@@ -636,7 +638,7 @@ void DOMWebSocket::didReceiveTextMessage(const String& msg)
     m_eventQueue->dispatch(MessageEvent::create(msg, SecurityOrigin::create(m_url)->toString()));
 }
 
-void DOMWebSocket::didReceiveBinaryMessage(PassOwnPtr<Vector<char>> binaryData)
+void DOMWebSocket::didReceiveBinaryMessage(std::unique_ptr<Vector<char>> binaryData)
 {
     WTF_LOG(Network, "WebSocket %p didReceiveBinaryMessage() %lu byte binary message", this, static_cast<unsigned long>(binaryData->size()));
     switch (m_binaryType) {
@@ -644,7 +646,7 @@ void DOMWebSocket::didReceiveBinaryMessage(PassOwnPtr<Vector<char>> binaryData)
         size_t size = binaryData->size();
         RefPtr<RawData> rawData = RawData::create();
         binaryData->swap(*rawData->mutableData());
-        OwnPtr<BlobData> blobData = BlobData::create();
+        std::unique_ptr<BlobData> blobData = BlobData::create();
         blobData->appendData(rawData.release(), 0, BlobDataItem::toEndOfFile);
         Blob* blob = Blob::create(BlobDataHandle::create(std::move(blobData), size));
         recordReceiveTypeHistogram(WebSocketReceiveTypeBlob);

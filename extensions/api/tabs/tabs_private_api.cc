@@ -16,10 +16,11 @@
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/prefs/pref_service.h"
-#include "components/ui/zoom/zoom_controller.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/render_frame_host.h"
@@ -33,6 +34,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/tabs_private.h"
 #include "prefs/vivaldi_pref_names.h"
+#include "prefs/vivaldi_tab_zoom_pref.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "ui/base/dragdrop/drag_utils.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -99,7 +101,7 @@ bool IsOutsideAppWindow(int screen_x, int screen_y, Profile* profile) {
 TabsPrivateAPI::TabsPrivateAPI(content::BrowserContext* context)
   : browser_context_(context) {
   event_router_.reset(new TabsPrivateEventRouter(
-      Profile::FromBrowserContext(context), nullptr));
+      Profile::FromBrowserContext(context)));
   EventRouter::Get(Profile::FromBrowserContext(context))
       ->RegisterObserver(this, tabs_private::OnDragEnd::kEventName);
 }
@@ -179,9 +181,8 @@ blink::WebDragOperationsMask TabsPrivateEventRouter::OnDragCursorUpdating(
 //  return ops;
 }
 
-TabsPrivateEventRouter::TabsPrivateEventRouter(
-  Profile* profile, content::WebContents* web_contents)
-  : profile_(profile), web_contents_(web_contents) {
+TabsPrivateEventRouter::TabsPrivateEventRouter(Profile* profile)
+  : profile_(profile) {
 }
 
 TabsPrivateEventRouter::~TabsPrivateEventRouter() {
@@ -218,7 +219,7 @@ VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
     : WebContentsObserver(web_contents), favicon_scoped_observer_(this) {
 
   auto zoom_controller =
-    ui_zoom::ZoomController::FromWebContents(web_contents);
+    zoom::ZoomController::FromWebContents(web_contents);
   if (zoom_controller) {
     zoom_controller->AddObserver(this);
   }
@@ -250,13 +251,6 @@ void VivaldiPrivateTabObserver::DidChangeThemeColor(SkColor theme_color) {
   BroadcastEvent(tabs_private::OnThemeColorChanged::kEventName, args, profile);
 }
 
-bool VivaldiPrivateTabObserver::IsVivaldiTabZoomEnabled() {
-  Profile* profile = Profile::FromBrowserContext(
-    web_contents()->GetBrowserContext());
-
-  return profile->GetPrefs()->GetBoolean(vivaldiprefs::kVivaldiTabZoom);
-}
-
 base::StringValue DictionaryToJSONString(
   const base::DictionaryValue& dict) {
   std::string json_string;
@@ -267,7 +261,7 @@ base::StringValue DictionaryToJSONString(
 
 void VivaldiPrivateTabObserver::RenderViewCreated(
     content::RenderViewHost* render_view_host) {
-  if (IsVivaldiTabZoomEnabled()) {
+  if (::vivaldi::isTabZoomEnabled(web_contents())) {
     std::string ext = web_contents()->GetExtData();
 
     base::JSONParserOptions options = base::JSON_PARSE_RFC;
@@ -276,7 +270,16 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
     base::DictionaryValue* dict = NULL;
     if (json && json->GetAsDictionary(&dict)) {
       if (dict) {
-        dict->GetDouble("vivaldi_tab_zoom", &tab_zoom_level_);
+        if (dict->HasKey("vivaldi_tab_zoom")) {
+          dict->GetDouble("vivaldi_tab_zoom", &tab_zoom_level_);
+        } else {
+          Profile *profile =
+            Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+          content::HostZoomMap* host_zoom_map =
+            content::HostZoomMap::GetDefaultForBrowserContext(profile);
+          tab_zoom_level_ = host_zoom_map->GetDefaultZoomLevel();
+          dict->SetDouble("vivaldi_tab_zoom", tab_zoom_level_);
+        }
       }
     }
   }
@@ -305,7 +308,7 @@ void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
 
 void VivaldiPrivateTabObserver::RenderViewHostChanged(
     content::RenderViewHost* old_host, content::RenderViewHost* new_host) {
-  if (IsVivaldiTabZoomEnabled()) {
+  if (::vivaldi::isTabZoomEnabled(web_contents())) {
     int render_view_id = new_host->GetRoutingID();
     int process_id = new_host->GetProcess()->GetID();
 
@@ -371,7 +374,7 @@ void VivaldiPrivateTabObserver::CommitSettings() {
 }
 
 void VivaldiPrivateTabObserver::OnZoomChanged(
-    const ui_zoom::ZoomController::ZoomChangedEventData& data) {
+    const zoom::ZoomController::ZoomChangedEventData& data) {
   SetZoomLevelForTab(data.new_zoom_level);
 }
 
@@ -446,6 +449,7 @@ bool TabsPrivateUpdateFunction::RunAsync() {
       tab_api->CommitSettings();
     }
   }
+  SendResponse(true);
   return true;
 }
 
@@ -620,6 +624,7 @@ bool TabsPrivateStartDragFunction::RunAsync() {
 
   ::vivaldi::SetTabDragInProgress(true);
   view->StartDragging(drop_data, allowed_ops, image, image_offset, event_info);
+  SendResponse(true);
   return true;
 }
 

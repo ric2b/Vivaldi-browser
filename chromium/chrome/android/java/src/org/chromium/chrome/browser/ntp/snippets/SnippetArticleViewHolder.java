@@ -6,27 +6,30 @@ package org.chromium.chrome.browser.ntp.snippets;
 
 import android.content.res.Resources;
 import android.graphics.Bitmap;
+import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.TransitionDrawable;
 import android.media.ThumbnailUtils;
+import android.support.v4.text.BidiFormatter;
 import android.text.format.DateUtils;
-import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.MeasureSpec;
-import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
-import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.base.Callback;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.favicon.FaviconHelper.FaviconImageCallback;
-import org.chromium.chrome.browser.ntp.NewTabPageUma;
+import org.chromium.chrome.browser.favicon.FaviconHelper.IconAvailabilityCallback;
+import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.ntp.NewTabPageView.NewTabPageManager;
+import org.chromium.chrome.browser.ntp.cards.CardViewHolder;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageListItem;
-import org.chromium.chrome.browser.ntp.cards.NewTabPageViewHolder;
+import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
+import org.chromium.components.variations.VariationsAssociatedData;
 
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -34,98 +37,133 @@ import java.net.URISyntaxException;
 /**
  * A class that represents the view for a single card snippet.
  */
-public class SnippetArticleViewHolder extends NewTabPageViewHolder implements View.OnClickListener {
+public class SnippetArticleViewHolder extends CardViewHolder {
     private static final String TAG = "NtpSnippets";
     private static final String PUBLISHER_FORMAT_STRING = "%s - %s";
     private static final int FADE_IN_ANIMATION_TIME_MS = 300;
+    private static final int[] FAVICON_SERVICE_SUPPORTED_SIZES = {16, 24, 32, 48, 64};
+    private static final String FAVICON_SERVICE_FORMAT =
+            "https://s2.googleusercontent.com/s2/favicons?domain=%s&src=chrome_newtab_mobile&sz=%d&alt=404";
+
+    // The variation parameter to fetch the value from the favicon service.
+    private static final String PARAMETER_FAVICON_SERVICE_NAME = "favicons_fetch_from_service";
+    private static final String PARAMETER_DISABLED_VALUE = "off";
 
     private final NewTabPageManager mNewTabPageManager;
+    private final SnippetsBridge mSnippetsBridge;
     private final TextView mHeadlineTextView;
     private final TextView mPublisherTextView;
     private final TextView mArticleSnippetTextView;
     private final ImageView mThumbnailView;
 
     private FetchImageCallback mImageCallback;
+    private SnippetArticle mArticle;
+    private ViewTreeObserver.OnPreDrawListener mPreDrawObserver;
+    private int mPublisherFaviconSizePx;
 
-    public String mUrl;
-    public int mPosition;
-
-    /**
-     * Creates the CardView object to display snippets information
-     *
-     * @param parent The parent view for the card
-     * @return a CardView object for displaying snippets
-     */
-    public static View createView(ViewGroup parent) {
-        return LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.new_tab_page_snippets_card, parent, false);
-    }
+    private final boolean mUseFaviconService;
 
     /**
      * Constructs a SnippetCardItemView item used to display snippets
      *
-     * @param cardView The View for the snippet card
-     * @param manager The SnippetsManager object used to open an article
+     * @param parent The ViewGroup that is going to contain the newly created view.
+     * @param manager The NTPManager object used to open an article
+     * @param snippetsBridge The SnippetsBridge used to retrieve the snippet thumbnails.
      */
-    public SnippetArticleViewHolder(View cardView, NewTabPageManager manager) {
-        super(cardView);
+    public SnippetArticleViewHolder(NewTabPageRecyclerView parent, NewTabPageManager manager,
+            SnippetsBridge snippetsBridge) {
+        super(R.layout.new_tab_page_snippets_card, parent);
 
         mNewTabPageManager = manager;
-        cardView.setOnClickListener(this);
-        mThumbnailView = (ImageView) cardView.findViewById(R.id.article_thumbnail);
-        mHeadlineTextView = (TextView) cardView.findViewById(R.id.article_headline);
-        mPublisherTextView = (TextView) cardView.findViewById(R.id.article_publisher);
-        mArticleSnippetTextView = (TextView) cardView.findViewById(R.id.article_snippet);
-        cardView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+        mSnippetsBridge = snippetsBridge;
+        mThumbnailView = (ImageView) itemView.findViewById(R.id.article_thumbnail);
+        mHeadlineTextView = (TextView) itemView.findViewById(R.id.article_headline);
+        mPublisherTextView = (TextView) itemView.findViewById(R.id.article_publisher);
+        mArticleSnippetTextView = (TextView) itemView.findViewById(R.id.article_snippet);
+
+        mPreDrawObserver = new ViewTreeObserver.OnPreDrawListener() {
+            @Override
+            public boolean onPreDraw() {
+                if (mArticle != null && !mArticle.impressionTracked()) {
+                    Rect r = new Rect(0, 0, itemView.getWidth(), itemView.getHeight());
+                    itemView.getParent().getChildVisibleRect(itemView, r, null);
+                    // Track impression if at least one third of the snippet is shown.
+                    if (r.height() >= itemView.getHeight() / 3) mArticle.trackImpression();
+                }
+                // Proceed with the current drawing pass.
+                return true;
+            }
+        };
+
+        // Listen to onPreDraw only if this view is potentially visible (attached to the window).
+        itemView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {
-                RecordHistogram.recordSparseSlowlyHistogram(
-                        "NewTabPage.Snippets.CardShown", mPosition);
+                itemView.getViewTreeObserver().addOnPreDrawListener(mPreDrawObserver);
             }
 
             @Override
-            public void onViewDetachedFromWindow(View v) {}
+            public void onViewDetachedFromWindow(View v) {
+                itemView.getViewTreeObserver().removeOnPreDrawListener(mPreDrawObserver);
+            }
         });
+
+        mUseFaviconService =
+                !PARAMETER_DISABLED_VALUE.equals(VariationsAssociatedData.getVariationParamValue(
+                        NewTabPage.FIELD_TRIAL_NAME, PARAMETER_FAVICON_SERVICE_NAME));
     }
 
     @Override
-    public void onClick(View v) {
-        mNewTabPageManager.open(mUrl);
-        RecordUserAction.record("MobileNTP.Snippets.Click");
-        RecordHistogram.recordSparseSlowlyHistogram("NewTabPage.Snippets.CardClicked", mPosition);
-        NewTabPageUma.recordSnippetAction(NewTabPageUma.SNIPPETS_ACTION_CLICKED);
-        NewTabPageUma.recordAction(NewTabPageUma.ACTION_OPENED_SNIPPET);
+    public void onCardTapped() {
+        mNewTabPageManager.openSnippet(mArticle.mUrl);
+        mArticle.trackClick();
     }
 
     @Override
     public void onBindViewHolder(NewTabPageListItem article) {
-        SnippetArticle item = (SnippetArticle) article;
+        super.onBindViewHolder(article);
 
-        mHeadlineTextView.setText(item.mTitle);
-        mPublisherTextView.setText(String.format(PUBLISHER_FORMAT_STRING, item.mPublisher,
-                DateUtils.getRelativeTimeSpanString(item.mTimestamp, System.currentTimeMillis(),
-                        DateUtils.MINUTE_IN_MILLIS)));
+        mArticle = (SnippetArticle) article;
 
-        mArticleSnippetTextView.setText(item.mPreviewText);
-        mUrl = item.mUrl;
-        mPosition = item.mPosition;
+        mHeadlineTextView.setText(mArticle.mTitle);
+
+        // We format the publisher here so that having a publisher name in an RTL language doesn't
+        // mess up the formatting on an LTR device and vice versa.
+        String publisherAttribution = String.format(PUBLISHER_FORMAT_STRING,
+                BidiFormatter.getInstance().unicodeWrap(mArticle.mPublisher),
+                DateUtils.getRelativeTimeSpanString(mArticle.mPublishTimestampMilliseconds,
+                        System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+        mPublisherTextView.setText(publisherAttribution);
+
+        // The favicon of the publisher should match the textview height.
+        int widthSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+        int heightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
+        mPublisherTextView.measure(widthSpec, heightSpec);
+        mPublisherFaviconSizePx = mPublisherTextView.getMeasuredHeight();
+
+        mArticleSnippetTextView.setText(mArticle.mPreviewText);
 
         // If there's still a pending thumbnail fetch, cancel it.
         cancelImageFetch();
 
         // If the article has a thumbnail already, reuse it. Otherwise start a fetch.
-        if (item.getThumbnailBitmap() != null) {
-            mThumbnailView.setImageBitmap(item.getThumbnailBitmap());
+        if (mArticle.getThumbnailBitmap() != null) {
+            mThumbnailView.setImageBitmap(mArticle.getThumbnailBitmap());
         } else {
             mThumbnailView.setImageResource(R.drawable.ic_snippet_thumbnail_placeholder);
-            mImageCallback = new FetchImageCallback(this, item);
-            mNewTabPageManager.fetchSnippetImage(item, mImageCallback);
+            mImageCallback = new FetchImageCallback(this, mArticle);
+            mSnippetsBridge.fetchSnippetImage(mArticle, mImageCallback);
         }
 
-        updateFavicon(item);
+        // Set the favicon of the publisher.
+        try {
+            fetchFaviconFromLocalCache(new URI(mArticle.mUrl), true);
+        } catch (URISyntaxException e) {
+            setDefaultFaviconOnView();
+        }
     }
 
-    private static class FetchImageCallback implements SnippetsBridge.FetchSnippetImageCallback {
+    private static class FetchImageCallback extends Callback<Bitmap> {
         private SnippetArticleViewHolder mViewHolder;
         private final SnippetArticle mSnippet;
 
@@ -135,7 +173,7 @@ public class SnippetArticleViewHolder extends NewTabPageViewHolder implements Vi
         }
 
         @Override
-        public void onSnippetImageAvailable(Bitmap image) {
+        public void onResult(Bitmap image) {
             if (mViewHolder == null) return;
             mViewHolder.fadeThumbnailIn(mSnippet, image);
         }
@@ -176,72 +214,76 @@ public class SnippetArticleViewHolder extends NewTabPageViewHolder implements Vi
         transitionDrawable.startTransition(FADE_IN_ANIMATION_TIME_MS);
     }
 
-    private void updateFavicon(SnippetArticle snippet) {
-        // The favicon size should match the textview height
-        int widthSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
-        int heightSpec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED);
-        mPublisherTextView.measure(widthSpec, heightSpec);
-        fetchFavicon(snippet, mPublisherTextView.getMeasuredHeight());
-    }
-
-    // Fetch the favicon using the article's url first. If that fails, try to fetch the
-    // favicon for the hostname
-    private void fetchFavicon(final SnippetArticle snippet, final int faviconSizePx) {
+    private void fetchFaviconFromLocalCache(final URI snippetUri, final boolean fallbackToService) {
         mNewTabPageManager.getLocalFaviconImageForURL(
-                snippet.mUrl, faviconSizePx, new FaviconImageCallback() {
+                getSnippetDomain(snippetUri), mPublisherFaviconSizePx, new FaviconImageCallback() {
                     @Override
                     public void onFaviconAvailable(Bitmap image, String iconUrl) {
-                        if (image == null) {
-                            fetchFaviconForHostname(snippet.mUrl, faviconSizePx);
-                        } else {
-                            setFaviconOnView(mPublisherTextView, faviconSizePx, image);
+                        if (image == null && fallbackToService) {
+                            fetchFaviconFromService(snippetUri);
+                            return;
                         }
+                        setFaviconOnView(image);
                     }
                 });
     }
 
-    private void fetchFaviconForHostname(String urlStr, final int sizePx) {
-        URI uri = null;
-        try {
-            uri = new URI(urlStr);
-        } catch (URISyntaxException e) {
-            drawDefaultFavicon(sizePx);
-            return;
+    private void fetchFaviconFromService(final URI snippetUri) {
+        // Show the default favicon immediately.
+        setDefaultFaviconOnView();
+
+        if (!mUseFaviconService) return;
+        int sizePx = getFaviconServiceSupportedSize();
+        if (sizePx == 0) return;
+
+        // Replace the default icon by another one from the service when it is fetched.
+        mNewTabPageManager.ensureIconIsAvailable(
+                getSnippetDomain(snippetUri), // Store to the cache for the whole domain.
+                String.format(FAVICON_SERVICE_FORMAT, snippetUri.getHost(), sizePx),
+                /*useLargeIcon=*/false, /*isTemporary=*/true, new IconAvailabilityCallback() {
+                    @Override
+                    public void onIconAvailabilityChecked(boolean newlyAvailable) {
+                        if (!newlyAvailable) return;
+                        // The download succeeded, the favicon is in the cache; fetch it.
+                        fetchFaviconFromLocalCache(snippetUri, /*fallbackToService=*/false);
+                    }
+                });
+    }
+
+    private int getFaviconServiceSupportedSize() {
+        // Take the smallest size larger than mFaviconSizePx.
+        for (int size : FAVICON_SERVICE_SUPPORTED_SIZES) {
+            if (size > mPublisherFaviconSizePx) return size;
         }
-
-        mNewTabPageManager.getLocalFaviconImageForURL(
-                String.format("%s://%s", uri.getScheme(), uri.getHost()), sizePx,
-                new FaviconImageCallback() {
-                    @Override
-                    public void onFaviconAvailable(Bitmap image, String iconUrl) {
-                        if (image == null) {
-                            drawDefaultFavicon(sizePx);
-                        } else {
-                            setFaviconOnView(mPublisherTextView, sizePx, image);
-                        }
-                    }
-                });
+        // Or at least the largest available size (unless too small).
+        int largestSize =
+                FAVICON_SERVICE_SUPPORTED_SIZES[FAVICON_SERVICE_SUPPORTED_SIZES.length - 1];
+        if (mPublisherFaviconSizePx <= largestSize * 1.5) return largestSize;
+        return 0;
     }
 
-    private void drawDefaultFavicon(int faviconSizePx) {
-        Drawable newIcon = ApiCompatibilityUtils.getDrawable(
-                mPublisherTextView.getContext().getResources(), R.drawable.default_favicon);
-        setFaviconOnView(mPublisherTextView, faviconSizePx, newIcon);
+    private String getSnippetDomain(URI snippetUri) {
+        return String.format("%s://%s", snippetUri.getScheme(), snippetUri.getHost());
     }
 
-    private static void setFaviconOnView(TextView textview, int sizePx, Bitmap image) {
-        Drawable domainFavicon = new BitmapDrawable(textview.getContext().getResources(), image);
-        setFaviconOnView(textview, sizePx, domainFavicon);
+    private void setDefaultFaviconOnView() {
+        setFaviconOnView(ApiCompatibilityUtils.getDrawable(
+                mPublisherTextView.getContext().getResources(), R.drawable.default_favicon));
     }
 
-    private static void setFaviconOnView(TextView textview, int sizePx, Drawable drawable) {
-        drawable.setBounds(0, 0, sizePx, sizePx);
-        ApiCompatibilityUtils.setCompoundDrawablesRelative(textview, drawable, null, null, null);
-        textview.setVisibility(View.VISIBLE);
+    private void setFaviconOnView(Bitmap image) {
+        setFaviconOnView(new BitmapDrawable(mPublisherTextView.getContext().getResources(), image));
+    }
+
+    private void setFaviconOnView(Drawable drawable) {
+        drawable.setBounds(0, 0, mPublisherFaviconSizePx, mPublisherFaviconSizePx);
+        ApiCompatibilityUtils.setCompoundDrawablesRelative(
+                mPublisherTextView, drawable, null, null, null);
+        mPublisherTextView.setVisibility(View.VISIBLE);
     }
 
     @Override
     public boolean isDismissable() {
-        return true;
+        return !isPeeking();
     }
 }

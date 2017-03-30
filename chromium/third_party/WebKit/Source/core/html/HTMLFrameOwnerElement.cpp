@@ -45,7 +45,7 @@ static WidgetToParentMap& widgetNewParentMap()
     return map;
 }
 
-typedef HeapHashSet<Member<Widget>> WidgetSet;
+using WidgetSet = HeapHashSet<Member<Widget>>;
 static WidgetSet& widgetsPendingTemporaryRemovalFromParent()
 {
     // Widgets in this set will not leak because it will be cleared in
@@ -54,9 +54,15 @@ static WidgetSet& widgetsPendingTemporaryRemovalFromParent()
     return set;
 }
 
-HeapHashCountedSet<Member<Node>>& SubframeLoadingDisabler::disabledSubtreeRoots()
+static WidgetSet& widgetsPendingDispose()
 {
-    DEFINE_STATIC_LOCAL(HeapHashCountedSet<Member<Node>>, nodes, (new HeapHashCountedSet<Member<Node>>));
+    DEFINE_STATIC_LOCAL(WidgetSet, set, (new WidgetSet));
+    return set;
+}
+
+SubframeLoadingDisabler::SubtreeRootSet& SubframeLoadingDisabler::disabledSubtreeRoots()
+{
+    DEFINE_STATIC_LOCAL(SubtreeRootSet, nodes, (new SubtreeRootSet));
     return nodes;
 }
 
@@ -85,12 +91,22 @@ void HTMLFrameOwnerElement::UpdateSuspendScope::performDeferredWidgetTreeOperati
         }
     }
 
-    WidgetSet set;
-    widgetsPendingTemporaryRemovalFromParent().swap(set);
-    for (const auto& widget : set) {
-        FrameView* currentParent = toFrameView(widget->parent());
-        if (currentParent)
-            currentParent->removeChild(widget.get());
+    {
+        WidgetSet set;
+        widgetsPendingTemporaryRemovalFromParent().swap(set);
+        for (const auto& widget : set) {
+            FrameView* currentParent = toFrameView(widget->parent());
+            if (currentParent)
+                currentParent->removeChild(widget.get());
+        }
+    }
+
+    {
+        WidgetSet set;
+        widgetsPendingDispose().swap(set);
+        for (const auto& widget : set) {
+            widget->dispose();
+        }
     }
 }
 
@@ -210,9 +226,24 @@ bool HTMLFrameOwnerElement::isKeyboardFocusable() const
     return m_contentFrame && HTMLElement::isKeyboardFocusable();
 }
 
+void HTMLFrameOwnerElement::disposeWidgetSoon(Widget* widget)
+{
+    if (s_updateSuspendCount) {
+        widgetsPendingDispose().add(widget);
+        return;
+    }
+    widget->dispose();
+}
+
 void HTMLFrameOwnerElement::dispatchLoad()
 {
     dispatchScopedEvent(Event::create(EventTypeNames::load));
+}
+
+const WebVector<WebPermissionType>& HTMLFrameOwnerElement::delegatedPermissions() const
+{
+    DEFINE_STATIC_LOCAL(WebVector<WebPermissionType>, permissions, ());
+    return permissions;
 }
 
 Document* HTMLFrameOwnerElement::getSVGDocument(ExceptionState& exceptionState) const

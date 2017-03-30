@@ -7,13 +7,13 @@ module blink.mojom;
 
 // The shipping address that the browser process provides to the renderer
 // process. Built either by the browser or a payment app.
-struct ShippingAddress {
+struct PaymentAddress {
   // ISO 3166 country code. Two upper case ASCII letters.
-  string region_code;
+  string country;
 
   array<string> address_line;
-  string administrative_area;
-  string locality;
+  string region;
+  string city;
   string dependent_locality;
   string postal_code;
   string sorting_code;
@@ -28,6 +28,20 @@ struct ShippingAddress {
 
   string organization;
   string recipient;
+  string careOf;
+  string phone;
+};
+
+// The currency amount that the renderer provides to the browser process. The
+// browser shows the amount in UI and forwards it on to the payment app, if it
+// requires the amount.
+struct PaymentCurrencyAmount {
+  // ISO 4217 currency code. Three upper case ASCII letters.
+  string currency;
+
+  // ISO 20022 CurrencyAnd30Amount. Up to 30 total digits. Up to 10 fraction
+  // digits. Separated by a dot.
+  string value;
 };
 
 struct PaymentResponse {
@@ -43,67 +57,84 @@ struct PaymentResponse {
   // {"nameOnCard": "Jon Doe", "pan": "4111 1111 1111 1111"}
   string stringified_details;
 
-  ShippingAddress? shipping_address;
-  string? shipping_option_id;
+  PaymentAddress? shipping_address;
+  string? shipping_option;
+  string? payer_email;
+  string? payer_phone;
+};
+
+enum PaymentErrorReason {
+  UNKNOWN,
+  USER_CANCEL,
+  NOT_SUPPORTED
 };
 
 interface PaymentRequestClient {
-  OnShippingAddressChange(ShippingAddress address);
+  OnShippingAddressChange(PaymentAddress address);
   OnShippingOptionChange(string shipping_option_id);
   OnPaymentResponse(PaymentResponse response);
-  OnError();
+  OnError(PaymentErrorReason error);
   OnComplete();
-};
-
-// The currency amount that the renderer provides to the browser process. The
-// browser shows the amount in UI and forwards it on to the payment app, if it
-// requires the amount.
-struct CurrencyAmount {
-  // ISO 4217 currency code. Three upper case ASCII letters.
-  string currency_code;
-
-  // ISO 20022 CurrencyAnd30Amount. Up to 30 total digits. Up to 10 fraction
-  // digits. Separated by a dot.
-  string value;
+  OnAbort(bool aborted_successfully);
 };
 
 struct PaymentItem {
-  string id;
   string label;
-  CurrencyAmount amount;
+  PaymentCurrencyAmount amount;
 };
 
-struct ShippingOption {
+struct PaymentShippingOption {
   string id;
   string label;
-  CurrencyAmount amount;
+  PaymentCurrencyAmount amount;
+  bool selected;
+};
+
+struct PaymentDetailsModifier {
+  array<string> supported_methods;
+  PaymentItem total;
+  array<PaymentItem> additional_display_items;
 };
 
 struct PaymentDetails {
-  array<PaymentItem> items;
-  array<ShippingOption> shipping_options;
+  PaymentItem total;
+  array<PaymentItem> display_items;
+  array<PaymentShippingOption> shipping_options;
+  array<PaymentDetailsModifier> modifiers;
 };
 
 struct PaymentOptions {
+  bool request_payer_email;
+  bool request_payer_phone;
   bool request_shipping;
+};
+
+struct PaymentMethodData {
+  array<string> supported_methods;
+  // A JSON string built by the renderer from a JavaScript object that the
+  // merchant website provides. The renderer uses
+  // blink::JSONObject::toJSONString() to generate this string. The browser
+  // parses the string via JSONObject(JsonSanitizer.sanitize(stringified_data))
+  // and passes a part of the JSON object to the payment app, for example
+  // Android Pay. There's no one format for this object, so richer types cannot
+  // be used. A simple example:
+  //
+  // {"gateway": "stripe"}
+  string stringified_data;
+};
+
+enum PaymentComplete {
+  SUCCESS,
+  FAIL,
+  UNKNOWN
 };
 
 interface PaymentRequest {
   SetClient(PaymentRequestClient client);
-  Show(array<string> supported_methods,
+  Show(array<PaymentMethodData> methodData,
        PaymentDetails details,
-       PaymentOptions options,
-       // A JSON string built by the renderer from a JavaScript object that the
-       // merchant website provides. The renderer uses
-       // blink::JSONObject::toJSONString() to generate this string. The browser
-       // parses the string via base::JSONParser and passes a part of the JSON
-       // object to the payment app, for example Android Pay. There's no one
-       // format for this object, so richer types cannot be used. A simple
-       // example:
-       //
-       // {"https://android.com/pay": {"gateway": "stripe"}}
-       string stringified_data);
+       PaymentOptions options);
   UpdateWith(PaymentDetails details);
   Abort();
-  Complete(bool success);
+  Complete(PaymentComplete result);
 };

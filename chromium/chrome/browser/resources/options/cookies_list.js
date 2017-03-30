@@ -415,7 +415,11 @@ cr.define('options', function() {
     /**
      * Remove a cookie tree node from the given index.
      * Both CookiesList and CookieTreeNode implement this API.
-     * @param {number} index The index of the tree node to remove.
+     *
+     * TODO(dbeam): this method now conflicts with HTMLElement#remove(), which
+     * is why the param is optional. Rename.
+     *
+     * @param {number=} index The index of the tree node to remove.
      */
     remove: function(index) {
       if (index < this.children.length) {
@@ -741,13 +745,13 @@ cr.define('options', function() {
      * @private
      */
     handleKeyLeftRight_: function(e) {
-      var id = e.keyIdentifier;
+      var id = e.key;
       if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey)
         return;
-      if ((id == 'Left' || id == 'Right') && this.expandedItem) {
+      if ((id == 'ArrowLeft' || id == 'ArrowRight') && this.expandedItem) {
         var cs = this.ownerDocument.defaultView.getComputedStyle(this);
         var rtl = cs.direction == 'rtl';
-        if ((!rtl && id == 'Left') || (rtl && id == 'Right'))
+        if ((!rtl && id == 'ArrowLeft') || (rtl && id == 'ArrowRight'))
           this.expandedItem.selectedIndex--;
         else
           this.expandedItem.selectedIndex++;
@@ -849,7 +853,11 @@ cr.define('options', function() {
     /**
      * Remove a cookie tree node from the given index.
      * Both CookiesList and CookieTreeNode implement this API.
-     * @param {number} index The index of the tree node to remove.
+     *
+     * TODO(dbeam): this method now conflicts with HTMLElement#remove(), which
+     * is why the param is optional. Rename.
+     *
+     * @param {number=} index The index of the tree node to remove.
      */
     remove: function(index) {
       if (index < this.dataModel.length)

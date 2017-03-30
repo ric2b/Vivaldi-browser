@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/common/window_positioner.h"
+#include "ash/common/wm/window_positioner.h"
 
 #include <string>
 
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm/window_positioner.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/shell.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/test/ash_test_base.h"
+#include "ash/test/ash_md_test_base.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/wm/common/window_positioner.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/strings/string_number_conversions.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -21,25 +22,32 @@
 
 namespace ash {
 
-typedef test::AshTestBase WindowPositionerTest;
+using WindowPositionerTest = test::AshMDTestBase;
 
-TEST_F(WindowPositionerTest, OpenMaximizedWindowOnSecondDisplay) {
+INSTANTIATE_TEST_CASE_P(
+    /* prefix intentionally left blank due to only one parameterization */,
+    WindowPositionerTest,
+    testing::Values(MaterialDesignController::NON_MATERIAL,
+                    MaterialDesignController::MATERIAL_NORMAL,
+                    MaterialDesignController::MATERIAL_EXPERIMENTAL));
+
+TEST_P(WindowPositionerTest, OpenMaximizedWindowOnSecondDisplay) {
   if (!SupportsMultipleDisplays())
     return;
+  const int height_offset = GetMdMaximizedWindowHeightOffset();
   // Tests that for a screen that is narrower than kForceMaximizeWidthLimit
   // a new window gets maximized.
   UpdateDisplay("400x400,500x500");
-  Shell::GetInstance()->set_target_root_window(
-      Shell::GetAllRootWindows()[1]);
+  Shell::GetInstance()->set_target_root_window(Shell::GetAllRootWindows()[1]);
   shell::ToplevelWindow::CreateParams params;
   params.can_resize = true;
   params.can_maximize = true;
-  views::Widget* widget =
-      shell::ToplevelWindow::CreateToplevelWindow(params);
-  EXPECT_EQ("400,0 500x453", widget->GetWindowBoundsInScreen().ToString());
+  views::Widget* widget = shell::ToplevelWindow::CreateToplevelWindow(params);
+  EXPECT_EQ(gfx::Rect(400, 0, 500, 453 + height_offset).ToString(),
+            widget->GetWindowBoundsInScreen().ToString());
 }
 
-TEST_F(WindowPositionerTest, OpenDefaultWindowOnSecondDisplay) {
+TEST_P(WindowPositionerTest, OpenDefaultWindowOnSecondDisplay) {
   if (!SupportsMultipleDisplays())
     return;
 #if defined(OS_WIN)
@@ -47,13 +55,11 @@ TEST_F(WindowPositionerTest, OpenDefaultWindowOnSecondDisplay) {
 #endif
   UpdateDisplay("400x400,1400x900");
   aura::Window* second_root_window = Shell::GetAllRootWindows()[1];
-  Shell::GetInstance()->set_target_root_window(
-      second_root_window);
+  Shell::GetInstance()->set_target_root_window(second_root_window);
   shell::ToplevelWindow::CreateParams params;
   params.can_resize = true;
   params.can_maximize = true;
-  views::Widget* widget =
-      shell::ToplevelWindow::CreateToplevelWindow(params);
+  views::Widget* widget = shell::ToplevelWindow::CreateToplevelWindow(params);
   gfx::Rect bounds = widget->GetWindowBoundsInScreen();
 #if defined(OS_WIN)
   EXPECT_TRUE(widget->IsMaximized());
@@ -69,51 +75,43 @@ TEST_F(WindowPositionerTest, OpenDefaultWindowOnSecondDisplay) {
 
 // Tests that second window inherits first window's maximized state as well as
 // its restore bounds.
-#if defined(OS_WIN) && !defined(USE_ASH)
 // TODO(msw): Broken on Windows. http://crbug.com/584038
-#define MAYBE_SecondMaximizedWindowHasProperRestoreSize \
-  DISABLED_SecondMaximizedWindowHasProperRestoreSize
-#else
-#define MAYBE_SecondMaximizedWindowHasProperRestoreSize \
-  SecondMaximizedWindowHasProperRestoreSize
-#endif
-TEST_F(WindowPositionerTest, MAYBE_SecondMaximizedWindowHasProperRestoreSize) {
-#if defined(OS_WIN)
-  ash::WindowPositioner::SetMaximizeFirstWindow(true);
-#endif
+#if defined(OS_CHROMEOS)
+TEST_P(WindowPositionerTest, SecondMaximizedWindowHasProperRestoreSize) {
+  const int height_offset = GetMdMaximizedWindowHeightOffset();
   UpdateDisplay("1400x900");
   shell::ToplevelWindow::CreateParams params;
   params.can_resize = true;
   params.can_maximize = true;
-  views::Widget* widget1 =
-      shell::ToplevelWindow::CreateToplevelWindow(params);
+  views::Widget* widget1 = shell::ToplevelWindow::CreateToplevelWindow(params);
   gfx::Rect bounds = widget1->GetWindowBoundsInScreen();
 
-#if !defined(OS_WIN)
   // The window should have default size.
   EXPECT_FALSE(widget1->IsMaximized());
   EXPECT_EQ("300x300", bounds.size().ToString());
   widget1->Maximize();
-#endif
+
   // The window should be maximized.
   bounds = widget1->GetWindowBoundsInScreen();
   EXPECT_TRUE(widget1->IsMaximized());
-  EXPECT_EQ("0,0 1400x853", bounds.ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 1400, 853 + height_offset).ToString(),
+            bounds.ToString());
 
   // Create another window
-  views::Widget* widget2 =
-      shell::ToplevelWindow::CreateToplevelWindow(params);
+  views::Widget* widget2 = shell::ToplevelWindow::CreateToplevelWindow(params);
 
   // The second window should be maximized.
   bounds = widget2->GetWindowBoundsInScreen();
   EXPECT_TRUE(widget2->IsMaximized());
-  EXPECT_EQ("0,0 1400x853", bounds.ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 1400, 853 + height_offset).ToString(),
+            bounds.ToString());
 
   widget2->Restore();
   // Second window's restored size should be set to default size.
   bounds = widget2->GetWindowBoundsInScreen();
   EXPECT_EQ("300x300", bounds.size().ToString());
 }
+#endif  // defined(OS_CHROMEOS)
 
 namespace {
 
@@ -143,7 +141,7 @@ class OutOfDisplayDelegate : public views::WidgetDelegate {
 
 }  // namespace
 
-TEST_F(WindowPositionerTest, EnsureMinimumVisibility) {
+TEST_P(WindowPositionerTest, EnsureMinimumVisibility) {
   if (!SupportsHostWindowResize())
     return;
 
@@ -153,7 +151,7 @@ TEST_F(WindowPositionerTest, EnsureMinimumVisibility) {
   params.delegate = new OutOfDisplayDelegate(widget);
   params.context = Shell::GetPrimaryRootWindow();
   widget->Init(params);
-  widget->SetBounds(gfx::Rect(450,10, 100, 100));
+  widget->SetBounds(gfx::Rect(450, 10, 100, 100));
   wm::GetWindowState(widget->GetNativeView())->set_minimum_visibility(true);
   widget->Show();
   // Make sure the bounds is adjusted to be inside the work area.
@@ -167,7 +165,7 @@ TEST_F(WindowPositionerTest, EnsureMinimumVisibility) {
 // resolutions, one can set "ForceMaximizeBrowserWindowOnFirstRun"
 // policy. In the following tests we check if the window will be opened in
 // maximized mode for low and high resolution when this policy is set.
-TEST_F(WindowPositionerTest, FirstRunMaximizeWindowHighResloution) {
+TEST_P(WindowPositionerTest, FirstRunMaximizeWindowHighResloution) {
   const int width = ash::WindowPositioner::GetForceMaximizedWidthLimit() + 100;
   // Set resolution to 1466x300.
   const std::string resolution = base::IntToString(width) + "x300";
@@ -186,7 +184,7 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowHighResloution) {
 }
 
 // For detail see description of FirstRunMaximizeWindowHighResloution.
-TEST_F(WindowPositionerTest, FirstRunMaximizeWindowLowResolution) {
+TEST_P(WindowPositionerTest, FirstRunMaximizeWindowLowResolution) {
   const int width = ash::WindowPositioner::GetForceMaximizedWidthLimit() - 100;
   // Set resolution to 1266x300.
   const std::string resolution = base::IntToString(width) + "x300";
@@ -204,7 +202,7 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowLowResolution) {
   EXPECT_EQ(show_state_out, ui::SHOW_STATE_MAXIMIZED);
 }
 
-TEST_F(WindowPositionerTest, IgnoreFullscreenInAutoRearrange) {
+TEST_P(WindowPositionerTest, IgnoreFullscreenInAutoRearrange) {
   if (!SupportsHostWindowResize())
     return;
   // Set bigger than 1366 so that the new window is opened in normal state.

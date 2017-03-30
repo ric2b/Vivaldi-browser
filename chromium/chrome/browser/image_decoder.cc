@@ -12,8 +12,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/utility_process_host.h"
-#include "content/public/common/service_registry.h"
-#include "skia/public/type_converters.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -32,16 +31,13 @@ const int kBatchModeTimeoutSeconds = 5;
 void OnDecodeImageDone(
     base::Callback<void(int)> fail_callback,
     base::Callback<void(const SkBitmap&, int)> success_callback,
-    int request_id, skia::mojom::BitmapPtr image) {
+    int request_id,
+    const SkBitmap& image) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (image) {
-    SkBitmap bitmap = image.To<SkBitmap>();
-    if (!bitmap.empty()) {
-      success_callback.Run(bitmap, request_id);
-      return;
-    }
-  }
-  fail_callback.Run(request_id);
+  if (!image.isNull() && !image.empty())
+    success_callback.Run(image, request_id);
+  else
+    fail_callback.Run(request_id);
 }
 
 }  // namespace
@@ -190,9 +186,7 @@ void ImageDecoder::StartBatchMode() {
     delete utility_process_host_.get();
     return;
   }
-  content::ServiceRegistry* service_registry =
-      utility_process_host_->GetServiceRegistry();
-  service_registry->ConnectToRemoteService(mojo::GetProxy(&decoder_));
+  utility_process_host_->GetRemoteInterfaces()->GetInterface(&decoder_);
 }
 
 void ImageDecoder::StopBatchMode() {

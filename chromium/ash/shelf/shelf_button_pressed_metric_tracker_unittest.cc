@@ -32,8 +32,7 @@ class DummyButton : public views::Button {
   DISALLOW_COPY_AND_ASSIGN(DummyButton);
 };
 
-DummyButton::DummyButton() : views::Button(nullptr) {
-}
+DummyButton::DummyButton() : views::Button(nullptr) {}
 
 // A simple light weight test double dummy for a ui::Event.
 class DummyEvent : public ui::Event {
@@ -52,12 +51,10 @@ class DummyEvent : public ui::Event {
 int DummyEvent::next_unique_id_ = 0;
 
 DummyEvent::DummyEvent()
-    : Event(ui::ET_GESTURE_TAP, base::TimeDelta(), 0),
-      unique_id_(next_unique_id_++) {
-}
+    : Event(ui::ET_GESTURE_TAP, base::TimeTicks(), 0),
+      unique_id_(next_unique_id_++) {}
 
-DummyEvent::~DummyEvent() {
-}
+DummyEvent::~DummyEvent() {}
 
 // Test fixture for the ShelfButtonPressedMetricTracker class. Relies on
 // AshTestBase to initilize the UserMetricsRecorder and it's dependencies.
@@ -102,11 +99,9 @@ const char* ShelfButtonPressedMetricTrackerTest::
         ShelfButtonPressedMetricTracker::
             kTimeBetweenWindowMinimizedAndActivatedActionsHistogramName;
 
-ShelfButtonPressedMetricTrackerTest::ShelfButtonPressedMetricTrackerTest() {
-}
+ShelfButtonPressedMetricTrackerTest::ShelfButtonPressedMetricTrackerTest() {}
 
-ShelfButtonPressedMetricTrackerTest::~ShelfButtonPressedMetricTrackerTest() {
-}
+ShelfButtonPressedMetricTrackerTest::~ShelfButtonPressedMetricTrackerTest() {}
 
 void ShelfButtonPressedMetricTrackerTest::SetUp() {
   AshTestBase::SetUp();
@@ -162,7 +157,7 @@ void ShelfButtonPressedMetricTrackerTest::ButtonPressed(
 TEST_F(ShelfButtonPressedMetricTrackerTest,
        Launcher_ButtonPressed_MouseIsRecordedWhenIconActivatedByMouse) {
   const ui::MouseEvent mouse_event(ui::ET_MOUSE_PRESSED, gfx::Point(),
-                                   gfx::Point(), base::TimeDelta(), 0, 0);
+                                   gfx::Point(), base::TimeTicks(), 0, 0);
 
   base::UserActionTester user_action_tester;
   ButtonPressed(mouse_event);
@@ -175,7 +170,7 @@ TEST_F(ShelfButtonPressedMetricTrackerTest,
 TEST_F(ShelfButtonPressedMetricTrackerTest,
        Launcher_ButtonPressed_MouseIsRecordedWhenIconActivatedByTouch) {
   const ui::TouchEvent touch_event(ui::ET_GESTURE_TAP, gfx::Point(), 0,
-                                   base::TimeDelta());
+                                   base::TimeTicks());
 
   base::UserActionTester user_action_tester;
   ButtonPressed(touch_event);

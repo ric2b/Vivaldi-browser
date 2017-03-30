@@ -48,4 +48,8 @@ void RendererSurfaceViewManager::OnFullscreenSurfaceCreated(int surface_id) {
   }
 }
 
+void RendererSurfaceViewManager::OnDestruct() {
+  delete this;
+}
+
 }  // namespace content

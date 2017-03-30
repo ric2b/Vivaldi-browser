@@ -37,7 +37,7 @@ const int kMaxActionIconSizePx = 128;
 class NotificationResourcesLoaderTest : public ::testing::Test {
 public:
     NotificationResourcesLoaderTest()
-        : m_page(DummyPageHolder::create()), m_loader(new NotificationResourcesLoader(bind<NotificationResourcesLoader*>(&NotificationResourcesLoaderTest::didFetchResources, this)))
+        : m_page(DummyPageHolder::create()), m_loader(new NotificationResourcesLoader(bind(&NotificationResourcesLoaderTest::didFetchResources, WTF::unretained(this))))
     {
     }
 
@@ -84,7 +84,7 @@ protected:
     }
 
 private:
-    OwnPtr<DummyPageHolder> m_page;
+    std::unique_ptr<DummyPageHolder> m_page;
     Persistent<NotificationResourcesLoader> m_loader;
     std::unique_ptr<WebNotificationResources> m_resources;
 };

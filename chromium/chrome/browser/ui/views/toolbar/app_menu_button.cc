@@ -11,6 +11,7 @@
 #include "base/time/time.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_otr_state.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/browser/ui/views/extensions/browser_action_drag_data.h"
@@ -25,7 +26,6 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icons_public.h"
 #include "ui/keyboard/keyboard_controller.h"
-#include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/controls/menu/menu_listener.h"
 #include "ui/views/metrics.h"
@@ -37,23 +37,28 @@ bool AppMenuButton::g_open_app_immediately_for_testing = false;
 AppMenuButton::AppMenuButton(ToolbarView* toolbar_view)
     : views::MenuButton(base::string16(), toolbar_view, false),
       severity_(AppMenuIconPainter::SEVERITY_NONE),
+      type_(AppMenuIconController::IconType::NONE),
       toolbar_view_(toolbar_view),
       allow_extension_dragging_(
           extensions::FeatureSwitch::extension_action_redesign()->IsEnabled()),
       margin_trailing_(0),
-      ink_drop_delegate_(new views::ButtonInkDropDelegate(this, this)),
       weak_factory_(this) {
-  set_ink_drop_delegate(ink_drop_delegate_.get());
-  if (!ui::MaterialDesignController::IsModeMaterial())
+  if (ui::MaterialDesignController::IsModeMaterial()) {
+    SetHasInkDrop(true);
+    SetFocusPainter(nullptr);
+  } else {
     icon_painter_.reset(new AppMenuIconPainter(this));
+  }
 }
 
 AppMenuButton::~AppMenuButton() {}
 
-void AppMenuButton::SetSeverity(AppMenuIconPainter::Severity severity,
+void AppMenuButton::SetSeverity(AppMenuIconController::IconType type,
+                                AppMenuIconPainter::Severity severity,
                                 bool animate) {
   if (ui::MaterialDesignController::IsModeMaterial()) {
     severity_ = severity;
+    type_ = type;
     UpdateIcon();
     return;
   }
@@ -151,8 +156,24 @@ void AppMenuButton::UpdateIcon() {
       break;
   }
 
-  SetImage(views::Button::STATE_NORMAL,
-           gfx::CreateVectorIcon(gfx::VectorIconId::BROWSER_TOOLS, color));
+  gfx::VectorIconId icon_id = gfx::VectorIconId::VECTOR_ICON_NONE;
+  switch (type_) {
+    case AppMenuIconController::IconType::NONE:
+      icon_id = gfx::VectorIconId::BROWSER_TOOLS;
+      DCHECK_EQ(severity_, AppMenuIconPainter::SEVERITY_NONE);
+      break;
+    case AppMenuIconController::IconType::UPGRADE_NOTIFICATION:
+      icon_id = gfx::VectorIconId::BROWSER_TOOLS_UPDATE;
+      break;
+    case AppMenuIconController::IconType::GLOBAL_ERROR:
+      icon_id = gfx::VectorIconId::BROWSER_TOOLS_ERROR;
+      break;
+    case AppMenuIconController::IconType::INCOMPATIBILITY_WARNING:
+      icon_id = gfx::VectorIconId::BROWSER_TOOLS_WARNING;
+      break;
+  }
+
+  SetImage(views::Button::STATE_NORMAL, gfx::CreateVectorIcon(icon_id, color));
 }
 
 void AppMenuButton::SetTrailingMargin(int margin) {
@@ -160,9 +181,12 @@ void AppMenuButton::SetTrailingMargin(int margin) {
 
   UpdateThemedBorder();
 
-  const int inset = LabelButton::kFocusRectInset;
-  SetFocusPainter(views::Painter::CreateDashedFocusPainterWithInsets(
-      gfx::Insets(inset, inset, inset, inset + margin)));
+  if (!ui::MaterialDesignController::IsModeMaterial()) {
+    const int inset = LabelButton::kFocusRectInset;
+    SetFocusPainter(views::Painter::CreateDashedFocusPainterWithInsets(
+        gfx::Insets(inset, inset, inset, inset + margin)));
+  }
+
   InvalidateLayout();
 }
 

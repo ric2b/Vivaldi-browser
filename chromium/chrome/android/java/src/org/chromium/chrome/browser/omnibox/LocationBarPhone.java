@@ -387,11 +387,7 @@ public class LocationBarPhone extends LocationBarLayout {
 
             @Override
             public void onAnimationEnd(Animator animation) {
-                mIsMenuBadgeAnimationRunning = false;
-            }
-
-            @Override
-            public void onAnimationCancel(Animator animation) {
+                // animator#cancel() will trigger onAnimationEnd() as well.
                 mIsMenuBadgeAnimationRunning = false;
             }
         });
@@ -458,7 +454,7 @@ public class LocationBarPhone extends LocationBarLayout {
         if (getToolbarDataProvider().isUsingBrandColor()) {
             int currentPrimaryColor = getToolbarDataProvider().getPrimaryColor();
             useLightDrawables |=
-                    ColorUtils.shoudUseLightForegroundOnBackground(currentPrimaryColor);
+                    ColorUtils.shouldUseLightForegroundOnBackground(currentPrimaryColor);
         }
         return useLightDrawables;
     }

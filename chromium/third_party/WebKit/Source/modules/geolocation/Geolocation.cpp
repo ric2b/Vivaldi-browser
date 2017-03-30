@@ -29,12 +29,15 @@
 
 #include "core/dom/Document.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/OriginsUsingFeatures.h"
+#include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/Settings.h"
 #include "modules/geolocation/Coordinates.h"
 #include "modules/geolocation/GeolocationError.h"
+#include "platform/UserGestureIndicator.h"
 #include "platform/mojo/MojoHelper.h"
+#include "public/platform/Platform.h"
 #include "public/platform/ServiceRegistry.h"
+#include "wtf/Assertions.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
@@ -97,7 +100,7 @@ Geolocation::Geolocation(ExecutionContext* context)
 
 Geolocation::~Geolocation()
 {
-    ASSERT(m_geolocationPermission != PermissionRequested);
+    DCHECK(m_geolocationPermission != PermissionRequested);
 }
 
 DEFINE_TRACE(Geolocation)
@@ -134,10 +137,10 @@ void Geolocation::contextDestroyed()
 
 void Geolocation::recordOriginTypeAccess() const
 {
-    ASSERT(frame());
+    DCHECK(frame());
 
     Document* document = this->document();
-    ASSERT(document);
+    DCHECK(document);
 
     // It is required by isSecureContext() but isn't
     // actually used. This could be used later if a warning is shown in the
@@ -153,11 +156,11 @@ void Geolocation::recordOriginTypeAccess() const
         // See https://crbug.com/603574.
         Deprecation::countDeprecation(document, UseCounter::GeolocationInsecureOriginDeprecatedNotRemoved);
         Deprecation::countDeprecationCrossOriginIframe(*document, UseCounter::GeolocationInsecureOriginIframeDeprecatedNotRemoved);
-        OriginsUsingFeatures::countAnyWorld(*document, OriginsUsingFeatures::Feature::GeolocationInsecureOrigin);
+        HostsUsingFeatures::countAnyWorld(*document, HostsUsingFeatures::Feature::GeolocationInsecureHost);
     } else {
         Deprecation::countDeprecation(document, UseCounter::GeolocationInsecureOrigin);
         Deprecation::countDeprecationCrossOriginIframe(*document, UseCounter::GeolocationInsecureOriginIframe);
-        OriginsUsingFeatures::countAnyWorld(*document, OriginsUsingFeatures::Feature::GeolocationInsecureOrigin);
+        HostsUsingFeatures::countAnyWorld(*document, HostsUsingFeatures::Feature::GeolocationInsecureHost);
     }
 }
 
@@ -375,7 +378,7 @@ void Geolocation::copyToSet(const GeoNotifierVector& src, GeoNotifierSet& dest)
 
 void Geolocation::handleError(PositionError* error)
 {
-    ASSERT(error);
+    DCHECK(error);
 
     GeoNotifierVector oneShotsCopy;
     copyToVector(m_oneShots, oneShotsCopy);
@@ -421,19 +424,20 @@ void Geolocation::requestPermission()
     m_geolocationPermission = PermissionRequested;
     frame->serviceRegistry()->connectToRemoteService(
         mojo::GetProxy(&m_permissionService));
-    m_permissionService.set_connection_error_handler(createBaseCallback(bind(&Geolocation::onPermissionConnectionError, WeakPersistentThisPointer<Geolocation>(this))));
+    m_permissionService.set_connection_error_handler(createBaseCallback(WTF::bind(&Geolocation::onPermissionConnectionError, wrapWeakPersistent(this))));
 
     // Ask the embedder: it maintains the geolocation challenge policy itself.
     m_permissionService->RequestPermission(
         mojom::blink::PermissionName::GEOLOCATION,
         getExecutionContext()->getSecurityOrigin()->toString(),
-        createBaseCallback(bind<mojom::blink::PermissionStatus>(&Geolocation::onGeolocationPermissionUpdated, this)));
+        UserGestureIndicator::processingUserGesture(),
+        createBaseCallback(WTF::bind(&Geolocation::onGeolocationPermissionUpdated, wrapPersistent(this))));
 }
 
 void Geolocation::makeSuccessCallbacks()
 {
-    ASSERT(m_lastPosition);
-    ASSERT(isAllowed());
+    DCHECK(m_lastPosition);
+    DCHECK(isAllowed());
 
     GeoNotifierVector oneShotsCopy;
     copyToVector(m_oneShots, oneShotsCopy);
@@ -455,7 +459,7 @@ void Geolocation::makeSuccessCallbacks()
 
 void Geolocation::positionChanged()
 {
-    ASSERT(isAllowed());
+    DCHECK(isAllowed());
 
     // Stop all currently running timers.
     stopTimers();
@@ -492,7 +496,7 @@ void Geolocation::updateGeolocationServiceConnection()
         return;
 
     frame()->serviceRegistry()->connectToRemoteService(mojo::GetProxy(&m_geolocationService));
-    m_geolocationService.set_connection_error_handler(createBaseCallback(bind(&Geolocation::onGeolocationConnectionError, WeakPersistentThisPointer<Geolocation>(this))));
+    m_geolocationService.set_connection_error_handler(createBaseCallback(WTF::bind(&Geolocation::onGeolocationConnectionError, wrapWeakPersistent(this))));
     if (m_enableHighAccuracy)
         m_geolocationService->SetHighAccuracy(true);
     queryNextPosition();
@@ -500,7 +504,7 @@ void Geolocation::updateGeolocationServiceConnection()
 
 void Geolocation::queryNextPosition()
 {
-    m_geolocationService->QueryNextPosition(createBaseCallback(bind<mojom::blink::GeopositionPtr>(&Geolocation::onPositionUpdated, this)));
+    m_geolocationService->QueryNextPosition(createBaseCallback(WTF::bind(&Geolocation::onPositionUpdated, wrapPersistent(this))));
 }
 
 void Geolocation::onPositionUpdated(mojom::blink::GeopositionPtr position)
@@ -523,6 +527,13 @@ void Geolocation::pageVisibilityChanged()
 
 void Geolocation::onGeolocationConnectionError()
 {
+    // If a request is outstanding at process shutdown, this error handler will
+    // be called. In that case, blink has already shut down so do nothing.
+    //
+    // TODO(sammc): Remove this once renderer shutdown is no longer graceful.
+    if (!Platform::current())
+        return;
+
     PositionError* error = PositionError::create(PositionError::POSITION_UNAVAILABLE, failedToStartServiceErrorMessage);
     error->setIsFatal(true);
     handleError(error);
@@ -530,6 +541,13 @@ void Geolocation::onGeolocationConnectionError()
 
 void Geolocation::onPermissionConnectionError()
 {
+    // If a request is outstanding at process shutdown, this error handler will
+    // be called. In that case, blink has already shut down so do nothing.
+    //
+    // TODO(sammc): Remove this once renderer shutdown is no longer graceful.
+    if (!Platform::current())
+        return;
+
     onGeolocationPermissionUpdated(mojom::blink::PermissionStatus::DENIED);
 }
 

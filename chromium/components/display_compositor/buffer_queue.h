@@ -18,16 +18,16 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 
-namespace cc {
-class ContextProvider;
-}
-
 namespace gfx {
 class GpuMemoryBuffer;
 }
 
 namespace gpu {
 class GpuMemoryBufferManager;
+
+namespace gles2 {
+class GLES2Interface;
+}
 }
 
 namespace display_compositor {
@@ -40,9 +40,9 @@ class GLHelper;
 // before the next BindFramebuffer call, otherwise it creates extra buffers.
 class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
  public:
-  BufferQueue(scoped_refptr<cc::ContextProvider> context_provider,
-              unsigned int texture_target,
-              unsigned int internalformat,
+  BufferQueue(gpu::gles2::GLES2Interface* gl,
+              uint32_t texture_target,
+              uint32_t internal_format,
               GLHelper* gl_helper,
               gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
               gpu::SurfaceHandle surface_handle);
@@ -57,10 +57,11 @@ class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
 
   void RecreateBuffers();
 
-  unsigned int current_texture_id() const {
+  uint32_t current_texture_id() const {
     return current_surface_ ? current_surface_->texture : 0;
   }
-  unsigned int fbo() const { return fbo_; }
+  uint32_t fbo() const { return fbo_; }
+  uint32_t internal_format() const { return internal_format_; }
 
  private:
   friend class BufferQueueTest;
@@ -69,14 +70,14 @@ class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
   struct DISPLAY_COMPOSITOR_EXPORT AllocatedSurface {
     AllocatedSurface(BufferQueue* buffer_queue,
                      std::unique_ptr<gfx::GpuMemoryBuffer> buffer,
-                     unsigned int texture,
-                     unsigned int image,
+                     uint32_t texture,
+                     uint32_t image,
                      const gfx::Rect& rect);
     ~AllocatedSurface();
     BufferQueue* const buffer_queue;
     std::unique_ptr<gfx::GpuMemoryBuffer> buffer;
-    const unsigned int texture;
-    const unsigned int image;
+    const uint32_t texture;
+    const uint32_t image;
     gfx::Rect damage;  // This is the damage for this frame from the previous.
   };
 
@@ -99,12 +100,12 @@ class DISPLAY_COMPOSITOR_EXPORT BufferQueue {
   std::unique_ptr<AllocatedSurface> RecreateBuffer(
       std::unique_ptr<AllocatedSurface> surface);
 
+  gpu::gles2::GLES2Interface* const gl_;
   gfx::Size size_;
-  scoped_refptr<cc::ContextProvider> context_provider_;
-  unsigned int fbo_;
+  uint32_t fbo_;
   size_t allocated_count_;
-  unsigned int texture_target_;
-  unsigned int internal_format_;
+  uint32_t texture_target_;
+  uint32_t internal_format_;
   // This surface is currently bound. This may be nullptr if no surface has
   // been bound, or if allocation failed at bind.
   std::unique_ptr<AllocatedSurface> current_surface_;

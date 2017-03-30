@@ -189,7 +189,7 @@ bool CompositeEditCommand::apply()
         case EditActionUnspecified:
             break;
         default:
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
             return false;
         }
     }
@@ -266,7 +266,7 @@ void CompositeEditCommand::applyCommandToComposite(EditCommand* command, Editing
 void CompositeEditCommand::applyCommandToComposite(CompositeEditCommand* command, const VisibleSelection& selection, EditingState* editingState)
 {
     command->setParent(this);
-    if (!equalSelectionsInDOMTree(selection, command->endingSelection())) {
+    if (selection != command->endingSelection()) {
         command->setStartingSelection(selection);
         command->setEndingSelection(selection);
     }
@@ -342,7 +342,8 @@ void CompositeEditCommand::insertNodeAfter(Node* insertChild, Node* refChild, Ed
 
 void CompositeEditCommand::insertNodeAt(Node* insertChild, const Position& editingPosition, EditingState* editingState)
 {
-    ABORT_EDITING_COMMAND_IF(!isEditablePosition(editingPosition, ContentIsEditable, DoNotUpdateStyle));
+    document().updateStyleAndLayoutIgnorePendingStylesheets();
+    ABORT_EDITING_COMMAND_IF(!isEditablePosition(editingPosition, ContentIsEditable));
     // For editing positions like [table, 0], insert before the table,
     // likewise for replaced elements, brs, etc.
     Position p = editingPosition.parentAnchoredEquivalent();
@@ -581,7 +582,7 @@ Position CompositeEditCommand::positionOutsideTabSpan(const Position& pos)
     switch (pos.anchorType()) {
     case PositionAnchorType::BeforeChildren:
     case PositionAnchorType::AfterChildren:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return pos;
     case PositionAnchorType::OffsetInAnchor:
         break;
@@ -862,7 +863,7 @@ void CompositeEditCommand::deleteInsignificantText(const Position& start, const 
         return;
 
     HeapVector<Member<Text>> nodes;
-    for (Node& node : NodeTraversal::startsAt(start.anchorNode())) {
+    for (Node& node : NodeTraversal::startsAt(*start.anchorNode())) {
         if (node.isTextNode())
             nodes.append(toText(&node));
         if (&node == end.anchorNode())
@@ -964,7 +965,7 @@ HTMLElement* CompositeEditCommand::insertNewDefaultParagraphElementAt(const Posi
 // it, and return that block.  Otherwise return 0.
 HTMLElement* CompositeEditCommand::moveParagraphContentsToNewBlockIfNecessary(const Position& pos, EditingState* editingState)
 {
-    DCHECK(isEditablePosition(pos, ContentIsEditable, DoNotUpdateStyle)) << pos;
+    DCHECK(isEditablePosition(pos, ContentIsEditable)) << pos;
 
     // It's strange that this function is responsible for verifying that pos has not been invalidated
     // by an earlier call to this function.  The caller, applyBlockStyle, should do this.
@@ -1244,14 +1245,14 @@ void CompositeEditCommand::moveParagraphWithClones(const VisiblePosition& startO
     }
 }
 
-void CompositeEditCommand::moveParagraph(const VisiblePosition& startOfParagraphToMove, const VisiblePosition& endOfParagraphToMove, const VisiblePosition& destination, EditingState* editingState, bool preserveSelection, bool preserveStyle, Node* constrainingAncestor)
+void CompositeEditCommand::moveParagraph(const VisiblePosition& startOfParagraphToMove, const VisiblePosition& endOfParagraphToMove, const VisiblePosition& destination, EditingState* editingState, ShouldPreserveSelection shouldPreserveSelection, ShouldPreserveStyle shouldPreserveStyle, Node* constrainingAncestor)
 {
     DCHECK(isStartOfParagraph(startOfParagraphToMove)) << startOfParagraphToMove;
     DCHECK(isEndOfParagraph(endOfParagraphToMove)) << endOfParagraphToMove;
-    moveParagraphs(startOfParagraphToMove, endOfParagraphToMove, destination, editingState, preserveSelection, preserveStyle, constrainingAncestor);
+    moveParagraphs(startOfParagraphToMove, endOfParagraphToMove, destination, editingState, shouldPreserveSelection, shouldPreserveStyle, constrainingAncestor);
 }
 
-void CompositeEditCommand::moveParagraphs(const VisiblePosition& startOfParagraphToMove, const VisiblePosition& endOfParagraphToMove, const VisiblePosition& destination, EditingState* editingState, bool preserveSelection, bool preserveStyle, Node* constrainingAncestor)
+void CompositeEditCommand::moveParagraphs(const VisiblePosition& startOfParagraphToMove, const VisiblePosition& endOfParagraphToMove, const VisiblePosition& destination, EditingState* editingState, ShouldPreserveSelection shouldPreserveSelection, ShouldPreserveStyle shouldPreserveStyle, Node* constrainingAncestor)
 {
     if (startOfParagraphToMove.deepEquivalent() == destination.deepEquivalent() || startOfParagraphToMove.isNull())
         return;
@@ -1260,7 +1261,7 @@ void CompositeEditCommand::moveParagraphs(const VisiblePosition& startOfParagrap
     int endIndex = -1;
     int destinationIndex = -1;
     bool originalIsDirectional = endingSelection().isDirectional();
-    if (preserveSelection && !endingSelection().isNone()) {
+    if (shouldPreserveSelection == PreserveSelection && !endingSelection().isNone()) {
         VisiblePosition visibleStart = endingSelection().visibleStart();
         VisiblePosition visibleEnd = endingSelection().visibleEnd();
 
@@ -1298,7 +1299,7 @@ void CompositeEditCommand::moveParagraphs(const VisiblePosition& startOfParagrap
     // anything if we're given an empty paragraph, but an empty paragraph can have style
     // too, <div><b><br></b></div> for example.  Save it so that we can preserve it later.
     EditingStyle* styleInEmptyParagraph = nullptr;
-    if (startOfParagraphToMove.deepEquivalent() == endOfParagraphToMove.deepEquivalent() && preserveStyle) {
+    if (startOfParagraphToMove.deepEquivalent() == endOfParagraphToMove.deepEquivalent() && shouldPreserveStyle == PreserveStyle) {
         styleInEmptyParagraph = EditingStyle::create(startOfParagraphToMove.deepEquivalent());
         styleInEmptyParagraph->mergeTypingStyle(&document());
         // The moved paragraph should assume the block style of the destination.
@@ -1340,9 +1341,9 @@ void CompositeEditCommand::moveParagraphs(const VisiblePosition& startOfParagrap
     destinationIndex = TextIterator::rangeLength(Position::firstPositionInNode(document().documentElement()), destination.toParentAnchoredPosition(), true);
 
     setEndingSelection(VisibleSelection(destination, originalIsDirectional));
-    DCHECK(endingSelection().isCaretOrRange());
+    DCHECK(!endingSelection().isNone());
     ReplaceSelectionCommand::CommandOptions options = ReplaceSelectionCommand::SelectReplacement | ReplaceSelectionCommand::MovingParagraph;
-    if (!preserveStyle)
+    if (shouldPreserveStyle == DoNotPreserveStyle)
         options |= ReplaceSelectionCommand::MatchStyle;
     applyCommandToComposite(ReplaceSelectionCommand::create(document(), fragment, options), editingState);
     if (editingState->isAborted())
@@ -1358,7 +1359,7 @@ void CompositeEditCommand::moveParagraphs(const VisiblePosition& startOfParagrap
             return;
     }
 
-    if (!preserveSelection || startIndex == -1)
+    if (shouldPreserveSelection ==  DoNotPreserveSelection || startIndex == -1)
         return;
     Element* documentElement = document().documentElement();
     if (!documentElement)
@@ -1485,7 +1486,7 @@ bool CompositeEditCommand::breakOutOfEmptyMailBlockquotedParagraph(EditingState*
     insertNodeBefore(br, highestBlockquote, editingState);
     if (editingState->isAborted())
         return false;
-    VisiblePosition atBR = createVisiblePosition(positionBeforeNode(br));
+    VisiblePosition atBR = VisiblePosition::beforeNode(br);
     // If the br we inserted collapsed, for example foo<br><blockquote>...</blockquote>, insert
     // a second one.
     if (!isStartOfParagraph(atBR)) {
@@ -1541,7 +1542,7 @@ Position CompositeEditCommand::positionAvoidingSpecialElementBoundary(const Posi
     // Don't avoid block level anchors, because that would insert content into the wrong paragraph.
     if (enclosingAnchor && !isEnclosingBlock(enclosingAnchor)) {
         VisiblePosition firstInAnchor = VisiblePosition::firstPositionInNode(enclosingAnchor);
-        VisiblePosition lastInAnchor = createVisiblePosition(Position::lastPositionInNode(enclosingAnchor));
+        VisiblePosition lastInAnchor = VisiblePosition::lastPositionInNode(enclosingAnchor);
         // If visually just after the anchor, insert *inside* the anchor unless it's the last
         // VisiblePosition in the document, to match NSTextView.
         if (visiblePos.deepEquivalent() == lastInAnchor.deepEquivalent()) {

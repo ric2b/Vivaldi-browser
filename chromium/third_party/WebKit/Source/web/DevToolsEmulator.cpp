@@ -7,6 +7,7 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/page/Page.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -15,6 +16,7 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
+#include "wtf/PtrUtil.h"
 
 namespace {
 
@@ -365,8 +367,8 @@ bool DevToolsEmulator::handleInputEvent(const WebInputEvent& inputEvent)
         PlatformGestureEventBuilder gestureEvent(frameView, static_cast<const WebGestureEvent&>(inputEvent));
         float pageScaleFactor = page->pageScaleFactor();
         if (gestureEvent.type() == PlatformEvent::GesturePinchBegin) {
-            m_lastPinchAnchorCss = adoptPtr(new IntPoint(frameView->scrollPosition() + gestureEvent.position()));
-            m_lastPinchAnchorDip = adoptPtr(new IntPoint(gestureEvent.position()));
+            m_lastPinchAnchorCss = wrapUnique(new IntPoint(frameView->scrollPosition() + gestureEvent.position()));
+            m_lastPinchAnchorDip = wrapUnique(new IntPoint(gestureEvent.position()));
             m_lastPinchAnchorDip->scale(pageScaleFactor, pageScaleFactor);
         }
         if (gestureEvent.type() == PlatformEvent::GesturePinchUpdate && m_lastPinchAnchorCss) {
@@ -377,8 +379,8 @@ bool DevToolsEmulator::handleInputEvent(const WebInputEvent& inputEvent)
             m_webViewImpl->mainFrame()->setScrollOffset(toIntSize(*m_lastPinchAnchorCss.get() - toIntSize(anchorCss)));
         }
         if (gestureEvent.type() == PlatformEvent::GesturePinchEnd) {
-            m_lastPinchAnchorCss.clear();
-            m_lastPinchAnchorDip.clear();
+            m_lastPinchAnchorCss.reset();
+            m_lastPinchAnchorDip.reset();
         }
         return true;
     }

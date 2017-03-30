@@ -1,51 +1,12 @@
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="/settings_root_css.html">
+
 <!-- Common styles for Material Design settings. -->
 <dom-module id="settings-shared">
   <template>
-    <style>
-      :root {
-        --checkbox-margin-start: 2px;
-        --checkbox-size: 16px;
-        --checkbox-spacing: 18px;
-        --iron-icon-fill-color: var(--paper-grey-600);
-        --iron-icon-height: 20px;
-        --iron-icon-spacing: 16px;
-        --iron-icon-width: 20px;
-        --paper-checkbox-label-color: inherit;
-        --paper-dialog-color: inherit;
-        --paper-icon-button: {
-          width: 36px;
-          height: 36px;
-        };
-        --paper-input-max-width: 264px;
-        --paper-item: {
-          font-size: inherit;
-        };
-        --paper-radio-button-label-color: inherit;
-        --paper-radio-group-item-padding: 0;
-
-        --settings-background-color: var(--paper-blue-grey-50);
-        --settings-secondary: {
-          color: var(--paper-grey-600);
-          font-weight: 400;
-          margin-top: 4px;
-        };
-        --settings-error-color: var(--paper-red-700);
-        --settings-hover-color: var(--google-grey-300);
-
-        /* Some colors use non-MD colors.  These custom colors are specified by
-         * UX design (bettes@). */
-        --settings-nav-grey: rgb(90, 90, 90);
-
-        --settings-row-min-height: 40px;
-        --settings-separator-line: 1px solid rgba(0, 0, 0, 0.06);
-
-        --settings-title-bar-background-color: rgb(52, 73, 94);
-        --settings-title-bar-color: rgb(255, 255, 255);
-        --settings-title-search-color: rgb(192, 199, 205);
-      }
-
+    <style include="cr-shared-style">
       h2 {
-        @apply(--layout-center);
+        align-items: center;
         display: flex;
         font-size: 100%;
         font-weight: 500;
@@ -79,33 +40,60 @@
         color: var(--google-blue-700);
       }
 
+      paper-button.primary-button,
+      paper-button.tertiary-button {
+        --paper-button-flat-keyboard-focus: {
+          background-color: rgba(51, 103, 214, .12);  /* --google-blue-700 */
+        };
+      }
+
       [is='action-link']:hover {
         /* TODO(dbeam): check with bettes@ on this one, but I'm pretty sure we
          * shouldn't be showing much :hover stuff on Polymer pages. */
         text-decoration: none;
       }
 
+      /*
+       * There are three main button styles, .primary-button, .secondary-button,
+       * and .tertiary-button. The primary is the action button (e.g. "edit",
+       * "delete") while the secondary is often a "Cancel" button. A tertiary
+       * button may be used to get more information or similar, that we expect
+       * most users will not need.
+       */
       paper-button.primary-button {
         --paper-button: {
           font-weight: 500;
           text-align: start;
         };
-        margin: 0 -0.57em;  /* Offsets default paper-button padding. */
       }
 
+      /* See notes in .primary-button. */
       paper-button.secondary-button {
         --paper-button: {
           color: var(--paper-grey-600);
           text-decoration: none;
           font-weight: 500;
         };
+        --paper-button-flat-keyboard-focus: {
+          background-color: rgba(0, 0, 0, .12);
+        };
       }
 
+      /* See notes in .primary-button. */
       paper-button.tertiary-button {
         --paper-button: {
           font-weight: 400;
           text-decoration: none;
         };
+      }
+
+      .settings-box paper-button.primary-button,
+      .settings-box paper-button.secondary-button,
+      .settings-box paper-button.secondary-button {
+        margin-left: -12px;
+        margin-right: -12px;
+        padding-left: 12px;
+        padding-right: 12px;
       }
 
       paper-checkbox {
@@ -117,13 +105,13 @@
       }
 
       paper-radio-button {
-        @apply(--layout-center);
         --paper-radio-button-checked-color: var(--google-blue-500);
         --paper-radio-button-label-spacing: 18px;
         --paper-radio-button-unchecked-color: var(--paper-grey-600);
         -webkit-margin-start: 2px;
+        align-items: center;
         display: flex;
-        min-height: 40px;
+        min-height: var(--settings-row-min-height);
       }
 
       paper-radio-group {
@@ -136,33 +124,19 @@
         white-space: nowrap;
       }
 
-      .button-row {
-        display: flex;
-        margin-top: 25px;
-      }
-
       .button-strip {
         text-align: end;
       }
 
-      .action-button {
-        background: var(--google-blue-500);
-        color: white;
-      }
-
-      .action-button[disabled] {
-        opacity: .25;  /* TODO(dbeam): check this value with bettes. */
-      }
-
-      .action-button,
-      .cancel-button {
-        font-weight: 500;
-      }
-
+      /*
+       * A list-frame is an outer container for list-items. It is intended to be
+       * outside of a settings-box. A list-frame is likely to follow a
+       * settings box.
+       */
       .list-frame {
-        @apply(--layout-center);
         -webkit-padding-end: 20px;
         -webkit-padding-start: 56px;
+        align-items: center;
         display: block;
         padding-bottom: 0;
         padding-top: 0;
@@ -173,13 +147,18 @@
         @apply(--settings-secondary);
       }
 
+      /*
+       * A list-item is intended to be contained within a list-frame. The list
+       * frame will setup the initial start margin.
+       */
       .list-item {
-        @apply(--layout-center);
+        align-items: center;
         display: flex;
         min-height: var(--settings-row-min-height);
         padding: 0;
       }
 
+      /* A thin separator line under a list item. */
       .list-item.underbar {
         border-bottom: var(--settings-separator-line);
       }
@@ -192,17 +171,19 @@
         -webkit-margin-start: 4px;
       }
 
+      /* The middle part (horizontally) of a list item. */
       .list-item > .middle {
         flex: 1;
         margin: 8px 16px;
-        overflow: hidden;
-        white-space: nowrap;
       }
 
+      /* The start (left in LTR) part (horizontally) of a list item. */
       .list-item > .start {
         flex: 1;
-        overflow: hidden;
-        white-space: nowrap;
+      }
+
+      .list-item > label span[disabled] {
+        opacity: .65;  /* TODO(michaelpg): check this value with bettes. */
       }
 
       .list-item > paper-icon-item {
@@ -211,19 +192,28 @@
 
       /* This button has no ink ripple. */
       .list-item.list-button {
-        @apply(--layout-center);
-        color: rgb(66, 133, 244);
+        align-items: center;
+        color: var(--google-blue-500);
         font-weight: 500;
       }
 
+      /*
+       * A settings-box is a horizontal row of text or controls within a
+       * setting section (page or subpage).
+       */
       .settings-box {
-        @apply(--layout-center);
+        align-items: center;
         border-top: var(--settings-separator-line);
         display: flex;
         min-height: var(--settings-row-min-height);
         padding: 0 20px;
       }
 
+      /*
+       * We use an explicit tag to remove the top border, rather than a
+       * :first-of-type modifier. This is a conscious choice, please consult
+       * with dbeam@ or dschuyler@ prior to changing it.
+       */
       .settings-box.first,
       .settings-box.continuation {
         border-top: none;
@@ -233,20 +223,30 @@
         display: block;
       }
 
+      /*
+       * A row with two lines of text. Often the lower line will be .secondary.
+       */
       .settings-box.two-line {
-        min-height: 52px;
+        min-height: 56px;
       }
 
+      [actionable] {
+        @apply(--settings-actionable);
+      }
+
+      /* The lower line of text in a .settings-box.two-line. */
       .settings-box .secondary {
         @apply(--settings-secondary);
       }
 
+      /* The middle part (horizontally) of a row. */
       .settings-box .middle {
         -webkit-margin-start: 16px;
         align-items: center;
         flex: auto;
       }
 
+      /* The start (left in LTR) part (horizontally) of a row. */
       .settings-box .start {
         align-items: center;
         flex: auto;
@@ -272,6 +272,7 @@
         padding: 8px;
       }
 
+      /* Helper for a list frame to automatically avoid the separator line. */
       .vertical-list > *:not(:first-of-type) {
         border-top: var(--settings-separator-line);
       }
@@ -284,7 +285,7 @@
       }
 
       /* Keep the slider color consistent throughout the range. */
-      paper-slider.always-on {
+      cr-slider.always-on {
         --paper-slider-knob-start-border-color: var(--google-blue-700);
         --paper-slider-knob-start-color: var(--google-blue-700);
         --paper-slider-pin-start-color: var(--google-blue-700);

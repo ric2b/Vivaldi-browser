@@ -29,7 +29,7 @@ class NavigationControllerImpl;
 class NavigationEntryImpl;
 class NavigationRequest;
 class RenderFrameHostImpl;
-class ResourceRequestBody;
+class ResourceRequestBodyImpl;
 class StreamHandle;
 struct BeginNavigationParams;
 struct CommonNavigationParams;
@@ -110,17 +110,21 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
 
   // The RenderFrameHostImpl has received a request to open a URL with the
   // specified |disposition|.
-  virtual void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
-                              const GURL& url,
-                              SiteInstance* source_site_instance,
-                              const Referrer& referrer,
-                              WindowOpenDisposition disposition,
-                              bool should_replace_current_entry,
-                              bool user_gesture) {}
+  virtual void RequestOpenURL(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& url,
+      bool uses_post,
+      const scoped_refptr<ResourceRequestBodyImpl>& body,
+      SiteInstance* source_site_instance,
+      const Referrer& referrer,
+      WindowOpenDisposition disposition,
+      bool should_replace_current_entry,
+      bool user_gesture) {}
 
   // The RenderFrameHostImpl wants to transfer the request to a new renderer.
   // |redirect_chain| contains any redirect URLs (excluding |url|) that happened
-  // before the transfer.
+  // before the transfer.  If |method| is "POST", then |post_body| needs to
+  // specify the request body, otherwise |post_body| should be null.
   virtual void RequestTransferURL(
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
@@ -129,7 +133,9 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const Referrer& referrer,
       ui::PageTransition page_transition,
       const GlobalRequestID& transferred_global_request_id,
-      bool should_replace_current_entry) {}
+      bool should_replace_current_entry,
+      const std::string& method,
+      scoped_refptr<ResourceRequestBodyImpl> post_body) {}
 
   // PlzNavigate
   // Called after receiving a BeforeUnloadACK IPC from the renderer. If
@@ -142,11 +148,9 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
   // PlzNavigate
   // Used to start a new renderer-initiated navigation, following a
   // BeginNavigation IPC from the renderer.
-  virtual void OnBeginNavigation(
-      FrameTreeNode* frame_tree_node,
-      const CommonNavigationParams& common_params,
-      const BeginNavigationParams& begin_params,
-      scoped_refptr<ResourceRequestBody> body);
+  virtual void OnBeginNavigation(FrameTreeNode* frame_tree_node,
+                                 const CommonNavigationParams& common_params,
+                                 const BeginNavigationParams& begin_params);
 
   // PlzNavigate
   // Called when a NavigationRequest for |frame_tree_node| failed. An

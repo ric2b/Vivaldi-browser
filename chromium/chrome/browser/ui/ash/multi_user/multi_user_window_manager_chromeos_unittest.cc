@@ -4,26 +4,29 @@
 
 #include <stddef.h>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/maximize_mode/maximize_mode_window_manager.h"
+#include "ash/common/wm/mru_window_tracker.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
+#include "ash/common/wm_shell.h"
 #include "ash/content/shell_content_state.h"
-#include "ash/root_window_controller.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_session_state_delegate.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_event.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/wm/maximize_mode/maximize_mode_window_manager.h"
-#include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
@@ -105,9 +108,9 @@ class TestShellDelegateChromeOS : public ash::test::TestShellDelegate {
     return new ash::test::TestSessionStateDelegate;
   }
 
-  bool CanShowWindowForUser(aura::Window* window) const override {
+  bool CanShowWindowForUser(ash::WmWindow* window) const override {
     return ::CanShowWindowForUser(
-        window,
+        ash::WmWindowAura::GetAuraWindow(window),
         base::Bind(&ash::ShellContentState::GetActiveBrowserContext,
                    base::Unretained(ash::ShellContentState::GetInstance())));
   }
@@ -145,7 +148,7 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
     while (multi_user_window_manager_->IsAnimationRunningForTest()) {
       // This should never take longer then a second.
       ASSERT_GE(1000, (base::TimeTicks::Now() - now).InMilliseconds());
-      base::MessageLoop::current()->RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
     }
   }
 
@@ -199,7 +202,7 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
   void MakeWindowSystemModal(aura::Window* window) {
     aura::Window* system_modal_container =
         window->GetRootWindow()->GetChildById(
-            ash::kShellWindowId_SystemModalContainer);
+            kShellWindowId_SystemModalContainer);
     system_modal_container->AddChild(window);
   }
 
@@ -241,14 +244,14 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
   }
 
   // Create a maximize mode window manager.
-  ash::MaximizeModeWindowManager* CreateMaximizeModeWindowManager() {
+  MaximizeModeWindowManager* CreateMaximizeModeWindowManager() {
     EXPECT_FALSE(maximize_mode_window_manager());
     Shell::GetInstance()->maximize_mode_controller()->
         EnableMaximizeModeWindowManager(true);
     return maximize_mode_window_manager();
   }
 
-  ash::MaximizeModeWindowManager* maximize_mode_window_manager() {
+  MaximizeModeWindowManager* maximize_mode_window_manager() {
     return Shell::GetInstance()->maximize_mode_controller()->
         maximize_mode_window_manager_.get();
   }
@@ -279,8 +282,7 @@ void MultiUserWindowManagerChromeOSTest::SetUp() {
   ash_test_helper()->set_test_shell_delegate(new TestShellDelegateChromeOS);
   ash_test_helper()->set_content_state(new ::TestShellContentState);
   AshTestBase::SetUp();
-  session_state_delegate_ = static_cast<TestSessionStateDelegate*>(
-      ash::Shell::GetInstance()->session_state_delegate());
+  session_state_delegate_ = AshTestHelper::GetTestSessionStateDelegate();
   profile_manager_.reset(
       new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
   ASSERT_TRUE(profile_manager_.get()->SetUp());
@@ -290,7 +292,7 @@ void MultiUserWindowManagerChromeOSTest::SetUp() {
 }
 
 void MultiUserWindowManagerChromeOSTest::SetUpForThisManyWindows(int windows) {
-  DCHECK(!window_.size());
+  DCHECK(window_.empty());
   for (int i = 0; i < windows; i++) {
     window_.push_back(CreateTestWindowInShellWithId(i));
     window_[i]->Show();
@@ -839,7 +841,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, MaximizeModeInteraction) {
   EXPECT_FALSE(wm::GetWindowState(window(0))->IsMaximized());
   EXPECT_FALSE(wm::GetWindowState(window(1))->IsMaximized());
 
-  ash::MaximizeModeWindowManager* manager = CreateMaximizeModeWindowManager();
+  MaximizeModeWindowManager* manager = CreateMaximizeModeWindowManager();
   ASSERT_TRUE(manager);
 
   EXPECT_TRUE(wm::GetWindowState(window(0))->IsMaximized());
@@ -1014,13 +1016,11 @@ TEST_F(MultiUserWindowManagerChromeOSTest, AnimationSteps) {
   EXPECT_FALSE(CoversScreen(window(1)));
   EXPECT_EQ("S[A], H[B], H[C]", GetStatus());
   EXPECT_EQ("A", GetOwnersOfVisibleWindowsAsString());
-  EXPECT_NE(ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            ash::Shell::GetInstance()->GetShelfAutoHideBehavior(
-                window(0)->GetRootWindow()));
+  Shelf* shelf = Shelf::ForPrimaryDisplay();
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
   EXPECT_EQ(1.0f, window(0)->layer()->GetTargetOpacity());
-  ash::ShelfWidget* shelf = ash::RootWindowController::ForWindow(
-      window(0))->shelf();
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
+  ShelfWidget* shelf_widget = shelf->shelf_widget();
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
   // Start the animation and see that the old window is becoming invisible, the
   // new one is becoming visible, the background starts transitionining and the
@@ -1031,10 +1031,8 @@ TEST_F(MultiUserWindowManagerChromeOSTest, AnimationSteps) {
   EXPECT_EQ("H[A], S[B], H[C]", GetStatus());
   EXPECT_EQ(0.0f, window(0)->layer()->GetTargetOpacity());
   EXPECT_EQ(1.0f, window(1)->layer()->GetTargetOpacity());
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            ash::Shell::GetInstance()->GetShelfAutoHideBehavior(
-                window(0)->GetRootWindow()));
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
+  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
   // Staring the next step should show the shelf again, but there are many
   // subsystems missing (preferences system, ChromeLauncherController, ...)
@@ -1046,14 +1044,12 @@ TEST_F(MultiUserWindowManagerChromeOSTest, AnimationSteps) {
   EXPECT_EQ("H[A], S[B], H[C]", GetStatus());
   EXPECT_EQ(0.0f, window(0)->layer()->GetTargetOpacity());
   EXPECT_EQ(1.0f, window(1)->layer()->GetTargetOpacity());
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            ash::Shell::GetInstance()->GetShelfAutoHideBehavior(
-                window(0)->GetRootWindow()));
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
+  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
   // After the finalize the animation of the wallpaper should be finished.
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
   EXPECT_EQ(kBAccountIdString, GetWallpaperUserIdForTest());
 }
 
@@ -1069,7 +1065,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, AnimationStepsScreenCoverage) {
   EXPECT_TRUE(CoversScreen(window(1)));
   EXPECT_FALSE(CoversScreen(window(2)));
 
-  ash::wm::WMEvent event(ash::wm::WM_EVENT_FULLSCREEN);
+  wm::WMEvent event(wm::WM_EVENT_FULLSCREEN);
   wm::GetWindowState(window(2))->OnWMEvent(&event);
   EXPECT_TRUE(CoversScreen(window(2)));
 }
@@ -1303,31 +1299,27 @@ TEST_F(MultiUserWindowManagerChromeOSTest, TestBlackBarCover) {
 
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
   multi_user_window_manager()->SetWindowOwner(window(1), account_id_B);
-  aura::Window* root_window = ash::Shell::GetInstance()->GetPrimaryRootWindow();
+  Shelf* shelf = Shelf::ForPrimaryDisplay();
 
   // Turn the use of delays and animation on.
   multi_user_window_manager()->SetAnimationSpeedForTest(
       chrome::MultiUserWindowManagerChromeOS::ANIMATION_SPEED_FAST);
-  EXPECT_NE(ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            ash::Shell::GetInstance()->GetShelfAutoHideBehavior(root_window));
-  ash::ShelfWidget* shelf = ash::RootWindowController::ForWindow(
-      root_window)->shelf();
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  ShelfWidget* shelf_widget = shelf->shelf_widget();
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
   // First test that with no maximized window we show/hide the shelf.
   StartUserTransitionAnimation(account_id_B);
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            ash::Shell::GetInstance()->GetShelfAutoHideBehavior(root_window));
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
 
   // Staring the next step should show the shelf again.
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
 
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
-  ash::Shell::GetInstance()->SetShelfAutoHideBehavior(
-      ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER, root_window);
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
 
   // Now we maximize the windows which will cause the black overlay to show up.
   wm::GetWindowState(window(0))->Maximize();
@@ -1341,18 +1333,16 @@ TEST_F(MultiUserWindowManagerChromeOSTest, TestBlackBarCover) {
   // Start the animation and see that the shelf gets hidden by the black bar,
   // and the AutoHide behavior remains as it was.
   StartUserTransitionAnimation(account_id_A);
-  EXPECT_TRUE(shelf->IsShelfHiddenBehindBlackBar());
-  EXPECT_NE(ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            ash::Shell::GetInstance()->GetShelfAutoHideBehavior(root_window));
+  EXPECT_TRUE(shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
 
-  // Staring the next step should show the shelf again.
+  // Starting the next step should show the shelf again.
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
-  EXPECT_NE(ash::SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
-            ash::Shell::GetInstance()->GetShelfAutoHideBehavior(root_window));
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
 
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
   window(0)->RemoveObserver(&window_observer);
   window(1)->RemoveObserver(&window_observer);
   // No resize should have been done to the window.
@@ -1507,8 +1497,8 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   activation_client->ActivateWindow(window(0));
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
-  ash::MruWindowTracker::WindowList mru_list =
-      ash::Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList();
+  aura::Window::Windows mru_list = WmWindowAura::ToAuraWindows(
+      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
   EXPECT_EQ(mru_list[2], window(2));
@@ -1523,8 +1513,8 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
   EXPECT_EQ("S[A], S[A], S[A]", GetStatus());
   EXPECT_EQ(wm::GetActiveWindow(), window(0));
 
-  mru_list =
-      ash::Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList();
+  mru_list = WmWindowAura::ToAuraWindows(
+      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   EXPECT_EQ(mru_list[0], window(0));
   EXPECT_EQ(mru_list[1], window(1));
   EXPECT_EQ(mru_list[2], window(2));

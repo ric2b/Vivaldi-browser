@@ -9,35 +9,27 @@
 
 #include <algorithm>
 #include <memory>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/values.h"
 #include "pdf/pdfium/pdfium_api_string_buffer_adapter.h"
 #include "pdf/pdfium/pdfium_engine.h"
+#include "printing/units.h"
 
 // Used when doing hit detection.
 #define kTolerance 20.0
 
+using printing::ConvertUnitDouble;
+using printing::kPointsPerInch;
+using printing::kPixelsPerInch;
+
 namespace {
 
-// Dictionary Value key names for returning the accessible page content as JSON.
-const char kPageWidth[] = "width";
-const char kPageHeight[] = "height";
-const char kPageTextBox[] = "textBox";
-const char kTextBoxLeft[] = "left";
-const char kTextBoxTop[]  = "top";
-const char kTextBoxWidth[] = "width";
-const char kTextBoxHeight[]  = "height";
-const char kTextBoxFontSize[] = "fontSize";
-const char kTextBoxNodes[] = "textNodes";
-const char kTextNodeType[] = "type";
-const char kTextNodeText[] = "text";
-const char kTextNodeTypeText[] = "text";
-
-pp::Rect PageRectToGViewRect(FPDF_PAGE page, const pp::Rect& input) {
+pp::FloatRect FloatPageRectToPixelRect(FPDF_PAGE page,
+                                       const pp::FloatRect& input) {
   int output_width = FPDF_GetPageWidth(page);
   int output_height = FPDF_GetPageHeight(page);
 
@@ -45,63 +37,40 @@ pp::Rect PageRectToGViewRect(FPDF_PAGE page, const pp::Rect& input) {
   int min_y;
   int max_x;
   int max_y;
-  FPDF_PageToDevice(page, 0, 0, output_width, output_height, 0,
-                    input.x(), input.y(), &min_x, &min_y);
-  FPDF_PageToDevice(page, 0, 0, output_width, output_height, 0,
-                    input.right(), input.bottom(), &max_x, &max_y);
+  FPDF_PageToDevice(page, 0, 0, output_width, output_height, 0, input.x(),
+                    input.y(), &min_x, &min_y);
+  FPDF_PageToDevice(page, 0, 0, output_width, output_height, 0, input.right(),
+                    input.bottom(), &max_x, &max_y);
 
   if (max_x < min_x)
     std::swap(min_x, max_x);
   if (max_y < min_y)
     std::swap(min_y, max_y);
 
-  pp::Rect output_rect(min_x, min_y, max_x - min_x, max_y - min_y);
-  output_rect.Intersect(pp::Rect(0, 0, output_width, output_height));
+  pp::FloatRect output_rect(
+      ConvertUnitDouble(min_x, kPointsPerInch, kPixelsPerInch),
+      ConvertUnitDouble(min_y, kPointsPerInch, kPixelsPerInch),
+      ConvertUnitDouble(max_x - min_x, kPointsPerInch, kPixelsPerInch),
+      ConvertUnitDouble(max_y - min_y, kPointsPerInch, kPixelsPerInch));
   return output_rect;
 }
 
-pp::Rect GetCharRectInGViewCoords(FPDF_PAGE page, FPDF_TEXTPAGE text_page,
-                                  int index) {
+pp::FloatRect GetFloatCharRectInPixels(FPDF_PAGE page,
+                                       FPDF_TEXTPAGE text_page,
+                                       int index) {
   double left, right, bottom, top;
   FPDFText_GetCharBox(text_page, index, &left, &right, &bottom, &top);
   if (right < left)
     std::swap(left, right);
   if (bottom < top)
     std::swap(top, bottom);
-  pp::Rect page_coords(left, top, right - left, bottom - top);
-  return PageRectToGViewRect(page, page_coords);
+  pp::FloatRect page_coords(left, top, right - left, bottom - top);
+  return FloatPageRectToPixelRect(page, page_coords);
 }
 
-// This is the character PDFium inserts where a word is broken across lines.
-const unsigned int kSoftHyphen = 0x02;
-
-// The following characters should all be recognized as Unicode newlines:
-//   LF:    Line Feed, U+000A
-//   VT:    Vertical Tab, U+000B
-//   FF:    Form Feed, U+000C
-//   CR:    Carriage Return, U+000D
-//   CR+LF: CR (U+000D) followed by LF (U+000A)
-//   NEL:   Next Line, U+0085
-//   LS:    Line Separator, U+2028
-//   PS:    Paragraph Separator, U+2029.
-// Source: http://en.wikipedia.org/wiki/Newline#Unicode .
-const unsigned int kUnicodeNewlines[] = {
-  0xA, 0xB, 0xC, 0xD, 0X85, 0x2028, 0x2029
-};
-
-bool IsSoftHyphen(unsigned int character) {
-  return kSoftHyphen == character;
-}
-
-bool OverlapsOnYAxis(const pp::Rect &a, const pp::Rect& b) {
+bool OverlapsOnYAxis(const pp::FloatRect &a, const pp::FloatRect& b) {
   return !(a.IsEmpty() || b.IsEmpty() ||
            a.bottom() < b.y() || b.bottom() < a.y());
-}
-
-bool IsEol(unsigned int character) {
-  const unsigned int* first = kUnicodeNewlines;
-  const unsigned int* last = kUnicodeNewlines + arraysize(kUnicodeNewlines);
-  return std::find(first, last, character) != last;
 }
 
 }  // namespace
@@ -191,112 +160,73 @@ FPDF_TEXTPAGE PDFiumPage::GetTextPage() {
   return text_page_;
 }
 
-base::Value* PDFiumPage::GetAccessibleContentAsValue(int rotation) {
-  base::DictionaryValue* node = new base::DictionaryValue();
-
-  if (!available_)
-    return node;
-
+void PDFiumPage::GetTextRunInfo(int start_char_index,
+                                uint32_t* out_len,
+                                double* out_font_size,
+                                pp::FloatRect* out_bounds) {
   FPDF_PAGE page = GetPage();
   FPDF_TEXTPAGE text_page = GetTextPage();
-
-  double width = FPDF_GetPageWidth(page);
-  double height = FPDF_GetPageHeight(page);
-
-  node->SetDouble(kPageWidth, width);
-  node->SetDouble(kPageHeight, height);
-  std::unique_ptr<base::ListValue> text(new base::ListValue());
-
   int chars_count = FPDFText_CountChars(text_page);
-  pp::Rect line_rect;
-  pp::Rect word_rect;
-  bool seen_literal_text_in_word = false;
+  int char_index = start_char_index;
+  while (
+      char_index < chars_count &&
+      base::IsUnicodeWhitespace(FPDFText_GetUnicode(text_page, char_index))) {
+    char_index++;
+  }
+  int text_run_font_size = FPDFText_GetFontSize(text_page, char_index);
+  pp::FloatRect text_run_bounds =
+      GetFloatCharRectInPixels(page, text_page, char_index);
+  char_index++;
+  while (char_index < chars_count) {
+    unsigned int character = FPDFText_GetUnicode(text_page, char_index);
 
-  // Iterate over all of the chars on the page. Explicitly run the loop
-  // with |i == chars_count|, which is one past the last character, and
-  // pretend it's a newline character in order to ensure we always flush
-  // the last line.
-  base::string16 line;
-  for (int i = 0; i <= chars_count; i++) {
-    unsigned int character;
-    pp::Rect char_rect;
-
-    if (i < chars_count) {
-      character = FPDFText_GetUnicode(text_page, i);
-      char_rect = GetCharRectInGViewCoords(page, text_page, i);
-    } else {
-      // Make the last character a newline so the last line isn't lost.
-      character = '\n';
-    }
-
-    // There are spurious STX chars appearing in place
-    // of ligatures.  Apply a heuristic to check that some vertical displacement
-    // is involved before assuming they are line-breaks.
-    bool is_intraword_linebreak = false;
-    if (i < chars_count - 1 && IsSoftHyphen(character)) {
-      // check if the next char and this char are in different lines.
-      pp::Rect next_char_rect = GetCharRectInGViewCoords(
-          page, text_page, i + 1);
-
+    if (!base::IsUnicodeWhitespace(character)) {
       // TODO(dmazzoni): this assumes horizontal text.
       // https://crbug.com/580311
-      is_intraword_linebreak = !OverlapsOnYAxis(char_rect, next_char_rect);
+      pp::FloatRect char_rect = GetFloatCharRectInPixels(
+          page, text_page, char_index);
+      if (!char_rect.IsEmpty() && !OverlapsOnYAxis(text_run_bounds, char_rect))
+        break;
+
+      int font_size = FPDFText_GetFontSize(text_page, char_index);
+      if (font_size != text_run_font_size)
+        break;
+
+      // Heuristic: split a text run after a space longer than 3 average
+      // characters.
+      double avg_char_width =
+          text_run_bounds.width() / (char_index - start_char_index);
+      if (char_rect.x() - text_run_bounds.right() > avg_char_width * 3)
+        break;
+
+      text_run_bounds = text_run_bounds.Union(char_rect);
     }
-    if (is_intraword_linebreak ||
-        base::IsUnicodeWhitespace(character) ||
-        IsEol(character)) {
-      if (!word_rect.IsEmpty() && seen_literal_text_in_word) {
-        word_rect = pp::Rect();
-        seen_literal_text_in_word = false;
-      }
-    }
 
-    if (is_intraword_linebreak || IsEol(character)) {
-      if (!line_rect.IsEmpty()) {
-        if (is_intraword_linebreak) {
-          // Add a 0-width hyphen.
-          line.push_back('-');
-        }
-
-        base::DictionaryValue* text_node = new base::DictionaryValue();
-        text_node->SetString(kTextNodeType, kTextNodeTypeText);
-        text_node->SetString(kTextNodeText, line);
-
-        base::ListValue* text_nodes = new base::ListValue();
-        text_nodes->Append(text_node);
-
-        base::DictionaryValue* line_node = new base::DictionaryValue();
-        line_node->SetDouble(kTextBoxLeft, line_rect.x());
-        line_node->SetDouble(kTextBoxTop, line_rect.y());
-        line_node->SetDouble(kTextBoxWidth, line_rect.width());
-        line_node->SetDouble(kTextBoxHeight, line_rect.height());
-        line_node->SetDouble(kTextBoxFontSize,
-                             FPDFText_GetFontSize(text_page, i));
-        line_node->Set(kTextBoxNodes, text_nodes);
-        text->Append(line_node);
-
-        line.clear();
-        line_rect = pp::Rect();
-        word_rect = pp::Rect();
-        seen_literal_text_in_word = false;
-      }
-      continue;
-    }
-    seen_literal_text_in_word = seen_literal_text_in_word ||
-        !base::IsUnicodeWhitespace(character);
-    line.push_back(character);
-
-    if (!char_rect.IsEmpty()) {
-      line_rect = line_rect.Union(char_rect);
-
-      if (!base::IsUnicodeWhitespace(character))
-        word_rect = word_rect.Union(char_rect);
-    }
+    char_index++;
   }
 
-  node->Set(kPageTextBox, text.release());  // Takes ownership of |text|
+  // Some PDFs have missing or obviously bogus font sizes; substitute the
+  // height of the bounding box in those cases.
+  if (text_run_font_size <= 1 ||
+      text_run_font_size < text_run_bounds.height() / 2 ||
+      text_run_font_size > text_run_bounds.height() * 2) {
+    text_run_font_size = text_run_bounds.height();
+  }
 
-  return node;
+  *out_len = char_index - start_char_index;
+  *out_font_size = text_run_font_size;
+  *out_bounds = text_run_bounds;
+}
+
+uint32_t PDFiumPage::GetCharUnicode(int char_index) {
+  FPDF_TEXTPAGE text_page = GetTextPage();
+  return FPDFText_GetUnicode(text_page, char_index);
+}
+
+pp::FloatRect PDFiumPage::GetCharBounds(int char_index) {
+  FPDF_PAGE page = GetPage();
+  FPDF_TEXTPAGE text_page = GetTextPage();
+  return GetFloatCharRectInPixels(page, text_page, char_index);
 }
 
 PDFiumPage::Area PDFiumPage::GetCharIndex(const pp::Point& point,

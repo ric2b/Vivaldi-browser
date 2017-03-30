@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "content/browser/bad_message.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/renderer_host/media/media_stream_ui_proxy.h"
 #include "content/common/media/media_stream_messages.h"
@@ -20,12 +21,12 @@ namespace content {
 
 MediaStreamDispatcherHost::MediaStreamDispatcherHost(
     int render_process_id,
-    const ResourceContext::SaltCallback& salt_callback,
+    const std::string& salt,
     MediaStreamManager* media_stream_manager,
     bool use_fake_ui)
     : BrowserMessageFilter(MediaStreamMsgStart),
       render_process_id_(render_process_id),
-      salt_callback_(salt_callback),
+      salt_(salt),
       media_stream_manager_(media_stream_manager),
       use_fake_ui_(use_fake_ui),
       weak_factory_(this) {}
@@ -167,8 +168,8 @@ void MediaStreamDispatcherHost::OnGenerateStream(
     return;
 
   media_stream_manager_->GenerateStream(
-      this, render_process_id_, render_frame_id, salt_callback_,
-      page_request_id, controls, security_origin, user_gesture);
+      this, render_process_id_, render_frame_id, salt_, page_request_id,
+      controls, security_origin, user_gesture);
 }
 
 void MediaStreamDispatcherHost::OnCancelGenerateStream(int render_frame_id,
@@ -203,8 +204,8 @@ void MediaStreamDispatcherHost::OnEnumerateDevices(
     return;
 
   media_stream_manager_->EnumerateDevices(
-      this, render_process_id_, render_frame_id, salt_callback_,
-      page_request_id, type, security_origin);
+      this, render_process_id_, render_frame_id, salt_, page_request_id, type,
+      security_origin);
 }
 
 void MediaStreamDispatcherHost::OnCancelEnumerateDevices(
@@ -230,9 +231,9 @@ void MediaStreamDispatcherHost::OnOpenDevice(
   if (!MediaStreamManager::IsOriginAllowed(render_process_id_, security_origin))
     return;
 
-  media_stream_manager_->OpenDevice(
-      this, render_process_id_, render_frame_id, salt_callback_,
-      page_request_id, device_id, type, security_origin);
+  media_stream_manager_->OpenDevice(this, render_process_id_, render_frame_id,
+                                    salt_, page_request_id, device_id, type,
+                                    security_origin);
 }
 
 void MediaStreamDispatcherHost::OnCloseDevice(
@@ -275,7 +276,10 @@ void MediaStreamDispatcherHost::OnCancelDeviceChangeNotifications(
       [render_frame_id](const DeviceChangeSubscriberInfo& subscriber_info) {
         return subscriber_info.render_frame_id == render_frame_id;
       });
-  CHECK(it != device_change_subscribers_.end());
+  if (it == device_change_subscribers_.end()) {
+    bad_message::ReceivedBadMessage(this, bad_message::MSDH_INVALID_FRAME_ID);
+    return;
+  }
   device_change_subscribers_.erase(it);
   if (device_change_subscribers_.empty())
     media_stream_manager_->CancelDeviceChangeNotifications(this);

@@ -31,7 +31,6 @@
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/net/chrome_extensions_network_delegate.h"
-#include "chrome/browser/net/connect_interceptor.h"
 #include "chrome/browser/net/request_source_bandwidth_histograms.h"
 #include "chrome/browser/net/safe_search_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -64,8 +63,7 @@
 
 #if BUILDFLAG(ANDROID_JAVA_UI)
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/precache/precache_manager_factory.h"
-#include "components/precache/content/precache_manager.h"
+#include "chrome/browser/precache/precache_util.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -110,31 +108,6 @@ void ForceGoogleSafeSearchCallbackWrapper(
     safe_search_util::ForceGoogleSafeSearch(request, new_url);
   callback.Run(rv);
 }
-
-#if BUILDFLAG(ANDROID_JAVA_UI)
-void RecordPrecacheStatsOnUIThread(const GURL& url,
-                                   const GURL& referrer,
-                                   base::TimeDelta latency,
-                                   const base::Time& fetch_time,
-                                   int64_t size,
-                                   bool was_cached,
-                                   void* profile_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-
-  if (!g_browser_process->profile_manager()->IsValidProfile(profile_id))
-    return;
-  Profile* profile = reinterpret_cast<Profile*>(profile_id);
-
-  precache::PrecacheManager* precache_manager =
-      precache::PrecacheManagerFactory::GetForBrowserContext(profile);
-  // |precache_manager| could be NULL if the profile is off the record.
-  if (!precache_manager || !precache_manager->IsPrecachingAllowed())
-    return;
-
-  precache_manager->RecordStatsForFetch(url, referrer, latency, fetch_time,
-                                        size, was_cached);
-}
-#endif  // BUILDFLAG(ANDROID_JAVA_UI)
 
 void ReportInvalidReferrerSendOnUI() {
   base::RecordAction(
@@ -296,6 +269,7 @@ ChromeNetworkDelegate::ChromeNetworkDelegate(
       enable_do_not_track_(NULL),
       force_google_safe_search_(NULL),
       force_youtube_safety_mode_(NULL),
+      allowed_domains_for_apps_(nullptr),
       url_blacklist_manager_(NULL),
       domain_reliability_monitor_(NULL),
       data_use_measurement_(metrics_data_use_forwarder),
@@ -326,12 +300,6 @@ void ChromeNetworkDelegate::set_cookie_settings(
   cookie_settings_ = cookie_settings;
 }
 
-void ChromeNetworkDelegate::set_predictor(
-    chrome_browser_net::Predictor* predictor) {
-  connect_interceptor_.reset(
-      new chrome_browser_net::ConnectInterceptor(predictor));
-}
-
 void ChromeNetworkDelegate::set_data_use_aggregator(
     data_usage::DataUseAggregator* data_use_aggregator,
     bool is_data_usage_off_the_record) {
@@ -345,6 +313,7 @@ void ChromeNetworkDelegate::InitializePrefsOnUIThread(
     BooleanPrefMember* enable_do_not_track,
     BooleanPrefMember* force_google_safe_search,
     BooleanPrefMember* force_youtube_safety_mode,
+    StringPrefMember* allowed_domains_for_apps,
     PrefService* pref_service) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   enable_referrers->Init(prefs::kEnableReferrers, pref_service);
@@ -364,6 +333,11 @@ void ChromeNetworkDelegate::InitializePrefsOnUIThread(
     force_youtube_safety_mode->Init(prefs::kForceYouTubeSafetyMode,
                                     pref_service);
     force_youtube_safety_mode->MoveToThread(
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
+  }
+  if (allowed_domains_for_apps) {
+    allowed_domains_for_apps->Init(prefs::kAllowedDomainsForApps, pref_service);
+    allowed_domains_for_apps->MoveToThread(
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::IO));
   }
 }
@@ -444,13 +418,18 @@ int ChromeNetworkDelegate::OnBeforeURLRequest(
       FROM_HERE_WITH_EXPLICIT_FUNCTION(
           "456327 URLRequest::ChromeNetworkDelegate::OnBeforeURLRequest 5"));
 
-  if (connect_interceptor_)
-    connect_interceptor_->WitnessURLRequest(request);
+  if (allowed_domains_for_apps_ &&
+      !allowed_domains_for_apps_->GetValue().empty() &&
+      request->url().DomainIs("google.com")) {
+    request->SetExtraRequestHeaderByName("X-GoogApps-Allowed-Domains",
+                                         allowed_domains_for_apps_->GetValue(),
+                                         true);
+  }
 
   return rv;
 }
 
-int ChromeNetworkDelegate::OnBeforeSendHeaders(
+int ChromeNetworkDelegate::OnBeforeStartTransaction(
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     net::HttpRequestHeaders* headers) {
@@ -464,13 +443,14 @@ int ChromeNetworkDelegate::OnBeforeSendHeaders(
   if (vivaldi::IsVivaldiRunning())
     vivaldi::spoof::ForceWhatsappMode(request, headers);
 
-  return extensions_delegate_->OnBeforeSendHeaders(request, callback, headers);
+  return extensions_delegate_->OnBeforeStartTransaction(request, callback,
+                                                        headers);
 }
 
-void ChromeNetworkDelegate::OnSendHeaders(
+void ChromeNetworkDelegate::OnStartTransaction(
     net::URLRequest* request,
     const net::HttpRequestHeaders& headers) {
-  extensions_delegate_->OnSendHeaders(request, headers);
+  extensions_delegate_->OnStartTransaction(request, headers);
 }
 
 int ChromeNetworkDelegate::OnHeadersReceived(
@@ -533,20 +513,7 @@ void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
 
   if (request->status().status() == net::URLRequestStatus::SUCCESS) {
 #if BUILDFLAG(ANDROID_JAVA_UI)
-    // For better accuracy, we use the actual bytes read instead of the length
-    // specified with the Content-Length header, which may be inaccurate,
-    // or missing, as is the case with chunked encoding.
-    int64_t received_content_length =
-        request->received_response_content_length();
-    base::TimeDelta latency = base::TimeTicks::Now() - request->creation_time();
-
-    // Record precache metrics when a fetch is completed successfully, if
-    // precaching is allowed.
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&RecordPrecacheStatsOnUIThread, request->url(),
-                   GURL(request->referrer()), latency, base::Time::Now(),
-                   received_content_length, request->was_cached(), profile_));
+    precache::UpdatePrecacheMetricsAndState(request, profile_);
 #endif  // BUILDFLAG(ANDROID_JAVA_UI)
     extensions_delegate_->OnCompleted(request, started);
   } else if (request->status().status() == net::URLRequestStatus::FAILED ||
@@ -686,7 +653,7 @@ bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
   // Pages/archives.
   if (!profile_path_.empty()) {
     const base::FilePath offline_page_archives =
-        profile_path_.Append(chrome::kOfflinePageArchviesDirname);
+        profile_path_.Append(chrome::kOfflinePageArchivesDirname);
     if (offline_page_archives.IsParent(path))
       return true;
   }

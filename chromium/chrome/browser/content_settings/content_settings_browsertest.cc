@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/test_launcher_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -33,6 +34,7 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "media/cdm/cdm_paths.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
@@ -44,6 +46,7 @@
 #endif
 
 #if defined(ENABLE_PEPPER_CDMS)
+#include "chrome/browser/media/pepper_cdm_test_constants.h"
 #include "chrome/browser/media/pepper_cdm_test_helper.h"
 #endif
 
@@ -326,15 +329,8 @@ class PepperContentSettingsSpecialCasesTest : public ContentSettingsTest {
 #if defined(ENABLE_PEPPER_CDMS)
     // Append the switch to register the External Clear Key CDM.
     base::FilePath::StringType pepper_plugins = BuildPepperCdmRegistration(
-        kClearKeyCdmAdapterFileName, kClearKeyCdmDisplayName,
-        kClearKeyCdmPepperMimeType);
-#if 0 && defined(WIDEVINE_CDM_AVAILABLE) && defined(WIDEVINE_CDM_IS_COMPONENT)
-    // The CDM must be registered when it is a component.
-    pepper_plugins.append(FILE_PATH_LITERAL(","));
-    pepper_plugins.append(BuildPepperCdmRegistration(
-        kWidevineCdmAdapterFileName, kWidevineCdmDisplayName,
-        kWidevineCdmPluginMimeType));
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(WIDEVINE_CDM_IS_COMPONENT)
+        kClearKeyCdmBaseDirectory, kClearKeyCdmAdapterFileName,
+        kClearKeyCdmDisplayName, kClearKeyCdmPepperMimeType);
     command_line->AppendSwitchNative(switches::kRegisterPepperPlugins,
                                      pepper_plugins);
 #endif  // defined(ENABLE_PEPPER_CDMS)
@@ -344,6 +340,15 @@ class PepperContentSettingsSpecialCasesTest : public ContentSettingsTest {
     command_line->AppendSwitch(switches::kEnableNaCl);
 #endif
   }
+
+#if defined(ENABLE_PEPPER_CDMS)
+  void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
+    base::CommandLine default_command_line(base::CommandLine::NO_PROGRAM);
+    InProcessBrowserTest::SetUpDefaultCommandLine(&default_command_line);
+    test_launcher_utils::RemoveCommandLineSwitch(
+        default_command_line, switches::kDisableComponentUpdate, command_line);
+  }
+#endif  // defined(ENABLE_PEPPER_CDMS)
 
   void RunLoadPepperPluginTest(const char* mime_type, bool expect_loaded) {
     const char* expected_result = expect_loaded ? "Loaded" : "Not Loaded";
@@ -471,6 +476,11 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
 #if defined(WIDEVINE_CDM_AVAILABLE) && !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesPluginsBlockedTest,
                        WidevineCdm) {
+  // Check that Widevine CDM is available and registered.
+  base::FilePath adapter_path =
+      GetPepperCdmPath(kWidevineCdmBaseDirectory, kWidevineCdmAdapterFileName);
+  EXPECT_TRUE(base::PathExists(adapter_path)) << adapter_path.MaybeAsASCII();
+  EXPECT_TRUE(IsPepperCdmRegistered(kWidevineCdmPluginMimeType));
   RunLoadPepperPluginTest(kWidevineCdmPluginMimeType, true);
 }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE) && !defined(OS_CHROMEOS)
@@ -496,6 +506,11 @@ IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,
 #if defined(WIDEVINE_CDM_AVAILABLE)
 IN_PROC_BROWSER_TEST_F(PepperContentSettingsSpecialCasesJavaScriptBlockedTest,
                        WidevineCdm) {
+  // Check that Widevine CDM is available and registered.
+  base::FilePath adapter_path =
+      GetPepperCdmPath(kWidevineCdmBaseDirectory, kWidevineCdmAdapterFileName);
+  EXPECT_TRUE(base::PathExists(adapter_path)) << adapter_path.MaybeAsASCII();
+  EXPECT_TRUE(IsPepperCdmRegistered(kWidevineCdmPluginMimeType));
   RunJavaScriptBlockedTest("load_widevine_no_js.html", true);
 }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)

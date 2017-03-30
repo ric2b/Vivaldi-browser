@@ -4,6 +4,8 @@
 
 #include "chrome/browser/chromeos/login/ui/webui_login_view.h"
 
+#include "ash/common/focus_cycler.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/system/tray/system_tray.h"
 #include "base/bind.h"
@@ -68,8 +70,6 @@ const char kAccelNameEnrollment[] = "enrollment";
 const char kAccelNameKioskEnable[] = "kiosk_enable";
 const char kAccelNameVersion[] = "version";
 const char kAccelNameReset[] = "reset";
-const char kAccelFocusPrev[] = "focus_prev";
-const char kAccelFocusNext[] = "focus_next";
 const char kAccelNameDeviceRequisition[] = "device_requisition";
 const char kAccelNameDeviceRequisitionRemora[] = "device_requisition_remora";
 const char kAccelNameDeviceRequisitionShark[] = "device_requisition_shark";
@@ -138,11 +138,6 @@ WebUILoginView::WebUILoginView()
   accel_map_[ui::Accelerator(
       ui::VKEY_B, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
       kAccelNameToggleEasyBootstrap;
-
-  accel_map_[ui::Accelerator(ui::VKEY_LEFT, ui::EF_NONE)] =
-      kAccelFocusPrev;
-  accel_map_[ui::Accelerator(ui::VKEY_RIGHT, ui::EF_NONE)] =
-      kAccelFocusNext;
 
   accel_map_[ui::Accelerator(
       ui::VKEY_D, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
@@ -264,8 +259,8 @@ bool WebUILoginView::AcceleratorPressed(
   content::WebUI* web_ui = GetWebUI();
   if (web_ui) {
     base::StringValue accel_name(entry->second);
-    web_ui->CallJavascriptFunction("cr.ui.Oobe.handleAccelerator",
-                                   accel_name);
+    web_ui->CallJavascriptFunctionUnsafe("cr.ui.Oobe.handleAccelerator",
+                                         accel_name);
   }
 
   return true;
@@ -421,7 +416,7 @@ void WebUILoginView::HandleKeyboardEvent(content::WebContents* source,
   if (event.type == blink::WebInputEvent::KeyDown) {
     content::WebUI* web_ui = GetWebUI();
     if (web_ui)
-      web_ui->CallJavascriptFunction("cr.ui.Oobe.clearErrors");
+      web_ui->CallJavascriptFunctionUnsafe("cr.ui.Oobe.clearErrors");
   }
 }
 
@@ -443,8 +438,8 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
   ash::SystemTray* tray = ash::Shell::GetInstance()->GetPrimarySystemTray();
   if (tray && tray->GetWidget()->IsVisible()) {
     tray->SetNextFocusableView(this);
-    ash::Shell::GetInstance()->RotateFocus(reverse ? ash::Shell::BACKWARD :
-                                                    ash::Shell::FORWARD);
+    ash::WmShell::Get()->focus_cycler()->RotateFocus(
+        reverse ? ash::FocusCycler::BACKWARD : ash::FocusCycler::FORWARD);
   }
 
   return true;
@@ -478,7 +473,7 @@ void WebUILoginView::RequestMediaAccessPermission(
 
   const base::ListValue* list_value;
   CHECK(raw_list_value->GetAsList(&list_value));
-  for (base::Value* base_value : *list_value) {
+  for (const auto& base_value : *list_value) {
     std::string value;
     if (base_value->GetAsString(&value)) {
       ContentSettingsPattern pattern =
@@ -511,32 +506,6 @@ bool WebUILoginView::PreHandleGestureEvent(
   return event.type == blink::WebGestureEvent::GesturePinchBegin ||
       event.type == blink::WebGestureEvent::GesturePinchUpdate ||
       event.type == blink::WebGestureEvent::GesturePinchEnd;
-}
-
-void WebUILoginView::LoadProgressChanged(content::WebContents* source,
-                                         double progress) {
-  // TODO(jdufault): Remove once crbug.com/452599 is resolved.
-  VLOG(1) << "WebUILoginView loading progress updated to " << progress;
-}
-
-void WebUILoginView::BeforeUnloadFired(content::WebContents* tab,
-                                       bool proceed,
-                                       bool* proceed_to_fire_unload) {
-  VLOG(1) << "WebUILoginView is unloading";
-  *proceed_to_fire_unload = true;
-}
-
-void WebUILoginView::RendererUnresponsive(content::WebContents* source) {
-  VLOG(1) << "WebUILoginView renderer became unresponsive";
-}
-
-void WebUILoginView::RendererResponsive(content::WebContents* source) {
-  VLOG(1) << "WebUILoginView renderer became responsive";
-}
-
-void WebUILoginView::DidNavigateMainFramePostCommit(
-    content::WebContents* source) {
-  VLOG(1) << "WebUILoginView navigated";
 }
 
 void WebUILoginView::OnLoginPromptVisible() {

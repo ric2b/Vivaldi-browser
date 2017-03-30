@@ -42,11 +42,11 @@ class TestWindowTree : public mojom::WindowTree {
   void DeleteWindow(uint32_t change_id, uint32_t window_id) override;
   void SetWindowBounds(uint32_t change_id,
                        uint32_t window_id,
-                       mojo::RectPtr bounds) override;
-  void SetClientArea(
-      uint32_t window_id,
-      mojo::InsetsPtr insets,
-      mojo::Array<mojo::RectPtr> additional_client_areas) override;
+                       const gfx::Rect& bounds) override;
+  void SetClientArea(uint32_t window_id,
+                     const gfx::Insets& insets,
+                     mojo::Array<gfx::Rect> additional_client_areas) override;
+  void SetHitTestMask(uint32_t window_id, const gfx::Rect& mask) override;
   void SetWindowVisibility(uint32_t change_id,
                            uint32_t window_id,
                            bool visible) override;
@@ -81,6 +81,7 @@ class TestWindowTree : public mojom::WindowTree {
                         uint32_t observer_id) override;
   void Embed(uint32_t window_id,
              mojom::WindowTreeClientPtr client,
+             uint32_t flags,
              const EmbedCallback& callback) override;
   void SetFocus(uint32_t change_id, uint32_t window_id) override;
   void SetCanFocus(uint32_t window_id, bool can_focus) override;

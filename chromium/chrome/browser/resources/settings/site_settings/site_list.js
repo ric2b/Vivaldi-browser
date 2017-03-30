@@ -79,6 +79,12 @@ Polymer({
     showBlockAction_: Boolean,
 
     /**
+     * Whether to show the 'Clear on exit' action in the action
+     * menu.
+     */
+    showSessionOnlyAction_: Boolean,
+
+    /**
      * All possible actions in the action menu.
      */
     actions_: {
@@ -88,19 +94,8 @@ Polymer({
         ALLOW: 'Allow',
         BLOCK: 'Block',
         RESET: 'Reset',
+        SESSION_ONLY: 'SessionOnly',
       }
-    },
-
-    i18n_: {
-      readOnly: true,
-      type: Object,
-      value: function() {
-        return {
-          allowAction: loadTimeData.getString('siteSettingsActionAllow'),
-          blockAction: loadTimeData.getString('siteSettingsActionBlock'),
-          resetAction: loadTimeData.getString('siteSettingsActionReset'),
-        };
-      },
     },
   },
 
@@ -115,7 +110,7 @@ Polymer({
 
   /**
    * Called when a site changes permission.
-   * @param {number} category The category of the site that changed.
+   * @param {string} category The category of the site that changed.
    * @param {string} site The site that changed.
    * @private
    */
@@ -146,23 +141,25 @@ Polymer({
    * @private
    */
   ensureOpened_: function() {
-    // Allowed list is always shown opened by default and All Sites is presented
-    // all in one list (nothing closed by default).
+    // Allowed list and Clear on Exit lists are always shown opened by default
+    // and All Sites is presented all in one list (nothing closed by default).
     if (this.allSites ||
-        this.categorySubtype == settings.PermissionValues.ALLOW) {
+        this.categorySubtype == settings.PermissionValues.ALLOW ||
+        this.categorySubtype == settings.PermissionValues.SESSION_ONLY) {
       this.$.category.opened = true;
       return;
     }
 
     // Block list should only be shown opened if there is nothing to show in
-    // the allowed list.
+    // the other lists.
     if (this.category != settings.INVALID_CATEGORY_SUBTYPE) {
       this.browserProxy_.getExceptionList(this.category).then(
         function(exceptionList) {
-          var allowExists = exceptionList.some(function(exception) {
-            return exception.setting == settings.PermissionValues.ALLOW;
+          var othersExists = exceptionList.some(function(exception) {
+            return exception.setting == settings.PermissionValues.ALLOW ||
+                exception.setting == settings.PermissionValues.SESSION_ONLY;
           });
-          if (allowExists)
+          if (othersExists)
             return;
           this.$.category.opened = true;
       }.bind(this));
@@ -172,13 +169,28 @@ Polymer({
   },
 
   /**
-   * Makes sure the visibility is correct for this widget (e.g. hidden if the
-   * block list is empty).
+   * Makes sure the visibility is correct for this widget.
    * @private
    */
   updateCategoryVisibility_: function() {
     this.$.category.hidden =
         !this.showSiteList_(this.sites, this.categoryEnabled);
+  },
+
+  /**
+   * A handler for the Add Site button.
+   * @private
+   */
+  onAddSiteTap_: function() {
+    var dialog = document.createElement('add-site-dialog');
+    dialog.category = this.category;
+    this.shadowRoot.appendChild(dialog);
+
+    dialog.open(this.categorySubtype);
+
+    dialog.addEventListener('iron-overlay-closed', function() {
+      dialog.remove();
+    });
   },
 
   /**
@@ -253,16 +265,8 @@ Polymer({
         if (exceptionList[i].setting == settings.PermissionValues.DEFAULT)
           continue;
 
-        // Filter out 'Block' values if this list is handling 'Allow' items.
-        if (exceptionList[i].setting == settings.PermissionValues.BLOCK &&
-            this.categorySubtype != settings.PermissionValues.BLOCK) {
+        if (exceptionList[i].setting != this.categorySubtype)
           continue;
-        }
-        // Filter out 'Allow' values if this list is handling 'Block' items.
-        if (exceptionList[i].setting == settings.PermissionValues.ALLOW &&
-            this.categorySubtype != settings.PermissionValues.ALLOW) {
-          continue;
-        }
       }
 
       sites.push(exceptionList[i]);
@@ -357,9 +361,12 @@ Polymer({
    */
   setUpActionMenu_: function() {
     this.showAllowAction_ =
-        this.categorySubtype == settings.PermissionValues.BLOCK;
+        this.categorySubtype != settings.PermissionValues.ALLOW;
     this.showBlockAction_ =
-        this.categorySubtype == settings.PermissionValues.ALLOW;
+        this.categorySubtype != settings.PermissionValues.BLOCK;
+    this.showSessionOnlyAction_ =
+        this.categorySubtype != settings.PermissionValues.SESSION_ONLY &&
+        this.category == settings.ContentSettingsTypes.COOKIES;
   },
 
   /**
@@ -382,22 +389,19 @@ Polymer({
   /**
    * A handler for activating one of the menu action items.
    * @param {!{model: !{item: !{origin: string}},
-   *           detail: !{item: !{textContent: string}}}} event
+   *           detail: !{selected: string}}} event
    * @private
    */
   onActionMenuIronActivate_: function(event) {
     var origin = event.model.item.origin;
     var embeddingOrigin = event.model.item.embeddingOrigin;
-    var action = event.detail.item.textContent;
-    if (action == this.i18n_.resetAction) {
+    var action = event.detail.selected;
+    if (action == settings.PermissionValues.DEFAULT) {
       this.resetCategoryPermissionForOrigin(
           origin, embeddingOrigin, this.category);
     } else {
-      var value = (action == this.i18n_.allowAction) ?
-          settings.PermissionValues.ALLOW :
-          settings.PermissionValues.BLOCK;
       this.setCategoryPermissionForOrigin(
-          origin, embeddingOrigin, this.category, value);
+          origin, embeddingOrigin, this.category, action);
     }
   },
 
@@ -410,26 +414,34 @@ Polymer({
    * @private
    */
   computeSiteListHeader_: function(siteList, toggleState) {
+    var title = '';
     if (this.categorySubtype == settings.PermissionValues.ALLOW) {
-      return loadTimeData.getStringF(
-          'titleAndCount',
-          loadTimeData.getString(
-              toggleState ? 'siteSettingsAllow' : 'siteSettingsExceptions'),
-          siteList.length);
+      title = loadTimeData.getString(
+          toggleState ? 'siteSettingsAllow' : 'siteSettingsExceptions');
+    } else if (this.categorySubtype == settings.PermissionValues.BLOCK) {
+      title = loadTimeData.getString('siteSettingsBlock');
+    } else if (this.categorySubtype == settings.PermissionValues.SESSION_ONLY) {
+      title = loadTimeData.getString('siteSettingsSessionOnly');
     } else {
-      return loadTimeData.getStringF(
-          'titleAndCount',
-          loadTimeData.getString('siteSettingsBlock'),
-          siteList.length);
+      return title;
     }
+    return loadTimeData.getStringF('titleAndCount', title, siteList.length);
   },
 
   /**
-   * Returns true if this widget is showing the allow list.
+   * Returns true if this widget is showing the Allow list.
    * @private
    */
   isAllowList_: function() {
     return this.categorySubtype == settings.PermissionValues.ALLOW;
+  },
+
+  /**
+   * Returns true if this widget is showing the Session Only list.
+   * @private
+   */
+  isSessionOnlyList_: function() {
+    return this.categorySubtype == settings.PermissionValues.SESSION_ONLY;
   },
 
   /**
@@ -441,13 +453,13 @@ Polymer({
    * @private
    */
   showSiteList_: function(siteList, toggleState) {
-    if (siteList.length == 0)
-      return false;
-
     // The Block list is only shown when the category is set to Allow since it
     // is redundant to also list all the sites that are blocked.
     if (this.isAllowList_())
       return true;
+
+    if (this.isSessionOnlyList_())
+      return siteList.length > 0;
 
     return toggleState;
   },

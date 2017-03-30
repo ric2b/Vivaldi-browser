@@ -131,10 +131,6 @@ PointerEvent* PointerEventFactory::create(
     pointerEventInit.setTiltX(mouseEvent.pointerProperties().tiltX);
     pointerEventInit.setTiltY(mouseEvent.pointerProperties().tiltY);
 
-    // Set width/height to 1 because it matches Edge (and supported by the spec).
-    pointerEventInit.setWidth(1);
-    pointerEventInit.setHeight(1);
-
     UIEventWithKeyState::setFromPlatformModifiers(pointerEventInit, mouseEvent.getModifiers());
 
     // Make sure chorded buttons fire pointermove instead of pointerup/down.
@@ -358,16 +354,6 @@ bool PointerEventFactory::isPrimary(int mappedId) const
 
     IncomingId p = m_pointerIdMapping.get(mappedId).incomingId;
     return m_primaryId[p.pointerType()] == mappedId;
-}
-
-WebPointerProperties::PointerType PointerEventFactory::getPointerType(
-    const int pointerId) const
-{
-    if (m_pointerIdMapping.contains(pointerId)) {
-        return static_cast<WebPointerProperties::PointerType>(
-            m_pointerIdMapping.get(pointerId).incomingId.pointerType());
-    }
-    return WebPointerProperties::PointerType::Unknown;
 }
 
 bool PointerEventFactory::isActive(const int pointerId) const

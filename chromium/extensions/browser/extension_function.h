@@ -65,6 +65,18 @@ class Sender;
 #define EXTENSION_FUNCTION_VALIDATE(test) CHECK(test)
 #endif  // NDEBUG
 
+#ifdef NDEBUG
+#define EXTENSION_FUNCTION_PRERUN_VALIDATE(test) \
+  do {                                           \
+    if (!(test)) {                               \
+      this->bad_message_ = true;                 \
+      return false;                              \
+    }                                            \
+  } while (0)
+#else  // NDEBUG
+#define EXTENSION_FUNCTION_PRERUN_VALIDATE(test) CHECK(test)
+#endif  // NDEBUG
+
 #define EXTENSION_FUNCTION_ERROR(error) \
   do {                                  \
     error_ = error;                     \
@@ -157,6 +169,16 @@ class ExtensionFunction
     ~ScopedUserGestureForTests();
   };
 
+  // Called before Run() in order to perform a common verification check so that
+  // APIs subclassing this don't have to roll their own RunSafe() variants.
+  // If this returns false, then Run() is never called, and the function
+  // responds immediately with an error (note that error must be non-empty in
+  // this case). If this returns true, execution continues on to Run().
+  virtual bool PreRunValidation(std::string* error);
+
+  // Runs the extension function if PreRunValidation() succeeds.
+  ResponseAction RunWithValidation();
+
   // Runs the function and returns the action to take when the caller is ready
   // to respond.
   //
@@ -201,12 +223,11 @@ class ExtensionFunction
   virtual void OnQuotaExceeded(const std::string& violation_error);
 
   // Specifies the raw arguments to the function, as a JSON value.
+  // TODO(dcheng): This should take a const ref.
   virtual void SetArgs(const base::ListValue* args);
 
   // Sets a single Value as the results of the function.
   void SetResult(std::unique_ptr<base::Value> result);
-  // As above, but deprecated. TODO(estade): remove.
-  void SetResult(base::Value* result);
 
   // Sets multiple Values as the results of the function.
   void SetResultList(std::unique_ptr<base::ListValue> results);
@@ -289,6 +310,14 @@ class ExtensionFunction
     return source_process_id_;
   }
 
+  // Sets did_respond_ to true so that the function won't DCHECK if it never
+  // sends a response. Typically, this shouldn't be used, even in testing. It's
+  // only for when you want to test functionality that doesn't exercise the
+  // Run() aspect of an extension function.
+  void ignore_did_respond_for_testing() { did_respond_ = true; }
+  // Same as above, but global. Yuck. Do not add any more uses of this.
+  static bool ignore_all_did_respond_for_testing_do_not_use;
+
  protected:
   friend struct ExtensionFunctionDeleteTraits;
 
@@ -296,22 +325,17 @@ class ExtensionFunction
   //
   // Success, no arguments to pass to caller.
   ResponseValue NoArguments();
-  // Success, a single argument |arg| to pass to caller. TAKES OWNERSHIP - a
-  // raw pointer for convenience, since callers usually construct the argument
-  // to this by hand.
-  ResponseValue OneArgument(base::Value* arg);
   // Success, a single argument |arg| to pass to caller.
   ResponseValue OneArgument(std::unique_ptr<base::Value> arg);
-  // Success, two arguments |arg1| and |arg2| to pass to caller. TAKES
-  // OWNERSHIP - raw pointers for convenience, since callers usually construct
-  // the argument to this by hand. Note that use of this function may imply you
+  // Success, two arguments |arg1| and |arg2| to pass to caller.
+  // Note that use of this function may imply you
   // should be using the generated Result struct and ArgumentList.
-  ResponseValue TwoArguments(base::Value* arg1, base::Value* arg2);
-  // Success, a list of arguments |results| to pass to caller. TAKES OWNERSHIP
+  ResponseValue TwoArguments(std::unique_ptr<base::Value> arg1,
+                             std::unique_ptr<base::Value> arg2);
+  // Success, a list of arguments |results| to pass to caller.
   // - a std::unique_ptr<> for convenience, since callers usually get this from
-  // the
-  // result of a Create(...) call on the generated Results struct, for example,
-  // alarms::Get::Results::Create(alarm).
+  //   the result of a Create(...) call on the generated Results struct. For
+  //   example, alarms::Get::Results::Create(alarm).
   ResponseValue ArgumentList(std::unique_ptr<base::ListValue> results);
   // Error. chrome.runtime.lastError.message will be set to |error|.
   ResponseValue Error(const std::string& error);
@@ -327,7 +351,7 @@ class ExtensionFunction
                       const std::string& s1,
                       const std::string& s2,
                       const std::string& s3);
-  // Error with a list of arguments |args| to pass to caller. TAKES OWNERSHIP.
+  // Error with a list of arguments |args| to pass to caller.
   // Using this ResponseValue indicates something is wrong with the API.
   // It shouldn't be possible to have both an error *and* some arguments.
   // Some legacy APIs do rely on it though, like webstorePrivate.
@@ -440,6 +464,9 @@ class ExtensionFunction
   // if unknown.
   int source_process_id_;
 
+  // Whether this function has responded.
+  bool did_respond_;
+
  private:
   base::ElapsedTimer timer_;
 
@@ -465,6 +492,8 @@ class UIThreadExtensionFunction : public ExtensionFunction {
   UIThreadExtensionFunction();
 
   UIThreadExtensionFunction* AsUIThreadExtensionFunction() override;
+
+  bool PreRunValidation(std::string* error) override;
 
   void set_test_delegate(DelegateForTests* delegate) {
     delegate_ = delegate;
@@ -497,6 +526,10 @@ class UIThreadExtensionFunction : public ExtensionFunction {
   }
   extensions::ExtensionFunctionDispatcher* dispatcher() const {
     return dispatcher_.get();
+  }
+
+  void set_is_from_service_worker(bool value) {
+    is_from_service_worker_ = value;
   }
 
   // Gets the "current" web contents if any. If there is no associated web
@@ -539,6 +572,10 @@ class UIThreadExtensionFunction : public ExtensionFunction {
 
   // The RenderFrameHost we will send responses to.
   content::RenderFrameHost* render_frame_host_;
+
+  // Whether or not this ExtensionFunction was called by an extension Service
+  // Worker.
+  bool is_from_service_worker_;
 
   std::unique_ptr<RenderFrameHostTracker> tracker_;
 

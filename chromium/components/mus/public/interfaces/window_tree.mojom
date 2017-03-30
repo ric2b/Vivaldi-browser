@@ -4,60 +4,17 @@
 
 module mus.mojom;
 
-import "components/mus/public/interfaces/compositor_frame.mojom";
+import "cc/ipc/surface_id.mojom";
 import "components/mus/public/interfaces/cursor.mojom";
 import "components/mus/public/interfaces/event_matcher.mojom";
-import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/mus_constants.mojom";
-import "components/mus/public/interfaces/surface_id.mojom";
+import "components/mus/public/interfaces/surface.mojom";
 import "components/mus/public/interfaces/window_manager.mojom";
 import "components/mus/public/interfaces/window_manager_constants.mojom";
-import "ui/mojo/geometry/geometry.mojom";
-import "ui/mojo/ime/text_input_state.mojom";
-
-struct ViewportMetrics {
-  mojo.Size size_in_pixels;
-  // A value of 0 indicates the real value is not yet available.
-  float device_pixel_ratio = 0.0;
-};
-
-struct WindowData {
-  uint32 parent_id;
-  uint32 window_id;
-  mojo.Rect bounds;
-  map<string, array<uint8>> properties;
-  // True if this window is visible. The window may not be drawn on screen (see
-  // OnWindowParentDrawnStateChanged() for details).
-  bool visible;
-  ViewportMetrics viewport_metrics;
-};
-
-enum ErrorCode {
-  NONE,
-  VALUE_IN_USE,
-  ILLEGAL_ARGUMENT,
-};
-
-// Each Window has support for two surfaces. Generally the |DEFAULT| surface
-// is used. The |UNDERLAY| surface is useful if the owner of a window wants to
-// to Embed() another client and at the same time draw something under the
-// embedded apps representation.
-enum SurfaceType {
-  // Only the owner of a window may obtain this surface.
-  // The window manager can change the offset of this by way of
-  // SetUnderlaySurfaceOffsetAndExtendedHitArea().
-  UNDERLAY,
-
-  // Only the embedded app may obtain this surface. If an app is not embedded
-  // in the Window than the owner may also render to this surface as well.
-  DEFAULT,
-};
-
-// The result of an input event sent to a client app.
-enum EventResult {
-  HANDLED,
-  UNHANDLED,
-};
+import "components/mus/public/interfaces/window_tree_constants.mojom";
+import "ui/events/mojo/event.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "ui/platform_window/mojo/text_input_state.mojom";
 
 // Windows are identified by a uint32. The upper 16 bits are the connection id,
 // and the lower 16 the id assigned by the client.
@@ -119,15 +76,20 @@ interface WindowTree {
   SetEventObserver(EventMatcher? matcher, uint32 observer_id);
 
   // Sets the specified bounds of the specified window.
-  SetWindowBounds(uint32 change_id, uint32 window_id, mojo.Rect bounds);
+  SetWindowBounds(uint32 change_id, uint32 window_id, gfx.mojom.Rect bounds);
 
   // Sets the client area of the specified window. The client area is specified
   // by way of insets. Everything outside of the insets, and not in
   // |additional_client_areas| is considered non-client area.
   // TODO(sky): convert additional_client_areas to a path.
   SetClientArea(uint32 window_id,
-                mojo.Insets insets,
-                array<mojo.Rect>? additional_client_areas);
+                gfx.mojom.Insets insets,
+                array<gfx.mojom.Rect>? additional_client_areas);
+
+  // Mouse events outside a hit test mask do not hit the window. The |mask| is
+  // in window local coordinates. Pass null to clear the mask.
+  // TODO(jamescook): Convert |mask| to a path. http://crbug.com/613210
+  SetHitTestMask(uint32 window_id, gfx.mojom.Rect? mask);
 
   // Sets the visibility of the specified window to |visible|. Connections are
   // allowed to change the visibility of any window they have created, as well
@@ -215,6 +177,9 @@ interface WindowTree {
   // The caller must have created |window_id|. If not the request fails and the
   // response is false.
   //
+  // The embedder can dictate the behaviour of the embedded client by setting
+  // the appropriate embed flags (e.g. kEmbedFlagEmbedderInterceptsEvents).
+  //
   // When a connection embeds a WindowTreeClient the originating connection no
   // longer has privileges to access or see any of the children of the window.
   // If the window had existing children the children are removed. The
@@ -230,7 +195,8 @@ interface WindowTree {
   // OnEmbeddedAppDisconnected().
   //
   // The callback returns whether the embedding was successful.
-  Embed(uint32 window_id, WindowTreeClient client) => (bool success);
+  Embed(uint32 window_id, WindowTreeClient client, uint32 embed_flags)
+      => (bool success);
 
   // Sets focus to the specified window, use 0 to clear focus. For a window to
   // get focus the following has to happen: the window is drawn, the window has
@@ -278,10 +244,12 @@ interface WindowTreeClient {
   // See Embed() on WindowTree for more details. |tree| will be a handle back to
   // the window manager service, unless the connection is to the root connection
   // in which case it will be null. |parent_drawn| is true if roots parent is
-  // drawn, see OnParentDrawnStateChanged() for details.
+  // drawn, see OnParentDrawnStateChanged() for details. |display_id| identifies
+  // the display this root window is on.
   OnEmbed(uint16 connection_id,
           WindowData root,
           WindowTree? tree,
+          int64 display_id,
           uint32 focused_window,
           bool parent_drawn);
 
@@ -300,33 +268,27 @@ interface WindowTreeClient {
 
   // Called in response to NewTopLevelWindow() successfully completing.
   // |parent_drawn| is true if the parent of the window is drawn, see
-  // OnDrawnStateChanged() for details.
-  OnTopLevelCreated(uint32 change_id, WindowData data, bool parent_drawn);
+  // OnDrawnStateChanged() for details. |display_id| identifies the display this
+  // window is on.
+  OnTopLevelCreated(uint32 change_id,
+                    WindowData data,
+                    int64 display_id,
+                    bool parent_drawn);
 
   // Invoked when a window's bounds have changed.
   OnWindowBoundsChanged(uint32 window,
-                        mojo.Rect old_bounds,
-                        mojo.Rect new_bounds);
+                        gfx.mojom.Rect old_bounds,
+                        gfx.mojom.Rect new_bounds);
 
   OnClientAreaChanged(uint32 window_id,
-                      mojo.Insets new_client_area,
-                      array<mojo.Rect> new_additional_client_areas);
+                      gfx.mojom.Insets new_client_area,
+                      array<gfx.mojom.Rect> new_additional_client_areas);
 
   OnTransientWindowAdded(uint32 window_id,
                          uint32 transient_window_id);
 
   OnTransientWindowRemoved(uint32 window_id,
                            uint32 transient_window_id);
-
-  // Invoked when the viewport metrics for the specified windows have changed.
-  // This is only sent for the roots, not for every window, it is expected
-  // clients propagate this to the tree.
-  // TODO(sky): rather than passing viewportmetrics like this, perhaps each
-  // window should know the display it is on, and the viewportmetrics of the
-  // display may change.
-  OnWindowViewportMetricsChanged(array<uint32> window_ids,
-                                 ViewportMetrics old_metrics,
-                                 ViewportMetrics new_metrics);
 
   // Invoked when a change is done to the hierarchy. A value of 0 is used to
   // identify a null window. For example, if the old_parent is NULL, 0 is
@@ -379,13 +341,13 @@ interface WindowTreeClient {
   // receive farther events until the event is ack'ed.
   OnWindowInputEvent(uint32 event_id,
                      uint32 window,
-                     Event event,
+                     ui.mojom.Event event,
                      uint32 event_observer_id);
 
   // Invoked when an |event| is sent via the EventObserver and not targeted at a
   // specific window. The |event_observer_id| is the one supplied to
   // SetEventObserver. The client should not acknowledge these events.
-  OnEventObserved(Event event, uint32 event_observer_id);
+  OnEventObserved(ui.mojom.Event event, uint32 event_observer_id);
 
   // Called in two distinct cases: when a window known to the connection gains
   // focus, or when focus moves from a window known to the connection to a

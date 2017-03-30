@@ -27,6 +27,7 @@
 #include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8DOMException.h"
+#include "bindings/core/v8/V8PrivateProperty.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 
@@ -69,7 +70,7 @@ v8::Local<v8::Value> V8ThrowException::createDOMException(v8::Isolate* isolate, 
     // FIXME: Is the current context always the right choice?
     ScriptState* scriptState = ScriptState::from(creationContext->CreationContext());
     Frame* frame = toFrameIfNotDetached(scriptState->context());
-    if (!frame || !BindingSecurity::shouldAllowAccessToFrame(isolate, callingDOMWindow(isolate), frame, DoNotReportSecurityError)) {
+    if (!frame || !BindingSecurity::shouldAllowAccessToFrame(isolate, currentDOMWindow(isolate), frame, DoNotReportSecurityError)) {
         scriptState = ScriptState::current(isolate);
         sanitizedCreationContext = scriptState->context()->Global();
     }
@@ -89,9 +90,10 @@ v8::Local<v8::Value> V8ThrowException::createDOMException(v8::Isolate* isolate, 
     v8::Local<v8::Value> error = v8::Exception::Error(v8String(isolate, domException->message()));
     ASSERT(!error.IsEmpty());
     v8::Local<v8::Object> exceptionObject = exception.As<v8::Object>();
-    v8::Maybe<bool> result = exceptionObject->SetAccessor(isolate->GetCurrentContext(), v8AtomicString(isolate, "stack"), domExceptionStackGetter, domExceptionStackSetter, v8::MaybeLocal<v8::Value>(error));
-    ASSERT_UNUSED(result, result.FromJust());
-    V8HiddenValue::setHiddenValue(scriptState, exceptionObject, V8HiddenValue::error(isolate), error);
+    v8CallOrCrash(exceptionObject->SetAccessor(isolate->GetCurrentContext(), v8AtomicString(isolate, "stack"), domExceptionStackGetter, domExceptionStackSetter, error));
+
+    auto privateError = V8PrivateProperty::getDOMExceptionError(isolate);
+    privateError.set(scriptState->context(), exceptionObject, error);
 
     return exception;
 }

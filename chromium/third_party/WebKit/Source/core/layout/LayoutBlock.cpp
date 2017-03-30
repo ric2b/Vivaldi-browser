@@ -24,7 +24,6 @@
 #include "core/layout/LayoutBlock.h"
 
 #include "core/HTMLNames.h"
-#include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/StyleEngine.h"
@@ -42,40 +41,24 @@
 #include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutFlowThread.h"
 #include "core/layout/LayoutGrid.h"
-#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutMultiColumnSpannerPlaceholder.h"
-#include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTableCell.h"
-#include "core/layout/LayoutTextCombine.h"
-#include "core/layout/LayoutTextControl.h"
-#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/TextAutosizer.h"
+#include "core/layout/api/LineLayoutBox.h"
 #include "core/layout/api/LineLayoutItem.h"
-#include "core/layout/line/GlyphOverflow.h"
-#include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/layout/shapes/ShapeOutsideInfo.h"
 #include "core/page/Page.h"
 #include "core/paint/BlockPainter.h"
-#include "core/paint/BoxPainter.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintLayer.h"
 #include "core/style/ComputedStyle.h"
-#include "core/style/ContentData.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/geometry/FloatQuad.h"
-#include "platform/geometry/TransformState.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
-#include "wtf/TemporaryChange.h"
-
-using namespace WTF;
-using namespace Unicode;
+#include <memory>
 
 namespace blink {
-
-using namespace HTMLNames;
 
 struct SameSizeAsLayoutBlock : public LayoutBox {
     LayoutObjectChildList children;
@@ -102,10 +85,6 @@ static TrackedContainerMap* gPositionedContainerMap = nullptr;
 // for every layout (see the comment above about why).
 static TrackedDescendantsMap* gPercentHeightDescendantsMap = nullptr;
 
-typedef WTF::HashSet<LayoutBlock*> DelayedUpdateScrollInfoSet;
-static int gDelayUpdateScrollInfo = 0;
-static DelayedUpdateScrollInfoSet* gDelayedUpdateScrollInfoSet = nullptr;
-
 LayoutBlock::LayoutBlock(ContainerNode* node)
     : LayoutBox(node)
     , m_hasMarginBeforeQuirk(false)
@@ -126,7 +105,7 @@ LayoutBlock::LayoutBlock(ContainerNode* node)
 void LayoutBlock::removeFromGlobalMaps()
 {
     if (hasPositionedObjects()) {
-        OwnPtr<TrackedLayoutBoxListHashSet> descendants = gPositionedDescendantsMap->take(this);
+        std::unique_ptr<TrackedLayoutBoxListHashSet> descendants = gPositionedDescendantsMap->take(this);
         ASSERT(!descendants->isEmpty());
         for (LayoutBox* descendant : *descendants) {
             ASSERT(gPositionedContainerMap->get(descendant) == this);
@@ -134,7 +113,7 @@ void LayoutBlock::removeFromGlobalMaps()
         }
     }
     if (hasPercentHeightDescendants()) {
-        OwnPtr<TrackedLayoutBoxListHashSet> descendants = gPercentHeightDescendantsMap->take(this);
+        std::unique_ptr<TrackedLayoutBoxListHashSet> descendants = gPercentHeightDescendantsMap->take(this);
         ASSERT(!descendants->isEmpty());
         for (LayoutBox* descendant : *descendants) {
             ASSERT(descendant->percentHeightContainer() == this);
@@ -153,9 +132,6 @@ void LayoutBlock::willBeDestroyed()
     if (!documentBeingDestroyed() && parent())
         parent()->dirtyLinesFromChangedChild(this);
 
-    if (UNLIKELY(gDelayedUpdateScrollInfoSet != 0))
-        gDelayedUpdateScrollInfoSet->remove(this);
-
     if (TextAutosizer* textAutosizer = document().textAutosizer())
         textAutosizer->destroy(this);
 
@@ -169,21 +145,24 @@ void LayoutBlock::styleWillChange(StyleDifference diff, const ComputedStyle& new
     setIsAtomicInlineLevel(newStyle.isDisplayInlineType());
 
     if (oldStyle && parent()) {
-        bool oldHasTransformRelatedProperty = oldStyle->hasTransformRelatedProperty();
-        bool newHasTransformRelatedProperty = newStyle.hasTransformRelatedProperty();
-        bool oldStyleIsContainer = oldStyle->position() != StaticPosition || oldHasTransformRelatedProperty;
+        bool oldStyleContainsFixedPosition = oldStyle->canContainFixedPositionObjects();
+        bool oldStyleContainsAbsolutePosition = oldStyleContainsFixedPosition || oldStyle->canContainAbsolutePositionObjects();
+        bool newStyleContainsFixedPosition = newStyle.canContainFixedPositionObjects();
+        bool newStyleContainsAbsolutePosition = newStyleContainsFixedPosition || newStyle.canContainAbsolutePositionObjects();
 
-        if (oldStyleIsContainer && (newStyle.position() == StaticPosition || (oldHasTransformRelatedProperty && !newHasTransformRelatedProperty))) {
+        if ((oldStyleContainsFixedPosition && !newStyleContainsFixedPosition)
+            || (oldStyleContainsAbsolutePosition && !newStyleContainsAbsolutePosition)) {
             // Clear our positioned objects list. Our absolute and fixed positioned descendants will be
             // inserted into our containing block's positioned objects list during layout.
             removePositionedObjects(nullptr, NewContainingBlock);
-        } else if (!oldStyleIsContainer && (newStyle.position() != StaticPosition || newHasTransformRelatedProperty)) {
+        }
+        if (!oldStyleContainsAbsolutePosition && newStyleContainsAbsolutePosition) {
             // Remove our absolutely positioned descendants from their current containing block.
             // They will be inserted into our positioned objects list during layout.
             if (LayoutBlock* cb = containingBlockForAbsolutePosition())
                 cb->removePositionedObjects(this, NewContainingBlock);
         }
-        if (!oldHasTransformRelatedProperty && newHasTransformRelatedProperty) {
+        if (!oldStyleContainsFixedPosition && newStyleContainsFixedPosition) {
             // Remove our fixed positioned descendants from their current containing block.
             // They will be inserted into our positioned objects list during layout.
             if (LayoutBlock* cb = containerForFixedPosition())
@@ -218,9 +197,11 @@ void LayoutBlock::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
 
     if (oldStyle && parent()) {
         if (oldStyle->position() != newStyle.position() && newStyle.position() != StaticPosition) {
-            // Remove our absolute and fixed positioned descendants from their new containing block,
-            // in case containingBlock() changes by the change to the position property.
-            // See styleWillChange() for other cases.
+            // In LayoutObject::styleWillChange() we already removed ourself from our old containing
+            // block's positioned descendant list, and we will be inserted to the new containing
+            // block's list during layout. However the positioned descendant layout logic assumes
+            // layout objects to obey parent-child order in the list. Remove our descendants here
+            // so they will be re-inserted after us.
             if (LayoutBlock* cb = containingBlock()) {
                 cb->removePositionedObjects(this, NewContainingBlock);
                 if (isOutOfFlowPositioned()) {
@@ -236,7 +217,7 @@ void LayoutBlock::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
     if (TextAutosizer* textAutosizer = document().textAutosizer())
         textAutosizer->record(this);
 
-    propagateStyleToAnonymousChildren(true);
+    propagateStyleToAnonymousChildren();
 
     // It's possible for our border/padding to change, but for the overall logical width or height of the block to
     // end up being the same. We keep track of this change so in layoutBlock, we can know to set relayoutChildren=true.
@@ -369,61 +350,14 @@ void LayoutBlock::removeLeftoverAnonymousBlock(LayoutBlock* child)
     child->destroy();
 }
 
-void LayoutBlock::startDelayUpdateScrollInfo()
-{
-    if (gDelayUpdateScrollInfo == 0) {
-        ASSERT(!gDelayedUpdateScrollInfoSet);
-        gDelayedUpdateScrollInfoSet = new DelayedUpdateScrollInfoSet;
-    }
-    ASSERT(gDelayedUpdateScrollInfoSet);
-    ++gDelayUpdateScrollInfo;
-}
-
-bool LayoutBlock::finishDelayUpdateScrollInfo(SubtreeLayoutScope* layoutScope, ScrollPositionMap* scrollMap)
-{
-    bool childrenMarkedForRelayout = false;
-
-    --gDelayUpdateScrollInfo;
-    ASSERT(gDelayUpdateScrollInfo >= 0);
-    if (gDelayUpdateScrollInfo == 0) {
-        ASSERT(gDelayedUpdateScrollInfoSet);
-
-        OwnPtr<DelayedUpdateScrollInfoSet> infoSet(adoptPtr(gDelayedUpdateScrollInfoSet));
-        gDelayedUpdateScrollInfoSet = nullptr;
-
-        for (auto* block : *infoSet) {
-            if (block->hasOverflowClip()) {
-                PaintLayerScrollableArea* scrollableArea = block->layer()->getScrollableArea();
-                if (scrollMap)
-                    scrollMap->add(scrollableArea, scrollableArea->scrollPositionDouble());
-                childrenMarkedForRelayout |= scrollableArea->updateAfterLayout(layoutScope);
-            }
-        }
-    }
-    return childrenMarkedForRelayout;
-}
-
 void LayoutBlock::updateAfterLayout()
 {
     invalidateStickyConstraints();
 
     // Update our scroll information if we're overflow:auto/scroll/hidden now that we know if
     // we overflow or not.
-    if (hasOverflowClip()) {
-        if (style()->isFlippedBlocksWritingMode()) {
-            // FIXME: https://bugs.webkit.org/show_bug.cgi?id=97937
-            // Workaround for now. We cannot delay the scroll info for overflow
-            // for items with opposite writing directions, as the contents needs
-            // to overflow in that direction
-            layer()->getScrollableArea()->updateAfterLayout();
-            return;
-        }
-
-        if (gDelayUpdateScrollInfo)
-            gDelayedUpdateScrollInfoSet->add(this);
-        else
-            layer()->getScrollableArea()->updateAfterLayout();
-    }
+    if (hasOverflowClip())
+        layer()->getScrollableArea()->updateAfterLayout();
 }
 
 void LayoutBlock::layout()
@@ -487,7 +421,7 @@ void LayoutBlock::addOverflowFromChildren()
 
 void LayoutBlock::computeOverflow(LayoutUnit oldClientAfterEdge, bool)
 {
-    m_overflow.clear();
+    m_overflow.reset();
 
     // Add overflow from children.
     addOverflowFromChildren();
@@ -511,8 +445,12 @@ void LayoutBlock::computeOverflow(LayoutUnit oldClientAfterEdge, bool)
     }
 
     addVisualEffectOverflow();
-
     addVisualOverflowFromTheme();
+
+    // An enclosing composited layer will need to update its bounds if we now overflow it.
+    PaintLayer* layer = enclosingLayer();
+    if (!needsLayout() && layer->hasCompositedLayerMapping() && !layer->visualRect().contains(visualOverflowRect()))
+        layer->setNeedsCompositingInputsUpdate();
 }
 
 void LayoutBlock::addOverflowFromBlockChildren()
@@ -692,7 +630,7 @@ void LayoutBlock::markFixedPositionObjectForLayoutIfNeeded(LayoutObject* child, 
     }
 }
 
-LayoutUnit LayoutBlock::marginIntrinsicLogicalWidthForChild(LayoutBox& child) const
+LayoutUnit LayoutBlock::marginIntrinsicLogicalWidthForChild(const LayoutBox& child) const
 {
     // A margin has three types: fixed, percentage, and auto (variable).
     // Auto and percentage margins become 0 when computing min/max width.
@@ -954,7 +892,7 @@ void LayoutBlock::insertPositionedObject(LayoutBox* o)
     TrackedLayoutBoxListHashSet* descendantSet = gPositionedDescendantsMap->get(this);
     if (!descendantSet) {
         descendantSet = new TrackedLayoutBoxListHashSet;
-        gPositionedDescendantsMap->set(this, adoptPtr(descendantSet));
+        gPositionedDescendantsMap->set(this, wrapUnique(descendantSet));
     }
     descendantSet->add(o);
 
@@ -1042,7 +980,7 @@ void LayoutBlock::addPercentHeightDescendant(LayoutBox* descendant)
     TrackedLayoutBoxListHashSet* descendantSet = gPercentHeightDescendantsMap->get(this);
     if (!descendantSet) {
         descendantSet = new TrackedLayoutBoxListHashSet;
-        gPercentHeightDescendantsMap->set(this, adoptPtr(descendantSet));
+        gPercentHeightDescendantsMap->set(this, wrapUnique(descendantSet));
     }
     descendantSet->add(descendant);
 
@@ -1304,7 +1242,7 @@ void LayoutBlock::computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, Lay
             maxLogicalWidth = std::max(minLogicalWidth, adjustContentBoxLogicalWidthForBoxSizing(LayoutUnit(tableCellWidth.value())));
     }
 
-    int scrollbarWidth = intrinsicScrollbarLogicalWidth();
+    int scrollbarWidth = scrollbarLogicalWidth();
     maxLogicalWidth += scrollbarWidth;
     minLogicalWidth += scrollbarWidth;
 }
@@ -1474,7 +1412,7 @@ bool LayoutBlock::hasLineIfEmpty() const
     if (node()->isRootEditableElement())
         return true;
 
-    if (node()->isShadowRoot() && isHTMLInputElement(*toShadowRoot(node())->host()))
+    if (node()->isShadowRoot() && isHTMLInputElement(toShadowRoot(node())->host()))
         return true;
 
     return false;
@@ -1834,6 +1772,13 @@ bool LayoutBlock::recalcChildOverflowAfterStyleChange()
         }
     }
 
+    return recalcPositionedDescendantsOverflowAfterStyleChange() || childrenOverflowChanged;
+}
+
+bool LayoutBlock::recalcPositionedDescendantsOverflowAfterStyleChange()
+{
+    bool childrenOverflowChanged = false;
+
     TrackedLayoutBoxListHashSet* positionedDescendants = positionedObjects();
     if (!positionedDescendants)
         return childrenOverflowChanged;
@@ -1897,7 +1842,7 @@ bool LayoutBlock::tryLayoutDoingPositionedMovementOnly()
     setIntrinsicContentLogicalHeight(contentLogicalHeight());
     computeLogicalHeight(oldHeight, logicalTop(), computedValues);
 
-    if (hasPercentHeightDescendants() && oldHeight != computedValues.m_extent) {
+    if (oldHeight != computedValues.m_extent && (hasPercentHeightDescendants() || isFlexibleBox())) {
         setIntrinsicContentLogicalHeight(oldIntrinsicContentLogicalHeight);
         return false;
     }

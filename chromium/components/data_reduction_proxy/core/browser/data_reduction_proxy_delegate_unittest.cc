@@ -149,8 +149,7 @@ TEST(DataReductionProxyDelegate, IsTrustedSpdyProxy) {
             test_context->event_creator()));
 
     DataReductionProxyDelegate delegate(
-        test_context->io_data()->request_options(), config.get(),
-        test_context->io_data()->configurator(),
+        config.get(), test_context->io_data()->configurator(),
         test_context->io_data()->event_creator(),
         test_context->io_data()->bypass_stats(),
         test_context->io_data()->net_log());
@@ -363,7 +362,7 @@ TEST_F(DataReductionProxyDelegateTest, OnResolveProxyHandler) {
   OnResolveProxyHandler(url, "GET", load_flags, data_reduction_proxy_config,
                         empty_proxy_retry_info, config(), &result);
   EXPECT_EQ(data_reduction_proxy_info.proxy_server(), result.proxy_server());
-  // Only the proxy list should be updated, not he proxy info.
+  // Only the proxy list should be updated, not the proxy info.
   EXPECT_EQ(result.config_id(), prev_id);
 
   // A direct connection is used, but the data reduction proxy is on the retry

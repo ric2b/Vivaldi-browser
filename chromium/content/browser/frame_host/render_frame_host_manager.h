@@ -269,7 +269,8 @@ class CONTENT_EXPORT RenderFrameHostManager
   // different URL than the last committed entry, without modifying it).
   RenderFrameHostImpl* Navigate(const GURL& dest_url,
                                 const FrameNavigationEntry& frame_entry,
-                                const NavigationEntryImpl& entry);
+                                const NavigationEntryImpl& entry,
+                                bool is_reload);
 
   // Instructs the various live views to stop. Called when the user directed the
   // page to stop loading.
@@ -435,9 +436,16 @@ class CONTENT_EXPORT RenderFrameHostManager
   // Resets Content Security Policy in all the proxies.
   void OnDidResetContentSecurityPolicy();
 
-  // Sends updated enforcement of strict mixed content checking to all
-  // frame proxies when the frame changes its setting.
-  void OnEnforceStrictMixedContentChecking(bool should_enforce);
+  // Sends updated enforcement of insecure request policy to all frame proxies
+  // when the frame changes its setting.
+  void OnEnforceInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
+
+  // Called on a frame to notify it that its out-of-process parent frame
+  // changed a property (such as allowFullscreen) on its <iframe> element.
+  // Sends updated WebFrameOwnerProperties to the RenderFrame and to all
+  // proxies, skipping the parent process.
+  void OnDidUpdateFrameOwnerProperties(
+      const blink::WebFrameOwnerProperties& properties);
 
   // Send updated origin to all frame proxies when the frame navigates to a new
   // origin.
@@ -722,7 +730,8 @@ class CONTENT_EXPORT RenderFrameHostManager
       bool dest_is_restore,
       bool dest_is_view_source_mode,
       const GlobalRequestID& transferred_request_id,
-      int bindings);
+      int bindings,
+      bool is_reload);
 
   // Updates the pending WebUI of the current RenderFrameHost for a same-site
   // navigation.

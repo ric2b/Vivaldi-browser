@@ -88,7 +88,7 @@ public class AutofillPreferences extends PreferenceFragment
         // Add an edit preference for each current Chrome profile.
         PreferenceGroup profileCategory = (PreferenceGroup) findPreference(PREF_AUTOFILL_PROFILES);
         profileCategory.removeAll();
-        for (AutofillProfile profile : PersonalDataManager.getInstance().getProfiles()) {
+        for (AutofillProfile profile : PersonalDataManager.getInstance().getProfilesForSettings()) {
             // Add an item on the current page...
             Preference pref = new Preference(getActivity());
             pref.setTitle(profile.getFullName());
@@ -111,17 +111,17 @@ public class AutofillPreferences extends PreferenceFragment
         PreferenceGroup profileCategory =
                 (PreferenceGroup) findPreference(PREF_AUTOFILL_CREDIT_CARDS);
         profileCategory.removeAll();
-        for (CreditCard card : PersonalDataManager.getInstance().getCreditCards()) {
+        for (CreditCard card : PersonalDataManager.getInstance().getCreditCardsForSettings()) {
             // Add an item on the current page...
             Preference pref = new Preference(getActivity());
             pref.setTitle(card.getObfuscatedNumber());
             pref.setSummary(card.getFormattedExpirationDate(getActivity()));
 
             if (card.getIsLocal()) {
-                pref.setFragment(AutofillCreditCardEditor.class.getName());
+                pref.setFragment(AutofillLocalCardEditor.class.getName());
             } else {
+                pref.setFragment(AutofillServerCardEditor.class.getName());
                 pref.setWidgetLayoutResource(R.layout.autofill_server_data_label);
-                pref.setFragment(AutofillServerCardPreferences.class.getName());
             }
 
             Bundle args = pref.getExtras();

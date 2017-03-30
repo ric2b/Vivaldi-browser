@@ -26,9 +26,8 @@
 #include "wtf/HashMap.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
 #include <memory>
@@ -104,14 +103,14 @@ private:
     int* m_destructNumber;
 };
 
-using OwnPtrHashMap = HashMap<int, OwnPtr<DestructCounter>>;
+using OwnPtrHashMap = HashMap<int, std::unique_ptr<DestructCounter>>;
 
 TEST(HashMapTest, OwnPtrAsValue)
 {
     int destructNumber = 0;
     OwnPtrHashMap map;
-    map.add(1, adoptPtr(new DestructCounter(1, &destructNumber)));
-    map.add(2, adoptPtr(new DestructCounter(2, &destructNumber)));
+    map.add(1, wrapUnique(new DestructCounter(1, &destructNumber)));
+    map.add(2, wrapUnique(new DestructCounter(2, &destructNumber)));
 
     DestructCounter* counter1 = map.get(1);
     EXPECT_EQ(1, counter1->get());
@@ -120,12 +119,12 @@ TEST(HashMapTest, OwnPtrAsValue)
     EXPECT_EQ(0, destructNumber);
 
     for (OwnPtrHashMap::iterator iter = map.begin(); iter != map.end(); ++iter) {
-        OwnPtr<DestructCounter>& ownCounter = iter->value;
+        std::unique_ptr<DestructCounter>& ownCounter = iter->value;
         EXPECT_EQ(iter->key, ownCounter->get());
     }
     ASSERT_EQ(0, destructNumber);
 
-    OwnPtr<DestructCounter> ownCounter1 = map.take(1);
+    std::unique_ptr<DestructCounter> ownCounter1 = map.take(1);
     EXPECT_EQ(ownCounter1.get(), counter1);
     EXPECT_FALSE(map.contains(1));
     EXPECT_EQ(0, destructNumber);
@@ -135,7 +134,7 @@ TEST(HashMapTest, OwnPtrAsValue)
     EXPECT_EQ(0UL, map.size());
     EXPECT_EQ(1, destructNumber);
 
-    ownCounter1.clear();
+    ownCounter1.reset();
     EXPECT_EQ(2, destructNumber);
 }
 
@@ -243,7 +242,7 @@ public:
 private:
     int m_v;
 };
-using IntSimpleMap = HashMap<int, OwnPtr<SimpleClass>>;
+using IntSimpleMap = HashMap<int, std::unique_ptr<SimpleClass>>;
 
 TEST(HashMapTest, AddResult)
 {
@@ -254,10 +253,10 @@ TEST(HashMapTest, AddResult)
     EXPECT_EQ(0, result.storedValue->value.get());
 
     SimpleClass* simple1 = new SimpleClass(1);
-    result.storedValue->value = adoptPtr(simple1);
+    result.storedValue->value = wrapUnique(simple1);
     EXPECT_EQ(simple1, map.get(1));
 
-    IntSimpleMap::AddResult result2 = map.add(1, adoptPtr(new SimpleClass(2)));
+    IntSimpleMap::AddResult result2 = map.add(1, wrapUnique(new SimpleClass(2)));
     EXPECT_FALSE(result2.isNewEntry);
     EXPECT_EQ(1, result.storedValue->key);
     EXPECT_EQ(1, result.storedValue->value->v());
@@ -606,6 +605,67 @@ TEST(HashMapTest, UniquePtrAsValue)
         EXPECT_EQ(1, addResult.storedValue->key);
         EXPECT_EQ(1, *addResult.storedValue->value);
     }
+}
+
+TEST(HashMapTest, MoveOnlyPairKeyType)
+{
+    using Pair = std::pair<MoveOnly, int>;
+    using TheMap = HashMap<Pair, int>;
+    TheMap map;
+    {
+        TheMap::AddResult addResult = map.add(Pair(MoveOnly(1), -1), 10);
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(1, addResult.storedValue->key.first.value());
+        EXPECT_EQ(-1, addResult.storedValue->key.second);
+        EXPECT_EQ(10, addResult.storedValue->value);
+    }
+    auto iter = map.find(Pair(MoveOnly(1), -1));
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key.first.value());
+    EXPECT_EQ(-1, iter->key.second);
+    EXPECT_EQ(10, iter->value);
+
+    iter = map.find(Pair(MoveOnly(1), 0));
+    EXPECT_TRUE(iter == map.end());
+
+    for (int i = 2; i < 32; ++i) {
+        TheMap::AddResult addResult = map.add(Pair(MoveOnly(i), -i), i * 10);
+        EXPECT_TRUE(addResult.isNewEntry);
+        EXPECT_EQ(i, addResult.storedValue->key.first.value());
+        EXPECT_EQ(-i, addResult.storedValue->key.second);
+        EXPECT_EQ(i * 10, addResult.storedValue->value);
+    }
+
+    iter = map.find(Pair(MoveOnly(1), -1));
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(1, iter->key.first.value());
+    EXPECT_EQ(-1, iter->key.second);
+    EXPECT_EQ(10, iter->value);
+
+    iter = map.find(Pair(MoveOnly(7), -7));
+    ASSERT_TRUE(iter != map.end());
+    EXPECT_EQ(7, iter->key.first.value());
+    EXPECT_EQ(-7, iter->key.second);
+    EXPECT_EQ(70, iter->value);
+
+    {
+        TheMap::AddResult addResult = map.set(Pair(MoveOnly(9), -9), 999);
+        EXPECT_FALSE(addResult.isNewEntry);
+        EXPECT_EQ(9, addResult.storedValue->key.first.value());
+        EXPECT_EQ(-9, addResult.storedValue->key.second);
+        EXPECT_EQ(999, addResult.storedValue->value);
+    }
+
+    map.remove(Pair(MoveOnly(11), -11));
+    iter = map.find(Pair(MoveOnly(11), -11));
+    EXPECT_TRUE(iter == map.end());
+
+    int oneThirty = map.take(Pair(MoveOnly(13), -13));
+    EXPECT_EQ(130, oneThirty);
+    iter = map.find(Pair(MoveOnly(13), -13));
+    EXPECT_TRUE(iter == map.end());
+
+    map.clear();
 }
 
 } // anonymous namespace

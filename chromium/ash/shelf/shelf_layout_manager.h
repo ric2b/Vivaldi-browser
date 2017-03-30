@@ -9,15 +9,17 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/session/session_state_observer.h"
+#include "ash/common/session/session_state_observer.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shell_observer.h"
+#include "ash/common/wm/background_animator.h"
+#include "ash/common/wm/dock/docked_window_layout_manager_observer.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/workspace/workspace_types.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_types.h"
-#include "ash/shell_observer.h"
 #include "ash/snap_to_pixel_layout_manager.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/wm/common/background_animator.h"
-#include "ash/wm/common/dock/docked_window_layout_manager_observer.h"
-#include "ash/wm/common/workspace/workspace_types.h"
+#include "ash/wm/gestures/shelf_gesture_handler.h"
 #include "ash/wm/lock_state_observer.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
@@ -58,6 +60,7 @@ FORWARD_DECLARE_TEST(WebNotificationTrayTest, PopupAndFullscreen);
 // layout to the status area.
 // To respond to bounds changes in the status area StatusAreaLayoutManager works
 // closely with ShelfLayoutManager.
+// On mus, widget bounds management is handled by the window manager.
 class ASH_EXPORT ShelfLayoutManager
     : public ash::ShellObserver,
       public aura::client::ActivationChangeObserver,
@@ -67,22 +70,7 @@ class ASH_EXPORT ShelfLayoutManager
       public SnapToPixelLayoutManager,
       public SessionStateObserver {
  public:
-  // We reserve a small area on the edge of the workspace area to ensure that
-  // the resize handle at the edge of the window can be hit.
-  static const int kWorkspaceAreaVisibleInset;
-
-  // When autohidden we extend the touch hit target onto the screen so that the
-  // user can drag the shelf out.
-  static const int kWorkspaceAreaAutoHideInset;
-
-  // Size of the shelf when auto-hidden.
-  static const int kAutoHideSize;
-
-  // Inset between the inner edge of the shelf (towards centre of screen), and
-  // the shelf items, notifications, status area etc.
-  static const int kShelfItemInset;
-
-  explicit ShelfLayoutManager(ShelfWidget* shelf);
+  explicit ShelfLayoutManager(ShelfWidget* shelf_widget);
   ~ShelfLayoutManager() override;
 
   void set_workspace_controller(WorkspaceController* controller) {
@@ -100,6 +88,9 @@ class ASH_EXPORT ShelfLayoutManager
 
   // Returns the ideal bounds of the shelf assuming it is visible.
   gfx::Rect GetIdealBounds();
+
+  // Returns the preferred size of the shelf for the target visibility state.
+  gfx::Size GetPreferredSize();
 
   // Returns the docked area bounds.
   const gfx::Rect& dock_bounds() const { return dock_bounds_; }
@@ -123,12 +114,18 @@ class ASH_EXPORT ShelfLayoutManager
   // Invoked by the shelf when the auto-hide state may have changed.
   void UpdateAutoHideState();
 
+  // Updates the auto-hide state for certain events. In classic ash these come
+  // from an EventHandler. In mash these come from events that hit the shelf
+  // widget and status tray widget.
+  void UpdateAutoHideForMouseEvent(ui::MouseEvent* event);
+  void UpdateAutoHideForGestureEvent(ui::GestureEvent* event);
+
   ShelfVisibilityState visibility_state() const {
     return state_.visibility_state;
   }
   ShelfAutoHideState auto_hide_state() const { return state_.auto_hide_state; }
 
-  ShelfWidget* shelf_widget() { return shelf_; }
+  ShelfWidget* shelf_widget() { return shelf_widget_; }
 
   // Sets whether any windows overlap the shelf. If a window overlaps the shelf
   // the shelf renders slightly differently.
@@ -156,14 +153,18 @@ class ASH_EXPORT ShelfLayoutManager
 
   // Overridden from ash::ShellObserver:
   void OnLockStateChanged(bool locked) override;
-  void OnShelfAlignmentChanged(aura::Window* root_window) override;
-  void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) override;
+  void OnShelfAlignmentChanged(WmWindow* root_window) override;
+  void OnShelfAutoHideBehaviorChanged(WmWindow* root_window) override;
+  void OnPinnedStateChanged(WmWindow* pinned_window) override;
 
   // Overriden from aura::client::ActivationChangeObserver:
   void OnWindowActivated(
       aura::client::ActivationChangeObserver::ActivationReason reason,
       aura::Window* gained_active,
       aura::Window* lost_active) override;
+
+  // Overridden from keyboard::KeyboardControllerObserver:
+  void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
 
   // Overridden from ash::LockStateObserver:
   void OnLockStateEvent(LockStateObserver::EventType event) override;
@@ -172,37 +173,26 @@ class ASH_EXPORT ShelfLayoutManager
   void SessionStateChanged(SessionStateDelegate::SessionState state) override;
 
   // TODO(msw): Remove these accessors, kept temporarily to simplify changes.
-  void SetAutoHideBehavior(ShelfAutoHideBehavior behavior) {
-    shelf_->shelf()->SetAutoHideBehavior(behavior);
-  }
-  ShelfAutoHideBehavior auto_hide_behavior() const {
-    return shelf_->shelf()->GetAutoHideBehavior();
-  }
-
-  // TODO(msw): Remove these accessors, kept temporarily to simplify changes.
-  void SetAlignment(wm::ShelfAlignment alignment) {
-    shelf_->shelf()->SetAlignment(alignment);
-  }
-  wm::ShelfAlignment GetAlignment() const { return shelf_->GetAlignment(); }
+  ShelfAlignment GetAlignment() const { return shelf_widget_->GetAlignment(); }
 
   // TODO(harrym|oshima): These templates will be moved to a new Shelf class.
   // A helper function for choosing values specific to a shelf alignment.
   template <typename T>
   T SelectValueForShelfAlignment(T bottom, T left, T right) const {
     switch (GetAlignment()) {
-      case wm::SHELF_ALIGNMENT_BOTTOM:
-      case wm::SHELF_ALIGNMENT_BOTTOM_LOCKED:
+      case SHELF_ALIGNMENT_BOTTOM:
+      case SHELF_ALIGNMENT_BOTTOM_LOCKED:
         return bottom;
-      case wm::SHELF_ALIGNMENT_LEFT:
+      case SHELF_ALIGNMENT_LEFT:
         return left;
-      case wm::SHELF_ALIGNMENT_RIGHT:
+      case SHELF_ALIGNMENT_RIGHT:
         return right;
     }
     NOTREACHED();
     return right;
   }
 
-  template<typename T>
+  template <typename T>
   T PrimaryAxisValue(T horizontal, T vertical) const {
     return IsHorizontalAlignment() ? horizontal : vertical;
   }
@@ -252,11 +242,11 @@ class ASH_EXPORT ShelfLayoutManager
     // appropriate.
     bool Equals(const State& other) const {
       return other.visibility_state == visibility_state &&
-          (visibility_state != SHELF_AUTO_HIDE ||
-           other.auto_hide_state == auto_hide_state) &&
-          other.window_state == window_state &&
-          other.is_screen_locked == is_screen_locked &&
-          other.is_adding_user_screen == is_adding_user_screen;
+             (visibility_state != SHELF_AUTO_HIDE ||
+              other.auto_hide_state == auto_hide_state) &&
+             other.window_state == window_state &&
+             other.is_screen_locked == is_screen_locked &&
+             other.is_adding_user_screen == is_adding_user_screen;
     }
 
     ShelfVisibilityState visibility_state;
@@ -290,7 +280,7 @@ class ASH_EXPORT ShelfLayoutManager
   void UpdateShelfBackground(BackgroundAnimatorChangeType type);
 
   // Returns how the shelf background is painted.
-  wm::ShelfBackgroundType GetShelfBackgroundType() const;
+  ShelfBackgroundType GetShelfBackgroundType() const;
 
   // Updates the auto hide state immediately.
   void UpdateAutoHideStateNow();
@@ -313,10 +303,7 @@ class ASH_EXPORT ShelfLayoutManager
   // Returns true if |window| is a descendant of the shelf.
   bool IsShelfWindow(aura::Window* window);
 
-  int GetWorkAreaSize(const State& state, int size) const;
-
-  // Overridden from keyboard::KeyboardControllerObserver:
-  void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
+  int GetWorkAreaInsets(const State& state, int size) const;
 
   // Overridden from DockedWindowLayoutManagerObserver:
   void OnDockBoundsChanging(
@@ -326,19 +313,28 @@ class ASH_EXPORT ShelfLayoutManager
   // Called when the LoginUI changes from visible to invisible.
   void UpdateShelfVisibilityAfterLoginUIChange();
 
+  // Compute |target_bounds| opacity based on gesture and shelf visibility.
+  float ComputeTargetOpacity(const State& state);
+
   // The RootWindow is cached so that we don't invoke Shell::GetInstance() from
   // our destructor. We avoid that as at the time we're deleted Shell is being
   // deleted too.
   aura::Window* root_window_;
 
+  ash::wm::WindowState::FullscreenShelfMode GetShelfModeForFullscreen() const;
+
+  int GetShelfInsetsForAutoHide() const;
+
   // True when inside UpdateBoundsAndOpacity() method. Used to prevent calling
   // UpdateBoundsAndOpacity() again from SetChildBounds().
   bool updating_bounds_;
 
+  bool in_shutdown_ = false;
+
   // Current state.
   State state_;
 
-  ShelfWidget* shelf_;
+  ShelfWidget* shelf_widget_;
 
   WorkspaceController* workspace_controller_;
 
@@ -352,13 +348,15 @@ class ASH_EXPORT ShelfLayoutManager
   bool mouse_over_shelf_when_auto_hide_timer_started_;
 
   // EventFilter used to detect when user moves the mouse over the shelf to
-  // trigger showing the shelf.
+  // trigger showing the shelf. Used in classic ash.
   std::unique_ptr<AutoHideEventFilter> auto_hide_event_filter_;
 
   // EventFilter used to detect when user issues a gesture on a bezel sensor.
   std::unique_ptr<ShelfBezelEventFilter> bezel_event_filter_;
 
   base::ObserverList<ShelfLayoutManagerObserver> observers_;
+
+  ShelfGestureHandler gesture_handler_;
 
   // The shelf reacts to gesture-drags, and can be set to auto-hide for certain
   // gestures. Some shelf behaviour (e.g. visibility state, background color
@@ -398,6 +396,10 @@ class ASH_EXPORT ShelfLayoutManager
 
   // The show hide animation duration override or 0 for default.
   int duration_override_in_ms_;
+
+  // The flag to enforce invisible shelf (as in MD-experiemntal).
+  // TODO(oshima): Remove this when MD immersive is launched.
+  bool invisible_auto_hide_shelf_ = false;
 
   std::unique_ptr<RootWindowControllerObserverImpl>
       root_window_controller_observer_;

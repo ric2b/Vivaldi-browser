@@ -23,20 +23,15 @@ class CC_EXPORT TileTaskManager {
 
   // Schedule running of tile tasks in |graph| and all dependencies.
   // Previously scheduled tasks that are not in |graph| will be canceled unless
-  // already running. Once scheduled, reply callbacks are guaranteed to run for
-  // all tasks even if they later get canceled by another call to
-  // ScheduleTasks().
+  // already running. Once scheduled and if not canceled by next scheduling,
+  // tasks are guaranteed to run.
   virtual void ScheduleTasks(TaskGraph* graph) = 0;
 
-  // Check for completed tasks and dispatch reply callbacks.
+  // Check for completed tasks and call OnTaskCompleted() on them.
   virtual void CheckForCompletedTasks() = 0;
 
-  // Shutdown after canceling all previously scheduled tasks. Reply callbacks
-  // are still guaranteed to run when CheckForCompletedTasks() is called.
+  // Shutdown after canceling all previously scheduled tasks.
   virtual void Shutdown() = 0;
-
-  // Get RasterBufferProvider.
-  virtual RasterBufferProvider* GetRasterBufferProvider() const = 0;
 };
 
 class CC_EXPORT TileTaskManagerImpl : public TileTaskManager {
@@ -44,24 +39,18 @@ class CC_EXPORT TileTaskManagerImpl : public TileTaskManager {
   ~TileTaskManagerImpl() override;
 
   static std::unique_ptr<TileTaskManagerImpl> Create(
-      std::unique_ptr<RasterBufferProvider> raster_buffer_provider,
       TaskGraphRunner* task_graph_runner);
 
   // Overridden from TileTaskManager:
   void ScheduleTasks(TaskGraph* graph) override;
   void CheckForCompletedTasks() override;
   void Shutdown() override;
-  RasterBufferProvider* GetRasterBufferProvider() const override;
 
  protected:
-  TileTaskManagerImpl(
-      std::unique_ptr<RasterBufferProvider> raster_buffer_provider,
-      TaskGraphRunner* task_graph_runner);
+  explicit TileTaskManagerImpl(TaskGraphRunner* task_graph_runner);
 
-  std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
   TaskGraphRunner* task_graph_runner_;
   const NamespaceToken namespace_token_;
-  Task::Vector completed_tasks_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TileTaskManagerImpl);

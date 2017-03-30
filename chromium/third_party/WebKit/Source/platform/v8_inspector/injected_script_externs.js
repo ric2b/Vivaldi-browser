@@ -8,12 +8,6 @@ function InjectedScriptHostClass()
 }
 
 /**
- * @param {*} objectId
- * @param {!Object} hints
- */
-InjectedScriptHostClass.prototype.inspect = function(objectId, hints) {}
-
-/**
  * @param {*} obj
  * @return {string}
  */
@@ -21,9 +15,10 @@ InjectedScriptHostClass.prototype.internalConstructorName = function(obj) {}
 
 /**
  * @param {*} obj
+ * @param {function()|undefined} func
  * @return {boolean}
  */
-InjectedScriptHostClass.prototype.formatAccessorsAsProperties = function(obj) {}
+InjectedScriptHostClass.prototype.formatAccessorsAsProperties = function(obj, func) {}
 
 /**
  * @param {*} obj
@@ -38,22 +33,10 @@ InjectedScriptHostClass.prototype.subtype = function(obj) {}
 InjectedScriptHostClass.prototype.isTypedArray = function(obj) {}
 
 /**
- * @param {!Object} obj
- * @return {?Array.<*>}
- */
-InjectedScriptHostClass.prototype.collectionEntries = function(obj) {}
-
-/**
  * @param {*} obj
  * @return {!Array.<*>}
  */
 InjectedScriptHostClass.prototype.getInternalProperties = function(obj) {}
-
-/**
- * @param {!EventTarget} target
- * @return {!Object|undefined}
- */
-InjectedScriptHostClass.prototype.getEventListeners = function(target) {}
 
 /**
  * @param {!Function} fn
@@ -62,13 +45,6 @@ InjectedScriptHostClass.prototype.getEventListeners = function(target) {}
  * @return {*}
  */
 InjectedScriptHostClass.prototype.suppressWarningsAndCallFunction = function(fn, receiver, argv) {}
-
-/**
- * @param {!Object} obj
- * @param {string} key
- * @param {*} value
- */
-InjectedScriptHostClass.prototype.setNonEnumProperty = function(obj, key, value) {}
 
 /**
  * @param {*} value

@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/strings/string_number_conversions.h"
 #include "media/base/media_tracks.h"
 #include "media/base/timestamp_constants.h"
 #include "media/filters/chunk_demuxer.h"
@@ -90,6 +91,10 @@ blink::WebTimeRanges WebSourceBufferImpl::buffered() {
   return result;
 }
 
+double WebSourceBufferImpl::highestPresentationTimestamp() {
+  return demuxer_->GetHighestPresentationTimestamp(id_).InSecondsF();
+}
+
 bool WebSourceBufferImpl::evictCodedFrames(double currentPlaybackTime,
                                            size_t newDataSize) {
   return demuxer_->EvictCodedFrames(
@@ -98,13 +103,12 @@ bool WebSourceBufferImpl::evictCodedFrames(double currentPlaybackTime,
       newDataSize);
 }
 
-void WebSourceBufferImpl::append(
-    const unsigned char* data,
-    unsigned length,
-    double* timestamp_offset) {
+bool WebSourceBufferImpl::append(const unsigned char* data,
+                                 unsigned length,
+                                 double* timestamp_offset) {
   base::TimeDelta old_offset = timestamp_offset_;
-  demuxer_->AppendData(id_, data, length, append_window_start_,
-                       append_window_end_, &timestamp_offset_);
+  bool success = demuxer_->AppendData(id_, data, length, append_window_start_,
+                                      append_window_end_, &timestamp_offset_);
 
   // Coded frame processing may update the timestamp offset. If the caller
   // provides a non-NULL |timestamp_offset| and frame processing changes the
@@ -113,6 +117,8 @@ void WebSourceBufferImpl::append(
   // more than microsecond precision.
   if (timestamp_offset && old_offset != timestamp_offset_)
     *timestamp_offset = timestamp_offset_.InSecondsF();
+
+  return success;
 }
 
 void WebSourceBufferImpl::resetParserState() {
@@ -182,7 +188,9 @@ void WebSourceBufferImpl::InitSegmentReceived(
   for (const auto& track : tracks->tracks()) {
     blink::WebSourceBufferClient::MediaTrackInfo trackInfo;
     trackInfo.trackType = mediaTrackTypeToBlink(track->type());
-    trackInfo.byteStreamTrackId = blink::WebString::fromUTF8(track->id());
+    trackInfo.id = blink::WebString::fromUTF8(track->id());
+    trackInfo.byteStreamTrackID = blink::WebString::fromUTF8(
+        base::UintToString(track->bytestream_track_id()));
     trackInfo.kind = blink::WebString::fromUTF8(track->kind());
     trackInfo.label = blink::WebString::fromUTF8(track->label());
     trackInfo.language = blink::WebString::fromUTF8(track->language());

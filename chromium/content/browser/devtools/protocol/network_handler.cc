@@ -289,10 +289,12 @@ Response NetworkHandler::CanEmulateNetworkConditions(bool* result) {
   return Response::OK();
 }
 
-Response NetworkHandler::EmulateNetworkConditions(bool offline,
-                                                  double latency,
-                                                  double download_throughput,
-                                                  double upload_throughput) {
+Response NetworkHandler::EmulateNetworkConditions(
+    bool offline,
+    double latency,
+    double download_throughput,
+    double upload_throughput,
+    const std::string* connection_type) {
   return Response::FallThrough();
 }
 

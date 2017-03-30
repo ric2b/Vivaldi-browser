@@ -6,7 +6,6 @@ package org.chromium.chrome.test.util.browser.sync;
 
 import static org.chromium.base.test.util.ScalableTimeout.scaleTimeout;
 
-import android.accounts.Account;
 import android.content.Context;
 import android.util.Pair;
 
@@ -18,7 +17,6 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
-import org.chromium.sync.signin.ChromeSigninController;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -42,10 +40,53 @@ public final class SyncTestUtil {
     private SyncTestUtil() {}
 
     /**
-     * Verifies that sync is signed out.
+     * Returns whether sync is requested.
      */
-    public static void verifySyncIsSignedOut() {
-        Assert.assertTrue(isSyncOff());
+    public static boolean isSyncRequested() {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                return ProfileSyncService.get().isSyncRequested();
+            }
+        });
+    }
+
+    /**
+     * Returns whether sync is active.
+     */
+    public static boolean isSyncActive() {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
+            @Override
+            public Boolean call() {
+                return ProfileSyncService.get().isSyncActive();
+            }
+        });
+    }
+
+    /**
+     * Waits for sync to become active.
+     */
+    public static void waitForSyncActive() throws InterruptedException {
+        CriteriaHelper.pollUiThread(new Criteria("Timed out waiting for sync to become active.") {
+            @Override
+            public boolean isSatisfied() {
+                return ProfileSyncService.get().isSyncActive();
+            }
+        }, TIMEOUT_MS, INTERVAL_MS);
+    }
+
+    /**
+     * Waits for sync's backend to be initialized.
+     */
+    public static void waitForBackendInitialized() throws InterruptedException {
+        CriteriaHelper.pollUiThread(
+                new Criteria("Timed out waiting for sync's backend to initialize.") {
+                    @Override
+                    public boolean isSatisfied() {
+                        return ProfileSyncService.get().isBackendInitialized();
+                    }
+                },
+                TIMEOUT_MS, INTERVAL_MS);
     }
 
     /**
@@ -85,54 +126,6 @@ public final class SyncTestUtil {
             @Override
             public Long call() {
                 return ProfileSyncService.get().getLastSyncedTimeForTest();
-            }
-        });
-    }
-
-    /**
-     * Waits for sync to become active.
-     */
-    public static void waitForSyncActive() throws InterruptedException {
-        CriteriaHelper.pollUiThread(new Criteria(
-                "Timed out waiting for sync to become active.") {
-            @Override
-            public boolean isSatisfied() {
-                return ProfileSyncService.get().isSyncActive();
-            }
-        }, TIMEOUT_MS, INTERVAL_MS);
-    }
-
-    /**
-     * Verifies that the sync is active and signed in with the given account.
-     */
-    public static void verifySyncIsActiveForAccount(Context context, Account account)
-            throws InterruptedException {
-        waitForSyncActive();
-        triggerSyncAndWaitForCompletion();
-        verifySignedInWithAccount(context, account);
-    }
-
-    /**
-     * Makes sure that sync is enabled with the correct account.
-     */
-    public static void verifySignedInWithAccount(Context context, Account account) {
-        Assert.assertEquals(account, ChromeSigninController.get(context).getSignedInUser());
-    }
-
-    /**
-     * Verifies that the sync is off but signed in with the account.
-     */
-    public static void verifySyncIsDisabled(Context context, Account account) {
-        Assert.assertTrue("Expected sync to be disabled.", isSyncOff());
-        verifySignedInWithAccount(context, account);
-    }
-
-    private static boolean isSyncOff() {
-        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                ProfileSyncService syncService = ProfileSyncService.get();
-                return !syncService.isBackendInitialized() && !syncService.isSyncRequested();
             }
         });
     }

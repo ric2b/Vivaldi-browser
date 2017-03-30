@@ -17,6 +17,7 @@
 #include "modules/canvas2d/CanvasPattern.h"
 #include "modules/canvas2d/CanvasStyle.h"
 #include "modules/canvas2d/Path2D.h"
+#include "platform/Histogram.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/ExpensiveCanvasHeuristicParameters.h"
@@ -90,6 +91,21 @@ void BaseRenderingContext2D::restore()
         c->restore();
 
     validateStateStack();
+}
+
+void BaseRenderingContext2D::restoreMatrixClipStack(SkCanvas* c) const
+{
+    if (!c)
+        return;
+    HeapVector<Member<CanvasRenderingContext2DState>>::const_iterator currState;
+    DCHECK(m_stateStack.begin() < m_stateStack.end());
+    for (currState = m_stateStack.begin(); currState < m_stateStack.end(); currState++) {
+        c->setMatrix(SkMatrix::I());
+        currState->get()->playbackClips(c);
+        c->setMatrix(affineTransformToSkMatrix(currState->get()->transform()));
+        c->save();
+    }
+    c->restore();
 }
 
 static inline void convertCanvasStyleToUnionType(CanvasStyle* style, StringOrCanvasGradientOrCanvasPattern& returnValue)
@@ -376,7 +392,7 @@ void BaseRenderingContext2D::setFilter(const String& filterString)
     if (filterString == state().unparsedFilter())
         return;
 
-    CSSValue* filterValue = CSSParser::parseSingleValue(CSSPropertyWebkitFilter, filterString, CSSParserContext(HTMLStandardMode, 0));
+    CSSValue* filterValue = CSSParser::parseSingleValue(CSSPropertyFilter, filterString, CSSParserContext(HTMLStandardMode, nullptr));
 
     if (!filterValue || filterValue->isInitialValue() || filterValue->isInheritedValue())
         return;
@@ -612,26 +628,31 @@ static SkPath::FillType parseWinding(const String& windingRuleString)
 
 void BaseRenderingContext2D::fill(const String& windingRuleString)
 {
+    trackDrawCall(FillPath);
     drawPathInternal(m_path, CanvasRenderingContext2DState::FillPaintType, parseWinding(windingRuleString));
 }
 
 void BaseRenderingContext2D::fill(Path2D* domPath, const String& windingRuleString)
 {
+    trackDrawCall(FillPath, domPath);
     drawPathInternal(domPath->path(), CanvasRenderingContext2DState::FillPaintType, parseWinding(windingRuleString));
 }
 
 void BaseRenderingContext2D::stroke()
 {
+    trackDrawCall(StrokePath);
     drawPathInternal(m_path, CanvasRenderingContext2DState::StrokePaintType);
 }
 
 void BaseRenderingContext2D::stroke(Path2D* domPath)
 {
+    trackDrawCall(StrokePath, domPath);
     drawPathInternal(domPath->path(), CanvasRenderingContext2DState::StrokePaintType);
 }
 
 void BaseRenderingContext2D::fillRect(double x, double y, double width, double height)
 {
+    trackDrawCall(FillRect);
     if (!validateRectForCanvas(x, y, width, height))
         return;
 
@@ -667,6 +688,7 @@ static void strokeRectOnCanvas(const FloatRect& rect, SkCanvas* canvas, const Sk
 
 void BaseRenderingContext2D::strokeRect(double x, double y, double width, double height)
 {
+    trackDrawCall(StrokeRect);
     if (!validateRectForCanvas(x, y, width, height))
         return;
 
@@ -780,6 +802,8 @@ bool BaseRenderingContext2D::isPointInStrokeInternal(const Path& path, const dou
 
 void BaseRenderingContext2D::clearRect(double x, double y, double width, double height)
 {
+    m_usageCounters.numClearRectCalls++;
+
     if (!validateRectForCanvas(x, y, width, height))
         return;
 
@@ -919,6 +943,8 @@ bool BaseRenderingContext2D::shouldDrawImageAntialiased(const FloatRect& destRec
 
 void BaseRenderingContext2D::drawImageInternal(SkCanvas* c, CanvasImageSource* imageSource, Image* image, const FloatRect& srcRect, const FloatRect& dstRect, const SkPaint* paint)
 {
+    trackDrawCall(DrawImage);
+
     int initialSaveCount = c->getSaveCount();
     SkPaint imagePaint = *paint;
 
@@ -1020,10 +1046,68 @@ void BaseRenderingContext2D::drawImage(ExecutionContext* executionContext, Canva
         return;
 
     DisableDeferralReason reason = DisableDeferralReasonUnknown;
-    if (shouldDisableDeferral(imageSource, &reason) || image->isTextureBacked())
+    if (shouldDisableDeferral(imageSource, &reason))
         disableDeferral(reason);
+    else if (image->isTextureBacked())
+        disableDeferral(DisableDeferralDrawImageWithTextureBackedSourceImage);
 
     validateStateStack();
+
+    // TODO(xidachen): After collecting some data, come back and prune off
+    // the ones that is not needed.
+    Optional<ScopedUsHistogramTimer> timer;
+    if (imageBuffer() && imageBuffer()->isAccelerated()) {
+        if (imageSource->isVideoElement()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterVideoGPU, new CustomCountHistogram("Blink.Canvas.DrawImage.Video.GPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterVideoGPU);
+        } else if (imageSource->isCanvasElement()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterCanvasGPU, new CustomCountHistogram("Blink.Canvas.DrawImage.Canvas.GPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterCanvasGPU);
+        } else if (imageSource->isSVGSource()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterSVGGPU, new CustomCountHistogram("Blink.Canvas.DrawImage.SVG.GPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterSVGGPU);
+        } else if (imageSource->isImageBitmap()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterImageBitmapGPU, new CustomCountHistogram("Blink.Canvas.DrawImage.ImageBitmap.GPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterImageBitmapGPU);
+        } else {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterOthersGPU, new CustomCountHistogram("Blink.Canvas.DrawImage.Others.GPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterOthersGPU);
+        }
+    } else if (imageBuffer() && imageBuffer()->isRecording()) {
+        if (imageSource->isVideoElement()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterVideoDisplayList, new CustomCountHistogram("Blink.Canvas.DrawImage.Video.DisplayList", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterVideoDisplayList);
+        } else if (imageSource->isCanvasElement()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterCanvasDisplayList, new CustomCountHistogram("Blink.Canvas.DrawImage.Canvas.DisplayList", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterCanvasDisplayList);
+        } else if (imageSource->isSVGSource()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterSVGDisplayList, new CustomCountHistogram("Blink.Canvas.DrawImage.SVG.DisplayList", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterSVGDisplayList);
+        } else if (imageSource->isImageBitmap()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterImageBitmapDisplayList, new CustomCountHistogram("Blink.Canvas.DrawImage.ImageBitmap.DisplayList", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterImageBitmapDisplayList);
+        } else {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterOthersDisplayList, new CustomCountHistogram("Blink.Canvas.DrawImage.Others.DisplayList", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterOthersDisplayList);
+        }
+    } else {
+        if (imageSource->isVideoElement()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterVideoCPU, new CustomCountHistogram("Blink.Canvas.DrawImage.Video.CPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterVideoCPU);
+        } else if (imageSource->isCanvasElement()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterCanvasCPU, new CustomCountHistogram("Blink.Canvas.DrawImage.Canvas.CPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterCanvasCPU);
+        } else if (imageSource->isSVGSource()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterSVGCPU, new CustomCountHistogram("Blink.Canvas.DrawImage.SVG.CPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterSVGCPU);
+        } else if (imageSource->isImageBitmap()) {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterImageBitmapCPU, new CustomCountHistogram("Blink.Canvas.DrawImage.ImageBitmap.CPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterImageBitmapCPU);
+        } else {
+            DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterOthersCPU, new CustomCountHistogram("Blink.Canvas.DrawImage.Others.CPU", 0, 10000000, 50));
+            timer.emplace(scopedUsCounterOthersCPU);
+        }
+    }
 
     draw(
         [this, &imageSource, &image, &srcRect, dstRect](SkCanvas* c, const SkPaint* paint) // draw lambda
@@ -1091,22 +1175,34 @@ CanvasGradient* BaseRenderingContext2D::createRadialGradient(double x0, double y
 
 CanvasPattern* BaseRenderingContext2D::createPattern(ExecutionContext* executionContext, const CanvasImageSourceUnion& imageSource, const String& repetitionType, ExceptionState& exceptionState)
 {
+    CanvasImageSource* imageSourceInternal = toImageSourceInternal(imageSource, exceptionState);
+    if (!imageSourceInternal) {
+        return nullptr;
+    }
+
+    return createPattern(executionContext, imageSourceInternal, repetitionType, exceptionState);
+}
+
+CanvasPattern* BaseRenderingContext2D::createPattern(ExecutionContext* executionContext, CanvasImageSource* imageSource, const String& repetitionType, ExceptionState& exceptionState)
+{
+    if (!imageSource) {
+        return nullptr;
+    }
+
     Pattern::RepeatMode repeatMode = CanvasPattern::parseRepetitionType(repetitionType, exceptionState);
     if (exceptionState.hadException())
         return nullptr;
 
     SourceImageStatus status;
-    CanvasImageSource* imageSourceInternal = toImageSourceInternal(imageSource, exceptionState);
-    if (!imageSourceInternal)
-        return nullptr;
+
     FloatSize defaultObjectSize(width(), height());
-    RefPtr<Image> imageForRendering = imageSourceInternal->getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCreatePattern, defaultObjectSize);
+    RefPtr<Image> imageForRendering = imageSource->getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCreatePattern, defaultObjectSize);
 
     switch (status) {
     case NormalSourceImageStatus:
         break;
     case ZeroSizeCanvasSourceImageStatus:
-        exceptionState.throwDOMException(InvalidStateError, String::format("The canvas %s is 0.", imageSourceInternal->elementSize(defaultObjectSize).width() ? "height" : "width"));
+        exceptionState.throwDOMException(InvalidStateError, String::format("The canvas %s is 0.", imageSource->elementSize(defaultObjectSize).width() ? "height" : "width"));
         return nullptr;
     case UndecodableSourceImageStatus:
         exceptionState.throwDOMException(InvalidStateError, "Source image is in the 'broken' state.");
@@ -1122,7 +1218,7 @@ CanvasPattern* BaseRenderingContext2D::createPattern(ExecutionContext* execution
     }
     ASSERT(imageForRendering);
 
-    bool originClean = !wouldTaintOrigin(imageSourceInternal, executionContext);
+    bool originClean = !wouldTaintOrigin(imageSource, executionContext);
 
     return CanvasPattern::create(imageForRendering.release(), repeatMode, originClean);
 }
@@ -1190,6 +1286,7 @@ ImageData* BaseRenderingContext2D::createImageData(double sw, double sh, Excepti
 
 ImageData* BaseRenderingContext2D::getImageData(double sx, double sy, double sw, double sh, ExceptionState& exceptionState) const
 {
+    m_usageCounters.numGetImageDataCalls++;
     if (!originClean())
         exceptionState.throwSecurityError("The canvas has been tainted by cross-origin data.");
     else if (!sw || !sh)
@@ -1214,6 +1311,18 @@ ImageData* BaseRenderingContext2D::getImageData(double sx, double sy, double sw,
         logicalRect.setHeight(1);
     if (!logicalRect.isExpressibleAsIntRect())
         return nullptr;
+
+    Optional<ScopedUsHistogramTimer> timer;
+    if (imageBuffer() && imageBuffer()->isAccelerated()) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterGPU, new CustomCountHistogram("Blink.Canvas.GetImageData.GPU", 0, 10000000, 50));
+        timer.emplace(scopedUsCounterGPU);
+    } else if (imageBuffer() && imageBuffer()->isRecording()) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterDisplayList, new CustomCountHistogram("Blink.Canvas.GetImageData.DisplayList", 0, 10000000, 50));
+        timer.emplace(scopedUsCounterDisplayList);
+    } else {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterCPU, new CustomCountHistogram("Blink.Canvas.GetImageData.CPU", 0, 10000000, 50));
+        timer.emplace(scopedUsCounterCPU);
+    }
 
     IntRect imageDataRect = enclosingIntRect(logicalRect);
     ImageBuffer* buffer = imageBuffer();
@@ -1243,6 +1352,7 @@ void BaseRenderingContext2D::putImageData(ImageData* data, double dx, double dy,
 
 void BaseRenderingContext2D::putImageData(ImageData* data, double dx, double dy, double dirtyX, double dirtyY, double dirtyWidth, double dirtyHeight, ExceptionState& exceptionState)
 {
+    m_usageCounters.numPutImageDataCalls++;
     if (data->data()->bufferBase()->isNeutered()) {
         exceptionState.throwDOMException(InvalidStateError, "The source data has been neutered.");
         return;
@@ -1269,6 +1379,19 @@ void BaseRenderingContext2D::putImageData(ImageData* data, double dx, double dy,
     destRect.intersect(IntRect(IntPoint(), buffer->size()));
     if (destRect.isEmpty())
         return;
+
+    Optional<ScopedUsHistogramTimer> timer;
+    if (imageBuffer() && imageBuffer()->isAccelerated()) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterGPU, new CustomCountHistogram("Blink.Canvas.PutImageData.GPU", 0, 10000000, 50));
+        timer.emplace(scopedUsCounterGPU);
+    } else if (imageBuffer() && imageBuffer()->isRecording()) {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterDisplayList, new CustomCountHistogram("Blink.Canvas.PutImageData.DisplayList", 0, 10000000, 50));
+        timer.emplace(scopedUsCounterDisplayList);
+    } else {
+        DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, scopedUsCounterCPU, new CustomCountHistogram("Blink.Canvas.PutImageData.CPU", 0, 10000000, 50));
+        timer.emplace(scopedUsCounterCPU);
+    }
+
     IntRect sourceRect(destRect);
     sourceRect.move(-destOffset);
 
@@ -1387,9 +1510,79 @@ void BaseRenderingContext2D::checkOverdraw(const SkRect& rect, const SkPaint* pa
     imageBuffer()->willOverwriteCanvas();
 }
 
+void BaseRenderingContext2D::trackDrawCall(DrawCallType callType, Path2D* path2d)
+{
+    m_usageCounters.numDrawCalls[callType]++;
+
+    if (callType == FillPath) {
+        SkPath skPath;
+        if (path2d) {
+            skPath = path2d->path().getSkPath();
+        } else {
+            skPath = m_path.getSkPath();
+        }
+        if (!(skPath.getConvexity() == SkPath::kConvex_Convexity)) {
+            m_usageCounters.numNonConvexFillPathCalls++;
+        }
+    }
+
+    if (callType == FillText
+        || callType == FillPath
+        || callType == StrokeText
+        || callType == StrokePath
+        || callType == FillRect
+        || callType == StrokeRect) {
+
+        CanvasStyle* canvasStyle;
+        if (callType == FillText || callType == FillPath || callType == FillRect) {
+            canvasStyle = state().fillStyle();
+        } else {
+            canvasStyle = state().strokeStyle();
+        }
+
+        if (canvasStyle->getCanvasGradient()) {
+            m_usageCounters.numGradients++;
+        }
+
+        if (canvasStyle->getCanvasPattern()) {
+            m_usageCounters.numPatterns++;
+        }
+    }
+
+    if (state().shadowBlur() > 0.0 && SkColorGetA(state().shadowColor()) > 0) {
+        m_usageCounters.numBlurredShadows++;
+    }
+
+    if (state().hasComplexClip()) {
+        m_usageCounters.numDrawWithComplexClips++;
+    }
+
+    if (stateHasFilter()) {
+        m_usageCounters.numFilters++;
+    }
+}
+
+const BaseRenderingContext2D::UsageCounters& BaseRenderingContext2D::getUsage()
+{
+    return m_usageCounters;
+}
+
 DEFINE_TRACE(BaseRenderingContext2D)
 {
     visitor->trace(m_stateStack);
 }
+
+BaseRenderingContext2D::UsageCounters::UsageCounters() :
+    numDrawCalls {0, 0, 0, 0, 0, 0},
+    numNonConvexFillPathCalls(0),
+    numGradients(0),
+    numPatterns(0),
+    numDrawWithComplexClips(0),
+    numBlurredShadows(0),
+    numFilters(0),
+    numGetImageDataCalls(0),
+    numPutImageDataCalls(0),
+    numClearRectCalls(0),
+    numDrawFocusCalls(0) {}
 
 } // namespace blink

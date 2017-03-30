@@ -157,15 +157,6 @@ component("events") {
     ]
   }
 
-  if (!is_chromeos && is_linux) {
-    sources += [
-      "linux/text_edit_command_auralinux.cc",
-      "linux/text_edit_command_auralinux.h",
-      "linux/text_edit_key_bindings_delegate_auralinux.cc",
-      "linux/text_edit_key_bindings_delegate_auralinux.h",
-    ]
-  }
-
   if (use_ozone || (is_android && use_aura)) {
     sources += [ "events_default.cc" ]
   }
@@ -348,7 +339,6 @@ source_set("test_support") {
 test("events_unittests") {
   sources = [
     "android/scroller_unittest.cc",
-    "blink/blink_event_util_unittest.cc",
     "cocoa/events_mac_unittest.mm",
     "event_dispatcher_unittest.cc",
     "event_processor_unittest.cc",
@@ -380,8 +370,8 @@ test("events_unittests") {
     ":gesture_detection",
     ":test_support",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
+    "//mojo/edk/test:run_all_unittests",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
@@ -392,18 +382,25 @@ test("events_unittests") {
 
   if (!is_ios) {
     sources += [
+      "blink/blink_event_util_unittest.cc",
       "blink/input_handler_proxy_unittest.cc",
       "blink/input_scroll_elasticity_controller_unittest.cc",
+      "devices/mojo/device_struct_traits_unittest.cc",
       "gestures/blink/web_gesture_curve_impl_unittest.cc",
       "ipc/latency_info_param_traits_unittest.cc",
+      "mojo/struct_traits_unittest.cc",
     ]
     deps += [
       "//cc",
       "//ipc:test_support",
+      "//mojo/public/cpp/bindings",
       "//third_party/WebKit/public:blink_headers",
       "//ui/events/blink",
+      "//ui/events/devices/mojo:test_interfaces",
       "//ui/events/gestures/blink",
       "//ui/events/ipc",
+      "//ui/events/mojo:test_interfaces",
+      "//ui/gfx/ipc/geometry",
     ]
   }
 

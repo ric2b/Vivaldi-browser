@@ -46,8 +46,7 @@ TEST(DrawQuadTest, CopySharedQuadState) {
   state->SetAll(quad_transform, layer_bounds, visible_layer_rect, clip_rect,
                 is_clipped, opacity, blend_mode, sorting_context_id);
 
-  std::unique_ptr<SharedQuadState> copy(new SharedQuadState);
-  copy->CopyFrom(state.get());
+  std::unique_ptr<SharedQuadState> copy(new SharedQuadState(*state));
   EXPECT_EQ(quad_transform, copy->quad_to_target_transform);
   EXPECT_EQ(visible_layer_rect, copy->visible_quad_layer_rect);
   EXPECT_EQ(opacity, copy->opacity);
@@ -88,7 +87,7 @@ void CompareDrawQuad(DrawQuad* quad,
   SharedQuadState* shared_state(CreateSharedQuadState(render_pass.get())); \
   SharedQuadState* copy_shared_state =                                     \
       render_pass->CreateAndAppendSharedQuadState();                       \
-  copy_shared_state->CopyFrom(shared_state);
+  *copy_shared_state = *shared_state;
 
 #define QUAD_DATA                              \
   gfx::Rect quad_rect(30, 40, 50, 60);         \
@@ -507,7 +506,7 @@ TEST(DrawQuadTest, CopyStreamVideoDrawQuad) {
 
 TEST(DrawQuadTest, CopySurfaceDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
-  SurfaceId surface_id(1234);
+  SurfaceId surface_id(0, 1234, 0);
   CREATE_SHARED_STATE();
 
   CREATE_QUAD_2_NEW(SurfaceDrawQuad, visible_rect, surface_id);
@@ -796,7 +795,7 @@ TEST_F(DrawQuadIteratorTest, StreamVideoDrawQuad) {
 
 TEST_F(DrawQuadIteratorTest, SurfaceDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
-  SurfaceId surface_id(4321);
+  SurfaceId surface_id(0, 4321, 0);
 
   CREATE_SHARED_STATE();
   CREATE_QUAD_2_NEW(SurfaceDrawQuad, visible_rect, surface_id);

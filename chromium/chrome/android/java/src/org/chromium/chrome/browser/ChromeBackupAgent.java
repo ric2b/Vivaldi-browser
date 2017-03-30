@@ -14,7 +14,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.os.ParcelFileDescriptor;
-import android.preference.PreferenceManager;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
@@ -157,8 +156,7 @@ public class ChromeBackupAgent extends BackupAgent {
         }
         // This is running without a ChromeApplication instance, so this has to be done here.
         ContextUtils.initApplicationContext(getApplicationContext());
-        SharedPreferences sharedPrefs =
-                PreferenceManager.getDefaultSharedPreferences(ChromeBackupAgent.this);
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
         // Save the user name for later restoration.
         String userName = sharedPrefs.getString(ChromeSigninController.SIGNED_IN_ACCOUNT_KEY, null);
         Log.d(TAG, "Previous signed in user name = " + userName);

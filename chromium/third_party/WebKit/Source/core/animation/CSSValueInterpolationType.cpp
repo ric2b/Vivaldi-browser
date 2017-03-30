@@ -14,23 +14,23 @@ class CSSValueNonInterpolableValue : public NonInterpolableValue {
 public:
     ~CSSValueNonInterpolableValue() final { }
 
-    static PassRefPtr<CSSValueNonInterpolableValue> create(CSSValue* cssValue)
+    static PassRefPtr<CSSValueNonInterpolableValue> create(const CSSValue* cssValue)
     {
         return adoptRef(new CSSValueNonInterpolableValue(cssValue));
     }
 
-    CSSValue* cssValue() const { return m_cssValue.get(); }
+    const CSSValue& cssValue() const { return *m_cssValue; }
 
     DECLARE_NON_INTERPOLABLE_VALUE_TYPE();
 
 private:
-    CSSValueNonInterpolableValue(CSSValue* cssValue)
+    CSSValueNonInterpolableValue(const CSSValue* cssValue)
         : m_cssValue(cssValue)
     {
         ASSERT(m_cssValue);
     }
 
-    Persistent<CSSValue> m_cssValue;
+    Persistent<const CSSValue> m_cssValue;
 };
 
 DEFINE_NON_INTERPOLABLE_VALUE_TYPE(CSSValueNonInterpolableValue);

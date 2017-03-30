@@ -39,6 +39,7 @@
 #include "core/editing/markers/DocumentMarker.h"
 #include "platform/PasteMode.h"
 #include "platform/heap/Handle.h"
+#include <memory>
 
 namespace blink {
 
@@ -146,6 +147,10 @@ public:
             return *m_frame;
         }
 
+        // Returns target ranges for the command, currently only supports delete related commands.
+        // Used by InputEvent.
+        RangeVector* getRanges() const;
+
         const EditorInternalCommand* m_command;
         EditorCommandSource m_source;
         Member<LocalFrame> m_frame;
@@ -251,7 +256,7 @@ private:
     int m_preventRevealSelection;
     bool m_shouldStartNewKillRingSequence;
     bool m_shouldStyleWithCSS;
-    const OwnPtr<KillRing> m_killRing;
+    const std::unique_ptr<KillRing> m_killRing;
     VisibleSelection m_mark;
     bool m_areMarkedTextMatchesHighlighted;
     EditorParagraphSeparator m_defaultParagraphSeparator;
@@ -282,7 +287,7 @@ private:
 
     void revealSelectionAfterEditingOperation(const ScrollAlignment& = ScrollAlignment::alignCenterIfNeeded, RevealExtentOption = DoNotRevealExtent);
     void changeSelectionAfterCommand(const VisibleSelection& newSelection, FrameSelection::SetSelectionOptions);
-    void notifyComponentsOnChangedSelection(const VisibleSelection& oldSelection);
+    void notifyComponentsOnChangedSelection();
 
     Element* findEventTargetFromSelection() const;
 

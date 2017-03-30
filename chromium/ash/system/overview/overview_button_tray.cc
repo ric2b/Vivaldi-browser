@@ -4,19 +4,24 @@
 
 #include "ash/system/overview/overview_button_tray.h"
 
-#include "ash/session/session_state_delegate.h"
-#include "ash/shelf/shelf_types.h"
-#include "ash/shelf/shelf_util.h"
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/common/shelf/wm_shelf_util.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_utils.h"
+#include "ash/common/wm/overview/window_selector_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/tray_utils.h"
-#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/wm/overview/window_selector_controller.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/gfx/vector_icons_public.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 
@@ -33,38 +38,43 @@ const int kVerticalShelfVerticalPadding = 5;
 
 namespace ash {
 
-OverviewButtonTray::OverviewButtonTray(StatusAreaWidget* status_area_widget)
-    : TrayBackgroundView(status_area_widget), icon_(NULL) {
+OverviewButtonTray::OverviewButtonTray(WmShelf* wm_shelf)
+    : TrayBackgroundView(wm_shelf), icon_(nullptr) {
   SetContentsBackground();
 
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   icon_ = new views::ImageView();
-  icon_->SetImage(
-      bundle.GetImageNamed(IDR_AURA_UBER_TRAY_OVERVIEW_MODE).ToImageSkia());
+  if (MaterialDesignController::IsShelfMaterial()) {
+    gfx::ImageSkia image_md =
+        CreateVectorIcon(gfx::VectorIconId::SHELF_OVERVIEW, kShelfIconColor);
+    icon_->SetImage(image_md);
+  } else {
+    gfx::ImageSkia* image_non_md =
+        ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_AURA_UBER_TRAY_OVERVIEW_MODE);
+    icon_->SetImage(image_non_md);
+  }
   SetIconBorderForShelfAlignment();
   tray_container()->AddChildView(icon_);
 
-  Shell::GetInstance()->AddShellObserver(this);
-  Shell::GetInstance()->session_state_delegate()->AddSessionStateObserver(this);
+  WmShell::Get()->AddShellObserver(this);
+  WmShell::Get()->GetSessionStateDelegate()->AddSessionStateObserver(this);
 }
 
 OverviewButtonTray::~OverviewButtonTray() {
-  Shell::GetInstance()->RemoveShellObserver(this);
-  Shell::GetInstance()->session_state_delegate()->RemoveSessionStateObserver(
-      this);
+  WmShell::Get()->RemoveShellObserver(this);
+  WmShell::Get()->GetSessionStateDelegate()->RemoveSessionStateObserver(this);
 }
 
-void OverviewButtonTray::UpdateAfterLoginStatusChange(
-    user::LoginStatus status) {
+void OverviewButtonTray::UpdateAfterLoginStatusChange(LoginStatus status) {
   UpdateIconVisibility();
 }
 
 bool OverviewButtonTray::PerformAction(const ui::Event& event) {
   WindowSelectorController* controller =
-      Shell::GetInstance()->window_selector_controller();
+      WmShell::Get()->window_selector_controller();
   controller->ToggleOverview();
   SetDrawBackgroundAsActive(controller->IsSelecting());
-  Shell::GetInstance()->metrics()->RecordUserMetricsAction(UMA_TRAY_OVERVIEW);
+  WmShell::Get()->RecordUserMetricsAction(UMA_TRAY_OVERVIEW);
   return true;
 }
 
@@ -96,7 +106,7 @@ void OverviewButtonTray::HideBubbleWithView(
   // This class has no bubbles to hide.
 }
 
-void OverviewButtonTray::SetShelfAlignment(wm::ShelfAlignment alignment) {
+void OverviewButtonTray::SetShelfAlignment(ShelfAlignment alignment) {
   if (alignment == shelf_alignment())
     return;
 
@@ -105,18 +115,23 @@ void OverviewButtonTray::SetShelfAlignment(wm::ShelfAlignment alignment) {
 }
 
 void OverviewButtonTray::SetIconBorderForShelfAlignment() {
-  if (wm::IsHorizontalAlignment(shelf_alignment())) {
+  if (ash::MaterialDesignController::IsShelfMaterial()) {
+    // Pad button size to align with other controls in the system tray.
+    const gfx::ImageSkia image = icon_->GetImage();
+    const int vertical_padding = (kTrayItemSize - image.height()) / 2;
+    const int horizontal_padding = (kTrayItemSize - image.width()) / 2;
     icon_->SetBorder(views::Border::CreateEmptyBorder(
-        kHorizontalShelfVerticalPadding,
-        kHorizontalShelfHorizontalPadding,
-        kHorizontalShelfVerticalPadding,
-        kHorizontalShelfHorizontalPadding));
+        gfx::Insets(vertical_padding, horizontal_padding)));
   } else {
-    icon_->SetBorder(views::Border::CreateEmptyBorder(
-        kVerticalShelfVerticalPadding,
-        kVerticalShelfHorizontalPadding,
-        kVerticalShelfVerticalPadding,
-        kVerticalShelfHorizontalPadding));
+    if (IsHorizontalAlignment(shelf_alignment())) {
+      icon_->SetBorder(views::Border::CreateEmptyBorder(
+          kHorizontalShelfVerticalPadding, kHorizontalShelfHorizontalPadding,
+          kHorizontalShelfVerticalPadding, kHorizontalShelfHorizontalPadding));
+    } else {
+      icon_->SetBorder(views::Border::CreateEmptyBorder(
+          kVerticalShelfVerticalPadding, kVerticalShelfHorizontalPadding,
+          kVerticalShelfVerticalPadding, kVerticalShelfHorizontalPadding));
+    }
   }
 }
 
@@ -127,7 +142,7 @@ void OverviewButtonTray::UpdateIconVisibility() {
   // a modal dialog is present.
   Shell* shell = Shell::GetInstance();
   SessionStateDelegate* session_state_delegate =
-      shell->session_state_delegate();
+      WmShell::Get()->GetSessionStateDelegate();
 
   SetVisible(
       shell->maximize_mode_controller()->IsMaximizeModeWindowManagerEnabled() &&
@@ -135,8 +150,8 @@ void OverviewButtonTray::UpdateIconVisibility() {
       !session_state_delegate->IsScreenLocked() &&
       session_state_delegate->GetSessionState() ==
           SessionStateDelegate::SESSION_STATE_ACTIVE &&
-      shell->system_tray_delegate()->GetUserLoginStatus() !=
-          user::LOGGED_IN_KIOSK_APP);
+      WmShell::Get()->system_tray_delegate()->GetUserLoginStatus() !=
+          LoginStatus::KIOSK_APP);
 }
 
 }  // namespace ash

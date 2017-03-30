@@ -3,25 +3,34 @@
 // found in the LICENSE file.
 
 cr.define('user_manager.control_bar_tests', function() {
+  /** @return {!ControlBarElement} */
+  function createElement() {
+    var controlBarElement = document.createElement('control-bar');
+    document.body.appendChild(controlBarElement);
+    return controlBarElement;
+  }
+
   function registerTests() {
+    /** @type {?TestProfileBrowserProxy} */
+    var browserProxy = null;
+
+    /** @type {?ControlBarElement} */
+    var controlBarElement = null;
+
     suite('ControlBarTests', function() {
-      /** @type {?TestProfileBrowserProxy} */
-      var browserProxy = null;
-
-      /** @type {?ControlBarElement} */
-      var controlBarElement = null;
-
       setup(function() {
         browserProxy = new TestProfileBrowserProxy();
         // Replace real proxy with mock proxy.
         signin.ProfileBrowserProxyImpl.instance_ = browserProxy;
 
-        PolymerTest.clearBody();
-        controlBarElement = document.createElement('control-bar');
-        document.body.appendChild(controlBarElement);
+        controlBarElement = createElement();
       });
 
-      teardown(function() { controlBarElement.remove(); });
+      teardown(function(done) {
+        controlBarElement.remove();
+        // Allow asynchronous tasks to finish.
+        setTimeout(done);
+      });
 
       test('Actions are hidden by default', function() {
         assertTrue(controlBarElement.$.launchGuest.hidden);
@@ -52,6 +61,55 @@ cr.define('user_manager.control_bar_tests', function() {
         // Simulate clicking 'Browse as guest'.
         MockInteractions.tap(controlBarElement.$.launchGuest);
         return browserProxy.whenCalled('launchGuestUser');
+      });
+    });
+
+    suite('ControlBarTestsAllProfilesAreLocked', function() {
+      /** @type {?ErrorDialogElement} */
+      var errorDialogElement = null;
+
+      setup(function() {
+        browserProxy = new TestProfileBrowserProxy();
+        // Replace real proxy with mock proxy.
+        signin.ProfileBrowserProxyImpl.instance_ = browserProxy;
+
+        browserProxy.setAllProfilesLocked(true);
+
+        controlBarElement = createElement();
+
+        errorDialogElement = document.querySelector('error-dialog');
+      });
+
+      teardown(function(done) {
+        controlBarElement.remove();
+        // Allow asynchronous tasks to finish.
+        setTimeout(done);
+      });
+
+      test('Cannot create profile', function() {
+        // Simulate clicking 'Create Profile'.
+        MockInteractions.tap(controlBarElement.$.addUser);
+
+        return browserProxy.whenCalled('areAllProfilesLocked').then(function() {
+          // Make sure DOM is up to date.
+          Polymer.dom.flush();
+
+          // The dialog is visible.
+          assertTrue(errorDialogElement.$.dialog.opened);
+        });
+      });
+
+      test('Cannot launch guest profile', function() {
+        // Simulate clicking 'Browse as guest'.
+        MockInteractions.tap(controlBarElement.$.launchGuest);
+
+        return browserProxy.whenCalled('areAllProfilesLocked').then(function() {
+          // Make sure DOM is up to date.
+          Polymer.dom.flush();
+
+          // The error dialog is visible.
+          assertTrue(errorDialogElement.$.dialog.opened);
+        });
       });
     });
   }

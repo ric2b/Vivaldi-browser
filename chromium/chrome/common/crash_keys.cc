@@ -157,6 +157,9 @@ size_t RegisterChromeCrashKeys() {
 #endif
     { kZeroEncodeDetails, kSmallSize },
 
+    // gin/:
+    { "v8-ignition", kSmallSize },
+
     // Temporary for http://crbug.com/575245.
     { "swapout_frame_id", kSmallSize },
     { "swapout_proxy_id", kSmallSize },
@@ -187,6 +190,9 @@ size_t RegisterChromeCrashKeys() {
     { "initrf_root_is_in_same_site_instance_as_parent", kSmallSize},
     { "initrf_root_process_is_live", kSmallSize},
     { "initrf_root_proxy_is_live", kSmallSize},
+
+    // Temporary for https://crbug.com/612711.
+    { "aci_wrong_sp_extension_id", kSmallSize },
 
     // Temporary for https://crbug.com/616149.
     { "existing_extension_pref_value_type", crash_keys::kSmallSize },

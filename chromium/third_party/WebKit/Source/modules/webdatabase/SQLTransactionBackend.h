@@ -35,6 +35,7 @@
 #include "wtf/Deque.h"
 #include "wtf/Forward.h"
 #include "wtf/ThreadingPrimitives.h"
+#include <memory>
 
 namespace blink {
 
@@ -105,12 +106,12 @@ private:
 
     void getNextStatement();
 
-    Member<SQLTransaction> m_frontend;
-    Member<SQLStatementBackend> m_currentStatementBackend;
+    CrossThreadPersistent<SQLTransaction> m_frontend;
+    CrossThreadPersistent<SQLStatementBackend> m_currentStatementBackend;
 
     Member<Database> m_database;
     Member<SQLTransactionWrapper> m_wrapper;
-    OwnPtr<SQLErrorData> m_transactionError;
+    std::unique_ptr<SQLErrorData> m_transactionError;
 
     bool m_hasCallback;
     bool m_hasSuccessCallback;
@@ -122,9 +123,9 @@ private:
     bool m_hasVersionMismatch;
 
     Mutex m_statementMutex;
-    HeapDeque<Member<SQLStatementBackend>> m_statementQueue;
+    Deque<CrossThreadPersistent<SQLStatementBackend>> m_statementQueue;
 
-    OwnPtr<SQLiteTransaction> m_sqliteTransaction;
+    std::unique_ptr<SQLiteTransaction> m_sqliteTransaction;
 };
 
 } // namespace blink

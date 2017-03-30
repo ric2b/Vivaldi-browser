@@ -109,6 +109,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/installer/util/google_update_settings.h"
 #include "chromeos/chromeos_constants.h"
+#include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/cdm/browser/cdm_message_filter_android.h"
 #include "components/cloud_devices/common/cloud_devices_switches.h"
@@ -130,7 +131,7 @@
 #include "components/rappor/rappor_utils.h"
 #include "components/security_interstitials/core/ssl_error_ui.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "components/startup_metric_utils/browser/startup_metric_message_filter.h"
+#include "components/startup_metric_utils/browser/startup_metric_host_impl.h"
 #include "components/translate/core/common/translate_switches.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/variations/variations_associated_data.h"
@@ -143,6 +144,7 @@
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -151,13 +153,13 @@
 #include "content/public/browser/resource_context.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/content_descriptors.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/sandbox_type.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/common/web_preferences.h"
 #include "device/usb/public/interfaces/chooser_service.mojom.h"
@@ -183,11 +185,11 @@
 #include "base/strings/string_tokenizer.h"
 #include "base/win/windows_version.h"
 #include "chrome/browser/chrome_browser_main_win.h"
-#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #elif defined(OS_MACOSX)
 #include "chrome/browser/chrome_browser_main_mac.h"
 #elif defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/arc_navigation_throttle.h"
 #include "chrome/browser/chromeos/attestation/platform_verification_impl.h"
 #include "chrome/browser/chromeos/chrome_browser_main_chromeos.h"
 #include "chrome/browser/chromeos/drive/fileapi/file_system_backend_delegate.h"
@@ -200,8 +202,15 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
+#include "chrome/browser/ui/browser_dialogs.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_service_manager.h"
+#include "components/arc/intent_helper/local_activity_resolver.h"
 #include "components/user_manager/user_manager.h"
+#if defined(MOJO_SHELL_CLIENT)
+#include "chrome/browser/chromeos/chrome_interface_factory.h"
+#include "chrome/browser/ui/ash/ash_util.h"
+#endif  // MOJO_SHELL_CLIENT
 #elif defined(OS_LINUX)
 #include "chrome/browser/chrome_browser_main_linux.h"
 #elif defined(OS_ANDROID)
@@ -268,6 +277,7 @@
 #include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
+#include "extensions/browser/extension_navigation_throttle.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
@@ -630,6 +640,19 @@ class SafeBrowsingSSLCertReporter : public SSLCertReporter {
       safe_browsing_ui_manager_;
 };
 
+// A provider of Geolocation services to override AccessTokenStore.
+class ChromeGeolocationDelegate : public content::GeolocationDelegate {
+ public:
+  ChromeGeolocationDelegate() = default;
+
+  AccessTokenStore* CreateAccessTokenStore() final {
+    return new ChromeAccessTokenStore();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ChromeGeolocationDelegate);
+};
+
 #if BUILDFLAG(ANDROID_JAVA_UI)
 void HandleSingleTabModeBlockOnUIThread(const BlockedWindowParams& params) {
   WebContents* web_contents = tab_util::GetWebContentsByFrameID(
@@ -727,6 +750,13 @@ bool GetDataSaverEnabledPref(const PrefService* prefs) {
          base::FieldTrialList::FindFullName("SaveDataHeader")
              .compare("Disabled");
 }
+
+#if defined(OS_CHROMEOS)
+bool IsIntentPickerEnabled() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableIntentPicker);
+}
+#endif
 
 }  // namespace
 
@@ -1000,7 +1030,6 @@ void ChromeContentBrowserClient::RenderProcessWillLaunch(
       DataReductionProxyChromeSettingsFactory::GetForBrowserContext(profile);
   host->AddFilter(new data_reduction_proxy::DataReductionProxyMessageFilter(
       data_reduction_proxy_settings));
-  host->AddFilter(new startup_metric_utils::StartupMetricMessageFilter());
 
   host->Send(new ChromeViewMsg_SetIsIncognitoProcess(
       profile->IsOffTheRecord()));
@@ -1107,16 +1136,6 @@ void ChromeContentBrowserClient::GetAdditionalWebUISchemes(
   additional_schemes->push_back(dom_distiller::kDomDistillerScheme);
 }
 
-void ChromeContentBrowserClient::GetAdditionalWebUIHostsToIgnoreParititionCheck(
-    std::vector<std::string>* hosts) {
-  hosts->push_back(chrome::kChromeUIExtensionIconHost);
-  hosts->push_back(chrome::kChromeUIFaviconHost);
-  hosts->push_back(chrome::kChromeUIThemeHost);
-  hosts->push_back(chrome::kChromeUIThumbnailHost);
-  hosts->push_back(chrome::kChromeUIThumbnailHost2);
-  hosts->push_back(chrome::kChromeUIThumbnailListHost);
-}
-
 bool ChromeContentBrowserClient::LogWebUIUrl(const GURL& web_ui_url) const {
   return webui::LogWebUIUrl(web_ui_url);
 }
@@ -1172,6 +1191,28 @@ bool ChromeContentBrowserClient::ShouldAllowOpenURL(
   }
 
   return true;
+}
+
+void ChromeContentBrowserClient::OverrideOpenURLParams(
+    content::SiteInstance* site_instance,
+    content::OpenURLParams* params) {
+  DCHECK(params);
+  // TODO(crbug.com/624410): Factor the predicate to identify a URL as an NTP
+  // to a shared library.
+  if (site_instance &&
+      site_instance->GetSiteURL().SchemeIs(chrome::kChromeSearchScheme) &&
+      (site_instance->GetSiteURL().host() ==
+           chrome::kChromeSearchRemoteNtpHost ||
+       site_instance->GetSiteURL().host() ==
+           chrome::kChromeSearchLocalNtpHost) &&
+      ui::PageTransitionCoreTypeIs(params->transition,
+                                   ui::PAGE_TRANSITION_LINK)) {
+    // Use AUTO_BOOKMARK for clicks on tiles of the new tab page, consistently
+    // with native implementations like Android's.
+    params->transition = ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+    params->is_renderer_initiated = false;
+    params->referrer = content::Referrer();
+  }
 }
 
 bool ChromeContentBrowserClient::IsSuitableHost(
@@ -1358,7 +1399,10 @@ void MaybeAppendBlinkSettingsSwitchForFieldTrial(
     "LowPriorityIFrames",
 
     // Keys: disallowFetchForDocWrittenScriptsInMainFrame
-    "DisallowFetchForDocWrittenScriptsInMainFrame"
+    "DisallowFetchForDocWrittenScriptsInMainFrame",
+
+    // Keys: parseHTMLOnMainThreadSyncTokenize
+    "ParseHTMLOnMainThread",
   };
 
   std::vector<std::string> blink_settings;
@@ -1378,40 +1422,6 @@ void MaybeAppendBlinkSettingsSwitchForFieldTrial(
             "%s=%s", param.first.c_str(), param.second.c_str()));
       }
     }
-  }
-
-  // Flags for the ResourcePriorities field trial. The settings are
-  // encoded in the field trial group name instead of as variations
-  // because the variations code is not accessible from the loader.
-  //
-  // The group name encoding looks like this:
-  //  <descriptiveName>_ABCDE_E2_F_G
-  //    A - fetchDeferLateScripts (1 for true, 0 for false)
-  //    B - fetchIncreaseFontPriority (1 for true, 0 for false)
-  //    C - fetchIncreaseAsyncScriptPriority (1 for true, 0 for false)
-  //    D - fetchIncreasePriorities (1 for true, 0 for false)
-  //    E - fetchEnableLayoutBlockingThreshold (1 for true, 0 for false)
-  //    E2 - fetchLayoutBlockingThreshold (Numeric)
-  //    F - fetchMaxNumDelayableWhileLayoutBlocking (Numeric)
-  //    G - fetchMaxNumDelayableRequests (Numeric)
-  //
-  // Only A-D are relevant to blink and exposed as settings
-  // Any group names (Control, Default, etc) will not match the pattern or
-  // flags and will get the default settings which is the expected behavior.
-  std::string resource_priorities_trial_group =
-      base::FieldTrialList::FindFullName("ResourcePriorities");
-  std::vector<std::string> split_group(
-      base::SplitString(resource_priorities_trial_group, "_",
-                        base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL));
-  if (split_group.size() == 5 && split_group[1].length() == 5) {
-    if (split_group[1].at(0) == '1')
-      blink_settings.push_back("fetchDeferLateScripts=true");
-    if (split_group[1].at(1) == '1')
-      blink_settings.push_back("fetchIncreaseFontPriority=true");
-    if (split_group[1].at(2) == '1')
-      blink_settings.push_back("fetchIncreaseAsyncScriptPriority=true");
-    if (split_group[1].at(3) == '1')
-      blink_settings.push_back("fetchIncreasePriorities=true");
   }
 
   if (blink_settings.empty()) {
@@ -1473,15 +1483,6 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
   };
   command_line->CopySwitchesFrom(browser_command_line, kCommonSwitchNames,
                                  arraysize(kCommonSwitchNames));
-
-#if defined(ENABLE_IPC_FUZZER)
-  static const char* const kIpcFuzzerSwitches[] = {
-      switches::kIpcDumpDirectory,
-      switches::kIpcFuzzerTestcase,
-  };
-  command_line->CopySwitchesFrom(browser_command_line, kIpcFuzzerSwitches,
-                                 arraysize(kIpcFuzzerSwitches));
-#endif
 
   static const char* const kDinosaurEasterEggSwitches[] = {
       error_page::switches::kDisableDinosaurEasterEgg,
@@ -1620,10 +1621,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
       autofill::switches::kDisableAccessorySuggestionView,
       autofill::switches::kEnableAccessorySuggestionView,
 #endif
-      autofill::switches::kDisableFillOnAccountSelect,
       autofill::switches::kDisablePasswordGeneration,
-      autofill::switches::kEnableFillOnAccountSelect,
-      autofill::switches::kEnableFillOnAccountSelectNoHighlighting,
       autofill::switches::kEnablePasswordGeneration,
       autofill::switches::kEnableSingleClickAutofill,
       autofill::switches::kEnableSuggestionsWithSubstringMatch,
@@ -1664,6 +1662,7 @@ void ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
 #endif
       switches::kJavaScriptHarmony,
       switches::kMessageLoopHistogrammer,
+      switches::kOriginTrialDisabledFeatures,
       switches::kOriginTrialPublicKey,
       switches::kPpapiFlashArgs,
       switches::kPpapiFlashPath,
@@ -2311,8 +2310,9 @@ net::NetLog* ChromeContentBrowserClient::GetNetLog() {
   return g_browser_process->net_log();
 }
 
-AccessTokenStore* ChromeContentBrowserClient::CreateAccessTokenStore() {
-  return new ChromeAccessTokenStore();
+content::GeolocationDelegate*
+ChromeContentBrowserClient::CreateGeolocationDelegate() {
+  return new ChromeGeolocationDelegate();
 }
 
 bool ChromeContentBrowserClient::IsFastShutdownPossible() {
@@ -2567,6 +2567,17 @@ bool ChromeContentBrowserClient::IsPepperVpnProviderAPIAllowed(
 #endif
 }
 
+std::unique_ptr<content::VpnServiceProxy>
+ChromeContentBrowserClient::GetVpnServiceProxy(
+    content::BrowserContext* browser_context) {
+#if defined(ENABLE_EXTENSIONS)
+  return ChromeContentBrowserClientExtensionsPart::GetVpnServiceProxy(
+      browser_context);
+#else
+  return nullptr;
+#endif
+}
+
 ui::SelectFilePolicy* ChromeContentBrowserClient::CreateSelectFilePolicy(
     WebContents* web_contents) {
   return new ChromeSelectFilePolicy(web_contents);
@@ -2735,6 +2746,9 @@ bool ChromeContentBrowserClient::PreSpawnRenderer(
 
 bool ChromeContentBrowserClient::IsWin32kLockdownEnabledForMimeType(
     const std::string& mime_type) const {
+  // We don't support PPAPI win32k lockdown prior to Windows 10.
+  if (base::win::GetVersion() < base::win::VERSION_WIN10)
+    return false;
   // First, check if any variation parameters have enabled or disabled this
   // mime type either specifically or globally.
   std::map<std::string, std::string> mime_params;
@@ -2780,30 +2794,33 @@ bool ChromeContentBrowserClient::IsWin32kLockdownEnabledForMimeType(
 
   return false;
 }
-
-bool ChromeContentBrowserClient::ShouldUseWindowsPrefetchArgument() const {
-  return startup_metric_utils::GetPreReadOptions().use_prefetch_argument;
-}
 #endif  // defined(OS_WIN)
 
-void ChromeContentBrowserClient::RegisterFrameMojoShellServices(
-    content::ServiceRegistry* registry,
+void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
+    shell::InterfaceRegistry* registry,
+    content::RenderProcessHost* render_process_host) {
+  registry->AddInterface(
+      base::Bind(&startup_metric_utils::StartupMetricHostImpl::Create));
+}
+
+void ChromeContentBrowserClient::RegisterFrameMojoShellInterfaces(
+    shell::InterfaceRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
 // TODO(xhwang): Only register this when ENABLE_MOJO_MEDIA.
 #if defined(OS_CHROMEOS)
-  registry->AddService(
+  registry->AddInterface(
       base::Bind(&chromeos::attestation::PlatformVerificationImpl::Create,
                  render_frame_host));
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(ENABLE_MOJO_MEDIA)
-  registry->AddService(
+  registry->AddInterface(
       base::Bind(&OutputProtectionImpl::Create, render_frame_host));
 #endif  // defined(ENABLE_MOJO_MEDIA)
 }
 
-void ChromeContentBrowserClient::RegisterRenderFrameMojoServices(
-    content::ServiceRegistry* registry,
+void ChromeContentBrowserClient::RegisterRenderFrameMojoInterfaces(
+    shell::InterfaceRegistry* registry,
     content::RenderFrameHost* render_frame_host) {
   // WebUSB is an experimental web API. It will only work if the experiment
   // is enabled and WebUSB feature is enabled. It should also not be available
@@ -2817,21 +2834,25 @@ void ChromeContentBrowserClient::RegisterRenderFrameMojoServices(
           extensions::kExtensionScheme)
 #endif
           ) {
-    registry->AddService(
+    registry->AddInterface(
         base::Bind(&CreateUsbDeviceManager, render_frame_host));
-    registry->AddService(
+    registry->AddInterface(
         base::Bind(&CreateWebUsbChooserService, render_frame_host));
   }
 
   // Register mojo CredentialManager service only for main frame.
   if (!render_frame_host->GetParent()) {
-    registry->AddService(
+    registry->AddInterface(
         base::Bind(&ChromePasswordManagerClient::BindCredentialManager,
                    render_frame_host));
   }
 
+  registry->AddInterface(
+      base::Bind(&autofill::ContentAutofillDriverFactory::BindAutofillDriver,
+                 render_frame_host));
+
 #if BUILDFLAG(ANDROID_JAVA_UI)
-  ChromeServiceRegistrarAndroid::RegisterRenderFrameMojoServices(
+  ChromeServiceRegistrarAndroid::RegisterRenderFrameMojoInterfaces(
       registry, render_frame_host);
 #endif
 }
@@ -2843,6 +2864,14 @@ void ChromeContentBrowserClient::RegisterInProcessMojoApplications(
   app_info.application_factory = base::Bind(&media::CreateMojoMediaApplication);
   apps->insert(std::make_pair("mojo:media", app_info));
 #endif
+#if defined(OS_CHROMEOS)
+#if defined(MOJO_SHELL_CLIENT)
+  if (chrome::IsRunningInMash()) {
+    content::MojoShellConnection::GetForProcess()->AddEmbeddedShellClient(
+        base::WrapUnique(new chromeos::ChromeInterfaceFactory));
+  }
+#endif  // MOJO_SHELL_CLIENT
+#endif  // OS_CHROMEOS
 }
 
 void ChromeContentBrowserClient::RegisterOutOfProcessMojoApplications(
@@ -2931,7 +2960,35 @@ ChromeContentBrowserClient::CreateThrottlesForNavigation(
         handle->GetURL().SchemeIsHTTPOrHTTPS()) {
       throttles.push_back(MergeSessionNavigationThrottle::Create(handle));
     }
+
+    // TODO(djacobo): Support incognito mode by showing an aditional dialog as a
+    // warning that the selected app is not in incognito mode.
+    if (IsIntentPickerEnabled() &&
+        !handle->GetWebContents()->GetBrowserContext()->IsOffTheRecord()) {
+      arc::ArcServiceManager* arc_service_manager =
+          arc::ArcServiceManager::Get();
+      DCHECK(arc_service_manager);
+      scoped_refptr<arc::LocalActivityResolver> local_resolver =
+          arc_service_manager->activity_resolver();
+      if (!local_resolver->ShouldChromeHandleUrl(handle->GetURL())) {
+        prerender::PrerenderContents* prerender_contents =
+            prerender::PrerenderContents::FromWebContents(
+                handle->GetWebContents());
+        if (!prerender_contents) {
+          auto intent_picker_cb = base::Bind(ShowIntentPickerBubble());
+          auto url_to_arc_throttle =
+              base::MakeUnique<arc::ArcNavigationThrottle>(handle,
+                                                           intent_picker_cb);
+          throttles.push_back(std::move(url_to_arc_throttle));
+        }
+      }
+    }
   }
+#endif
+
+#if defined(ENABLE_EXTENSIONS)
+  if (!handle->IsInMainFrame())
+    throttles.push_back(new extensions::ExtensionNavigationThrottle(handle));
 #endif
 
   return throttles;
@@ -2943,11 +3000,7 @@ ChromeContentBrowserClient::GetDevToolsManagerDelegate() {
 }
 
 content::TracingDelegate* ChromeContentBrowserClient::GetTracingDelegate() {
-#if !defined(OS_ANDROID)
   return new ChromeTracingDelegate();
-#else
-  return nullptr;
-#endif
 }
 
 bool ChromeContentBrowserClient::IsPluginAllowedToCallRequestOSFileHandle(

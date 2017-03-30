@@ -44,6 +44,7 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/text/AtomicString.h"
+#include <memory>
 
 namespace blink {
 
@@ -78,7 +79,7 @@ public:
     DECLARE_TRACE();
 
     EventListenerMap eventListenerMap;
-    OwnPtr<FiringEventIteratorVector> firingEventIterators;
+    std::unique_ptr<FiringEventIteratorVector> firingEventIterators;
 };
 
 // This is the base class for all DOM event targets. To make your class an
@@ -187,6 +188,8 @@ private:
 // EventTargetWithInlineData::m_eventTargetData and store it to a Member etc.
 class GC_PLUGIN_IGNORE("513199") CORE_EXPORT EventTargetWithInlineData : public EventTarget {
 public:
+    ~EventTargetWithInlineData() override { }
+
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
         visitor->trace(m_eventTargetData);

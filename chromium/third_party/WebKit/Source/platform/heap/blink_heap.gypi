@@ -52,14 +52,17 @@
       'InlinedGlobalMarkingVisitor.h',
       'MarkingVisitor.h',
       'MarkingVisitorImpl.h',
+      'Member.h',
       'PageMemory.cpp',
       'PageMemory.h',
       'PagePool.cpp',
       'PagePool.h',
+      'Persistent.h',
       'PersistentNode.cpp',
       'PersistentNode.h',
       'SafePoint.cpp',
       'SafePoint.h',
+      'SelfKeepAlive.h',
       'StackFrameDepth.cpp',
       'StackFrameDepth.h',
       'ThreadState.cpp',
@@ -71,8 +74,9 @@
       'WrapperVisitor.h',
     ],
     'platform_heap_test_files': [
-      'HeapTest.cpp',
       'BlinkGCMemoryDumpProviderTest.cpp',
+      'HeapTest.cpp',
+      'PersistentTest.cpp',
     ],
     'conditions': [
       ['target_arch == "arm"', {

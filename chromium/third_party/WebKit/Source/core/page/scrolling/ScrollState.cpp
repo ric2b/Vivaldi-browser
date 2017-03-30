@@ -7,6 +7,9 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
+#include "platform/graphics/CompositorElementId.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -26,7 +29,7 @@ Element* elementForId(int elementId)
 
 ScrollState* ScrollState::create(ScrollStateInit init)
 {
-    OwnPtr<ScrollStateData> scrollStateData = adoptPtr(new ScrollStateData());
+    std::unique_ptr<ScrollStateData> scrollStateData = wrapUnique(new ScrollStateData());
     scrollStateData->delta_x = init.deltaX();
     scrollStateData->delta_y = init.deltaY();
     scrollStateData->position_x = init.positionX();
@@ -44,13 +47,13 @@ ScrollState* ScrollState::create(ScrollStateInit init)
     return scrollState;
 }
 
-ScrollState* ScrollState::create(PassOwnPtr<ScrollStateData> data)
+ScrollState* ScrollState::create(std::unique_ptr<ScrollStateData> data)
 {
     ScrollState* scrollState = new ScrollState(std::move(data));
     return scrollState;
 }
 
-ScrollState::ScrollState(PassOwnPtr<ScrollStateData> data)
+ScrollState::ScrollState(std::unique_ptr<ScrollStateData> data)
     : m_data(std::move(data))
 {
 }
@@ -92,7 +95,7 @@ void ScrollState::consumeDeltaNative(double x, double y)
 
 Element* ScrollState::currentNativeScrollingElement() const
 {
-    uint64_t elementId = m_data->current_native_scrolling_element();
+    uint64_t elementId = m_data->current_native_scrolling_element().primaryId;
     if (elementId == 0)
         return nullptr;
     return elementForId(elementId);
@@ -100,12 +103,12 @@ Element* ScrollState::currentNativeScrollingElement() const
 
 void ScrollState::setCurrentNativeScrollingElement(Element* element)
 {
-    m_data->set_current_native_scrolling_element(DOMNodeIds::idForNode(element));
+    m_data->set_current_native_scrolling_element(createCompositorElementId(DOMNodeIds::idForNode(element), CompositorSubElementId::Scroll));
 }
 
 void ScrollState::setCurrentNativeScrollingElementById(int elementId)
 {
-    m_data->set_current_native_scrolling_element(elementId);
+    m_data->set_current_native_scrolling_element(createCompositorElementId(elementId, CompositorSubElementId::Scroll));
 }
 
 } // namespace blink

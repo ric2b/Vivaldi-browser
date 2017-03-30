@@ -11,8 +11,11 @@ source_set("common") {
   sources = [
     "media_type_converters.cc",
     "media_type_converters.h",
+    "mojo_decoder_buffer_converter.cc",
+    "mojo_decoder_buffer_converter.h",
     "mojo_shared_buffer_video_frame.cc",
     "mojo_shared_buffer_video_frame.h",
+    "mojo_type_trait.h",
   ]
 
   deps = [
@@ -20,9 +23,9 @@ source_set("common") {
     "//media",
     "//media/mojo/interfaces",
     "//mojo/common",
-    "//mojo/converters/geometry",
-    "//mojo/public/c/system:for_component",
+    "//mojo/public/cpp/bindings",
+    "//mojo/public/cpp/system",
     "//ui/gfx/geometry",
-    "//ui/mojo/geometry:interfaces",
+    "//ui/gfx/geometry/mojo",
   ]
 }

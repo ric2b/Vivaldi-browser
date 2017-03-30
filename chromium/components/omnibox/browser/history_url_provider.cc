@@ -127,7 +127,8 @@ double CalculateRelevanceUsingScoreBuckets(
   if (decayed_count > 0)
     decayed_count *= decay_factor;
 
-  const HUPScoringParams::ScoreBuckets::CountMaxRelevance* score_bucket = NULL;
+  const HUPScoringParams::ScoreBuckets::CountMaxRelevance* score_bucket =
+      nullptr;
   const double factor = (score_buckets.use_decay_factor() ?
       decay_factor : decayed_count);
   for (size_t i = 0; i < score_buckets.buckets().size(); ++i) {
@@ -434,7 +435,7 @@ HistoryURLProviderParams::HistoryURLProviderParams(
       exact_suggestion_is_in_history(false),
       promote_type(NEITHER),
       default_search_provider(default_search_provider ?
-          new TemplateURL(default_search_provider->data()) : NULL),
+          new TemplateURL(default_search_provider->data()) : nullptr),
       search_terms_data(new SearchTermsDataSnapshot(search_terms_data)) {
 }
 
@@ -445,7 +446,7 @@ HistoryURLProvider::HistoryURLProvider(AutocompleteProviderClient* client,
                                        AutocompleteProviderListener* listener)
     : HistoryProvider(AutocompleteProvider::TYPE_HISTORY_URL, client),
       listener_(listener),
-      params_(NULL),
+      params_(nullptr),
       search_url_database_(OmniboxFieldTrial::HUPSearchDatabase()) {
   // Initialize the default HUP scoring params.
   OmniboxFieldTrial::GetDefaultHUPScoringParams(&scoring_params_);
@@ -471,8 +472,7 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   matches_.clear();
 
   if (input.from_omnibox_focus() ||
-      (input.type() == metrics::OmniboxInputType::INVALID) ||
-      (input.type() == metrics::OmniboxInputType::FORCED_QUERY))
+      (input.type() == metrics::OmniboxInputType::INVALID))
     return;
 
   // Do some fixup on the user input before matching against it, so we provide
@@ -506,10 +506,10 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
 
   // Get the default search provider and search terms data now since we have to
   // retrieve these on the UI thread, and the second pass runs on the history
-  // thread. |template_url_service| can be NULL when testing.
+  // thread. |template_url_service| can be null when testing.
   TemplateURLService* template_url_service = client()->GetTemplateURLService();
   TemplateURL* default_search_provider = template_url_service ?
-      template_url_service->GetDefaultSearchProvider() : NULL;
+      template_url_service->GetDefaultSearchProvider() : nullptr;
 
   // Create the data structure for the autocomplete passes.  We'll save this off
   // onto the |params_| member for later deletion below if we need to run pass
@@ -524,15 +524,14 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   // Pass 1: Get the in-memory URL database, and use it to find and promote
   // the inline autocomplete match, if any.
   history::URLDatabase* url_db = history_service->InMemoryDatabase();
-  // url_db can be NULL if it hasn't finished initializing (or failed to
-  // initialize).  In this case all we can do is fall back on the second
-  // pass.
+  // url_db can be null if it hasn't finished initializing (or failed to
+  // initialize).  In this case all we can do is fall back on the second pass.
   //
   // TODO(pkasting): We should just block here until this loads.  Any time
   // someone unloads the history backend, we'll get inconsistent inline
   // autocomplete behavior here.
   if (url_db) {
-    DoAutocomplete(NULL, url_db, params.get());
+    DoAutocomplete(nullptr, url_db, params.get());
     matches_.clear();
     PromoteMatchesIfNecessary(*params);
     // NOTE: We don't reset |params| here since at least the |promote_type|
@@ -585,12 +584,16 @@ AutocompleteMatch HistoryURLProvider::SuggestExactInput(
         AutocompleteInput::FormattedStringWithEquivalentMeaning(
             destination_url, display_string, client()->GetSchemeClassifier());
     // The what-you-typed match is generally only allowed to be default for
-    // URL inputs.  (It's also allowed to be default for UNKNOWN inputs
-    // where the destination is a known intranet site.  In this case,
-    // |allowed_to_be_default_match| is revised in FixupExactSuggestion().)
+    // URL inputs or when there is no default search provider.  (It's also
+    // allowed to be default for UNKNOWN inputs where the destination is a known
+    // intranet site.  In this case, |allowed_to_be_default_match| is revised in
+    // FixupExactSuggestion().)
+    const bool has_default_search_provider =
+       client()->GetTemplateURLService() &&
+       client()->GetTemplateURLService()->GetDefaultSearchProvider();
     match.allowed_to_be_default_match =
         (input.type() == metrics::OmniboxInputType::URL) ||
-        !OmniboxFieldTrial::PreventUWYTDefaultForNonURLInputs();
+        !has_default_search_provider;
     // NOTE: Don't set match.inline_autocompletion to something non-empty here;
     // it's surprising and annoying.
 
@@ -602,10 +605,10 @@ AutocompleteMatch HistoryURLProvider::SuggestExactInput(
     const URLPrefix* best_prefix = URLPrefix::BestURLPrefix(
         base::UTF8ToUTF16(destination_url.spec()), input.text());
     // It's possible for match.destination_url to not contain the user's input
-    // at all (so |best_prefix| is NULL), for example if the input is
+    // at all (so |best_prefix| is null), for example if the input is
     // "view-source:x" and |destination_url| has an inserted "http://" in the
     // middle.
-    if (best_prefix == NULL) {
+    if (!best_prefix) {
       AutocompleteMatch::ClassifyMatchInString(input.text(),
                                                match.contents,
                                                ACMatchClassification::URL,
@@ -624,7 +627,7 @@ AutocompleteMatch HistoryURLProvider::SuggestExactInput(
 void HistoryURLProvider::ExecuteWithDB(HistoryURLProviderParams* params,
                                        history::HistoryBackend* backend,
                                        history::URLDatabase* db) {
-  // We may get called with a NULL database if it couldn't be properly
+  // We may get called with a null database if it couldn't be properly
   // initialized.
   if (!db) {
     params->failed = true;
@@ -847,7 +850,7 @@ void HistoryURLProvider::QueryComplete(
   // If the user hasn't already started another query, clear our member pointer
   // so we can't write into deleted memory.
   if (params_ == params_gets_deleted)
-    params_ = NULL;
+    params_ = nullptr;
 
   // Don't send responses for queries that have been canceled.
   if (params->cancel_flag.IsSet())
@@ -919,36 +922,33 @@ bool HistoryURLProvider::FixupExactSuggestion(
       break;
   }
 
-  if (OmniboxFieldTrial::PreventUWYTDefaultForNonURLInputs()) {
-    const GURL& url = params->what_you_typed_match.destination_url;
-    const url::Parsed& parsed = url.parsed_for_possibly_invalid_spec();
-    // If the what-you-typed result looks like a single word (which can be
-    // interpreted as an intranet address) followed by a pound sign ("#"),
-    // leave the score for the url-what-you-typed result as is and also
-    // don't mark it as allowed to be the default match.  It will likely be
-    // outscored by a search query from the SearchProvider or, if not, the
-    // search query default match will in any case--which is allowed to be the
-    // default match--will be reordered to be first.  This test fixes cases
-    // such as "c#" and "c# foo" where the user has visited an intranet site
-    // "c".  We want the search-what-you-typed score to beat the
-    // URL-what-you-typed score in this case.  Most of the below test tries to
-    // make sure that this code does not trigger if the user did anything to
-    // indicate the desired match is a URL.  For instance, "c/# foo" will not
-    // pass the test because that will be classified as input type URL.  The
-    // parsed.CountCharactersBefore() in the test looks for the presence of a
-    // reference fragment in the URL by checking whether the position differs
-    // included the delimiter (pound sign) versus not including the delimiter.
-    // (One cannot simply check url.ref() because it will not distinguish
-    // between the input "c" and the input "c#", both of which will have empty
-    // reference fragments.)
-    if ((type == UNVISITED_INTRANET) &&
-        (params->input.type() != metrics::OmniboxInputType::URL) &&
-        url.username().empty() && url.password().empty() &&
-        url.port().empty() && (url.path() == "/") && url.query().empty() &&
-        (parsed.CountCharactersBefore(url::Parsed::REF, true) !=
-         parsed.CountCharactersBefore(url::Parsed::REF, false))) {
-      return false;
-    }
+  const GURL& url = params->what_you_typed_match.destination_url;
+  const url::Parsed& parsed = url.parsed_for_possibly_invalid_spec();
+  // If the what-you-typed result looks like a single word (which can be
+  // interpreted as an intranet address) followed by a pound sign ("#"), leave
+  // the score for the url-what-you-typed result as is and also don't mark it
+  // as allowed to be the default match.  It will likely be outscored by a
+  // search query from the SearchProvider or, if not, the search query default
+  // match will in any case--which is allowed to be the default match--will be
+  // reordered to be first.  This test fixes cases such as "c#" and "c# foo"
+  // where the user has visited an intranet site "c".  We want the search-what-
+  // you-typed score to beat the URL-what-you-typed score in this case.  Most
+  // of the below test tries to make sure that this code does not trigger if
+  // the user did anything to indicate the desired match is a URL.  For
+  // instance, "c/# foo" will not pass the test because that will be classified
+  // as input type URL.  The parsed.CountCharactersBefore() in the test looks
+  // for the presence of a reference fragment in the URL by checking whether
+  // the position differs included the delimiter (pound sign) versus not
+  // including the delimiter.  (One cannot simply check url.ref() because it
+  // will not distinguish between the input "c" and the input "c#", both of
+  // which will have empty reference fragments.)
+  if ((type == UNVISITED_INTRANET) &&
+      (params->input.type() != metrics::OmniboxInputType::URL) &&
+      url.username().empty() && url.password().empty() &&
+      url.port().empty() && (url.path() == "/") && url.query().empty() &&
+      (parsed.CountCharactersBefore(url::Parsed::REF, true) !=
+       parsed.CountCharactersBefore(url::Parsed::REF, false))) {
+    return false;
   }
 
   params->what_you_typed_match.allowed_to_be_default_match = true;

@@ -8,6 +8,7 @@
 
 #import "base/mac/bundle_locations.h"
 #import "base/mac/foundation_util.h"
+#include "base/mac/mac_util.h"
 #import "base/mac/sdk_forward_declarations.h"
 #include "base/metrics/histogram.h"
 #include "base/strings/sys_string_conversions.h"
@@ -41,7 +42,6 @@
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_name_folder_controller.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/menu_button.h"
-#import "chrome/browser/ui/cocoa/presentation_mode_controller.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
@@ -536,15 +536,15 @@ CGFloat BookmarkRightMargin() {
 
   // Watch for things going to or from fullscreen.
   [[NSNotificationCenter defaultCenter]
-    addObserver:self
-       selector:@selector(willEnterOrLeaveFullscreen:)
-           name:kWillEnterFullscreenNotification
-         object:nil];
+      addObserver:self
+         selector:@selector(willEnterOrLeaveFullscreen:)
+             name:NSWindowWillEnterFullScreenNotification
+           object:nil];
   [[NSNotificationCenter defaultCenter]
-    addObserver:self
-       selector:@selector(willEnterOrLeaveFullscreen:)
-           name:kWillLeaveFullscreenNotification
-         object:nil];
+      addObserver:self
+         selector:@selector(willEnterOrLeaveFullscreen:)
+             name:NSWindowWillExitFullScreenNotification
+           object:nil];
 
   // Don't pass ourself along (as 'self') until our init is completely
   // done.  Thus, this call is (almost) last.
@@ -1971,12 +1971,10 @@ CGFloat BookmarkRightMargin() {
       [BookmarkButtonCell buttonCellWithText:text
                                        image:image
                               menuController:contextMenuController_];
-  if (ui::MaterialDesignController::IsModeMaterial()) {
+  if (ui::MaterialDesignController::IsModeMaterial())
     [cell setTag:kMaterialStandardButtonTypeWithLimitedClickFeedback];
-    [cell setHighlightsBy:NSNoCellMask];
-  } else {
+  else
     [cell setTag:kStandardButtonTypeWithLimitedClickFeedback];
-  }
 
   // Note: a quirk of setting a cell's text color is that it won't work
   // until the cell is associated with a button, so we can't theme the cell yet.
@@ -2637,10 +2635,6 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
     // Update |hoverButton_| so that it corresponds to the open folder.
     hoverButton_.reset([sender retain]);
     [folderTarget_ openBookmarkFolderFromButton:sender];
-
-    const BookmarkButtonCell* cell = [sender cell];
-    if ([cell tag] == kMaterialStandardButtonTypeWithLimitedClickFeedback)
-      [cell setHighlighted:YES];
   } else {
     // We're over a non-folder bookmark so close any old folders.
     [folderController_ close];
@@ -2692,7 +2686,6 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
     parentButton = [folderController_ parentButton];
   }
   [folderController_ close];
-  [[parentButton cell] setHighlighted:NO];
   [parentButton setNeedsDisplay:YES];
   folderController_ = nil;
 }

@@ -10,8 +10,8 @@
 #include "core/frame/FrameView.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 namespace blink {
 
@@ -174,7 +174,7 @@ TEST(MediaQueryEvaluatorTest, Cached)
 
 TEST(MediaQueryEvaluatorTest, Dynamic)
 {
-    OwnPtr<DummyPageHolder> pageHolder = DummyPageHolder::create(IntSize(500, 500));
+    std::unique_ptr<DummyPageHolder> pageHolder = DummyPageHolder::create(IntSize(500, 500));
     pageHolder->frameView().setMediaType(MediaTypeNames::screen);
 
     MediaQueryEvaluator mediaQueryEvaluator(&pageHolder->frame());
@@ -185,9 +185,9 @@ TEST(MediaQueryEvaluatorTest, Dynamic)
 
 TEST(MediaQueryEvaluatorTest, DynamicNoView)
 {
-    OwnPtr<DummyPageHolder> pageHolder = DummyPageHolder::create(IntSize(500, 500));
+    std::unique_ptr<DummyPageHolder> pageHolder = DummyPageHolder::create(IntSize(500, 500));
     LocalFrame* frame = &pageHolder->frame();
-    pageHolder.clear();
+    pageHolder.reset();
     ASSERT_EQ(nullptr, frame->view());
     MediaQueryEvaluator mediaQueryEvaluator(frame);
     MediaQuerySet* querySet = MediaQuerySet::create("foobar");

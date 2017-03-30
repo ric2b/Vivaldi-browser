@@ -38,7 +38,6 @@
 #include "public/web/WebPluginContainer.h"
 #include "web/WebExport.h"
 #include "wtf/Compiler.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
@@ -90,7 +89,6 @@ public:
     void handleEvent(Event*) override;
     void frameRectsChanged() override;
     void setParentVisible(bool) override;
-    void setParent(Widget*) override;
     void widgetGeometryMayHaveChanged() override;
     bool isPluginContainer() const override { return true; }
     void eventListenersRemoved() override;
@@ -123,7 +121,11 @@ public:
     float pageScaleFactor() override;
     float pageZoomFactor() override;
 
-    virtual void setWebLayer(WebLayer*);
+    void setWebLayer(WebLayer*) override;
+
+    void requestFullscreen() override;
+    bool isFullscreenElement() const override;
+    void cancelFullscreen() override;
 
     // Printing interface. The plugin can support custom printing
     // (which means it controls the layout, number of pages etc).

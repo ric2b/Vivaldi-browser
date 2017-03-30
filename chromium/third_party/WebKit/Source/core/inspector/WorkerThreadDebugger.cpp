@@ -31,7 +31,10 @@
 #include "core/inspector/WorkerThreadDebugger.h"
 
 #include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
+#include "core/inspector/ConsoleMessage.h"
+#include "core/workers/WorkerReportingProxy.h"
 #include "core/workers/WorkerThread.h"
 #include <v8.h>
 
@@ -76,12 +79,12 @@ int WorkerThreadDebugger::contextGroupId()
 void WorkerThreadDebugger::runMessageLoopOnPause(int contextGroupId)
 {
     ASSERT(contextGroupId == workerContextGroupId);
-    m_workerThread->startRunningDebuggerTasksOnPause();
+    m_workerThread->startRunningDebuggerTasksOnPauseOnWorkerThread();
 }
 
 void WorkerThreadDebugger::quitMessageLoopOnPause()
 {
-    m_workerThread->stopRunningDebuggerTasksOnPause();
+    m_workerThread->stopRunningDebuggerTasksOnPauseOnWorkerThread();
 }
 
 bool WorkerThreadDebugger::callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target)
@@ -89,21 +92,18 @@ bool WorkerThreadDebugger::callingContextCanAccessContext(v8::Local<v8::Context>
     return true;
 }
 
-int WorkerThreadDebugger::ensureDefaultContextInGroup(int contextGroupId)
+v8::Local<v8::Context> WorkerThreadDebugger::ensureDefaultContextInGroup(int contextGroupId)
 {
     ASSERT(contextGroupId == workerContextGroupId);
     ScriptState* scriptState = m_workerThread->workerGlobalScope()->scriptController()->getScriptState();
-    if (!scriptState)
-        return 0;
-    v8::HandleScope scopes(scriptState->isolate());
-    return V8Debugger::contextId(scriptState->context());
+    return scriptState ? scriptState->context() : v8::Local<v8::Context>();
 }
 
-void WorkerThreadDebugger::reportMessageToConsole(v8::Local<v8::Context> context, ConsoleMessage* message)
+void WorkerThreadDebugger::messageAddedToConsole(int contextGroupId, MessageSource source, MessageLevel level, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace* stackTrace)
 {
-    ExecutionContext* executionContext = toExecutionContext(context);
-    ASSERT(executionContext->isWorkerGlobalScope());
-    executionContext->addConsoleMessage(message);
+    DCHECK(contextGroupId == workerContextGroupId);
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(source, level, message, SourceLocation::create(url, lineNumber, columnNumber, stackTrace ? stackTrace->clone() : nullptr, 0));
+    m_workerThread->workerReportingProxy().reportConsoleMessage(consoleMessage);
 }
 
 v8::MaybeLocal<v8::Value> WorkerThreadDebugger::memoryInfo(v8::Isolate*, v8::Local<v8::Context>)

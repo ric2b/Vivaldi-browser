@@ -33,9 +33,9 @@ namespace ui {
 struct SelectedFileInfo;
 }
 
-// This class handles file-selection requests coming from WebUI elements
-// (via the extensions::ExtensionHost class). It implements both the
-// initialisation and listener functions for file-selection dialogs.
+// This class handles file-selection requests coming from renderer processes.
+// It implements both the initialisation and listener functions for
+// file-selection dialogs.
 //
 // Since FileSelectHelper has-a NotificationRegistrar, it needs to live on and
 // be destroyed on the UI thread. References to FileSelectHelper may be passed
@@ -48,7 +48,7 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
                          public content::NotificationObserver {
  public:
   // Show the file chooser dialog.
-  static void RunFileChooser(content::WebContents* tab,
+  static void RunFileChooser(content::RenderFrameHost* render_frame_host,
                              const content::FileChooserParams& params);
 
   // Enumerates all the files in directory.
@@ -89,8 +89,7 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
     DISALLOW_COPY_AND_ASSIGN(DirectoryListerDispatchDelegate);
   };
 
-  void RunFileChooser(content::RenderViewHost* render_view_host,
-                      content::WebContents* web_contents,
+  void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       std::unique_ptr<content::FileChooserParams> params);
   void GetFileTypesOnFileThread(
       std::unique_ptr<content::FileChooserParams> params);
@@ -133,8 +132,9 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
                const content::NotificationDetails& details) override;
 
   // content::WebContentsObserver overrides.
-  void RenderViewHostChanged(content::RenderViewHost* old_host,
-                             content::RenderViewHost* new_host) override;
+  void RenderFrameHostChanged(content::RenderFrameHost* old_host,
+                              content::RenderFrameHost* new_host) override;
+  void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;
   void WebContentsDestroyed() override;
 
   void EnumerateDirectory(int request_id,
@@ -174,21 +174,21 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
   static base::FilePath ZipPackage(const base::FilePath& path);
 #endif  // defined(OS_MACOSX)
 
-  // Utility method that passes |files| to the render view host, and ends the
+  // Utility method that passes |files| to the RenderFrameHost, and ends the
   // file chooser.
-  void NotifyRenderViewHostAndEnd(
+  void NotifyRenderFrameHostAndEnd(
       const std::vector<ui::SelectedFileInfo>& files);
 
   // Sends the result to the render process, and call |RunFileChooserEnd|.
-  void NotifyRenderViewHostAndEndAfterConversion(
+  void NotifyRenderFrameHostAndEndAfterConversion(
       const std::vector<content::FileChooserFileInfo>& list);
 
   // Schedules the deletion of the files in |temporary_files_| and clears the
   // vector.
   void DeleteTemporaryFiles();
 
-  // Cleans up when the RenderViewHost of our WebContents changes.
-  void CleanUpOnRenderViewHostChange();
+  // Cleans up when the initiator of the file chooser is no longer valid.
+  void CleanUp();
 
   // Helper method to get allowed extensions for select file dialog from
   // the specified accept types as defined in the spec:
@@ -221,9 +221,9 @@ class FileSelectHelper : public base::RefCountedThreadSafe<
   // Profile used to set/retrieve the last used directory.
   Profile* profile_;
 
-  // The RenderViewHost and WebContents for the page showing a file dialog
+  // The RenderFrameHost and WebContents for the page showing a file dialog
   // (may only be one such dialog).
-  content::RenderViewHost* render_view_host_;
+  content::RenderFrameHost* render_frame_host_;
   content::WebContents* web_contents_;
 
   // Dialog box used for choosing files to upload from file form fields.

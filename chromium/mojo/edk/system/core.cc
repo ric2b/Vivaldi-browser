@@ -18,7 +18,6 @@
 #include "base/rand_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "crypto/random.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/embedder_internal.h"
 #include "mojo/edk/embedder/platform_shared_buffer.h"
@@ -31,6 +30,7 @@
 #include "mojo/edk/system/message_for_transit.h"
 #include "mojo/edk/system/message_pipe_dispatcher.h"
 #include "mojo/edk/system/platform_handle_dispatcher.h"
+#include "mojo/edk/system/ports/name.h"
 #include "mojo/edk/system/ports/node.h"
 #include "mojo/edk/system/remote_message_pipe_bootstrap.h"
 #include "mojo/edk/system/request_context.h"
@@ -57,6 +57,82 @@ void CallWatchCallback(MojoWatchCallback callback,
                        MojoWatchNotificationFlags flags) {
   callback(context, result, static_cast<MojoHandleSignalsState>(signals_state),
       flags);
+}
+
+MojoResult MojoPlatformHandleToScopedPlatformHandle(
+    const MojoPlatformHandle* platform_handle,
+    ScopedPlatformHandle* out_handle) {
+  if (platform_handle->struct_size != sizeof(MojoPlatformHandle))
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  if (platform_handle->type == MOJO_PLATFORM_HANDLE_TYPE_INVALID) {
+    out_handle->reset();
+    return MOJO_RESULT_OK;
+  }
+
+  PlatformHandle handle;
+  switch (platform_handle->type) {
+#if defined(OS_POSIX)
+    case MOJO_PLATFORM_HANDLE_TYPE_FILE_DESCRIPTOR:
+      handle.handle = static_cast<int>(platform_handle->value);
+      break;
+#endif
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+    case MOJO_PLATFORM_HANDLE_TYPE_MACH_PORT:
+      handle.type = PlatformHandle::Type::MACH;
+      handle.port = static_cast<mach_port_t>(platform_handle->value);
+      break;
+#endif
+
+#if defined(OS_WIN)
+    case MOJO_PLATFORM_HANDLE_TYPE_WINDOWS_HANDLE:
+      handle.handle = reinterpret_cast<HANDLE>(platform_handle->value);
+      break;
+#endif
+
+    default:
+      return MOJO_RESULT_INVALID_ARGUMENT;
+  }
+
+  out_handle->reset(handle);
+  return MOJO_RESULT_OK;
+}
+
+MojoResult ScopedPlatformHandleToMojoPlatformHandle(
+    ScopedPlatformHandle handle,
+    MojoPlatformHandle* platform_handle) {
+  if (platform_handle->struct_size != sizeof(MojoPlatformHandle))
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  if (!handle.is_valid()) {
+    platform_handle->type = MOJO_PLATFORM_HANDLE_TYPE_INVALID;
+    return MOJO_RESULT_OK;
+  }
+
+#if defined(OS_POSIX)
+  switch (handle.get().type) {
+    case PlatformHandle::Type::POSIX:
+      platform_handle->type = MOJO_PLATFORM_HANDLE_TYPE_FILE_DESCRIPTOR;
+      platform_handle->value = static_cast<uint64_t>(handle.release().handle);
+      break;
+
+#if defined(OS_MACOSX) && !defined(OS_IOS)
+    case PlatformHandle::Type::MACH:
+      platform_handle->type = MOJO_PLATFORM_HANDLE_TYPE_MACH_PORT;
+      platform_handle->value = static_cast<uint64_t>(handle.release().port);
+      break;
+#endif  // defined(OS_MACOSX) && !defined(OS_IOS)
+
+    default:
+      return MOJO_RESULT_INVALID_ARGUMENT;
+  }
+#elif defined(OS_WIN)
+  platform_handle->type = MOJO_PLATFORM_HANDLE_TYPE_WINDOWS_HANDLE;
+  platform_handle->value = reinterpret_cast<uint64_t>(handle.release().handle);
+#endif  // defined(OS_WIN)
+
+  return MOJO_RESULT_OK;
 }
 
 }  // namespace
@@ -93,9 +169,18 @@ scoped_refptr<Dispatcher> Core::GetDispatcher(MojoHandle handle) {
 }
 
 void Core::AddChild(base::ProcessHandle process_handle,
-                    ScopedPlatformHandle platform_handle) {
+                    ScopedPlatformHandle platform_handle,
+                    const std::string& child_token,
+                    const ProcessErrorCallback& process_error_callback) {
   GetNodeController()->ConnectToChild(process_handle,
-                                      std::move(platform_handle));
+                                      std::move(platform_handle),
+                                      child_token,
+                                      process_error_callback);
+}
+
+void Core::ChildLaunchFailed(const std::string& child_token) {
+  RequestContext request_context;
+  GetNodeController()->CloseChildPorts(child_token);
 }
 
 void Core::InitChild(ScopedPlatformHandle platform_handle) {
@@ -149,11 +234,15 @@ MojoResult Core::PassWrappedPlatformHandle(
   MojoResult result = handles_.GetAndRemoveDispatcher(wrapper_handle, &d);
   if (result != MOJO_RESULT_OK)
     return result;
-  PlatformHandleDispatcher* phd =
-      static_cast<PlatformHandleDispatcher*>(d.get());
-  *platform_handle = phd->PassPlatformHandle();
-  phd->Close();
-  return MOJO_RESULT_OK;
+  if (d->GetType() == Dispatcher::Type::PLATFORM_HANDLE) {
+    PlatformHandleDispatcher* phd =
+        static_cast<PlatformHandleDispatcher*>(d.get());
+    *platform_handle = phd->PassPlatformHandle();
+  } else {
+    result = MOJO_RESULT_INVALID_ARGUMENT;
+  }
+  d->Close();
+  return result;
 }
 
 MojoResult Core::CreateSharedBufferWrapper(
@@ -236,6 +325,10 @@ void Core::RequestShutdown(const base::Closure& callback) {
 
 ScopedMessagePipeHandle Core::CreateMessagePipe(
     ScopedPlatformHandle platform_handle) {
+#if defined(OS_NACL)
+  NOTREACHED();
+  return ScopedMessagePipeHandle();
+#else
   ports::PortRef port0, port1;
   GetNodeController()->node()->CreatePortPair(&port0, &port1);
   MojoHandle handle = AddDispatcher(
@@ -244,17 +337,18 @@ ScopedMessagePipeHandle Core::CreateMessagePipe(
   RemoteMessagePipeBootstrap::Create(
       GetNodeController(), std::move(platform_handle), port1);
   return ScopedMessagePipeHandle(MessagePipeHandle(handle));
+#endif
 }
 
 ScopedMessagePipeHandle Core::CreateParentMessagePipe(
-    const std::string& token) {
+    const std::string& token, const std::string& child_token) {
   RequestContext request_context;
   ports::PortRef port0, port1;
   GetNodeController()->node()->CreatePortPair(&port0, &port1);
   MojoHandle handle = AddDispatcher(
       new MessagePipeDispatcher(GetNodeController(), port0,
                                 kUnknownPipeIdForDebug, 0));
-  GetNodeController()->ReservePort(token, port1);
+  GetNodeController()->ReservePort(token, port1, child_token);
   return ScopedMessagePipeHandle(MessagePipeHandle(handle));
 }
 
@@ -281,6 +375,17 @@ MojoResult Core::AsyncWait(MojoHandle handle,
   if (rv == MOJO_RESULT_OK)
     ignore_result(waiter.release());
   return rv;
+}
+
+MojoResult Core::SetProperty(MojoPropertyType type, const void* value) {
+  base::AutoLock locker(property_lock_);
+  switch (type) {
+    case MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED:
+      property_sync_call_allowed_ = *static_cast<const bool*>(value);
+      return MOJO_RESULT_OK;
+    default:
+      return MOJO_RESULT_INVALID_ARGUMENT;
+  }
 }
 
 MojoTimeTicks Core::GetTimeTicksNow() {
@@ -430,6 +535,17 @@ MojoResult Core::GetMessageBuffer(MojoMessageHandle message, void** buffer) {
   *buffer = reinterpret_cast<MessageForTransit*>(message)->mutable_bytes();
 
   return MOJO_RESULT_OK;
+}
+
+MojoResult Core::GetProperty(MojoPropertyType type, void* value) {
+  base::AutoLock locker(property_lock_);
+  switch (type) {
+    case MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED:
+      *static_cast<bool*>(value) = property_sync_call_allowed_;
+      return MOJO_RESULT_OK;
+    default:
+      return MOJO_RESULT_INVALID_ARGUMENT;
+  }
 }
 
 MojoResult Core::CreateWaitSet(MojoHandle* wait_set_handle) {
@@ -661,6 +777,24 @@ MojoResult Core::FuseMessagePipes(MojoHandle handle0, MojoHandle handle1) {
   return MOJO_RESULT_OK;
 }
 
+MojoResult Core::NotifyBadMessage(MojoMessageHandle message,
+                                  const char* error,
+                                  size_t error_num_bytes) {
+  if (!message)
+    return MOJO_RESULT_INVALID_ARGUMENT;
+
+  const PortsMessage& ports_message =
+      reinterpret_cast<MessageForTransit*>(message)->ports_message();
+  if (ports_message.source_node() == ports::kInvalidNodeName) {
+    DVLOG(1) << "Received invalid message from unknown node.";
+    return MOJO_RESULT_OK;
+  }
+
+  GetNodeController()->NotifyBadMessageFrom(
+      ports_message.source_node(), std::string(error, error_num_bytes));
+  return MOJO_RESULT_OK;
+}
+
 MojoResult Core::CreateDataPipe(
     const MojoCreateDataPipeOptions* options,
     MojoHandle* data_pipe_producer_handle,
@@ -878,6 +1012,101 @@ MojoResult Core::UnmapBuffer(void* buffer) {
   RequestContext request_context;
   base::AutoLock lock(mapping_table_lock_);
   return mapping_table_.RemoveMapping(buffer);
+}
+
+MojoResult Core::WrapPlatformHandle(const MojoPlatformHandle* platform_handle,
+                                    MojoHandle* mojo_handle) {
+  ScopedPlatformHandle handle;
+  MojoResult result = MojoPlatformHandleToScopedPlatformHandle(platform_handle,
+                                                               &handle);
+  if (result != MOJO_RESULT_OK)
+    return result;
+
+  return CreatePlatformHandleWrapper(std::move(handle), mojo_handle);
+}
+
+MojoResult Core::UnwrapPlatformHandle(MojoHandle mojo_handle,
+                                      MojoPlatformHandle* platform_handle) {
+  ScopedPlatformHandle handle;
+  MojoResult result = PassWrappedPlatformHandle(mojo_handle, &handle);
+  if (result != MOJO_RESULT_OK)
+    return result;
+
+  return ScopedPlatformHandleToMojoPlatformHandle(std::move(handle),
+                                                  platform_handle);
+}
+
+MojoResult Core::WrapPlatformSharedBufferHandle(
+    const MojoPlatformHandle* platform_handle,
+    size_t size,
+    MojoPlatformSharedBufferHandleFlags flags,
+    MojoHandle* mojo_handle) {
+  DCHECK(size);
+  ScopedPlatformHandle handle;
+  MojoResult result = MojoPlatformHandleToScopedPlatformHandle(platform_handle,
+                                                               &handle);
+  if (result != MOJO_RESULT_OK)
+    return result;
+
+  bool read_only = flags & MOJO_PLATFORM_SHARED_BUFFER_HANDLE_FLAG_READ_ONLY;
+  scoped_refptr<PlatformSharedBuffer> platform_buffer =
+      PlatformSharedBuffer::CreateFromPlatformHandle(size, read_only,
+                                                     std::move(handle));
+  if (!platform_buffer)
+    return MOJO_RESULT_UNKNOWN;
+
+  scoped_refptr<SharedBufferDispatcher> dispatcher;
+  result = SharedBufferDispatcher::CreateFromPlatformSharedBuffer(
+      platform_buffer, &dispatcher);
+  if (result != MOJO_RESULT_OK)
+    return result;
+
+  MojoHandle h = AddDispatcher(dispatcher);
+  if (h == MOJO_HANDLE_INVALID) {
+    dispatcher->Close();
+    return MOJO_RESULT_RESOURCE_EXHAUSTED;
+  }
+
+  *mojo_handle = h;
+  return MOJO_RESULT_OK;
+}
+
+MojoResult Core::UnwrapPlatformSharedBufferHandle(
+    MojoHandle mojo_handle,
+    MojoPlatformHandle* platform_handle,
+    size_t* size,
+    MojoPlatformSharedBufferHandleFlags* flags) {
+  scoped_refptr<Dispatcher> dispatcher;
+  MojoResult result = MOJO_RESULT_OK;
+  {
+    base::AutoLock lock(handles_lock_);
+    result = handles_.GetAndRemoveDispatcher(mojo_handle, &dispatcher);
+    if (result != MOJO_RESULT_OK)
+      return result;
+  }
+
+  if (dispatcher->GetType() != Dispatcher::Type::SHARED_BUFFER) {
+    dispatcher->Close();
+    return MOJO_RESULT_INVALID_ARGUMENT;
+  }
+
+  SharedBufferDispatcher* shm_dispatcher =
+      static_cast<SharedBufferDispatcher*>(dispatcher.get());
+  scoped_refptr<PlatformSharedBuffer> platform_shared_buffer =
+      shm_dispatcher->PassPlatformSharedBuffer();
+  CHECK(platform_shared_buffer);
+
+  CHECK(size);
+  *size = platform_shared_buffer->GetNumBytes();
+
+  CHECK(flags);
+  *flags = MOJO_PLATFORM_SHARED_BUFFER_HANDLE_FLAG_NONE;
+  if (platform_shared_buffer->IsReadOnly())
+    *flags |= MOJO_PLATFORM_SHARED_BUFFER_HANDLE_FLAG_READ_ONLY;
+
+  ScopedPlatformHandle handle = platform_shared_buffer->PassPlatformHandle();
+  return ScopedPlatformHandleToMojoPlatformHandle(std::move(handle),
+                                                  platform_handle);
 }
 
 void Core::GetActiveHandlesForTest(std::vector<MojoHandle>* handles) {

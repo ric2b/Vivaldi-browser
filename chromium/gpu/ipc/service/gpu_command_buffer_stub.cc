@@ -33,6 +33,7 @@
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
 #include "gpu/ipc/service/gpu_channel_manager_delegate.h"
+#include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "gpu/ipc/service/gpu_memory_manager.h"
 #include "gpu/ipc/service/gpu_memory_tracking.h"
 #include "gpu/ipc/service/gpu_watchdog.h"
@@ -232,8 +233,9 @@ bool GpuCommandBufferStub::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(GpuCommandBufferStub, message)
     IPC_MESSAGE_HANDLER_DELAY_REPLY(GpuCommandBufferMsg_SetGetBuffer,
                                     OnSetGetBuffer);
-    IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_ProduceFrontBuffer,
-                        OnProduceFrontBuffer);
+    IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_TakeFrontBuffer, OnTakeFrontBuffer);
+    IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_ReturnFrontBuffer,
+                        OnReturnFrontBuffer);
     IPC_MESSAGE_HANDLER_DELAY_REPLY(GpuCommandBufferMsg_WaitForTokenInRange,
                                     OnWaitForTokenInRange);
     IPC_MESSAGE_HANDLER_DELAY_REPLY(GpuCommandBufferMsg_WaitForGetOffsetInRange,
@@ -243,6 +245,8 @@ bool GpuCommandBufferStub::OnMessageReceived(const IPC::Message& message) {
                         OnRegisterTransferBuffer);
     IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_DestroyTransferBuffer,
                         OnDestroyTransferBuffer);
+    IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_WaitSyncToken,
+                        OnWaitSyncToken)
     IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_SignalSyncToken,
                         OnSignalSyncToken)
     IPC_MESSAGE_HANDLER(GpuCommandBufferMsg_SignalQuery,
@@ -320,6 +324,7 @@ void GpuCommandBufferStub::PerformWork() {
     }
 
     executor_->ProcessPendingQueries();
+    executor_->PerformPollingWork();
   }
 
   ScheduleDelayedWork(
@@ -337,7 +342,8 @@ bool GpuCommandBufferStub::HasUnprocessedCommands() {
 
 void GpuCommandBufferStub::ScheduleDelayedWork(base::TimeDelta delay) {
   bool has_more_work = executor_.get() && (executor_->HasPendingQueries() ||
-                                           executor_->HasMoreIdleWork());
+                                           executor_->HasMoreIdleWork() ||
+                                           executor_->HasPollingWork());
   if (!has_more_work) {
     last_idle_time_ = base::TimeTicks();
     return;
@@ -454,20 +460,23 @@ bool GpuCommandBufferStub::Initialize(
   } else {
     scoped_refptr<gles2::FeatureInfo> feature_info =
         new gles2::FeatureInfo(manager->gpu_driver_bug_workarounds());
+    gpu::GpuMemoryBufferFactory* gmb_factory =
+        channel_->gpu_channel_manager()->gpu_memory_buffer_factory();
     context_group_ = new gles2::ContextGroup(
         manager->gpu_preferences(), channel_->mailbox_manager(),
         new GpuCommandBufferMemoryTracker(channel_,
                                           command_buffer_id_.GetUnsafeValue()),
         manager->shader_translator_cache(),
         manager->framebuffer_completeness_cache(), feature_info,
-        init_params.attribs.bind_generates_resource);
+        init_params.attribs.bind_generates_resource,
+        gmb_factory ? gmb_factory->AsImageFactory() : nullptr);
   }
 
 #if defined(OS_MACOSX)
   // Virtualize PreferIntegratedGpu contexts by default on OS X to prevent
   // performance regressions when enabling FCM.
   // http://crbug.com/180463
-  if (init_params.gpu_preference == gfx::PreferIntegratedGpu)
+  if (init_params.attribs.gpu_preference == gl::PreferIntegratedGpu)
     use_virtualized_gl_context_ = true;
 #endif
 
@@ -478,9 +487,9 @@ bool GpuCommandBufferStub::Initialize(
   // only a single context. See crbug.com/510243 for details.
   use_virtualized_gl_context_ |= channel_->mailbox_manager()->UsesSync();
 
-  gfx::GLSurface::Format surface_format = gfx::GLSurface::SURFACE_DEFAULT;
+  gl::GLSurface::Format surface_format = gl::GLSurface::SURFACE_DEFAULT;
   bool offscreen = (surface_handle_ == kNullSurfaceHandle);
-  gfx::GLSurface* default_surface = manager->GetDefaultOffscreenSurface();
+  gl::GLSurface* default_surface = manager->GetDefaultOffscreenSurface();
   if (!default_surface) {
     DLOG(ERROR) << "Failed to create default offscreen surface.";
     return false;
@@ -490,20 +499,12 @@ bool GpuCommandBufferStub::Initialize(
       init_params.attribs.green_size <= 6 &&
       init_params.attribs.blue_size <= 5 &&
       init_params.attribs.alpha_size == 0)
-    surface_format = gfx::GLSurface::SURFACE_RGB565;
+    surface_format = gl::GLSurface::SURFACE_RGB565;
   // We can only use virtualized contexts for onscreen command buffers if their
   // config is compatible with the offscreen ones - otherwise MakeCurrent fails.
   if (surface_format != default_surface->GetFormat() && !offscreen)
     use_virtualized_gl_context_ = false;
 #endif
-
-  gfx::Size initial_size = init_params.size;
-  if (offscreen && initial_size.IsEmpty()) {
-    // If we're an offscreen surface with zero width and/or height, set to a
-    // non-zero size so that we have a complete framebuffer for operations like
-    // glClear.
-    initial_size = gfx::Size(1, 1);
-  }
 
   command_buffer_.reset(new CommandBufferService(
       context_group_->transfer_buffer_manager()));
@@ -531,13 +532,13 @@ bool GpuCommandBufferStub::Initialize(
     }
   }
 
-  scoped_refptr<gfx::GLContext> context;
-  gfx::GLShareGroup* gl_share_group = channel_->share_group();
+  scoped_refptr<gl::GLContext> context;
+  gl::GLShareGroup* gl_share_group = channel_->share_group();
   if (use_virtualized_gl_context_ && gl_share_group) {
     context = gl_share_group->GetSharedContext();
     if (!context.get()) {
       context = gl::init::CreateGLContext(gl_share_group, default_surface,
-                                          init_params.gpu_preference);
+                                          init_params.attribs.gpu_preference);
       if (!context.get()) {
         DLOG(ERROR) << "Failed to create shared context for virtualization.";
         return false;
@@ -551,10 +552,11 @@ bool GpuCommandBufferStub::Initialize(
     // (1) a non-virtual GL context, or
     // (2) a mock context.
     DCHECK(context->GetHandle() ||
-           gfx::GetGLImplementation() == gfx::kGLImplementationMockGL);
+           gl::GetGLImplementation() == gl::kGLImplementationMockGL);
     context = new GLContextVirtual(
         gl_share_group, context.get(), decoder_->AsWeakPtr());
-    if (!context->Initialize(surface_.get(), init_params.gpu_preference)) {
+    if (!context->Initialize(surface_.get(),
+                             init_params.attribs.gpu_preference)) {
       // The real context created above for the default offscreen surface
       // might not be compatible with this surface.
       context = NULL;
@@ -564,7 +566,7 @@ bool GpuCommandBufferStub::Initialize(
   }
   if (!context.get()) {
     context = gl::init::CreateGLContext(gl_share_group, surface_.get(),
-                                        init_params.gpu_preference);
+                                        init_params.attribs.gpu_preference);
   }
   if (!context.get()) {
     DLOG(ERROR) << "Failed to create context.";
@@ -587,7 +589,7 @@ bool GpuCommandBufferStub::Initialize(
   }
 
   // Initialize the decoder with either the view or pbuffer GLContext.
-  if (!decoder_->Initialize(surface_, context, offscreen, initial_size,
+  if (!decoder_->Initialize(surface_, context, offscreen,
                             gpu::gles2::DisallowedFeatures(),
                             init_params.attribs)) {
     DLOG(ERROR) << "Failed to initialize decoder.";
@@ -608,6 +610,12 @@ bool GpuCommandBufferStub::Initialize(
       &GpuCommandBufferStub::OnFenceSyncRelease, base::Unretained(this)));
   decoder_->SetWaitFenceSyncCallback(base::Bind(
       &GpuCommandBufferStub::OnWaitFenceSync, base::Unretained(this)));
+  decoder_->SetDescheduleUntilFinishedCallback(
+      base::Bind(&GpuCommandBufferStub::OnDescheduleUntilFinished,
+                 base::Unretained(this)));
+  decoder_->SetRescheduleAfterFinishedCallback(
+      base::Bind(&GpuCommandBufferStub::OnRescheduleAfterFinished,
+                 base::Unretained(this)));
 
   command_buffer_->SetPutOffsetChangeCallback(
       base::Bind(&GpuCommandBufferStub::PutChanged, base::Unretained(this)));
@@ -659,14 +667,19 @@ void GpuCommandBufferStub::OnSetGetBuffer(int32_t shm_id,
   Send(reply_message);
 }
 
-void GpuCommandBufferStub::OnProduceFrontBuffer(const Mailbox& mailbox) {
-  TRACE_EVENT0("gpu", "GpuCommandBufferStub::OnProduceFrontBuffer");
+void GpuCommandBufferStub::OnTakeFrontBuffer(const Mailbox& mailbox) {
+  TRACE_EVENT0("gpu", "GpuCommandBufferStub::OnTakeFrontBuffer");
   if (!decoder_) {
-    LOG(ERROR) << "Can't produce front buffer before initialization.";
+    LOG(ERROR) << "Can't take front buffer before initialization.";
     return;
   }
 
-  decoder_->ProduceFrontBuffer(mailbox);
+  decoder_->TakeFrontBuffer(mailbox);
+}
+
+void GpuCommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
+                                               bool is_lost) {
+  decoder_->ReturnFrontBuffer(mailbox, is_lost);
 }
 
 void GpuCommandBufferStub::OnParseError() {
@@ -831,6 +844,11 @@ void GpuCommandBufferStub::PullTextureUpdates(
   }
 }
 
+void GpuCommandBufferStub::OnWaitSyncToken(const SyncToken& sync_token) {
+  OnWaitFenceSync(sync_token.namespace_id(), sync_token.command_buffer_id(),
+                  sync_token.release_count());
+}
+
 void GpuCommandBufferStub::OnSignalSyncToken(const SyncToken& sync_token,
                                              uint32_t id) {
   scoped_refptr<SyncPointClientState> release_state =
@@ -884,6 +902,21 @@ void GpuCommandBufferStub::OnFenceSyncRelease(uint64_t release) {
   }
 
   sync_point_client_->ReleaseFenceSync(release);
+}
+
+void GpuCommandBufferStub::OnDescheduleUntilFinished() {
+  DCHECK(executor_->scheduled());
+  DCHECK(executor_->HasPollingWork());
+
+  executor_->SetScheduled(false);
+  channel_->OnStreamRescheduled(stream_id_, false);
+}
+
+void GpuCommandBufferStub::OnRescheduleAfterFinished() {
+  DCHECK(!executor_->scheduled());
+
+  executor_->SetScheduled(true);
+  channel_->OnStreamRescheduled(stream_id_, true);
 }
 
 bool GpuCommandBufferStub::OnWaitFenceSync(
@@ -972,14 +1005,16 @@ void GpuCommandBufferStub::OnCreateImage(
   }
 
   scoped_refptr<gl::GLImage> image = channel()->CreateImageForGpuMemoryBuffer(
-      handle, size, format, internalformat);
+      handle, size, format, internalformat, surface_handle_);
   if (!image.get())
     return;
 
   image_manager->AddImage(image.get(), id);
   if (image_release_count) {
-    DCHECK_EQ(image_release_count,
-              sync_point_client_->client_state()->fence_sync_release() + 1);
+    DLOG_IF(ERROR,
+            image_release_count !=
+                sync_point_client_->client_state()->fence_sync_release() + 1)
+        << "Client released fences out of order.";
     sync_point_client_->ReleaseFenceSync(image_release_count);
   }
 }
@@ -1052,7 +1087,7 @@ bool GpuCommandBufferStub::CheckContextLost() {
     // Lose all other contexts if the reset was triggered by the robustness
     // extension instead of being synthetic.
     if (was_lost_by_robustness &&
-        (gfx::GLContext::LosesAllContextsOnContextLost() ||
+        (gl::GLContext::LosesAllContextsOnContextLost() ||
          use_virtualized_gl_context_)) {
       channel_->LoseAllContexts();
     }

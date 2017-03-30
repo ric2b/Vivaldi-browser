@@ -84,6 +84,7 @@
         '../../components/components.gyp:metrics_ui',
         '../../components/components.gyp:navigation_metrics',
         '../../components/components.gyp:net_log',
+        '../../components/components.gyp:network_session_configurator',
         '../../components/components.gyp:network_time',
         '../../components/components.gyp:ntp_snippets',
         '../../components/components.gyp:omnibox_browser',
@@ -126,8 +127,10 @@
         '../../google_apis/google_apis.gyp:google_apis',
         '../../net/net.gyp:net',
         '../../net/net.gyp:net_extras',
+        '../../services/shell/shell_public.gyp:shell_public',
         '../../skia/skia.gyp:skia',
         '../../sync/sync.gyp:sync',
+        '../../third_party/brotli/brotli.gyp:brotli',
         '../../third_party/google_toolbox_for_mac/google_toolbox_for_mac.gyp:google_toolbox_for_mac',
         '../../ui/base/ui_base.gyp:ui_base',
         '../../ui/gfx/gfx.gyp:gfx',
@@ -378,6 +381,7 @@
         'browser/metrics/mobile_session_shutdown_metrics_provider.mm',
         'browser/metrics/previous_session_info.h',
         'browser/metrics/previous_session_info.mm',
+        'browser/metrics/previous_session_info_private.h',
         'browser/net/chrome_cookie_store_ios_client.h',
         'browser/net/chrome_cookie_store_ios_client.mm',
         'browser/net/connection_type_observer_bridge.h',
@@ -417,6 +421,8 @@
         'browser/passwords/ios_chrome_password_manager_client.mm',
         'browser/passwords/ios_chrome_password_manager_driver.h',
         'browser/passwords/ios_chrome_password_manager_driver.mm',
+        'browser/passwords/ios_chrome_password_manager_infobar_delegate.h',
+        'browser/passwords/ios_chrome_password_manager_infobar_delegate.mm',
         'browser/passwords/ios_chrome_password_manager_setting_migrator_service_factory.cc',
         'browser/passwords/ios_chrome_password_manager_setting_migrator_service_factory.h',
         'browser/passwords/ios_chrome_password_store_factory.cc',
@@ -537,8 +543,12 @@
         'browser/ssl/ios_chrome_security_state_model_client.mm',
         'browser/ssl/ios_ssl_blocking_page.h',
         'browser/ssl/ios_ssl_blocking_page.mm',
+        'browser/ssl/ios_ssl_error_handler.h',
+        'browser/ssl/ios_ssl_error_handler.mm',
         'browser/suggestions/image_fetcher_impl.h',
         'browser/suggestions/image_fetcher_impl.mm',
+        'browser/suggestions/ios_image_decoder_impl.h',
+        'browser/suggestions/ios_image_decoder_impl.mm',
         'browser/suggestions/suggestions_service_factory.h',
         'browser/suggestions/suggestions_service_factory.mm',
         'browser/sync/glue/sync_start_util.cc',
@@ -602,11 +612,8 @@
         'browser/ui/commands/show_mail_composer_command.mm',
         'browser/ui/commands/show_signin_command.h',
         'browser/ui/commands/show_signin_command.mm',
-        'browser/ui/context_menu/context_menu_controller.h',
-        'browser/ui/context_menu/context_menu_controller.mm',
-        'browser/ui/context_menu/context_menu_holder.h',
-        'browser/ui/context_menu/context_menu_holder.mm',
-        'browser/ui/context_menu/context_menu_provider.h',
+        'browser/ui/context_menu/context_menu_coordinator.h',
+        'browser/ui/context_menu/context_menu_coordinator.mm',
         'browser/ui/file_locations.h',
         'browser/ui/file_locations.mm',
         'browser/ui/image_util.h',
@@ -655,6 +662,7 @@
         'browser/ui/webui/history/history_ui.mm',
         'browser/ui/webui/history/metrics_handler.cc',
         'browser/ui/webui/history/metrics_handler.h',
+        'browser/ui/webui/mojo_web_ui_ios_controller.h',
         'browser/ui/webui/net_export/net_export_ui.cc',
         'browser/ui/webui/net_export/net_export_ui.h',
         'browser/ui/webui/sync_internals/sync_internals_message_handler.cc',
@@ -696,14 +704,6 @@
           ],
         }],
       ],
-      # TODO(crbug.com/569158): Suppresses warnings that are treated as errors
-      # when minimum iOS version support is increased to iOS 9 and up.
-      # This should be removed once all deprecation violations have been fixed.
-      'xcode_settings': {
-        'WARNING_CFLAGS': [
-          '-Wno-deprecated-declarations',
-        ],
-      },
     },
     {
       # GN version: //ios/chrome/browser:about_flags
@@ -750,6 +750,23 @@
         'google_test_oauth_url%': '',
         'google_test_sync_url%': '',
       },
+    },
+    {
+      # GN version: //ios/chrome/browser:chrome_coordinators
+      'target_name': 'ios_chrome_browser_chrome_coordinators',
+      'type': 'static_library',
+      'include_dirs': [
+        '../..',
+      ],
+      'dependencies': [
+        '../../base/base.gyp:base',
+      ],
+      'sources': [
+        'browser/chrome_coordinator.h',
+        'browser/chrome_coordinator.mm',
+        'browser/root_coordinator.h',
+        'browser/root_coordinator.mm',
+       ]
     },
     {
       # GN version: //ios/chrome/common

@@ -9,11 +9,10 @@
 #include "platform/animation/CompositorAnimationCurve.h"
 #include "platform/geometry/FloatPoint.h"
 #include "wtf/Noncopyable.h"
-
+#include "wtf/PtrUtil.h"
 #include <memory>
 
 namespace cc {
-class AnimationCurve;
 class ScrollOffsetAnimationCurve;
 }
 
@@ -28,22 +27,31 @@ public:
         ScrollDurationInverseDelta
     };
 
-    CompositorScrollOffsetAnimationCurve(FloatPoint, TimingFunctionType, ScrollDurationBehavior);
-    CompositorScrollOffsetAnimationCurve(cc::ScrollOffsetAnimationCurve*);
+    static std::unique_ptr<CompositorScrollOffsetAnimationCurve> create(FloatPoint targetValue, CompositorScrollOffsetAnimationCurve::ScrollDurationBehavior durationBehavior)
+    {
+        return wrapUnique(new CompositorScrollOffsetAnimationCurve(targetValue, durationBehavior));
+    }
+    static std::unique_ptr<CompositorScrollOffsetAnimationCurve> create(cc::ScrollOffsetAnimationCurve* curve)
+    {
+        return wrapUnique(new CompositorScrollOffsetAnimationCurve(curve));
+    }
+
     ~CompositorScrollOffsetAnimationCurve() override;
 
+    void setInitialValue(FloatPoint);
+    FloatPoint getValue(double time) const;
+    double duration() const;
+    FloatPoint targetValue() const;
+    void applyAdjustment(IntSize);
+    void updateTarget(double time, FloatPoint newTarget);
+
     // CompositorAnimationCurve implementation.
-    AnimationCurveType type() const override;
-
-    virtual void setInitialValue(FloatPoint);
-    virtual FloatPoint getValue(double time) const;
-    virtual double duration() const;
-    virtual FloatPoint targetValue() const;
-    virtual void updateTarget(double time, FloatPoint newTarget);
-
-    std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const;
+    std::unique_ptr<cc::AnimationCurve> cloneToAnimationCurve() const override;
 
 private:
+    CompositorScrollOffsetAnimationCurve(FloatPoint, ScrollDurationBehavior);
+    CompositorScrollOffsetAnimationCurve(cc::ScrollOffsetAnimationCurve*);
+
     std::unique_ptr<cc::ScrollOffsetAnimationCurve> m_curve;
 };
 

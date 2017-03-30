@@ -19,7 +19,6 @@
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
-class ImageSerializationProcessor;
 
 FilterDisplayItem::FilterDisplayItem(const FilterOperations& filters,
                                      const gfx::RectF& bounds) {
@@ -46,9 +45,7 @@ void FilterDisplayItem::SetNew(const FilterOperations& filters,
   bounds_ = bounds;
 }
 
-void FilterDisplayItem::ToProtobuf(
-    proto::DisplayItem* proto,
-    ImageSerializationProcessor* image_serialization_processor) const {
+void FilterDisplayItem::ToProtobuf(proto::DisplayItem* proto) const {
   proto->set_type(proto::DisplayItem::Type_Filter);
 
   proto::FilterDisplayItem* details = proto->mutable_filter_item();
@@ -58,7 +55,6 @@ void FilterDisplayItem::ToProtobuf(
 }
 
 void FilterDisplayItem::Raster(SkCanvas* canvas,
-                               const gfx::Rect& canvas_target_playback_rect,
                                SkPicture::AbortCallback* callback) const {
   canvas->save();
   canvas->translate(bounds_.x(), bounds_.y());
@@ -97,14 +93,11 @@ EndFilterDisplayItem::EndFilterDisplayItem(const proto::DisplayItem& proto) {
 
 EndFilterDisplayItem::~EndFilterDisplayItem() {}
 
-void EndFilterDisplayItem::ToProtobuf(
-    proto::DisplayItem* proto,
-    ImageSerializationProcessor* image_serialization_processor) const {
+void EndFilterDisplayItem::ToProtobuf(proto::DisplayItem* proto) const {
   proto->set_type(proto::DisplayItem::Type_EndFilter);
 }
 
 void EndFilterDisplayItem::Raster(SkCanvas* canvas,
-                                  const gfx::Rect& canvas_target_playback_rect,
                                   SkPicture::AbortCallback* callback) const {
   canvas->restore();
   canvas->restore();

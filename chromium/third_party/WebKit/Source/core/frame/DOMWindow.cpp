@@ -4,7 +4,6 @@
 
 #include "core/frame/DOMWindow.h"
 
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
@@ -20,7 +19,7 @@
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/input/EventHandler.h"
-#include "core/inspector/ConsoleMessageStorage.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
@@ -30,6 +29,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/Suborigin.h"
+#include <memory>
 
 namespace blink {
 
@@ -103,7 +103,10 @@ DOMWindow* DOMWindow::opener() const
 
 DOMWindow* DOMWindow::parent() const
 {
-    if (!frame())
+    // TODO(yukishiino): The 'parent' attribute must return |this|
+    // (the WindowProxy object of the browsing context itself) when it's
+    // top-level or detached.
+    if (!isCurrentlyDisplayedInFrame())
         return nullptr;
 
     Frame* parent = frame()->tree().parent();
@@ -112,7 +115,10 @@ DOMWindow* DOMWindow::parent() const
 
 DOMWindow* DOMWindow::top() const
 {
-    if (!frame())
+    // TODO(yukishiino): The 'top' attribute must return |this|
+    // (the WindowProxy object of the browsing context itself) when it's
+    // top-level or detached.
+    if (!isCurrentlyDisplayedInFrame())
         return nullptr;
 
     return frame()->tree().top()->domWindow();
@@ -198,7 +204,7 @@ void DOMWindow::postMessage(PassRefPtr<SerializedScriptValue> message, const Mes
         }
     }
 
-    OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(getExecutionContext(), ports, exceptionState);
+    std::unique_ptr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(getExecutionContext(), ports, exceptionState);
     if (exceptionState.hadException())
         return;
 

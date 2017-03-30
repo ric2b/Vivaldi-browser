@@ -130,6 +130,7 @@ Host</translation>
 <translation id="4156740505453712750">Um den Zugriff auf diesen Computer zu schützen, wählen Sie eine PIN mit <ph name="BOLD_START" />mindestens 6 Ziffern<ph name="BOLD_END" /> aus. Die Eingabe dieser PIN ist erforderlich, wenn eine Verbindung von einem anderen Ort aus hergestellt wird.</translation>
 <translation id="4176825807642096119">Zugriffscode</translation>
 <translation id="4207623512727273241">Führen Sie das Installationsprogramm aus, bevor Sie fortfahren.</translation>
+<translation id="4227991223508142681">Host Provisioning-Dienstprogramm</translation>
 <translation id="4240294130679914010">Chromoting Host-Deinstallationsprogramm</translation>
 <translation id="4277463233460010382">Dieser Computer wird konfiguriert, um einem oder mehreren Clients das Herstellen einer Verbindung ohne Eingabe einer PIN zu ermöglichen.</translation>
 <translation id="4277736576214464567">Der Zugriffscode ist ungültig. Bitte versuchen Sie es erneut.</translation>
@@ -237,7 +238,7 @@ Desktop Host</translation>
 <translation id="6944854424004126054">Fenster wiederherstellen</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Möchten Sie die Remote-Verbindung zu <ph name="HOSTNAME" /> wirklich deaktivieren? Wenn Sie die Verbindung später erneut aktivieren möchten, müssen Sie dies von dem betreffenden Computer aus tun.</translation>
-<translation id="6998989275928107238">Zu</translation>
+<translation id="6998989275928107238">An</translation>
 <translation id="7019153418965365059">Nicht erkannter Hostfehler: <ph name="HOST_OFFLINE_REASON" /></translation>
 <translation id="701976023053394610">Remote-Unterstützung</translation>
 <translation id="7038683108611689168">Helfen Sie uns bei der Verbesserung von Chromoting, indem Sie zulassen, dass wir Nutzungsstatistiken und Absturzberichte erfassen.</translation>
@@ -261,6 +262,7 @@ Desktop Host</translation>
 <translation id="7836926030608666805">Es fehlen einige erforderliche Komponenten. Überprüfen Sie, ob Sie die neueste Version von Chrome verwenden, und versuchen Sie es erneut.</translation>
 <translation id="7868137160098754906">Geben Sie Ihre PIN für den Remote-Computer ein.</translation>
 <translation id="7869445566579231750">Sie sind nicht berechtigt, diese App auszuführen.</translation>
+<translation id="7895403300744144251">Die Sicherheitsrichtlinien auf dem Remote-Computer gestatten keine Verbindungen von Ihrem Konto.</translation>
 <translation id="7948001860594368197">Optionen</translation>
 <translation id="7970576581263377361">Fehler bei der Authentifizierung. Melden Sie sich erneut in Chromium an.</translation>
 <translation id="7981525049612125370">Die Remote-Sitzung ist abgelaufen.</translation>

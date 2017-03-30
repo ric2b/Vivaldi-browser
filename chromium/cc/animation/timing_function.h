@@ -18,6 +18,10 @@ class CC_EXPORT TimingFunction {
  public:
   virtual ~TimingFunction();
 
+  // Note that LINEAR is a nullptr TimingFunction (for now).
+  enum class Type { LINEAR, CUBIC_BEZIER, STEPS };
+
+  virtual Type GetType() const = 0;
   virtual float GetValue(double t) const = 0;
   virtual float Velocity(double time) const = 0;
   // The smallest and largest values returned by GetValue for inputs in [0, 1].
@@ -33,6 +37,9 @@ class CC_EXPORT TimingFunction {
 
 class CC_EXPORT CubicBezierTimingFunction : public TimingFunction {
  public:
+  enum class EaseType { EASE, EASE_IN, EASE_OUT, EASE_IN_OUT, CUSTOM };
+
+  static std::unique_ptr<TimingFunction> CreatePreset(EaseType ease_type);
   static std::unique_ptr<CubicBezierTimingFunction> Create(double x1,
                                                            double y1,
                                                            double x2,
@@ -40,50 +47,26 @@ class CC_EXPORT CubicBezierTimingFunction : public TimingFunction {
   ~CubicBezierTimingFunction() override;
 
   // TimingFunction implementation.
+  Type GetType() const override;
   float GetValue(double time) const override;
   float Velocity(double time) const override;
   void Range(float* min, float* max) const override;
   std::unique_ptr<TimingFunction> Clone() const override;
 
+  EaseType ease_type() const { return ease_type_; }
+
  protected:
-  CubicBezierTimingFunction(double x1, double y1, double x2, double y2);
+  CubicBezierTimingFunction(EaseType ease_type,
+                            double x1,
+                            double y1,
+                            double x2,
+                            double y2);
 
   gfx::CubicBezier bezier_;
+  EaseType ease_type_;
 
  private:
   DISALLOW_ASSIGN(CubicBezierTimingFunction);
-};
-
-class CC_EXPORT EaseTimingFunction {
- public:
-  static std::unique_ptr<TimingFunction> Create();
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(EaseTimingFunction);
-};
-
-class CC_EXPORT EaseInTimingFunction {
- public:
-  static std::unique_ptr<TimingFunction> Create();
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(EaseInTimingFunction);
-};
-
-class CC_EXPORT EaseOutTimingFunction {
- public:
-  static std::unique_ptr<TimingFunction> Create();
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(EaseOutTimingFunction);
-};
-
-class CC_EXPORT EaseInOutTimingFunction {
- public:
-  static std::unique_ptr<TimingFunction> Create();
-
- private:
-  DISALLOW_IMPLICIT_CONSTRUCTORS(EaseInOutTimingFunction);
 };
 
 class CC_EXPORT StepsTimingFunction : public TimingFunction {
@@ -96,9 +79,10 @@ class CC_EXPORT StepsTimingFunction : public TimingFunction {
       StepPosition step_position);
   ~StepsTimingFunction() override;
 
+  // TimingFunction implementation.
+  Type GetType() const override;
   float GetValue(double t) const override;
   std::unique_ptr<TimingFunction> Clone() const override;
-
   void Range(float* min, float* max) const override;
   float Velocity(double time) const override;
 

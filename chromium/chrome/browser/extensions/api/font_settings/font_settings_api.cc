@@ -8,6 +8,9 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
@@ -270,10 +273,10 @@ bool FontSettingsGetFontFunction::RunSync() {
       extensions::preference_helpers::GetLevelOfControl(
           GetProfile(), extension_id(), pref_path, kIncognito);
 
-  base::DictionaryValue* result = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   result->SetString(kFontIdKey, font_name);
   result->SetString(kLevelOfControlKey, level_of_control);
-  SetResult(result);
+  SetResult(std::move(result));
   return true;
 }
 
@@ -337,13 +340,14 @@ bool FontSettingsGetFontListFunction::CopyFontsToResult(
       return false;
     }
 
-    base::DictionaryValue* font_name = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> font_name(
+        new base::DictionaryValue());
     font_name->Set(kFontIdKey, new base::StringValue(name));
     font_name->Set(kDisplayNameKey, new base::StringValue(localized_name));
-    result->Append(font_name);
+    result->Append(std::move(font_name));
   }
 
-  SetResult(result.release());
+  SetResult(std::move(result));
   return true;
 }
 
@@ -371,10 +375,10 @@ bool GetFontPrefExtensionFunction::RunSync() {
       extensions::preference_helpers::GetLevelOfControl(
           GetProfile(), extension_id(), GetPrefName(), kIncognito);
 
-  base::DictionaryValue* result = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   result->Set(GetKey(), pref->GetValue()->DeepCopy());
   result->SetString(kLevelOfControlKey, level_of_control);
-  SetResult(result);
+  SetResult(std::move(result));
   return true;
 }
 

@@ -315,8 +315,8 @@ class SingleTestRunner(object):
     def _compare_text(self, expected_text, actual_text):
         failures = []
         if (expected_text and actual_text and
-            # Assuming expected_text is already normalized.
-            self._port.do_text_results_differ(expected_text, self._get_normalized_output_text(actual_text))):
+                # Assuming expected_text is already normalized.
+                self._port.do_text_results_differ(expected_text, self._get_normalized_output_text(actual_text))):
             failures.append(test_failures.FailureTextMismatch())
         elif actual_text and not expected_text:
             failures.append(test_failures.FailureMissingResult())
@@ -325,7 +325,7 @@ class SingleTestRunner(object):
     def _compare_audio(self, expected_audio, actual_audio):
         failures = []
         if (expected_audio and actual_audio and
-            self._port.do_audio_results_differ(expected_audio, actual_audio)):
+                self._port.do_audio_results_differ(expected_audio, actual_audio)):
             failures.append(test_failures.FailureAudioMismatch())
         elif actual_audio and not expected_audio:
             failures.append(test_failures.FailureMissingAudio())
@@ -410,11 +410,13 @@ class SingleTestRunner(object):
             if (expectation == '!=' and test_result.failures) or (expectation == '==' and not test_result.failures):
                 break
 
-        assert(expected_output)
+        assert expected_output
 
         if expected_text:
             text_output = DriverOutput(text=test_output.text, image=None, image_hash=None, audio=None)
-            test_result.failures.extend(self._compare_output(expected_text_output, text_output).failures)
+            text_compare_result = self._compare_output(expected_text_output, text_output)
+            test_result.failures.extend(text_compare_result.failures)
+            test_result.has_repaint_overlay = text_compare_result.has_repaint_overlay
             expected_output.text = expected_text_output.text
 
         test_result_writer.write_test_result(self._filesystem, self._port, self._results_directory,
@@ -425,7 +427,7 @@ class SingleTestRunner(object):
         reftest_type = list(set([reference_file[0] for reference_file in self._reference_files]))
         return TestResult(self._test_name, test_result.failures, total_test_time,
                           test_result.has_stderr, reftest_type=reftest_type, pid=test_result.pid,
-                          references=reference_test_names)
+                          references=reference_test_names, has_repaint_overlay=test_result.has_repaint_overlay)
 
     # The returned TestResult always has 0 test_run_time. _run_reftest() calculates total_run_time from test outputs.
     def _compare_output_with_reference(self, reference_driver_output, actual_driver_output, reference_filename, mismatch):

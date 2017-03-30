@@ -27,6 +27,23 @@ class BluetoothLowEnergyPeripheralBridge {
     device_mac_->DidDiscoverPrimaryServices(error);
   };
 
+  void DidDiscoverCharacteristics(CBService* service, NSError* error) {
+    device_mac_->DidDiscoverCharacteristics(service, error);
+  };
+
+  void DidUpdateValue(CBCharacteristic* characteristic, NSError* error) {
+    device_mac_->DidUpdateValue(characteristic, error);
+  }
+
+  void DidWriteValue(CBCharacteristic* characteristic, NSError* error) {
+    device_mac_->DidWriteValue(characteristic, error);
+  }
+
+  void DidUpdateNotificationState(CBCharacteristic* characteristic,
+                                  NSError* error) {
+    device_mac_->DidUpdateNotificationState(characteristic, error);
+  }
+
   CBPeripheral* GetPeripheral() { return device_mac_->GetPeripheral(); }
 
  private:
@@ -60,4 +77,28 @@ class BluetoothLowEnergyPeripheralBridge {
   bridge_->DidDiscoverPrimaryServices(error);
 }
 
+- (void)peripheral:(CBPeripheral*)peripheral
+    didDiscoverCharacteristicsForService:(CBService*)service
+                                   error:(NSError*)error {
+  bridge_->DidDiscoverCharacteristics(service, error);
+}
+
+- (void)peripheral:(CBPeripheral*)peripheral
+    didUpdateValueForCharacteristic:(CBCharacteristic*)characteristic
+                              error:(NSError*)error {
+  bridge_->DidUpdateValue(characteristic, error);
+}
+
+- (void)peripheral:(CBPeripheral*)peripheral
+    didWriteValueForCharacteristic:(nonnull CBCharacteristic*)characteristic
+                             error:(nullable NSError*)error {
+  bridge_->DidWriteValue(characteristic, error);
+}
+
+- (void)peripheral:(CBPeripheral*)peripheral
+    didUpdateNotificationStateForCharacteristic:
+        (nonnull CBCharacteristic*)characteristic
+                                          error:(nullable NSError*)error {
+  bridge_->DidUpdateNotificationState(characteristic, error);
+}
 @end

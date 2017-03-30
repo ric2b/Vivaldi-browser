@@ -27,7 +27,6 @@
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
-#include "chrome/browser/net/connect_interceptor.h"
 #include "chrome/browser/net/http_server_properties_manager_factory.h"
 #include "chrome/browser/net/predictor.h"
 #include "chrome/browser/net/quota_policy_channel_id_store.h"
@@ -125,7 +124,7 @@ ProfileImplIOData::Handle::~Handle() {
     save_prefs = !chromeos::ProfileHelper::IsSigninProfile(profile_);
 #endif
     if (save_prefs)
-      io_data_->predictor_->SaveStateForNextStartupAndTrim();
+      io_data_->predictor_->SaveStateForNextStartup();
     io_data_->predictor_->ShutdownOnUIThread();
   }
 
@@ -447,8 +446,6 @@ void ProfileImplIOData::InitializeInternal(
   IOThread* const io_thread = profile_params->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
 
-  chrome_network_delegate->set_predictor(predictor_.get());
-
   if (domain_reliability_monitor_) {
     domain_reliability::DomainReliabilityMonitor* monitor =
         domain_reliability_monitor_.get();
@@ -464,6 +461,8 @@ void ProfileImplIOData::InitializeInternal(
     http_server_properties_manager_->InitializeOnNetworkThread();
 
   main_context->set_transport_security_state(transport_security_state());
+  main_context->set_ct_policy_enforcer(
+      io_thread_globals->ct_policy_enforcer.get());
 
   main_context->set_net_log(io_thread->net_log());
 
@@ -579,6 +578,8 @@ void ProfileImplIOData::
   ApplyProfileParamsToContext(extensions_context);
 
   extensions_context->set_transport_security_state(transport_security_state());
+  extensions_context->set_ct_policy_enforcer(
+      io_thread_globals->ct_policy_enforcer.get());
 
   extensions_context->set_net_log(io_thread->net_log());
 
@@ -782,6 +783,10 @@ ProfileImplIOData::AcquireIsolatedMediaRequestContext(
       InitializeMediaRequestContext(app_context, partition_descriptor);
   DCHECK(media_request_context);
   return media_request_context;
+}
+
+chrome_browser_net::Predictor* ProfileImplIOData::GetPredictor() {
+  return predictor_.get();
 }
 
 void ProfileImplIOData::ClearNetworkingHistorySinceOnIOThread(

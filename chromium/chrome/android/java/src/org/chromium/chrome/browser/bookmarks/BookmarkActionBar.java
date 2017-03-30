@@ -19,9 +19,14 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkItem;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge.BookmarkModelObserver;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
+import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
 import org.chromium.chrome.browser.widget.NumberRollView;
+import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
+import org.chromium.content_public.browser.LoadUrlParams;
 
 import java.util.List;
 
@@ -114,6 +119,16 @@ public class BookmarkActionBar extends Toolbar implements BookmarkUIObserver,
         } else if (menuItem.getItemId() == R.id.selection_mode_delete_menu_id) {
             mDelegate.getModel().deleteBookmarks(
                     mDelegate.getSelectedBookmarks().toArray(new BookmarkId[0]));
+            return true;
+        } else if (menuItem.getItemId() == R.id.selection_open_in_new_tab_id) {
+            openBookmarksInNewTabs(mDelegate.getSelectedBookmarks(), new TabDelegate(false),
+                    mDelegate.getModel());
+            mDelegate.clearSelection();
+            return true;
+        } else if (menuItem.getItemId() == R.id.selection_open_in_incognito_tab_id) {
+            openBookmarksInNewTabs(mDelegate.getSelectedBookmarks(), new TabDelegate(true),
+                    mDelegate.getModel());
+            mDelegate.clearSelection();
             return true;
         }
 
@@ -245,6 +260,8 @@ public class BookmarkActionBar extends Toolbar implements BookmarkUIObserver,
         mIsSelectionEnabled = mDelegate.isSelectionEnabled();
         NumberRollView numberRollView = (NumberRollView) findViewById(R.id.selection_mode_number);
         if (mIsSelectionEnabled) {
+            setOverflowIcon(TintedDrawable.constructTintedDrawable(getResources(),
+                    R.drawable.btn_menu, android.R.color.white));
             setNavigationButton(NAVIGATION_BUTTON_SELECTION_BACK);
             setTitle(null);
 
@@ -253,6 +270,17 @@ public class BookmarkActionBar extends Toolbar implements BookmarkUIObserver,
             // Editing a bookmark action on multiple selected items doesn't make sense. So disable.
             getMenu().findItem(R.id.selection_mode_edit_menu_id).setVisible(
                     selectedBookmarks.size() == 1);
+            getMenu().findItem(R.id.selection_open_in_incognito_tab_id)
+                    .setVisible(PrefServiceBridge.getInstance().isIncognitoModeEnabled());
+            // It does not make sense to open a folder in new tab.
+            for (BookmarkId bookmark : selectedBookmarks) {
+                BookmarkItem item = mDelegate.getModel().getBookmarkById(bookmark);
+                if (item != null && item.isFolder()) {
+                    getMenu().findItem(R.id.selection_open_in_new_tab_id).setVisible(false);
+                    getMenu().findItem(R.id.selection_open_in_incognito_tab_id).setVisible(false);
+                    break;
+                }
+            }
             // Partner bookmarks can't move, so if the selection includes a partner bookmark,
             // disable the move button.
             for (BookmarkId bookmark : selectedBookmarks) {
@@ -261,7 +289,6 @@ public class BookmarkActionBar extends Toolbar implements BookmarkUIObserver,
                     break;
                 }
             }
-
             setBackgroundColor(
                     ApiCompatibilityUtils.getColor(getResources(), R.color.light_active_color));
 
@@ -269,15 +296,25 @@ public class BookmarkActionBar extends Toolbar implements BookmarkUIObserver,
             if (!wasSelectionEnabled) numberRollView.setNumber(0, false);
             numberRollView.setNumber(selectedBookmarks.size(), true);
         } else {
+            setOverflowIcon(TintedDrawable.constructTintedDrawable(getResources(),
+                    R.drawable.btn_menu));
             getMenu().setGroupVisible(R.id.normal_menu_group, true);
             getMenu().setGroupVisible(R.id.selection_mode_menu_group, false);
             setBackgroundColor(ApiCompatibilityUtils.getColor(getResources(),
-                    R.color.bookmark_appbar_background));
+                    R.color.appbar_background));
 
             numberRollView.setVisibility(View.GONE);
             numberRollView.setNumber(0, false);
 
             mDelegate.notifyStateChange(this);
+        }
+    }
+
+    private static void openBookmarksInNewTabs(
+            List<BookmarkId> bookmarks, TabDelegate tabDelegate, BookmarkModel model) {
+        for (BookmarkId id : bookmarks) {
+            tabDelegate.createNewTab(new LoadUrlParams(model.getBookmarkById(id).getUrl()),
+                    TabLaunchType.FROM_LONGPRESS_BACKGROUND, null);
         }
     }
 }

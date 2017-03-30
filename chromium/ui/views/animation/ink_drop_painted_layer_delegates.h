@@ -9,22 +9,26 @@
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/layer_delegate.h"
-#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/shadow_value.h"
+#include "ui/views/views_export.h"
 
 namespace views {
 
 // Base ui::LayerDelegate stub that can be extended to paint shapes of a
 // specific color.
-class BasePaintedLayerDelegate : public ui::LayerDelegate {
+class VIEWS_EXPORT BasePaintedLayerDelegate : public ui::LayerDelegate {
  public:
   ~BasePaintedLayerDelegate() override;
 
-  SkColor color() const { return color_; }
+  // Defines the bounds of the layer that the delegate will paint into.
+  virtual gfx::Rect GetPaintedBounds() const = 0;
 
-  // Returns the center point of the painted shape.
-  virtual gfx::PointF GetCenterPoint() const = 0;
+  // Defines how to place the layer by providing an offset from the origin of
+  // the parent to the visual center of the layer.
+  virtual gfx::Vector2dF GetCenteringOffset() const;
 
   // ui::LayerDelegate:
   void OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) override;
@@ -33,6 +37,8 @@ class BasePaintedLayerDelegate : public ui::LayerDelegate {
 
  protected:
   explicit BasePaintedLayerDelegate(SkColor color);
+
+  SkColor color() const { return color_; }
 
  private:
   // The color to paint.
@@ -43,7 +49,7 @@ class BasePaintedLayerDelegate : public ui::LayerDelegate {
 
 // A BasePaintedLayerDelegate that paints a circle of a specified color and
 // radius.
-class CircleLayerDelegate : public BasePaintedLayerDelegate {
+class VIEWS_EXPORT CircleLayerDelegate : public BasePaintedLayerDelegate {
  public:
   CircleLayerDelegate(SkColor color, int radius);
   ~CircleLayerDelegate() override;
@@ -51,7 +57,7 @@ class CircleLayerDelegate : public BasePaintedLayerDelegate {
   int radius() const { return radius_; }
 
   // BasePaintedLayerDelegate:
-  gfx::PointF GetCenterPoint() const override;
+  gfx::Rect GetPaintedBounds() const override;
   void OnPaintLayer(const ui::PaintContext& context) override;
 
  private:
@@ -63,7 +69,7 @@ class CircleLayerDelegate : public BasePaintedLayerDelegate {
 
 // A BasePaintedLayerDelegate that paints a rectangle of a specified color and
 // size.
-class RectangleLayerDelegate : public BasePaintedLayerDelegate {
+class VIEWS_EXPORT RectangleLayerDelegate : public BasePaintedLayerDelegate {
  public:
   RectangleLayerDelegate(SkColor color, gfx::Size size);
   ~RectangleLayerDelegate() override;
@@ -71,7 +77,7 @@ class RectangleLayerDelegate : public BasePaintedLayerDelegate {
   const gfx::Size& size() const { return size_; }
 
   // BasePaintedLayerDelegate:
-  gfx::PointF GetCenterPoint() const override;
+  gfx::Rect GetPaintedBounds() const override;
   void OnPaintLayer(const ui::PaintContext& context) override;
 
  private:
@@ -83,17 +89,18 @@ class RectangleLayerDelegate : public BasePaintedLayerDelegate {
 
 // A BasePaintedLayerDelegate that paints a rounded rectangle of a specified
 // color, size and corner radius.
-class RoundedRectangleLayerDelegate : public BasePaintedLayerDelegate {
+class VIEWS_EXPORT RoundedRectangleLayerDelegate
+    : public BasePaintedLayerDelegate {
  public:
   RoundedRectangleLayerDelegate(SkColor color,
-                                gfx::Size size,
+                                const gfx::Size& size,
                                 int corner_radius);
   ~RoundedRectangleLayerDelegate() override;
 
   const gfx::Size& size() const { return size_; }
 
   // BasePaintedLayerDelegate:
-  gfx::PointF GetCenterPoint() const override;
+  gfx::Rect GetPaintedBounds() const override;
   void OnPaintLayer(const ui::PaintContext& context) override;
 
  private:
@@ -104,6 +111,33 @@ class RoundedRectangleLayerDelegate : public BasePaintedLayerDelegate {
   int corner_radius_;
 
   DISALLOW_COPY_AND_ASSIGN(RoundedRectangleLayerDelegate);
+};
+
+// A BasePaintedLayerDelegate that paints a shadow around the outside of a
+// specified roundrect.
+class VIEWS_EXPORT BorderShadowLayerDelegate : public BasePaintedLayerDelegate {
+ public:
+  BorderShadowLayerDelegate(const std::vector<gfx::ShadowValue>& shadows,
+                            const gfx::Rect& shadowed_area_bounds,
+                            int corner_radius);
+  ~BorderShadowLayerDelegate() override;
+
+  // BasePaintedLayerDelegate:
+  gfx::Rect GetPaintedBounds() const override;
+  gfx::Vector2dF GetCenteringOffset() const override;
+  void OnPaintLayer(const ui::PaintContext& context) override;
+
+ private:
+  gfx::Rect GetTotalRect() const;
+
+  const std::vector<gfx::ShadowValue> shadows_;
+
+  // The bounds of the shadowed area.
+  gfx::Rect bounds_;
+
+  int corner_radius_;
+
+  DISALLOW_COPY_AND_ASSIGN(BorderShadowLayerDelegate);
 };
 
 }  // namespace views

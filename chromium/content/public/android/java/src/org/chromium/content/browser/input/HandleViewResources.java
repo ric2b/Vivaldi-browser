@@ -8,8 +8,9 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 
 import org.chromium.base.ApiCompatibilityUtils;
@@ -68,25 +69,7 @@ public class HandleViewResources {
     }
 
     private static Bitmap getHandleBitmap(Context context, final int[] attrs) {
-        // TODO(jdduke): Properly derive and apply theme color.
-        TypedArray a = context.getTheme().obtainStyledAttributes(attrs);
-        final int resId = a.getResourceId(a.getIndex(0), 0);
-        final Resources res = a.getResources();
-        a.recycle();
-
         final Bitmap.Config config = Bitmap.Config.ARGB_8888;
-        final BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inJustDecodeBounds = false;
-        options.inPreferredConfig = config;
-        Bitmap bitmap = BitmapFactory.decodeResource(res, resId, options);
-        if (bitmap != null) return bitmap;
-
-        // If themed resource lookup fails, fall back to using the Context's
-        // resources for attribute lookup.
-        if (res != context.getResources()) {
-            bitmap = BitmapFactory.decodeResource(context.getResources(), resId, options);
-            if (bitmap != null) return bitmap;
-        }
 
         Drawable drawable = getHandleDrawable(context, attrs);
         assert drawable != null;
@@ -96,6 +79,11 @@ public class HandleViewResources {
         Bitmap canvasBitmap = Bitmap.createBitmap(width, height, config);
         Canvas canvas = new Canvas(canvasBitmap);
         drawable.setBounds(0, 0, width, height);
+
+        // Special workaround on 53 branch only for wrong color of handles provided by a particular
+        // version of the support library on <K: http://crbug.com/640764
+        drawable.setColorFilter(Color.rgb(0x42, 0x85, 0xF3), PorterDuff.Mode.SRC_IN);
+
         drawable.draw(canvas);
         return canvasBitmap;
     }

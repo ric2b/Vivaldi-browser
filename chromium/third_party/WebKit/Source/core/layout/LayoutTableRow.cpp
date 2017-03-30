@@ -28,8 +28,8 @@
 #include "core/fetch/ImageResource.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
+#include "core/layout/LayoutState.h"
 #include "core/layout/LayoutTableCell.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/paint/TableRowPainter.h"
 #include "core/style/StyleInheritedData.h"
@@ -81,13 +81,19 @@ void LayoutTableRow::styleDidChange(StyleDifference diff, const ComputedStyle* o
             // If the border width changes on a row, we need to make sure the cells in the row know to lay out again.
             // This only happens when borders are collapsed, since they end up affecting the border sides of the cell
             // itself.
-            table->setPreferredLogicalWidthsDirty(MarkOnlyThis);
             for (LayoutBox* childBox = firstChildBox(); childBox; childBox = childBox->nextSiblingBox()) {
                 if (!childBox->isTableCell())
                     continue;
                 childBox->setChildNeedsLayout();
                 childBox->setPreferredLogicalWidthsDirty(MarkOnlyThis);
             }
+            // Most table componenents can rely on LayoutObject::styleDidChange
+            // to mark the container chain dirty. But LayoutTableSection seems
+            // to never clear its dirty bit, which stops the propagation. So
+            // anything under LayoutTableSection has to restart the propagation
+            // at the table.
+            // TODO(dgrogan): Make LayoutTableSection clear its dirty bit.
+            table->setPreferredLogicalWidthsDirty();
         }
     }
 }
@@ -170,9 +176,16 @@ void LayoutTableRow::layout()
             cell->markForPaginationRelayoutIfNeeded(layouter);
         if (cell->needsLayout())
             cell->layout();
+        // We're laying out each cell here to establish its raw logical height so it can be used to
+        // figure out the row's height and baseline later on in layoutRows(). As part of that we
+        // will layout the cell again if we're in a paginated context and come up with the
+        // correct strut. Any strut we come up with here will depend on the old paged layout and will
+        // give the cell an invalid height that is not useful for figuring out the raw height of the row.
+        if (cell->firstRootBox() && cell->firstRootBox()->paginationStrut())
+            cell->setLogicalHeight(cell->logicalHeight() - cell->firstRootBox()->paginationStrut());
     }
 
-    m_overflow.clear();
+    m_overflow.reset();
     addVisualEffectOverflow();
     // We do not call addOverflowFromCell here. The cell are laid out to be
     // measured above and will be sized correctly in a follow-up phase.

@@ -37,6 +37,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/task_management/web_contents_tags.h"
+#include "chrome/browser/ui/bluetooth/chrome_extension_bluetooth_chooser.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -200,12 +201,12 @@ bool ChromeExtensionsBrowserClient::DidVersionUpdate(
     content::BrowserContext* context) {
   Profile* profile = static_cast<Profile*>(context);
 
-  // Unit tests may not provide prefs; assume everything is up-to-date.
+  // Unit tests may not provide prefs; assume everything is up to date.
   ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(profile);
   if (!extension_prefs)
     return false;
 
-  // If we're inside a browser test, then assume prefs are all up-to-date.
+  // If we're inside a browser test, then assume prefs are all up to date.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType))
     return false;
 
@@ -245,12 +246,6 @@ bool ChromeExtensionsBrowserClient::IsLoggedInAsPublicAccount() {
 #else
   return false;
 #endif
-}
-
-ApiActivityMonitor* ChromeExtensionsBrowserClient::GetApiActivityMonitor(
-    content::BrowserContext* context) {
-  // The ActivityLog monitors and records function calls and events.
-  return ActivityLog::GetInstance(context);
 }
 
 ExtensionSystemProvider*
@@ -406,6 +401,20 @@ std::unique_ptr<ExtensionApiFrameIdMapHelper>
 ChromeExtensionsBrowserClient::CreateExtensionApiFrameIdMapHelper(
     ExtensionApiFrameIdMap* map) {
   return base::WrapUnique(new ChromeExtensionApiFrameIdMapHelper(map));
+}
+
+std::unique_ptr<content::BluetoothChooser>
+ChromeExtensionsBrowserClient::CreateBluetoothChooser(
+    content::RenderFrameHost* frame,
+    const content::BluetoothChooser::EventHandler& event_handler) {
+  return base::WrapUnique(
+      new ChromeExtensionBluetoothChooser(frame, event_handler));
+}
+
+bool ChromeExtensionsBrowserClient::IsActivityLoggingEnabled(
+    content::BrowserContext* context) {
+  ActivityLog* activity_log = ActivityLog::GetInstance(context);
+  return activity_log && activity_log->is_active();
 }
 
 }  // namespace extensions

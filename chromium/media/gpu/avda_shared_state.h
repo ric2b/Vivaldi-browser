@@ -13,7 +13,7 @@
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_surface.h"
 
-namespace gfx {
+namespace gl {
 class SurfaceTexture;
 }
 
@@ -36,18 +36,18 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
 
   void WaitForFrameAvailable();
 
-  void SetSurfaceTexture(scoped_refptr<gfx::SurfaceTexture> surface_texture,
+  void SetSurfaceTexture(scoped_refptr<gl::SurfaceTexture> surface_texture,
                          GLuint attached_service_id);
 
   // Context and surface that |surface_texture_| is bound to, if
   // |surface_texture_| is not null.
-  gfx::GLContext* context() const { return context_.get(); }
+  gl::GLContext* context() const { return context_.get(); }
 
-  gfx::GLSurface* surface() const { return surface_.get(); }
+  gl::GLSurface* surface() const { return surface_.get(); }
 
   // Iterates over all known codec images and updates the MediaCodec attached to
   // each one.
-  void CodecChanged(media::MediaCodecBridge* codec);
+  void CodecChanged(MediaCodecBridge* codec);
 
   // Methods for finding and updating the AVDACodecImage associated with a given
   // picture buffer id. GetImageForPicture() will return null for unknown ids.
@@ -72,7 +72,7 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
   //
   // Some devices do not reliably notify frame availability, so we use a very
   // short deadline of only a few milliseconds to avoid indefinite stalls.
-  void RenderCodecBufferToSurfaceTexture(media::MediaCodecBridge* codec,
+  void RenderCodecBufferToSurfaceTexture(MediaCodecBridge* codec,
                                          int codec_buffer_index);
 
  protected:
@@ -81,7 +81,7 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
  private:
   friend class base::RefCounted<AVDASharedState>;
 
-  scoped_refptr<gfx::SurfaceTexture> surface_texture_;
+  scoped_refptr<gl::SurfaceTexture> surface_texture_;
 
   // Platform gl texture id for |surface_texture_|.
   GLuint surface_texture_service_id_;
@@ -91,8 +91,8 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
 
   // Context and surface that |surface_texture_| is bound to, if
   // |surface_texture_| is not null.
-  scoped_refptr<gfx::GLContext> context_;
-  scoped_refptr<gfx::GLSurface> surface_;
+  scoped_refptr<gl::GLContext> context_;
+  scoped_refptr<gl::GLSurface> surface_;
 
   // Maps a picture buffer id to a AVDACodecImage.
   std::map<int, AVDACodecImage*> codec_images_;

@@ -76,29 +76,32 @@ class LoadingTrace(object):
 
   @classmethod
   def RecordUrlNavigation(
-      cls, url, connection, chrome_metadata, additional_categories=None,
-      timeout_seconds=devtools_monitor.DEFAULT_TIMEOUT_SECONDS):
+      cls, url, connection, chrome_metadata, categories,
+      timeout_seconds=devtools_monitor.DEFAULT_TIMEOUT_SECONDS,
+      stop_delay_multiplier=0):
     """Create a loading trace by using controller to fetch url.
 
     Args:
       url: (str) url to fetch.
       connection: An opened devtools connection.
       chrome_metadata: Dictionary of chrome metadata.
-      additional_categories: ([str] or None) TracingTrack additional categories
-                             to capture.
+      categories: as in tracing.TracingTrack
       timeout_seconds: monitoring connection timeout in seconds.
+      stop_delay_multiplier: How long to wait after page load completed before
+        tearing down, relative to the time it took to reach the page load to
+        complete.
 
     Returns:
       LoadingTrace instance.
     """
     page = page_track.PageTrack(connection)
     request = request_track.RequestTrack(connection)
-    trace = tracing.TracingTrack(
-        connection,
-        additional_categories=additional_categories)
+    trace = tracing.TracingTrack(connection, categories)
     start_date_str = datetime.datetime.utcnow().isoformat()
     seconds_since_epoch=time.time()
-    connection.MonitorUrl(url, timeout_seconds=timeout_seconds)
+    connection.MonitorUrl(url,
+                          timeout_seconds=timeout_seconds,
+                          stop_delay_multiplier=stop_delay_multiplier)
     trace = cls(url, chrome_metadata, page, request, trace)
     trace.metadata.update(date=start_date_str,
                           seconds_since_epoch=seconds_since_epoch)

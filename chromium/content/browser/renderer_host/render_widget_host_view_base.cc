@@ -13,6 +13,7 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base_observer.h"
+#include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/browser/render_widget_host_view_frame_subscriber.h"
 #include "ui/display/display.h"
@@ -40,6 +41,7 @@ RenderWidgetHostViewBase::RenderWidgetHostViewBase()
       current_device_scale_factor_(0),
       current_display_rotation_(display::Display::ROTATE_0),
       pinch_zoom_enabled_(content::IsPinchToZoomEnabled()),
+      text_input_manager_(nullptr),
       renderer_frame_number_(0),
       weak_factory_(this) {}
 
@@ -53,6 +55,10 @@ RenderWidgetHostViewBase::~RenderWidgetHostViewBase() {
   // NotifyObserversAboutShutdown() twice, as the observers are required to
   // de-register on the first call, and so the second call does nothing.
   NotifyObserversAboutShutdown();
+  // If we have a live reference to |text_input_manager_|, we should unregister
+  // so that the |text_input_manager_| will free its state.
+  if (text_input_manager_)
+    text_input_manager_->Unregister(this);
 }
 
 void RenderWidgetHostViewBase::NotifyObserversAboutShutdown() {
@@ -235,6 +241,13 @@ bool RenderWidgetHostViewBase::HasDisplayPropertyChanged(gfx::NativeView view) {
   return true;
 }
 
+void RenderWidgetHostViewBase::DidUnregisterFromTextInputManager(
+    TextInputManager* text_input_manager) {
+  DCHECK(text_input_manager && text_input_manager_ == text_input_manager);
+
+  text_input_manager_ = nullptr;
+}
+
 base::WeakPtr<RenderWidgetHostViewBase> RenderWidgetHostViewBase::GetWeakPtr() {
   return weak_factory_.GetWeakPtr();
 }
@@ -255,6 +268,12 @@ void RenderWidgetHostViewBase::BeginFrameSubscription(
 
 void RenderWidgetHostViewBase::EndFrameSubscription() {
   NOTREACHED();
+}
+
+void RenderWidgetHostViewBase::FocusedNodeTouched(
+    const gfx::Point& location_dips_screen,
+    bool editable) {
+  DVLOG(1) << "FocusedNodeTouched: " << editable;
 }
 
 uint32_t RenderWidgetHostViewBase::RendererFrameNumber() {
@@ -387,6 +406,41 @@ void RenderWidgetHostViewBase::TransformPointToLocalCoordSpace(
     cc::SurfaceId original_surface,
     gfx::Point* transformed_point) {
   *transformed_point = point;
+}
+
+void RenderWidgetHostViewBase::TextInputStateChanged(
+    const TextInputState& text_input_state) {
+// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
+#if defined(USE_AURA)
+  if (GetTextInputManager())
+    GetTextInputManager()->UpdateTextInputState(this, text_input_state);
+#endif
+}
+
+void RenderWidgetHostViewBase::ImeCancelComposition() {
+// TODO(ekaramad): Use TextInputManager code paths for IME on other platforms.
+#if defined(USE_AURA)
+  if (GetTextInputManager())
+    GetTextInputManager()->ImeCancelComposition(this);
+#endif
+}
+
+TextInputManager* RenderWidgetHostViewBase::GetTextInputManager() {
+  if (text_input_manager_)
+    return text_input_manager_;
+
+  RenderWidgetHostImpl* host =
+      RenderWidgetHostImpl::From(GetRenderWidgetHost());
+  if (!host || !host->delegate())
+    return nullptr;
+
+  // This RWHV needs to be registered with the TextInputManager so that the
+  // TextInputManager starts tracking its state, and observing its lifetime.
+  text_input_manager_ = host->delegate()->GetTextInputManager();
+  if (text_input_manager_)
+    text_input_manager_->Register(this);
+
+  return text_input_manager_;
 }
 
 void RenderWidgetHostViewBase::AddObserver(

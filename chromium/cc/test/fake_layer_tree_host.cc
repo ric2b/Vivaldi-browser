@@ -53,6 +53,7 @@ std::unique_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
   params.client = client;
   params.settings = &settings;
   params.task_graph_runner = task_graph_runner;
+  params.animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   return base::WrapUnique(new FakeLayerTreeHost(client, &params, mode));
 }
 
@@ -67,6 +68,7 @@ std::unique_ptr<FakeLayerTreeHost> FakeLayerTreeHost::Create(
   params.settings = &settings;
   params.task_graph_runner = task_graph_runner;
   params.image_serialization_processor = image_serialization_processor;
+  params.animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   return base::WrapUnique(new FakeLayerTreeHost(client, &params, mode));
 }
 
@@ -84,7 +86,7 @@ void FakeLayerTreeHost::SetNeedsCommit() { needs_commit_ = true; }
 
 LayerImpl* FakeLayerTreeHost::CommitAndCreateLayerImplTree() {
   TreeSynchronizer::SynchronizeTrees(root_layer(), active_tree());
-  active_tree()->SetPropertyTrees(*property_trees());
+  active_tree()->SetPropertyTrees(property_trees());
   TreeSynchronizer::PushLayerProperties(root_layer()->layer_tree_host(),
                                         active_tree());
   animation_host()->PushPropertiesTo(host_impl_.animation_host());
@@ -101,18 +103,18 @@ LayerImpl* FakeLayerTreeHost::CommitAndCreateLayerImplTree() {
   }
 
   active_tree()->UpdatePropertyTreesForBoundsDelta();
-  return active_tree()->root_layer();
+  return active_tree()->root_layer_for_testing();
 }
 
 LayerImpl* FakeLayerTreeHost::CommitAndCreatePendingTree() {
   TreeSynchronizer::SynchronizeTrees(root_layer(), pending_tree());
-  pending_tree()->SetPropertyTrees(*property_trees());
+  pending_tree()->SetPropertyTrees(property_trees());
   TreeSynchronizer::PushLayerProperties(root_layer()->layer_tree_host(),
                                         pending_tree());
   animation_host()->PushPropertiesTo(host_impl_.animation_host());
 
   pending_tree()->UpdatePropertyTreeScrollOffset(property_trees());
-  return pending_tree()->root_layer();
+  return pending_tree()->root_layer_for_testing();
 }
 
 }  // namespace cc

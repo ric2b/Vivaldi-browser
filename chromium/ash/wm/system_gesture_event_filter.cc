@@ -4,7 +4,7 @@
 
 #include "ash/wm/system_gesture_event_filter.h"
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/shell.h"
 #include "ash/touch/touch_uma.h"
@@ -20,8 +20,7 @@ SystemGestureEventFilter::SystemGestureEventFilter()
     : overview_gesture_handler_(new OverviewGestureHandler),
       shelf_gesture_handler_(new ShelfGestureHandler()) {}
 
-SystemGestureEventFilter::~SystemGestureEventFilter() {
-}
+SystemGestureEventFilter::~SystemGestureEventFilter() {}
 
 void SystemGestureEventFilter::OnMouseEvent(ui::MouseEvent* event) {
 #if defined(OS_CHROMEOS)

@@ -29,10 +29,6 @@
 import unittest
 
 from webkitpy.common.net.layouttestresults import LayoutTestResults
-from webkitpy.common.system.outputcapture import OutputCapture
-from webkitpy.layout_tests.models import test_results
-from webkitpy.layout_tests.models import test_failures
-from webkitpy.thirdparty.BeautifulSoup import BeautifulSoup
 
 
 class LayoutTestResultsTest(unittest.TestCase):
@@ -64,6 +60,11 @@ class LayoutTestResultsTest(unittest.TestCase):
                     "expected": "PASS",
                     "actual": "IMAGE PASS",
                     "is_unexpected": true
+                },
+                "prototype-crashy.html": {
+                    "expected": "PASS",
+                    "actual": "CRASH",
+                    "is_unexpected": true
                 }
             }
         },
@@ -80,7 +81,7 @@ class LayoutTestResultsTest(unittest.TestCase):
     },
     "skipped": 450,
     "num_regressions": 15,
-    "layout_tests_dir": "\/b\/build\/slave\/Webkit_Mac10_5\/build\/src\/third_party\/WebKit\/LayoutTests",
+    "layout_tests_dir": "/b/build/slave/Webkit_Mac10_5/build/src/third_party/WebKit/LayoutTests",
     "version": 3,
     "num_passes": 77,
     "has_pretty_patch": false,
@@ -105,6 +106,16 @@ class LayoutTestResultsTest(unittest.TestCase):
 
     def test_actual_results(self):
         results = LayoutTestResults.results_from_string(self.example_full_results_json)
-        self.assertEqual(results.actual_results("fast/dom/prototype-banana.html"), "PASS")
-        self.assertEqual(results.actual_results("fast/dom/prototype-taco.html"), "PASS TEXT")
-        self.assertEqual(results.actual_results("nonexistant.html"), "")
+        self.assertEqual(results.result_for_test("fast/dom/prototype-banana.html").actual_results(), "PASS")
+        self.assertEqual(results.result_for_test("fast/dom/prototype-taco.html").actual_results(), "PASS TEXT")
+        self.assertFalse(results.result_for_test("nonexistant.html"))
+
+    def test_unexpected_mismatch_results(self):
+        results = LayoutTestResults.results_from_string(self.example_full_results_json)
+        self.assertEqual(
+            [r.test_name() for r in results.unexpected_mismatch_results()],
+            [
+                'fast/dom/prototype-inheritance.html',
+                'fast/dom/prototype-taco.html',
+                'svg/dynamic-updates/SVGFEDropShadowElement-dom-stdDeviation-attr.html'
+            ])

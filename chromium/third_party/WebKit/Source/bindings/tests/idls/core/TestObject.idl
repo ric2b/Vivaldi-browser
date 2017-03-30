@@ -259,7 +259,8 @@ interface TestObject {
     [Reflect=reflectUrlAttribute, URL] attribute DOMString urlStringAttribute;
     [Unforgeable] attribute long unforgeableLongAttribute;
     [Measure] attribute long measuredLongAttribute;
-    [SameObject] attribute TestInterface sameObjectAttribute;
+    [SameObject] readonly attribute TestInterface sameObjectAttribute;
+    [SameObject, SaveSameObject] readonly attribute TestInterface saveSameObjectAttribute;
     [Unscopeable] attribute long unscopeableLongAttribute;
     [Unscopeable, OriginTrialEnabled=FeatureName] attribute long unscopeableOriginTrialEnabledLongAttribute;
     [Unscopeable, RuntimeEnabled=FeatureName] attribute long unscopeableRuntimeEnabledLongAttribute;
@@ -547,12 +548,14 @@ interface TestObject {
     [NotEnumerable] void notEnumerableVoidMethod();
     [OriginTrialEnabled=FeatureName] void originTrialEnabledVoidMethod();
     [PerWorldBindings, OriginTrialEnabled=FeatureName] void perWorldBindingsOriginTrialEnabledVoidMethod();
-    [OriginTrialEnabled=FeatureName] void originTrialEnabledOverloadedVoidMethod(DOMString stringArg);
-    [OriginTrialEnabled=FeatureName] void originTrialEnabledOverloadedVoidMethod(long longArg);
-    [OriginTrialEnabled=FeatureName1] void partiallyOriginTrialEnabledOverloadedVoidMethod(DOMString stringArg);
-    [OriginTrialEnabled=FeatureName2] void partiallyOriginTrialEnabledOverloadedVoidMethod(TestInterface testInterfaceArg);
-    void partiallyOriginTrialEnabledOverloadedVoidMethod(long longArg, DOMString stringArg);
-    [OriginTrialEnabled=FeatureName3] void partiallyOriginTrialEnabledOverloadedVoidMethod(long longArg, DOMString stringArg, TestInterface testInterfaceArg);
+    // TODO(iclelland): Re-enable origin trials on overloaded methods
+    // (crbug.com/621641)
+    // [OriginTrialEnabled=FeatureName] void originTrialEnabledOverloadedVoidMethod(DOMString stringArg);
+    // [OriginTrialEnabled=FeatureName] void originTrialEnabledOverloadedVoidMethod(long longArg);
+    // [OriginTrialEnabled=FeatureName1] void partiallyOriginTrialEnabledOverloadedVoidMethod(DOMString stringArg);
+    // [OriginTrialEnabled=FeatureName2] void partiallyOriginTrialEnabledOverloadedVoidMethod(TestInterface testInterfaceArg);
+    // void partiallyOriginTrialEnabledOverloadedVoidMethod(long longArg, DOMString stringArg);
+    // [OriginTrialEnabled=FeatureName3] void partiallyOriginTrialEnabledOverloadedVoidMethod(long longArg, DOMString stringArg, TestInterface testInterfaceArg);
     [PerWorldBindings] void perWorldBindingsVoidMethod();
     [PerWorldBindings] void perWorldBindingsVoidMethodTestInterfaceEmptyArg(TestInterfaceEmpty testInterfaceEmptyArg);
     [PostMessage, RaisesException] void postMessage(SerializedScriptValue message, optional sequence<Transferable> transfer);

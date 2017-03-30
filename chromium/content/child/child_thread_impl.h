@@ -18,12 +18,12 @@
 #include "base/sequenced_task_runner.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
-#include "content/child/mojo/mojo_application.h"
 #include "content/common/content_export.h"
 #include "content/public/child/child_thread.h"
 #include "ipc/ipc_message.h"  // For IPC_MESSAGE_LOG_ENABLED.
 #include "ipc/ipc_platform_file.h"
 #include "ipc/message_router.h"
+#include "services/shell/public/cpp/shell_client.h"
 
 namespace base {
 class MessageLoop;
@@ -31,10 +31,15 @@ class MessageLoop;
 
 namespace IPC {
 class MessageFilter;
-class ScopedIPCSupport;
 class SyncChannel;
 class SyncMessageFilter;
 }  // namespace IPC
+
+namespace mojo {
+namespace edk {
+class ScopedIPCSupport;
+}  // namespace edk
+}  // namespace mojo
 
 namespace blink {
 class WebFrame;
@@ -57,12 +62,14 @@ class QuotaMessageFilter;
 class ResourceDispatcher;
 class ThreadSafeSender;
 class WebSocketDispatcher;
+class WebSocketMessageFilter;
 struct RequestInfo;
 
 // The main thread of a child process derives from this class.
 class CONTENT_EXPORT ChildThreadImpl
     : public IPC::Listener,
-      virtual public ChildThread {
+      virtual public ChildThread,
+      public NON_EXPORTED_BASE(shell::ShellClient){
  public:
   struct CONTENT_EXPORT Options;
 
@@ -90,6 +97,13 @@ class CONTENT_EXPORT ChildThreadImpl
 #endif
   void RecordAction(const base::UserMetricsAction& action) override;
   void RecordComputedAction(const std::string& action) override;
+  MojoShellConnection* GetMojoShellConnection() override;
+  shell::InterfaceRegistry* GetInterfaceRegistry() override;
+  shell::InterfaceProvider* GetRemoteInterfaces() override;
+
+  // shell::ShellClient:
+  shell::InterfaceRegistry* GetInterfaceRegistryForConnection() override;
+  shell::InterfaceProvider* GetInterfaceProviderForConnection() override;
 
   IPC::SyncChannel* channel() { return channel_.get(); }
 
@@ -174,6 +188,10 @@ class CONTENT_EXPORT ChildThreadImpl
     return resource_message_filter_.get();
   }
 
+  WebSocketMessageFilter* websocket_message_filter() const {
+    return websocket_message_filter_.get();
+  }
+
   base::MessageLoop* message_loop() const { return message_loop_; }
 
   // Returns the one child thread. Can only be called on the main thread.
@@ -184,10 +202,6 @@ class CONTENT_EXPORT ChildThreadImpl
   // process.
   static void ShutdownThread();
 #endif
-
-  ServiceRegistry* service_registry() const {
-    return mojo_application_->service_registry();
-  }
 
  protected:
   friend class ChildProcess;
@@ -238,8 +252,10 @@ class CONTENT_EXPORT ChildThreadImpl
 
   void EnsureConnected();
 
-  std::unique_ptr<IPC::ScopedIPCSupport> mojo_ipc_support_;
-  std::unique_ptr<MojoApplication> mojo_application_;
+  std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
+  std::unique_ptr<MojoShellConnection> mojo_shell_connection_;
+  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
+  std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
 
   std::string channel_name_;
   std::unique_ptr<IPC::SyncChannel> channel_;
@@ -275,6 +291,8 @@ class CONTENT_EXPORT ChildThreadImpl
   scoped_refptr<ServiceWorkerMessageFilter> service_worker_message_filter_;
 
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;
+
+  scoped_refptr<WebSocketMessageFilter> websocket_message_filter_;
 
   scoped_refptr<NotificationDispatcher> notification_dispatcher_;
 

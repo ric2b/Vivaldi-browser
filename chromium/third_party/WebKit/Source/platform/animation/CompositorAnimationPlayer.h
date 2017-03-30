@@ -11,8 +11,9 @@
 #include "cc/animation/animation_delegate.h"
 #include "cc/animation/animation_player.h"
 #include "platform/PlatformExport.h"
+#include "platform/graphics/CompositorElementId.h"
 #include "wtf/Noncopyable.h"
-
+#include "wtf/PtrUtil.h"
 #include <memory>
 
 namespace blink {
@@ -25,7 +26,11 @@ class WebLayer;
 class PLATFORM_EXPORT CompositorAnimationPlayer : public cc::AnimationDelegate {
     WTF_MAKE_NONCOPYABLE(CompositorAnimationPlayer);
 public:
-    CompositorAnimationPlayer();
+    static std::unique_ptr<CompositorAnimationPlayer> create()
+    {
+        return wrapUnique(new CompositorAnimationPlayer());
+    }
+
     ~CompositorAnimationPlayer();
 
     cc::AnimationPlayer* animationPlayer() const;
@@ -36,16 +41,18 @@ public:
     // deleting the delegate.
     void setAnimationDelegate(CompositorAnimationDelegate*);
 
-    void attachLayer(WebLayer*);
-    void detachLayer();
-    bool isLayerAttached() const;
+    void attachElement(const CompositorElementId&);
+    void detachElement();
+    bool isElementAttached() const;
 
     void addAnimation(CompositorAnimation*);
-    void removeAnimation(int animationId);
-    void pauseAnimation(int animationId, double timeOffset);
-    void abortAnimation(int animationId);
+    void removeAnimation(uint64_t animationId);
+    void pauseAnimation(uint64_t animationId, double timeOffset);
+    void abortAnimation(uint64_t animationId);
 
 private:
+    CompositorAnimationPlayer();
+
     // cc::AnimationDelegate implementation.
     void NotifyAnimationStarted(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;
     void NotifyAnimationFinished(base::TimeTicks monotonicTime, cc::TargetProperty::Type, int group) override;

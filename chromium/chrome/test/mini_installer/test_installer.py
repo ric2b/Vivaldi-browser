@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 import unittest
 import _winreg
 
@@ -216,7 +217,12 @@ def RunCleanCommand(force_clean, variable_expander):
                '--chrome-long-name="%s" '
                '--no-error-if-absent %s %s' %
                (product_name, product_switch, interactive_option))
-    RunCommand(command, variable_expander)
+    try:
+      RunCommand(command, variable_expander)
+    except:
+      message = traceback.format_exception(*sys.exc_info())
+      message.insert(0, 'Error cleaning up an old install with:\n')
+      LogMessage(''.join(message))
     if force_clean:
       DeleteGoogleUpdateRegistration(system_level, registry_subkey,
                                      variable_expander)
@@ -345,9 +351,6 @@ def main():
                                                mini_installer_path)
 
   suite = unittest.TestSuite()
-
-  # Set the env var used by mini_installer.exe to decide to not show UI.
-  os.environ['MINI_INSTALLER_TEST'] = '1'
 
   variable_expander = VariableExpander(mini_installer_path)
   config = ParseConfigFile(args.config, variable_expander)

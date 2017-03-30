@@ -55,12 +55,12 @@ void NotificationResourcesLoader::start(ExecutionContext* executionContext, cons
     size_t numActions = notificationData.actions.size();
     m_pendingRequestCount = 2 /* icon and badge */ + numActions;
 
-    loadImage(executionContext, notificationData.icon, bind<const SkBitmap&>(&NotificationResourcesLoader::didLoadIcon, WeakPersistentThisPointer<NotificationResourcesLoader>(this)));
-    loadImage(executionContext, notificationData.badge, bind<const SkBitmap&>(&NotificationResourcesLoader::didLoadBadge, WeakPersistentThisPointer<NotificationResourcesLoader>(this)));
+    loadImage(executionContext, notificationData.icon, WTF::bind(&NotificationResourcesLoader::didLoadIcon, wrapWeakPersistent(this)));
+    loadImage(executionContext, notificationData.badge, WTF::bind(&NotificationResourcesLoader::didLoadBadge, wrapWeakPersistent(this)));
 
     m_actionIcons.resize(numActions);
     for (size_t i = 0; i < numActions; i++)
-        loadImage(executionContext, notificationData.actions[i].icon, bind<const SkBitmap&>(&NotificationResourcesLoader::didLoadActionIcon, WeakPersistentThisPointer<NotificationResourcesLoader>(this), i));
+        loadImage(executionContext, notificationData.actions[i].icon, WTF::bind(&NotificationResourcesLoader::didLoadActionIcon, wrapWeakPersistent(this), i));
 }
 
 std::unique_ptr<WebNotificationResources> NotificationResourcesLoader::getResources() const

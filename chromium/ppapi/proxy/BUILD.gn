@@ -194,6 +194,8 @@ component("proxy") {
     "video_frame_resource.h",
     "video_source_resource.cc",
     "video_source_resource.h",
+    "vpn_provider_resource.cc",
+    "vpn_provider_resource.h",
     "websocket_resource.cc",
     "websocket_resource.h",
   ]
@@ -278,9 +280,11 @@ component("proxy") {
 
   deps = [
     "//base",
-    "//gpu/command_buffer/client:client_sources_for_ppapi",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/ipc/common:command_buffer_traits",
     "//ipc",
     "//media:shared_memory_support",
+    "//mojo/edk/system",
     "//ppapi/c",
     "//ppapi/shared_impl",
   ]

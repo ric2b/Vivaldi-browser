@@ -105,9 +105,6 @@
       'type': 'none',
       'dependencies': [
         '../../chrome/chrome.gyp:chrome_android_core',
-        # TODO(yfriedman): move this DEP to chrome_android_core to be shared  
-        # between internal/external.
-         '../../third_party/cld_2/cld_2.gyp:cld2_dynamic',
       ],
       'include_dirs': [
         '../..',
@@ -282,11 +279,14 @@
         '../../components/components.gyp:security_state_enums_java',
         '../../components/components.gyp:web_contents_delegate_android_java',
         '../../content/content_shell_and_tests.gyp:content_java_test_support',
+        '../../mojo/mojo_public.gyp:mojo_bindings_java',
+        '../../mojo/mojo_public.gyp:mojo_public_java',
         '../../net/net.gyp:net_java',
         '../../net/net.gyp:net_java_test_support',
         '../../sync/sync.gyp:sync_java_test_support',
         '../../third_party/android_tools/android_tools.gyp:android_support_v7_appcompat_javalib',
         '../../third_party/android_tools/android_tools.gyp:google_play_services_javalib',
+        '../../third_party/WebKit/public/blink.gyp:android_mojo_bindings_java',
         '../../ui/android/ui_android.gyp:ui_javatests',
       ],
       'includes': [ '../../build/java.gypi' ],

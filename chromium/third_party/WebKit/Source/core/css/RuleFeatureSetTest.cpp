@@ -19,6 +19,47 @@
 
 namespace blink {
 
+// TODO(sof): consider making these part object helper abstractions
+// available from platform/heap/.
+
+template<typename T>
+class HeapPartObject final : public GarbageCollectedFinalized<HeapPartObject<T>> {
+public:
+    static HeapPartObject* create()
+    {
+        return new HeapPartObject;
+    }
+
+    T* get() { return &m_part; }
+
+    DEFINE_INLINE_TRACE()
+    {
+        visitor->trace(m_part);
+    }
+
+private:
+    HeapPartObject()
+    {
+    }
+
+    T m_part;
+};
+
+template<typename T>
+class PersistentPartObject final {
+    DISALLOW_NEW();
+public:
+    PersistentPartObject()
+        : m_part(HeapPartObject<T>::create())
+    {
+    }
+
+    T* operator->() const { return (*m_part).get(); }
+
+private:
+    Persistent<HeapPartObject<T>> m_part;
+};
+
 class RuleFeatureSetTest : public ::testing::Test {
 public:
     RuleFeatureSetTest()
@@ -41,31 +82,36 @@ public:
 
         StyleRule* styleRule = StyleRule::create(std::move(selectorList), MutableStylePropertySet::create(HTMLStandardMode));
         RuleData ruleData(styleRule, 0, 0, RuleHasNoSpecialState);
-        return m_ruleFeatureSet.collectFeaturesFromRuleData(ruleData);
+        return m_ruleFeatureSet->collectFeaturesFromRuleData(ruleData);
     }
 
     void collectInvalidationSetsForClass(InvalidationLists& invalidationLists, const AtomicString& className) const
     {
         Element* element = Traversal<HTMLElement>::firstChild(*Traversal<HTMLElement>::firstChild(*m_document->body()));
-        m_ruleFeatureSet.collectInvalidationSetsForClass(invalidationLists, *element, className);
+        m_ruleFeatureSet->collectInvalidationSetsForClass(invalidationLists, *element, className);
     }
 
     void collectInvalidationSetsForId(InvalidationLists& invalidationLists, const AtomicString& id) const
     {
         Element* element = Traversal<HTMLElement>::firstChild(*Traversal<HTMLElement>::firstChild(*m_document->body()));
-        m_ruleFeatureSet.collectInvalidationSetsForId(invalidationLists, *element, id);
+        m_ruleFeatureSet->collectInvalidationSetsForId(invalidationLists, *element, id);
     }
 
     void collectInvalidationSetsForAttribute(InvalidationLists& invalidationLists, const QualifiedName& attributeName) const
     {
         Element* element = Traversal<HTMLElement>::firstChild(*Traversal<HTMLElement>::firstChild(*m_document->body()));
-        m_ruleFeatureSet.collectInvalidationSetsForAttribute(invalidationLists, *element, attributeName);
+        m_ruleFeatureSet->collectInvalidationSetsForAttribute(invalidationLists, *element, attributeName);
     }
 
     void collectInvalidationSetsForPseudoClass(InvalidationLists& invalidationLists, CSSSelector::PseudoType pseudo) const
     {
         Element* element = Traversal<HTMLElement>::firstChild(*Traversal<HTMLElement>::firstChild(*m_document->body()));
-        m_ruleFeatureSet.collectInvalidationSetsForPseudoClass(invalidationLists, *element, pseudo);
+        m_ruleFeatureSet->collectInvalidationSetsForPseudoClass(invalidationLists, *element, pseudo);
+    }
+
+    void collectUniversalSiblingInvalidationSet(InvalidationLists& invalidationLists)
+    {
+        m_ruleFeatureSet->collectUniversalSiblingInvalidationSet(invalidationLists);
     }
 
     const HashSet<AtomicString>& classSet(const InvalidationSet& invalidationSet)
@@ -172,22 +218,16 @@ public:
 
     void expectSiblingRuleCount(unsigned count)
     {
-        EXPECT_EQ(count, m_ruleFeatureSet.siblingRules.size());
+        EXPECT_EQ(count, m_ruleFeatureSet->siblingRules.size());
     }
 
     void expectUncommonAttributeRuleCount(unsigned count)
     {
-        EXPECT_EQ(count, m_ruleFeatureSet.uncommonAttributeRules.size());
-    }
-
-    DEFINE_INLINE_TRACE()
-    {
-        visitor->trace(m_ruleFeatureSet);
-        visitor->trace(m_document);
+        EXPECT_EQ(count, m_ruleFeatureSet->uncommonAttributeRules.size());
     }
 
 private:
-    RuleFeatureSet m_ruleFeatureSet;
+    PersistentPartObject<RuleFeatureSet> m_ruleFeatureSet;
     Persistent<Document> m_document;
 };
 
@@ -531,6 +571,156 @@ TEST_F(RuleFeatureSetTest, uncommonAttributeRulesAfterHostContextBeforePseudo)
 {
     EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures(":host-context([attr])::before"));
     expectUncommonAttributeRuleCount(1);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationDirectAdjacent)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("* + .a"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(1, "a", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationMultipleDirectAdjacent)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("* + .a + .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(2, "b", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationDirectAdjacentDescendant)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("* + .a .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingDescendantInvalidation(1, "a", "b", invalidationLists.siblings);
+    expectNoSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationIndirectAdjacent)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("* ~ .a"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(UINT_MAX, "a", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationMultipleIndirectAdjacent)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("* ~ .a ~ .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(UINT_MAX, "b", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationIndirectAdjacentDescendant)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("* ~ .a .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingDescendantInvalidation(UINT_MAX, "a", "b", invalidationLists.siblings);
+    expectNoSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationNot)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures(":not(.a) + .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(1, "b", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, nonUniversalSiblingInvalidationNot)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("#x:not(.a) + .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectNoInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationAny)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures(":-webkit-any(.a) + .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(1, "b", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, nonUniversalSiblingInvalidationAny)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("#x:-webkit-any(.a) + .b"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectNoInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationType)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("div + .a"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(1, "a", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, nonUniversalSiblingInvalidationType)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("div#x + .a"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectNoInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, universalSiblingInvalidationLink)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures(":link + .a"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectSiblingInvalidation(1, "a", invalidationLists.siblings);
+    expectSelfInvalidation(invalidationLists.siblings);
+}
+
+TEST_F(RuleFeatureSetTest, nonUniversalSiblingInvalidationLink)
+{
+    EXPECT_EQ(RuleFeatureSet::SelectorMayMatch, collectFeatures("#x:link + .a"));
+
+    InvalidationLists invalidationLists;
+    collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    expectNoInvalidation(invalidationLists.siblings);
 }
 
 } // namespace blink

@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -14,6 +16,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -26,11 +29,11 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/autofill/content/browser/wallet/wallet_service_url.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
+#include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/phone_number_i18n.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -114,7 +117,7 @@ void GetAddressComponents(const std::string& country_code,
         components[i - 1].length_hint == AddressUiComponent::HINT_LONG ||
         components[i].length_hint == AddressUiComponent::HINT_LONG) {
       line = new base::ListValue;
-      address_components->Append(line);
+      address_components->Append(base::WrapUnique(line));
     }
 
     std::unique_ptr<base::DictionaryValue> component(new base::DictionaryValue);
@@ -159,7 +162,7 @@ void GetAddressComponents(const std::string& country_code,
         break;
     }
 
-    line->Append(component.release());
+    line->Append(std::move(component));
   }
 }
 
@@ -181,7 +184,7 @@ void SetCountryData(const PersonalDataManager& manager,
     option_details->SetString(
         "value",
         countries[i] ? countries[i]->country_code() : "separator");
-    country_list->Append(option_details.release());
+    country_list->Append(std::move(option_details));
   }
   localized_strings->Set("autofillCountrySelectList", country_list.release());
 
@@ -244,11 +247,11 @@ void AutofillOptionsHandler::GetLocalizedValues(
   SetCreditCardOverlayStrings(localized_strings);
 
   localized_strings->SetString(
-      "manageWalletAddressesUrl",
-      autofill::wallet::GetManageAddressesUrl(0).spec());
+      "paymentsManageAddressesUrl",
+      autofill::payments::GetManageAddressesUrl(0).spec());
   localized_strings->SetString(
-      "manageWalletPaymentMethodsUrl",
-      autofill::wallet::GetManageInstrumentsUrl(0).spec());
+      "paymentsManageInstrumentsUrl",
+      autofill::payments::GetManageInstrumentsUrl(0).spec());
 }
 
 void AutofillOptionsHandler::InitializeHandler() {
@@ -352,19 +355,20 @@ void AutofillOptionsHandler::LoadAutofillData() {
     value->SetString("sublabel", labels[i].substr(label_parts[0].size()));
     value->SetBoolean("isLocal", profiles[i]->record_type() ==
                                      AutofillProfile::LOCAL_PROFILE);
-    addresses.Append(value.release());
+    addresses.Append(std::move(value));
   }
 
-  web_ui()->CallJavascriptFunction("AutofillOptions.setAddressList", addresses);
+  web_ui()->CallJavascriptFunctionUnsafe("AutofillOptions.setAddressList",
+                                         addresses);
 
   base::ListValue credit_cards;
   const std::vector<CreditCard*>& cards = personal_data_->GetCreditCards();
   for (const CreditCard* card : cards) {
-    credit_cards.Append(CreditCardToDictionary(*card).release());
+    credit_cards.Append(CreditCardToDictionary(*card));
   }
 
-  web_ui()->CallJavascriptFunction("AutofillOptions.setCreditCardList",
-                                   credit_cards);
+  web_ui()->CallJavascriptFunctionUnsafe("AutofillOptions.setCreditCardList",
+                                         credit_cards);
 }
 
 void AutofillOptionsHandler::RemoveData(const base::ListValue* args) {
@@ -401,7 +405,8 @@ void AutofillOptionsHandler::LoadAddressEditor(const base::ListValue* args) {
   base::DictionaryValue address;
   AutofillProfileToDictionary(*prior_profile, &address);
 
-  web_ui()->CallJavascriptFunction("AutofillOptions.editAddress", address);
+  web_ui()->CallJavascriptFunctionUnsafe("AutofillOptions.editAddress",
+                                         address);
 }
 
 void AutofillOptionsHandler::LoadAddressEditorComponents(
@@ -420,7 +425,7 @@ void AutofillOptionsHandler::LoadAddressEditorComponents(
   input.Set(kComponents, components.release());
   input.SetString(kLanguageCode, language_code);
 
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "AutofillEditAddressOverlay.loadAddressComponents", input);
 }
 
@@ -457,8 +462,8 @@ void AutofillOptionsHandler::LoadCreditCardEditor(const base::ListValue* args) {
       "expirationYear",
       credit_card->GetRawInfo(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR));
 
-  web_ui()->CallJavascriptFunction("AutofillOptions.editCreditCard",
-                                   credit_card_data);
+  web_ui()->CallJavascriptFunctionUnsafe("AutofillOptions.editCreditCard",
+                                         credit_card_data);
 }
 
 void AutofillOptionsHandler::SetAddress(const base::ListValue* args) {

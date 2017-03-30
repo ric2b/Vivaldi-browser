@@ -54,10 +54,9 @@ cr.define('signin', function() {
     },
 
     /**
-     * Gets the list of existing supervised users.
      * @param {string} profilePath Profile Path of the custodian.
-     * @return {Promise} A promise for the requested data.
-     * @private
+     * @return {!Promise<!Array<!SupervisedUser>>} The list of existing
+     *     supervised users.
      */
     getExistingSupervisedUsers: function(profilePath) {
       assertNotReached();
@@ -83,6 +82,13 @@ cr.define('signin', function() {
      * Cancels creation of the new profile.
      */
     cancelCreateProfile: function() {
+      assertNotReached();
+    },
+
+    /**
+     * Cancels loading supervised users.
+     */
+    cancelLoadingSupervisedUsers: function() {
       assertNotReached();
     },
 
@@ -117,6 +123,22 @@ cr.define('signin', function() {
      * @param {string} profilePath Path to the profile to switch to.
      */
     switchToProfile: function(profilePath) {
+      assertNotReached();
+    },
+
+    /**
+     * @return {!Promise<boolean>} Whether all (non-supervised and non-child)
+     *     profiles are locked.
+     */
+    areAllProfilesLocked: function() {
+      assertNotReached();
+    },
+
+    /**
+     * Authenticates the custodian profile with the given email address.
+     * @param {string} emailAddress Email address of the custodian profile.
+     */
+    authenticateCustodian: function(emailAddress) {
       assertNotReached();
     }
   };
@@ -166,6 +188,11 @@ cr.define('signin', function() {
     },
 
     /** @override */
+    cancelLoadingSupervisedUsers: function() {
+      chrome.send('cancelLoadingSupervisedUsers');
+    },
+
+    /** @override */
     initializeUserManager: function(locationHash) {
       chrome.send('userManagerInitialize', [locationHash]);
     },
@@ -183,6 +210,16 @@ cr.define('signin', function() {
     /** @override */
     switchToProfile: function(profilePath) {
       chrome.send('switchToProfile', [profilePath]);
+    },
+
+    /** @override */
+    areAllProfilesLocked: function() {
+      return cr.sendWithPromise('areAllProfilesLocked');
+    },
+
+    /** @override */
+    authenticateCustodian: function(emailAddress) {
+      chrome.send('authenticateCustodian', [emailAddress]);
     }
   };
 

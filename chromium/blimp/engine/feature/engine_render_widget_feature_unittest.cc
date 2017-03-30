@@ -22,7 +22,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
-#include "ui/base/ime/text_input_client.h"
+#include "ui/base/ime/dummy_text_input_client.h"
 
 using testing::_;
 using testing::InSequence;
@@ -87,6 +87,7 @@ class MockRenderWidgetHost
   bool IsLoading() const override { return false; }
   void ResizeRectChanged(const gfx::Rect& new_rect) override {}
   void RestartHangMonitorTimeout() override {}
+  void DisableHangMonitorForTesting() override {}
   void SetIgnoreInputEvents(bool ignore_input_events) override {}
   void WasResized() override {}
   void AddKeyPressEventCallback(
@@ -98,55 +99,15 @@ class MockRenderWidgetHost
   void AddInputEventObserver(InputEventObserver* observer) override {}
   void RemoveInputEventObserver(InputEventObserver* observer) override {}
   void GetWebScreenInfo(blink::WebScreenInfo* result) override {}
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override {
-    return false; }
   void HandleCompositorProto(const std::vector<uint8_t>& proto) override {}
 
   bool Send(IPC::Message* msg) override { return false; }
 };
 
-class MockTextInputClient : public ui::TextInputClient {
-  ui::TextInputType text_input_type_;
-
+class MockTextInputClient : public ui::DummyTextInputClient {
  public:
-  MockTextInputClient() : text_input_type_(ui::TEXT_INPUT_TYPE_TEXT) {}
-  ~MockTextInputClient() override {}
+  MockTextInputClient() : DummyTextInputClient(ui::TEXT_INPUT_TYPE_TEXT) {}
 
-  void SetCompositionText(const ui::CompositionText& composition) override {}
-  void ConfirmCompositionText() override {}
-  void ClearCompositionText() override {}
-  void InsertText(const base::string16& text) override {}
-  void InsertChar(const ui::KeyEvent& event) override {}
-  ui::TextInputType GetTextInputType() const override {
-    return text_input_type_;
-  }
-  ui::TextInputMode GetTextInputMode() const override {
-    return ui::TEXT_INPUT_MODE_DEFAULT;
-  }
-  int GetTextInputFlags() const override { return 0; }
-  bool CanComposeInline() const override { return false; }
-  gfx::Rect GetCaretBounds() const override { return gfx::Rect(); }
-  bool GetCompositionCharacterBounds(uint32_t index,
-                                     gfx::Rect* rect) const override {
-    return false;
-  }
-  bool HasCompositionText() const override { return false; }
-  bool GetTextRange(gfx::Range* range) const override { return false; }
-  bool GetCompositionTextRange(gfx::Range* range) const override {
-    return false;
-  }
-  bool GetSelectionRange(gfx::Range* range) const override { return false; }
-  bool SetSelectionRange(const gfx::Range& range) override { return false; }
-  bool DeleteRange(const gfx::Range& range) override { return false; }
-  void OnInputMethodChanged() override {}
-  bool ChangeTextDirectionAndLayoutAlignment(
-      base::i18n::TextDirection direction) override {
-    return false;
-  }
-  void ExtendSelectionAndDelete(size_t before, size_t after) override {}
-  void EnsureCaretInRect(const gfx::Rect& rect) override {}
-  bool IsEditCommandEnabled(int command_id) override { return false; }
-  void SetEditCommandForNextKeyEvent(int command_id) override {}
   bool GetTextFromRange(const gfx::Range& range,
                         base::string16* text) const override {
     *text = base::string16(base::ASCIIToUTF16("green apple"));
@@ -208,7 +169,6 @@ void SendInputMessage(BlimpMessageProcessor* processor,
   InputMessageGenerator generator;
   std::unique_ptr<BlimpMessage> message =
       generator.GenerateMessage(input_event);
-  message->set_type(BlimpMessage::INPUT);
   message->set_target_tab_id(tab_id);
   message->mutable_input()->set_render_widget_id(rw_id);
 

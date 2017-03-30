@@ -69,7 +69,8 @@ SkPaint* GetBadgeTextPaintSingleton() {
     text_paint->setTextAlign(SkPaint::kLeft_Align);
 
     sk_sp<SkTypeface> typeface(
-        SkTypeface::CreateFromName(kPreferredTypeface, SkTypeface::kBold));
+        SkTypeface::MakeFromName(kPreferredTypeface,
+                                 SkFontStyle::FromOldStyle(SkTypeface::kBold)));
     // Skia doesn't do any font fallback---if the user is missing the font then
     // typeface will be NULL. If we don't do manual fallback then we'll crash.
     if (typeface) {
@@ -81,13 +82,12 @@ SkPaint* GetBadgeTextPaintSingleton() {
       // that don't have Arial.
       ResourceBundle& rb = ResourceBundle::GetSharedInstance();
       const gfx::Font& base_font = rb.GetFont(ResourceBundle::BaseFont);
-      typeface = sk_sp<SkTypeface>(SkTypeface::CreateFromName(
-          base_font.GetFontName().c_str(), SkTypeface::kNormal));
+      typeface = SkTypeface::MakeFromName(base_font.GetFontName().c_str(),
+                                          SkFontStyle());
       DCHECK(typeface);
     }
 
-    text_paint->setTypeface(typeface.get());
-    // |text_paint| adds its own ref. Release the ref from CreateFontName.
+    text_paint->setTypeface(std::move(typeface));
   }
   return text_paint;
 }
@@ -168,9 +168,12 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
 
   SkColor background_color = ui::MaterialDesignController::IsModeMaterial()
                                  ? gfx::kGoogleBlue500
-                                 : SkColorSetARGB(255, 218, 0, 24);
+                                 : SkColorSetRGB(218, 0, 24);
   if (SkColorGetA(badge_->background_color) != SK_AlphaTRANSPARENT)
     background_color = badge_->background_color;
+  // Make sure the background color is opaque. See http://crbug.com/619499
+  if (ui::MaterialDesignController::IsModeMaterial())
+    background_color = SkColorSetA(background_color, SK_AlphaOPAQUE);
 
   canvas->Save();
 
@@ -180,6 +183,22 @@ void IconWithBadgeImageSource::PaintBadge(gfx::Canvas* canvas) {
   gfx::FontList base_font = rb->GetFontList(ResourceBundle::BaseFont)
                                 .DeriveWithHeightUpperBound(kBadgeHeight);
   base::string16 utf16_text = base::UTF8ToUTF16(badge_->text);
+
+  // See if we can squeeze a slightly larger font into the badge given the
+  // actual string that is to be displayed.
+  const int kMaxIncrementAttempts = 5;
+  for (size_t i = 0; i < kMaxIncrementAttempts; ++i) {
+    int w = 0;
+    int h = 0;
+    gfx::FontList bigger_font =
+        base_font.Derive(1, 0, gfx::Font::Weight::NORMAL);
+    gfx::Canvas::SizeStringInt(utf16_text, bigger_font, &w, &h, 0,
+                               gfx::Canvas::NO_ELLIPSIS);
+    if (h > kBadgeHeight)
+      break;
+    base_font = bigger_font;
+  }
+
   if (ui::MaterialDesignController::IsModeMaterial()) {
     text_width =
         std::min(kMaxTextWidth, canvas->GetStringWidth(utf16_text, base_font));

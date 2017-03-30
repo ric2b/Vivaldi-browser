@@ -25,42 +25,63 @@ namespace arc {
 class ActivityIconLoader : public base::RefCounted<ActivityIconLoader> {
  public:
   struct Icons {
-    Icons(const gfx::Image& icon16, const gfx::Image& icon48);
+    Icons(const gfx::Image& icon16, const gfx::Image& icon20);
     const gfx::Image icon16;  // 16 dip
-    const gfx::Image icon48;  // 48 dip
+    const gfx::Image icon20;  // 20 dip
   };
 
   struct ActivityName {
     ActivityName(const std::string& package_name,
                  const std::string& activity_name);
     bool operator<(const ActivityName& other) const;
+
     // TODO(yusukes): Add const to these variables later. At this point,
     // doing so seems to confuse g++ 4.6 on builders.
     std::string package_name;
+
+    // Can be empty. When |activity_name| is empty, the loader tries to fetch
+    // the package's default icon.
     std::string activity_name;
+  };
+
+  enum class GetResult {
+    // Succeeded. The callback will be called asynchronously.
+    SUCCEEDED_ASYNC,
+    // Succeeded. The callback has already been called synchronously.
+    SUCCEEDED_SYNC,
+    // Failed. The intent_helper instance is not yet ready. This is a temporary
+    // error.
+    FAILED_ARC_NOT_READY,
+    // Failed. Either ARC is not supported at all or intent_helper instance
+    // version is too old.
+    FAILED_ARC_NOT_SUPPORTED,
   };
 
   using ActivityToIconsMap = std::map<ActivityName, Icons>;
   using OnIconsReadyCallback =
       base::Callback<void(std::unique_ptr<ActivityToIconsMap>)>;
 
-  explicit ActivityIconLoader(ui::ScaleFactor scale_factor);
+  ActivityIconLoader();
 
   // Removes icons associated with |package_name| from the cache.
   void InvalidateIcons(const std::string& package_name);
 
   // Retrieves icons for the |activities| and calls |cb|. The |cb| is called
   // back exactly once, either synchronously in the GetActivityIcons() when
-  // all icons were already cached locally, or asynchronously with icons fetched
-  // from ARC side.
-  // Returns true in the former synchronous case, where everything is done.
-  bool GetActivityIcons(const std::vector<ActivityName>& activities,
-                        const OnIconsReadyCallback& cb);
+  // the result is _not_ SUCCEEDED_ASYNC (i.e. all icons are already cached
+  // locally or ARC is not ready/supported). Otherwise, the callback is run
+  // later asynchronously with icons fetched from ARC side.
+  GetResult GetActivityIcons(const std::vector<ActivityName>& activities,
+                             const OnIconsReadyCallback& cb);
 
   void OnIconsResizedForTesting(const OnIconsReadyCallback& cb,
                                 std::unique_ptr<ActivityToIconsMap> result);
   void AddIconToCacheForTesting(const ActivityName& activity,
                                 const gfx::Image& image);
+
+  // Returns true if |result| indicates that the |cb| object passed to
+  // GetActivityIcons() has already called.
+  static bool HasIconsReadyCallbackRun(GetResult result);
 
   const ActivityToIconsMap& cached_icons_for_testing() { return cached_icons_; }
 

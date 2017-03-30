@@ -56,6 +56,8 @@
 #include "public/platform/modules/serviceworker/WebServiceWorker.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerRegistration.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -69,7 +71,7 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
-        m_resolver->resolve(ServiceWorkerRegistration::getOrCreate(m_resolver->getExecutionContext(), adoptPtr(handle.release())));
+        m_resolver->resolve(ServiceWorkerRegistration::getOrCreate(m_resolver->getExecutionContext(), wrapUnique(handle.release())));
     }
 
     void onError(const WebServiceWorkerError& error) override
@@ -96,7 +98,7 @@ public:
 
     void onSuccess(std::unique_ptr<WebServiceWorkerRegistration::Handle> webPassHandle) override
     {
-        OwnPtr<WebServiceWorkerRegistration::Handle> handle = adoptPtr(webPassHandle.release());
+        std::unique_ptr<WebServiceWorkerRegistration::Handle> handle = wrapUnique(webPassHandle.release());
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
         if (!handle) {
@@ -127,10 +129,10 @@ public:
 
     void onSuccess(std::unique_ptr<WebVector<WebServiceWorkerRegistration::Handle*>> webPassRegistrations) override
     {
-        Vector<OwnPtr<WebServiceWorkerRegistration::Handle>> handles;
-        OwnPtr<WebVector<WebServiceWorkerRegistration::Handle*>> webRegistrations = adoptPtr(webPassRegistrations.release());
+        Vector<std::unique_ptr<WebServiceWorkerRegistration::Handle>> handles;
+        std::unique_ptr<WebVector<WebServiceWorkerRegistration::Handle*>> webRegistrations = wrapUnique(webPassRegistrations.release());
         for (auto& handle : *webRegistrations) {
-            handles.append(adoptPtr(handle));
+            handles.append(wrapUnique(handle));
         }
 
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
@@ -161,7 +163,7 @@ public:
         ASSERT(m_ready->getState() == ReadyProperty::Pending);
 
         if (m_ready->getExecutionContext() && !m_ready->getExecutionContext()->activeDOMObjectsAreStopped())
-            m_ready->resolve(ServiceWorkerRegistration::getOrCreate(m_ready->getExecutionContext(), adoptPtr(handle.release())));
+            m_ready->resolve(ServiceWorkerRegistration::getOrCreate(m_ready->getExecutionContext(), wrapUnique(handle.release())));
     }
 
 private:
@@ -195,7 +197,7 @@ DEFINE_TRACE(ServiceWorkerContainer)
     ContextLifecycleObserver::trace(visitor);
 }
 
-void ServiceWorkerContainer::registerServiceWorkerImpl(ExecutionContext* executionContext, const KURL& rawScriptURL, const KURL& scope, PassOwnPtr<RegistrationCallbacks> callbacks)
+void ServiceWorkerContainer::registerServiceWorkerImpl(ExecutionContext* executionContext, const KURL& rawScriptURL, const KURL& scope, std::unique_ptr<RegistrationCallbacks> callbacks)
 {
     if (!m_provider) {
         callbacks->onError(WebServiceWorkerError(WebServiceWorkerError::ErrorTypeState, "Failed to register a ServiceWorker: The document is in an invalid state."));
@@ -249,13 +251,13 @@ void ServiceWorkerContainer::registerServiceWorkerImpl(ExecutionContext* executi
 
     ContentSecurityPolicy* csp = executionContext->contentSecurityPolicy();
     if (csp) {
-        if (!csp->allowWorkerContextFromSource(scriptURL, ContentSecurityPolicy::DidNotRedirect, ContentSecurityPolicy::SendReport)) {
+        if (!csp->allowWorkerContextFromSource(scriptURL, ResourceRequest::RedirectStatus::NoRedirect, ContentSecurityPolicy::SendReport)) {
             callbacks->onError(WebServiceWorkerError(WebServiceWorkerError::ErrorTypeSecurity, String("Failed to register a ServiceWorker: The provided scriptURL ('" + scriptURL.getString() + "') violates the Content Security Policy.")));
             return;
         }
     }
 
-    m_provider->registerServiceWorker(patternURL, scriptURL, callbacks.leakPtr());
+    m_provider->registerServiceWorker(patternURL, scriptURL, callbacks.release());
 }
 
 ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptState, const String& url, const RegistrationOptions& options)
@@ -282,7 +284,7 @@ ScriptPromise ServiceWorkerContainer::registerServiceWorker(ScriptState* scriptS
     else
         patternURL = enteredExecutionContext(scriptState->isolate())->completeURL(options.scope());
 
-    registerServiceWorkerImpl(executionContext, scriptURL, patternURL, adoptPtr(new RegistrationCallback(resolver)));
+    registerServiceWorkerImpl(executionContext, scriptURL, patternURL, wrapUnique(new RegistrationCallback(resolver)));
 
     return promise;
 }
@@ -385,7 +387,7 @@ void ServiceWorkerContainer::setController(std::unique_ptr<WebServiceWorker::Han
 {
     if (!getExecutionContext())
         return;
-    m_controller = ServiceWorker::from(getExecutionContext(), adoptPtr(handle.release()));
+    m_controller = ServiceWorker::from(getExecutionContext(), wrapUnique(handle.release()));
     if (m_controller)
         UseCounter::count(getExecutionContext(), UseCounter::ServiceWorkerControlledPage);
     if (shouldNotifyControllerChange)
@@ -398,8 +400,8 @@ void ServiceWorkerContainer::dispatchMessageEvent(std::unique_ptr<WebServiceWork
         return;
 
     MessagePortArray* ports = MessagePort::toMessagePortArray(getExecutionContext(), webChannels);
-    RefPtr<SerializedScriptValue> value = SerializedScriptValueFactory::instance().createFromWire(message);
-    ServiceWorker* source = ServiceWorker::from(getExecutionContext(), adoptPtr(handle.release()));
+    RefPtr<SerializedScriptValue> value = SerializedScriptValue::create(message);
+    ServiceWorker* source = ServiceWorker::from(getExecutionContext(), wrapUnique(handle.release()));
     dispatchEvent(ServiceWorkerMessageEvent::create(ports, value, source, getExecutionContext()->getSecurityOrigin()->toString()));
 }
 

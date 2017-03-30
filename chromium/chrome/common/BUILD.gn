@@ -7,7 +7,6 @@ import("//chrome/common/features.gni")
 import("//chrome/version.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//tools/grit/grit_rule.gni")
-import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 gypi_values = exec_script("//build/gypi_to_gn.py",
                           [ rebase_path("../chrome_common.gypi") ],
@@ -52,6 +51,9 @@ buildflag_header("features") {
 }
 
 # GYP version: chrome/chrome_common.gypi:common
+#
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
 static_library("common") {
   sources = rebase_path(gypi_values.chrome_common_sources, ".", "//chrome")
   defines = []
@@ -90,6 +92,7 @@ static_library("common") {
     "//components/metrics:net",
     "//components/nacl/common:process_type",
     "//components/nacl/common:switches",
+    "//components/network_session_configurator:switches",
     "//components/offline_pages:switches",
     "//components/omnibox/common",
     "//components/policy",
@@ -218,14 +221,6 @@ static_library("common") {
       sources += rebase_path(gypi_values.chrome_common_service_process_sources,
                              ".",
                              "//chrome")
-
-      if (is_win) {
-        deps = [
-          # TODO(fdoray): Remove this once the PreRead field trial has expired.
-          # crbug.com/577698
-          "//components/startup_metric_utils/common",
-        ]
-      }
     }
   }
 
@@ -293,14 +288,6 @@ static_library("common") {
                       "//chrome")
     }
   }
-
-  if (enable_ipc_fuzzer) {
-    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
-    sources += [
-      "external_ipc_dumper.cc",
-      "external_ipc_dumper.h",
-    ]
-  }
 }
 
 # GYP version: chrome/common_constants.gyp:version_header
@@ -353,6 +340,7 @@ static_library("constants") {
     "//base/third_party/dynamic_annotations",
     "//components/bookmarks/common",
     "//components/nacl/common:switches",
+    "//media:cdm_paths",  # Needed by chrome_paths.cc.
     "//third_party/widevine/cdm:version_h",
   ]
 
@@ -368,10 +356,6 @@ static_library("constants") {
     # on this target. On that platform one of the Chrome paths forwards to one
     # implemented in //ui/base, so we need that dependency.
     deps += [ "//ui/base" ]
-  }
-
-  if (enable_ipc_fuzzer) {
-    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
   }
 }
 
@@ -390,7 +374,9 @@ if (is_win) {
   }
 }
 
-source_set("test_support") {
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+static_library("test_support") {
   testonly = true
   visibility = [ "//chrome/test:test_support" ]
 
@@ -429,6 +415,8 @@ source_set("app_mode_app_support") {
     "mac/app_mode_common.h",
     "mac/app_mode_common.mm",
   ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   deps = [
     ":constants",

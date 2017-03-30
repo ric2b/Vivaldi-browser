@@ -29,7 +29,7 @@
 #include "media/video/video_decode_accelerator.h"
 #include "ui/gl/android/scoped_java_surface.h"
 
-namespace gfx {
+namespace gl {
 class SurfaceTexture;
 }
 
@@ -43,10 +43,10 @@ class SharedMemoryRegion;
 // It delegates attaching pictures to PictureBuffers to a BackingStrategy, but
 // otherwise handles the work of transferring data to / from MediaCodec.
 class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
-    : public media::VideoDecodeAccelerator,
+    : public VideoDecodeAccelerator,
       public AVDAStateProvider {
  public:
-  using OutputBufferMap = std::map<int32_t, media::PictureBuffer>;
+  using OutputBufferMap = std::map<int32_t, PictureBuffer>;
 
   // A BackingStrategy is responsible for making a PictureBuffer's texture
   // contain the image that a MediaCodec decoder buffer tells it to.
@@ -58,7 +58,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     // |kNoSurfaceID| it refers to a SurfaceView that the strategy must render
     // to.
     // Returns the Java surface to configure MediaCodec with.
-    virtual gfx::ScopedJavaSurface Initialize(int surface_view_id) = 0;
+    virtual gl::ScopedJavaSurface Initialize(int surface_view_id) = 0;
 
     // Called before the AVDA does any Destroy() work.  The strategy should
     // release any pending codec buffers, for example.
@@ -71,7 +71,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
     // This returns the SurfaceTexture created by Initialize, or nullptr if
     // the strategy was initialized with a SurfaceView.
-    virtual scoped_refptr<gfx::SurfaceTexture> GetSurfaceTexture() const = 0;
+    virtual scoped_refptr<gl::SurfaceTexture> GetSurfaceTexture() const = 0;
 
     // Return the GL texture target that the PictureBuffer textures use.
     virtual uint32_t GetTextureTarget() const = 0;
@@ -83,16 +83,14 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     // the decoded output buffer at codec_buffer_index.
     virtual void UseCodecBufferForPictureBuffer(
         int32_t codec_buffer_index,
-        const media::PictureBuffer& picture_buffer) = 0;
+        const PictureBuffer& picture_buffer) = 0;
 
     // Notify strategy that a picture buffer has been assigned.
-    virtual void AssignOnePictureBuffer(
-        const media::PictureBuffer& picture_buffer,
-        bool have_context) {}
+    virtual void AssignOnePictureBuffer(const PictureBuffer& picture_buffer,
+                                        bool have_context) {}
 
     // Notify strategy that a picture buffer has been reused.
-    virtual void ReuseOnePictureBuffer(
-        const media::PictureBuffer& picture_buffer) {}
+    virtual void ReuseOnePictureBuffer(const PictureBuffer& picture_buffer) {}
 
     // Release MediaCodec buffers.
     virtual void ReleaseCodecBuffers(
@@ -104,7 +102,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     // Notify strategy that we have a new android MediaCodec instance.  This
     // happens when we're starting up or re-configuring mid-stream.  Any
     // previously provided codec should no longer be referenced.
-    virtual void CodecChanged(media::VideoCodecBridge* codec) = 0;
+    virtual void CodecChanged(VideoCodecBridge* codec) = 0;
 
     // Notify the strategy that a frame is available.  This callback can happen
     // on any thread at any time.
@@ -118,7 +116,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     // |new_size| and also update any size-dependent state (e.g. size of
     // associated texture). Callers should set the correct GL context prior to
     // calling.
-    virtual void UpdatePictureBufferSize(media::PictureBuffer* picture_buffer,
+    virtual void UpdatePictureBufferSize(PictureBuffer* picture_buffer,
                                          const gfx::Size& new_size) = 0;
   };
 
@@ -128,11 +126,10 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
   ~AndroidVideoDecodeAccelerator() override;
 
-  // media::VideoDecodeAccelerator implementation:
+  // VideoDecodeAccelerator implementation:
   bool Initialize(const Config& config, Client* client) override;
-  void Decode(const media::BitstreamBuffer& bitstream_buffer) override;
-  void AssignPictureBuffers(
-      const std::vector<media::PictureBuffer>& buffers) override;
+  void Decode(const BitstreamBuffer& bitstream_buffer) override;
+  void AssignPictureBuffers(const std::vector<PictureBuffer>& buffers) override;
   void ReusePictureBuffer(int32_t picture_buffer_id) override;
   void Flush() override;
   void Reset() override;
@@ -147,13 +144,13 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   const base::ThreadChecker& ThreadChecker() const override;
   base::WeakPtr<gpu::gles2::GLES2Decoder> GetGlDecoder() const override;
   gpu::gles2::TextureRef* GetTextureForPicture(
-      const media::PictureBuffer& picture_buffer) override;
-  scoped_refptr<gfx::SurfaceTexture> CreateAttachedSurfaceTexture(
+      const PictureBuffer& picture_buffer) override;
+  scoped_refptr<gl::SurfaceTexture> CreateAttachedSurfaceTexture(
       GLuint* service_id) override;
   void PostError(const ::tracked_objects::Location& from_here,
-                 media::VideoDecodeAccelerator::Error error) override;
+                 VideoDecodeAccelerator::Error error) override;
 
-  static media::VideoDecodeAccelerator::Capabilities GetCapabilities(
+  static VideoDecodeAccelerator::Capabilities GetCapabilities(
       const gpu::GpuPreferences& gpu_preferences);
 
   // Notifies about SurfaceTexture::OnFrameAvailable.  This can happen on any
@@ -193,18 +190,18 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
     CodecConfig();
 
     // Codec type. Used when we configure media codec.
-    media::VideoCodec codec_ = media::kUnknownVideoCodec;
+    VideoCodec codec_ = kUnknownVideoCodec;
 
     // Whether encryption scheme requires to use protected surface.
     bool needs_protected_surface_ = false;
 
     // The surface that MediaCodec is configured to output to. It's created by
     // the backing strategy.
-    gfx::ScopedJavaSurface surface_;
+    gl::ScopedJavaSurface surface_;
 
     // The MediaCrypto object is used in the MediaCodec.configure() in case of
     // an encrypted stream.
-    media::MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto_;
+    MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto_;
 
     // Initial coded size.  The actual size might change at any time, so this
     // is only a hint.
@@ -257,12 +254,12 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
   // Instantiate a media codec using |codec_config|.
   // This may be called on any thread.
-  static std::unique_ptr<media::VideoCodecBridge>
-  ConfigureMediaCodecOnAnyThread(scoped_refptr<CodecConfig> codec_config);
+  static std::unique_ptr<VideoCodecBridge> ConfigureMediaCodecOnAnyThread(
+      scoped_refptr<CodecConfig> codec_config);
 
   // Called on the main thread to update |media_codec_| and complete codec
   // configuration.  |media_codec| will be null if configuration failed.
-  void OnCodecConfigured(std::unique_ptr<media::VideoCodecBridge> media_codec);
+  void OnCodecConfigured(std::unique_ptr<VideoCodecBridge> media_codec);
 
   // Sends the decoded frame specified by |codec_buffer_index| to the client.
   void SendDecodedFrameToClient(int32_t codec_buffer_index,
@@ -288,15 +285,14 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
   // Decode the content in the |bitstream_buffer|. Note that a
   // |bitstream_buffer| of id as -1 indicates a flush command.
-  void DecodeBuffer(const media::BitstreamBuffer& bitstream_buffer);
+  void DecodeBuffer(const BitstreamBuffer& bitstream_buffer);
 
   // Called during Initialize() for encrypted streams to set up the CDM.
   void InitializeCdm();
 
   // Called after the CDM obtains a MediaCrypto object.
-  void OnMediaCryptoReady(
-      media::MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
-      bool needs_protected_surface);
+  void OnMediaCryptoReady(MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
+                          bool needs_protected_surface);
 
   // Called when a new key is added to the CDM.
   void OnKeyAdded();
@@ -305,7 +301,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   void NotifyInitializationComplete(bool success);
 
   // Notifies the client about the availability of a picture.
-  void NotifyPictureReady(const media::Picture& picture);
+  void NotifyPictureReady(const Picture& picture);
 
   // Notifies the client that the input buffer identifed by input_buffer_id has
   // been processed.
@@ -323,7 +319,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // from breaking.  NotifyError will do so immediately, PostError may wait.
   // |token| has to match |error_sequence_token_|, or else it's assumed to be
   // from a post that's prior to a previous reset, and ignored.
-  void NotifyError(media::VideoDecodeAccelerator::Error error, int token);
+  void NotifyError(VideoDecodeAccelerator::Error error, int token);
 
   // Start or stop our work-polling timer based on whether we did any work, and
   // how long it has been since we've done work.  Calling this with true will
@@ -354,17 +350,21 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // Resets MediaCodec and buffers/containers used for storing output. These
   // components need to be reset upon EOS to decode a later stream. Input state
   // (e.g. queued BitstreamBuffers) is not reset, as input following an EOS
-  // is still valid and should be processed. Upon competion calls |done_cb| that
-  // can be a null callback.
-  void ResetCodecState(const base::Closure& done_cb);
+  // is still valid and should be processed.
+  void ResetCodecState();
 
   // Registered to be called when surfaces are being destroyed. If |surface_id|
   // is our surface, we should release the MediaCodec before returning from
   // this.
   void OnDestroyingSurface(int surface_id);
 
-  // Return true if and only if we should use deferred rendering.
+  // Returns true if and only if we should use deferred rendering.
   static bool UseDeferredRenderingStrategy(
+      const gpu::GpuPreferences& gpu_preferences);
+
+  // Returns true if frame's COPY_REQUIRED flag needs to be set when using
+  // deferred strategy.
+  static bool UseTextureCopyForDeferredStrategy(
       const gpu::GpuPreferences& gpu_preferences);
 
   // Used to DCHECK that we are called on the correct thread.
@@ -392,7 +392,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   std::queue<int32_t> free_picture_ids_;
 
   // The low-level decoder which Android SDK provides.
-  std::unique_ptr<media::VideoCodecBridge> media_codec_;
+  std::unique_ptr<VideoCodecBridge> media_codec_;
 
   // Set to true after requesting picture buffers to the client.
   bool picturebuffers_requested_;
@@ -404,11 +404,11 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // if any.  The goal is to prevent leaving a BitstreamBuffer's shared memory
   // handle open.
   struct BitstreamRecord {
-    BitstreamRecord(const media::BitstreamBuffer&);
+    BitstreamRecord(const BitstreamBuffer&);
     BitstreamRecord(BitstreamRecord&& other);
     ~BitstreamRecord();
 
-    media::BitstreamBuffer buffer;
+    BitstreamBuffer buffer;
 
     // |memory| is not mapped, and may be null if buffer has no data.
     std::unique_ptr<SharedMemoryRegion> memory;
@@ -443,9 +443,9 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   DrainType drain_type_;
 
   // Holds a ref-count to the CDM to avoid using the CDM after it's destroyed.
-  scoped_refptr<media::MediaKeys> cdm_for_reference_holding_only_;
+  scoped_refptr<MediaKeys> cdm_for_reference_holding_only_;
 
-  media::MediaDrmBridgeCdmContext* media_drm_bridge_cdm_context_;
+  MediaDrmBridgeCdmContext* media_drm_bridge_cdm_context_;
 
   // MediaDrmBridge requires registration/unregistration of the player, this
   // registration id is used for this.

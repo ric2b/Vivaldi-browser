@@ -42,8 +42,7 @@
     void preventDefault();
     readonly attribute boolean defaultPrevented;
 
-    [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventScoped] readonly attribute boolean scoped;
-    [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventRelatedTargetScoped] readonly attribute boolean relatedTargetScoped;
+    [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventComposed] readonly attribute boolean composed;
 
     [Unforgeable] readonly attribute boolean isTrusted;
 
@@ -66,7 +65,7 @@
     // Shadow DOM
     // https://w3c.github.io/webcomponents/spec/shadow/#extensions-to-event-interface
     [MeasureAs=EventPath, CallWith=ScriptState] readonly attribute EventTarget[] path;
-    [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventDeepPath, CallWith=ScriptState] sequence<EventTarget> deepPath();
+    [RuntimeEnabled=ShadowDOMV1, MeasureAs=EventComposedPath, CallWith=ScriptState] sequence<EventTarget> composedPath();
 
     // Non-standard APIs
     const unsigned short MOUSEDOWN = 1;

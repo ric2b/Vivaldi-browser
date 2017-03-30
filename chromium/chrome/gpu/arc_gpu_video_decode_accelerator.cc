@@ -6,12 +6,28 @@
 
 #include "base/callback_helpers.h"
 #include "base/logging.h"
+#include "base/numerics/safe_math.h"
 #include "base/run_loop.h"
 #include "content/public/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/base/video_frame.h"
 
 namespace chromeos {
 namespace arc {
+
+namespace {
+
+// An arbitrary chosen limit of the number of buffers. The number of
+// buffers used is requested from the untrusted client side.
+const size_t kMaxBufferCount = 128;
+
+// Maximum number of concurrent ARC video clients.
+// Currently we have no way to know the resources are not enough to create more
+// VDA. Arbitrarily chosen a reasonable constant as the limit.
+const int kMaxConcurrentClients = 8;
+
+}  // anonymous namespace
+
+int ArcGpuVideoDecodeAccelerator::client_count_ = 0;
 
 ArcGpuVideoDecodeAccelerator::InputRecord::InputRecord(
     int32_t bitstream_buffer_id,
@@ -21,33 +37,34 @@ ArcGpuVideoDecodeAccelerator::InputRecord::InputRecord(
       buffer_index(buffer_index),
       timestamp(timestamp) {}
 
-ArcGpuVideoDecodeAccelerator::InputBufferInfo::InputBufferInfo()
-    : offset(0), length(0) {}
+ArcGpuVideoDecodeAccelerator::InputBufferInfo::InputBufferInfo() = default;
 
 ArcGpuVideoDecodeAccelerator::InputBufferInfo::InputBufferInfo(
-    InputBufferInfo&& other)
-    : handle(std::move(other.handle)),
-      offset(other.offset),
-      length(other.length) {}
+    InputBufferInfo&& other) = default;
 
-ArcGpuVideoDecodeAccelerator::InputBufferInfo::~InputBufferInfo() {}
+ArcGpuVideoDecodeAccelerator::InputBufferInfo::~InputBufferInfo() = default;
+
+ArcGpuVideoDecodeAccelerator::OutputBufferInfo::OutputBufferInfo() = default;
+
+ArcGpuVideoDecodeAccelerator::OutputBufferInfo::OutputBufferInfo(
+    OutputBufferInfo&& other) = default;
+
+ArcGpuVideoDecodeAccelerator::OutputBufferInfo::~OutputBufferInfo() = default;
 
 ArcGpuVideoDecodeAccelerator::ArcGpuVideoDecodeAccelerator()
     : arc_client_(nullptr),
       next_bitstream_buffer_id_(0),
+      output_pixel_format_(media::PIXEL_FORMAT_UNKNOWN),
       output_buffer_size_(0) {}
 
-ArcGpuVideoDecodeAccelerator::~ArcGpuVideoDecodeAccelerator() {}
+ArcGpuVideoDecodeAccelerator::~ArcGpuVideoDecodeAccelerator() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (vda_) {
+    client_count_--;
+  }
+}
 
-namespace {
-
-// An arbitrary chosen limit of the number of buffers. The number of
-// buffers used is requested from the untrusted client side.
-const size_t kMaxBufferCount = 128;
-
-}  // anonymous namespace
-
-bool ArcGpuVideoDecodeAccelerator::Initialize(
+ArcVideoAccelerator::Result ArcGpuVideoDecodeAccelerator::Initialize(
     const Config& config,
     ArcVideoAccelerator::Client* client) {
   DVLOG(5) << "Initialize(device=" << config.device_type
@@ -55,19 +72,25 @@ bool ArcGpuVideoDecodeAccelerator::Initialize(
            << ", num_input_buffers=" << config.num_input_buffers << ")";
   DCHECK(thread_checker_.CalledOnValidThread());
   if (config.device_type != Config::DEVICE_DECODER)
-    return false;
+    return INVALID_ARGUMENT;
   DCHECK(client);
 
   if (arc_client_) {
     DLOG(ERROR) << "Re-Initialize() is not allowed";
-    return false;
+    return ILLEGAL_STATE;
+  }
+
+  if (client_count_ >= kMaxConcurrentClients) {
+    LOG(WARNING) << "Reject to Initialize() due to too many clients: "
+                 << client_count_;
+    return INSUFFICIENT_RESOURCES;
   }
 
   arc_client_ = client;
 
   if (config.num_input_buffers > kMaxBufferCount) {
     DLOG(ERROR) << "Request too many buffers: " << config.num_input_buffers;
-    return false;
+    return INVALID_ARGUMENT;
   }
   input_buffer_info_.resize(config.num_input_buffers);
 
@@ -81,7 +104,7 @@ bool ArcGpuVideoDecodeAccelerator::Initialize(
       break;
     default:
       DLOG(ERROR) << "Unsupported input format: " << config.input_pixel_format;
-      return false;
+      return INVALID_ARGUMENT;
   }
   vda_config.output_mode =
       media::VideoDecodeAccelerator::Config::OutputMode::IMPORT;
@@ -91,9 +114,14 @@ bool ArcGpuVideoDecodeAccelerator::Initialize(
   vda_ = vda_factory->CreateVDA(this, vda_config);
   if (!vda_) {
     DLOG(ERROR) << "Failed to create VDA.";
-    return false;
+    return PLATFORM_FAILURE;
   }
-  return true;
+
+  client_count_++;
+  DVLOG(5) << "Number of concurrent ArcVideoAccelerator clients: "
+           << client_count_;
+
+  return SUCCESS;
 }
 
 void ArcGpuVideoDecodeAccelerator::SetNumberOfOutputBuffers(size_t number) {
@@ -153,9 +181,49 @@ void ArcGpuVideoDecodeAccelerator::BindSharedMemory(PortType port,
   input_info->length = length;
 }
 
-void ArcGpuVideoDecodeAccelerator::BindDmabuf(PortType port,
-                                              uint32_t index,
-                                              base::ScopedFD dmabuf_fd) {
+bool ArcGpuVideoDecodeAccelerator::VerifyDmabuf(
+    const base::ScopedFD& dmabuf_fd,
+    const std::vector<DmabufPlane>& dmabuf_planes) const {
+  size_t num_planes = media::VideoFrame::NumPlanes(output_pixel_format_);
+  if (dmabuf_planes.size() != num_planes) {
+    DLOG(ERROR) << "Invalid number of dmabuf planes passed: "
+                << dmabuf_planes.size() << ", expected: " << num_planes;
+    return false;
+  }
+
+  off_t size = lseek(dmabuf_fd.get(), 0, SEEK_END);
+  lseek(dmabuf_fd.get(), 0, SEEK_SET);
+  if (size < 0) {
+    DPLOG(ERROR) << "fail to find the size of dmabuf";
+    return false;
+  }
+
+  size_t i = 0;
+  for (const auto& plane : dmabuf_planes) {
+    DVLOG(4) << "Plane " << i << ", offset: " << plane.offset
+             << ", stride: " << plane.stride;
+
+    size_t rows =
+        media::VideoFrame::Rows(i, output_pixel_format_, coded_size_.height());
+    base::CheckedNumeric<off_t> current_size(plane.offset);
+    current_size += plane.stride * rows;
+
+    if (!current_size.IsValid() || current_size.ValueOrDie() > size) {
+      DLOG(ERROR) << "Invalid strides/offsets";
+      return false;
+    }
+
+    ++i;
+  }
+
+  return true;
+}
+
+void ArcGpuVideoDecodeAccelerator::BindDmabuf(
+    PortType port,
+    uint32_t index,
+    base::ScopedFD dmabuf_fd,
+    const std::vector<DmabufPlane>& dmabuf_planes) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   if (!vda_) {
@@ -172,7 +240,14 @@ void ArcGpuVideoDecodeAccelerator::BindDmabuf(PortType port,
     arc_client_->OnError(INVALID_ARGUMENT);
     return;
   }
-  buffers_pending_import_[index] = std::move(dmabuf_fd);
+  if (!VerifyDmabuf(dmabuf_fd, dmabuf_planes)) {
+    arc_client_->OnError(INVALID_ARGUMENT);
+    return;
+  }
+
+  OutputBufferInfo& info = buffers_pending_import_[index];
+  info.handle = std::move(dmabuf_fd);
+  info.planes = dmabuf_planes;
 }
 
 void ArcGpuVideoDecodeAccelerator::UseBuffer(PortType port,
@@ -212,13 +287,18 @@ void ArcGpuVideoDecodeAccelerator::UseBuffer(PortType port,
     case PORT_OUTPUT: {
       // is_valid() is true for the first time the buffer is passed to the VDA.
       // In that case, VDA needs to import the buffer first.
-      if (buffers_pending_import_[index].is_valid()) {
+      OutputBufferInfo& info = buffers_pending_import_[index];
+      if (info.handle.is_valid()) {
         gfx::GpuMemoryBufferHandle handle;
 #if defined(USE_OZONE)
-        handle.native_pixmap_handle.fd = base::FileDescriptor(
-            buffers_pending_import_[index].release(), true);
+        handle.native_pixmap_handle.fds.emplace_back(
+            base::FileDescriptor(info.handle.release(), true));
+        for (const auto& plane : info.planes) {
+          handle.native_pixmap_handle.strides_and_offsets.emplace_back(
+              plane.stride, plane.offset);
+        }
 #endif
-        vda_->ImportBufferForPicture(index, {handle});
+        vda_->ImportBufferForPicture(index, handle);
       } else {
         vda_->ReusePictureBuffer(index);
       }
@@ -249,6 +329,7 @@ void ArcGpuVideoDecodeAccelerator::Flush() {
 
 void ArcGpuVideoDecodeAccelerator::ProvidePictureBuffers(
     uint32_t requested_num_of_buffers,
+    media::VideoPixelFormat output_pixel_format,
     uint32_t textures_per_buffer,
     const gfx::Size& dimensions,
     uint32_t texture_target) {
@@ -257,10 +338,15 @@ void ArcGpuVideoDecodeAccelerator::ProvidePictureBuffers(
            << ", dimensions=" << dimensions.ToString() << ")";
   DCHECK(thread_checker_.CalledOnValidThread());
   coded_size_ = dimensions;
+  if ((output_pixel_format_ != media::PIXEL_FORMAT_UNKNOWN) &&
+      (output_pixel_format_ != output_pixel_format)) {
+    arc_client_->OnError(PLATFORM_FAILURE);
+    return;
+  }
+  output_pixel_format_ = output_pixel_format;
 
   VideoFormat video_format;
-  media::VideoPixelFormat output_format = vda_->GetOutputFormat();
-  switch (output_format) {
+  switch (output_pixel_format_) {
     case media::PIXEL_FORMAT_I420:
     case media::PIXEL_FORMAT_YV12:
     case media::PIXEL_FORMAT_NV12:
@@ -274,12 +360,12 @@ void ArcGpuVideoDecodeAccelerator::ProvidePictureBuffers(
       video_format.pixel_format = HAL_PIXEL_FORMAT_BGRA_8888;
       break;
     default:
-      DLOG(ERROR) << "Format not supported: " << output_format;
+      DLOG(ERROR) << "Format not supported: " << output_pixel_format_;
       arc_client_->OnError(PLATFORM_FAILURE);
       return;
   }
   video_format.buffer_size =
-      media::VideoFrame::AllocationSize(output_format, coded_size_);
+      media::VideoFrame::AllocationSize(output_pixel_format_, coded_size_);
   output_buffer_size_ = video_format.buffer_size;
   video_format.min_num_buffers = requested_num_of_buffers;
   video_format.coded_width = dimensions.width();
@@ -339,7 +425,7 @@ void ArcGpuVideoDecodeAccelerator::NotifyResetDone() {
   arc_client_->OnResetDone();
 }
 
-static ArcVideoAccelerator::Error ConvertErrorCode(
+static ArcVideoAccelerator::Result ConvertErrorCode(
     media::VideoDecodeAccelerator::Error error) {
   switch (error) {
     case media::VideoDecodeAccelerator::ILLEGAL_STATE:
@@ -390,7 +476,7 @@ ArcGpuVideoDecodeAccelerator::FindInputRecord(int32_t bitstream_buffer_id) {
 }
 
 bool ArcGpuVideoDecodeAccelerator::ValidatePortAndIndex(PortType port,
-                                                        uint32_t index) {
+                                                        uint32_t index) const {
   switch (port) {
     case PORT_INPUT:
       if (index >= input_buffer_info_.size()) {

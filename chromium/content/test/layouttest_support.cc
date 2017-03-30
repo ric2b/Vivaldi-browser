@@ -9,21 +9,26 @@
 
 #include "base/callback.h"
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "cc/test/pixel_test_delegating_output_surface.h"
 #include "components/scheduler/test/renderer_scheduler_test_support.h"
 #include "components/test_runner/test_common.h"
 #include "components/test_runner/web_frame_test_proxy.h"
 #include "components/test_runner/web_test_proxy.h"
-#include "content/browser/bluetooth/bluetooth_dispatcher_host.h"
+#include "content/browser/bluetooth/bluetooth_adapter_factory_wrapper.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
+#include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/renderer/renderer_gamepad_provider.h"
 #include "content/renderer/fetchers/manifest_fetcher.h"
+#include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/history_entry.h"
 #include "content/renderer/history_serialization.h"
+#include "content/renderer/layout_test_dependencies.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
@@ -31,6 +36,7 @@
 #include "content/shell/common/shell_switches.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "gpu/ipc/service/image_transport_surface.h"
+#include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebGamepads.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionData.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationData.h"
@@ -171,8 +177,52 @@ void SetMockDeviceOrientationData(const WebDeviceOrientationData& data) {
   RendererBlinkPlatformImpl::SetMockDeviceOrientationDataForTesting(data);
 }
 
+class LayoutTestDependenciesImpl : public LayoutTestDependencies {
+ public:
+  std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
+      scoped_refptr<gpu::GpuChannelHost> gpu_channel,
+      scoped_refptr<cc::ContextProvider> compositor_context_provider,
+      scoped_refptr<cc::ContextProvider> worker_context_provider,
+      CompositorDependencies* deps) override {
+    // This is for an offscreen context for the compositor. So the default
+    // framebuffer doesn't need alpha, depth, stencil, antialiasing.
+    gpu::gles2::ContextCreationAttribHelper attributes;
+    attributes.alpha_size = -1;
+    attributes.depth_size = 0;
+    attributes.stencil_size = 0;
+    attributes.samples = 0;
+    attributes.sample_buffers = 0;
+    attributes.bind_generates_resource = false;
+    attributes.lose_context_when_out_of_memory = true;
+    const bool automatic_flushes = false;
+    const bool support_locking = false;
+
+    scoped_refptr<cc::ContextProvider> display_context_provider(
+        new ContextProviderCommandBuffer(
+            std::move(gpu_channel), gpu::GPU_STREAM_DEFAULT,
+            gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
+            GURL(
+                "chrome://gpu/LayoutTestDependenciesImpl::CreateOutputSurface"),
+            automatic_flushes, support_locking, gpu::SharedMemoryLimits(),
+            attributes, nullptr,
+            command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_TESTING));
+
+    cc::LayerTreeSettings settings =
+        RenderWidgetCompositor::GenerateLayerTreeSettings(
+            *base::CommandLine::ForCurrentProcess(), deps, 1.f);
+
+    return base::MakeUnique<cc::PixelTestDelegatingOutputSurface>(
+        std::move(compositor_context_provider),
+        std::move(worker_context_provider), std::move(display_context_provider),
+        settings.renderer_settings, deps->GetSharedBitmapManager(),
+        deps->GetGpuMemoryBufferManager(), gfx::Size(), false,
+        !deps->GetCompositorImplThreadTaskRunner());
+  }
+};
+
 void EnableRendererLayoutTestMode() {
-  RenderThreadImpl::current()->set_layout_test_mode(true);
+  RenderThreadImpl::current()->set_layout_test_dependencies(
+      base::MakeUnique<LayoutTestDependenciesImpl>());
 
 #if defined(OS_WIN)
   RegisterSideloadedTypefaces(SkFontMgr_New_DirectWrite());
@@ -214,6 +264,12 @@ void ForceResizeRenderView(RenderView* render_view,
 void SetDeviceScaleFactor(RenderView* render_view, float factor) {
   static_cast<RenderViewImpl*>(render_view)->
       SetDeviceScaleFactorForTesting(factor);
+}
+
+float GetWindowToViewportScale(RenderView* render_view) {
+  blink::WebFloatRect rect(0, 0, 1.0f, 0.0);
+  static_cast<RenderViewImpl*>(render_view)->convertWindowToViewport(&rect);
+  return rect.width;
 }
 
 void SetDeviceColorProfile(RenderView* render_view, const std::string& name) {
@@ -359,11 +415,8 @@ void SetBluetoothAdapter(int render_process_id,
       static_cast<RenderProcessHostImpl*>(
           RenderProcessHost::FromID(render_process_id));
 
-  BluetoothDispatcherHost* dispatcher_host =
-      render_process_host_impl->GetBluetoothDispatcherHost();
-
-  if (dispatcher_host != NULL)
-    dispatcher_host->SetBluetoothAdapterForTesting(std::move(adapter));
+  render_process_host_impl->GetBluetoothAdapterFactoryWrapper()
+      ->SetBluetoothAdapterForTesting(std::move(adapter));
 }
 
 void UseSynchronousResizeMode(RenderView* render_view, bool enable) {

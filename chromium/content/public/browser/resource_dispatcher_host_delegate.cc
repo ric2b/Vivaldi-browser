@@ -7,6 +7,7 @@
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/stream_info.h"
+#include "net/ssl/client_cert_store.h"
 
 namespace content {
 
@@ -31,7 +32,6 @@ void ResourceDispatcherHostDelegate::DownloadStarting(
     ResourceContext* resource_context,
     int child_id,
     int route_id,
-    int request_id,
     bool is_content_initiated,
     bool must_download,
     ScopedVector<ResourceThrottle>* throttles) {
@@ -50,7 +50,8 @@ bool ResourceDispatcherHostDelegate::HandleExternalProtocol(
     const ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     bool is_main_frame,
     ui::PageTransition page_transition,
-    bool has_user_gesture) {
+    bool has_user_gesture,
+    ResourceContext* resource_context) {
   return true;
 }
 
@@ -102,7 +103,10 @@ NavigationData* ResourceDispatcherHostDelegate::GetNavigationData(
   return nullptr;
 }
 
-ResourceDispatcherHostDelegate::ResourceDispatcherHostDelegate() {
+std::unique_ptr<net::ClientCertStore>
+ResourceDispatcherHostDelegate::CreateClientCertStore(
+    ResourceContext* resource_context) {
+  return std::unique_ptr<net::ClientCertStore>();
 }
 
 ResourceDispatcherHostDelegate::~ResourceDispatcherHostDelegate() {

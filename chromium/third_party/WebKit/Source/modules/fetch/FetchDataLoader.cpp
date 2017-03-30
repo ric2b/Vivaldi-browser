@@ -5,9 +5,11 @@
 #include "modules/fetch/FetchDataLoader.h"
 
 #include "core/html/parser/TextResourceDecoder.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
 #include "wtf/typed_arrays/ArrayBufferBuilder.h"
+#include <memory>
 
 namespace blink {
 
@@ -39,7 +41,7 @@ private:
         RefPtr<BlobDataHandle> blobHandle = m_reader->drainAsBlobDataHandle();
         if (blobHandle) {
             ASSERT(blobHandle->size() != UINT64_MAX);
-            m_reader.clear();
+            m_reader.reset();
             if (blobHandle->type() != m_mimeType) {
                 // A new BlobDataHandle is created to override the Blob's type.
                 m_client->didFetchDataLoadedBlobHandle(BlobDataHandle::create(blobHandle->uuid(), m_mimeType, blobHandle->size()));
@@ -72,7 +74,7 @@ private:
                 break;
 
             case WebDataConsumerHandle::Done: {
-                m_reader.clear();
+                m_reader.reset();
                 long long size = m_blobData->length();
                 m_client->didFetchDataLoadedBlobHandle(BlobDataHandle::create(std::move(m_blobData), size));
                 m_client.clear();
@@ -85,8 +87,8 @@ private:
             case WebDataConsumerHandle::Busy:
             case WebDataConsumerHandle::ResourceExhausted:
             case WebDataConsumerHandle::UnexpectedError:
-                m_reader.clear();
-                m_blobData.clear();
+                m_reader.reset();
+                m_blobData.reset();
                 m_client->didFetchDataLoadFailed();
                 m_client.clear();
                 return;
@@ -96,16 +98,16 @@ private:
 
     void cancel() override
     {
-        m_reader.clear();
-        m_blobData.clear();
+        m_reader.reset();
+        m_blobData.reset();
         m_client.clear();
     }
 
-    OwnPtr<FetchDataConsumerHandle::Reader> m_reader;
+    std::unique_ptr<FetchDataConsumerHandle::Reader> m_reader;
     Member<FetchDataLoader::Client> m_client;
 
     String m_mimeType;
-    OwnPtr<BlobData> m_blobData;
+    std::unique_ptr<BlobData> m_blobData;
 };
 
 class FetchDataLoaderAsArrayBuffer
@@ -128,7 +130,7 @@ protected:
         ASSERT(!m_rawData);
         ASSERT(!m_reader);
         m_client = client;
-        m_rawData = adoptPtr(new ArrayBufferBuilder());
+        m_rawData = wrapUnique(new ArrayBufferBuilder());
         m_reader = handle->obtainReader(this);
     }
 
@@ -158,9 +160,9 @@ protected:
                 break;
 
             case WebDataConsumerHandle::Done:
-                m_reader.clear();
+                m_reader.reset();
                 m_client->didFetchDataLoadedArrayBuffer(DOMArrayBuffer::create(m_rawData->toArrayBuffer()));
-                m_rawData.clear();
+                m_rawData.reset();
                 m_client.clear();
                 return;
 
@@ -178,23 +180,23 @@ protected:
 
     void error()
     {
-        m_reader.clear();
-        m_rawData.clear();
+        m_reader.reset();
+        m_rawData.reset();
         m_client->didFetchDataLoadFailed();
         m_client.clear();
     }
 
     void cancel() override
     {
-        m_reader.clear();
-        m_rawData.clear();
+        m_reader.reset();
+        m_rawData.reset();
         m_client.clear();
     }
 
-    OwnPtr<FetchDataConsumerHandle::Reader> m_reader;
+    std::unique_ptr<FetchDataConsumerHandle::Reader> m_reader;
     Member<FetchDataLoader::Client> m_client;
 
-    OwnPtr<ArrayBufferBuilder> m_rawData;
+    std::unique_ptr<ArrayBufferBuilder> m_rawData;
 };
 
 class FetchDataLoaderAsString
@@ -240,11 +242,11 @@ protected:
                 break;
 
             case WebDataConsumerHandle::Done:
-                m_reader.clear();
+                m_reader.reset();
                 m_builder.append(m_decoder->flush());
                 m_client->didFetchDataLoadedString(m_builder.toString());
                 m_builder.clear();
-                m_decoder.clear();
+                m_decoder.reset();
                 m_client.clear();
                 return;
 
@@ -262,25 +264,25 @@ protected:
 
     void error()
     {
-        m_reader.clear();
+        m_reader.reset();
         m_builder.clear();
-        m_decoder.clear();
+        m_decoder.reset();
         m_client->didFetchDataLoadFailed();
         m_client.clear();
     }
 
     void cancel() override
     {
-        m_reader.clear();
+        m_reader.reset();
         m_builder.clear();
-        m_decoder.clear();
+        m_decoder.reset();
         m_client.clear();
     }
 
-    OwnPtr<FetchDataConsumerHandle::Reader> m_reader;
+    std::unique_ptr<FetchDataConsumerHandle::Reader> m_reader;
     Member<FetchDataLoader::Client> m_client;
 
-    OwnPtr<TextResourceDecoder> m_decoder;
+    std::unique_ptr<TextResourceDecoder> m_decoder;
     StringBuilder m_builder;
 };
 
@@ -327,7 +329,7 @@ protected:
                 break;
 
             case WebDataConsumerHandle::Done:
-                m_reader.clear();
+                m_reader.reset();
                 if (needToFlush)
                     m_outStream->flush();
                 m_outStream->finalize();
@@ -348,7 +350,7 @@ protected:
                 // notice the error and continue waiting forever.
                 // FIXME: Add new message to report the error to the browser
                 // process.
-                m_reader.clear();
+                m_reader.reset();
                 m_outStream->abort();
                 m_client->didFetchDataLoadFailed();
                 cleanup();
@@ -364,12 +366,12 @@ protected:
 
     void cleanup()
     {
-        m_reader.clear();
+        m_reader.reset();
         m_client.clear();
         m_outStream.clear();
     }
 
-    OwnPtr<FetchDataConsumerHandle::Reader> m_reader;
+    std::unique_ptr<FetchDataConsumerHandle::Reader> m_reader;
     Member<FetchDataLoader::Client> m_client;
 
     Member<Stream> m_outStream;

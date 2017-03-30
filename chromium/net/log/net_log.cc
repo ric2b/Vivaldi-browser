@@ -85,6 +85,16 @@ std::unique_ptr<base::Value> NetLogStringCallback(
   return std::move(event_params);
 }
 
+std::unique_ptr<base::Value> NetLogCharStringCallback(
+    const char* name,
+    const char* value,
+    NetLogCaptureMode /* capture_mode */) {
+  std::unique_ptr<base::DictionaryValue> event_params(
+      new base::DictionaryValue());
+  event_params->SetString(name, value);
+  return std::move(event_params);
+}
+
 std::unique_ptr<base::Value> NetLogString16Callback(
     const char* name,
     const base::string16* value,
@@ -142,7 +152,7 @@ bool NetLog::Source::FromEventParameters(base::Value* event_params,
   return true;
 }
 
-base::Value* NetLog::Entry::ToValue() const {
+std::unique_ptr<base::Value> NetLog::Entry::ToValue() const {
   std::unique_ptr<base::DictionaryValue> entry_dict(
       new base::DictionaryValue());
 
@@ -167,7 +177,7 @@ base::Value* NetLog::Entry::ToValue() const {
       entry_dict->Set("params", std::move(value));
   }
 
-  return entry_dict.release();
+  return std::move(entry_dict);
 }
 
 std::unique_ptr<base::Value> NetLog::Entry::ParametersToValue() const {
@@ -371,6 +381,13 @@ NetLog::ParametersCallback NetLog::StringCallback(const char* name,
                                                   const std::string* value) {
   DCHECK(value);
   return base::Bind(&NetLogStringCallback, name, value);
+}
+
+// static
+NetLog::ParametersCallback NetLog::StringCallback(const char* name,
+                                                  const char* value) {
+  DCHECK(value);
+  return base::Bind(&NetLogCharStringCallback, name, value);
 }
 
 // static

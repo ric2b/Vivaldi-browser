@@ -25,7 +25,7 @@ PaintWorkletGlobalScope* PaintWorkletGlobalScope::create(LocalFrame* frame, cons
 }
 
 PaintWorkletGlobalScope::PaintWorkletGlobalScope(LocalFrame* frame, const KURL& url, const String& userAgent, PassRefPtr<SecurityOrigin> securityOrigin, v8::Isolate* isolate)
-    : WorkletGlobalScope(frame, url, userAgent, securityOrigin, isolate)
+    : MainThreadWorkletGlobalScope(frame, url, userAgent, securityOrigin, isolate)
 {
 }
 
@@ -79,12 +79,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name, const ScriptValu
                 if (CSSVariableParser::isValidVariableName(property))
                     customInvalidationProperties.append(property);
             } else {
-                // Disallow prefixes.
-                if (property[0] == '-') {
-                    addConsoleMessage(ConsoleMessage::create(JSMessageSource, WarningMessageLevel, property + " is a prefixed property which is not supported."));
-                } else {
-                    nativeInvalidationProperties.append(propertyID);
-                }
+                nativeInvalidationProperties.append(propertyID);
             }
         }
     }
@@ -153,7 +148,7 @@ DEFINE_TRACE(PaintWorkletGlobalScope)
 {
     visitor->trace(m_paintDefinitions);
     visitor->trace(m_pendingGenerators);
-    WorkletGlobalScope::trace(visitor);
+    MainThreadWorkletGlobalScope::trace(visitor);
 }
 
 } // namespace blink

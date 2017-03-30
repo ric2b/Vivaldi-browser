@@ -130,6 +130,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="4156740505453712750">このパソコンへのアクセスを保護するには、<ph name="BOLD_START" />6 桁以上<ph name="BOLD_END" />の PIN を選択してください。この PIN は別の場所から接続するときに必要となります。</translation>
 <translation id="4176825807642096119">アクセス コード</translation>
 <translation id="4207623512727273241">続行する前にインストーラを実行してください。</translation>
+<translation id="4227991223508142681">ユーティリティ プロビジョニングをホストします</translation>
 <translation id="4240294130679914010">Chromoting ホスト アンインストーラ</translation>
 <translation id="4277463233460010382">このパソコンは、1 つ以上のクライアントが PIN の入力なしで接続できるように設定されています。</translation>
 <translation id="4277736576214464567">アクセス コードが無効です。もう一度入力してください。</translation>
@@ -229,7 +230,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="6668065415969892472">PIN を更新しました。</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. All Rights Reserved.</translation>
 <translation id="6746493157771801606">履歴をクリア</translation>
-<translation id="6748108480210050150">接続元</translation>
+<translation id="6748108480210050150">From</translation>
 <translation id="677755392401385740">次のユーザーのホストを開始しました: <ph name="HOST_USERNAME" />。</translation>
 <translation id="6865175692670882333">表示/編集</translation>
 <translation id="6930242544192836755">接続時間</translation>
@@ -237,7 +238,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="6944854424004126054">ウィンドウを元のサイズに戻す</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942"><ph name="HOSTNAME" /> へのリモート接続を無効にしてもよろしいですか？元に戻す場合は、該当のパソコンにアクセスして接続を再び有効にする必要があります。</translation>
-<translation id="6998989275928107238">接続先</translation>
+<translation id="6998989275928107238">To</translation>
 <translation id="7019153418965365059">不明なホストエラー: <ph name="HOST_OFFLINE_REASON" />。</translation>
 <translation id="701976023053394610">リモート サポート</translation>
 <translation id="7038683108611689168">Chromoting の改善のため、使用統計情報とクラッシュ レポートの収集に協力する</translation>
@@ -261,6 +262,7 @@ US英語以外のキーボードを使用しているリモートパソコンで
 <translation id="7836926030608666805">必要なコンポーネントが見つかりません。実行している Chrome のバージョンが最新であることを確認し、もう一度お試しください。</translation>
 <translation id="7868137160098754906">リモート パソコンの PIN を入力してください。</translation>
 <translation id="7869445566579231750">このアプリケーションを実行する権限がありません。</translation>
+<translation id="7895403300744144251">リモート パソコンのセキュリティ ポリシーで、ご使用のアカウントからの接続が許可されていません。</translation>
 <translation id="7948001860594368197">画面のオプション</translation>
 <translation id="7970576581263377361">認証できませんでした。Chromium にもう一度ログインしてください。</translation>
 <translation id="7981525049612125370">リモート セッションが時間切れとなりました。</translation>

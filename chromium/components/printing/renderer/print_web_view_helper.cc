@@ -522,7 +522,8 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
                            page_layout.margin_top + page_layout.margin_bottom +
                                page_layout.content_height);
 
-  blink::WebView* web_view = blink::WebView::create(NULL);
+  blink::WebView* web_view =
+      blink::WebView::create(nullptr, blink::WebPageVisibilityStateVisible);
   web_view->settings()->setJavaScriptEnabled(true);
 
   blink::WebLocalFrame* frame =
@@ -739,7 +740,8 @@ void PrepareFrameAndViewForPrint::CopySelection(
   WebPreferences prefs = preferences;
   prefs.javascript_enabled = false;
 
-  blink::WebView* web_view = blink::WebView::create(this);
+  blink::WebView* web_view =
+      blink::WebView::create(this, blink::WebPageVisibilityStateVisible);
   owns_web_view_ = true;
   content::RenderView::ApplyWebPreferences(prefs, web_view);
   web_view->setMainFrame(
@@ -940,6 +942,10 @@ bool PrintWebViewHelper::OnMessageReceived(const IPC::Message& message) {
 
   --ipc_nesting_level_;
   return handled;
+}
+
+void PrintWebViewHelper::OnDestruct() {
+  delete this;
 }
 
 bool PrintWebViewHelper::GetPrintFrame(blink::WebLocalFrame** frame) {
@@ -1245,7 +1251,7 @@ bool PrintWebViewHelper::RenderPreviewPage(
   std::unique_ptr<PdfMetafileSkia> draft_metafile;
   PdfMetafileSkia* initial_render_metafile = print_preview_context_.metafile();
   if (print_preview_context_.IsModifiable() && is_print_ready_metafile_sent_) {
-    draft_metafile.reset(new PdfMetafileSkia);
+    draft_metafile.reset(new PdfMetafileSkia(PDF_SKIA_DOCUMENT_TYPE));
     initial_render_metafile = draft_metafile.get();
   }
 
@@ -1260,7 +1266,8 @@ bool PrintWebViewHelper::RenderPreviewPage(
              print_preview_context_.generate_draft_pages()) {
     DCHECK(!draft_metafile.get());
     draft_metafile =
-        print_preview_context_.metafile()->GetMetafileForCurrentPage();
+        print_preview_context_.metafile()->GetMetafileForCurrentPage(
+            PDF_SKIA_DOCUMENT_TYPE);
   }
   return PreviewPageRendered(page_number, draft_metafile.get());
 }
@@ -2019,7 +2026,7 @@ bool PrintWebViewHelper::PrintPreviewContext::CreatePreviewDocument(
     return false;
   }
 
-  metafile_.reset(new PdfMetafileSkia);
+  metafile_.reset(new PdfMetafileSkia(PDF_SKIA_DOCUMENT_TYPE));
   CHECK(metafile_->Init());
 
   current_page_index_ = 0;

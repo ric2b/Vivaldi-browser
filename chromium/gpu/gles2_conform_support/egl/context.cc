@@ -181,6 +181,11 @@ int32_t Context::CreateGpuMemoryBufferImage(size_t width,
   return -1;
 }
 
+int32_t Context::GetImageGpuMemoryBufferId(unsigned image_id) {
+  NOTIMPLEMENTED();
+  return -1;
+}
+
 void Context::SignalQuery(uint32_t query, const base::Closure& callback) {
   NOTIMPLEMENTED();
 }
@@ -230,7 +235,7 @@ bool Context::CanWaitUnverifiedSyncToken(const gpu::SyncToken* sync_token) {
   return false;
 }
 
-void Context::ApplyCurrentContext(gfx::GLSurface* current_surface) {
+void Context::ApplyCurrentContext(gl::GLSurface* current_surface) {
   DCHECK(HasService());
   // The current_surface will be the same as
   // the surface of the decoder. We can not DCHECK as there is
@@ -246,7 +251,7 @@ void Context::ApplyContextReleased() {
   gles2::SetGLContext(nullptr);
 }
 
-bool Context::CreateService(gfx::GLSurface* gl_surface) {
+bool Context::CreateService(gl::GLSurface* gl_surface) {
   scoped_refptr<gpu::TransferBufferManager> transfer_buffer_manager(
       new gpu::TransferBufferManager(nullptr));
   transfer_buffer_manager->Initialize();
@@ -259,7 +264,8 @@ bool Context::CreateService(gfx::GLSurface* gl_surface) {
   scoped_refptr<gpu::gles2::ContextGroup> group(new gpu::gles2::ContextGroup(
       gpu_preferences_, nullptr, nullptr,
       new gpu::gles2::ShaderTranslatorCache(gpu_preferences_),
-      new gpu::gles2::FramebufferCompletenessCache, feature_info, true));
+      new gpu::gles2::FramebufferCompletenessCache, feature_info, true,
+      nullptr));
 
   std::unique_ptr<gpu::gles2::GLES2Decoder> decoder(
       gpu::gles2::GLES2Decoder::Create(group.get()));
@@ -272,8 +278,8 @@ bool Context::CreateService(gfx::GLSurface* gl_surface) {
 
   decoder->set_engine(command_executor.get());
 
-  scoped_refptr<gfx::GLContext> gl_context(
-      gl::init::CreateGLContext(nullptr, gl_surface, gfx::PreferDiscreteGpu));
+  scoped_refptr<gl::GLContext> gl_context(
+      gl::init::CreateGLContext(nullptr, gl_surface, gl::PreferDiscreteGpu));
   if (!gl_context)
     return false;
 
@@ -289,9 +295,10 @@ bool Context::CreateService(gfx::GLSurface* gl_surface) {
   helper.fail_if_major_perf_caveat = false;
   helper.lose_context_when_out_of_memory = kLoseContextWhenOutOfMemory;
   helper.context_type = gpu::gles2::CONTEXT_TYPE_OPENGLES2;
+  helper.offscreen_framebuffer_size = gl_surface->GetSize();
 
   if (!decoder->Initialize(gl_surface, gl_context.get(),
-                           gl_surface->IsOffscreen(), gl_surface->GetSize(),
+                           gl_surface->IsOffscreen(),
                            gpu::gles2::DisallowedFeatures(), helper)) {
     return false;
   }
@@ -381,7 +388,7 @@ bool Context::IsCompatibleSurface(Surface* surface) const {
   return surface_config_is_offscreen == context_config_is_offscreen;
 }
 
-bool Context::Flush(gfx::GLSurface* gl_surface) {
+bool Context::Flush(gl::GLSurface* gl_surface) {
   if (WasServiceContextLost())
     return false;
   if (!gl_context_->MakeCurrent(gl_surface)) {

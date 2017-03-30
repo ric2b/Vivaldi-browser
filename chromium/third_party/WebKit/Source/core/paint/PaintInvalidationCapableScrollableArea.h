@@ -41,6 +41,8 @@ private:
     virtual LayoutScrollbarPart* scrollCorner() const = 0;
     virtual LayoutScrollbarPart* resizer() const = 0;
 
+    void scrollControlWasSetNeedsPaintInvalidation() override;
+
     bool m_horizontalScrollbarPreviouslyWasOverlay;
     bool m_verticalScrollbarPreviouslyWasOverlay;
     LayoutRect m_horizontalScrollbarPreviousPaintInvalidationRect;

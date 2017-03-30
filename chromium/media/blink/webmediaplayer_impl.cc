@@ -17,8 +17,10 @@
 #include "base/command_line.h"
 #include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
+#include "base/location.h"
 #include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -57,11 +59,10 @@
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
-#if defined(OS_ANDROID)
-#include "media/base/android/media_codec_util.h"
-#endif
-
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(OS_MACOSX)
+#include "media/filters/core_audio_demuxer.h"
+#endif
 #include "media/base/pipeline_stats.h"
 #include "media/base/platform_mime_util.h"
 #include "media/filters/ipc_demuxer.h"
@@ -69,8 +70,8 @@
 #include "media/filters/pass_through_video_decoder.h"
 #endif
 
-#if defined(OS_MACOSX)
-#include "media/filters/core_audio_demuxer.h"
+#if defined(OS_ANDROID)
+#include "media/base/android/media_codec_util.h"
 #endif
 
 using blink::WebCanvas;
@@ -131,6 +132,12 @@ bool IsNetworkStateError(blink::WebMediaPlayer::NetworkState state) {
                 state == blink::WebMediaPlayer::NetworkStateDecodeError;
   DCHECK_EQ(state > blink::WebMediaPlayer::NetworkStateLoaded, result);
   return result;
+}
+
+gfx::Size GetRotatedVideoSize(VideoRotation rotation, gfx::Size natural_size) {
+  if (rotation == VIDEO_ROTATION_90 || rotation == VIDEO_ROTATION_270)
+    return gfx::Size(natural_size.height(), natural_size.width());
+  return natural_size;
 }
 
 }  // namespace
@@ -209,10 +216,9 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       data_source2_(NULL),
       url_index_(url_index),
       // Threaded compositing isn't enabled universally yet.
-      compositor_task_runner_(
-          params.compositor_task_runner()
-              ? params.compositor_task_runner()
-              : base::MessageLoop::current()->task_runner()),
+      compositor_task_runner_(params.compositor_task_runner()
+                                  ? params.compositor_task_runner()
+                                  : base::ThreadTaskRunnerHandle::Get()),
       compositor_(new VideoFrameCompositor(compositor_task_runner_)),
       is_cdm_attached_(false),
 #if defined(OS_ANDROID)  // WMPI_CAST
@@ -252,25 +258,13 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
 }
 
 WebMediaPlayerImpl::~WebMediaPlayerImpl() {
-  client_->setWebLayer(NULL);
-
   DCHECK(main_task_runner_->BelongsToCurrentThread());
 
+  suppress_destruction_errors_ = true;
   if (delegate_) {
     delegate_->PlayerGone(delegate_id_);
     delegate_->RemoveObserver(delegate_id_);
   }
-
-  // Abort any pending IO so stopping the pipeline doesn't get blocked.
-  suppress_destruction_errors_ = true;
-  if (data_source_)
-    data_source_->Abort();
-  if (chunk_demuxer_) {
-    chunk_demuxer_->Shutdown();
-    chunk_demuxer_ = nullptr;
-  }
-
-  renderer_factory_.reset();
 
   // Pipeline must be stopped before it is destroyed.
   pipeline_.Stop();
@@ -811,15 +805,16 @@ bool WebMediaPlayerImpl::copyVideoTextureToPlatformTexture(
 
   scoped_refptr<VideoFrame> video_frame = GetCurrentFrameFromCompositor();
 
-  if (!video_frame.get() || !video_frame->HasTextures() ||
-      media::VideoFrame::NumPlanes(video_frame->format()) != 1) {
+  if (!video_frame.get() || !video_frame->HasTextures()) {
     return false;
   }
 
-  SkCanvasVideoRenderer::CopyVideoFrameSingleTextureToGLTexture(
-      gl, video_frame.get(), texture, internal_format, type, premultiply_alpha,
-      flip_y);
-  return true;
+  Context3D context_3d;
+  if (!context_3d_cb_.is_null())
+    context_3d = context_3d_cb_.Run();
+  return skcanvas_video_renderer_.CopyVideoFrameTexturesToGLTexture(
+      context_3d, gl, video_frame.get(), texture, internal_format, type,
+      premultiply_alpha, flip_y);
 }
 
 void WebMediaPlayerImpl::setContentDecryptionModule(
@@ -871,21 +866,17 @@ void WebMediaPlayerImpl::OnFFmpegMediaTracksUpdated(
   // Report the media track information to blink.
   for (const auto& track : tracks->tracks()) {
     if (track->type() == MediaTrack::Audio) {
-      auto track_id = client_->addAudioTrack(
-          blink::WebString::fromUTF8(track->id()),
-          blink::WebMediaPlayerClient::AudioTrackKindMain,
-          blink::WebString::fromUTF8(track->label()),
-          blink::WebString::fromUTF8(track->language()),
-          /*enabled*/ true);
-      (void)track_id;
+      client_->addAudioTrack(blink::WebString::fromUTF8(track->id()),
+                             blink::WebMediaPlayerClient::AudioTrackKindMain,
+                             blink::WebString::fromUTF8(track->label()),
+                             blink::WebString::fromUTF8(track->language()),
+                             /*enabled*/ true);
     } else if (track->type() == MediaTrack::Video) {
-      auto track_id = client_->addVideoTrack(
-          blink::WebString::fromUTF8(track->id()),
-          blink::WebMediaPlayerClient::VideoTrackKindMain,
-          blink::WebString::fromUTF8(track->label()),
-          blink::WebString::fromUTF8(track->language()),
-          /*selected*/ true);
-      (void)track_id;
+      client_->addVideoTrack(blink::WebString::fromUTF8(track->id()),
+                             blink::WebMediaPlayerClient::VideoTrackKindMain,
+                             blink::WebString::fromUTF8(track->label()),
+                             blink::WebString::fromUTF8(track->language()),
+                             /*selected*/ true);
     } else {
       // Text tracks are not supported through this code path yet.
       NOTREACHED();
@@ -1017,11 +1008,8 @@ void WebMediaPlayerImpl::OnMetadata(PipelineMetadata metadata) {
   SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
 
   if (hasVideo()) {
-    if (pipeline_metadata_.video_rotation == VIDEO_ROTATION_90 ||
-        pipeline_metadata_.video_rotation == VIDEO_ROTATION_270) {
-      gfx::Size size = pipeline_metadata_.natural_size;
-      pipeline_metadata_.natural_size = gfx::Size(size.height(), size.width());
-    }
+    pipeline_metadata_.natural_size = GetRotatedVideoSize(
+        pipeline_metadata_.video_rotation, pipeline_metadata_.natural_size);
 
     if (fullscreen_ && surface_manager_)
       surface_manager_->NaturalSizeChanged(pipeline_metadata_.natural_size);
@@ -1114,17 +1102,20 @@ void WebMediaPlayerImpl::OnVideoNaturalSizeChange(const gfx::Size& size) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   DCHECK_NE(ready_state_, WebMediaPlayer::ReadyStateHaveNothing);
 
-  if (size == pipeline_metadata_.natural_size)
+  gfx::Size rotated_size =
+      GetRotatedVideoSize(pipeline_metadata_.video_rotation, size);
+
+  if (rotated_size == pipeline_metadata_.natural_size)
     return;
 
   TRACE_EVENT0("media", "WebMediaPlayerImpl::OnNaturalSizeChanged");
-  media_log_->AddEvent(
-      media_log_->CreateVideoSizeSetEvent(size.width(), size.height()));
+  media_log_->AddEvent(media_log_->CreateVideoSizeSetEvent(
+      rotated_size.width(), rotated_size.height()));
 
   if (fullscreen_ && surface_manager_)
-    surface_manager_->NaturalSizeChanged(size);
+    surface_manager_->NaturalSizeChanged(rotated_size);
 
-  pipeline_metadata_.natural_size = size;
+  pipeline_metadata_.natural_size = rotated_size;
   client_->sizeChanged();
 }
 
@@ -1545,7 +1536,8 @@ WebMediaPlayerImpl::GetCurrentFrameFromCompositor() {
   // Use a posted task and waitable event instead of a lock otherwise
   // WebGL/Canvas can see different content than what the compositor is seeing.
   scoped_refptr<VideoFrame> video_frame;
-  base::WaitableEvent event(false, false);
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
   compositor_task_runner_->PostTask(FROM_HERE,
                                     base::Bind(&GetCurrentFrameAndSignal,
                                                base::Unretained(compositor_),
@@ -1625,10 +1617,12 @@ void WebMediaPlayerImpl::SetSuspendState(bool is_suspended) {
   if (IsNetworkStateError(network_state_))
     return;
 
-#if defined(OS_MACOSX) || defined(OS_WIN)
-  // TODO(sandersd): Idle suspend is disabled on OSX and Windows for hardware
-  // decoding / opaque video frames since these frames are owned by the decoder
-  // in the GPU process. http://crbug.com/595716 and http://crbug.com/602708
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+  // TODO(sandersd): idle suspend is disabled if decoder owns video frame.
+  // Used on OSX,Windows+Chromecast. Since GetCurrentFrameFromCompositor is
+  // a synchronous cross-thread post, avoid the cost on platforms that
+  // always allow suspend. Need to find a better mechanism for this. See
+  // http://crbug.com/595716 and http://crbug.com/602708
   if (can_suspend_state_ == CanSuspendState::UNKNOWN) {
     scoped_refptr<VideoFrame> frame = GetCurrentFrameFromCompositor();
     if (frame) {

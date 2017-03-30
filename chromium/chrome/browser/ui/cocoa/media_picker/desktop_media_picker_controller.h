@@ -20,11 +20,20 @@
 // A controller for the Desktop Media Picker. Presents the user with a list of
 // media sources for screen-capturing, and reports the result.
 @interface DesktopMediaPickerController
-    : NSWindowController<NSWindowDelegate, DesktopMediaPickerObserver> {
+    : NSWindowController<NSWindowDelegate,
+                         DesktopMediaPickerObserver,
+                         NSTableViewDataSource,
+                         NSTableViewDelegate> {
  @private
-  // The image browser view to present sources to the user (thumbnails and
-  // names).
-  base::scoped_nsobject<IKImageBrowserView> sourceBrowser_;
+  // The image browser view or table view to present sources to the user
+  // (thumbnails and names).
+  base::scoped_nsobject<IKImageBrowserView> screenBrowser_;
+  base::scoped_nsobject<IKImageBrowserView> windowBrowser_;
+  base::scoped_nsobject<NSTableView> tabBrowser_;
+
+  base::scoped_nsobject<NSScrollView> imageBrowserScroll_;
+
+  base::scoped_nsobject<NSSegmentedControl> sourceTypeControl_;
 
   // The button used to confirm the selection.
   NSButton* shareButton_;  // weak; owned by contentView
@@ -33,22 +42,26 @@
   NSButton* cancelButton_;  // weak; owned by contentView
 
   // The checkbox for audio share.
-  // |audioShareState_| records the state when check box is disabled.
   base::scoped_nsobject<NSButton> audioShareCheckbox_;
-  NSCellStateValue audioShareState_;
 
-  // Provides source information (including thumbnails) to fill up |items_| and
-  // to render in |sourceBrowser_|.
-  std::unique_ptr<DesktopMediaList> media_list_;
+  // Provides source information (including thumbnails) to fill up the array of
+  // |screenItems_|, |windowItems_| and |tabItems_|, and to render in
+  // |screenBrowser_|, |windowBrowser_| and |tabBrowser_|.
+  std::unique_ptr<DesktopMediaList> screenList_;
+  std::unique_ptr<DesktopMediaList> windowList_;
+  std::unique_ptr<DesktopMediaList> tabList_;
 
   // To be called with the user selection.
   DesktopMediaPicker::DoneCallback doneCallback_;
 
-  // Array of |DesktopMediaPickerItem| used as data for |sourceBrowser_|.
-  base::scoped_nsobject<NSMutableArray> items_;
+  // Arrays of |DesktopMediaPickerItem| used as data for |screenBrowser_|,
+  // |windowBrowser_| and |tabBrowser_|.
+  base::scoped_nsobject<NSMutableArray> screenItems_;
+  base::scoped_nsobject<NSMutableArray> windowItems_;
+  base::scoped_nsobject<NSMutableArray> tabItems_;
 
-  // C++ bridge to use as an observer to |media_list_|, that forwards obj-c
-  // notifications to this object.
+  // C++ bridge to use as an observer to |screenList_|, |windowList_| and
+  // |tabList_|, that forwards obj-c notifications to this object.
   std::unique_ptr<DesktopMediaPickerBridge> bridge_;
 
   // Used to create |DesktopMediaPickerItem|s with unique IDs.
@@ -62,9 +75,9 @@
 // appears as the initiator of the request.
 // |targetName| will be used to format the dialog's label and appear as the
 // consumer of the requested stream.
-- (id)initWithScreenList:(std::unique_ptr<DesktopMediaList>)screen_list
-              windowList:(std::unique_ptr<DesktopMediaList>)window_list
-                 tabList:(std::unique_ptr<DesktopMediaList>)tab_list
+- (id)initWithScreenList:(std::unique_ptr<DesktopMediaList>)screenList
+              windowList:(std::unique_ptr<DesktopMediaList>)windowList
+                 tabList:(std::unique_ptr<DesktopMediaList>)tabList
                   parent:(NSWindow*)parent
                 callback:(const DesktopMediaPicker::DoneCallback&)callback
                  appName:(const base::string16&)appName

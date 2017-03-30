@@ -12,6 +12,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "net/base/completion_callback.h"
 #include "net/base/layered_network_delegate.h"
@@ -35,13 +36,14 @@ class URLRequest;
 }
 
 namespace data_reduction_proxy {
-
 class DataReductionProxyBypassStats;
 class DataReductionProxyConfig;
 class DataReductionProxyConfigurator;
 class DataReductionProxyExperimentsStats;
 class DataReductionProxyIOData;
 class DataReductionProxyRequestOptions;
+class DataUseGroupProvider;
+class DataUseGroup;
 
 // Values of the UMA DataReductionProxy.LoFi.TransformationType histogram.
 // This enum must remain synchronized with
@@ -85,18 +87,22 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   // is responsible for deleting the returned value.
   base::Value* SessionNetworkStatsInfoToValue() const;
 
+  void SetDataUseGroupProvider(
+      std::unique_ptr<DataUseGroupProvider> data_use_group_provider);
+
  private:
   // Resets if Lo-Fi has been used for the last main frame load to false.
   void OnBeforeURLRequestInternal(net::URLRequest* request,
                                   const net::CompletionCallback& callback,
                                   GURL* new_url) override;
 
-  // Called after a proxy connection. Allows the delegate to read/write
+  // Called after connection. Allows the delegate to read/write
   // |headers| before they get sent out. |headers| is valid only until
   // OnCompleted or OnURLRequestDestroyed is called for this request.
-  void OnBeforeSendProxyHeadersInternal(
+  void OnBeforeSendHeadersInternal(
       net::URLRequest* request,
       const net::ProxyInfo& proxy_info,
+      const net::ProxyRetryInfoMap& proxy_retry_info,
       net::HttpRequestHeaders* headers) override;
 
   // Indicates that the URL request has been completed or failed.
@@ -119,7 +125,7 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   void AccumulateDataUsage(int64_t data_used,
                            int64_t original_size,
                            DataReductionProxyRequestType request_type,
-                           const std::string& data_usage_host,
+                           const scoped_refptr<DataUseGroup>& data_use_group,
                            const std::string& mime_type);
 
   // Record information such as histograms related to the Content-Length of
@@ -133,6 +139,14 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   // Records UMA that counts how many pages were transformed by various Lo-Fi
   // transformations.
   void RecordLoFiTransformationType(LoFiTransformationType type);
+
+  // Returns whether |request| would have used the data reduction proxy server
+  // if the holdback fieldtrial weren't enabled. |proxy_info| is the list of
+  // proxies being used, and |proxy_retry_info| contains a list of bad proxies.
+  bool WasEligibleWithoutHoldback(
+      const net::URLRequest& request,
+      const net::ProxyInfo& proxy_info,
+      const net::ProxyRetryInfoMap& proxy_retry_info) const;
 
   // Total size of all content that has been received over the network.
   int64_t total_received_bytes_;
@@ -150,6 +164,8 @@ class DataReductionProxyNetworkDelegate : public net::LayeredNetworkDelegate {
   DataReductionProxyIOData* data_reduction_proxy_io_data_;
 
   const DataReductionProxyConfigurator* configurator_;
+
+  std::unique_ptr<DataUseGroupProvider> data_use_group_provider_;
 
   DISALLOW_COPY_AND_ASSIGN(DataReductionProxyNetworkDelegate);
 };

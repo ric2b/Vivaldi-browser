@@ -6,7 +6,6 @@
 #define InspectedContext_h
 
 #include "platform/inspector_protocol/Allocator.h"
-#include "platform/inspector_protocol/Collections.h"
 #include "platform/inspector_protocol/String16.h"
 #include <v8.h>
 
@@ -55,7 +54,7 @@ private:
     const String16 m_humanReadableName;
     const String16 m_frameId;
     bool m_reported;
-    OwnPtr<InjectedScript> m_injectedScript;
+    std::unique_ptr<InjectedScript> m_injectedScript;
     v8::Global<v8::Object> m_console;
 };
 

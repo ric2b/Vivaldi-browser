@@ -19,6 +19,7 @@
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/desktop_aura/x11_move_loop_delegate.h"
@@ -100,7 +101,7 @@ class VIEWS_EXPORT DesktopDragDropClientAuraX11
   // Overridden from X11WholeScreenMoveLoopDelegate:
   void OnMouseMovement(const gfx::Point& screen_point,
                        int flags,
-                       base::TimeDelta event_time) override;
+                       base::TimeTicks event_time) override;
   void OnMouseReleased() override;
   void OnMoveLoopEnded() override;
 
@@ -118,6 +119,9 @@ class VIEWS_EXPORT DesktopDragDropClientAuraX11
   // Sends |xev| to |xid|, optionally short circuiting the round trip to the X
   // server.
   virtual void SendXClientEvent(::Window xid, XEvent* xev);
+
+ protected:
+  Widget* drag_widget() { return drag_widget_.get(); }
 
  private:
   enum SourceState {
@@ -278,6 +282,9 @@ class VIEWS_EXPORT DesktopDragDropClientAuraX11
 
   // Widget that the user drags around. May be NULL.
   std::unique_ptr<Widget> drag_widget_;
+
+  // The size of drag image.
+  gfx::Size drag_image_size_;
 
   // The offset of |drag_widget_| relative to the mouse position.
   gfx::Vector2d drag_widget_offset_;

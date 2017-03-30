@@ -33,10 +33,9 @@ namespace content {
 
 class ResourceContext;
 class ResourceMessageFilter;
-class ResourceRequestBody;
+class ResourceRequestBodyImpl;
 class ServiceWorkerContextCore;
 class ServiceWorkerContextWrapper;
-class ServiceWorkerNavigationHandleCore;
 class ServiceWorkerProviderHost;
 
 // Abstract base class for routing network requests to ServiceWorkers.
@@ -44,19 +43,6 @@ class ServiceWorkerProviderHost;
 class CONTENT_EXPORT ServiceWorkerRequestHandler
     : public base::SupportsUserData::Data {
  public:
-  // PlzNavigate
-  // Attaches a newly created handler if the given |request| needs to be handled
-  // by ServiceWorker.
-  static void InitializeForNavigation(
-      net::URLRequest* request,
-      ServiceWorkerNavigationHandleCore* navigation_handle_core,
-      storage::BlobStorageContext* blob_storage_context,
-      bool skip_service_worker,
-      ResourceType resource_type,
-      RequestContextType request_context_type,
-      RequestContextFrameType frame_type,
-      scoped_refptr<ResourceRequestBody> body);
-
   // Attaches a newly created handler if the given |request| needs to
   // be handled by ServiceWorker.
   // TODO(kinuko): While utilizing UserData to attach data to URLRequest
@@ -76,12 +62,12 @@ class CONTENT_EXPORT ServiceWorkerRequestHandler
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
-      scoped_refptr<ResourceRequestBody> body);
+      scoped_refptr<ResourceRequestBodyImpl> body);
 
   // Returns the handler attached to |request|. This may return NULL
   // if no handler is attached.
   static ServiceWorkerRequestHandler* GetHandler(
-      net::URLRequest* request);
+      const net::URLRequest* request);
 
   // Creates a protocol interceptor for ServiceWorker.
   static std::unique_ptr<net::URLRequestInterceptor> CreateInterceptor(
@@ -91,7 +77,12 @@ class CONTENT_EXPORT ServiceWorkerRequestHandler
   // It's only reliable after the ServiceWorkerRequestHandler MaybeCreateJob
   // method runs to completion for this request. The AppCache handler uses
   // this to avoid colliding with ServiceWorkers.
-  static bool IsControlledByServiceWorker(net::URLRequest* request);
+  static bool IsControlledByServiceWorker(const net::URLRequest* request);
+
+  // Returns the ServiceWorkerProviderHost the request is associated with.
+  // Only valid after InitializeHandler has been called. Can return null.
+  static ServiceWorkerProviderHost* GetProviderHost(
+      const net::URLRequest* request);
 
   ~ServiceWorkerRequestHandler() override;
 

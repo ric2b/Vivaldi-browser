@@ -1,0 +1,156 @@
+/* Copyright 2016 The Chromium Authors. All rights reserved.
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+:host > ::content > * {
+  margin: 0;
+  padding: 0;
+}
+
+paper-dialog {
+  background-color: transparent;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.thumbnail {
+  flex: none;
+  max-height: 100%;
+  max-width: 100%;
+}
+
+video {
+  min-width: 192px;
+}
+
+#video-poster {
+  max-height: 100%;
+  max-width: 100%;
+}
+
+paper-button:focus:not(:active) {
+  box-shadow: 0 0 0 2px rgba(191, 191, 191, 0.5);
+}
+
+video::-webkit-media-controls-fullscreen-button,
+audio::-webkit-media-controls-volume-slider,
+video::-webkit-media-controls-volume-slider {
+  display: none;
+}
+
+#audio-artwork {
+  margin: 0 auto;
+  max-width: 300px;
+}
+
+#mainPanel {
+  background-color: transparent;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+
+#contentPanel {
+  background-color: transparent;
+  height: 100%;
+  position: relative;
+}
+
+#contentPanel[metadata-box-active] {
+  margin-right: 200px;
+}
+
+#innerContentPanel {
+  background-color: transparent;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  height: 70%;
+  justify-content: center;
+  margin: auto;
+  position: relative;
+  text-align: center;
+  top: 15%;
+  width: 70%;
+}
+
+.content {
+  bottom: 0;
+  left: 0;
+  margin: auto;
+  max-height: 100%;
+  max-width: 100%;
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+
+#toolbar {
+  --paper-toolbar-background: black;
+  --paper-toolbar-height: 32px;
+  color: white;
+  margin: 0;
+  z-index: 1;
+  width: 100%;
+}
+
+#buttons {
+  position: absolute;
+  right: 0px;
+}
+
+paper-button {
+  padding: 4px;
+}
+
+#metadata-box {
+  background: black;
+  bottom: 0;
+  height: 100%;
+  margin: 0;
+  position: absolute;
+  right: 0;
+  width: 200px;
+}
+
+[hidden] {
+  display: none;
+}
+
+/* Large generic thumbnails, used when a file does not have a thumbnail. */
+[generic-thumbnail] {
+  background: -webkit-image-set(
+      url(../images/files/ui/filetype_placeholder_generic.png) 1x,
+      url(../images/files/ui/2x/filetype_placeholder_generic.png) 2x)
+    center
+    no-repeat;
+  height: 48px;
+}
+
+[generic-thumbnail='audio'] {
+  background: -webkit-image-set(
+      url(../images/files/ui/filetype_placeholder_audio.png) 1x,
+      url(../images/files/ui/2x/filetype_placeholder_audio.png) 2x)
+    center
+    no-repeat;
+}
+
+[generic-thumbnail='image'] {
+  background: -webkit-image-set(
+      url(../images/files/ui/filetype_placeholder_image.png) 1x,
+      url(../images/files/ui/2x/filetype_placeholder_image.png) 2x)
+    center
+    no-repeat;
+}
+
+[generic-thumbnail='video'] {
+  background: -webkit-image-set(
+      url(../images/files/ui/filetype_placeholder_video.png) 1x,
+      url(../images/files/ui/2x/filetype_placeholder_video.png) 2x)
+    center
+    no-repeat;
+}

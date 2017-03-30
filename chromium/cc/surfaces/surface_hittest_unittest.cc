@@ -66,13 +66,10 @@ TEST(SurfaceHittestTest, Hittest_BadCompositorFrameDoesNotCrash) {
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
   RenderPass* root_pass = nullptr;
-  std::unique_ptr<CompositorFrame> root_frame =
-      CreateCompositorFrame(root_rect, &root_pass);
+  CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to a non-existant child surface on the root surface.
-  SurfaceIdAllocator child_allocator(3);
-  SurfaceId child_surface_id;
-  child_surface_id.id = 0xdeadbeef;
+  SurfaceId child_surface_id(3, 0xdeadbeef, 0);
   gfx::Rect child_rect(200, 200);
   CreateSurfaceDrawQuad(root_pass,
                         gfx::Transform(),
@@ -107,8 +104,7 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface) {
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
   RenderPass* root_pass = nullptr;
-  std::unique_ptr<CompositorFrame> root_frame =
-      CreateCompositorFrame(root_rect, &root_pass);
+  CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Submit the root frame.
   SurfaceIdAllocator root_allocator(2);
@@ -138,8 +134,7 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
   RenderPass* root_pass = nullptr;
-  std::unique_ptr<CompositorFrame> root_frame =
-      CreateCompositorFrame(root_rect, &root_pass);
+  CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to the child surface on the root surface.
   SurfaceIdAllocator child_allocator(3);
@@ -163,8 +158,7 @@ TEST(SurfaceHittestTest, Hittest_ChildSurface) {
 
   // Creates a child surface.
   RenderPass* child_pass = nullptr;
-  std::unique_ptr<CompositorFrame> child_frame =
-      CreateCompositorFrame(child_rect, &child_pass);
+  CompositorFrame child_frame = CreateCompositorFrame(child_rect, &child_pass);
 
   // Add a solid quad in the child surface.
   gfx::Rect child_solid_quad_rect(100, 100);
@@ -271,8 +265,7 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
   RenderPass* root_pass = nullptr;
-  std::unique_ptr<CompositorFrame> root_frame =
-      CreateCompositorFrame(root_rect, &root_pass);
+  CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Create a RenderPassDrawQuad to a non-existant RenderPass.
   CreateRenderPassDrawQuad(root_pass,
@@ -303,8 +296,7 @@ TEST(SurfaceHittestTest, Hittest_InvalidRenderPassDrawQuad) {
 
   // Creates a child surface.
   RenderPass* child_pass = nullptr;
-  std::unique_ptr<CompositorFrame> child_frame =
-      CreateCompositorFrame(child_rect, &child_pass);
+  CompositorFrame child_frame = CreateCompositorFrame(child_rect, &child_pass);
 
   // Add a solid quad in the child surface.
   gfx::Rect child_solid_quad_rect(100, 100);
@@ -392,9 +384,9 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
                    &render_pass_list);
 
   RenderPass* root_pass = nullptr;
-  std::unique_ptr<CompositorFrame> root_frame =
+  CompositorFrame root_frame =
       CreateCompositorFrameWithRenderPassList(&render_pass_list);
-  root_pass = root_frame->delegated_frame_data->render_pass_list.back().get();
+  root_pass = root_frame.delegated_frame_data->render_pass_list.back().get();
 
   // Create a RenderPassDrawQuad.
   gfx::Rect render_pass_quad_rect(100, 100);
@@ -406,7 +398,7 @@ TEST(SurfaceHittestTest, Hittest_RenderPassDrawQuad) {
 
   // Add a solid quad in the child render pass.
   RenderPass* child_render_pass =
-      root_frame->delegated_frame_data->render_pass_list.front().get();
+      root_frame.delegated_frame_data->render_pass_list.front().get();
   gfx::Rect child_solid_quad_rect(100, 100);
   CreateSolidColorDrawQuad(child_render_pass,
                            gfx::Transform(),
@@ -477,8 +469,7 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
   // Creates a root surface.
   gfx::Rect root_rect(300, 300);
   RenderPass* root_pass = nullptr;
-  std::unique_ptr<CompositorFrame> root_frame =
-      CreateCompositorFrame(root_rect, &root_pass);
+  CompositorFrame root_frame = CreateCompositorFrame(root_rect, &root_pass);
 
   // Add a reference to the child surface on the root surface.
   SurfaceIdAllocator child_allocator(3);
@@ -501,8 +492,7 @@ TEST(SurfaceHittestTest, Hittest_SingleSurface_WithInsetsDelegate) {
 
   // Creates a child surface.
   RenderPass* child_pass = nullptr;
-  std::unique_ptr<CompositorFrame> child_frame =
-      CreateCompositorFrame(child_rect, &child_pass);
+  CompositorFrame child_frame = CreateCompositorFrame(child_rect, &child_pass);
 
   // Add a solid quad in the child surface.
   gfx::Rect child_solid_quad_rect(190, 190);

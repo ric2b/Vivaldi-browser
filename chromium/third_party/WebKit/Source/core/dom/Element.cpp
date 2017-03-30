@@ -39,8 +39,8 @@
 #include "core/animation/CustomCompositorAnimations.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/css/CSSImageValue.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSStyleSheet.h"
-#include "core/css/CSSValuePool.h"
 #include "core/css/PropertySetCSSStyleDeclaration.h"
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
@@ -73,11 +73,14 @@
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
+#include "core/dom/custom/CustomElement.h"
+#include "core/dom/custom/CustomElementsRegistry.h"
 #include "core/dom/custom/V0CustomElement.h"
 #include "core/dom/custom/V0CustomElementRegistrationContext.h"
 #include "core/dom/shadow/InsertionPoint.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/dom/shadow/ShadowRootInit.h"
+#include "core/dom/shadow/SlotAssignment.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/iterators/TextIterator.h"
@@ -86,9 +89,9 @@
 #include "core/events/FocusEvent.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
-#include "core/frame/OriginsUsingFeatures.h"
 #include "core/frame/ScrollToOptions.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
@@ -136,6 +139,7 @@
 #include "wtf/text/CString.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/TextPosition.h"
+#include <memory>
 
 namespace blink {
 
@@ -268,7 +272,7 @@ Element* Element::cloneElementWithoutChildren()
 
 Element* Element::cloneElementWithoutAttributesAndChildren()
 {
-    return document().createElement(tagQName(), false);
+    return document().createElement(tagQName(), CreatedByCloneNode);
 }
 
 Attr* Element::detachAttribute(size_t index)
@@ -521,7 +525,15 @@ void Element::nativeDistributeScroll(ScrollState& scrollState)
 void Element::callDistributeScroll(ScrollState& scrollState)
 {
     ScrollStateCallback* callback = scrollCustomizationCallbacks().getDistributeScroll(this);
-    if (!callback) {
+
+    // TODO(bokan): Need to add tests before we allow calling custom callbacks
+    // for non-touch modalities. For now, just call into the native callback but
+    // allow the viewport scroll callback so we don't disable overscroll.
+    // crbug.com/623079.
+    bool disableCustomCallbacks = !scrollState.isDirectManipulation()
+        && !document().isViewportScrollCallback(callback);
+
+    if (!callback || disableCustomCallbacks) {
         nativeDistributeScroll(scrollState);
         return;
     }
@@ -535,8 +547,6 @@ void Element::callDistributeScroll(ScrollState& scrollState)
 
 void Element::nativeApplyScroll(ScrollState& scrollState)
 {
-    DCHECK(RuntimeEnabledFeatures::scrollCustomizationEnabled());
-
     // All elements in the scroll chain should be boxes.
     DCHECK(!layoutObject() || layoutObject()->isBox());
 
@@ -553,8 +563,9 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 
     LayoutBox* boxToScroll = nullptr;
 
-    // Handle the scrollingElement separately, as it should scroll the viewport.
-    if (this == document().scrollingElement())
+    // We should only ever scroll the effective root scroller this way when the
+    // page removes the default applyScroll (ViewportScrollCallback).
+    if (document().effectiveRootScroller() == this)
         boxToScroll = document().layoutView();
     else if (layoutObject())
         boxToScroll = toLayoutBox(layoutObject());
@@ -564,7 +575,7 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 
     ScrollResult result =
         LayoutBoxItem(boxToScroll).enclosingBox().scroll(
-            ScrollByPrecisePixel,
+            ScrollGranularity(static_cast<int>(scrollState.deltaGranularity())),
             delta);
 
     if (!result.didScroll())
@@ -588,7 +599,15 @@ void Element::nativeApplyScroll(ScrollState& scrollState)
 void Element::callApplyScroll(ScrollState& scrollState)
 {
     ScrollStateCallback* callback = scrollCustomizationCallbacks().getApplyScroll(this);
-    if (!callback) {
+
+    // TODO(bokan): Need to add tests before we allow calling custom callbacks
+    // for non-touch modalities. For now, just call into the native callback but
+    // allow the viewport scroll callback so we don't disable overscroll.
+    // crbug.com/623079.
+    bool disableCustomCallbacks = !scrollState.isDirectManipulation()
+        && !document().isViewportScrollCallback(callback);
+
+    if (!callback || disableCustomCallbacks) {
         nativeApplyScroll(scrollState);
         return;
     }
@@ -598,13 +617,13 @@ void Element::callApplyScroll(ScrollState& scrollState)
         nativeApplyScroll(scrollState);
     if (callback->nativeScrollBehavior() == WebNativeScrollBehavior::PerformAfterNativeScroll)
         callback->handleEvent(&scrollState);
-};
+}
 
 int Element::offsetLeft()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetLeft()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetLeft(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -612,7 +631,7 @@ int Element::offsetTop()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetTop()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetTop(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -620,7 +639,7 @@ int Element::offsetWidth()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetWidth()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetWidth(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -628,7 +647,7 @@ int Element::offsetHeight()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
     if (LayoutBoxModelObject* layoutObject = layoutBoxModelObject())
-        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetHeight()), layoutObject->styleRef()).round();
+        return adjustLayoutUnitForAbsoluteZoom(LayoutUnit(layoutObject->pixelSnappedOffsetHeight(offsetParent())), layoutObject->styleRef()).round();
     return 0;
 }
 
@@ -637,17 +656,7 @@ Element* Element::offsetParent()
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
 
     LayoutObject* layoutObject = this->layoutObject();
-    if (!layoutObject)
-        return nullptr;
-
-    Element* element = layoutObject->offsetParent();
-    if (!element)
-        return nullptr;
-
-    if (element->isInShadowTree() && !element->containingShadowRoot()->isOpenOrV0())
-        return nullptr;
-
-    return element;
+    return layoutObject ? layoutObject->offsetParent() : nullptr;
 }
 
 int Element::clientLeft()
@@ -1047,14 +1056,14 @@ ClientRect* Element::getBoundingClientRect()
 const AtomicString& Element::computedRole()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
-    OwnPtr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
+    std::unique_ptr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
     return cache->get()->computedRoleForNode(this);
 }
 
 String Element::computedName()
 {
     document().updateStyleAndLayoutIgnorePendingStylesheetsForNode(this);
-    OwnPtr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
+    std::unique_ptr<ScopedAXObjectCache> cache = ScopedAXObjectCache::create(document());
     return cache->get()->computedNameForNode(this);
 }
 
@@ -1145,10 +1154,9 @@ void Element::attributeChanged(const QualifiedName& name, const AtomicString& ol
         if (shouldInvalidateDistributionWhenAttributeChanged(parentElementShadow, name, newValue))
             parentElementShadow->setNeedsDistributionRecalc();
     }
-    if (name == HTMLNames::slotAttr && isChildOfV1ShadowHost()) {
-        parentElementShadow()->setNeedsDistributionRecalc();
-        if (oldValue != newValue)
-            parentElement()->shadowRootIfV1()->assignV1();
+    if (name == HTMLNames::slotAttr && oldValue != newValue) {
+        if (ShadowRoot* root = v1ShadowRootOfParent())
+            root->ensureSlotAssignment().hostChildSlotNameChanged(oldValue, newValue);
     }
 
     parseAttribute(name, oldValue, newValue);
@@ -1421,8 +1429,14 @@ Node::InsertionNotificationRequest Element::insertedInto(ContainerNode* insertio
             rareData->intersectionObserverData()->activateValidIntersectionObservers(*this);
     }
 
-    if (isUpgradedV0CustomElement() && inShadowIncludingDocument())
-        V0CustomElement::didAttach(this, document());
+    if (inShadowIncludingDocument()) {
+        if (getCustomElementState() == CustomElementState::Custom)
+            CustomElement::enqueueConnectedCallback(this);
+        else if (isUpgradedV0CustomElement())
+            V0CustomElement::didAttach(this, document());
+        else if (getCustomElementState() == CustomElementState::Undefined)
+            CustomElement::tryToUpgrade(this);
+    }
 
     TreeScope& scope = insertionPoint->treeScope();
     if (scope != treeScope())
@@ -1482,7 +1496,9 @@ void Element::removedFrom(ContainerNode* insertionPoint)
         if (hasPendingResources())
             document().accessSVGExtensions().removeElementFromPendingResources(this);
 
-        if (isUpgradedV0CustomElement())
+        if (getCustomElementState() == CustomElementState::Custom)
+            CustomElement::enqueueDisconnectedCallback(this);
+        else if (isUpgradedV0CustomElement())
             V0CustomElement::didDetach(this, insertionPoint->document());
 
         if (needsStyleInvalidation())
@@ -1507,12 +1523,6 @@ void Element::removedFrom(ContainerNode* insertionPoint)
 
     if (document().frame())
         document().frame()->eventHandler().elementRemoved(this);
-
-    if (HTMLSlotElement* slot = assignedSlot()) {
-        ShadowRoot* root = slot->containingShadowRoot();
-        if (root && root->isV1())
-            root->assignV1();
-    }
 }
 
 void Element::attach(const AttachContext& context)
@@ -1905,7 +1915,7 @@ V0CustomElementDefinition* Element::customElementDefinition() const
 
 ShadowRoot* Element::createShadowRoot(const ScriptState* scriptState, ExceptionState& exceptionState)
 {
-    OriginsUsingFeatures::countMainWorldOnly(scriptState, document(), OriginsUsingFeatures::Feature::ElementCreateShadowRoot);
+    HostsUsingFeatures::countMainWorldOnly(scriptState, document(), HostsUsingFeatures::Feature::ElementCreateShadowRoot);
     if (ShadowRoot* root = shadowRoot()) {
         if (root->isV1()) {
             exceptionState.throwDOMException(InvalidStateError, "Shadow root cannot be created on a host which already hosts a v1 shadow tree.");
@@ -1928,10 +1938,11 @@ ShadowRoot* Element::attachShadow(const ScriptState* scriptState, const ShadowRo
 {
     DCHECK(RuntimeEnabledFeatures::shadowDOMV1Enabled());
 
-    OriginsUsingFeatures::countMainWorldOnly(scriptState, document(), OriginsUsingFeatures::Feature::ElementAttachShadow);
+    HostsUsingFeatures::countMainWorldOnly(scriptState, document(), HostsUsingFeatures::Feature::ElementAttachShadow);
 
     const AtomicString& tagName = localName();
     bool tagNameIsSupported = isV0CustomElement()
+        || isCustomElement()
         || tagName == HTMLNames::articleTag
         || tagName == HTMLNames::asideTag
         || tagName == HTMLNames::blockquoteTag
@@ -2086,23 +2097,18 @@ void Element::childrenChanged(const ChildrenChange& change)
 
     checkForEmptyStyleChange();
     if (!change.byParser && change.isChildElementChange())
-        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, change.siblingBeforeChange, change.siblingAfterChange);
+        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, change.siblingChanged, change.siblingBeforeChange, change.siblingAfterChange);
 
-    if (ElementShadow* shadow = this->shadow()) {
+    // TODO(hayato): Confirm that we can skip this if a shadow tree is v1.
+    if (ElementShadow* shadow = this->shadow())
         shadow->setNeedsDistributionRecalc();
-        if (document().shadowCascadeOrder() == ShadowCascadeOrder::ShadowCascadeV1) {
-            ShadowRoot* root = isShadowHost(*this) && shadowRoot()->isV1() ? shadowRootIfV1() : isHTMLSlotElement(*this) ? containingShadowRoot() : nullptr;
-            if (root && root->isV1())
-                root->assignV1();
-        }
-    }
 }
 
 void Element::finishParsingChildren()
 {
     setIsFinishedParsingChildren(true);
     checkForEmptyStyleChange();
-    checkForSiblingStyleChanges(FinishedParsingChildren, lastChild(), nullptr);
+    checkForSiblingStyleChanges(FinishedParsingChildren, nullptr, lastChild(), nullptr);
 }
 
 #ifndef NDEBUG
@@ -2116,16 +2122,16 @@ void Element::formatForDebugger(char* buffer, unsigned length) const
     s = getIdAttribute();
     if (s.length() > 0) {
         if (result.length() > 0)
-            result.appendLiteral("; ");
-        result.appendLiteral("id=");
+            result.append("; ");
+        result.append("id=");
         result.append(s);
     }
 
     s = getAttribute(classAttr);
     if (s.length() > 0) {
         if (result.length() > 0)
-            result.appendLiteral("; ");
-        result.appendLiteral("class=");
+            result.append("; ");
+        result.append("class=");
         result.append(s);
     }
 
@@ -2234,7 +2240,7 @@ void Element::parseAttribute(const QualifiedName& name, const AtomicString&, con
         int tabindex = 0;
         if (value.isEmpty()) {
             clearTabIndexExplicitlyIfNeeded();
-            if (treeScope().adjustedFocusedElement() == this) {
+            if (adjustedFocusedElementInTreeScope() == this) {
                 // We might want to call blur(), but it's dangerous to dispatch
                 // events here.
                 document().setNeedsFocusedElementCheck();
@@ -2432,7 +2438,7 @@ void Element::updateFocusAppearance(SelectionBehaviorOnFocus selectionBehavior)
 void Element::blur()
 {
     cancelFocusAppearanceUpdate();
-    if (treeScope().adjustedFocusedElement() == this) {
+    if (adjustedFocusedElementInTreeScope() == this) {
         Document& doc = document();
         if (doc.page())
             doc.page()->focusController().setFocusedElement(0, doc.frame());
@@ -2497,6 +2503,11 @@ bool Element::isMouseFocusable() const
 bool Element::isFocusedElementInDocument() const
 {
     return this == document().focusedElement();
+}
+
+Element* Element::adjustedFocusedElementInTreeScope() const
+{
+    return isInTreeScope() ? containingTreeScope().adjustedFocusedElement() : nullptr;
 }
 
 void Element::dispatchFocusEvent(Element* oldFocusedElement, WebFocusType type, InputDeviceCapabilities* sourceCapabilities)
@@ -2613,7 +2624,7 @@ Node* Element::insertAdjacent(const String& where, Node* newChild, ExceptionStat
 
 NodeIntersectionObserverData* Element::intersectionObserverData() const
 {
-    if (elementRareData())
+    if (hasRareData())
         return elementRareData()->intersectionObserverData();
     return nullptr;
 }
@@ -2670,10 +2681,6 @@ void Element::setPointerCapture(int pointerId, ExceptionState& exceptionState)
             exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
         else if (!inShadowIncludingDocument())
             exceptionState.throwDOMException(InvalidStateError, "InvalidStateError");
-        // TODO(crbug.com/579553): This next "else if" is a hack to notify JS that we don't (yet) support
-        // explicit set/release of touch pointers (which are implicitly captured for performance reasons).
-        else if (document().frame()->eventHandler().getPointerEventType(pointerId) == WebPointerProperties::PointerType::Touch)
-            exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
         else
             document().frame()->eventHandler().setPointerCapture(pointerId, this);
     }
@@ -2683,10 +2690,6 @@ void Element::releasePointerCapture(int pointerId, ExceptionState& exceptionStat
 {
     if (document().frame()) {
         if (!document().frame()->eventHandler().isPointerEventActive(pointerId))
-            exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
-        // TODO(crbug.com/579553): This next "else if" is a hack to notify JS that we don't (yet) support
-        // explicit set/release of touch pointers (which are implicitly captured for performance reasons).
-        else if (document().frame()->eventHandler().getPointerEventType(pointerId) == WebPointerProperties::PointerType::Touch)
             exceptionState.throwDOMException(InvalidPointerId, "InvalidPointerId");
         else
             document().frame()->eventHandler().releasePointerCapture(pointerId, this);
@@ -3056,15 +3059,31 @@ void Element::setContainsFullScreenElement(bool flag)
     pseudoStateChanged(CSSSelector::PseudoFullScreenAncestor);
 }
 
-static Element* parentCrossingFrameBoundaries(Element* element)
+// Unlike Node::parentNode, this can cross frame boundaries.
+static Element* nextAncestorElement(Element* element)
 {
     DCHECK(element);
-    return element->parentElement() ? element->parentElement() : element->document().localOwner();
+    if (element->parentElement())
+        return element->parentElement();
+
+    Frame* frame = element->document().frame();
+    if (!frame || !frame->owner())
+        return nullptr;
+
+    // Find the next LocalFrame on the ancestor chain, and return the
+    // corresponding <iframe> element for the remote child if it exists.
+    while (frame->tree().parent() && frame->tree().parent()->isRemoteFrame())
+        frame = frame->tree().parent();
+
+    if (frame->owner() && frame->owner()->isLocal())
+        return toHTMLFrameOwnerElement(frame->owner());
+
+    return nullptr;
 }
 
 void Element::setContainsFullScreenElementOnAncestorsCrossingFrameBoundaries(bool flag)
 {
-    for (Element* element = parentCrossingFrameBoundaries(this); element; element = parentCrossingFrameBoundaries(element))
+    for (Element* element = nextAncestorElement(this); element; element = nextAncestorElement(element))
         element->setContainsFullScreenElement(flag);
 }
 
@@ -3154,7 +3173,7 @@ inline void Element::updateId(const AtomicString& oldId, const AtomicString& new
     if (oldId == newId)
         return;
 
-    updateId(treeScope(), oldId, newId);
+    updateId(containingTreeScope(), oldId, newId);
 }
 
 inline void Element::updateId(TreeScope& scope, const AtomicString& oldId, const AtomicString& newId)
@@ -3179,7 +3198,9 @@ void Element::willModifyAttribute(const QualifiedName& name, const AtomicString&
 
     if (oldValue != newValue) {
         document().styleEngine().attributeChangedForElement(name, *this);
-        if (isUpgradedV0CustomElement())
+        if (getCustomElementState() == CustomElementState::Custom)
+            CustomElement::enqueueAttributeChangedCallback(this, name, oldValue, newValue);
+        else if (isUpgradedV0CustomElement())
             V0CustomElement::attributeDidChange(this, name.localName(), oldValue, newValue);
     }
 
@@ -3508,7 +3529,7 @@ void Element::styleAttributeChanged(const AtomicString& newStyleString, Attribut
 
     if (newStyleString.isNull()) {
         ensureUniqueElementData().m_inlineStyle.clear();
-    } else if (modificationReason == ModifiedByCloning || ContentSecurityPolicy::shouldBypassMainWorld(&document()) || document().contentSecurityPolicy()->allowInlineStyle(document().url(), startLineNumber, newStyleString)) {
+    } else if (modificationReason == ModifiedByCloning || ContentSecurityPolicy::shouldBypassMainWorld(&document()) || document().contentSecurityPolicy()->allowInlineStyle(document().url(), String(), startLineNumber, newStyleString)) {
         setInlineStyleFromString(newStyleString);
     }
 
@@ -3529,12 +3550,12 @@ void Element::inlineStyleChanged()
 
 void Element::setInlineStyleProperty(CSSPropertyID propertyID, CSSValueID identifier, bool important)
 {
-    setInlineStyleProperty(propertyID, cssValuePool().createIdentifierValue(identifier), important);
+    setInlineStyleProperty(propertyID, CSSPrimitiveValue::createIdentifier(identifier), important);
 }
 
 void Element::setInlineStyleProperty(CSSPropertyID propertyID, double value, CSSPrimitiveValue::UnitType unit, bool important)
 {
-    setInlineStyleProperty(propertyID, cssValuePool().createValue(value, unit), important);
+    setInlineStyleProperty(propertyID, CSSPrimitiveValue::create(value, unit), important);
 }
 
 void Element::setInlineStyleProperty(CSSPropertyID propertyID, CSSValue* value, bool important)
@@ -3585,13 +3606,13 @@ void Element::updatePresentationAttributeStyle()
 void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* style, CSSPropertyID propertyID, CSSValueID identifier)
 {
     DCHECK(isStyledElement());
-    style->setProperty(propertyID, cssValuePool().createIdentifierValue(identifier));
+    style->setProperty(propertyID, CSSPrimitiveValue::createIdentifier(identifier));
 }
 
 void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* style, CSSPropertyID propertyID, double value, CSSPrimitiveValue::UnitType unit)
 {
     DCHECK(isStyledElement());
-    style->setProperty(propertyID, cssValuePool().createValue(value, unit));
+    style->setProperty(propertyID, CSSPrimitiveValue::create(value, unit));
 }
 
 void Element::addPropertyToPresentationAttributeStyle(MutableStylePropertySet* style, CSSPropertyID propertyID, const String& value)

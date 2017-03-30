@@ -149,6 +149,12 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   LayerTreeHost* remote_client_layer_tree_host();
   bool delegating_renderer() const { return delegating_renderer_; }
   FakeOutputSurface* output_surface() { return output_surface_; }
+  SharedBitmapManager* shared_bitmap_manager() const {
+    return shared_bitmap_manager_.get();
+  }
+  TestGpuMemoryBufferManager* gpu_memory_buffer_manager() {
+    return gpu_memory_buffer_manager_.get();
+  }
 
   // Use these only for tests in threaded or remote mode.
   ProxyMainForTest* GetProxyMainForTest() const;
@@ -175,10 +181,6 @@ class LayerTreeTest : public testing::Test, public TestHooks {
 
   TestWebGraphicsContext3D* TestContext();
 
-  TestGpuMemoryBufferManager* GetTestGpuMemoryBufferManager() {
-    return gpu_memory_buffer_manager_.get();
-  }
-
   bool IsRemoteTest() const;
 
   gfx::Vector2dF ScrollDelta(LayerImpl* layer_impl);
@@ -197,6 +199,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   FakeOutputSurface* output_surface_;
   FakeExternalBeginFrameSource* external_begin_frame_source_;
   RemoteProtoChannelBridge remote_proto_channel_bridge_;
+
+  std::unique_ptr<ImageSerializationProcessor> image_serialization_processor_;
 
   bool beginning_;
   bool end_when_begin_returns_;

@@ -51,6 +51,7 @@ class NET_EXPORT WebSocketChannel {
       const std::vector<std::string>&,
       const url::Origin&,
       const GURL&,
+      const std::string&,
       URLRequestContext*,
       const BoundNetLog&,
       std::unique_ptr<WebSocketStream::ConnectDelegate>)>
@@ -73,7 +74,8 @@ class NET_EXPORT WebSocketChannel {
       const GURL& socket_url,
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
-      const GURL& first_party_for_cookies);
+      const GURL& first_party_for_cookies,
+      const std::string& additional_headers);
 
   // Sends a data frame to the remote side. It is the responsibility of the
   // caller to ensure that they have sufficient send quota to send this data,
@@ -124,6 +126,7 @@ class NET_EXPORT WebSocketChannel {
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
       const GURL& first_party_for_cookies,
+      const std::string& additional_headers,
       const WebSocketStreamCreator& creator);
 
   // The default timout for the closing handshake is a sensible value (see
@@ -217,6 +220,7 @@ class NET_EXPORT WebSocketChannel {
       const std::vector<std::string>& requested_protocols,
       const url::Origin& origin,
       const GURL& first_party_for_cookies,
+      const std::string& additional_headers,
       const WebSocketStreamCreator& creator);
 
   // Success callback from WebSocketStream::CreateAndConnectStream(). Reports

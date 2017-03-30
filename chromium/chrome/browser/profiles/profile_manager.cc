@@ -17,7 +17,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_profile.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -108,7 +107,6 @@
 #endif
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/ntp_snippets/ntp_snippets_service_factory.h"
 #include "components/ntp_snippets/ntp_snippets_service.h"
 #endif
@@ -615,14 +613,18 @@ std::vector<Profile*> ProfileManager::GetLastOpenedProfiles(
     std::unique_ptr<base::ListValue> profile_list(
         local_state->GetList(prefs::kProfilesLastActive)->DeepCopy());
     base::ListValue::const_iterator it;
-    std::string profile;
     for (it = profile_list->begin(); it != profile_list->end(); ++it) {
-      if (!(*it)->GetAsString(&profile) || profile.empty() ||
-          profile == base::FilePath(chrome::kSystemProfileDir).AsUTF8Unsafe()) {
+      std::string profile_path;
+      if (!(*it)->GetAsString(&profile_path) ||
+          profile_path.empty() ||
+          profile_path ==
+              base::FilePath(chrome::kSystemProfileDir).AsUTF8Unsafe()) {
         LOG(WARNING) << "Invalid entry in " << prefs::kProfilesLastActive;
         continue;
       }
-      to_return.push_back(GetProfile(user_data_dir.AppendASCII(profile)));
+      Profile* profile = GetProfile(user_data_dir.AppendASCII(profile_path));
+      if (profile)
+        to_return.push_back(profile);
     }
   }
   return to_return;
@@ -1071,7 +1073,7 @@ void ProfileManager::Observe(
           profile_path !=
               base::FilePath(chrome::kSystemProfileDir).AsUTF8Unsafe()) {
         profile_paths.insert(profile_path);
-        profile_list->Append(new base::StringValue(profile_path));
+        profile_list->AppendString(profile_path);
       }
     }
   }
@@ -1103,9 +1105,6 @@ void ProfileManager::OnProfileCreated(Profile* profile,
   } else {
     profile = NULL;
     profiles_info_.erase(iter);
-    // TODO(yiyaoliu): This is temporary, remove it after it's not used.
-    UMA_HISTOGRAM_COUNTS_100("UMA.ProfilesCount.AfterErase",
-                             profiles_info_.size());
   }
 
   if (profile) {
@@ -1127,7 +1126,6 @@ void ProfileManager::OnProfileCreated(Profile* profile,
 
 void ProfileManager::DoFinalInit(Profile* profile, bool go_off_the_record) {
   TRACE_EVENT0("browser", "ProfileManager::DoFinalInit");
-  TRACK_SCOPED_REGION("Startup", "ProfileManager::DoFinalInit");
 
   DoFinalInitForServices(profile, go_off_the_record);
   AddProfileToStorage(profile);
@@ -1153,7 +1151,6 @@ void ProfileManager::DoFinalInit(Profile* profile, bool go_off_the_record) {
 void ProfileManager::DoFinalInitForServices(Profile* profile,
                                             bool go_off_the_record) {
   TRACE_EVENT0("browser", "ProfileManager::DoFinalInitForServices");
-  TRACK_SCOPED_REGION("Startup", "ProfileManager::DoFinalInitForServices");
 
 #if defined(ENABLE_EXTENSIONS)
   // Ensure that the HostContentSettingsMap has been created before the
@@ -1230,10 +1227,7 @@ void ProfileManager::DoFinalInitForServices(Profile* profile,
 
 #if defined(OS_ANDROID)
   // Service is responsible for fetching content snippets for the NTP.
-  // Note: Create the service even if the feature is disabled, so that any
-  // remaining tasks will be cleaned up.
-  NTPSnippetsServiceFactory::GetForProfile(profile)->Init(
-      base::FeatureList::IsEnabled(chrome::android::kNTPSnippetsFeature));
+  NTPSnippetsServiceFactory::GetForProfile(profile);
 #endif
 }
 
@@ -1255,7 +1249,6 @@ void ProfileManager::DoFinalInitLogging(Profile* profile) {
 Profile* ProfileManager::CreateProfileHelper(const base::FilePath& path) {
   TRACE_EVENT0("browser", "ProfileManager::CreateProfileHelper");
   SCOPED_UMA_HISTOGRAM_TIMER("Profile.CreateProfileHelperTime");
-  TRACK_SCOPED_REGION("Startup", "ProfileManager::CreateProfileHelper");
 
   return Profile::CreateProfile(path, NULL, Profile::CREATE_MODE_SYNCHRONOUS);
 }
@@ -1306,7 +1299,6 @@ Profile* ProfileManager::GetActiveUserOrOffTheRecordProfileFromPath(
 
 bool ProfileManager::AddProfile(Profile* profile) {
   TRACE_EVENT0("browser", "ProfileManager::AddProfile");
-  TRACK_SCOPED_REGION("Startup", "ProfileManager::AddProfile");
 
   DCHECK(profile);
 
@@ -1328,8 +1320,6 @@ bool ProfileManager::AddProfile(Profile* profile) {
 Profile* ProfileManager::CreateAndInitializeProfile(
     const base::FilePath& profile_dir) {
   TRACE_EVENT0("browser", "ProfileManager::CreateAndInitializeProfile");
-  TRACK_SCOPED_REGION(
-      "Startup", "ProfileManager::CreateAndInitializeProfile");
   SCOPED_UMA_HISTOGRAM_LONG_TIMER("Profile.CreateAndInitializeProfile");
 
   // CHECK that we are not trying to load the same profile twice, to prevent
@@ -1338,7 +1328,6 @@ Profile* ProfileManager::CreateAndInitializeProfile(
   // which would make Bad Things happen if we returned it.
   CHECK(!GetProfileByPathInternal(profile_dir));
   Profile* profile = CreateProfileHelper(profile_dir);
-  DCHECK(profile);
   if (profile) {
     bool result = AddProfile(profile);
     DCHECK(result);

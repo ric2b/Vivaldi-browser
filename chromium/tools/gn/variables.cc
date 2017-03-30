@@ -52,13 +52,13 @@ const char kTargetCpu_Help[] =
     "\n"
     "  This value should be used to indicate the desired architecture for\n"
     "  the primary objects of the build. It will match the cpu architecture\n"
-    "  of the default toolchain.\n"
+    "  of the default toolchain, but not necessarily the current toolchain.\n"
     "\n"
     "  In many cases, this is the same as \"host_cpu\", but in the case\n"
-    "  of cross-compiles, this can be set to something different. This \n"
-    "  value is different from \"current_cpu\" in that it can be referenced\n"
-    "  from inside any toolchain. This value can also be ignored if it is\n"
-    "  not needed or meaningful for a project.\n"
+    "  of cross-compiles, this can be set to something different. This\n"
+    "  value is different from \"current_cpu\" in that it does not change\n"
+    "  based on the current toolchain. When writing rules, \"current_cpu\"\n"
+    "  should be used rather than \"target_cpu\" most of the time.\n"
     "\n"
     "  This value is not used internally by GN for any purpose, so it\n"
     "  may be set to whatever value is needed for the build.\n"
@@ -648,6 +648,54 @@ const char kCheckIncludes_Help[] =
     "    ...\n"
     "  }\n";
 
+const char kCodeSigningArgs[] = "code_signing_args";
+const char kCodeSigningArgs_HelpShort[] =
+    "code_signing_args: [string list] Arguments passed to code signing script.";
+const char kCodeSigningArgs_Help[] =
+    "code_signing_args: [string list] Arguments passed to code signing "
+        "script.\n"
+    "\n"
+    "  For create_bundle targets, code_signing_args is the list of arguments\n"
+    "  to pass to the code signing script. Typically you would use source\n"
+    "  expansion (see \"gn help source_expansion\") to insert the source file\n"
+    "  names.\n"
+    "\n"
+    "  See also \"gn help create_bundle\".\n";
+
+const char kCodeSigningScript[] = "code_signing_script";
+const char kCodeSigningScript_HelpShort[] =
+    "code_signing_script: [file name] Script for code signing.";
+const char kCodeSigningScript_Help[] =
+    "code_signing_script: [file name] Script for code signing."
+    "\n"
+    "  An absolute or buildfile-relative file name of a Python script to run\n"
+    "  for a create_bundle target to perform code signing step.\n"
+    "\n"
+    "  See also \"gn help create_bundle\".\n";
+
+const char kCodeSigningSources[] = "code_signing_sources";
+const char kCodeSigningSources_HelpShort[] =
+    "code_signing_sources: [file list] Sources for code signing step.";
+const char kCodeSigningSources_Help[] =
+    "code_signing_sources: [file list] Sources for code signing step.\n"
+    "\n"
+    "  A list of files used as input for code signing script step of a\n"
+    "  create_bundle target. Non-absolute paths will be resolved relative to\n"
+    "  the current build file.\n"
+    "\n"
+    "  See also \"gn help create_bundle\".\n";
+
+const char kCodeSigningOutputs[] = "code_signing_outputs";
+const char kCodeSigningOutputs_HelpShort[] =
+    "code_signing_outputs: [file list] Output files for code signing step.";
+const char kCodeSigningOutputs_Help[] =
+    "code_signing_outputs: [file list] Output files for code signing step.\n"
+    "\n"
+    "  Outputs from the code signing step of a create_bundle target. Must\n"
+    "  refer to files in the build directory.\n"
+    "\n"
+    "  See also \"gn help create_bundle\".\n";
+
 const char kCompleteStaticLib[] = "complete_static_lib";
 const char kCompleteStaticLib_HelpShort[] =
     "complete_static_lib: [boolean] Links all deps into a static library.";
@@ -812,6 +860,9 @@ const char kData_Help[] =
     "  However, no verification is done on these so GN doesn't enforce this.\n"
     "  The paths are just rebased and passed along when requested.\n"
     "\n"
+    "  Note: On iOS and OS X, create_bundle targets will not be recursed\n"
+    "  into when gathering data. See \"gn help create_bundle\" for details.\n"
+    "\n"
     "  See \"gn help runtime_deps\" for how these are used.\n";
 
 const char kDataDeps[] = "data_deps";
@@ -828,6 +879,10 @@ const char kDataDeps_Help[] =
     "\n"
     "  This is normally used for things like plugins or helper programs that\n"
     "  a target needs at runtime.\n"
+    "\n"
+    "  Note: On iOS and OS X, create_bundle targets will not be recursed\n"
+    "  into when gathering data_deps. See \"gn help create_bundle\" for\n"
+    "  details.\n"
     "\n"
     "  See also \"gn help deps\" and \"gn help data\".\n"
     "\n"
@@ -979,7 +1034,7 @@ const char kInputs_Help[] =
     "\n"
     "  The problem happens if a file is ever removed because the inputs are\n"
     "  not listed on the command line to the script. Because the script\n"
-    "  hasn't changed and all inputs are up-to-date, the script will not\n"
+    "  hasn't changed and all inputs are up to date, the script will not\n"
     "  re-run and you will get a stale build. Instead, either list all\n"
     "  inputs on the command line to the script, or if there are many, create\n"
     "  a separate list file that the script reads. As long as this file is\n"
@@ -993,13 +1048,11 @@ const char kInputs_Help[] =
     "  files in a target are compiled. So if you depend on generated headers,\n"
     "  you do not typically need to list them in the inputs section.\n"
     "\n"
-    "  Inputs for binary targets will be treated as order-only dependencies,\n"
-    "  meaning that they will be forced up-to-date before compiling or\n"
-    "  any files in the target, but changes in the inputs will not\n"
-    "  necessarily force the target to compile. This is because it is\n"
-    "  expected that the compiler will report the precise list of input\n"
-    "  dependencies required to recompile each file once the initial build\n"
-    "  is done.\n"
+    "  Inputs for binary targets will be treated as implicit dependencies,\n"
+    "  meaning that changes in any of the inputs will force all sources in\n"
+    "  the target to be recompiled. If an input only applies to a subset of\n"
+    "  source files, you may want to split those into a separate target to\n"
+    "  avoid unnecessary recompiles.\n"
     "\n"
     "Example\n"
     "\n"
@@ -1691,6 +1744,10 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(CflagsObjC)
     INSERT_VARIABLE(CflagsObjCC)
     INSERT_VARIABLE(CheckIncludes)
+    INSERT_VARIABLE(CodeSigningArgs)
+    INSERT_VARIABLE(CodeSigningScript)
+    INSERT_VARIABLE(CodeSigningSources)
+    INSERT_VARIABLE(CodeSigningOutputs)
     INSERT_VARIABLE(CompleteStaticLib)
     INSERT_VARIABLE(Configs)
     INSERT_VARIABLE(Console)

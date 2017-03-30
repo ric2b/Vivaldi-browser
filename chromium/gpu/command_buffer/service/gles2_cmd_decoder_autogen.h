@@ -551,6 +551,149 @@ error::Error GLES2DecoderImpl::HandleCompileShader(uint32_t immediate_data_size,
   return error::kNoError;
 }
 
+error::Error GLES2DecoderImpl::HandleCompressedTexImage2DBucket(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  const gles2::cmds::CompressedTexImage2DBucket& c =
+      *static_cast<const gles2::cmds::CompressedTexImage2DBucket*>(cmd_data);
+  (void)c;
+  GLenum target = static_cast<GLenum>(c.target);
+  GLint level = static_cast<GLint>(c.level);
+  GLenum internalformat = static_cast<GLenum>(c.internalformat);
+  GLsizei width = static_cast<GLsizei>(c.width);
+  GLsizei height = static_cast<GLsizei>(c.height);
+  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
+  GLint border = static_cast<GLint>(c.border);
+  Bucket* bucket = GetBucket(bucket_id);
+  if (!bucket)
+    return error::kInvalidArguments;
+  uint32_t data_size = bucket->size();
+  GLsizei imageSize = data_size;
+  const void* data = bucket->GetData(0, data_size);
+  DCHECK(data || !imageSize);
+  if (!validators_->texture_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", target, "target");
+    return error::kNoError;
+  }
+  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", internalformat,
+                                    "internalformat");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D", "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
+                       "height < 0");
+    return error::kNoError;
+  }
+  if (imageSize < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
+                       "imageSize < 0");
+    return error::kNoError;
+  }
+  DoCompressedTexImage2D(target, level, internalformat, width, height, border,
+                         imageSize, data);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleCompressedTexImage2D(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  const gles2::cmds::CompressedTexImage2D& c =
+      *static_cast<const gles2::cmds::CompressedTexImage2D*>(cmd_data);
+  (void)c;
+  GLenum target = static_cast<GLenum>(c.target);
+  GLint level = static_cast<GLint>(c.level);
+  GLenum internalformat = static_cast<GLenum>(c.internalformat);
+  GLsizei width = static_cast<GLsizei>(c.width);
+  GLsizei height = static_cast<GLsizei>(c.height);
+  GLint border = static_cast<GLint>(c.border);
+  GLsizei imageSize = static_cast<GLsizei>(c.imageSize);
+  uint32_t data_size = imageSize;
+  const void* data = GetSharedMemoryAs<const void*>(
+      c.data_shm_id, c.data_shm_offset, data_size);
+  if (!validators_->texture_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", target, "target");
+    return error::kNoError;
+  }
+  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage2D", internalformat,
+                                    "internalformat");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D", "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
+                       "height < 0");
+    return error::kNoError;
+  }
+  if (imageSize < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage2D",
+                       "imageSize < 0");
+    return error::kNoError;
+  }
+  DoCompressedTexImage2D(target, level, internalformat, width, height, border,
+                         imageSize, data);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleCompressedTexSubImage2DBucket(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  const gles2::cmds::CompressedTexSubImage2DBucket& c =
+      *static_cast<const gles2::cmds::CompressedTexSubImage2DBucket*>(cmd_data);
+  (void)c;
+  GLenum target = static_cast<GLenum>(c.target);
+  GLint level = static_cast<GLint>(c.level);
+  GLint xoffset = static_cast<GLint>(c.xoffset);
+  GLint yoffset = static_cast<GLint>(c.yoffset);
+  GLsizei width = static_cast<GLsizei>(c.width);
+  GLsizei height = static_cast<GLsizei>(c.height);
+  GLenum format = static_cast<GLenum>(c.format);
+  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
+  Bucket* bucket = GetBucket(bucket_id);
+  if (!bucket)
+    return error::kInvalidArguments;
+  uint32_t data_size = bucket->size();
+  GLsizei imageSize = data_size;
+  const void* data = bucket->GetData(0, data_size);
+  DCHECK(data || !imageSize);
+  if (!validators_->texture_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage2D", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
+                       "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
+                       "height < 0");
+    return error::kNoError;
+  }
+  if (!validators_->compressed_texture_format.IsValid(format)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage2D", format,
+                                    "format");
+    return error::kNoError;
+  }
+  if (imageSize < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage2D",
+                       "imageSize < 0");
+    return error::kNoError;
+  }
+  DoCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height,
+                            format, imageSize, data);
+  return error::kNoError;
+}
+
 error::Error GLES2DecoderImpl::HandleCompressedTexSubImage2D(
     uint32_t immediate_data_size,
     const void* cmd_data) {
@@ -598,6 +741,172 @@ error::Error GLES2DecoderImpl::HandleCompressedTexSubImage2D(
   }
   DoCompressedTexSubImage2D(target, level, xoffset, yoffset, width, height,
                             format, imageSize, data);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleCompressedTexImage3DBucket(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  if (!unsafe_es3_apis_enabled())
+    return error::kUnknownCommand;
+  const gles2::cmds::CompressedTexImage3DBucket& c =
+      *static_cast<const gles2::cmds::CompressedTexImage3DBucket*>(cmd_data);
+  (void)c;
+  GLenum target = static_cast<GLenum>(c.target);
+  GLint level = static_cast<GLint>(c.level);
+  GLenum internalformat = static_cast<GLenum>(c.internalformat);
+  GLsizei width = static_cast<GLsizei>(c.width);
+  GLsizei height = static_cast<GLsizei>(c.height);
+  GLsizei depth = static_cast<GLsizei>(c.depth);
+  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
+  GLint border = static_cast<GLint>(c.border);
+  Bucket* bucket = GetBucket(bucket_id);
+  if (!bucket)
+    return error::kInvalidArguments;
+  uint32_t data_size = bucket->size();
+  GLsizei imageSize = data_size;
+  const void* data = bucket->GetData(0, data_size);
+  DCHECK(data || !imageSize);
+  if (!validators_->texture_3_d_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", target, "target");
+    return error::kNoError;
+  }
+  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", internalformat,
+                                    "internalformat");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
+                       "height < 0");
+    return error::kNoError;
+  }
+  if (depth < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "depth < 0");
+    return error::kNoError;
+  }
+  if (imageSize < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
+                       "imageSize < 0");
+    return error::kNoError;
+  }
+  DoCompressedTexImage3D(target, level, internalformat, width, height, depth,
+                         border, imageSize, data);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleCompressedTexImage3D(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  if (!unsafe_es3_apis_enabled())
+    return error::kUnknownCommand;
+  const gles2::cmds::CompressedTexImage3D& c =
+      *static_cast<const gles2::cmds::CompressedTexImage3D*>(cmd_data);
+  (void)c;
+  GLenum target = static_cast<GLenum>(c.target);
+  GLint level = static_cast<GLint>(c.level);
+  GLenum internalformat = static_cast<GLenum>(c.internalformat);
+  GLsizei width = static_cast<GLsizei>(c.width);
+  GLsizei height = static_cast<GLsizei>(c.height);
+  GLsizei depth = static_cast<GLsizei>(c.depth);
+  GLint border = static_cast<GLint>(c.border);
+  GLsizei imageSize = static_cast<GLsizei>(c.imageSize);
+  uint32_t data_size = imageSize;
+  const void* data = GetSharedMemoryAs<const void*>(
+      c.data_shm_id, c.data_shm_offset, data_size);
+  if (!validators_->texture_3_d_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", target, "target");
+    return error::kNoError;
+  }
+  if (!validators_->compressed_texture_format.IsValid(internalformat)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexImage3D", internalformat,
+                                    "internalformat");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
+                       "height < 0");
+    return error::kNoError;
+  }
+  if (depth < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D", "depth < 0");
+    return error::kNoError;
+  }
+  if (imageSize < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexImage3D",
+                       "imageSize < 0");
+    return error::kNoError;
+  }
+  DoCompressedTexImage3D(target, level, internalformat, width, height, depth,
+                         border, imageSize, data);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleCompressedTexSubImage3DBucket(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  if (!unsafe_es3_apis_enabled())
+    return error::kUnknownCommand;
+  const gles2::cmds::CompressedTexSubImage3DBucket& c =
+      *static_cast<const gles2::cmds::CompressedTexSubImage3DBucket*>(cmd_data);
+  (void)c;
+  GLenum target = static_cast<GLenum>(c.target);
+  GLint level = static_cast<GLint>(c.level);
+  GLint xoffset = static_cast<GLint>(c.xoffset);
+  GLint yoffset = static_cast<GLint>(c.yoffset);
+  GLint zoffset = static_cast<GLint>(c.zoffset);
+  GLsizei width = static_cast<GLsizei>(c.width);
+  GLsizei height = static_cast<GLsizei>(c.height);
+  GLsizei depth = static_cast<GLsizei>(c.depth);
+  GLenum format = static_cast<GLenum>(c.format);
+  GLuint bucket_id = static_cast<GLuint>(c.bucket_id);
+  Bucket* bucket = GetBucket(bucket_id);
+  if (!bucket)
+    return error::kInvalidArguments;
+  uint32_t data_size = bucket->size();
+  GLsizei imageSize = data_size;
+  const void* data = bucket->GetData(0, data_size);
+  DCHECK(data || !imageSize);
+  if (!validators_->texture_3_d_target.IsValid(target)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", target,
+                                    "target");
+    return error::kNoError;
+  }
+  if (width < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "width < 0");
+    return error::kNoError;
+  }
+  if (height < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "height < 0");
+    return error::kNoError;
+  }
+  if (depth < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "depth < 0");
+    return error::kNoError;
+  }
+  if (!validators_->compressed_texture_format.IsValid(format)) {
+    LOCAL_SET_GL_ERROR_INVALID_ENUM("glCompressedTexSubImage3D", format,
+                                    "format");
+    return error::kNoError;
+  }
+  if (imageSize < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glCompressedTexSubImage3D",
+                       "imageSize < 0");
+    return error::kNoError;
+  }
+  DoCompressedTexSubImage3D(target, level, xoffset, yoffset, zoffset, width,
+                            height, depth, format, imageSize, data);
   return error::kNoError;
 }
 
@@ -946,13 +1255,7 @@ error::Error GLES2DecoderImpl::HandleDeleteSync(uint32_t immediate_data_size,
       *static_cast<const gles2::cmds::DeleteSync*>(cmd_data);
   (void)c;
   GLuint sync = c.sync;
-  GLsync service_id = 0;
-  if (group_->GetSyncServiceId(sync, &service_id)) {
-    glDeleteSync(service_id);
-    group_->RemoveSyncId(sync);
-  } else {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glDeleteSync", "unknown sync");
-  }
+  DeleteSyncHelper(sync);
   return error::kNoError;
 }
 
@@ -1115,7 +1418,7 @@ error::Error GLES2DecoderImpl::HandleFenceSync(uint32_t immediate_data_size,
   if (group_->GetSyncServiceId(client_id, &service_id)) {
     return error::kInvalidArguments;
   }
-  service_id = glFenceSync(condition, flags);
+  service_id = DoFenceSync(condition, flags);
   if (service_id) {
     group_->AddSyncId(client_id, service_id);
   }
@@ -1263,7 +1566,7 @@ error::Error GLES2DecoderImpl::HandleGenBuffersImmediate(
   if (buffers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenBuffersHelper(n, buffers)) {
+  if (!CheckUniqueAndNonNullIds(n, buffers) || !GenBuffersHelper(n, buffers)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1300,7 +1603,8 @@ error::Error GLES2DecoderImpl::HandleGenFramebuffersImmediate(
   if (framebuffers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenFramebuffersHelper(n, framebuffers)) {
+  if (!CheckUniqueAndNonNullIds(n, framebuffers) ||
+      !GenFramebuffersHelper(n, framebuffers)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1322,7 +1626,8 @@ error::Error GLES2DecoderImpl::HandleGenRenderbuffersImmediate(
   if (renderbuffers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenRenderbuffersHelper(n, renderbuffers)) {
+  if (!CheckUniqueAndNonNullIds(n, renderbuffers) ||
+      !GenRenderbuffersHelper(n, renderbuffers)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1346,7 +1651,8 @@ error::Error GLES2DecoderImpl::HandleGenSamplersImmediate(
   if (samplers == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenSamplersHelper(n, samplers)) {
+  if (!CheckUniqueAndNonNullIds(n, samplers) ||
+      !GenSamplersHelper(n, samplers)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1368,7 +1674,8 @@ error::Error GLES2DecoderImpl::HandleGenTexturesImmediate(
   if (textures == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenTexturesHelper(n, textures)) {
+  if (!CheckUniqueAndNonNullIds(n, textures) ||
+      !GenTexturesHelper(n, textures)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1392,7 +1699,8 @@ error::Error GLES2DecoderImpl::HandleGenTransformFeedbacksImmediate(
   if (ids == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenTransformFeedbacksHelper(n, ids)) {
+  if (!CheckUniqueAndNonNullIds(n, ids) ||
+      !GenTransformFeedbacksHelper(n, ids)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -1927,7 +2235,7 @@ error::Error GLES2DecoderImpl::HandleGetSynciv(uint32_t immediate_data_size,
   }
   GLsync service_sync = 0;
   if (!group_->GetSyncServiceId(sync, &service_sync)) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glGetSynciv", "invalid sync id");
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glGetSynciv", "invalid sync id");
     return error::kNoError;
   }
   glGetSynciv(service_sync, pname, num_values, nullptr, values);
@@ -2172,13 +2480,17 @@ error::Error GLES2DecoderImpl::HandleHint(uint32_t immediate_data_size,
     case GL_GENERATE_MIPMAP_HINT:
       if (state_.hint_generate_mipmap != mode) {
         state_.hint_generate_mipmap = mode;
-        glHint(target, mode);
+        if (!feature_info_->gl_version_info().is_desktop_core_profile) {
+          glHint(target, mode);
+        }
       }
       break;
     case GL_FRAGMENT_SHADER_DERIVATIVE_HINT_OES:
       if (state_.hint_fragment_shader_derivative != mode) {
         state_.hint_fragment_shader_derivative = mode;
-        glHint(target, mode);
+        if (feature_info_->feature_flags().oes_standard_derivatives) {
+          glHint(target, mode);
+        }
       }
       break;
     default:
@@ -2410,8 +2722,7 @@ error::Error GLES2DecoderImpl::HandleIsSync(uint32_t immediate_data_size,
   if (!result_dst) {
     return error::kOutOfBounds;
   }
-  GLsync service_sync = 0;
-  *result_dst = group_->GetSyncServiceId(sync, &service_sync);
+  *result_dst = DoIsSync(sync);
   return error::kNoError;
 }
 
@@ -4408,6 +4719,10 @@ error::Error GLES2DecoderImpl::HandleTexStorage2DEXT(
   const gles2::cmds::TexStorage2DEXT& c =
       *static_cast<const gles2::cmds::TexStorage2DEXT*>(cmd_data);
   (void)c;
+  if (!features().ext_texture_storage) {
+    return error::kUnknownCommand;
+  }
+
   GLenum target = static_cast<GLenum>(c.target);
   GLsizei levels = static_cast<GLsizei>(c.levels);
   GLenum internalFormat = static_cast<GLenum>(c.internalFormat);
@@ -4454,7 +4769,8 @@ error::Error GLES2DecoderImpl::HandleGenQueriesEXTImmediate(
   if (queries == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenQueriesEXTHelper(n, queries)) {
+  if (!CheckUniqueAndNonNullIds(n, queries) ||
+      !GenQueriesEXTHelper(n, queries)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -4576,7 +4892,8 @@ error::Error GLES2DecoderImpl::HandleGenVertexArraysOESImmediate(
   if (arrays == NULL) {
     return error::kOutOfBounds;
   }
-  if (!GenVertexArraysOESHelper(n, arrays)) {
+  if (!CheckUniqueAndNonNullIds(n, arrays) ||
+      !GenVertexArraysOESHelper(n, arrays)) {
     return error::kInvalidArguments;
   }
   return error::kNoError;
@@ -4667,36 +4984,6 @@ error::Error GLES2DecoderImpl::HandleGetMaxValueInBufferCHROMIUM(
     return error::kNoError;
   }
   *result_dst = DoGetMaxValueInBufferCHROMIUM(buffer_id, count, type, offset);
-  return error::kNoError;
-}
-
-error::Error GLES2DecoderImpl::HandleTexImageIOSurface2DCHROMIUM(
-    uint32_t immediate_data_size,
-    const void* cmd_data) {
-  const gles2::cmds::TexImageIOSurface2DCHROMIUM& c =
-      *static_cast<const gles2::cmds::TexImageIOSurface2DCHROMIUM*>(cmd_data);
-  (void)c;
-  GLenum target = static_cast<GLenum>(c.target);
-  GLsizei width = static_cast<GLsizei>(c.width);
-  GLsizei height = static_cast<GLsizei>(c.height);
-  GLuint ioSurfaceId = static_cast<GLuint>(c.ioSurfaceId);
-  GLuint plane = static_cast<GLuint>(c.plane);
-  if (!validators_->texture_bind_target.IsValid(target)) {
-    LOCAL_SET_GL_ERROR_INVALID_ENUM("glTexImageIOSurface2DCHROMIUM", target,
-                                    "target");
-    return error::kNoError;
-  }
-  if (width < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexImageIOSurface2DCHROMIUM",
-                       "width < 0");
-    return error::kNoError;
-  }
-  if (height < 0) {
-    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glTexImageIOSurface2DCHROMIUM",
-                       "height < 0");
-    return error::kNoError;
-  }
-  DoTexImageIOSurface2DCHROMIUM(target, width, height, ioSurfaceId, plane);
   return error::kNoError;
 }
 
@@ -4991,6 +5278,37 @@ error::Error GLES2DecoderImpl::HandleDrawBuffersEXTImmediate(
     return error::kOutOfBounds;
   }
   DoDrawBuffersEXT(count, bufs);
+  return error::kNoError;
+}
+
+error::Error GLES2DecoderImpl::HandleScheduleCALayerInUseQueryCHROMIUMImmediate(
+    uint32_t immediate_data_size,
+    const void* cmd_data) {
+  const gles2::cmds::ScheduleCALayerInUseQueryCHROMIUMImmediate& c =
+      *static_cast<
+          const gles2::cmds::ScheduleCALayerInUseQueryCHROMIUMImmediate*>(
+          cmd_data);
+  (void)c;
+  GLsizei count = static_cast<GLsizei>(c.count);
+  uint32_t data_size = 0;
+  if (count >= 0 &&
+      !GLES2Util::ComputeDataSize(count, sizeof(GLuint), 1, &data_size)) {
+    return error::kOutOfBounds;
+  }
+  if (data_size > immediate_data_size) {
+    return error::kOutOfBounds;
+  }
+  const GLuint* textures =
+      GetImmediateDataAs<const GLuint*>(c, data_size, immediate_data_size);
+  if (count < 0) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glScheduleCALayerInUseQueryCHROMIUM",
+                       "count < 0");
+    return error::kNoError;
+  }
+  if (textures == NULL) {
+    return error::kOutOfBounds;
+  }
+  DoScheduleCALayerInUseQueryCHROMIUM(count, textures);
   return error::kNoError;
 }
 

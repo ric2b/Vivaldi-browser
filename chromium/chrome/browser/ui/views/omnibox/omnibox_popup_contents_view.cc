@@ -51,7 +51,7 @@ OmniboxPopupView* OmniboxPopupContentsView::Create(
     OmniboxView* omnibox_view,
     OmniboxEditModel* edit_model,
     LocationBarView* location_bar_view) {
-  OmniboxPopupContentsView* view = NULL;
+  OmniboxPopupContentsView* view = nullptr;
   view = new OmniboxPopupContentsView(
       font_list, omnibox_view, edit_model, location_bar_view);
   view->Init();
@@ -122,14 +122,9 @@ gfx::Rect OmniboxPopupContentsView::GetPopupBounds() const {
 void OmniboxPopupContentsView::LayoutChildren() {
   gfx::Rect contents_rect = GetContentsBounds();
   contents_rect.Inset(GetLayoutInsets(OMNIBOX_DROPDOWN));
-  contents_rect.Inset(0, views::NonClientFrameView::kClientEdgeThickness, 0, 0);
-
-  // In the non-material dropdown, the colored/clickable regions within the
-  // dropdown are only as wide as the location bar. In the material version,
-  // these are full width, and OmniboxResultView instead insets the icons/text
-  // inside to be aligned with the location bar.
-  if (!ui::MaterialDesignController::IsModeMaterial())
-    contents_rect.Inset(start_margin_, 0, end_margin_, 0);
+  contents_rect.Inset(start_margin_,
+                      views::NonClientFrameView::kClientEdgeThickness,
+                      end_margin_, 0);
 
   int top = contents_rect.y();
   for (size_t i = 0; i < AutocompleteResult::kMaxMatches; ++i) {
@@ -146,12 +141,13 @@ void OmniboxPopupContentsView::LayoutChildren() {
 // OmniboxPopupContentsView, OmniboxPopupView overrides:
 
 bool OmniboxPopupContentsView::IsOpen() const {
-  return popup_ != NULL;
+  return popup_ != nullptr;
 }
 
 void OmniboxPopupContentsView::InvalidateLine(size_t line) {
   OmniboxResultView* result = result_view_at(line);
   result->Invalidate();
+  result->SchedulePaint();
 
   if (HasMatchAt(line) && GetMatchAtIndex(line).associated_keyword.get()) {
     result->ShowKeyword(IsSelectedIndex(line) &&
@@ -167,7 +163,7 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
   if (model_->result().empty() || omnibox_view_->IsImeShowingPopup()) {
     // No matches or the IME is showing a popup window which may overlap
     // the omnibox popup window.  Close any existing popup.
-    if (popup_ != NULL) {
+    if (popup_) {
       size_animation_.Stop();
 
       // NOTE: Do NOT use CloseNow() here, as we may be deep in a callstack
@@ -237,7 +233,7 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     size_animation_.Reset();
   target_bounds_ = new_target_bounds;
 
-  if (popup_ == NULL) {
+  if (!popup_) {
     views::Widget* popup_parent = location_bar_view_->GetWidget();
 
     // If the popup is currently closed, we need to create it.
@@ -260,12 +256,12 @@ void OmniboxPopupContentsView::UpdatePopupAppearance() {
     // synchronously change focus/activation, resulting in the popup being
     // destroyed by the time control returns here.  Bail out in this case to
     // avoid a NULL dereference.
-    if (!popup_.get())
+    if (!popup_)
       return;
     popup_->SetVisibilityAnimationTransition(views::Widget::ANIMATE_NONE);
     popup_->SetContentsView(this);
     popup_->StackAbove(omnibox_view_->GetRelativeWindowForPopup());
-    if (!popup_.get()) {
+    if (!popup_) {
       // For some IMEs GetRelativeWindowForPopup triggers the omnibox to lose
       // focus, thereby closing (and destroying) the popup.
       // TODO(sky): this won't be needed once we close the omnibox on input
@@ -328,7 +324,7 @@ bool OmniboxPopupContentsView::IsStarredMatch(
 void OmniboxPopupContentsView::AnimationProgressed(
     const gfx::Animation* animation) {
   // We should only be running the animation when the popup is already visible.
-  DCHECK(popup_ != NULL);
+  DCHECK(popup_);
   popup_->SetBounds(GetPopupBounds());
 }
 
@@ -346,7 +342,7 @@ void OmniboxPopupContentsView::Layout() {
 
 views::View* OmniboxPopupContentsView::GetTooltipHandlerForPoint(
     const gfx::Point& point) {
-  return NULL;
+  return nullptr;
 }
 
 bool OmniboxPopupContentsView::OnMousePressed(

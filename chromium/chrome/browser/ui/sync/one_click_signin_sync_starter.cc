@@ -84,7 +84,7 @@ OneClickSigninSyncStarter::OneClickSigninSyncStarter(
     const GURL& continue_url,
     Callback sync_setup_completed_callback)
     : content::WebContentsObserver(web_contents),
-      profile_(NULL),
+      profile_(nullptr),
       start_mode_(start_mode),
       confirmation_required_(confirmation_required),
       current_url_(current_url),
@@ -108,7 +108,7 @@ OneClickSigninSyncStarter::OneClickSigninSyncStarter(
 
 void OneClickSigninSyncStarter::OnBrowserRemoved(Browser* browser) {
   if (browser == browser_)
-    browser_ = NULL;
+    browser_ = nullptr;
 }
 
 OneClickSigninSyncStarter::~OneClickSigninSyncStarter() {
@@ -133,7 +133,7 @@ void OneClickSigninSyncStarter::Initialize(Profile* profile, Browser* browser) {
   // syncing until the user has finished any configuration.
   ProfileSyncService* profile_sync_service = GetProfileSyncService();
   if (profile_sync_service)
-    profile_sync_service->SetSetupInProgress(true);
+    sync_blocker_ = profile_sync_service->GetSetupInProgressHandle();
 
   // Make sure the syncing is requested, otherwise the SigninManager
   // will not be able to complete successfully.
@@ -174,7 +174,7 @@ void OneClickSigninSyncStarter::SigninDialogDelegate::OnCancelSignin() {
   SetUserChoiceHistogram(SIGNIN_CHOICE_CANCEL);
   content::RecordAction(
       base::UserMetricsAction("Signin_EnterpriseAccountPrompt_Cancel"));
-  if (sync_starter_ != NULL)
+  if (sync_starter_)
     sync_starter_->CancelSigninAndDelete();
 }
 
@@ -183,7 +183,7 @@ void OneClickSigninSyncStarter::SigninDialogDelegate::OnContinueSignin() {
   content::RecordAction(
       base::UserMetricsAction("Signin_EnterpriseAccountPrompt_ImportData"));
 
-  if (sync_starter_ != NULL)
+  if (sync_starter_)
     sync_starter_->LoadPolicyWithCachedCredentials();
 }
 
@@ -192,7 +192,7 @@ void OneClickSigninSyncStarter::SigninDialogDelegate::OnSigninWithNewProfile() {
   content::RecordAction(
       base::UserMetricsAction("Signin_EnterpriseAccountPrompt_DontImportData"));
 
-  if (sync_starter_ != NULL)
+  if (sync_starter_)
     sync_starter_->CreateNewSignedInProfile();
 }
 
@@ -306,7 +306,7 @@ void OneClickSigninSyncStarter::CompleteInitForNewProfile(
       // and switch over to tracking that profile.
       new_signin_manager->CopyCredentialsFrom(*old_signin_manager);
       FinishProfileSyncServiceSetup();
-      Initialize(new_profile, NULL);
+      Initialize(new_profile, nullptr);
       DCHECK_EQ(profile_, new_profile);
 
       // We've transferred our credentials to the new profile - notify that
@@ -358,7 +358,6 @@ void OneClickSigninSyncStarter::ConfirmAndSignin() {
         base::UTF8ToUTF16(signin->GetUsernameForAuthInProgress()),
         base::Bind(&OneClickSigninSyncStarter::UntrustedSigninConfirmed,
                    weak_pointer_factory_.GetWeakPtr()));
-    LoginUIServiceFactory::GetForProfile(profile_)->UntrustedLoginUIShown();
   } else {
     // No confirmation required - just sign in the user.
     signin->CompletePendingSignin();
@@ -608,17 +607,14 @@ void OneClickSigninSyncStarter::ShowSettingsPage(bool configure_sync) {
 }
 
 ProfileSyncService* OneClickSigninSyncStarter::GetProfileSyncService() {
-  ProfileSyncService* service = NULL;
+  ProfileSyncService* service = nullptr;
   if (profile_->IsSyncAllowed())
     service = ProfileSyncServiceFactory::GetForProfile(profile_);
   return service;
 }
 
 void OneClickSigninSyncStarter::FinishProfileSyncServiceSetup() {
-  ProfileSyncService* service =
-      ProfileSyncServiceFactory::GetForProfile(profile_);
-  if (service)
-    service->SetSetupInProgress(false);
+  sync_blocker_.reset();
 }
 
 void OneClickSigninSyncStarter::ShowSettingsPageInWebContents(

@@ -20,6 +20,11 @@ class WebContents;
 // context.
 class ExclusiveAccessContext {
  public:
+  enum TabFullscreenState {
+    STATE_ENTER_TAB_FULLSCREEN,
+    STATE_EXIT_TAB_FULLSCREEN,
+  };
+
   virtual ~ExclusiveAccessContext() {}
 
   // Returns the current profile associated with the window.
@@ -29,28 +34,18 @@ class ExclusiveAccessContext {
   // fullscreen.
   virtual bool IsFullscreen() const = 0;
 
-  // Returns true if fullscreen with toolbar is supported.
-  virtual bool SupportsFullscreenWithToolbar() const;
-
-  // Shows or hides the tab strip, toolbar and bookmark bar with in browser
-  // fullscreen.
-  // Currently only supported on Mac.
-  virtual void UpdateFullscreenWithToolbar(bool with_toolbar);
+  // Called when we transition between tab and browser fullscreen. This method
+  // updates the UI by showing/hiding the tab strip, toolbar and bookmark bar
+  // in the browser fullscreen. Currently only supported on Mac.
+  virtual void UpdateUIForTabFullscreen(TabFullscreenState state);
 
   // Updates the toolbar state to be hidden or shown in fullscreen according to
   // the preference's state. Only supported on Mac.
   virtual void UpdateFullscreenToolbar();
 
-  // Returns true if the window is fullscreen with additional UI elements. See
-  // EnterFullscreen |with_toolbar|.
-  virtual bool IsFullscreenWithToolbar() const;
-
   // Enters fullscreen and update exit bubble.
-  // On Mac, the tab strip and toolbar will be shown if |with_toolbar| is true,
-  // |with_toolbar| is ignored on other platforms.
   virtual void EnterFullscreen(const GURL& url,
-                               ExclusiveAccessBubbleType bubble_type,
-                               bool with_toolbar) = 0;
+                               ExclusiveAccessBubbleType bubble_type) = 0;
 
   // Exits fullscreen and update exit bubble.
   virtual void ExitFullscreen() = 0;

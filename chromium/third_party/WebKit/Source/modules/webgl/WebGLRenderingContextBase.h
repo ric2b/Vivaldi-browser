@@ -35,7 +35,7 @@
 #include "core/dom/DOMTypedArray.h"
 #include "core/dom/TypedFlexibleArrayBufferView.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
-#include "core/layout/LayoutBoxModelObject.h"
+#include "core/layout/ContentChangeType.h"
 #include "modules/webgl/WebGLContextAttributes.h"
 #include "modules/webgl/WebGLExtensionName.h"
 #include "modules/webgl/WebGLTexture.h"
@@ -48,9 +48,8 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "third_party/khronos/GLES2/gl2.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/text/WTFString.h"
-
+#include <memory>
 #include <set>
 
 namespace blink {
@@ -140,8 +139,8 @@ public:
 
     static unsigned getWebGLVersion(const CanvasRenderingContext*);
 
-    static PassOwnPtr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(HTMLCanvasElement*, WebGLContextAttributes, unsigned webGLVersion);
-    static PassOwnPtr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(ScriptState*, WebGLContextAttributes, unsigned webGLVersion);
+    static std::unique_ptr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(HTMLCanvasElement*, WebGLContextAttributes, unsigned webGLVersion);
+    static std::unique_ptr<WebGraphicsContext3DProvider> createWebGraphicsContext3DProvider(ScriptState*, WebGLContextAttributes, unsigned webGLVersion);
     static void forceNextWebGLContextCreationToFail();
 
     int drawingBufferWidth() const;
@@ -431,9 +430,9 @@ protected:
     friend class ScopedTexture2DRestorer;
     friend class ScopedFramebufferRestorer;
 
-    WebGLRenderingContextBase(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
-    WebGLRenderingContextBase(OffscreenCanvas*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
-    PassRefPtr<DrawingBuffer> createDrawingBuffer(PassOwnPtr<WebGraphicsContext3DProvider>);
+    WebGLRenderingContextBase(HTMLCanvasElement*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    WebGLRenderingContextBase(OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    PassRefPtr<DrawingBuffer> createDrawingBuffer(std::unique_ptr<WebGraphicsContext3DProvider>);
     void setupFlags();
 
     // CanvasRenderingContext implementation.
@@ -537,7 +536,7 @@ protected:
         ImageBuffer* imageBuffer(const IntSize&);
     private:
         void bubbleToFront(int idx);
-        OwnPtr<OwnPtr<ImageBuffer>[]> m_buffers;
+        std::unique_ptr<std::unique_ptr<ImageBuffer>[]> m_buffers;
         int m_capacity;
     };
     LRUImageBufferCache m_generatedImageCache;
@@ -586,7 +585,7 @@ protected:
 
     unsigned long m_onePlusMaxNonDefaultTextureUnit;
 
-    OwnPtr<Extensions3DUtil> m_extensionsUtil;
+    std::unique_ptr<Extensions3DUtil> m_extensionsUtil;
 
     enum ExtensionFlags {
         ApprovedExtension               = 0x00,
@@ -769,16 +768,17 @@ protected:
     // Convert texture internal format.
     GLenum convertTexInternalFormat(GLenum internalformat, GLenum type);
 
-    void texImage2DBase(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels);
-    void texImage2DImpl(GLenum target, GLint level, GLint internalformat, GLenum format, GLenum type, Image*, WebGLImageConversion::ImageHtmlDomSource, bool flipY, bool premultiplyAlpha);
-    void texSubImage2DBase(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLsizei width, GLsizei height, GLenum format, GLenum type, const void* pixels);
-    void texSubImage2DImpl(GLenum target, GLint level, GLint xoffset, GLint yoffset, GLenum format, GLenum type, Image*, WebGLImageConversion::ImageHtmlDomSource, bool flipY, bool premultiplyAlpha);
-
     enum TexImageFunctionType {
         TexImage,
         TexSubImage,
         CopyTexImage,
         CompressedTexImage
+    };
+    enum TexImageFunctionID {
+        TexImage2D,
+        TexSubImage2D,
+        TexImage3D,
+        TexSubImage3D
     };
     enum TexImageByGPUType {
         TexImage2DByGPU,
@@ -789,10 +789,15 @@ protected:
         Tex2D,
         Tex3D
     };
-    // Copy from the canvas element directly to the texture via the GPU, without a read-back to system memory.
-    void texImageCanvasByGPU(TexImageByGPUType, WebGLTexture*, GLenum target, GLint level,
-        GLint internalformat, GLenum type, GLint xoffset, GLint yoffset, GLint zoffset, HTMLCanvasElement*);
-    bool canUseTexImageCanvasByGPU(GLint internalformat, GLenum type);
+    void texImage2DBase(GLenum target, GLint level, GLint internalformat, GLsizei width, GLsizei height, GLint border, GLenum format, GLenum type, const void* pixels);
+    void texImageImpl(TexImageFunctionID, GLenum target, GLint level, GLint internalformat, GLint xoffset, GLint yoffset, GLint zoffset,
+        GLenum format, GLenum type, Image*, WebGLImageConversion::ImageHtmlDomSource, bool flipY, bool premultiplyAlpha);
+
+    // Copy from the source directly to the texture via the gpu, without a read-back to system memory.
+    // Souce could be canvas or imageBitmap.
+    void texImageByGPU(TexImageByGPUType, WebGLTexture*, GLenum target, GLint level, GLint internalformat,
+        GLenum type, GLint xoffset, GLint yoffset, GLint zoffset, CanvasImageSource*);
+    virtual bool canUseTexImageByGPU(TexImageFunctionID, GLint internalformat, GLenum type);
 
     virtual WebGLImageConversion::PixelStoreParams getPackPixelStoreParams();
     virtual WebGLImageConversion::PixelStoreParams getUnpackPixelStoreParams(TexImageDimension);
@@ -818,6 +823,9 @@ protected:
     // Generate GL errors and return 0 if target is invalid or texture bound is
     // null.  Otherwise, return the texture bound to the target.
     WebGLTexture* validateTextureBinding(const char* functionName, GLenum target);
+
+    // Wrapper function for validateTexture2D(3D)Binding, used in texImageHelper functions.
+    virtual WebGLTexture* validateTexImageBinding(const char*, TexImageFunctionID, GLenum);
 
     // Helper function to check texture 2D target and texture bound to the target.
     // Generate GL errors and return 0 if target is invalid or texture bound is
@@ -1057,6 +1065,7 @@ protected:
         PreservedRenderbuffer,
         PreservedDefaultVAO,
         PreservedVAO,
+        PreservedTransformFeedback,
     };
     ScopedPersistent<v8::Array> m_miscWrappers;
 
@@ -1066,9 +1075,6 @@ protected:
     // during calls to bindBuffer and vertexAttribPointer (from
     // JavaScript).
     void maybePreserveDefaultVAOObjectWrapper(ScriptState*);
-
-    virtual bool transformFeedbackActive() const { return false; }
-    virtual bool transformFeedbackPaused() const { return false; }
 
     friend class WebGLStateRestorer;
     friend class WebGLRenderingContextEvictionManager;
@@ -1084,11 +1090,22 @@ protected:
     static WebGLRenderingContextBase* oldestContext();
     static WebGLRenderingContextBase* oldestEvictedContext();
 
-    CrossThreadWeakPersistentThisPointer<WebGLRenderingContextBase> createWeakThisPointer() { return CrossThreadWeakPersistentThisPointer<WebGLRenderingContextBase>(this); }
+    ImageBitmap* transferToImageBitmapBase();
+
+    // Helper functions for tex(Sub)Image2D && texSubImage3D
+    void texImageHelperDOMArrayBufferView(TexImageFunctionID, GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, GLsizei, GLint, GLint, GLint, DOMArrayBufferView*);
+    void texImageHelperImageData(TexImageFunctionID, GLenum, GLint, GLint, GLint, GLenum, GLenum, GLsizei, GLint, GLint, GLint, ImageData*);
+    void texImageHelperHTMLImageElement(TexImageFunctionID, GLenum, GLint, GLint, GLenum, GLenum, GLint, GLint, GLint, HTMLImageElement*, ExceptionState&);
+    void texImageHelperHTMLCanvasElement(TexImageFunctionID, GLenum, GLint, GLint, GLenum, GLenum, GLint, GLint, GLint, HTMLCanvasElement*, ExceptionState&);
+    void texImageHelperHTMLVideoElement(TexImageFunctionID, GLenum, GLint, GLint, GLenum, GLenum, GLint, GLint, GLint, HTMLVideoElement*, ExceptionState&);
+    void texImageHelperImageBitmap(TexImageFunctionID, GLenum, GLint, GLint, GLenum, GLenum, GLint, GLint, GLint, ImageBitmap*, ExceptionState&);
+    static const char* getTexImageFunctionName(TexImageFunctionID);
 
 private:
-    WebGLRenderingContextBase(HTMLCanvasElement*, OffscreenCanvas*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
-    static PassOwnPtr<WebGraphicsContext3DProvider> createContextProviderInternal(HTMLCanvasElement*, ScriptState*, WebGLContextAttributes, unsigned);
+    WebGLRenderingContextBase(HTMLCanvasElement*, OffscreenCanvas*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes&);
+    static std::unique_ptr<WebGraphicsContext3DProvider> createContextProviderInternal(HTMLCanvasElement*, ScriptState*, WebGLContextAttributes, unsigned);
+    void texImageCanvasByGPU(HTMLCanvasElement*, GLuint, GLenum, GLenum, GLint);
+    void texImageBitmapByGPU(ImageBitmap*, GLuint, GLenum, GLenum, GLint, bool);
 };
 
 DEFINE_TYPE_CASTS(WebGLRenderingContextBase, CanvasRenderingContext, context, context->is3d(), context.is3d());

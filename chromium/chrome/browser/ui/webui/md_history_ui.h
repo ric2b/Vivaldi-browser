@@ -9,6 +9,8 @@
 #include "content/public/browser/web_ui_controller.h"
 #include "ui/base/layout.h"
 
+class Profile;
+
 namespace base {
 class RefCountedMemory;
 }
@@ -17,6 +19,10 @@ class MdHistoryUI : public content::WebUIController {
  public:
   explicit MdHistoryUI(content::WebUI* web_ui);
   ~MdHistoryUI() override;
+
+  static bool IsEnabled(Profile* profile);
+  // Reset the current list of features and explicitly disable MD History.
+  static void DisableForTesting();
 
   static base::RefCountedMemory* GetFaviconResourceBytes(
       ui::ScaleFactor scale_factor);

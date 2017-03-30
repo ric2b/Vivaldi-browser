@@ -59,6 +59,7 @@
 #include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/dom/shadow/InsertionPoint.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/shadow/SlotAssignment.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/Event.h"
@@ -92,7 +93,6 @@
 #include "platform/TraceEvent.h"
 #include "platform/TracedValue.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/allocator/Partitions.h"
 #include "wtf/text/CString.h"
@@ -164,8 +164,9 @@ void Node::dumpStatistics()
                 if (!result.isNewEntry)
                     result.storedValue->value++;
 
-                if (const ElementData* elementData = element->elementData()) {
-                    attributes += elementData->attributes().size();
+                size_t attributeCount = element->attributesWithoutUpdate().size();
+                if (attributeCount) {
+                    attributes += attributeCount;
                     ++elementsWithAttributeStorage;
                 }
                 break;
@@ -373,7 +374,7 @@ Node* Node::pseudoAwareLastChild() const
 Node& Node::treeRoot() const
 {
     if (isInTreeScope())
-        return treeScope().rootNode();
+        return containingTreeScope().rootNode();
     const Node* node = this;
     while (node->parentNode())
         node = node->parentNode();
@@ -556,10 +557,6 @@ bool Node::hasEditableStyle(EditableLevel editableLevel, UserSelectAllTreatment 
 
     for (const Node& node : NodeTraversal::inclusiveAncestorsOf(*this)) {
         if ((node.isHTMLElement() || node.isDocumentNode()) && node.layoutObject()) {
-            // Elements with user-select: all style are considered atomic
-            // therefore non editable.
-            if (nodeIsUserSelectAll(&node) && treatment == UserSelectAllIsAlwaysNonEditable)
-                return false;
             switch (node.layoutObject()->style()->userModify()) {
             case READ_ONLY:
                 return false;
@@ -635,12 +632,29 @@ Node& Node::shadowIncludingRoot() const
     return *root;
 }
 
-#if DCHECK_IS_ON()
+bool Node::isUnclosedNodeOf(const Node& other) const
+{
+    if (!isInShadowTree() || treeScope() == other.treeScope())
+        return true;
+
+    const TreeScope* scope = &treeScope();
+    for (; scope->parentTreeScope(); scope = scope->parentTreeScope()) {
+        const ContainerNode& root = scope->rootNode();
+        if (root.isShadowRoot() && !toShadowRoot(root).isOpenOrV0())
+            break;
+    }
+
+    for (TreeScope* otherScope = &other.treeScope(); otherScope; otherScope = otherScope->parentTreeScope()) {
+        if (otherScope == scope)
+            return true;
+    }
+    return false;
+}
+
 bool Node::needsDistributionRecalc() const
 {
     return shadowIncludingRoot().childNeedsDistributionRecalc();
 }
-#endif
 
 void Node::updateDistribution()
 {
@@ -684,7 +698,7 @@ void Node::setIsLink(bool isLink)
 
 void Node::setNeedsStyleInvalidation()
 {
-    DCHECK(isElementNode());
+    DCHECK(isElementNode() || isShadowRoot());
     setFlag(NeedsStyleInvalidationFlag);
     markAncestorsWithChildNeedsStyleInvalidation();
 }
@@ -700,11 +714,6 @@ void Node::markAncestorsWithChildNeedsStyleInvalidation()
 void Node::markAncestorsWithChildNeedsDistributionRecalc()
 {
     ScriptForbiddenScope forbidScriptDuringRawIteration;
-    if (RuntimeEnabledFeatures::shadowDOMV1Enabled() && inShadowIncludingDocument() && !document().childNeedsDistributionRecalc()) {
-        // TODO(hayato): Support a non-document composed tree.
-        // TODO(hayato): Enqueue a task only if a 'slotchange' event listner is registered in the document composed tree.
-        Microtask::enqueueMicrotask(WTF::bind(&Document::updateDistribution, &document()));
-    }
     for (Node* node = this; node && !node->childNeedsDistributionRecalc(); node = node->parentOrShadowHostNode())
         node->setChildNeedsDistributionRecalc();
     document().scheduleLayoutTreeUpdateIfNeeded();
@@ -994,17 +1003,11 @@ bool Node::isSlotOrActiveInsertionPoint() const
 
 AtomicString Node::slotName() const
 {
-    DCHECK(slottable());
+    DCHECK(isSlotable());
     if (isElementNode())
-        return normalizeSlotName(toElement(*this).fastGetAttribute(HTMLNames::slotAttr));
+        return HTMLSlotElement::normalizeSlotName(toElement(*this).fastGetAttribute(HTMLNames::slotAttr));
     DCHECK(isTextNode());
     return emptyAtom;
-}
-
-// static
-AtomicString Node::normalizeSlotName(const AtomicString& name)
-{
-    return (name.isNull() || name.isEmpty()) ? emptyAtom : name;
 }
 
 bool Node::isInV1ShadowTree() const
@@ -1037,10 +1040,17 @@ bool Node::isChildOfV0ShadowHost() const
     return parentShadow && !parentShadow->isV1();
 }
 
+ShadowRoot* Node::v1ShadowRootOfParent() const
+{
+    if (Element* parent = parentElement())
+        return parent->shadowRootIfV1();
+    return nullptr;
+}
+
 Element* Node::shadowHost() const
 {
     if (ShadowRoot* root = containingShadowRoot())
-        return root->host();
+        return &root->host();
     return nullptr;
 }
 
@@ -1078,7 +1088,7 @@ Element* Node::parentOrShadowHostElement() const
         return nullptr;
 
     if (parent->isShadowRoot())
-        return toShadowRoot(parent)->host();
+        return &toShadowRoot(parent)->host();
 
     if (!parent->isElementNode())
         return nullptr;
@@ -1516,13 +1526,13 @@ String Node::debugName() const
     if (isElementNode()) {
         const Element& thisElement = toElement(*this);
         if (thisElement.hasID()) {
-            name.appendLiteral(" id=\'");
+            name.append(" id=\'");
             name.append(thisElement.getIdAttribute());
             name.append('\'');
         }
 
         if (thisElement.hasClass()) {
-            name.appendLiteral(" class=\'");
+            name.append(" class=\'");
             for (size_t i = 0; i < thisElement.classNames().size(); ++i) {
                 if (i > 0)
                     name.append(' ');
@@ -1581,9 +1591,9 @@ static void appendAttributeDesc(const Node* node, StringBuilder& stringBuilder, 
         return;
 
     stringBuilder.append(attrDesc);
-    stringBuilder.appendLiteral("=\"");
+    stringBuilder.append("=\"");
     stringBuilder.append(attr);
-    stringBuilder.appendLiteral("\"");
+    stringBuilder.append("\"");
 }
 
 void Node::showNode(const char* prefix) const
@@ -1609,9 +1619,9 @@ void Node::showNode(const char* prefix) const
         appendAttributeDesc(this, attrs, classAttr, " CLASS");
         appendAttributeDesc(this, attrs, styleAttr, " STYLE");
         if (hasEditableStyle())
-            attrs.appendLiteral(" (editable)");
+            attrs.append(" (editable)");
         if (document().focusedElement() == this)
-            attrs.appendLiteral(" (focused)");
+            attrs.append(" (focused)");
         WTFLogAlways("%s%s\t%p%s\n", prefix, nodeName().utf8().data(), this, attrs.toString().utf8().data());
     }
 }
@@ -1899,7 +1909,7 @@ void Node::removeAllEventListeners()
 void Node::removeAllEventListenersRecursively()
 {
     ScriptForbiddenScope forbidScriptDuringRawIteration;
-    for (Node& node : NodeTraversal::startsAt(this)) {
+    for (Node& node : NodeTraversal::startsAt(*this)) {
         node.removeAllEventListeners();
         for (ShadowRoot* root = node.youngestShadowRoot(); root; root = root->olderShadowRoot())
             root->removeAllEventListenersRecursively();
@@ -2116,13 +2126,8 @@ void Node::dispatchSimulatedClick(Event* underlyingEvent, SimulatedClickMouseEve
 
 void Node::dispatchInputEvent()
 {
-    if (RuntimeEnabledFeatures::inputEventEnabled()) {
-        InputEventInit eventInitDict;
-        eventInitDict.setBubbles(true);
-        dispatchScopedEvent(InputEvent::create(EventTypeNames::input, eventInitDict));
-    } else {
-        dispatchScopedEvent(Event::createBubble(EventTypeNames::input));
-    }
+    // Legacy 'input' event for forms set value and checked.
+    dispatchScopedEvent(Event::createBubble(EventTypeNames::input));
 }
 
 void Node::defaultEventHandler(Event* event)
@@ -2170,21 +2175,11 @@ void Node::defaultEventHandler(Event* event)
             }
         }
 #endif
-    } else if ((eventType == EventTypeNames::wheel || eventType == EventTypeNames::mousewheel) && event->hasInterface(EventNames::WheelEvent)) {
-        WheelEvent* wheelEvent = toWheelEvent(event);
-
-        // If we don't have a layoutObject, send the wheel event to the first node we find with a layoutObject.
-        // This is needed for <option> and <optgroup> elements so that <select>s get a wheel scroll.
-        Node* startNode = this;
-        while (startNode && !startNode->layoutObject())
-            startNode = startNode->parentOrShadowHostNode();
-
-        if (startNode && startNode->layoutObject()) {
-            if (LocalFrame* frame = document().frame())
-                frame->eventHandler().defaultWheelEventHandler(startNode, wheelEvent);
-        }
     } else if (event->type() == EventTypeNames::webkitEditableContentChanged) {
-        dispatchInputEvent();
+        // TODO(chongz): Remove after shipped.
+        // New InputEvent are dispatched in Editor::appliedEditing, etc.
+        if (!RuntimeEnabledFeatures::inputEventEnabled())
+            dispatchInputEvent();
     }
 }
 
@@ -2247,20 +2242,18 @@ StaticNodeList* Node::getDestinationInsertionPoints()
 
 HTMLSlotElement* Node::assignedSlot() const
 {
-    Element* parent = parentElement();
-    ShadowRoot* root = parent ? parent->youngestShadowRoot() : nullptr;
-    if (root && root->isV1())
-        return root->assignedSlotFor(*this);
+    if (ShadowRoot* root = v1ShadowRootOfParent())
+        return root->ensureSlotAssignment().findSlot(*this);
     return nullptr;
 }
 
 HTMLSlotElement* Node::assignedSlotForBinding()
 {
     updateDistribution();
-    Element* parent = parentElement();
-    ShadowRoot* root = parent ? parent->youngestShadowRoot() : nullptr;
-    if (root && root->type() == ShadowRootType::Open)
-        return root->assignedSlotFor(*this);
+    if (ShadowRoot* root = v1ShadowRootOfParent()) {
+        if (root->type() == ShadowRootType::Open)
+            return root->ensureSlotAssignment().findSlot(*this);
+    }
     return nullptr;
 }
 
@@ -2341,15 +2334,21 @@ void Node::setCustomElementState(CustomElementState newState)
 
     DCHECK(isHTMLElement());
     DCHECK_NE(V0Upgraded, getV0CustomElementState());
+#if DCHECK_IS_ON()
+    bool wasDefined = toElement(this)->isDefined();
+#endif
 
     setFlag(CustomElementFlag);
     if (newState == CustomElementState::Custom)
         setFlag(CustomElementCustomFlag);
     DCHECK(newState == getCustomElementState());
 
-    // TODO(kojii): Should fire pseudoStateChanged() when :defined selector is
-    // ready.
-    // toElement(this)->pseudoStateChanged(CSSSelector::PseudoDefined);
+    // When the state goes from Uncustomized to Undefined, and then to Custom,
+    // isDefined is always flipped.
+#if DCHECK_IS_ON()
+    DCHECK_NE(wasDefined, toElement(this)->isDefined());
+#endif
+    toElement(this)->pseudoStateChanged(CSSSelector::PseudoDefined);
 }
 
 void Node::setV0CustomElementState(V0CustomElementState newState)
@@ -2379,12 +2378,36 @@ void Node::setV0CustomElementState(V0CustomElementState newState)
         toElement(this)->pseudoStateChanged(CSSSelector::PseudoUnresolved);
 }
 
-void Node::updateAssignmentForInsertedInto(ContainerNode* insertionPoint)
+void Node::checkSlotChange()
 {
-    if (isShadowHost(insertionPoint)) {
-        ShadowRoot* root = insertionPoint->youngestShadowRoot();
-        if (root && root->isV1())
-            root->assignV1();
+    // Common check logic is used in both cases, "after inserted" and "before removed".
+    if (!isSlotable())
+        return;
+    if (ShadowRoot* root = v1ShadowRootOfParent()) {
+        // Relevant DOM Standard:
+        // https://dom.spec.whatwg.org/#concept-node-insert
+        // - 6.1.2: If parent is a shadow host and node is a slotable, then assign a slot for node.
+        // https://dom.spec.whatwg.org/#concept-node-remove
+        // - 10. If node is assigned, then run assign slotables for node’s assigned slot.
+
+        // Although DOM Standard requires "assign a slot for node / run assign slotables" at this timing,
+        // we skip it as an optimization.
+        if (HTMLSlotElement* slot = root->ensureSlotAssignment().findSlot(*this))
+            slot->enqueueSlotChangeEvent();
+    } else {
+        // Relevant DOM Standard:
+        // https://dom.spec.whatwg.org/#concept-node-insert
+        // - 6.1.3: If parent is a slot whose assigned nodes is the empty list, then run signal a slot change for parent.
+        // https://dom.spec.whatwg.org/#concept-node-remove
+        // - 11. If parent is a slot whose assigned nodes is the empty list, then run signal a slot change for parent.
+        Element* parent = parentElement();
+        if (parent && isHTMLSlotElement(parent)) {
+            HTMLSlotElement& parentSlot = toHTMLSlotElement(*parent);
+            if (ShadowRoot* root = containingShadowRoot()) {
+                if (root && root->isV1() && !parentSlot.hasAssignedNodesSlow())
+                    parentSlot.enqueueSlotChangeEvent();
+            }
+        }
     }
 }
 

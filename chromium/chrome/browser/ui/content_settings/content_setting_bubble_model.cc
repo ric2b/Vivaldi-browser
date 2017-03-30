@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/chrome_content_settings_utils.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
@@ -33,6 +34,7 @@
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/prefs/pref_service.h"
+#include "components/rappor/rappor_utils.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
@@ -179,6 +181,11 @@ void ContentSettingSimpleBubbleModel::SetManageLink() {
 void ContentSettingSimpleBubbleModel::OnManageLinkClicked() {
   if (delegate())
     delegate()->ShowContentSettingsPage(content_type());
+
+  if (content_type() == CONTENT_SETTINGS_TYPE_PLUGINS) {
+    content_settings::RecordPluginsAction(
+        content_settings::PLUGINS_ACTION_CLICKED_MANAGE_PLUGIN_BLOCKING);
+  }
 }
 
 void ContentSettingSimpleBubbleModel::SetCustomLink() {
@@ -442,6 +449,8 @@ class ContentSettingPluginBubbleModel : public ContentSettingSingleRadioGroup {
  private:
   void OnLearnMoreLinkClicked() override;
   void OnCustomLinkClicked() override;
+
+  void RunPluginsOnPage();
 };
 
 ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
@@ -476,21 +485,38 @@ ContentSettingPluginBubbleModel::ContentSettingPluginBubbleModel(
   }
 
   set_learn_more_link(l10n_util::GetStringUTF8(IDS_LEARN_MORE));
+
+  content_settings::RecordPluginsAction(
+      content_settings::PLUGINS_ACTION_DISPLAYED_BUBBLE);
 }
 
 ContentSettingPluginBubbleModel::~ContentSettingPluginBubbleModel() {
   // If the user elected to allow all plugins then run plugins at this time.
-  if (settings_changed() && selected_item() == kAllowButtonIndex)
-    OnCustomLinkClicked();
+  if (settings_changed() && selected_item() == kAllowButtonIndex) {
+    content_settings::RecordPluginsAction(
+        content_settings::
+            PLUGINS_ACTION_CLICKED_ALWAYS_ALLOW_PLUGINS_ON_ORIGIN);
+    RunPluginsOnPage();
+  }
 }
 
 void ContentSettingPluginBubbleModel::OnLearnMoreLinkClicked() {
   if (delegate())
     delegate()->ShowLearnMorePage(CONTENT_SETTINGS_TYPE_PLUGINS);
+
+  content_settings::RecordPluginsAction(
+      content_settings::PLUGINS_ACTION_CLICKED_LEARN_MORE);
 }
 
 void ContentSettingPluginBubbleModel::OnCustomLinkClicked() {
   content::RecordAction(UserMetricsAction("ClickToPlay_LoadAll_Bubble"));
+  content_settings::RecordPluginsAction(
+      content_settings::PLUGINS_ACTION_CLICKED_RUN_ALL_PLUGINS_THIS_TIME);
+
+  RunPluginsOnPage();
+}
+
+void ContentSettingPluginBubbleModel::RunPluginsOnPage() {
   // Web contents can be NULL if the tab was closed while the plugins
   // settings bubble is visible.
   if (!web_contents())
@@ -501,8 +527,8 @@ void ContentSettingPluginBubbleModel::OnCustomLinkClicked() {
       web_contents(), true, std::string());
 #endif
   set_custom_link_enabled(false);
-  TabSpecificContentSettings::FromWebContents(web_contents())->
-      set_load_plugins_link_enabled(false);
+  TabSpecificContentSettings::FromWebContents(web_contents())
+      ->set_load_plugins_link_enabled(false);
 }
 
 // ContentSettingPopupBubbleModel ----------------------------------------------
@@ -976,7 +1002,9 @@ ContentSettingMixedScriptBubbleModel::ContentSettingMixedScriptBubbleModel(
 }
 
 void ContentSettingMixedScriptBubbleModel::OnCustomLinkClicked() {
-  DCHECK(web_contents());
+  if (!web_contents())
+    return;
+
   web_contents()->SendToAllFrames(
       new ChromeViewMsg_SetAllowRunningInsecureContent(MSG_ROUTING_NONE, true));
   web_contents()->GetMainFrame()->Send(new ChromeViewMsg_ReloadFrame(
@@ -984,8 +1012,10 @@ void ContentSettingMixedScriptBubbleModel::OnCustomLinkClicked() {
 
   content_settings::RecordMixedScriptAction(
       content_settings::MIXED_SCRIPT_ACTION_CLICKED_ALLOW);
-  content_settings::RecordMixedScriptActionWithRAPPOR(
-      content_settings::MIXED_SCRIPT_ACTION_CLICKED_ALLOW,
+
+  rappor::SampleDomainAndRegistryFromGURL(
+      g_browser_process->rappor_service(),
+      "ContentSettings.MixedScript.UserClickedAllow",
       web_contents()->GetLastCommittedURL());
 }
 
@@ -1079,6 +1109,9 @@ void ContentSettingRPHBubbleModel::OnRadioClicked(int radio_index) {
 }
 
 void ContentSettingRPHBubbleModel::OnDoneClicked() {
+  if (!web_contents())
+    return;
+
   // The user has one chance to deal with the RPH content setting UI,
   // then we remove it.
   TabSpecificContentSettings::FromWebContents(web_contents())->
@@ -1090,6 +1123,9 @@ void ContentSettingRPHBubbleModel::OnDoneClicked() {
 }
 
 void ContentSettingRPHBubbleModel::RegisterProtocolHandler() {
+  if (!web_contents())
+    return;
+
   // A no-op if the handler hasn't been ignored, but needed in case the user
   // selects sequences like register/ignore/register.
   registry_->RemoveIgnoredHandler(pending_handler_);
@@ -1100,6 +1136,9 @@ void ContentSettingRPHBubbleModel::RegisterProtocolHandler() {
 }
 
 void ContentSettingRPHBubbleModel::UnregisterProtocolHandler() {
+  if (!web_contents())
+    return;
+
   registry_->OnDenyRegisterProtocolHandler(pending_handler_);
   TabSpecificContentSettings::FromWebContents(web_contents())->
       set_pending_protocol_handler_setting(CONTENT_SETTING_BLOCK);
@@ -1107,6 +1146,9 @@ void ContentSettingRPHBubbleModel::UnregisterProtocolHandler() {
 }
 
 void ContentSettingRPHBubbleModel::IgnoreProtocolHandler() {
+  if (!web_contents())
+    return;
+
   registry_->OnIgnoreRegisterProtocolHandler(pending_handler_);
   TabSpecificContentSettings::FromWebContents(web_contents())->
       set_pending_protocol_handler_setting(CONTENT_SETTING_DEFAULT);

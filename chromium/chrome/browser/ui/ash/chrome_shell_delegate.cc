@@ -6,15 +6,20 @@
 
 #include <stddef.h>
 
+#include <limits>
+
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
-#include "ash/accessibility_delegate.h"
-#include "ash/container_delegate_aura.h"
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/accessibility_delegate.h"
+#include "ash/common/accessibility_types.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/wm/mru_window_tracker.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm_shell.h"
 #include "ash/content/gpu_support_impl.h"
 #include "ash/pointer_watcher_delegate_aura.h"
-#include "ash/session/session_state_delegate.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/mru_window_tracker.h"
+#include "ash/shell.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -41,7 +46,7 @@
 #include "chrome/browser/ui/ash/app_list/app_list_service_ash.h"
 #include "chrome/browser/ui/ash/chrome_keyboard_ui.h"
 #include "chrome/browser/ui/ash/chrome_new_window_delegate.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/media_delegate_chromeos.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
@@ -82,9 +87,8 @@ void InitAfterFirstSessionStart() {
   // Restore focus after the user session is started.  It's needed because some
   // windows can be opened in background while login UI is still active because
   // we currently restore browser windows before login UI is deleted.
-  ash::Shell* shell = ash::Shell::GetInstance();
-  ash::MruWindowTracker::WindowList mru_list =
-      shell->mru_window_tracker()->BuildMruWindowList();
+  aura::Window::Windows mru_list = ash::WmWindowAura::ToAuraWindows(
+      ash::WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
   if (!mru_list.empty())
     mru_list.front()->Focus();
 
@@ -99,11 +103,11 @@ void InitAfterFirstSessionStart() {
 class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
  public:
   AccessibilityDelegateImpl() {
-    ash::Shell::GetInstance()->AddShellObserver(
+    ash::WmShell::Get()->AddShellObserver(
         chromeos::AccessibilityManager::Get());
   }
   ~AccessibilityDelegateImpl() override {
-    ash::Shell::GetInstance()->RemoveShellObserver(
+    ash::WmShell::Get()->RemoveShellObserver(
         chromeos::AccessibilityManager::Get());
   }
 
@@ -119,7 +123,7 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
   }
 
   void ToggleSpokenFeedback(
-      ui::AccessibilityNotificationVisibility notify) override {
+      ash::AccessibilityNotificationVisibility notify) override {
     DCHECK(chromeos::AccessibilityManager::Get());
     chromeos::AccessibilityManager::Get()->ToggleSpokenFeedback(notify);
   }
@@ -134,7 +138,7 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
     return chromeos::MagnificationManager::Get()->SetMagnifierEnabled(enabled);
   }
 
-  void SetMagnifierType(ui::MagnifierType type) override {
+  void SetMagnifierType(ash::MagnifierType type) override {
     DCHECK(chromeos::MagnificationManager::Get());
     return chromeos::MagnificationManager::Get()->SetMagnifierType(type);
   }
@@ -144,7 +148,7 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
     return chromeos::MagnificationManager::Get()->IsMagnifierEnabled();
   }
 
-  ui::MagnifierType GetMagnifierType() const override {
+  ash::MagnifierType GetMagnifierType() const override {
     DCHECK(chromeos::MagnificationManager::Get());
     return chromeos::MagnificationManager::Get()->GetMagnifierType();
   }
@@ -267,29 +271,29 @@ class AccessibilityDelegateImpl : public ash::AccessibilityDelegate {
     return std::numeric_limits<double>::min();
   }
 
-  void TriggerAccessibilityAlert(ui::AccessibilityAlert alert) override {
+  void TriggerAccessibilityAlert(ash::AccessibilityAlert alert) override {
     Profile* profile = ProfileManager::GetActiveUserProfile();
     if (profile) {
       switch (alert) {
-        case ui::A11Y_ALERT_WINDOW_NEEDED: {
+        case ash::A11Y_ALERT_WINDOW_NEEDED: {
           AutomationManagerAura::GetInstance()->HandleAlert(
               profile, l10n_util::GetStringUTF8(IDS_A11Y_ALERT_WINDOW_NEEDED));
           break;
         }
-        case ui::A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED: {
+        case ash::A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED: {
           AutomationManagerAura::GetInstance()->HandleAlert(
               profile, l10n_util::GetStringUTF8(
                            IDS_A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED));
           break;
         }
-        case ui::A11Y_ALERT_NONE:
+        case ash::A11Y_ALERT_NONE:
           break;
       }
     }
   }
 
-  ui::AccessibilityAlert GetLastAccessibilityAlert() override {
-    return ui::A11Y_ALERT_NONE;
+  ash::AccessibilityAlert GetLastAccessibilityAlert() override {
+    return ash::A11Y_ALERT_NONE;
   }
 
   void PlayEarcon(int sound_key) override {
@@ -357,8 +361,9 @@ bool ChromeShellDelegate::IsRunningInForcedAppMode() const {
   return chrome::IsRunningInForcedAppMode();
 }
 
-bool ChromeShellDelegate::CanShowWindowForUser(aura::Window* window) const {
-  return ::CanShowWindowForUser(window, base::Bind(&GetActiveBrowserContext));
+bool ChromeShellDelegate::CanShowWindowForUser(ash::WmWindow* window) const {
+  return ::CanShowWindowForUser(ash::WmWindowAura::GetAuraWindow(window),
+                                base::Bind(&GetActiveBrowserContext));
 }
 
 bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
@@ -395,14 +400,16 @@ void ChromeShellDelegate::Exit() {
   chrome::AttemptUserExit();
 }
 
-void ChromeShellDelegate::OpenUrl(const GURL& url) {
+void ChromeShellDelegate::OpenUrlFromArc(const GURL& url) {
   if (!url.is_valid())
     return;
 
   chrome::ScopedTabbedBrowserDisplayer displayer(
       ProfileManager::GetActiveUserProfile());
-  chrome::AddSelectedTabWithURL(displayer.browser(), url,
-                                ui::PAGE_TRANSITION_LINK);
+  chrome::AddSelectedTabWithURL(
+      displayer.browser(), url,
+      ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK |
+                                ui::PAGE_TRANSITION_FROM_API));
 
   // Since the ScopedTabbedBrowserDisplayer does not guarantee that the
   // browser will be shown on the active desktop, we ensure the visibility.
@@ -418,15 +425,11 @@ app_list::AppListPresenter* ChromeShellDelegate::GetAppListPresenter() {
 ash::ShelfDelegate* ChromeShellDelegate::CreateShelfDelegate(
     ash::ShelfModel* model) {
   if (!shelf_delegate_) {
-    shelf_delegate_ = ChromeLauncherController::CreateInstance(NULL, model);
+    shelf_delegate_ =
+        ChromeLauncherControllerImpl::CreateInstance(nullptr, model);
     shelf_delegate_->Init();
   }
   return shelf_delegate_;
-}
-
-std::unique_ptr<ash::ContainerDelegate>
-ChromeShellDelegate::CreateContainerDelegate() {
-  return base::WrapUnique(new ash::ContainerDelegateAura);
 }
 
 std::unique_ptr<ash::PointerWatcherDelegate>
@@ -435,14 +438,14 @@ ChromeShellDelegate::CreatePointerWatcherDelegate() {
 }
 
 ui::MenuModel* ChromeShellDelegate::CreateContextMenu(
-    ash::Shelf* shelf,
+    ash::WmShelf* wm_shelf,
     const ash::ShelfItem* item) {
   DCHECK(shelf_delegate_);
   // Don't show context menu for exclusive app runtime mode.
   if (chrome::IsRunningInAppMode())
     return nullptr;
 
-  return LauncherContextMenu::Create(shelf_delegate_, item, shelf);
+  return LauncherContextMenu::Create(shelf_delegate_, item, wm_shelf);
 }
 
 ash::GPUSupport* ChromeShellDelegate::CreateGPUSupport() {

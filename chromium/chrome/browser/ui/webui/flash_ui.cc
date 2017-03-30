@@ -7,7 +7,9 @@
 #include <stddef.h>
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -23,7 +25,7 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/crash_upload_list.h"
+#include "chrome/browser/crash_upload_list/crash_upload_list.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -187,10 +189,10 @@ void FlashDOMHandler::OnUploadListAvailable() {
 void AddPair(base::ListValue* list,
              const base::string16& key,
              const base::string16& value) {
-  base::DictionaryValue* results = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> results(new base::DictionaryValue());
   results->SetString("key", key);
   results->SetString("value", value);
-  list->Append(results);
+  list->Append(std::move(results));
 }
 
 void AddPair(base::ListValue* list,
@@ -373,7 +375,7 @@ void FlashDOMHandler::MaybeRespondToPage() {
 
   base::DictionaryValue flashInfo;
   flashInfo.Set("flashInfo", list);
-  web_ui()->CallJavascriptFunction("returnFlashInfo", flashInfo);
+  web_ui()->CallJavascriptFunctionUnsafe("returnFlashInfo", flashInfo);
 }
 
 }  // namespace

@@ -54,6 +54,10 @@ namespace safe_browsing {
 class PhishingClassifierFilter;
 }
 
+namespace subresource_filter {
+class RulesetDealer;
+}
+
 namespace visitedlink {
 class VisitedLinkSlave;
 }
@@ -151,9 +155,11 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
   void RunScriptsAtDocumentEnd(content::RenderFrame* render_frame) override;
   void DidInitializeServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context,
+      int embedded_worker_id,
       const GURL& url) override;
   void WillDestroyServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context,
+      int embedded_worker_id,
       const GURL& url) override;
   bool ShouldEnforceWebRTCRoutingPreferences() override;
 
@@ -209,6 +215,8 @@ class ChromeContentRendererClient : public content::ContentRendererClient {
 #endif
   std::unique_ptr<visitedlink::VisitedLinkSlave> visited_link_slave_;
   std::unique_ptr<safe_browsing::PhishingClassifierFilter> phishing_classifier_;
+  std::unique_ptr<subresource_filter::RulesetDealer>
+      subresource_filter_ruleset_dealer_;
   std::unique_ptr<prerender::PrerenderDispatcher> prerender_dispatcher_;
 #if defined(ENABLE_WEBRTC)
   scoped_refptr<WebRtcLoggingMessageFilter> webrtc_logging_message_filter_;

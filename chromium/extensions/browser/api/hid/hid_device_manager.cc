@@ -11,7 +11,10 @@
 #include <vector>
 
 #include "base/lazy_instance.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "device/core/device_client.h"
 #include "device/hid/hid_device_filter.h"
 #include "device/hid/hid_service.h"
@@ -124,7 +127,7 @@ void HidDeviceManager::GetApiDevices(
   if (enumeration_ready_) {
     std::unique_ptr<base::ListValue> devices =
         CreateApiDeviceList(extension, filters);
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(callback, base::Passed(&devices)));
   } else {
     pending_enumerations_.push_back(base::WrapUnique(
@@ -143,7 +146,7 @@ std::unique_ptr<base::ListValue> HidDeviceManager::GetApiDevicesFromList(
     hid::HidDeviceInfo device_info;
     device_info.device_id = device_entry->second;
     PopulateHidDeviceInfo(&device_info, device);
-    device_list->Append(device_info.ToValue().release());
+    device_list->Append(device_info.ToValue());
   }
   return device_list;
 }

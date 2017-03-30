@@ -9,9 +9,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/audio/fake_audio_input_stream.h"
 #include "media/base/video_frame.h"
+#include "mojo/public/cpp/bindings/string.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPaint.h"
@@ -24,12 +28,15 @@ static const float kPacmanAngularVelocity = 600;
 // Beep every 500 ms.
 static const int kBeepInterval = 500;
 
+static const int kMinZoom = 1;
+static const int kMaxZoom = 2;
+
 void DrawPacman(bool use_argb,
                 uint8_t* const data,
                 base::TimeDelta elapsed_time,
                 float frame_rate,
                 const gfx::Size& frame_size) {
-  // |kN32_SkColorType| stands for the appropriiate RGBA/BGRA format.
+  // |kN32_SkColorType| stands for the appropriate RGBA/BGRA format.
   const SkColorType colorspace =
       use_argb ? kN32_SkColorType : kAlpha_8_SkColorType;
   const SkImageInfo info = SkImageInfo::Make(
@@ -75,25 +82,26 @@ void DrawPacman(bool use_argb,
 
 // Creates a PNG-encoded frame and sends it back to |callback|. The other
 // parameters are used to replicate the PacMan rendering.
-void DoTakeFakePhoto(const VideoCaptureDevice::TakePhotoCallback& callback,
-                     const VideoCaptureFormat& capture_format,
-                     base::TimeDelta elapsed_time,
-                     float fake_capture_rate) {
+void DoTakeFakePhoto(
+    ScopedResultCallback<VideoCaptureDevice::TakePhotoCallback> callback,
+    const VideoCaptureFormat& capture_format,
+    base::TimeDelta elapsed_time,
+    float fake_capture_rate) {
   std::unique_ptr<uint8_t[]> buffer(new uint8_t[VideoFrame::AllocationSize(
       PIXEL_FORMAT_ARGB, capture_format.frame_size)]);
 
   DrawPacman(true /* use_argb */, buffer.get(), elapsed_time, fake_capture_rate,
              capture_format.frame_size);
 
-  std::unique_ptr<std::vector<uint8_t>> encoded_data(
-      new std::vector<uint8_t>());
+  std::vector<uint8_t> encoded_data;
   const bool result = gfx::PNGCodec::Encode(
       buffer.get(), gfx::PNGCodec::FORMAT_RGBA, capture_format.frame_size,
       capture_format.frame_size.width() * 4, true /* discard_transparency */,
-      std::vector<gfx::PNGCodec::Comment>(), encoded_data.get());
+      std::vector<gfx::PNGCodec::Comment>(), &encoded_data);
   DCHECK(result);
 
-  callback.Run("image/png", std::move(encoded_data));
+  callback.Run(mojo::String::From("image/png"),
+               mojo::Array<uint8_t>::From(encoded_data));
 }
 
 FakeVideoCaptureDevice::FakeVideoCaptureDevice(BufferOwnership buffer_ownership,
@@ -161,12 +169,23 @@ void FakeVideoCaptureDevice::StopAndDeAllocate() {
   client_.reset();
 }
 
-bool FakeVideoCaptureDevice::TakePhoto(
-    const TakePhotoCallback& photo_callback) {
-  base::MessageLoop::current()->PostTask(
-      FROM_HERE, base::Bind(&DoTakeFakePhoto, photo_callback, capture_format_,
-                            elapsed_time_, fake_capture_rate_));
-  return true;
+void FakeVideoCaptureDevice::GetPhotoCapabilities(
+    ScopedResultCallback<GetPhotoCapabilitiesCallback> callback) {
+  mojom::PhotoCapabilitiesPtr photo_capabilities =
+      mojom::PhotoCapabilities::New();
+  photo_capabilities->zoom = mojom::Range::New();
+  photo_capabilities->zoom->current = kMinZoom;
+  photo_capabilities->zoom->max = kMaxZoom;
+  photo_capabilities->zoom->min = kMinZoom;
+  callback.Run(std::move(photo_capabilities));
+}
+
+void FakeVideoCaptureDevice::TakePhoto(
+    ScopedResultCallback<TakePhotoCallback> callback) {
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&DoTakeFakePhoto, base::Passed(&callback), capture_format_,
+                 elapsed_time_, fake_capture_rate_));
 }
 
 void FakeVideoCaptureDevice::CaptureUsingOwnBuffers(
@@ -179,9 +198,12 @@ void FakeVideoCaptureDevice::CaptureUsingOwnBuffers(
              fake_capture_rate_, capture_format_.frame_size);
 
   // Give the captured frame to the client.
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (first_ref_time_.is_null())
+    first_ref_time_ = now;
   client_->OnIncomingCapturedData(fake_frame_.get(), frame_size,
-                                  capture_format_, 0 /* rotation */,
-                                  base::TimeTicks::Now());
+                                  capture_format_, 0 /* rotation */, now,
+                                  now - first_ref_time_);
   BeepAndScheduleNextCapture(
       expected_execution_time,
       base::Bind(&FakeVideoCaptureDevice::CaptureUsingOwnBuffers,
@@ -227,8 +249,11 @@ void FakeVideoCaptureDevice::CaptureUsingClientBuffers(
   }
 
   // Give the captured frame to the client.
+  base::TimeTicks now = base::TimeTicks::Now();
+  if (first_ref_time_.is_null())
+    first_ref_time_ = now;
   client_->OnIncomingCapturedBuffer(std::move(capture_buffer), capture_format_,
-                                    base::TimeTicks::Now());
+                                    now, now - first_ref_time_);
 
   BeepAndScheduleNextCapture(
       expected_execution_time,
@@ -259,7 +284,7 @@ void FakeVideoCaptureDevice::BeepAndScheduleNextCapture(
   const base::TimeTicks next_execution_time =
       std::max(current_time, expected_execution_time + frame_interval);
   const base::TimeDelta delay = next_execution_time - current_time;
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(next_capture, next_execution_time), delay);
 }
 

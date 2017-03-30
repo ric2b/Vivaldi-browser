@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -14,8 +15,11 @@
 #include "base/callback.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "components/precache/core/precache_fetcher.h"
+#include "components/precache/core/precache_session_table.h"
 #include "components/precache/core/precache_url_table.h"
 
 class GURL;
@@ -25,11 +29,17 @@ class FilePath;
 class Time;
 }
 
+namespace net {
+class HttpResponseInfo;
+}
+
 namespace sql {
 class Connection;
 }
 
 namespace precache {
+
+class PrecacheUnfinishedWork;
 
 // Class that tracks information related to precaching. This class may be
 // constructed on any thread, but all calls to, and destruction of this class
@@ -57,8 +67,8 @@ class PrecacheDatabase {
   void RecordURLPrefetch(const GURL& url,
                          const base::TimeDelta& latency,
                          const base::Time& fetch_time,
-                         int64_t size,
-                         bool was_cached);
+                         const net::HttpResponseInfo& info,
+                         int64_t size);
 
   // Report precache-related metrics in response to a URL being fetched, where
   // the fetch was not motivated by precaching. |is_connection_cellular|
@@ -66,10 +76,23 @@ class PrecacheDatabase {
   void RecordURLNonPrefetch(const GURL& url,
                             const base::TimeDelta& latency,
                             const base::Time& fetch_time,
+                            const net::HttpResponseInfo& info,
                             int64_t size,
-                            bool was_cached,
                             int host_rank,
                             bool is_connection_cellular);
+
+  // Gets the state required to continue a precache session.
+  std::unique_ptr<PrecacheUnfinishedWork> GetUnfinishedWork();
+
+  // Stores the state required to continue a precache session so that the
+  // session can be resumed later.
+  void SaveUnfinishedWork(
+      std::unique_ptr<PrecacheUnfinishedWork> unfinished_work);
+
+  // Deletes unfinished work from the database.
+  void DeleteUnfinishedWork();
+
+  base::WeakPtr<PrecacheDatabase> GetWeakPtr();
 
  private:
   friend class PrecacheDatabaseTest;
@@ -96,6 +119,10 @@ class PrecacheDatabase {
   // and wouldn't be in the cache otherwise. If |buffered_writes_| is non-empty,
   // then this table will not be up to date until the next call to Flush().
   PrecacheURLTable precache_url_table_;
+
+  // Table that persists state related to a precache session, including
+  // unfinished work to be done.
+  PrecacheSessionTable precache_session_table_;
 
   // A vector of write operations to be run on the database.
   std::vector<base::Closure> buffered_writes_;

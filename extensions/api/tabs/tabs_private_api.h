@@ -10,7 +10,7 @@
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "components/favicon/core/favicon_driver_observer.h"
-#include "components/ui/zoom/zoom_observer.h"
+#include "components/zoom/zoom_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_event_histogram_value.h"
@@ -50,7 +50,7 @@ protected:
 // Class that handles the drag and drop related vivaldi events.
 class TabsPrivateEventRouter : public TabDragDelegate {
  public:
-  TabsPrivateEventRouter(Profile* profile, content::WebContents* web_contents);
+  TabsPrivateEventRouter(Profile* profile);
   ~TabsPrivateEventRouter() override;
 
   // TabDragDelegate interface
@@ -73,7 +73,6 @@ private:
                      std::unique_ptr<base::ListValue>& args);
 
   Profile* profile_ = nullptr;
-  content::WebContents* web_contents_ = nullptr;
   const std::vector<std::string> tab_drag_data_;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateEventRouter);
@@ -115,7 +114,7 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI,
 // WebContents.
 class VivaldiPrivateTabObserver
     : public content::WebContentsObserver,
-      public ui_zoom::ZoomObserver,
+      public zoom::ZoomObserver,
       public content::WebContentsUserData<VivaldiPrivateTabObserver>,
       public favicon::FaviconDriverObserver {
  public:
@@ -143,10 +142,9 @@ class VivaldiPrivateTabObserver
 
   // ZoomObserver implementation.
   void OnZoomChanged(
-    const ui_zoom::ZoomController::ZoomChangedEventData& data) override;
+    const zoom::ZoomController::ZoomChangedEventData& data) override;
 
   void SetZoomLevelForTab(double level);
-  bool IsVivaldiTabZoomEnabled();
 
   // favicon::FaviconDriverObserver:
   void OnFaviconUpdated(favicon::FaviconDriver* favicon_driver,

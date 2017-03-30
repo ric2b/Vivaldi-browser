@@ -13,6 +13,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "cc/surfaces/surface_id_allocator.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/public/common/web_preferences.h"
@@ -88,9 +89,8 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   bool IsSpeaking() const override;
   void StopSpeaking() override;
 #endif  // defined(OS_MACOSX)
-  void OnSwapCompositorFrame(
-      uint32_t output_surface_id,
-      std::unique_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
+                             cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override {}
 
   // RenderWidgetHostViewBase implementation.
@@ -100,7 +100,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void Focus() override {}
   void SetIsLoading(bool is_loading) override {}
   void UpdateCursor(const WebCursor& cursor) override {}
-  void TextInputStateChanged(const TextInputState& params) override {}
   void ImeCancelComposition() override {}
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
@@ -125,7 +124,6 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   void LockCompositingSurface() override {}
   void UnlockCompositingSurface() override {}
   void GetScreenInfo(blink::WebScreenInfo* results) override {}
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
   bool LockMouse() override;
   void UnlockMouse() override;
@@ -139,7 +137,7 @@ class TestRenderWidgetHostView : public RenderWidgetHostViewBase {
   RenderWidgetHostImpl* rwh_;
 
  private:
-  uint32_t surface_id_namespace_;
+  std::unique_ptr<cc::SurfaceIdAllocator> surface_id_allocator_;
   bool is_showing_;
   bool is_occluded_;
   bool did_swap_compositor_frame_;

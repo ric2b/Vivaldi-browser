@@ -4,6 +4,7 @@
 
 body {
   -webkit-user-select: none;
+  background-color: black;
   font-size: 84%;
   margin: 0;
 }
@@ -341,6 +342,7 @@ files-toggle-ripple::shadow .ripple.activated {
   margin: 8px 0;
   min-width: 160px;
   padding: 4px 0;
+  text-overflow: ellipsis;
   width: -webkit-fit-content;
 }
 

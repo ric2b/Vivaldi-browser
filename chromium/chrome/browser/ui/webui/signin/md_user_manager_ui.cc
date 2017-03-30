@@ -65,6 +65,8 @@ content::WebUIDataSource* MDUserManagerUI::CreateUIDataSource(
   source->AddResourcePath("control_bar.js", IDR_MD_CONTROL_BAR_JS);
   source->AddResourcePath("create_profile.html", IDR_MD_CREATE_PROFILE_HTML);
   source->AddResourcePath("create_profile.js", IDR_MD_CREATE_PROFILE_JS);
+  source->AddResourcePath("error_dialog.html", IDR_MD_ERROR_DIALOG_HTML);
+  source->AddResourcePath("error_dialog.js", IDR_MD_ERROR_DIALOG_JS);
   source->AddResourcePath("icons.html", IDR_MD_USER_MANAGER_ICONS_HTML);
   source->AddResourcePath("import_supervised_user.html",
                           IDR_MD_IMPORT_SUPERVISED_USER_HTML);
@@ -86,12 +88,14 @@ content::WebUIDataSource* MDUserManagerUI::CreateUIDataSource(
   source->AddResourcePath("supervised_user_learn_more.js",
                           IDR_MD_SUPERVISED_USER_LEARN_MORE_JS);
   source->AddResourcePath("user_manager.js", IDR_MD_USER_MANAGER_JS);
+  source->AddResourcePath("user_manager_dialog.html",
+                          IDR_MD_USER_MANAGER_DIALOG_HTML);
+  source->AddResourcePath("user_manager_dialog.js",
+                          IDR_MD_USER_MANAGER_DIALOG_JS);
   source->AddResourcePath("user_manager_pages.html",
                           IDR_MD_USER_MANAGER_PAGES_HTML);
   source->AddResourcePath("user_manager_pages.js",
                           IDR_MD_USER_MANAGER_PAGES_JS);
-  source->AddResourcePath("user_manager_styles.html",
-                          IDR_MD_USER_MANAGER_STYLES_HTML);
   source->AddResourcePath("user_manager_tutorial.html",
                           IDR_MD_USER_MANAGER_TUTORIAL_HTML);
   source->AddResourcePath("user_manager_tutorial.js",

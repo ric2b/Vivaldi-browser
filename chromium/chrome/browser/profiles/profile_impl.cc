@@ -77,6 +77,7 @@
 #include "chrome/browser/ssl/chrome_ssl_host_state_delegate_factory.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
@@ -101,10 +102,10 @@
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
-#include "components/ui/zoom/zoom_event_manager.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/tracked/tracked_preference_validation_delegate.h"
 #include "components/user_prefs/user_prefs.h"
+#include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/notification_service.h"
@@ -223,7 +224,9 @@ void BlockFileThreadOnDirectoryCreate(base::WaitableEvent* done_creating) {
 void CreateProfileDirectory(base::SequencedTaskRunner* sequenced_task_runner,
                             const base::FilePath& path,
                             bool create_readme) {
-  base::WaitableEvent* done_creating = new base::WaitableEvent(false, false);
+  base::WaitableEvent* done_creating =
+      new base::WaitableEvent(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                              base::WaitableEvent::InitialState::NOT_SIGNALED);
   sequenced_task_runner->PostTask(
       FROM_HERE, base::Bind(&CreateDirectoryAndSignal, path, done_creating,
                             create_readme));
@@ -326,6 +329,21 @@ void ProfileImpl::RegisterProfilePrefs(
   registry->RegisterBooleanPref(prefs::kForceGoogleSafeSearch, false);
   registry->RegisterBooleanPref(prefs::kForceYouTubeSafetyMode, false);
   registry->RegisterBooleanPref(prefs::kForceSessionSync, false);
+  registry->RegisterStringPref(prefs::kAllowedDomainsForApps, std::string());
+
+#if defined(OS_ANDROID)
+  // The following prefs don't need to be sync'd to mobile. This file isn't
+  // compiled on iOS so we only need to exclude them syncing from the Android
+  // build.
+  registry->RegisterIntegerPref(prefs::kProfileAvatarIndex, -1);
+  // Whether a profile is using an avatar without having explicitely chosen it
+  // (i.e. was assigned by default by legacy profile creation).
+  registry->RegisterBooleanPref(prefs::kProfileUsingDefaultAvatar, true);
+  registry->RegisterBooleanPref(prefs::kProfileUsingGAIAAvatar, false);
+  // Whether a profile is using a default avatar name (eg. Pickles or Person 1).
+  registry->RegisterBooleanPref(prefs::kProfileUsingDefaultName, true);
+  registry->RegisterStringPref(prefs::kProfileName, std::string());
+#else
   registry->RegisterIntegerPref(
       prefs::kProfileAvatarIndex,
       -1,
@@ -345,13 +363,20 @@ void ProfileImpl::RegisterProfilePrefs(
       prefs::kProfileUsingDefaultName,
       true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterStringPref(prefs::kSupervisedUserId, std::string());
   registry->RegisterStringPref(prefs::kProfileName,
                                std::string(),
                                user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif
+
+  registry->RegisterStringPref(prefs::kSupervisedUserId, std::string());
+#if defined(OS_IOS) || defined(OS_ANDROID)
+  uint32_t home_page_flags = PrefRegistry::NO_REGISTRATION_FLAGS;
+#else
+  uint32_t home_page_flags = user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
+#endif
   registry->RegisterStringPref(prefs::kHomePage,
                                std::string(),
-                               user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+                               home_page_flags);
 #if defined(ENABLE_PRINTING)
   registry->RegisterBooleanPref(prefs::kPrintingEnabled, true);
 #endif
@@ -613,7 +638,7 @@ void ProfileImpl::DoFinalInit() {
 
   // The DomDistillerViewerSource is not a normal WebUI so it must be registered
   // as a URLDataSource early.
-  RegisterDomDistillerViewerSource(this);
+  dom_distiller::RegisterViewerSource(this);
 
 #if defined(OS_CHROMEOS)
   if (chromeos::UserSessionManager::GetInstance()
@@ -713,7 +738,7 @@ std::unique_ptr<content::ZoomLevelDelegate>
 ProfileImpl::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
   return base::WrapUnique(new ChromeZoomLevelPrefs(
       GetPrefs(), GetPath(), partition_path,
-      ui_zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
+      zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
 }
 
 base::FilePath ProfileImpl::GetPath() const {
@@ -1233,9 +1258,11 @@ void ProfileImpl::GetCacheParameters(bool is_media_context,
                                      int* max_size) {
   DCHECK(cache_path);
   DCHECK(max_size);
+
   base::FilePath path(prefs_->GetFilePath(prefs::kDiskCacheDir));
   if (!path.empty())
-    *cache_path = path;
+    *cache_path = path.Append(cache_path->BaseName());
+
   *max_size = is_media_context ? prefs_->GetInteger(prefs::kMediaCacheSize) :
                                  prefs_->GetInteger(prefs::kDiskCacheSize);
 }

@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/extensions/pending_extension_info.h"
-
 #include "base/logging.h"
+#include "chrome/browser/extensions/pending_extension_info.h"
+#include "extensions/common/extension.h"
 
 namespace extensions {
 
@@ -36,7 +36,7 @@ PendingExtensionInfo::PendingExtensionInfo()
       should_allow_install_(NULL),
       is_from_sync_(true),
       install_source_(Manifest::INVALID_LOCATION),
-      creation_flags_(0),
+      creation_flags_(Extension::NO_FLAGS),
       mark_acknowledged_(false),
       remote_install_(false) {
 }

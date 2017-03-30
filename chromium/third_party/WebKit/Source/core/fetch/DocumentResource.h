@@ -26,6 +26,8 @@
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceClient.h"
 #include "core/html/parser/TextResourceDecoder.h"
+#include "platform/heap/Handle.h"
+#include <memory>
 
 namespace blink {
 
@@ -64,16 +66,17 @@ private:
     Document* createDocument(const KURL&);
 
     Member<Document> m_document;
-    OwnPtr<TextResourceDecoder> m_decoder;
+    std::unique_ptr<TextResourceDecoder> m_decoder;
 };
 
 DEFINE_TYPE_CASTS(DocumentResource, Resource, resource, resource->getType() == Resource::SVGDocument, resource.getType() == Resource::SVGDocument);
 
-class CORE_EXPORT DocumentResourceClient : public ResourceClient {
+class CORE_EXPORT DocumentResourceClient : public GarbageCollectedMixin, public ResourceClient {
 public:
     ~DocumentResourceClient() override {}
     static bool isExpectedType(ResourceClient* client) { return client->getResourceClientType() == DocumentType; }
     ResourceClientType getResourceClientType() const final { return DocumentType; }
+    DEFINE_INLINE_VIRTUAL_TRACE() {}
 };
 
 } // namespace blink

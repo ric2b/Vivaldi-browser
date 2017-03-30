@@ -54,7 +54,8 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   BackgroundTracingManagerImpl();
   ~BackgroundTracingManagerImpl() override;
 
-  void StartTracing(std::string, base::trace_event::TraceRecordMode);
+  void StartTracing(BackgroundTracingConfigImpl::CategoryPreset,
+                    base::trace_event::TraceRecordMode);
   void StartTracingIfConfigNeedsIt();
   void OnFinalizeStarted(std::unique_ptr<const base::DictionaryValue> metadata,
                          base::RefCountedString*);
@@ -62,7 +63,7 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   void BeginFinalizing(StartedFinalizingCallback);
   void ValidateStartupScenario();
 
-  void AddCustomMetadata(TracingControllerImpl::TraceDataSink*) const;
+  void AddCustomMetadata(TracingControllerImpl::TraceDataSink*);
 
   std::string GetTriggerNameFromHandle(TriggerHandle handle) const;
   bool IsTriggerHandleValid(TriggerHandle handle) const;
@@ -95,7 +96,7 @@ class BackgroundTracingManagerImpl : public BackgroundTracingManager {
   std::map<TriggerHandle, std::string> trigger_handles_;
   std::unique_ptr<TracingTimer> tracing_timer_;
   ReceiveCallback receive_callback_;
-
+  std::unique_ptr<base::DictionaryValue> last_triggered_rule_;
   bool is_gathering_;
   bool is_tracing_;
   bool requires_anonymized_data_;

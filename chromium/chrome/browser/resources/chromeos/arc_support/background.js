@@ -8,11 +8,13 @@
  * @type {Array<string>}
  */
 var UI_PAGES = ['none',
-                'start',
+                'terms-loading',
+                'terms',
                 'lso-loading',
                 'lso',
                 'arc-loading',
-                'error'];
+                'error',
+                'error-with-feedback'];
 
 /**
  * Chrome window that hosts UI. Only one window is allowed.
@@ -52,6 +54,43 @@ var windowClosedInternally = false;
 var termsReloadTimeout = null;
 
 /**
+ * Stores current device id.
+ * @type {string}
+ */
+var currentDeviceId = null;
+
+/**
+ * Indicates that terms were accepted by user.
+ * @type {boolean}
+ */
+var termsAccepted = false;
+
+/**
+ * Indicates that current user has managed Arc.
+ * @type {boolean}
+ */
+var arcManaged = false;
+
+/**
+ * Tooltip text used in 'controlled by policy' indicator.
+ * @type {boolean}
+ */
+var controlledByPolicyText = '';
+
+/**
+ * Host window inner default width.
+ * @const {number}
+ */
+var INNER_WIDTH = 960;
+
+/**
+ * Host window inner default height.
+ * @const {number}
+ */
+var INNER_HEIGHT = 688;
+
+
+/**
  * Closes current window in response to request from native code. This does not
  * issue 'cancelAuthCode' message to native code.
  */
@@ -72,15 +111,54 @@ function sendNativeMessage(code, opt_Props) {
 }
 
 /**
+ * Helper function that sets inner content for an option which includes text,
+ * link to 'learn more' section. This also creates an indicator showing that
+ * option is controlled by policy and inserts it before link element.
+ * @param {string} textId Id of the label element to process.
+ * @param {string} learnMoreLinkId Id inner link to 'learn more' element.
+ * @param {string} indicatorId Id of indicator to create.
+ * @param {string} text Inner text to set. Includes link declaration.
+ */
+function createConsentOption(textId, learnMoreLinkId, indicatorId, text) {
+  var doc = appWindow.contentWindow.document;
+  var textElement = doc.getElementById(textId);
+  textElement.innerHTML = text;
+  var linkLearnMoreElement = doc.getElementById(learnMoreLinkId);
+  linkLearnMoreElement.addEventListener('click', onLearnMore);
+
+  // Create controlled by policy indicator.
+  var policyIndicator = new appWindow.contentWindow.cr.ui.ControlledIndicator();
+  policyIndicator.id = indicatorId;
+  policyIndicator.getBubbleText = function() {
+    return controlledByPolicyText;
+  };
+  textElement.insertBefore(policyIndicator, linkLearnMoreElement);
+}
+
+/**
  * Applies localization for html content and sets terms webview.
  * @param {!Object} data Localized strings and relevant information.
+ * @param {string} deviceId Current device id.
  */
-function initialize(data) {
+function initialize(data, deviceId) {
+  currentDeviceId = deviceId;
   var doc = appWindow.contentWindow.document;
   var loadTimeData = appWindow.contentWindow.loadTimeData;
   loadTimeData.data = data;
   appWindow.contentWindow.i18nTemplate.process(doc, loadTimeData);
   var countryCode = data.countryCode.toLowerCase();
+  controlledByPolicyText = data.controlledByPolicy;
+  arcManaged = data.arcManaged;
+  setTermsVisible(!arcManaged);
+
+  createConsentOption('text-backup-restore',
+                      'learn-more-link-backup-restore',
+                      'policy-indicator-backup-restore',
+                      data.textBackupRestore);
+  createConsentOption('text-location-service',
+                      'learn-more-link-location-service',
+                      'policy-indicator-location-service',
+                      data.textLocationService);
 
   var scriptSetCountryCode = 'document.countryCode = \'' + countryCode + '\';';
   termsView.addContentScripts([
@@ -95,10 +173,18 @@ function initialize(data) {
         js: { files: ['playstore.js'] },
         run_at: 'document_end'
       }]);
-
-  // Applying localization changes page layout, update terms height.
-  updateTermsHeight();
 }
+
+/**
+ * Handles the event when the user clicks on a learn more link. Opens the
+ * support page for the user.
+ * @param {Event} event
+ */
+var onLearnMore = function(event) {
+  var url = 'https://support.google.com/chromebook?p=playapps';
+  chrome.browser.openTab({'url': url}, function() {});
+  event.preventDefault();
+};
 
 /**
  * Sets current metrics mode.
@@ -118,18 +204,61 @@ function setMetricsMode(text, canEnable, on) {
     event.preventDefault();
   };
 
-  var onLearnMore = function(event) {
-    var url = 'https://support.google.com/chrome/answer/96817';
-    chrome.browser.openTab({'url': url}, function() {});
-    event.preventDefault();
-  };
-
   doc.getElementById('text-metrics').innerHTML = text;
   doc.getElementById('settings-link').addEventListener('click', onSettings);
-  doc.getElementById('learn-more-link').addEventListener('click', onLearnMore);
+  doc.getElementById('learn-more-link-metrics').addEventListener('click',
+      onLearnMore);
 
   // Applying metrics mode changes page layout, update terms height.
   updateTermsHeight();
+}
+
+/**
+ * Sets current backup and restore mode.
+ * @param {boolean} enabled Defines the value for backup and restore checkbox.
+ * @param {boolean} managed Defines whether this setting is set by policy.
+ */
+function setBackupRestoreMode(enabled, managed) {
+  var doc = appWindow.contentWindow.document;
+  doc.getElementById('enable-backup-restore').checked = enabled;
+  doc.getElementById('enable-backup-restore').disabled = managed;
+  doc.getElementById('text-backup-restore').disabled = managed;
+  var policyIconElement = doc.getElementById('policy-indicator-backup-restore');
+  if (managed) {
+    policyIconElement.setAttribute('controlled-by', 'policy');
+  } else {
+    policyIconElement.removeAttribute('controlled-by');
+  }
+}
+
+/**
+ * Sets current usage of location service opt in mode.
+ * @param {boolean} enabled Defines the value for location service opt in.
+ * @param {boolean} managed Defines whether this setting is set by policy.
+ */
+function setLocationServiceMode(enabled, managed) {
+  var doc = appWindow.contentWindow.document;
+  doc.getElementById('enable-location-service').checked = enabled;
+  doc.getElementById('enable-location-service').disabled = managed;
+  doc.getElementById('text-location-service').disabled = managed;
+  var policyIconElement = doc.getElementById(
+      'policy-indicator-location-service');
+  if (managed) {
+    policyIconElement.setAttribute('controlled-by', 'policy');
+  } else {
+    policyIconElement.removeAttribute('controlled-by');
+  }
+}
+
+/**
+ * Sets visibility of Terms of Service.
+ * @param {boolean} visible Whether the Terms of Service visible or not.
+ */
+function setTermsVisible(visible) {
+  var doc = appWindow.contentWindow.document;
+  var styleVisibility = visible ? 'visible' : 'hidden';
+  doc.getElementById('terms-title').style.visibility = styleVisibility;
+  doc.getElementById('terms-container').style.visibility = styleVisibility;
 }
 
 /**
@@ -140,6 +269,9 @@ function updateTermsHeight() {
   var setTermsHeight = function() {
     var doc = appWindow.contentWindow.document;
     var termsContainer = doc.getElementById('terms-container');
+    // Reset terms-view height in order to stabilize style computation. For
+    // some reason, child webview affects final result.
+    termsView.style.height = '0px';
     var style = window.getComputedStyle(termsContainer, null);
     var height = style.getPropertyValue('height');
     termsView.style.height = height;
@@ -162,13 +294,19 @@ function onNativeMessage(message) {
   }
 
   if (message.action == 'initialize') {
-    initialize(message.data);
+    initialize(message.data, message.deviceId);
   } else if (message.action == 'setMetricsMode') {
     setMetricsMode(message.text, message.canEnable, message.on);
+  } else if (message.action == 'setBackupAndRestoreMode') {
+    setBackupRestoreMode(message.enabled, message.managed);
+  } else if (message.action == 'setLocationServiceMode') {
+    setLocationServiceMode(message.enabled, message.managed);
   } else if (message.action == 'closeUI') {
     closeWindowInternally();
   } else if (message.action == 'showPage') {
     showPageWithStatus(message.page, message.status);
+  } else if (message.action == 'setWindowBounds') {
+    setWindowBounds();
   }
 }
 
@@ -198,6 +336,14 @@ function showPage(pageDivId) {
 
   var doc = appWindow.contentWindow.document;
   var pages = doc.getElementsByClassName('section');
+  var sendFeedbackElement = doc.getElementById('button-send-feedback');
+  if (pageDivId == 'error-with-feedback') {
+    // Only show feedback button if the pageDivId is 'error-with-feedback'.
+    sendFeedbackElement.hidden = false;
+    pageDivId = 'error';
+  } else {
+    sendFeedbackElement.hidden = true;
+  }
   for (var i = 0; i < pages.length; i++) {
     pages[i].hidden = pages[i].id != pageDivId;
   }
@@ -207,10 +353,13 @@ function showPage(pageDivId) {
                   '1070009224336-sdh77n7uot3oc99ais00jmuft6sk2fg9.apps.' +
                   'googleusercontent.com&response_type=code&redirect_uri=oob&' +
                   'scope=https://www.google.com/accounts/OAuthLogin&' +
-                  'device_type=arc_plus_plus&device_id=0&hl=' +
-                  navigator.language;
+                  'device_type=arc_plus_plus&device_id=' + currentDeviceId +
+                  '&hl=' + navigator.language;
   }
   appWindow.show();
+  if (pageDivId == 'terms') {
+    updateTermsHeight();
+  }
 }
 
 /**
@@ -238,9 +387,21 @@ function showPageWithStatus(pageId, status) {
     return;
   }
 
-  if (UI_PAGES[pageId] == 'start') {
+  if (UI_PAGES[pageId] == 'terms-loading') {
+    termsAccepted = arcManaged;
+    if (termsAccepted) {
+      showPage('terms');
+      return;
+    }
     loadInitialTerms();
-  } else if (UI_PAGES[pageId] == 'error') {
+  } else {
+    // Explicit request to start not from start page. Assume terms are
+    // accepted in this case.
+    termsAccepted = true;
+  }
+
+  if (UI_PAGES[pageId] == 'error' ||
+      UI_PAGES[pageId] == 'error-with-feedback') {
     setErrorMessage(status);
   }
   showPage(UI_PAGES[pageId]);
@@ -253,39 +414,86 @@ function loadInitialTerms() {
   termsView.src = 'https://play.google.com/about/play-terms.html';
 }
 
+function setWindowBounds() {
+  if (!appWindow) {
+    return;
+  }
+
+  var decorationWidth = appWindow.outerBounds.width -
+      appWindow.innerBounds.width;
+  var decorationHeight = appWindow.outerBounds.height -
+      appWindow.innerBounds.height;
+
+  var outerWidth = INNER_WIDTH + decorationWidth;
+  var outerHeight = INNER_HEIGHT + decorationHeight;
+  if (outerWidth > screen.availWidth) {
+    outerWidth = screen.availWidth;
+  }
+  if (outerHeight > screen.availHeight) {
+    outerHeight = screen.availHeight;
+  }
+  if (appWindow.outerBounds.width == outerWidth &&
+      appWindow.outerBounds.height == outerHeight) {
+    return;
+  }
+
+  appWindow.outerBounds.width = outerWidth;
+  appWindow.outerBounds.height = outerHeight;
+  appWindow.outerBounds.left = Math.ceil((screen.availWidth - outerWidth) / 2);
+  appWindow.outerBounds.top =
+    Math.ceil((screen.availHeight - outerHeight) / 2);
+}
+
 chrome.app.runtime.onLaunched.addListener(function() {
   var onAppContentLoad = function() {
     var doc = appWindow.contentWindow.document;
     lsoView = doc.getElementById('arc-support');
-    // Apply absolute dimension to webview tag in order to avoid UI glitch
-    // when embedded content layout is visible for user, even if 100% width and
-    // height are set in css file.
-    // TODO(khmel): Investigate why relative layout is not enough.
-    lsoView.style.width = appWindow.innerBounds.width + 'px';
-    lsoView.style.height = appWindow.innerBounds.height + 'px';
+    lsoView.addContentScripts([
+        { name: 'postProcess',
+          matches: ['https://accounts.google.com/*'],
+          css: { files: ['lso.css'] },
+          run_at: 'document_end'
+        }]);
 
     var isApprovalResponse = function(url) {
       var resultUrlPrefix = 'https://accounts.google.com/o/oauth2/approval?';
       return url.substring(0, resultUrlPrefix.length) == resultUrlPrefix;
     };
 
+    var lsoError = false;
     var onLsoViewRequestResponseStarted = function(details) {
       if (isApprovalResponse(details.url)) {
         showPage('arc-loading');
       }
+      lsoError = false;
+    };
+
+    var onLsoViewErrorOccurred = function(details) {
+      setErrorMessage(appWindow.contentWindow.loadTimeData.getString(
+          'serverError'));
+      showPage('error');
+      lsoError = true;
     };
 
     var onLsoViewContentLoad = function() {
+      if (lsoError) {
+        return;
+      }
+
       if (!isApprovalResponse(lsoView.src)) {
         // Show LSO page when its content is ready.
         showPage('lso');
+        // We have fixed width for LSO page in css file in order to prevent
+        // unwanted webview resize animation when it is shown first time. Now
+        // it safe to make it up to window width.
+        lsoView.style.width = '100%';
         return;
       }
 
       lsoView.executeScript({code: 'document.title;'}, function(results) {
         var authCodePrefix = 'Success code=';
-        if (results[0].substring(0, authCodePrefix.length) ==
-            authCodePrefix) {
+        if (results && results.length == 1 && typeof results[0] == 'string' &&
+            results[0].substring(0, authCodePrefix.length) == authCodePrefix) {
           var authCode = results[0].substring(authCodePrefix.length);
           sendNativeMessage('setAuthCode', {code: authCode});
         } else {
@@ -303,31 +511,39 @@ chrome.app.runtime.onLaunched.addListener(function() {
 
     lsoView.request.onResponseStarted.addListener(
         onLsoViewRequestResponseStarted, requestFilter);
+    lsoView.request.onErrorOccurred.addListener(
+        onLsoViewErrorOccurred, requestFilter);
     lsoView.addEventListener('contentload', onLsoViewContentLoad);
 
-    termsView = doc.getElementById('terms');
+    termsView = doc.getElementById('terms-view');
 
-    // Handle terms view completed event. Enable button 'Agree' in case terms
-    // were loaded successfully and try to reload its content on error.
-    var termsReloadRetryTimeMs = 1000;  // 1 second
-    function onTermsViewRequestCompleted(details) {
-      if (termsReloadTimeout) {
-        clearTimeout(termsReloadTimeout);
-        termsReloadTimeout = null;
+    var termsError = false;
+    var onTermsViewBeforeRequest = function(details) {
+      showPage('terms-loading');
+      termsError = false;
+    };
+
+    var onTermsViewErrorOccurred = function(details) {
+      termsAccepted = false;
+      setErrorMessage(appWindow.contentWindow.loadTimeData.getString(
+          'serverError'));
+      showPage('error');
+      termsError = true;
+    };
+
+    var onTermsViewContentLoad = function() {
+      if (termsError) {
+        return;
       }
-      if (details.statusCode == 200) {
-        doc.getElementById('button-agree').disabled = false;
-      } else {
-        termsReloadTimeout = setTimeout(loadInitialTerms,
-                                        termsReloadRetryTimeMs);
-        termsReloadRetryTimeMs = termsReloadRetryTimeMs * 2;
-        if (termsReloadRetryTimeMs > 30000) {
-          termsReloadRetryTimeMs = 30000;
-        }
-      }
-    }
-    termsView.request.onCompleted.addListener(onTermsViewRequestCompleted,
-                                              requestFilter);
+      showPage('terms');
+    };
+
+    termsView.request.onBeforeRequest.addListener(onTermsViewBeforeRequest,
+                                                  requestFilter);
+    termsView.request.onErrorOccurred.addListener(onTermsViewErrorOccurred,
+                                                  requestFilter);
+    termsView.addEventListener('contentload', onTermsViewContentLoad);
+
 
     // webview is not allowed to open links in the new window. Hook these events
     // and open links in context of main page.
@@ -337,10 +553,25 @@ chrome.app.runtime.onLaunched.addListener(function() {
     });
 
     var onAgree = function() {
+      termsAccepted = true;
+
       var enableMetrics = doc.getElementById('enable-metrics');
-      if (!enableMetrics.hidden && enableMetrics.checked) {
-        sendNativeMessage('enableMetrics');
+      if (!enableMetrics.hidden) {
+        sendNativeMessage('enableMetrics', {
+          'enabled': enableMetrics.checked
+        });
       }
+
+      var enableBackupRestore = doc.getElementById('enable-backup-restore');
+      sendNativeMessage('setBackupRestore', {
+        'enabled': enableBackupRestore.checked
+      });
+
+      var enableLocationService = doc.getElementById('enable-location-service');
+      sendNativeMessage('setLocationService', {
+        'enabled': enableLocationService.checked
+      });
+
       sendNativeMessage('startLso');
     };
 
@@ -353,12 +584,22 @@ chrome.app.runtime.onLaunched.addListener(function() {
     };
 
     var onRetry = function() {
-      sendNativeMessage('startLso');
+      if (termsAccepted) {
+        sendNativeMessage('startLso');
+      } else {
+        loadInitialTerms();
+      }
+    };
+
+    var onSendFeedback = function() {
+      sendNativeMessage('sendFeedback');
     };
 
     doc.getElementById('button-agree').addEventListener('click', onAgree);
     doc.getElementById('button-cancel').addEventListener('click', onCancel);
     doc.getElementById('button-retry').addEventListener('click', onRetry);
+    doc.getElementById('button-send-feedback')
+        .addEventListener('click', onSendFeedback);
 
     connectPort();
   };
@@ -367,6 +608,8 @@ chrome.app.runtime.onLaunched.addListener(function() {
     appWindow = createdWindow;
     appWindow.contentWindow.onload = onAppContentLoad;
     createdWindow.onClosed.addListener(onWindowClosed);
+
+    setWindowBounds();
   };
 
   var onWindowClosed = function() {
@@ -382,6 +625,7 @@ chrome.app.runtime.onLaunched.addListener(function() {
   };
 
   windowClosedInternally = false;
+
   var options = {
     'id': 'play_store_wnd',
     'resizable': false,
@@ -391,8 +635,8 @@ chrome.app.runtime.onLaunched.addListener(function() {
       color: '#ffffff'
     },
     'innerBounds': {
-      'width': 960,
-      'height': 688
+      'width': INNER_WIDTH,
+      'height': INNER_HEIGHT
     }
   };
   chrome.app.window.create('main.html', options, onWindowCreated);

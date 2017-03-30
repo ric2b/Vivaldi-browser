@@ -14,9 +14,9 @@
 #include "net/base/elements_upload_data_stream.h"
 #include "net/base/ip_address.h"
 #include "net/base/test_completion_callback.h"
-#include "net/base/test_data_directory.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
+#include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/dns/mapped_host_resolver.h"
@@ -33,6 +33,7 @@
 #include "net/ssl/default_channel_id_store.h"
 #include "net/ssl/ssl_config_service_defaults.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "net/tools/quic/quic_in_memory_cache.h"
 #include "net/tools/quic/quic_server.h"
 #include "net/tools/quic/test_tools/quic_in_memory_cache_peer.h"
@@ -118,10 +119,11 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams> {
     params_.cert_verifier = &cert_verifier_;
     params_.transport_security_state = &transport_security_state_;
     params_.cert_transparency_verifier = cert_transparency_verifier_.get();
+    params_.ct_policy_enforcer = &ct_policy_enforcer_;
     params_.proxy_service = proxy_service_.get();
     params_.ssl_config_service = ssl_config_service_.get();
     params_.http_auth_handler_factory = auth_handler_factory_.get();
-    params_.http_server_properties = http_server_properties.GetWeakPtr();
+    params_.http_server_properties = &http_server_properties_;
     channel_id_service_.reset(
         new ChannelIDService(new DefaultChannelIDStore(nullptr),
                              base::ThreadTaskRunnerHandle::Get()));
@@ -251,10 +253,11 @@ class QuicEndToEndTest : public ::testing::TestWithParam<TestParams> {
   std::unique_ptr<ChannelIDService> channel_id_service_;
   TransportSecurityState transport_security_state_;
   std::unique_ptr<CTVerifier> cert_transparency_verifier_;
+  CTPolicyEnforcer ct_policy_enforcer_;
   scoped_refptr<SSLConfigServiceDefaults> ssl_config_service_;
   std::unique_ptr<ProxyService> proxy_service_;
   std::unique_ptr<HttpAuthHandlerFactory> auth_handler_factory_;
-  HttpServerPropertiesImpl http_server_properties;
+  HttpServerPropertiesImpl http_server_properties_;
   HttpNetworkSession::Params params_;
   std::unique_ptr<TestTransactionFactory> transaction_factory_;
   HttpRequestInfo request_;

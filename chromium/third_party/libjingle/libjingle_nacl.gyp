@@ -4,7 +4,6 @@
 
 {
   'variables': {
-    'libjingle_source': "source",
     'webrtc_base': "../webrtc/base",
     'webrtc_xmllite': "../webrtc/libjingle/xmllite",
     'webrtc_p2p': "../webrtc/p2p",
@@ -44,7 +43,6 @@
         'timezone=_timezone',
       ],
       'include_dirs': [
-        './<(libjingle_source)',
         '../',
       ],
       'includes': ['libjingle_common.gypi', ],
@@ -52,8 +50,6 @@
       'sources': [
         '<(webrtc_base)/asyncfile.cc',
         '<(webrtc_base)/asyncfile.h',
-        '<(webrtc_base)/asynchttprequest.cc',
-        '<(webrtc_base)/asynchttprequest.h',
         '<(webrtc_base)/asyncinvoker.cc',
         '<(webrtc_base)/asyncinvoker.h',
         '<(webrtc_base)/asyncinvoker-inl.h',
@@ -115,6 +111,8 @@
         '<(webrtc_base)/ipaddress.cc',
         '<(webrtc_base)/ipaddress.h',
         '<(webrtc_base)/linked_ptr.h',
+        '<(webrtc_base)/location.cc',
+        '<(webrtc_base)/location.h',
         '<(webrtc_base)/logging.cc',
         '<(webrtc_base)/logging.h',
         '<(webrtc_base)/maccocoathreadhelper.h',
@@ -254,7 +252,7 @@
       'sources!': [
         # For NACL, we have the field_trial_default and don't need the
         # field_trail.cc.
-        'overrides/field_trial.cc',
+        '../webrtc_overrides/field_trial.cc',
       ],
       'sources/': [
         ['exclude', '/mac[a-z]+\\.(h|cc)$'],
@@ -269,8 +267,6 @@
       ],
       'direct_dependent_settings': {
         'include_dirs': [
-          './overrides',
-          './<(libjingle_source)',
           '../../third_party/webrtc_overrides',
           '../../third_party',
           '../../third_party/webrtc',

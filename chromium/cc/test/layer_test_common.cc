@@ -97,8 +97,6 @@ void LayerTestCommon::VerifyQuadsAreOccluded(const QuadList& quads,
       // ends up on integer boundaries for ease of testing.
       ASSERT_EQ(target_rectf, gfx::RectF(target_rect));
     }
-    gfx::Rect target_visible_rect = MathUtil::MapEnclosingClippedRect(
-        quad->shared_quad_state->quad_to_target_transform, quad->visible_rect);
 
     bool fully_occluded_horizontal = target_rect.x() >= occluded.x() &&
                                      target_rect.right() <= occluded.right();
@@ -128,8 +126,8 @@ LayerTestCommon::LayerImplTest::LayerImplTest(const LayerTreeSettings& settings)
       layer_impl_id_(2) {
   std::unique_ptr<LayerImpl> root =
       LayerImpl::Create(host_->host_impl()->active_tree(), 1);
-  host_->host_impl()->active_tree()->SetRootLayer(std::move(root));
-  root_layer()->SetHasRenderSurface(true);
+  host_->host_impl()->active_tree()->SetRootLayerForTesting(std::move(root));
+  root_layer_for_testing()->SetHasRenderSurface(true);
   host_->host_impl()->SetVisible(true);
   host_->host_impl()->InitializeRenderer(output_surface_.get());
 
@@ -152,7 +150,7 @@ void LayerTestCommon::LayerImplTest::CalcDrawProps(
     const gfx::Size& viewport_size) {
   LayerImplList layer_list;
   LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting inputs(
-      root_layer(), viewport_size, &layer_list);
+      root_layer_for_testing(), viewport_size, &layer_list);
   LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);
 }
 
@@ -209,10 +207,8 @@ void LayerTestCommon::LayerImplTest::AppendSurfaceQuadsWithOcclusion(
 void EmptyCopyOutputCallback(std::unique_ptr<CopyOutputResult> result) {}
 
 void LayerTestCommon::LayerImplTest::RequestCopyOfOutput() {
-  std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests;
-  copy_requests.push_back(
+  root_layer_for_testing()->test_properties()->copy_requests.push_back(
       CopyOutputRequest::CreateRequest(base::Bind(&EmptyCopyOutputCallback)));
-  root_layer()->PassCopyRequests(&copy_requests);
 }
 
 }  // namespace cc

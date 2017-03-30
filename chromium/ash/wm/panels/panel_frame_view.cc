@@ -4,6 +4,8 @@
 
 #include "ash/wm/panels/panel_frame_view.h"
 
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/frame/default_header_painter.h"
 #include "ash/frame/frame_border_hit_test_controller.h"
@@ -29,9 +31,11 @@ PanelFrameView::PanelFrameView(views::Widget* frame, FrameType frame_type)
   DCHECK(!frame_->widget_delegate()->CanMaximize());
   if (frame_type != FRAME_NONE)
     InitHeaderPainter();
+  WmShell::Get()->AddShellObserver(this);
 }
 
 PanelFrameView::~PanelFrameView() {
+  WmShell::Get()->RemoveShellObserver(this);
 }
 
 void PanelFrameView::SetFrameColors(SkColor active_frame_color,
@@ -68,10 +72,9 @@ gfx::Size PanelFrameView::GetMinimumSize() const {
   if (!header_painter_)
     return gfx::Size();
   gfx::Size min_client_view_size(frame_->client_view()->GetMinimumSize());
-  return gfx::Size(
-      std::max(header_painter_->GetMinimumHeaderWidth(),
-               min_client_view_size.width()),
-      NonClientTopBorderHeight() + min_client_view_size.height());
+  return gfx::Size(std::max(header_painter_->GetMinimumHeaderWidth(),
+                            min_client_view_size.width()),
+                   NonClientTopBorderHeight() + min_client_view_size.height());
 }
 
 void PanelFrameView::Layout() {
@@ -105,26 +108,7 @@ void PanelFrameView::UpdateWindowTitle() {
   header_painter_->SchedulePaintForTitle();
 }
 
-void PanelFrameView::SizeConstraintsChanged() {
-}
-
-int PanelFrameView::NonClientHitTest(const gfx::Point& point) {
-  if (!header_painter_)
-    return HTNOWHERE;
-  return FrameBorderHitTestController::NonClientHitTest(this,
-      caption_button_container_, point);
-}
-
-void PanelFrameView::OnPaint(gfx::Canvas* canvas) {
-  if (!header_painter_)
-    return;
-  bool paint_as_active = ShouldPaintAsActive();
-  caption_button_container_->SetPaintAsActive(paint_as_active);
-
-  HeaderPainter::Mode header_mode = paint_as_active ?
-      HeaderPainter::MODE_ACTIVE : HeaderPainter::MODE_INACTIVE;
-  header_painter_->PaintHeader(canvas, header_mode);
-}
+void PanelFrameView::SizeConstraintsChanged() {}
 
 gfx::Rect PanelFrameView::GetBoundsForClientView() const {
   gfx::Rect client_bounds = bounds();
@@ -137,6 +121,38 @@ gfx::Rect PanelFrameView::GetWindowBoundsForClientBounds(
   gfx::Rect window_bounds = client_bounds;
   window_bounds.Inset(0, -NonClientTopBorderHeight(), 0, 0);
   return window_bounds;
+}
+
+int PanelFrameView::NonClientHitTest(const gfx::Point& point) {
+  if (!header_painter_)
+    return HTNOWHERE;
+  return FrameBorderHitTestController::NonClientHitTest(
+      this, caption_button_container_, point);
+}
+
+void PanelFrameView::OnPaint(gfx::Canvas* canvas) {
+  if (!header_painter_)
+    return;
+  bool paint_as_active = ShouldPaintAsActive();
+  caption_button_container_->SetPaintAsActive(paint_as_active);
+
+  HeaderPainter::Mode header_mode = paint_as_active
+                                        ? HeaderPainter::MODE_ACTIVE
+                                        : HeaderPainter::MODE_INACTIVE;
+  header_painter_->PaintHeader(canvas, header_mode);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// PanelFrameView, ShellObserver overrides:
+
+void PanelFrameView::OnOverviewModeStarting() {
+  if (ash::MaterialDesignController::IsOverviewMaterial())
+    caption_button_container_->SetVisible(false);
+}
+
+void PanelFrameView::OnOverviewModeEnded() {
+  if (ash::MaterialDesignController::IsOverviewMaterial())
+    caption_button_container_->SetVisible(true);
 }
 
 }  // namespace ash

@@ -6,15 +6,18 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/location.h"
 #import "base/mac/foundation_util.h"
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/scoped_nsautorelease_pool.h"
 #import "base/mac/scoped_objc_class_swizzler.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #import "testing/gtest_mac.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -94,11 +97,11 @@ class BridgedNativeWidgetTestApi {
     bridge_ = NativeWidgetMac::GetBridgeForNativeWindow(window);
   }
 
-  // Simulate a frame swap from the compositor. Assumes scale factor of 1.0f.
+  // Simulate a frame swap from the compositor.
   void SimulateFrameSwap(const gfx::Size& size) {
     const float kScaleFactor = 1.0f;
-    bridge_->compositor_widget_->GotFrame(
-        0, false, 0, base::ScopedCFTypeRef<IOSurfaceRef>(), size, kScaleFactor);
+    bridge_->compositor_widget_->GotIOSurfaceFrame(
+        base::ScopedCFTypeRef<IOSurfaceRef>(), size, kScaleFactor);
     bridge_->AcceleratedWidgetSwapCompleted();
   }
 
@@ -194,7 +197,7 @@ class WidgetChangeObserver : public TestWidgetObserver {
 
     base::RunLoop run_loop;
     run_loop_ = &run_loop;
-    base::MessageLoop::current()->task_runner()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::action_timeout());
     run_loop.Run();
     run_loop_ = nullptr;
@@ -380,6 +383,55 @@ class PaintCountView : public View {
 
   DISALLOW_COPY_AND_ASSIGN(PaintCountView);
 };
+
+// Test for correct child window restore when parent window is minimized
+// and restored using -makeKeyAndOrderFront:.
+// Parent-child window relationships in AppKit are not supported when window
+// visibility changes.
+// Disabled because it relies on cocoa occlusion APIs
+// and state changes that are unavoidably flaky.
+TEST_F(NativeWidgetMacTest, DISABLED_OrderFrontAfterMiniaturize) {
+  Widget* widget = CreateTopLevelPlatformWidget();
+  NSWindow* ns_window = widget->GetNativeWindow();
+
+  Widget* child_widget = CreateChildPlatformWidget(widget->GetNativeView());
+  NSWindow* child_ns_window = child_widget->GetNativeWindow();
+
+  // Set parent bounds that overlap child.
+  widget->SetBounds(gfx::Rect(100, 100, 300, 300));
+  child_widget->SetBounds(gfx::Rect(110, 110, 100, 100));
+
+  widget->Show();
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(widget->IsMinimized());
+
+  // Minimize parent.
+  [ns_window performMiniaturize:nil];
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(widget->IsMinimized());
+  EXPECT_FALSE(widget->IsVisible());
+  EXPECT_FALSE(child_widget->IsVisible());
+
+  // Restore parent window as AppController does.
+  [ns_window makeKeyAndOrderFront:nil];
+
+  // Wait and check that child is really visible.
+  // TODO(kirr): remove the fixed delay.
+  base::MessageLoop::current()->PostDelayedTask(
+      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
+      base::TimeDelta::FromSeconds(2));
+  base::MessageLoop::current()->Run();
+
+  EXPECT_FALSE(widget->IsMinimized());
+  EXPECT_TRUE(widget->IsVisible());
+  EXPECT_TRUE(child_widget->IsVisible());
+  // Check that child window is visible.
+  EXPECT_TRUE([child_ns_window occlusionState] & NSWindowOcclusionStateVisible);
+  EXPECT_TRUE(IsWindowStackedAbove(child_widget, widget));
+  widget->Close();
+}
 
 // Test minimized states triggered externally, implied visibility and restored
 // bounds whilst minimized.
@@ -797,7 +849,7 @@ class ScopedSwizzleWaiter {
       return;
 
     base::RunLoop run_loop;
-    base::MessageLoop::current()->task_runner()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), TestTimeouts::action_timeout());
     run_loop_ = &run_loop;
     run_loop.Run();
@@ -969,8 +1021,6 @@ TEST_F(NativeWidgetMacTest, WindowModalSheet) {
                    queue:nil
               usingBlock:^(NSNotification* note) {
                 EXPECT_TRUE([sheet_window delegate]);
-                EXPECT_FALSE(sheet_widget->IsVisible());
-                EXPECT_FALSE(sheet_widget->GetLayer()->IsDrawn());
                 *did_observe_ptr = true;
               }];
 
@@ -1298,9 +1348,9 @@ TEST_F(NativeWidgetMacTest, ChangeOpacity) {
   NSWindow* ns_window = widget->GetNativeWindow();
 
   CGFloat old_opacity = [ns_window alphaValue];
-  widget->SetOpacity(0xAA);
+  widget->SetOpacity(.7f);
   EXPECT_NE(old_opacity, [ns_window alphaValue]);
-  EXPECT_DOUBLE_EQ(0xAA / 255.0, [ns_window alphaValue]);
+  EXPECT_DOUBLE_EQ(.7f, [ns_window alphaValue]);
 
   widget->CloseNow();
 }

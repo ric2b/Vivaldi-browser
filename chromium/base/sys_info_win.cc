@@ -30,6 +30,28 @@ int64_t AmountOfMemory(DWORDLONG MEMORYSTATUSEX::*memory_field) {
   return rv < 0 ? std::numeric_limits<int64_t>::max() : rv;
 }
 
+bool GetDiskSpaceInfo(const base::FilePath& path,
+                      int64_t* available_bytes,
+                      int64_t* total_bytes) {
+  ULARGE_INTEGER available;
+  ULARGE_INTEGER total;
+  ULARGE_INTEGER free;
+  if (!GetDiskFreeSpaceExW(path.value().c_str(), &available, &total, &free))
+    return false;
+
+  if (available_bytes) {
+    *available_bytes = static_cast<int64_t>(available.QuadPart);
+    if (*available_bytes < 0)
+      *available_bytes = std::numeric_limits<int64_t>::max();
+  }
+  if (total_bytes) {
+    *total_bytes = static_cast<int64_t>(total.QuadPart);
+    if (*total_bytes < 0)
+      *total_bytes = std::numeric_limits<int64_t>::max();
+  }
+  return true;
+}
+
 }  // namespace
 
 namespace base {
@@ -58,12 +80,20 @@ int64_t SysInfo::AmountOfVirtualMemory() {
 int64_t SysInfo::AmountOfFreeDiskSpace(const FilePath& path) {
   ThreadRestrictions::AssertIOAllowed();
 
-  ULARGE_INTEGER available, total, free;
-  if (!GetDiskFreeSpaceExW(path.value().c_str(), &available, &total, &free))
+  int64_t available;
+  if (!GetDiskSpaceInfo(path, &available, nullptr))
     return -1;
+  return available;
+}
 
-  int64_t rv = static_cast<int64_t>(available.QuadPart);
-  return rv < 0 ? std::numeric_limits<int64_t>::max() : rv;
+// static
+int64_t SysInfo::AmountOfTotalDiskSpace(const FilePath& path) {
+  ThreadRestrictions::AssertIOAllowed();
+
+  int64_t total;
+  if (!GetDiskSpaceInfo(path, nullptr, &total))
+    return -1;
+  return total;
 }
 
 std::string SysInfo::OperatingSystemName() {
@@ -74,8 +104,9 @@ std::string SysInfo::OperatingSystemName() {
 std::string SysInfo::OperatingSystemVersion() {
   win::OSInfo* os_info = win::OSInfo::GetInstance();
   win::OSInfo::VersionNumber version_number = os_info->version_number();
-  std::string version(StringPrintf("%d.%d", version_number.major,
-                                   version_number.minor));
+  std::string version(StringPrintf("%d.%d.%d", version_number.major,
+                                   version_number.minor,
+                                   version_number.build));
   win::OSInfo::ServicePack service_pack = os_info->service_pack();
   if (service_pack.major != 0) {
     version += StringPrintf(" SP%d", service_pack.major);

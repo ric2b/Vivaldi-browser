@@ -28,6 +28,7 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       'showBannerMessage',
       'showUserPodCustomIcon',
       'hideUserPodCustomIcon',
+      'disablePinKeyboardForUser',
       'setAuthType',
       'setTouchViewState',
       'setPublicSessionDisplayName',
@@ -196,6 +197,20 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
     },
 
     /**
+     * Loads the PIN keyboard if any of the users can login with a PIN.
+     * @param {array} users Array of user instances.
+     */
+    loadPinKeyboardIfNeeded_: function(users) {
+      for (var i = 0; i < users.length; ++i) {
+        var user = users[i];
+        if (user.showPin) {
+          showPinKeyboardAsync();
+          return;
+        }
+      }
+    },
+
+    /**
      * Loads given users in pod row.
      * @param {array} users Array of user.
      * @param {boolean} showGuest Whether to show guest session button.
@@ -206,6 +221,8 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
       // On Desktop, #login-header-bar has a shadow if there are 8+ profiles.
       if (Oobe.getInstance().displayType == DISPLAY_TYPE.DESKTOP_USER_MANAGER)
         $('login-header-bar').classList.toggle('shadow', users.length > 8);
+
+      this.loadPinKeyboardIfNeeded_(users);
     },
 
     /**
@@ -335,6 +352,14 @@ login.createScreen('AccountPickerScreen', 'account-picker', function() {
      */
     setTouchViewState: function(isTouchViewEnabled) {
       $('pod-row').setTouchViewState(isTouchViewEnabled);
+    },
+
+    /**
+     * Hides the PIN keyboard if it's active.
+     * @param {!user} user The user who can no longer enter a PIN.
+     */
+    disablePinKeyboardForUser: function(user) {
+      $('pod-row').setPinVisibility(user, false);
     },
 
     /**

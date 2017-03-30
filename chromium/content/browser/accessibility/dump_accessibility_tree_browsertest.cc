@@ -798,6 +798,11 @@ IN_PROC_BROWSER_TEST_F(
       FILE_PATH_LITERAL("contenteditable-with-embedded-contenteditables.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
+                       AccessibilityContenteditableWithNoDescendants) {
+  RunHtmlTest(FILE_PATH_LITERAL("contenteditable-with-no-descendants.html"));
+}
+
 #if defined(OS_ANDROID)
 // Flaky failures: http://crbug.com/515053.
 #define MAYBE_AccessibilityEm DISABLED_AccessibilityEm
@@ -879,8 +884,14 @@ IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
   RunHtmlTest(FILE_PATH_LITERAL("iframe-coordinates-cross-process.html"));
 }
 
+// Flaky on Win7. http://crbug.com/610744
+#ifdef OS_WIN
+#define MAYBE_AccessibilityIframePresentational DISABLED_AccessibilityIframePresentational
+#else
+#define MAYBE_AccessibilityIframePresentational AccessibilityIframePresentational
+#endif
 IN_PROC_BROWSER_TEST_F(DumpAccessibilityTreeTest,
-                       AccessibilityIframePresentational) {
+                       MAYBE_AccessibilityIframePresentational) {
   RunHtmlTest(FILE_PATH_LITERAL("iframe-presentational.html"));
 }
 

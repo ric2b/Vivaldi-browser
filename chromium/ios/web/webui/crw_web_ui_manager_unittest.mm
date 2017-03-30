@@ -20,7 +20,7 @@
 #include "ios/web/public/test/scoped_testing_web_client.h"
 #include "ios/web/public/test/test_browser_state.h"
 #import "ios/web/public/test/test_web_client.h"
-#import "ios/web/test/web_test.h"
+#include "ios/web/public/test/web_test.h"
 #include "ios/web/web_state/web_state_impl.h"
 #import "ios/web/webui/crw_web_ui_page_builder.h"
 #include "ios/web/webui/url_fetcher_block_adapter.h"
@@ -43,8 +43,8 @@ NSString* kHtml = @"<html>Hello World</html>";
 // Mojo module for WebUI page.
 NSString* kMojoModule = @"service_provider.connect('Test');";
 
-// Mock of WebStateImpl to check that LoadHtml and ExecuteJavaScriptAsync are
-// called as expected.
+// Mock of WebStateImpl to check that LoadHtml and ExecuteJavaScript are called
+// as expected.
 class MockWebStateImpl : public WebStateImpl {
  public:
   MockWebStateImpl(BrowserState* browser_state)

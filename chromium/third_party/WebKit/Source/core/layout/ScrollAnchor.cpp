@@ -6,7 +6,6 @@
 
 #include "core/frame/FrameView.h"
 #include "core/frame/UseCounter.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/paint/PaintLayerScrollableArea.h"
 #include "platform/Histogram.h"
@@ -105,10 +104,20 @@ static LayoutPoint computeRelativeOffset(const LayoutObject* layoutObject, const
     return cornerPointOfRect(relativeBounds(layoutObject, scroller), corner);
 }
 
-static bool candidateMovesWithScroller(const LayoutObject* candidate, const ScrollableArea* scroller)
+static bool candidateMayMoveWithScroller(const LayoutObject* candidate, const ScrollableArea* scroller)
 {
-    if (candidate->style() && candidate->style()->hasViewportConstrainedPosition())
-        return false;
+    if (const ComputedStyle* style = candidate->style()) {
+        if (style->hasViewportConstrainedPosition())
+            return false;
+
+        if (style->hasOutOfFlowPosition()) {
+            // Absolute positioned elements with non-zero scrollTop/Left/Bottom/
+            // Right can stick to the viewport.
+            if (!style->top().isZero() || !style->left().isZero()
+                || !style->bottom().isZero() || !style->right().isZero())
+                return false;
+        }
+    }
 
     bool skippedByContainerLookup = false;
     candidate->container(scrollerLayoutBox(scroller), &skippedByContainerLookup);
@@ -120,10 +129,15 @@ ScrollAnchor::ExamineResult ScrollAnchor::examine(const LayoutObject* candidate)
     if (candidate->isLayoutInline())
         return ExamineResult(Continue);
 
+    // Anonymous blocks are not in the DOM tree and it may be hard for
+    // developers to reason about the anchor node.
+    if (candidate->isAnonymous())
+        return ExamineResult(Continue);
+
     if (!candidate->isText() && !candidate->isBox())
         return ExamineResult(Skip);
 
-    if (!candidateMovesWithScroller(candidate, m_scroller))
+    if (!candidateMayMoveWithScroller(candidate, m_scroller))
         return ExamineResult(Skip);
 
     LayoutRect candidateRect = relativeBounds(candidate, m_scroller);
@@ -189,7 +203,7 @@ void ScrollAnchor::save()
         // We need to update m_lastAdjusted.m_savedRelativeOffset, since it is
         // relative to the visible rect and the user may have scrolled since the
         // last adjustment.
-        if (!candidateMovesWithScroller(m_lastAdjusted.m_anchorObject, m_scroller)) {
+        if (!candidateMayMoveWithScroller(m_lastAdjusted.m_anchorObject, m_scroller)) {
             m_lastAdjusted.clear();
         } else if (m_lastAdjusted.m_anchorObject == m_current.m_anchorObject
             && m_lastAdjusted.m_corner == m_current.m_corner) {
@@ -242,21 +256,7 @@ void ScrollAnchor::restore()
 
 void ScrollAnchor::adjust(IntSize adjustment)
 {
-    DoublePoint desiredPos = m_scroller->scrollPositionDouble() + adjustment;
-    ScrollAnimatorBase* animator = m_scroller->existingScrollAnimator();
-    if (!animator || !animator->hasRunningAnimation()) {
-        m_scroller->setScrollPosition(desiredPos, AnchoringScroll);
-    } else {
-        // If in the middle of a scroll animation, stop the animation, make
-        // the adjustment, and continue the animation on the pending delta.
-        // TODO(skobes): This is not quite right, we are starting a new curve without
-        // saving our progress on the existing curve.
-        FloatSize pendingDelta = animator->desiredTargetPosition() -
-            FloatPoint(m_scroller->scrollPositionDouble());
-        animator->cancelAnimation();
-        m_scroller->setScrollPosition(desiredPos, AnchoringScroll);
-        animator->userScroll(ScrollByPixel, pendingDelta);
-    }
+    m_scroller->scrollAnimator().adjustAnimationAndSetScrollPosition(adjustment, AnchoringScroll);
 
     if (m_current && m_lastAdjusted.m_anchorObject != m_current.m_anchorObject) {
         m_lastAdjusted.clear();

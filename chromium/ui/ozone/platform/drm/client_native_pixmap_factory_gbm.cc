@@ -45,7 +45,8 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
                format == gfx::BufferFormat::RGBA_8888 ||
                format == gfx::BufferFormat::RGBX_8888 ||
                format == gfx::BufferFormat::BGRA_8888 ||
-               format == gfx::BufferFormat::BGRX_8888;
+               format == gfx::BufferFormat::BGRX_8888 ||
+               format == gfx::BufferFormat::YVU_420;
       case gfx::BufferUsage::SCANOUT:
         return format == gfx::BufferFormat::BGRX_8888;
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
@@ -70,22 +71,23 @@ class ClientNativePixmapFactoryGbm : public ClientNativePixmapFactory {
       const gfx::NativePixmapHandle& handle,
       const gfx::Size& size,
       gfx::BufferUsage usage) override {
-    base::ScopedFD scoped_fd(handle.fd.fd);
-
+    DCHECK(!handle.fds.empty());
+    base::ScopedFD scoped_fd(handle.fds[0].fd);
     switch (usage) {
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE:
       case gfx::BufferUsage::GPU_READ_CPU_READ_WRITE_PERSISTENT:
 #if defined(OS_CHROMEOS)
-        return ClientNativePixmapDmaBuf::ImportFromDmabuf(scoped_fd.release(),
-                                                          size, handle.stride);
+        // TODO(dcastagna): Add support for pixmaps with multiple FDs for non
+        // scanout buffers.
+        return ClientNativePixmapDmaBuf::ImportFromDmabuf(
+            scoped_fd.release(), size, handle.strides_and_offsets[0].first);
 #else
         NOTREACHED();
         return nullptr;
 #endif
       case gfx::BufferUsage::GPU_READ:
       case gfx::BufferUsage::SCANOUT:
-        return base::WrapUnique<ClientNativePixmapGbm>(
-            new ClientNativePixmapGbm);
+        return base::WrapUnique(new ClientNativePixmapGbm);
     }
     NOTREACHED();
     return nullptr;

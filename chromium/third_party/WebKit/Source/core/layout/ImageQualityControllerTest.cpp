@@ -9,6 +9,7 @@
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -52,7 +53,7 @@ public:
     bool maybeAnimated() override { return true; }
     bool currentFrameKnownToBeOpaque(MetadataMode = UseCurrentMetadata) override { return false; }
     IntSize size() const override { return IntSize(); }
-    void destroyDecodedData(bool) override { }
+    void destroyDecodedData() override { }
     void draw(SkCanvas*, const SkPaint&, const FloatRect& dstRect, const FloatRect& srcRect, RespectImageOrientationEnum, ImageClampingMode) override { }
     PassRefPtr<SkImage> imageForCurrentFrame() override { return nullptr; }
 };
@@ -71,7 +72,7 @@ public:
     bool maybeAnimated() override { return true; }
     bool currentFrameKnownToBeOpaque(MetadataMode = UseCurrentMetadata) override { return false; }
     IntSize size() const override { return IntSize(); }
-    void destroyDecodedData(bool) override { }
+    void destroyDecodedData() override { }
     void draw(SkCanvas*, const SkPaint&, const FloatRect& dstRect, const FloatRect& srcRect, RespectImageOrientationEnum, ImageClampingMode) override { }
 
     bool isBitmapImage() const override { return true; }
@@ -92,7 +93,7 @@ public:
     bool maybeAnimated() override { return true; }
     bool currentFrameKnownToBeOpaque(MetadataMode = UseCurrentMetadata) override { return false; }
     IntSize size() const override { return IntSize(1, 1); }
-    void destroyDecodedData(bool) override { }
+    void destroyDecodedData() override { }
     void draw(SkCanvas*, const SkPaint&, const FloatRect& dstRect, const FloatRect& srcRect, RespectImageOrientationEnum, ImageClampingMode) override { }
 
     bool isBitmapImage() const override { return true; }
@@ -170,7 +171,7 @@ TEST_F(ImageQualityControllerTest, LowQualityFilterForResizingImage)
     LayoutImage* img = toLayoutImage(document().body()->firstChild()->layoutObject());
 
     RefPtr<TestImageLowQuality> testImage = adoptRef(new TestImageLowQuality);
-    OwnPtr<PaintController> paintController = PaintController::create();
+    std::unique_ptr<PaintController> paintController = PaintController::create();
     GraphicsContext context(*paintController);
 
     // Paint once. This will kick off a timer to see if we resize it during that timer's execution.
@@ -196,7 +197,7 @@ TEST_F(ImageQualityControllerTest, MediumQualityFilterForNotAnimatedWhileAnother
     LayoutImage* nonAnimatingImage = toLayoutImage(document().getElementById("myNonAnimatingImage")->layoutObject());
 
     RefPtr<TestImageLowQuality> testImage = adoptRef(new TestImageLowQuality);
-    OwnPtr<PaintController> paintController = PaintController::create();
+    std::unique_ptr<PaintController> paintController = PaintController::create();
     GraphicsContext context(*paintController);
 
     // Paint once. This will kick off a timer to see if we resize it during that timer's execution.
@@ -254,7 +255,7 @@ TEST_F(ImageQualityControllerTest, DontRestartTimerUnlessAdvanced)
 
     // Paint once. This will kick off a timer to see if we resize it during that timer's execution.
     mockTimer->setTime(0.1);
-    EXPECT_EQ(false, controller()->shouldPaintAtLowQuality(*img, testImage.get(), testImage.get(), LayoutSize(2, 2), 0.1));
+    EXPECT_FALSE(controller()->shouldPaintAtLowQuality(*img, testImage.get(), testImage.get(), LayoutSize(2, 2), 0.1));
     EXPECT_EQ(ImageQualityController::cLowQualityTimeThreshold, mockTimer->nextFireInterval());
 
     // Go into low-quality mode now that the size changed.

@@ -7,7 +7,7 @@
 #include "base/strings/stringprintf.h"
 #include "ui/gl/gl_bindings.h"
 
-namespace gfx {
+namespace gl {
 
 namespace {
 
@@ -61,8 +61,14 @@ void GLFenceARB::ServerWait() {
 }
 
 GLFenceARB::~GLFenceARB() {
-  DCHECK_EQ(GL_TRUE, glIsSync(sync_));
-  glDeleteSync(sync_);
+  if (sync_) {
+    DCHECK_EQ(GL_TRUE, glIsSync(sync_));
+    glDeleteSync(sync_);
+  }
 }
 
-}  // namespace gfx
+void GLFenceARB::Invalidate() {
+  sync_ = 0;
+}
+
+}  // namespace gl

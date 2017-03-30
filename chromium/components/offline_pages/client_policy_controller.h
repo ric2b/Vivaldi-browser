@@ -15,9 +15,6 @@
 
 namespace offline_pages {
 
-// Currently used for fallbacks like tests.
-static const char kDefaultNamespace[] = "default";
-
 // This is the class which is a singleton for offline page model
 // to get client policies based on namespaces.
 class ClientPolicyController {
@@ -30,7 +27,8 @@ class ClientPolicyController {
       const std::string& name_space,
       LifetimePolicy::LifetimeType lifetime_type,
       const base::TimeDelta& expiration_period,
-      int page_limit);
+      size_t page_limit,
+      size_t pages_allowed_per_url);
 
   // Get the client policy for |name_space|.
   const OfflinePageClientPolicy& GetPolicy(const std::string& name_space) const;

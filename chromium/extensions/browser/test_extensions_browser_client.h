@@ -90,8 +90,6 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
   void PermitExternalProtocolHandler() override;
   bool IsRunningInForcedAppMode() override;
   bool IsLoggedInAsPublicAccount() override;
-  ApiActivityMonitor* GetApiActivityMonitor(
-      content::BrowserContext* context) override;
   ExtensionSystemProvider* GetExtensionSystemFactory() override;
   void RegisterExtensionFunctions(
       ExtensionFunctionRegistry* registry) const override;
@@ -113,6 +111,10 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
       content::WebContents* web_contents) override;
   scoped_refptr<update_client::UpdateClient> CreateUpdateClient(
       content::BrowserContext* context) override;
+
+  ExtensionSystemProvider* extension_system_factory() {
+    return extension_system_factory_;
+  }
 
  private:
   content::BrowserContext* main_context_;       // Not owned.

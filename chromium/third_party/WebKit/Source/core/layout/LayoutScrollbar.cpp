@@ -31,7 +31,6 @@
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutScrollbarPart.h"
 #include "core/layout/LayoutScrollbarTheme.h"
-#include "core/layout/LayoutView.h"
 #include "platform/graphics/GraphicsContext.h"
 
 namespace blink {
@@ -359,10 +358,10 @@ int LayoutScrollbar::minimumThumbLength() const
     return orientation() == HorizontalScrollbar ? partLayoutObject->size().width() : partLayoutObject->size().height();
 }
 
-void LayoutScrollbar::invalidateDisplayItemClientsOfScrollbarParts(const LayoutBoxModelObject& paintInvalidationContainer)
+void LayoutScrollbar::invalidateDisplayItemClientsOfScrollbarParts()
 {
     for (auto& part : m_parts)
-        part.value->invalidateDisplayItemClientsIncludingNonCompositingDescendants(&paintInvalidationContainer, PaintInvalidationScroll);
+        part.value->invalidateDisplayItemClientsIncludingNonCompositingDescendants(PaintInvalidationScroll);
 }
 
 } // namespace blink

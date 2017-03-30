@@ -247,6 +247,13 @@ int64_t URLRequest::GetTotalSentBytes() const {
   return job_->GetTotalSentBytes();
 }
 
+int64_t URLRequest::GetRawBodyBytes() const {
+  if (!job_.get())
+    return 0;
+
+  return job_->prefilter_bytes_read();
+}
+
 LoadStateWithParam URLRequest::GetLoadState() const {
   // The !blocked_by_.empty() check allows |this| to report it's blocked on a
   // delegate before it has been started.
@@ -388,11 +395,6 @@ bool URLRequest::GetRemoteEndpoint(IPEndPoint* endpoint) const {
   return job_->GetRemoteEndpoint(endpoint);
 }
 
-bool URLRequest::GetResponseCookies(ResponseCookies* cookies) {
-  DCHECK(job_.get());
-  return job_->GetResponseCookies(cookies);
-}
-
 void URLRequest::GetMimeType(string* mime_type) const {
   DCHECK(job_.get());
   job_->GetMimeType(mime_type);
@@ -477,6 +479,15 @@ void URLRequest::SetReferrer(const std::string& referrer) {
 
 void URLRequest::set_referrer_policy(ReferrerPolicy referrer_policy) {
   DCHECK(!is_pending_);
+  // External callers shouldn't be setting NO_REFERRER or
+  // ORIGIN. |referrer_policy_| is only applied during server redirects,
+  // so external callers must set the referrer themselves using
+  // SetReferrer() for the initial request. Once the referrer has been
+  // set to an origin or to an empty string, there is no point in
+  // setting the policy to NO_REFERRER or ORIGIN as it would have the
+  // same effect as using NEVER_CLEAR_REFERRER across redirects.
+  DCHECK_NE(referrer_policy, NO_REFERRER);
+  DCHECK_NE(referrer_policy, ORIGIN);
   referrer_policy_ = referrer_policy;
 }
 
@@ -976,6 +987,7 @@ int URLRequest::Redirect(const RedirectInfo& redirect_info) {
   }
 
   referrer_ = redirect_info.new_referrer;
+  referrer_policy_ = redirect_info.new_referrer_policy;
   first_party_for_cookies_ = redirect_info.new_first_party_for_cookies;
   token_binding_referrer_ = redirect_info.referred_token_binding_host;
 
@@ -1014,26 +1026,11 @@ void URLRequest::SetPriority(RequestPriority priority) {
 
   priority_ = priority;
   if (job_.get()) {
-    net_log_.AddEvent(NetLog::TYPE_URL_REQUEST_SET_PRIORITY,
-                      NetLog::IntCallback("priority", priority_));
+    net_log_.AddEvent(
+        NetLog::TYPE_URL_REQUEST_SET_PRIORITY,
+        NetLog::StringCallback("priority", RequestPriorityToString(priority_)));
     job_->SetPriority(priority_);
   }
-}
-
-bool URLRequest::GetHSTSRedirect(GURL* redirect_url) const {
-  const GURL& url = this->url();
-  bool scheme_is_http = url.SchemeIs("http");
-  if (!scheme_is_http && !url.SchemeIs("ws"))
-    return false;
-  TransportSecurityState* state = context()->transport_security_state();
-  if (state && state->ShouldUpgradeToSSL(url.host())) {
-    GURL::Replacements replacements;
-    const char* new_scheme = scheme_is_http ? "https" : "wss";
-    replacements.SetSchemeStr(new_scheme);
-    *redirect_url = url.ReplaceComponents(replacements);
-    return true;
-  }
-  return false;
 }
 
 void URLRequest::NotifyAuthRequired(AuthChallengeInfo* auth_info) {

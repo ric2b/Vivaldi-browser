@@ -27,6 +27,10 @@ namespace extensions {
 class ExtensionGarbageCollectorChromeOSUnitTest;
 }
 
+namespace arc {
+class SyncArcPackageHelper;
+}
+
 namespace ash {
 namespace test {
 class MultiUserWindowManagerChromeOSTest;
@@ -124,7 +128,7 @@ class ProfileHelper
 
   // DEPRECATED
   // Returns profile of the |user| if user's profile is created and fully
-  // initialized. Otherwise, if some user is active, returns his profile.
+  // initialized. Otherwise, if some user is active, returns their profile.
   // Otherwise, returns signin profile.
   // Behaviour of this function does not correspond to its name and can be
   // very surprising, that's why it should not be used anymore.
@@ -158,6 +162,7 @@ class ProfileHelper
   friend class ProfileListChromeOSTest;
   friend class SessionStateDelegateChromeOSTest;
   friend class SystemTrayDelegateChromeOSTest;
+  friend class arc::SyncArcPackageHelper;
   friend class ash::test::MultiUserWindowManagerChromeOSTest;
   friend class ::test::BrowserFinderChromeOSTest;
 
@@ -191,6 +196,9 @@ class ProfileHelper
   // Associates |profile| with |user|, for GetProfileByUser() testing.
   void SetUserToProfileMappingForTesting(const user_manager::User* user,
                                          Profile* profile);
+
+  // Removes |account_id| user from |user_to_profile_for_testing_| for testing.
+  void RemoveUserFromListForTesting(const AccountId& account_id);
 
   // Identifies path to active user profile on Chrome OS.
   std::string active_user_id_hash_;

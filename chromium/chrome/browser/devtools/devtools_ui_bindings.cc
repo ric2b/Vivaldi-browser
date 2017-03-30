@@ -5,6 +5,7 @@
 #include "chrome/browser/devtools/devtools_ui_bindings.h"
 
 #include <stddef.h>
+
 #include <utility>
 
 #include "base/base64.h"
@@ -40,7 +41,7 @@
 #include "components/infobars/core/infobar.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
-#include "components/ui/zoom/page_zoom.h"
+#include "components/zoom/page_zoom.h"
 #include "content/public/browser/devtools_external_agent_proxy.h"
 #include "content/public/browser/devtools_external_agent_proxy_delegate.h"
 #include "content/public/browser/invalidate_type.h"
@@ -422,7 +423,7 @@ DevToolsUIBindings::~DevToolsUIBindings() {
     delete pair.first;
 
   if (agent_host_.get())
-    agent_host_->DetachClient();
+    agent_host_->DetachClient(this);
 
   for (IndexingJobsMap::const_iterator jobs_it(indexing_jobs_.begin());
        jobs_it != indexing_jobs_.end(); ++jobs_it) {
@@ -678,15 +679,15 @@ void DevToolsUIBindings::SetWhitelistedShortcuts(const std::string& message) {
 }
 
 void DevToolsUIBindings::ZoomIn() {
-  ui_zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_IN);
+  zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_IN);
 }
 
 void DevToolsUIBindings::ZoomOut() {
-  ui_zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_OUT);
+  zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_OUT);
 }
 
 void DevToolsUIBindings::ResetZoom() {
-  ui_zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_RESET);
+  zoom::PageZoom::Zoom(web_contents(), content::PAGE_ZOOM_RESET);
 }
 
 void DevToolsUIBindings::SetDevicesDiscoveryConfig(
@@ -811,7 +812,7 @@ void DevToolsUIBindings::ReadyForTest() {
 void DevToolsUIBindings::DispatchProtocolMessageFromDevToolsFrontend(
     const std::string& message) {
   if (agent_host_.get())
-    agent_host_->DispatchProtocolMessage(message);
+    agent_host_->DispatchProtocolMessage(this, message);
 }
 
 void DevToolsUIBindings::RecordEnumeratedHistogram(const std::string& name,
@@ -1007,7 +1008,8 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
     if (extensions::chrome_manifest_urls::GetDevToolsPage(extension.get())
             .is_empty())
       continue;
-    base::DictionaryValue* extension_info = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> extension_info(
+        new base::DictionaryValue());
     extension_info->Set(
         "startPage",
         new base::StringValue(extensions::chrome_manifest_urls::GetDevToolsPage(
@@ -1017,7 +1019,7 @@ void DevToolsUIBindings::AddDevToolsExtensionsToClient() {
                         new base::FundamentalValue(
                             extension->permissions_data()->HasAPIPermission(
                                 extensions::APIPermission::kExperimental)));
-    results.Append(extension_info);
+    results.Append(std::move(extension_info));
   }
   CallClientFunction("DevToolsAPI.addExtensions",
                      &results, NULL, NULL);
@@ -1032,7 +1034,9 @@ void DevToolsUIBindings::AttachTo(
   if (agent_host_.get())
     Detach();
   agent_host_ = agent_host;
-  agent_host_->AttachClient(this);
+  // DevToolsUIBindings terminates existing debugging connections and starts
+  // debugging.
+  agent_host_->ForceAttachClient(this);
 }
 
 void DevToolsUIBindings::Reattach() {
@@ -1042,7 +1046,7 @@ void DevToolsUIBindings::Reattach() {
 
 void DevToolsUIBindings::Detach() {
   if (agent_host_.get())
-    agent_host_->DetachClient();
+    agent_host_->DetachClient(this);
   agent_host_ = NULL;
 }
 
@@ -1077,7 +1081,7 @@ void DevToolsUIBindings::DocumentAvailableInMainFrame() {
   if (!reattaching_)
     return;
   reattaching_ = false;
-  agent_host_->DetachClient();
+  agent_host_->DetachClient(this);
   agent_host_->AttachClient(this);
 }
 

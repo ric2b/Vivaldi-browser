@@ -22,6 +22,7 @@ template<typename Type> struct DefaultSingletonTraits;
 }
 
 namespace content {
+class GeolocationDelegate;
 class LocationArbitrator;
 
 class CONTENT_EXPORT GeolocationProviderImpl
@@ -90,6 +91,9 @@ class CONTENT_EXPORT GeolocationProviderImpl
 
   // True only in testing, where we want to use a custom position.
   bool ignore_location_updates_;
+
+  // The system provided Delegate for the |arbitrator_|.
+  std::unique_ptr<GeolocationDelegate> delegate_;
 
   // Only to be used on the geolocation thread.
   std::unique_ptr<LocationArbitrator> arbitrator_;

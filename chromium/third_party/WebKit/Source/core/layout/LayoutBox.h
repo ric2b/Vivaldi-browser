@@ -26,8 +26,10 @@
 #include "core/CoreExport.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/OverflowModel.h"
+#include "core/layout/ScrollEnums.h"
 #include "platform/scroll/ScrollTypes.h"
-#include "platform/scroll/ScrollableArea.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -42,15 +44,9 @@ enum AvailableLogicalHeightType { ExcludeMarginBorderPadding, IncludeMarginBorde
 // When painting, overlay scrollbars do not take up space and should not affect
 // clipping behavior. During hit testing, overlay scrollbars behave like regular
 // scrollbars and should change how hit testing is clipped.
-enum OverlayScrollbarClipBehavior { IgnoreOverlayScrollbarSize, ExcludeOverlayScrollbarSizeForHitTesting };
 enum MarginDirection { BlockDirection, InlineDirection };
 
 enum ShouldComputePreferred { ComputeActual, ComputePreferred };
-
-enum ScrollOffsetClamping {
-    ScrollOffsetUnclamped,
-    ScrollOffsetClamped
-};
 
 enum ApplyOverflowClipFlag {
     ApplyOverflowClip,
@@ -93,12 +89,12 @@ public:
     LayoutBox* m_snapContainer;
     // For snap container, the descendant snap areas that contribute snap
     // points.
-    OwnPtr<SnapAreaSet> m_snapAreas;
+    std::unique_ptr<SnapAreaSet> m_snapAreas;
 
     SnapAreaSet& ensureSnapAreas()
     {
         if (!m_snapAreas)
-            m_snapAreas = adoptPtr(new SnapAreaSet);
+            m_snapAreas = wrapUnique(new SnapAreaSet);
 
         return *m_snapAreas;
     }
@@ -205,6 +201,7 @@ public:
 
     // Use this with caution! No type checking is done!
     LayoutBox* firstChildBox() const;
+    LayoutBox* firstInFlowChildBox() const;
     LayoutBox* lastChildBox() const;
 
     int pixelSnappedWidth() const { return m_frameRect.pixelSnappedWidth(); }
@@ -413,7 +410,7 @@ public:
     void addOverflowFromChild(LayoutBox* child) { addOverflowFromChild(child, child->locationOffset()); }
     void addOverflowFromChild(LayoutBox* child, const LayoutSize& delta);
     void clearLayoutOverflow();
-    void clearAllOverflows() { m_overflow.clear(); }
+    void clearAllOverflows() { m_overflow.reset(); }
 
     void updateLayerTransformAfterLayout();
 
@@ -428,8 +425,8 @@ public:
     LayoutUnit offsetWidth() const override { return m_frameRect.width(); }
     LayoutUnit offsetHeight() const override { return m_frameRect.height(); }
 
-    int pixelSnappedOffsetWidth() const final;
-    int pixelSnappedOffsetHeight() const final;
+    int pixelSnappedOffsetWidth(const Element*) const final;
+    int pixelSnappedOffsetHeight(const Element*) const final;
 
     // More IE extensions.  clientWidth and clientHeight represent the interior of an object
     // excluding border and scrollbar.  clientLeft/Top are just the borderLeftWidth and borderTopWidth.
@@ -744,9 +741,7 @@ public:
     virtual LayoutUnit computeReplacedLogicalWidth(ShouldComputePreferred  = ComputeActual) const;
     virtual LayoutUnit computeReplacedLogicalHeight(LayoutUnit estimatedUsedWidth = LayoutUnit()) const;
 
-    bool hasDefiniteLogicalWidth() const;
     bool percentageLogicalHeightIsResolvable() const;
-    bool hasDefiniteLogicalHeight() const;
     LayoutUnit computePercentageLogicalHeight(const Length& height) const;
 
     // Block flows subclass availableWidth/Height to handle multi column layout (shrinking the width/height available to children when laying out.)
@@ -761,7 +756,6 @@ public:
 
     int verticalScrollbarWidth() const;
     int horizontalScrollbarHeight() const;
-    int intrinsicScrollbarLogicalWidth() const;
     int scrollbarLogicalWidth() const { return style()->isHorizontalWritingMode() ? verticalScrollbarWidth() : horizontalScrollbarHeight(); }
     int scrollbarLogicalHeight() const { return style()->isHorizontalWritingMode() ? horizontalScrollbarHeight() : verticalScrollbarWidth(); }
     virtual ScrollResult scroll(ScrollGranularity, const FloatSize&);
@@ -842,8 +836,8 @@ public:
     LayoutUnit lineHeight(bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
     int baselinePosition(FontBaseline, bool firstLine, LineDirectionMode, LinePositionMode = PositionOnContainingLine) const override;
 
-    LayoutUnit offsetLeft() const override;
-    LayoutUnit offsetTop() const override;
+    LayoutUnit offsetLeft(const Element*) const override;
+    LayoutUnit offsetTop(const Element*) const override;
 
     LayoutPoint flipForWritingModeForChild(const LayoutBox* child, const LayoutPoint&) const;
     LayoutUnit flipForWritingMode(LayoutUnit position) const WARN_UNUSED_RETURN {
@@ -966,6 +960,9 @@ public:
 
     bool hitTestClippedOutByRoundedBorder(const HitTestLocation& locationInContainer, const LayoutPoint& borderBoxLocation) const;
 
+    bool mustInvalidateFillLayersPaintOnWidthChange(const FillLayer&) const;
+    bool mustInvalidateFillLayersPaintOnHeightChange(const FillLayer&) const;
+
 protected:
     void willBeDestroyed() override;
 
@@ -1020,7 +1017,6 @@ protected:
 private:
     bool mustInvalidateBackgroundOrBorderPaintOnHeightChange() const;
     bool mustInvalidateBackgroundOrBorderPaintOnWidthChange() const;
-    inline bool mustInvalidateFillLayersPaintOnWidthChange(const FillLayer&) const;
 
     void invalidatePaintRectClippedByOldAndNewBounds(const LayoutBoxModelObject& paintInvalidationContainer, const LayoutRect&, const LayoutRect& oldBounds, const LayoutRect& newBounds);
 
@@ -1052,6 +1048,14 @@ private:
     LayoutUnit fillAvailableMeasure(LayoutUnit availableLogicalWidth) const;
     LayoutUnit fillAvailableMeasure(LayoutUnit availableLogicalWidth, LayoutUnit& marginStart, LayoutUnit& marginEnd) const;
 
+    // Calculates the intrinsic(https://drafts.csswg.org/css-sizing-3/#intrinsic) logical widths for this layout box.
+    //
+    // intrinsicWidth is defined as:
+    //     intrinsic size of content (without our border and padding) + scrollbarWidth.
+    //
+    // preferredWidth is defined as:
+    //     fixedWidth OR (intrinsicWidth plus border and padding).
+    //     Note: fixedWidth includes border and padding and scrollbarWidth.
     virtual void computeIntrinsicLogicalWidths(LayoutUnit& minLogicalWidth, LayoutUnit& maxLogicalWidth) const;
 
     // This function calculates the preferred widths for an object.
@@ -1067,7 +1071,7 @@ private:
     LayoutBoxRareData& ensureRareData()
     {
         if (!m_rareData)
-            m_rareData = adoptPtr(new LayoutBoxRareData());
+            m_rareData = wrapUnique(new LayoutBoxRareData());
         return *m_rareData.get();
     }
 
@@ -1130,13 +1134,13 @@ protected:
     LayoutUnit m_maxPreferredLogicalWidth;
 
     // Our overflow information.
-    OwnPtr<BoxOverflowModel> m_overflow;
+    std::unique_ptr<BoxOverflowModel> m_overflow;
 
 private:
     // The inline box containing this LayoutBox, for atomic inline elements.
     InlineBox* m_inlineBoxWrapper;
 
-    OwnPtr<LayoutBoxRareData> m_rareData;
+    std::unique_ptr<LayoutBoxRareData> m_rareData;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutBox, isBox());
@@ -1175,6 +1179,14 @@ inline LayoutBox* LayoutBox::parentBox() const
 inline LayoutBox* LayoutBox::firstChildBox() const
 {
     return toLayoutBox(slowFirstChild());
+}
+
+inline LayoutBox* LayoutBox::firstInFlowChildBox() const
+{
+    LayoutBox* child = firstChildBox();
+    while (child && child->isOutOfFlowPositioned())
+        child = child->nextSiblingBox();
+    return child;
 }
 
 inline LayoutBox* LayoutBox::lastChildBox() const

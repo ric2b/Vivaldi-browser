@@ -36,44 +36,29 @@
 #include "platform/image-decoders/SegmentReader.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Threading.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 #if USE(QCMSLIB)
 #include "qcms.h"
+#endif
 
-namespace WTF {
+namespace blink {
 
-template <typename T>
-struct OwnedPtrDeleter;
-template <>
-struct OwnedPtrDeleter<qcms_transform> {
-    static void deletePtr(qcms_transform* transform)
+#if USE(QCMSLIB)
+struct QCMSTransformDeleter {
+    void operator()(qcms_transform* transform)
     {
         if (transform)
             qcms_transform_release(transform);
     }
 };
 
-template <typename T>
-struct OwnedPtrDeleter;
-template <>
-struct OwnedPtrDeleter<qcms_profile> {
-    static void deletePtr(qcms_profile* profile)
-    {
-        if (profile)
-            qcms_profile_release(profile);
-    }
-};
-
-} // namespace WTF
-
+using QCMSTransformUniquePtr = std::unique_ptr<qcms_transform, QCMSTransformDeleter>;
 #endif // USE(QCMSLIB)
-
-namespace blink {
 
 // ImagePlanes can be used to decode color components into provided buffers instead of using an ImageFrame.
 class PLATFORM_EXPORT ImagePlanes final {
@@ -123,9 +108,9 @@ public:
     // we can't sniff a supported type from the provided data (possibly
     // because there isn't enough data yet).
     // Sets m_maxDecodedBytes to Platform::maxImageDecodedBytes().
-    static PassOwnPtr<ImageDecoder> create(const char* data, size_t length, AlphaOption, GammaAndColorProfileOption);
-    static PassOwnPtr<ImageDecoder> create(const SharedBuffer&, AlphaOption, GammaAndColorProfileOption);
-    static PassOwnPtr<ImageDecoder> create(const SegmentReader&, AlphaOption, GammaAndColorProfileOption);
+    static std::unique_ptr<ImageDecoder> create(const char* data, size_t length, AlphaOption, GammaAndColorProfileOption);
+    static std::unique_ptr<ImageDecoder> create(const SharedBuffer&, AlphaOption, GammaAndColorProfileOption);
+    static std::unique_ptr<ImageDecoder> create(const SegmentReader&, AlphaOption, GammaAndColorProfileOption);
 
     virtual String filenameExtension() const = 0;
 
@@ -233,11 +218,10 @@ public:
 
     ImageOrientation orientation() const { return m_orientation; }
 
-    static bool deferredImageDecodingEnabled();
-
     void setIgnoreGammaAndColorProfile(bool flag) { m_ignoreGammaAndColorProfile = flag; }
     bool ignoresGammaAndColorProfile() const { return m_ignoreGammaAndColorProfile; }
 
+    static void setTargetColorProfile(const WebVector<char>&);
     bool hasColorProfile() const;
 
 #if USE(QCMSLIB)
@@ -280,7 +264,7 @@ public:
 
     virtual bool canDecodeToYUV() { return false; }
     virtual bool decodeToYUV() { return false; }
-    virtual void setImagePlanes(PassOwnPtr<ImagePlanes>) { }
+    virtual void setImagePlanes(std::unique_ptr<ImagePlanes>) { }
 
 protected:
     // Calculates the most recent frame whose image data may be needed in
@@ -347,7 +331,7 @@ private:
     bool m_failed;
 
 #if USE(QCMSLIB)
-    OwnPtr<qcms_transform> m_sourceToOutputDeviceColorTransform;
+    QCMSTransformUniquePtr m_sourceToOutputDeviceColorTransform;
 #endif
 };
 

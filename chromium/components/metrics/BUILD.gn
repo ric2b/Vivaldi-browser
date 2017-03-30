@@ -7,6 +7,12 @@ declare_args() {
   metrics_use_blimp = false
 }
 
+# These are only used by the blimp team, which has entirely migrated to gn,
+# so this logic is not replicated in the gyp file.
+if (metrics_use_blimp) {
+  defines = [ "OVERRIDE_OS_NAME_TO_BLIMP" ]
+}
+
 # GYP version: components/metrics.gypi:metrics
 source_set("metrics") {
   sources = [
@@ -48,6 +54,8 @@ source_set("metrics") {
     "metrics_pref_names.h",
     "metrics_provider.cc",
     "metrics_provider.h",
+    "metrics_reporting_default_state.cc",
+    "metrics_reporting_default_state.h",
     "metrics_reporting_scheduler.cc",
     "metrics_reporting_scheduler.h",
     "metrics_service.cc",
@@ -145,7 +153,6 @@ if (is_chromeos) {
     deps = [
       "//base",
       "//components/metrics/proto:proto",
-      "//content/public/browser",
     ]
   }
 }
@@ -365,11 +372,5 @@ source_set("unit_tests") {
 
   if (is_chromeos) {
     deps += [ ":leak_detector_unit_tests" ]
-  }
-
-  # These are only used by the blimp team, which has entirely migrated to gn,
-  # so this logic is not replicated in the gyp file.
-  if (metrics_use_blimp) {
-    defines = [ "OVERRIDE_OS_NAME_TO_BLIMP" ]
   }
 }

@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Per proteggere l'accesso a questo computer, scegli un PIN di <ph name="BOLD_START" />almeno sei cifre<ph name="BOLD_END" />. Questo PIN sarà richiesto quando ti connetti da un'altra posizione.</translation>
 <translation id="4176825807642096119">Codice di accesso</translation>
 <translation id="4207623512727273241">Esegui il programma di installazione prima di continuare.</translation>
+<translation id="4227991223508142681">Utilità di provisioning degli host</translation>
 <translation id="4240294130679914010">Programma di disinstallazione host Chromoting</translation>
 <translation id="4277463233460010382">Questo computer è configurato per consentire la connessione di uno o più client senza l'inserimento di un codice PIN.</translation>
 <translation id="4277736576214464567">Il codice di accesso non è valido. Riprova.</translation>
@@ -261,6 +262,7 @@ Remote Desktop</translation>
 <translation id="7836926030608666805">Mancano alcuni componenti obbligatori. Assicurati di avere l'ultima versione di Chrome e riprova.</translation>
 <translation id="7868137160098754906">Inserisci il codice PIN per il computer remoto.</translation>
 <translation id="7869445566579231750">Non sei autorizzato a eseguire questa applicazione.</translation>
+<translation id="7895403300744144251">Le norme di sicurezza del computer remoto non consentono connessioni dal tuo account.</translation>
 <translation id="7948001860594368197">Opzioni schermo</translation>
 <translation id="7970576581263377361">Autenticazione non riuscita. Accedi di nuovo a Chromium.</translation>
 <translation id="7981525049612125370">La sessione remota è scaduta.</translation>

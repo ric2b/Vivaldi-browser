@@ -75,7 +75,7 @@ public:
                 readingContext->onReadDone();
                 return v;
             }
-            if (!V8Uint8Array::hasInstance(value, v.isolate())) {
+            if (!value->IsUint8Array()) {
                 readingContext->onRejected();
                 return ScriptValue();
             }
@@ -242,7 +242,7 @@ public:
     void notifyLater()
     {
         ASSERT(m_client);
-        Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&ReadingContext::notify, PassRefPtr<ReadingContext>(this)));
+        Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&ReadingContext::notify, PassRefPtr<ReadingContext>(this)));
     }
 
 private:

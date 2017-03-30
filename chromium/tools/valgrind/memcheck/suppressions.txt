@@ -552,12 +552,6 @@
    fun:_ZNK5blink24BaseDateAndTimeInputType13sanitizeValueERKN3WTF6StringE
 }
 {
-   bug_418234
-   Memcheck:Uninitialized
-   fun:_ZN10extensions19ExtensionManagement7RefreshEv
-   fun:_ZN10extensions19ExtensionManagement22OnExtensionPrefChangedEv
-}
-{
    bug_464462
    Memcheck:Uninitialized
    fun:_ZN7content14ManifestParser16ParseIconDensityERKN4base15DictionaryValueE
@@ -1447,29 +1441,6 @@
    fun:_ZN5blink13ContainerNode6detachEv
 }
 {
-   bug_138220_a
-   Memcheck:Uninitialized
-   fun:_ZNK7blink16HTMLInputElement8dataListEv
-   fun:_ZNK7blink16HTMLInputElement4listEv
-   fun:_ZN5blink21RenderSliderContainer6layoutEv
-   fun:_ZN5blink11RenderBlock16layoutBlockChildEPNS_9RenderBoxERNS0_10MarginInfoERNS_20FractionalLayoutUnitES6_
-   fun:_ZN5blink11RenderBlock19layoutBlockChildrenEbRNS_20FractionalLayoutUnitE
-   fun:_ZN5blink11RenderBlock11layoutBlockEbNS_20FractionalLayoutUnitE
-   fun:_ZN5blink11RenderBlock6layoutEv
-   fun:_ZN5blink12RenderSlider6layoutEv
-}
-{
-   bug_138220_b
-   Memcheck:Uninitialized
-   fun:_ZNK7blink16HTMLInputElement8dataListEv
-   fun:_ZNK7blink16HTMLInputElement4listEv
-   fun:_ZN5blink11RenderTheme16paintSliderTicksEPNS_12RenderObjectERKNS_9PaintInfoERKNS_7IntRectE
-   fun:_ZN5blink24RenderThemeChromiumLinux16paintSliderTrackEPNS_12RenderObjectERKNS_9PaintInfoERKNS_7IntRectE
-   fun:_ZN5blink11RenderTheme5paintEPNS_12RenderObjectERKNS_9PaintInfoERKNS_7IntRectE
-   fun:_ZN5blink9RenderBox19paintBoxDecorationsERNS_9PaintInfoERKNS_21FractionalLayoutPointE
-   fun:_ZN5blink11RenderBlock11paintObjectERNS_9PaintInfoERKNS_21FractionalLayoutPointE
-}
-{
    bug_138233_a
    Memcheck:Leak
    fun:malloc
@@ -2062,14 +2033,6 @@
    fun:_ZN7content17BlinkPlatformImpl9DoTimeoutEv
 }
 {
-   bug_350809
-   Memcheck:Uninitialized
-   fun:_ZN5blink23ReplaceSelectionCommand7doApplyEv
-   fun:_ZN5blink20CompositeEditCommand5applyEv
-   fun:_ZN5blink6Editor28replaceSelectionWithFragmentEN3WTF10PassRefPtrINS_16DocumentFragmentEEEbbb
-   fun:_ZN5blink6Editor24replaceSelectionWithTextERKN3WTF6StringEbb
-}
-{
   bug_361594
   Memcheck:Uninitialized
   ...
@@ -2201,43 +2164,6 @@
    fun:_ZN5blink17WebLocalFrameImpl16createChildFrameERKN7blink16FrameLoadRequestEPNS1_21HTMLFrameOwnerElementE
 }
 {
-   bug_385396a
-   Memcheck:Uninitialized
-   ...
-   fun:_ZN5blink11RenderLayer7hitTestERKNS_14HitTestRequestERKNS_15HitTestLocationERNS_13HitTestResultE
-   fun:_ZN5blink10RenderView7hitTestERKNS_14HitTestRequestERKNS_15HitTestLocationERNS_13HitTestResultE
-   fun:_ZN5blink10RenderView7hitTestERKNS_14HitTestRequestERNS_13HitTestResultE
-   ...
-   fun:_ZN5blink12EventHandler18handleGestureEventERKNS_20PlatformGestureEventE
-   fun:_ZN5blink11WebViewImpl18handleGestureEventERKNS_15WebGestureEventE
-}
-{
-   bug_385396b
-   Memcheck:Uninitialized
-   ...
-   fun:_ZN5blink11LayoutPointC*ERKNS_8IntPointE
-   ...
-   fun:_ZN5blink12EventHandler18handleGestureEventERKNS_20PlatformGestureEventE
-   fun:_ZN5blink11WebViewImpl18handleGestureEventERKNS_15WebGestureEventE
-}
-{
-   bug_385396c
-   Memcheck:Uninitialized
-   fun:_ZNK5blink7IntRect8containsEii
-   ...
-   fun:_ZN5blink12EventHandler18handleGestureEventERKNS_20PlatformGestureEventE
-   fun:_ZN5blink11WebViewImpl18handleGestureEventERKNS_15WebGestureEventE
-}
-{
-   bug_385396d
-   Memcheck:Uninitialized
-   fun:_ZNK7blink10LayoutUnit5floorEv
-   ...
-   fun:_ZN5blink12EventHandler18handleGestureEventERKNS_20PlatformGestureEventE
-   fun:_ZN5blink11WebViewImpl18handleGestureEventERKNS_15WebGestureEventE
-   fun:_ZN5blink18PageWidgetDelegate16handleInputEventEPN7blink4PageERNS_22PageWidgetEventHandlerERKNS_13WebInputEventE
-}
-{
    bug_385396e
    Memcheck:Uninitialized
    fun:_ZN5blink15roundedIntPointERKNS_11LayoutPointE
@@ -2265,7 +2191,7 @@
    Memcheck:Leak
    fun:_Znw*
    fun:_ZN4base8internal20PostTaskAndReplyImpl16PostTaskAndReplyERKN15tracked_objects8LocationERKNS_8CallbackIF*
-   fun:_ZN4base10WorkerPool16PostTaskAndReplyERKN15tracked_objects8LocationERKNS_8CallbackIF*
+   fun:_ZN4base10TaskRunner16PostTaskAndReplyERKN15tracked_objects8LocationERKNS_8CallbackIF*
    fun:_ZN3net16HostResolverImpl16LoopbackProbeJob*
    fun:_ZN3net16HostResolverImpl*
 }

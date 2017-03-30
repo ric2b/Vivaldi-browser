@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/hash.h"
 #include "base/process/process_metrics.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/test/perf_time_logger.h"
 #include "base/test/test_file_util.h"
@@ -24,6 +25,7 @@
 #include "net/disk_cache/disk_cache.h"
 #include "net/disk_cache/disk_cache_test_base.h"
 #include "net/disk_cache/disk_cache_test_util.h"
+#include "net/disk_cache/simple/simple_backend_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 
@@ -79,8 +81,8 @@ class DiskCachePerfTest : public DiskCacheTestWithCache {
   const size_t kFdLimitForCacheTests = 8192;
 
   const int kNumEntries = 1000;
-  const int kHeadersSize = 200;
-  const int kBodySize = 16 * 1024 - 1;
+  const int kHeadersSize = 800;
+  const int kBodySize = 256 * 1024 - 1;
 
   std::vector<TestEntry> entries_;
 
@@ -88,9 +90,14 @@ class DiskCachePerfTest : public DiskCacheTestWithCache {
   const size_t saved_fd_limit_;
 };
 
-// Creates num_entries on the cache, and writes 200 bytes of metadata and up
-// to kBodySize of data to each entry.
+// Creates num_entries on the cache, and writes kHeaderSize bytes of metadata
+// and up to kBodySize of data to each entry.
 bool DiskCachePerfTest::TimeWrite() {
+  // TODO(gavinp): This test would be significantly more realistic if it didn't
+  // do single reads and writes. Perhaps entries should be written 64kb at a
+  // time. As well, not all entries should be created and written essentially
+  // simultaneously; some number of entries in flight at a time would be a
+  // likely better testing load.
   scoped_refptr<net::IOBuffer> buffer1(new net::IOBuffer(kHeadersSize));
   scoped_refptr<net::IOBuffer> buffer2(new net::IOBuffer(kBodySize));
 
@@ -201,7 +208,7 @@ TEST_F(DiskCachePerfTest, BlockfileHashes) {
 }
 
 void DiskCachePerfTest::ResetAndEvictSystemDiskCache() {
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   cache_.reset();
 
   // Flush all files in the cache out of system memory.
@@ -230,19 +237,26 @@ void DiskCachePerfTest::CacheBackendPerformance() {
   InitCache();
   EXPECT_TRUE(TimeWrite());
 
+  disk_cache::SimpleBackendImpl::FlushWorkerPoolForTesting();
+  base::RunLoop().RunUntilIdle();
+
   ResetAndEvictSystemDiskCache();
   EXPECT_TRUE(TimeRead(WhatToRead::HEADERS_ONLY,
                        "Read disk cache headers only (cold)"));
   EXPECT_TRUE(TimeRead(WhatToRead::HEADERS_ONLY,
                        "Read disk cache headers only (warm)"));
-  base::MessageLoop::current()->RunUntilIdle();
+
+  disk_cache::SimpleBackendImpl::FlushWorkerPoolForTesting();
+  base::RunLoop().RunUntilIdle();
 
   ResetAndEvictSystemDiskCache();
   EXPECT_TRUE(
       TimeRead(WhatToRead::HEADERS_AND_BODY, "Read disk cache entries (cold)"));
   EXPECT_TRUE(
       TimeRead(WhatToRead::HEADERS_AND_BODY, "Read disk cache entries (warm)"));
-  base::MessageLoop::current()->RunUntilIdle();
+
+  disk_cache::SimpleBackendImpl::FlushWorkerPoolForTesting();
+  base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(DiskCachePerfTest, CacheBackendPerformance) {
@@ -298,7 +312,7 @@ TEST_F(DiskCachePerfTest, BlockFilesPerformance) {
   }
 
   timer2.Done();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace

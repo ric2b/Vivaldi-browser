@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/website_settings/website_settings_popup_view.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/web_contents.h"
@@ -108,7 +109,7 @@ void LocationIconView::OnClickOrTap(const ui::LocatedEvent& event) {
 
 void LocationIconView::ProcessLocatedEvent(const ui::LocatedEvent& event) {
   if (HitTestPoint(event.location()))
-    OnActivate();
+    OnActivate(event);
 }
 
 gfx::Size LocationIconView::GetMinimumSize() const {
@@ -130,7 +131,7 @@ SkColor LocationIconView::GetBorderColor() const {
   return GetTextColor();
 }
 
-bool LocationIconView::OnActivate() {
+bool LocationIconView::OnActivate(const ui::Event& event) {
   WebContents* contents = location_bar_->GetWebContents();
   if (!contents)
     return false;
@@ -146,7 +147,7 @@ bool LocationIconView::OnActivate() {
   DCHECK(model_client);
 
   location_bar_->delegate()->ShowWebsiteSettings(
-      contents, entry->GetURL(), model_client->GetSecurityInfo());
+      contents, entry->GetVirtualURL(), model_client->GetSecurityInfo());
   return true;
 }
 

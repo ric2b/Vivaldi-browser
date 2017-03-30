@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "components/mus/gles2/mojo_gpu_memory_buffer_manager.h"
+#include "components/mus/common/mojo_gpu_memory_buffer_manager.h"
 #include "components/mus/gles2/raster_thread_helper.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "ui/compositor/compositor.h"
@@ -51,9 +51,13 @@ class VIEWS_MUS_EXPORT SurfaceContextFactory : public ui::ContextFactory {
   cc::SurfaceManager* GetSurfaceManager() override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
+  void SetDisplayColorSpace(ui::Compositor* compositor,
+                            const gfx::ColorSpace& color_space) override {}
   void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                      base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
+  void AddObserver(ui::ContextFactoryObserver* observer) override {}
+  void RemoveObserver(ui::ContextFactoryObserver* observer) override {}
 
   SurfaceBinding surface_binding_;
   uint32_t next_surface_id_namespace_;

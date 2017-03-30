@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.preferences.website;
 
+import android.content.DialogInterface;
+import android.content.res.Resources;
 import android.os.Bundle;
 import android.preference.Preference;
 import android.preference.Preference.OnPreferenceChangeListener;
@@ -12,16 +14,22 @@ import android.preference.PreferenceFragment;
 import android.preference.PreferenceGroup;
 import android.preference.PreferenceScreen;
 import android.support.v4.view.MenuItemCompat;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.widget.SearchView;
+import android.text.format.Formatter;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
+import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.media.cdm.MediaDrmCredentialManager;
 import org.chromium.chrome.browser.media.cdm.MediaDrmCredentialManager.MediaDrmCredentialManagerCallback;
@@ -34,6 +42,7 @@ import org.chromium.chrome.browser.preferences.ManagedPreferenceDelegate;
 import org.chromium.chrome.browser.preferences.ManagedPreferencesUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.ProtectedContentResetCredentialConfirmDialogFragment;
+import org.chromium.chrome.browser.preferences.website.Website.StoredDataClearedCallback;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 import org.chromium.ui.widget.Toast;
@@ -53,7 +62,8 @@ import java.util.Set;
 public class SingleCategoryPreferences extends PreferenceFragment
         implements OnPreferenceChangeListener, OnPreferenceClickListener,
                    AddExceptionPreference.SiteAddedCallback,
-                   ProtectedContentResetCredentialConfirmDialogFragment.Listener {
+                   ProtectedContentResetCredentialConfirmDialogFragment.Listener,
+                   View.OnClickListener {
     // The key to use to pass which category this preference should display,
     // e.g. Location/Popups/All sites (if blank).
     public static final String EXTRA_CATEGORY = "category";
@@ -63,6 +73,8 @@ public class SingleCategoryPreferences extends PreferenceFragment
     private TextView mEmptyView;
     // The view for searching the list of items.
     private SearchView mSearchView;
+    // The clear button displayed in the Storage view.
+    private Button mClearButton;
     // The Site Settings Category we are showing.
     private SiteSettingsCategory mCategory;
     // If not blank, represents a substring to use to search for site names.
@@ -77,10 +89,13 @@ public class SingleCategoryPreferences extends PreferenceFragment
     private boolean mIsInitialRun = true;
     // The number of sites that are on the Allowed list.
     private int mAllowedSiteCount = 0;
+    // The websites that are currently displayed to the user.
+    private List<WebsitePreference> mWebsites;
 
     // Keys for individual preferences.
     public static final String READ_WRITE_TOGGLE_KEY = "read_write_toggle";
     public static final String THIRD_PARTY_COOKIES_TOGGLE_KEY = "third_party_cookies";
+    public static final String NOTIFICATIONS_VIBRATE_TOGGLE_KEY = "notifications_vibrate";
     public static final String EXPLAIN_PROTECTED_MEDIA_KEY = "protected_content_learn_more";
     private static final String ADD_EXCEPTION_KEY = "add_exception";
     // Keys for Allowed/Blocked preference groups/headers.
@@ -112,6 +127,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
             // This method may be called after the activity has been destroyed.
             // In that case, bail out.
             if (getActivity() == null) return;
+            mWebsites = null;
 
             // First we scan origins to get settings from there.
             List<WebsitePreference> websites = new ArrayList<>();
@@ -189,6 +205,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
                     }
                 }
 
+                mWebsites = websites;
                 updateBlockedHeader(blocked);
                 ChromeSwitchPreference globalToggle = (ChromeSwitchPreference)
                         getPreferenceScreen().findPreference(READ_WRITE_TOGGLE_KEY);
@@ -281,13 +298,8 @@ public class SingleCategoryPreferences extends PreferenceFragment
     }
 
     @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
-        addPreferencesFromResource(R.xml.website_preferences);
-        ListView listView = (ListView) getView().findViewById(android.R.id.list);
-        mEmptyView = (TextView) getView().findViewById(android.R.id.empty);
-        listView.setEmptyView(mEmptyView);
-        listView.setDivider(null);
-
+    public View onCreateView(
+            LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         // Read which category we should be showing.
         String category = "";
         if (getArguments() != null) {
@@ -296,6 +308,52 @@ public class SingleCategoryPreferences extends PreferenceFragment
         }
         if (mCategory == null) {
             mCategory = SiteSettingsCategory.fromString(SiteSettingsCategory.CATEGORY_ALL_SITES);
+        }
+        if (!mCategory.showStorageSites()) {
+            return super.onCreateView(inflater, container, savedInstanceState);
+        } else {
+            return inflater.inflate(R.layout.storage_preferences, container, false);
+        }
+    }
+
+    /**
+     * This clears all the storage for websites that are displayed to the user. This happens
+     * asynchronously, and then we call {@link #getInfoForOrigins()} when we're done.
+     */
+    public void clearStorage() {
+        if (mWebsites == null) {
+            return;
+        }
+        RecordUserAction.record("MobileSettingsStorageClearAll");
+
+        // The goal is to refresh the info for origins again after we've cleared all of them, so we
+        // wait until the last website is cleared to refresh the origin list.
+        final int[] numLeft = new int[1];
+        numLeft[0] = mWebsites.size();
+        for (int i = 0; i < mWebsites.size(); i++) {
+            WebsitePreference preference = mWebsites.get(i);
+            preference.site().clearAllStoredData(new StoredDataClearedCallback() {
+                @Override
+                public void onStoredDataCleared() {
+                    if (--numLeft[0] <= 0) {
+                        getInfoForOrigins();
+                    }
+                }
+            });
+        }
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        addPreferencesFromResource(R.xml.website_preferences);
+        ListView listView = (ListView) getView().findViewById(android.R.id.list);
+        mEmptyView = (TextView) getView().findViewById(android.R.id.empty);
+        listView.setEmptyView(mEmptyView);
+        listView.setDivider(null);
+
+        mClearButton = (Button) getView().findViewById(R.id.clear_button);
+        if (mClearButton != null) {
+            mClearButton.setOnClickListener(this);
         }
 
         String title = getArguments().getString(EXTRA_TITLE);
@@ -393,6 +451,35 @@ public class SingleCategoryPreferences extends PreferenceFragment
         return super.onPreferenceTreeClick(screen, preference);
     }
 
+    /** OnClickListener for the clear button. We show an alert dialog to confirm the action */
+    @Override
+    public void onClick(View v) {
+        if (getActivity() == null || v != mClearButton) return;
+
+        long totalUsage = 0;
+        if (mWebsites != null) {
+            for (WebsitePreference preference : mWebsites) {
+                totalUsage += preference.site().getTotalUsage();
+            }
+        }
+
+        AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+        builder.setPositiveButton(R.string.storage_clear_dialog_clear_storage_option,
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int id) {
+                        clearStorage();
+                    }
+                });
+        builder.setNegativeButton(R.string.cancel, null);
+        builder.setTitle(R.string.storage_clear_site_storage_title);
+        Resources res = getResources();
+        String dialogFormattedText = res.getString(R.string.storage_clear_dialog_text,
+                Formatter.formatShortFileSize(getActivity(), totalUsage));
+        builder.setMessage(dialogFormattedText);
+        builder.create().show();
+    }
+
     // OnPreferenceChangeListener:
     @Override
     public boolean onPreferenceChange(Preference preference, Object newValue) {
@@ -418,6 +505,7 @@ public class SingleCategoryPreferences extends PreferenceFragment
                 PrefServiceBridge.getInstance().setMicEnabled((boolean) newValue);
             } else if (mCategory.showNotificationsSites()) {
                 PrefServiceBridge.getInstance().setNotificationsEnabled((boolean) newValue);
+                updateNotificationsVibrateCheckBox();
             } else if (mCategory.showPopupSites()) {
                 PrefServiceBridge.getInstance().setAllowPopupsEnabled((boolean) newValue);
             } else if (mCategory.showProtectedMediaSites()) {
@@ -448,6 +536,8 @@ public class SingleCategoryPreferences extends PreferenceFragment
             getInfoForOrigins();
         } else if (THIRD_PARTY_COOKIES_TOGGLE_KEY.equals(preference.getKey())) {
             PrefServiceBridge.getInstance().setBlockThirdPartyCookiesEnabled(!((boolean) newValue));
+        } else if (NOTIFICATIONS_VIBRATE_TOGGLE_KEY.equals(preference.getKey())) {
+            PrefServiceBridge.getInstance().setNotificationsVibrateEnabled((boolean) newValue);
         }
         return true;
     }
@@ -538,6 +628,16 @@ public class SingleCategoryPreferences extends PreferenceFragment
             getPreferenceScreen().removePreference(thirdPartyCookies);
         }
 
+        // Configure/hide the notifications vibrate toggle, as needed.
+        Preference notificationsVibrate =
+                getPreferenceScreen().findPreference(NOTIFICATIONS_VIBRATE_TOGGLE_KEY);
+        if (mCategory.showNotificationsSites()) {
+            notificationsVibrate.setOnPreferenceChangeListener(this);
+            updateNotificationsVibrateCheckBox();
+        } else {
+            getPreferenceScreen().removePreference(notificationsVibrate);
+        }
+
         // Show/hide the link that explains protected media settings, as needed.
         if (!mCategory.showProtectedMediaSites()) {
             getPreferenceScreen().removePreference(
@@ -616,10 +716,10 @@ public class SingleCategoryPreferences extends PreferenceFragment
                 } else if (mCategory.showFullscreenSites()) {
                     globalToggle.setChecked(
                             PrefServiceBridge.getInstance().isFullscreenAllowed());
-                    // With the simplified flag enabled, the fullscreen global toggle cannot be
-                    // disabled.
-                    globalToggle.setEnabled(
-                            !ChromeFeatureList.isEnabled("ViewsSimplifiedFullscreenUI"));
+                    // The fullscreen global toggle cannot be disabled.
+                    // TODO(mgiuca): Remove this setting entirely (requires deleting all the data;
+                    // see https://crbug.com/591896).
+                    globalToggle.setEnabled(false);
                 } else if (mCategory.showGeolocationSites()) {
                     globalToggle.setChecked(
                             LocationSettings.getInstance().isChromeLocationSettingEnabled());
@@ -650,6 +750,13 @@ public class SingleCategoryPreferences extends PreferenceFragment
                 return PrefServiceBridge.getInstance().isBlockThirdPartyCookiesManaged();
             }
         });
+    }
+
+    private void updateNotificationsVibrateCheckBox() {
+        ChromeBaseCheckBoxPreference preference =
+                (ChromeBaseCheckBoxPreference) getPreferenceScreen().findPreference(
+                        NOTIFICATIONS_VIBRATE_TOGGLE_KEY);
+        preference.setEnabled(PrefServiceBridge.getInstance().isNotificationsEnabled());
     }
 
     private void showManagedToast() {

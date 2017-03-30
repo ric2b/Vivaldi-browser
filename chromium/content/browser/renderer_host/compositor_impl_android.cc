@@ -7,7 +7,7 @@
 #include <android/bitmap.h>
 #include <android/native_window_jni.h>
 #include <stdint.h>
-
+#include <unordered_set>
 #include <utility>
 
 #include "base/android/jni_android.h"
@@ -28,6 +28,7 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "cc/animation/animation_host.h"
 #include "cc/base/switches.h"
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
@@ -35,10 +36,12 @@
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/output/texture_mailbox_deleter.h"
 #include "cc/output/vulkan_in_process_context_provider.h"
 #include "cc/raster/single_thread_task_graph_runner.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/onscreen_display_client.h"
+#include "cc/surfaces/display.h"
+#include "cc/surfaces/display_scheduler.h"
 #include "cc/surfaces/surface_display_output_surface.h"
 #include "cc/surfaces/surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
@@ -80,23 +83,40 @@ namespace {
 
 const unsigned int kMaxDisplaySwapBuffers = 1U;
 
-class ExternalBeginFrameSource : public cc::BeginFrameSourceBase,
+class ExternalBeginFrameSource : public cc::BeginFrameSource,
                                  public CompositorImpl::VSyncObserver {
  public:
-  ExternalBeginFrameSource(CompositorImpl* compositor)
+  explicit ExternalBeginFrameSource(CompositorImpl* compositor)
       : compositor_(compositor) {
     compositor_->AddObserver(this);
   }
-
   ~ExternalBeginFrameSource() override { compositor_->RemoveObserver(this); }
 
-  // cc::BeginFrameSourceBase implementation:
-  void AddObserver(cc::BeginFrameObserver* obs) override {
-    cc::BeginFrameSourceBase::AddObserver(obs);
-    DCHECK(needs_begin_frames());
-    if (!last_begin_frame_args_.IsValid())
-      return;
+  // cc::BeginFrameSource implementation.
+  void AddObserver(cc::BeginFrameObserver* obs) override;
+  void RemoveObserver(cc::BeginFrameObserver* obs) override;
+  void DidFinishFrame(cc::BeginFrameObserver* obs,
+                      size_t remaining_frames) override {}
 
+  // CompositorImpl::VSyncObserver implementation.
+  void OnVSync(base::TimeTicks frame_time,
+               base::TimeDelta vsync_period) override;
+
+ private:
+  CompositorImpl* const compositor_;
+  std::unordered_set<cc::BeginFrameObserver*> observers_;
+  cc::BeginFrameArgs last_begin_frame_args_;
+};
+
+void ExternalBeginFrameSource::AddObserver(cc::BeginFrameObserver* obs) {
+  DCHECK(obs);
+  DCHECK(observers_.find(obs) == observers_.end());
+
+  observers_.insert(obs);
+  obs->OnBeginFrameSourcePausedChanged(false);
+  compositor_->OnNeedsBeginFramesChange(true);
+
+  if (last_begin_frame_args_.IsValid()) {
     // Send a MISSED begin frame if necessary.
     cc::BeginFrameArgs last_args = obs->LastUsedBeginFrameArgs();
     if (!last_args.IsValid() ||
@@ -111,61 +131,57 @@ class ExternalBeginFrameSource : public cc::BeginFrameSourceBase,
       obs->OnBeginFrame(last_begin_frame_args_);
     }
   }
+}
 
-  void OnNeedsBeginFramesChanged(bool needs_begin_frames) override {
-    TRACE_EVENT1("compositor", "OnNeedsBeginFramesChanged",
-                 "needs_begin_frames", needs_begin_frames);
-    compositor_->OnNeedsBeginFramesChange(needs_begin_frames);
-  }
+void ExternalBeginFrameSource::RemoveObserver(cc::BeginFrameObserver* obs) {
+  DCHECK(obs);
+  DCHECK(observers_.find(obs) != observers_.end());
 
-  // CompositorImpl::VSyncObserver implementation:
-  void OnVSync(base::TimeTicks frame_time,
-               base::TimeDelta vsync_period) override {
-    base::TimeTicks deadline = std::max(base::TimeTicks::Now(), frame_time);
-    last_begin_frame_args_ =
-        cc::BeginFrameArgs::Create(BEGINFRAME_FROM_HERE, frame_time, deadline,
-                                   vsync_period, cc::BeginFrameArgs::NORMAL);
-    CallOnBeginFrame(last_begin_frame_args_);
-  }
+  observers_.erase(obs);
+  if (observers_.empty())
+    compositor_->OnNeedsBeginFramesChange(false);
+}
 
- private:
-  CompositorImpl* compositor_;
-  cc::BeginFrameArgs last_begin_frame_args_;
-};
+void ExternalBeginFrameSource::OnVSync(base::TimeTicks frame_time,
+                                       base::TimeDelta vsync_period) {
+  // frame time is in the past, so give the next vsync period as the deadline.
+  base::TimeTicks deadline = frame_time + vsync_period;
+  last_begin_frame_args_ =
+      cc::BeginFrameArgs::Create(BEGINFRAME_FROM_HERE, frame_time, deadline,
+                                 vsync_period, cc::BeginFrameArgs::NORMAL);
+  std::unordered_set<cc::BeginFrameObserver*> observers(observers_);
+  for (auto* obs : observers)
+    obs->OnBeginFrame(last_begin_frame_args_);
+}
 
 // Used to override capabilities_.adjust_deadline_for_parent to false
-class OutputSurfaceWithoutParent : public cc::OutputSurface,
-                                   public CompositorImpl::VSyncObserver {
+class OutputSurfaceWithoutParent : public cc::OutputSurface {
  public:
   OutputSurfaceWithoutParent(
-      CompositorImpl* compositor,
-      const scoped_refptr<ContextProviderCommandBuffer>& context_provider,
+      scoped_refptr<ContextProviderCommandBuffer> context_provider,
       const base::Callback<void(gpu::Capabilities)>&
-          populate_gpu_capabilities_callback,
-      std::unique_ptr<ExternalBeginFrameSource> begin_frame_source)
-      : cc::OutputSurface(context_provider),
-        compositor_(compositor),
+          populate_gpu_capabilities_callback)
+      : cc::OutputSurface(std::move(context_provider), nullptr, nullptr),
         populate_gpu_capabilities_callback_(populate_gpu_capabilities_callback),
         swap_buffers_completion_callback_(
             base::Bind(&OutputSurfaceWithoutParent::OnSwapBuffersCompleted,
                        base::Unretained(this))),
         overlay_candidate_validator_(
             new display_compositor::
-                CompositorOverlayCandidateValidatorAndroid()),
-        begin_frame_source_(std::move(begin_frame_source)) {
+                CompositorOverlayCandidateValidatorAndroid()) {
     capabilities_.adjust_deadline_for_parent = false;
     capabilities_.max_frames_pending = kMaxDisplaySwapBuffers;
   }
 
-  ~OutputSurfaceWithoutParent() override { compositor_->RemoveObserver(this); }
+  ~OutputSurfaceWithoutParent() override = default;
 
-  void SwapBuffers(cc::CompositorFrame* frame) override {
-    GetCommandBufferProxy()->SetLatencyInfo(frame->metadata.latency_info);
-    if (frame->gl_frame_data->sub_buffer_rect.IsEmpty()) {
+  void SwapBuffers(cc::CompositorFrame frame) override {
+    GetCommandBufferProxy()->SetLatencyInfo(frame.metadata.latency_info);
+    if (frame.gl_frame_data->sub_buffer_rect.IsEmpty()) {
       context_provider_->ContextSupport()->CommitOverlayPlanes();
     } else {
-      DCHECK(frame->gl_frame_data->sub_buffer_rect ==
-             gfx::Rect(frame->gl_frame_data->size));
+      DCHECK(frame.gl_frame_data->sub_buffer_rect ==
+             gfx::Rect(frame.gl_frame_data->size));
       context_provider_->ContextSupport()->Swap();
     }
     client_->DidSwapBuffers();
@@ -180,20 +196,16 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
 
     populate_gpu_capabilities_callback_.Run(
         context_provider_->ContextCapabilities());
-    compositor_->AddObserver(this);
-
-    client->SetBeginFrameSource(begin_frame_source_.get());
-
     return true;
-  }
-
-  void DetachFromClient() override {
-    client_->SetBeginFrameSource(nullptr);
-    OutputSurface::DetachFromClient();
   }
 
   cc::OverlayCandidateValidator* GetOverlayCandidateValidator() const override {
     return overlay_candidate_validator_.get();
+  }
+
+  uint32_t GetFramebufferCopyTextureFormat() override {
+    auto* gl = static_cast<ContextProviderCommandBuffer*>(context_provider());
+    return gl->GetCopyTextureInternalFormat();
   }
 
  private:
@@ -215,12 +227,7 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
     OutputSurface::OnSwapBuffersComplete();
   }
 
-  void OnVSync(base::TimeTicks timebase, base::TimeDelta interval) override {
-    client_->CommitVSyncParameters(timebase, interval);
-  }
-
  private:
-  CompositorImpl* compositor_;
   base::Callback<void(gpu::Capabilities)> populate_gpu_capabilities_callback_;
   base::CancelableCallback<void(
       const std::vector<ui::LatencyInfo>&,
@@ -228,20 +235,14 @@ class OutputSurfaceWithoutParent : public cc::OutputSurface,
       const gpu::GpuProcessHostedCALayerTreeParamsMac* params_mac)>
       swap_buffers_completion_callback_;
   std::unique_ptr<cc::OverlayCandidateValidator> overlay_candidate_validator_;
-  std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
 };
 
 #if defined(ENABLE_VULKAN)
 class VulkanOutputSurface : public cc::OutputSurface {
  public:
-  VulkanOutputSurface(
-      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider,
-      std::unique_ptr<ExternalBeginFrameSource> begin_frame_source)
-      : OutputSurface(nullptr,
-                      nullptr,
-                      std::move(vulkan_context_provider),
-                      nullptr),
-        begin_frame_source_(std::move(begin_frame_source)) {}
+  explicit VulkanOutputSurface(
+      scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider)
+      : OutputSurface(std::move(vulkan_context_provider)) {}
 
   ~VulkanOutputSurface() override { Destroy(); }
 
@@ -261,11 +262,10 @@ class VulkanOutputSurface : public cc::OutputSurface {
   bool BindToClient(cc::OutputSurfaceClient* client) override {
     if (!OutputSurface::BindToClient(client))
       return false;
-    client->SetBeginFrameSource(begin_frame_source_.get());
     return true;
   }
 
-  void SwapBuffers(cc::CompositorFrame* frame) override {
+  void SwapBuffers(cc::CompositorFrame frame) override {
     surface_->SwapBuffers();
     PostSwapBuffersComplete();
     client_->DidSwapBuffers();
@@ -286,7 +286,6 @@ class VulkanOutputSurface : public cc::OutputSurface {
 
  private:
   std::unique_ptr<gpu::VulkanSurface> surface_;
-  std::unique_ptr<ExternalBeginFrameSource> begin_frame_source_;
 
   DISALLOW_COPY_AND_ASSIGN(VulkanOutputSurface);
 };
@@ -473,6 +472,7 @@ void CompositorImpl::CreateLayerTreeHost() {
   params.task_graph_runner = g_task_graph_runner.Pointer();
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
   params.settings = &settings;
+  params.animation_host = cc::AnimationHost::CreateMainInstance();
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
   DCHECK(!host_->visible());
   host_->SetRootLayer(root_layer_);
@@ -494,7 +494,7 @@ void CompositorImpl::SetVisible(bool visible) {
       host_->ReleaseOutputSurface();
     pending_swapbuffers_ = 0;
     establish_gpu_channel_timeout_.Stop();
-    display_client_.reset();
+    display_.reset();
   } else {
     host_->SetVisible(true);
     if (output_surface_request_pending_)
@@ -515,8 +515,8 @@ void CompositorImpl::SetWindowBounds(const gfx::Size& size) {
   size_ = size;
   if (host_)
     host_->SetViewportSize(size);
-  if (display_client_)
-    display_client_->display()->Resize(size);
+  if (display_)
+    display_->Resize(size);
   root_layer_->SetBounds(size);
 }
 
@@ -598,23 +598,22 @@ void CompositorImpl::CreateOutputSurface() {
   scoped_refptr<ContextProviderCommandBuffer> context_provider;
   scoped_refptr<cc::VulkanInProcessContextProvider> vulkan_context_provider =
       SharedVulkanContextProviderAndroid();
-  std::unique_ptr<cc::OutputSurface> real_output_surface;
+  std::unique_ptr<cc::OutputSurface> display_output_surface;
 #if defined(ENABLE_VULKAN)
   std::unique_ptr<VulkanOutputSurface> vulkan_surface;
   if (vulkan_context_provider) {
-    vulkan_surface.reset(new VulkanOutputSurface(
-        std::move(vulkan_context_provider),
-        base::WrapUnique(new ExternalBeginFrameSource(this))));
+    vulkan_surface.reset(
+        new VulkanOutputSurface(std::move(vulkan_context_provider)));
     if (!vulkan_surface->Initialize(window_)) {
       vulkan_surface->Destroy();
       vulkan_surface.reset();
     } else {
-      real_output_surface = std::move(vulkan_surface);
+      display_output_surface = std::move(vulkan_surface);
     }
   }
 #endif
 
-  if (!real_output_surface) {
+  if (!display_output_surface) {
     // This is used for the browser compositor (offscreen) and for the display
     // compositor (onscreen), so ask for capabilities needed by either one.
     // The default framebuffer for an offscreen context is not used, so it does
@@ -686,41 +685,44 @@ void CompositorImpl::CreateOutputSurface() {
 
     context_provider = new ContextProviderCommandBuffer(
         std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
-        gpu::GpuStreamPriority::NORMAL, surface_handle_, url,
-        gfx::PreferIntegratedGpu, automatic_flushes, support_locking, limits,
-        attributes, nullptr,
+        gpu::GpuStreamPriority::NORMAL, surface_handle_, url, automatic_flushes,
+        support_locking, limits, attributes, nullptr,
         command_buffer_metrics::DISPLAY_COMPOSITOR_ONSCREEN_CONTEXT);
     DCHECK(context_provider.get());
 
-    real_output_surface = base::WrapUnique(new OutputSurfaceWithoutParent(
-        this, context_provider,
-        base::Bind(&CompositorImpl::PopulateGpuCapabilities,
-                   base::Unretained(this)),
-        base::WrapUnique(new ExternalBeginFrameSource(this))));
+    display_output_surface = base::WrapUnique(new OutputSurfaceWithoutParent(
+        context_provider, base::Bind(&CompositorImpl::PopulateGpuCapabilities,
+                                     base::Unretained(this))));
   }
 
   cc::SurfaceManager* manager = GetSurfaceManager();
-  display_client_.reset(new cc::OnscreenDisplayClient(
-      std::move(real_output_surface), manager,
-      HostSharedBitmapManager::current(),
-      BrowserGpuMemoryBufferManager::current(),
-      host_->settings().renderer_settings, base::ThreadTaskRunnerHandle::Get(),
-      surface_id_allocator_->id_namespace()));
+  auto* task_runner = base::ThreadTaskRunnerHandle::Get().get();
+  std::unique_ptr<ExternalBeginFrameSource> begin_frame_source(
+      new ExternalBeginFrameSource(this));
+  std::unique_ptr<cc::DisplayScheduler> scheduler(new cc::DisplayScheduler(
+      begin_frame_source.get(), task_runner,
+      display_output_surface->capabilities().max_frames_pending));
 
-  std::unique_ptr<cc::SurfaceDisplayOutputSurface> surface_output_surface(
+  display_.reset(new cc::Display(
+      manager, HostSharedBitmapManager::current(),
+      BrowserGpuMemoryBufferManager::current(),
+      host_->settings().renderer_settings,
+      surface_id_allocator_->id_namespace(), std::move(begin_frame_source),
+      std::move(display_output_surface), std::move(scheduler),
+      base::MakeUnique<cc::TextureMailboxDeleter>(task_runner)));
+
+  std::unique_ptr<cc::SurfaceDisplayOutputSurface> delegated_output_surface(
       vulkan_context_provider
           ? new cc::SurfaceDisplayOutputSurface(
-                manager, surface_id_allocator_.get(),
+                manager, surface_id_allocator_.get(), display_.get(),
                 static_cast<scoped_refptr<cc::VulkanContextProvider>>(
                     vulkan_context_provider))
-          : new cc::SurfaceDisplayOutputSurface(manager,
-                                                surface_id_allocator_.get(),
-                                                context_provider, nullptr));
+          : new cc::SurfaceDisplayOutputSurface(
+                manager, surface_id_allocator_.get(), display_.get(),
+                context_provider, nullptr));
 
-  display_client_->set_surface_output_surface(surface_output_surface.get());
-  surface_output_surface->set_display_client(display_client_.get());
-  display_client_->display()->Resize(size_);
-  host_->SetOutputSurface(std::move(surface_output_surface));
+  display_->Resize(size_);
+  host_->SetOutputSurface(std::move(delegated_output_surface));
 }
 
 void CompositorImpl::PopulateGpuCapabilities(
@@ -775,6 +777,10 @@ void CompositorImpl::DidAbortSwapBuffers() {
 
 void CompositorImpl::DidCommit() {
   root_window_->OnCompositingDidCommit();
+}
+
+void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
+  root_layer_->AddChild(layer);
 }
 
 void CompositorImpl::RequestCopyOfOutputOnRootLayer(

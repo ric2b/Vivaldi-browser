@@ -6,10 +6,10 @@
 
 #include <memory>
 
+#include "ash/common/wm/window_state.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/common/window_state.h"
 #include "ui/gfx/font_list.h"
 #include "ui/views/test/test_views.h"
 #include "ui/views/widget/widget.h"
@@ -44,9 +44,7 @@ TEST_F(DefaultHeaderPainterTest, TitleIconAlignment) {
   w->Show();
 
   DefaultHeaderPainter painter;
-  painter.Init(w.get(),
-               w->non_client_view()->frame_view(),
-               &container);
+  painter.Init(w.get(), w->non_client_view()->frame_view(), &container);
   painter.UpdateLeftHeaderView(&window_icon);
   painter.LayoutHeader();
   gfx::Rect title_bounds = painter.GetTitleBounds();

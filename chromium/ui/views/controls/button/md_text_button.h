@@ -7,22 +7,17 @@
 
 #include <memory>
 
-#include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/controls/button/label_button.h"
 
 namespace views {
 
+namespace internal {
+class MdFocusRing;
+}  // namespace internal
+
 // A button class that implements the Material Design text button spec.
 class VIEWS_EXPORT MdTextButton : public LabelButton {
  public:
-  // Describes the presentation of a button. A stronger call to action draws
-  // more attention.
-  enum CallToAction {
-    NO_CALL_TO_ACTION,  // Default.
-    WEAK_CALL_TO_ACTION,
-    STRONG_CALL_TO_ACTION,
-  };
-
   // Creates a normal STYLE_BUTTON LabelButton in pre-MD, or an MdTextButton
   // in MD mode.
   static LabelButton* CreateStandardButton(ButtonListener* listener,
@@ -36,24 +31,39 @@ class VIEWS_EXPORT MdTextButton : public LabelButton {
   static MdTextButton* CreateMdButton(ButtonListener* listener,
                                       const base::string16& text);
 
-  void SetCallToAction(CallToAction cta);
+  // Paint an MD-style focus ring on the given canvas at the given bounds.
+  static void PaintMdFocusRing(gfx::Canvas* canvas,
+                               View* view,
+                               int thickness,
+                               SkAlpha alpha);
+
+  void SetCallToAction(bool cta);
 
   // LabelButton:
+  void Layout() override;
+  void OnFocus() override;
+  void OnBlur() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
+  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
+      const override;
   SkColor GetInkDropBaseColor() const override;
-  void SetText(const base::string16& text) override;
+  bool ShouldShowInkDropForFocus() const override;
+  void SetEnabledTextColors(SkColor color) override;
   void UpdateStyleToIndicateDefaultStatus() override;
 
  private:
   MdTextButton(ButtonListener* listener);
   ~MdTextButton() override;
 
-  void UpdateColorsFromNativeTheme();
+  void UpdateColors();
 
-  ButtonInkDropDelegate ink_drop_delegate_;
+  // The MD-style focus ring. This is not done via a FocusPainter
+  // because it needs to paint to a layer so it can extend beyond the bounds of
+  // |this|.
+  internal::MdFocusRing* focus_ring_;
 
-  // The call to action style for this button.
-  CallToAction cta_;
+  // True if this button uses call-to-action styling.
+  bool is_cta_;
 
   DISALLOW_COPY_AND_ASSIGN(MdTextButton);
 };

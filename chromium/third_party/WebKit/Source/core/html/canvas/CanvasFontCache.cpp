@@ -10,6 +10,7 @@
 #include "core/style/ComputedStyle.h"
 #include "platform/fonts/FontCache.h"
 #include "public/platform/Platform.h"
+#include "wtf/PtrUtil.h"
 
 namespace {
 
@@ -40,7 +41,7 @@ CanvasFontCache::CanvasFontCache(Document& document)
 
 CanvasFontCache::~CanvasFontCache()
 {
-    m_mainCachePurgePreventer.clear();
+    m_mainCachePurgePreventer.reset();
     if (m_pruningScheduled) {
         Platform::current()->currentThread()->removeTaskObserver(this);
     }
@@ -124,7 +125,7 @@ void CanvasFontCache::didProcessTask()
         m_fontsResolvedUsingDefaultStyle.remove(m_fontLRUList.first());
         m_fontLRUList.removeFirst();
     }
-    m_mainCachePurgePreventer.clear();
+    m_mainCachePurgePreventer.reset();
     Platform::current()->currentThread()->removeTaskObserver(this);
     m_pruningScheduled = false;
 }
@@ -134,7 +135,7 @@ void CanvasFontCache::schedulePruningIfNeeded()
     if (m_pruningScheduled)
         return;
     ASSERT(!m_mainCachePurgePreventer);
-    m_mainCachePurgePreventer = adoptPtr(new FontCachePurgePreventer);
+    m_mainCachePurgePreventer = wrapUnique(new FontCachePurgePreventer);
     Platform::current()->currentThread()->addTaskObserver(this);
     m_pruningScheduled = true;
 }

@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/guid.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -43,10 +44,8 @@
 #include "content/common/frame_messages.h"
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/common/gpu_process_launch_causes.h"
-#include "content/common/mime_registry_messages.h"
 #include "content/common/render_process_messages.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/media_stream_utils.h"
@@ -61,6 +60,7 @@
 #include "content/renderer/gamepad_shared_memory_reader.h"
 #include "content/renderer/media/audio_decoder.h"
 #include "content/renderer/media/canvas_capture_handler.h"
+#include "content/renderer/media/html_audio_element_capturer_source.h"
 #include "content/renderer/media/html_video_element_capturer_source.h"
 #include "content/renderer/media/image_capture_frame_grabber.h"
 #include "content/renderer/media/media_recorder_handler.h"
@@ -84,6 +84,7 @@
 #include "media/base/mime_util.h"
 #include "media/blink/webcontentdecryptionmodule_impl.h"
 #include "media/filters/stream_parser_factory.h"
+#include "mojo/common/common_type_converters.h"
 #include "storage/common/database/database_identifier.h"
 #include "storage/common/quota/quota_types.h"
 #include "third_party/WebKit/public/platform/BlameContext.h"
@@ -99,9 +100,9 @@
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
+#include "third_party/WebKit/public/platform/mime_registry.mojom.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionListener.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationListener.h"
-#include "ui/gfx/color_profile.h"
 #include "url/gurl.h"
 
 #if defined(OS_MACOSX)
@@ -192,6 +193,9 @@ class RendererBlinkPlatformImpl::MimeRegistry
                                    const blink::WebString& codecs) override;
   blink::WebString mimeTypeForExtension(
       const blink::WebString& file_extension) override;
+
+ private:
+  blink::mojom::MimeRegistryPtr mime_registry_;
 };
 
 class RendererBlinkPlatformImpl::FileUtilities : public WebFileUtilitiesImpl {
@@ -238,7 +242,7 @@ class RendererBlinkPlatformImpl::SandboxSupport
 
 RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
     scheduler::RendererScheduler* renderer_scheduler,
-    base::WeakPtr<ServiceRegistry> service_registry)
+    base::WeakPtr<shell::InterfaceProvider> remote_interfaces)
     : BlinkPlatformImpl(renderer_scheduler->DefaultTaskRunner()),
       main_thread_(renderer_scheduler->CreateMainThread()),
       clipboard_delegate_(new RendererClipboardDelegate),
@@ -250,7 +254,8 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
       loading_task_runner_(renderer_scheduler->LoadingTaskRunner()),
       web_scrollbar_behavior_(new WebScrollbarBehaviorImpl),
       renderer_scheduler_(renderer_scheduler),
-      blink_service_registry_(new BlinkServiceRegistryImpl(service_registry)) {
+      blink_service_registry_(
+          new BlinkServiceRegistryImpl(remote_interfaces)) {
 #if !defined(OS_ANDROID) && !defined(OS_WIN)
   if (g_sandbox_enabled && sandboxEnabled()) {
     sandbox_support_.reset(new RendererBlinkPlatformImpl::SandboxSupport);
@@ -517,11 +522,15 @@ WebString RendererBlinkPlatformImpl::MimeRegistry::mimeTypeForExtension(
     const WebString& file_extension) {
   // The sandbox restricts our access to the registry, so we need to proxy
   // these calls over to the browser process.
-  std::string mime_type;
-  RenderThread::Get()->Send(
-      new MimeRegistryMsg_GetMimeTypeFromExtension(
-          blink::WebStringToFilePath(file_extension).value(), &mime_type));
-  return base::ASCIIToUTF16(mime_type);
+  if (!mime_registry_)
+    RenderThread::Get()->GetRemoteInterfaces()->GetInterface(&mime_registry_);
+
+  mojo::String mime_type;
+  if (!mime_registry_->GetMimeTypeFromExtension(
+          mojo::String::From(base::string16(file_extension)), &mime_type)) {
+    return WebString();
+  }
+  return base::ASCIIToUTF16(mime_type.get());
 }
 
 //------------------------------------------------------------------------------
@@ -645,11 +654,8 @@ long long RendererBlinkPlatformImpl::databaseGetFileSize(
 
 long long RendererBlinkPlatformImpl::databaseGetSpaceAvailableForOrigin(
     const blink::WebSecurityOrigin& origin) {
-  // TODO(jsbell): Pass url::Origin over IPC instead of database
-  // identifier/GURL. https://crbug.com/591482
-  return DatabaseUtil::DatabaseGetSpaceAvailable(WebString::fromUTF8(
-      storage::GetIdentifierFromOrigin(WebSecurityOriginToGURL(origin))),
-      sync_message_filter_.get());
+  return DatabaseUtil::DatabaseGetSpaceAvailable(origin,
+                                                 sync_message_filter_.get());
 }
 
 bool RendererBlinkPlatformImpl::databaseSetFileSize(
@@ -842,27 +848,6 @@ blink::WebString RendererBlinkPlatformImpl::signedPublicKeyAndChallengeString(
 
 //------------------------------------------------------------------------------
 
-void RendererBlinkPlatformImpl::screenColorProfile(
-    WebVector<char>* to_profile) {
-#if defined(OS_WIN)
-  // On Windows screen color profile is only available in the browser.
-  std::vector<char> profile;
-  // This Send() can be called from any impl-side thread. Use a thread
-  // safe send to avoid crashing trying to access RenderThread::Get(),
-  // which is not accessible from arbitrary threads.
-  thread_safe_sender_->Send(
-      new RenderProcessHostMsg_GetMonitorColorProfile(&profile));
-  *to_profile = profile;
-#else
-  // On other platforms, the primary monitor color profile can be read
-  // directly.
-  gfx::ColorProfile profile;
-  *to_profile = profile.profile();
-#endif
-}
-
-//------------------------------------------------------------------------------
-
 blink::WebScrollbarBehavior* RendererBlinkPlatformImpl::scrollbarBehavior() {
   return web_scrollbar_behavior_.get();
 }
@@ -981,6 +966,33 @@ void RendererBlinkPlatformImpl::createHTMLVideoElementCapturer(
 #endif
 }
 
+void RendererBlinkPlatformImpl::createHTMLAudioElementCapturer(
+    WebMediaStream* web_media_stream,
+    WebMediaPlayer* web_media_player) {
+  DCHECK(web_media_stream);
+  DCHECK(web_media_player);
+
+  blink::WebMediaStreamSource web_media_stream_source;
+  blink::WebMediaStreamTrack web_media_stream_track;
+  const WebString track_id = WebString::fromUTF8(base::GenerateGUID());
+
+  web_media_stream_source.initialize(track_id,
+                                     blink::WebMediaStreamSource::TypeAudio,
+                                     track_id,
+                                     false /* is_remote */);
+  web_media_stream_track.initialize(web_media_stream_source);
+
+  MediaStreamAudioSource* const media_stream_source =
+      HtmlAudioElementCapturerSource::CreateFromWebMediaPlayerImpl(
+          web_media_player);
+
+  // Takes ownership of |media_stream_source|.
+  web_media_stream_source.setExtraData(media_stream_source);
+
+  media_stream_source->ConnectToTrack(web_media_stream_track);
+  web_media_stream->addTrack(web_media_stream_track);
+}
+
 //------------------------------------------------------------------------------
 
 WebImageCaptureFrameGrabber*
@@ -1078,6 +1090,8 @@ RendererBlinkPlatformImpl::createOffscreenGraphicsContext3DProvider(
   attributes.samples = 0;
   attributes.sample_buffers = 0;
   attributes.bind_generates_resource = false;
+  // Prefer discrete GPU for WebGL.
+  attributes.gpu_preference = gl::PreferDiscreteGpu;
 
   attributes.fail_if_major_perf_caveat =
       web_attributes.failIfMajorPerformanceCaveat;
@@ -1090,15 +1104,13 @@ RendererBlinkPlatformImpl::createOffscreenGraphicsContext3DProvider(
 
   constexpr bool automatic_flushes = true;
   constexpr bool support_locking = false;
-  // Prefer discrete GPU for WebGL.
-  constexpr gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
 
   scoped_refptr<ContextProviderCommandBuffer> provider(
       new ContextProviderCommandBuffer(
           std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
           gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
-          GURL(top_document_web_url), gpu_preference, automatic_flushes,
-          support_locking, gpu::SharedMemoryLimits(), attributes, share_context,
+          GURL(top_document_web_url), automatic_flushes, support_locking,
+          gpu::SharedMemoryLimits(), attributes, share_context,
           command_buffer_metrics::OFFSCREEN_CONTEXT_FOR_WEBGL));
   return new WebGraphicsContext3DProviderImpl(std::move(provider));
 }

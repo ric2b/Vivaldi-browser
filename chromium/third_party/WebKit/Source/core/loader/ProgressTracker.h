@@ -32,11 +32,12 @@
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
 class LocalFrame;
+class Resource;
 class ResourceResponse;
 struct ProgressItem;
 
@@ -59,35 +60,29 @@ public:
 
     void finishedParsing();
 
+    void willStartLoading(unsigned long identifier);
     void incrementProgress(unsigned long identifier, const ResourceResponse&);
     void incrementProgress(unsigned long identifier, int);
     void completeProgress(unsigned long identifier);
-
-    long long totalPageAndResourceBytesToLoad() const { return m_totalPageAndResourceBytesToLoad; }
-    long long totalBytesReceived() const { return m_totalBytesReceived; }
 
 private:
     explicit ProgressTracker(LocalFrame*);
 
     void incrementProgressForMainResourceOnly(unsigned long identifier, int length);
+    void maybeSendProgress();
     void sendFinalProgress();
     void reset();
 
     Member<LocalFrame> m_frame;
-    unsigned long m_mainResourceIdentifier;
-    long long m_totalPageAndResourceBytesToLoad;
-    long long m_totalBytesReceived;
     double m_lastNotifiedProgressValue;
     double m_lastNotifiedProgressTime;
-    double m_progressNotificationInterval;
-    double m_progressNotificationTimeInterval;
-    bool m_finalProgressChangedSent;
+    bool m_finishedParsing;
     double m_progressValue;
 
     int m_elementsLoaded;
     int m_elementsTotal;
 
-    HashMap<unsigned long, OwnPtr<ProgressItem>> m_progressItems;
+    HashMap<unsigned long, std::unique_ptr<ProgressItem>> m_progressItems;
 };
 
 } // namespace blink

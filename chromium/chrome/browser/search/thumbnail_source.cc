@@ -7,14 +7,16 @@
 #include <stddef.h>
 
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_io_context.h"
-#include "chrome/browser/search/suggestions/image_fetcher_impl.h"
+#include "chrome/browser/search/suggestions/image_decoder_impl.h"
 #include "chrome/browser/thumbnails/thumbnail_service.h"
 #include "chrome/browser/thumbnails/thumbnail_service_factory.h"
 #include "chrome/common/url_constants.h"
+#include "components/image_fetcher/image_fetcher_impl.h"
 #include "components/suggestions/image_encoder.h"
 #include "net/url_request/url_request.h"
 #include "ui/gfx/image/image.h"
@@ -44,7 +46,9 @@ ThumbnailSource::ThumbnailSource(Profile* profile, bool capture_thumbnails)
       capture_thumbnails_(capture_thumbnails),
       weak_ptr_factory_(this) {
   image_fetcher_.reset(
-      new suggestions::ImageFetcherImpl(profile->GetRequestContext()));
+      new image_fetcher::ImageFetcherImpl(
+          base::MakeUnique<suggestions::ImageDecoderImpl>(),
+          profile->GetRequestContext()));
 }
 
 ThumbnailSource::~ThumbnailSource() {
@@ -75,7 +79,7 @@ void ThumbnailSource::StartDataRequest(
     // Otherwise, if a fallback thumbnail URL was provided, fetch it and
     // eventually return it.
     image_fetcher_->StartOrQueueNetworkRequest(
-        page_url, fallback_thumbnail_url,
+        page_url.spec(), fallback_thumbnail_url,
         base::Bind(&ThumbnailSource::SendFetchedUrlImage,
                    weak_ptr_factory_.GetWeakPtr(), callback));
   } else {
@@ -126,7 +130,7 @@ void ThumbnailSource::ExtractPageAndThumbnailUrls(
 
 void ThumbnailSource::SendFetchedUrlImage(
     const content::URLDataSource::GotDataCallback& callback,
-    const GURL& url,
+    const std::string& url,
     const gfx::Image& image) {
   // In case the image could not be retrieved an empty image is returned.
   if (image.IsEmpty()) {

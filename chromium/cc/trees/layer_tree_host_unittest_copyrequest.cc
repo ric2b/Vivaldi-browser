@@ -4,7 +4,10 @@
 
 #include <stddef.h>
 
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/layer_iterator.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
@@ -47,7 +50,7 @@ class LayerTreeHostCopyRequestTestMultipleRequests
   void DidCommit() override { WaitForCallback(); }
 
   void WaitForCallback() {
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
         base::Bind(&LayerTreeHostCopyRequestTestMultipleRequests::NextStep,
                    base::Unretained(this)));
@@ -1191,7 +1194,7 @@ class LayerTreeHostCopyRequestTestMultipleDrawsHiddenCopyRequest
   DrawResult PrepareToDrawOnThread(LayerTreeHostImpl* host_impl,
                                    LayerTreeHostImpl::FrameData* frame_data,
                                    DrawResult draw_result) override {
-    LayerImpl* root = host_impl->active_tree()->root_layer();
+    LayerImpl* root = host_impl->active_tree()->root_layer_for_testing();
     LayerImpl* child = host_impl->active_tree()->LayerById(child_->id());
 
     bool saw_root = false;

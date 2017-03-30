@@ -4,13 +4,12 @@
 
 #include "ash/wm/window_cycle_controller.h"
 
-#include "ash/metrics/user_metrics_recorder.h"
-#include "ash/session/session_state_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/wm/mru_window_tracker.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_cycle_list.h"
 #include "base/metrics/histogram.h"
-#include "ui/aura/window.h"
 #include "ui/events/event.h"
 #include "ui/events/event_handler.h"
 
@@ -20,7 +19,7 @@ namespace {
 
 // Returns the most recently active window from the |window_list| or nullptr
 // if the list is empty.
-aura::Window* GetActiveWindow(const MruWindowTracker::WindowList& window_list) {
+WmWindow* GetActiveWindow(const MruWindowTracker::WindowList& window_list) {
   return window_list.empty() ? nullptr : window_list[0];
 }
 
@@ -47,6 +46,13 @@ WindowCycleEventFilter::~WindowCycleEventFilter() {
 }
 
 void WindowCycleEventFilter::OnKeyEvent(ui::KeyEvent* event) {
+  // Until the alt key is released, all key events except the tab press (which
+  // is handled by the accelerator controller to call Step) are handled by this
+  // window cycle controller: https://crbug.com/340339.
+  if (event->key_code() != ui::VKEY_TAB ||
+      event->type() != ui::ET_KEY_PRESSED) {
+    event->StopPropagation();
+  }
   // Views uses VKEY_MENU for both left and right Alt keys.
   if (event->key_code() == ui::VKEY_MENU &&
       event->type() == ui::ET_KEY_RELEASED) {
@@ -60,18 +66,16 @@ void WindowCycleEventFilter::OnKeyEvent(ui::KeyEvent* event) {
 //////////////////////////////////////////////////////////////////////////////
 // WindowCycleController, public:
 
-WindowCycleController::WindowCycleController() {
-}
+WindowCycleController::WindowCycleController() {}
 
-WindowCycleController::~WindowCycleController() {
-}
+WindowCycleController::~WindowCycleController() {}
 
 // static
 bool WindowCycleController::CanCycle() {
-  // Don't allow window cycling if the screen is locked or a modal dialog is
-  // open.
-  return !Shell::GetInstance()->session_state_delegate()->IsScreenLocked() &&
-         !Shell::GetInstance()->IsSystemModalWindowOpen();
+  // Prevent window cycling if the screen is locked or a modal dialog is open.
+  WmShell* wm_shell = WmShell::Get();
+  return !wm_shell->GetSessionStateDelegate()->IsScreenLocked() &&
+         !wm_shell->IsSystemModalWindowOpen() && !wm_shell->IsPinned();
 }
 
 void WindowCycleController::HandleCycleWindow(Direction direction) {
@@ -86,14 +90,16 @@ void WindowCycleController::HandleCycleWindow(Direction direction) {
 
 void WindowCycleController::StartCycling() {
   MruWindowTracker::WindowList window_list =
-      Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList();
+      WmShell::Get()->mru_window_tracker()->BuildMruWindowList();
 
   active_window_before_window_cycle_ = GetActiveWindow(window_list);
 
   window_cycle_list_.reset(new WindowCycleList(window_list));
   event_handler_.reset(new WindowCycleEventFilter());
   cycle_start_time_ = base::Time::Now();
-  Shell::GetInstance()->metrics()->RecordUserMetricsAction(UMA_WINDOW_CYCLE);
+  WmShell::Get()->RecordUserMetricsAction(UMA_WINDOW_CYCLE);
+  UMA_HISTOGRAM_COUNTS_100("Ash.WindowCycleController.Items",
+                           window_list.size());
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -105,10 +111,12 @@ void WindowCycleController::Step(Direction direction) {
 }
 
 void WindowCycleController::StopCycling() {
+  UMA_HISTOGRAM_COUNTS_100("Ash.WindowCycleController.SelectionDepth",
+                           window_cycle_list_->current_index() + 1);
   window_cycle_list_.reset();
 
-  aura::Window* active_window_after_window_cycle = GetActiveWindow(
-      Shell::GetInstance()->mru_window_tracker()->BuildMruWindowList());
+  WmWindow* active_window_after_window_cycle = GetActiveWindow(
+      WmShell::Get()->mru_window_tracker()->BuildMruWindowList());
 
   // Remove our key event filter.
   event_handler_.reset();

@@ -35,6 +35,7 @@
 #include "platform/mediastream/MediaStreamSource.h"
 #include "public/platform/WebMediaConstraints.h"
 #include "wtf/Forward.h"
+#include <memory>
 
 namespace blink {
 
@@ -42,6 +43,7 @@ class AudioSourceProvider;
 class ExceptionState;
 class MediaTrackConstraints;
 class MediaStreamTrackSourcesCallback;
+class MediaTrackSettings;
 
 class MODULES_EXPORT MediaStreamTrack
     : public EventTargetWithInlineData
@@ -76,6 +78,8 @@ public:
     // Called from UserMediaRequest when it succeeds. It is not IDL-exposed.
     void setConstraints(const WebMediaConstraints&);
 
+    void getSettings(MediaTrackSettings&);
+
     DEFINE_ATTRIBUTE_EVENT_LISTENER(mute);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(unmute);
     DEFINE_ATTRIBUTE_EVENT_LISTENER(ended);
@@ -96,7 +100,7 @@ public:
     // ActiveDOMObject
     void stop() override;
 
-    PassOwnPtr<AudioSourceProvider> createWebAudioSource();
+    std::unique_ptr<AudioSourceProvider> createWebAudioSource();
 
     DECLARE_VIRTUAL_TRACE();
 

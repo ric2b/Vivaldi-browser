@@ -12,17 +12,18 @@ source_set("unittest_support") {
     "test_window.h",
     "test_window_tree.cc",
     "test_window_tree.h",
-    "test_window_tree_connection_setup.cc",
-    "test_window_tree_connection_setup.h",
-    "window_tree_client_impl_private.cc",
-    "window_tree_client_impl_private.h",
+    "test_window_tree_client_setup.cc",
+    "test_window_tree_client_setup.h",
+    "window_tree_client_private.cc",
+    "window_tree_client_private.h",
   ]
 
   deps = [
     "//base",
     "//components/mus/public/cpp",
-    "//mojo/converters/geometry",
     "//testing/gtest",
+    "//ui/display",
+    "//ui/gfx/geometry/mojo",
   ]
 }
 
@@ -54,7 +55,7 @@ test("mus_public_unittests") {
     "run_all_unittests.cc",
     "window_server_test_suite.cc",
     "window_server_test_suite.h",
-    "window_tree_client_impl_unittest.cc",
+    "window_tree_client_unittest.cc",
     "window_unittest.cc",
   ]
 
@@ -65,18 +66,14 @@ test("mus_public_unittests") {
     "//components/mus/common:mus_common",
     "//components/mus/public/cpp",
     "//mojo/common:common_base",
-    "//mojo/converters/geometry",
-    "//mojo/converters/input_events",
     "//mojo/edk/system",
-    "//mojo/gles2",
-    "//mojo/platform_handle:platform_handle_impl",
     "//mojo/public/cpp/system",
     "//services/shell/public/cpp",
     "//testing/gtest",
     "//ui/events",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
-    "//ui/mojo/geometry:interfaces",
+    "//ui/gfx/geometry/mojo",
   ]
 
   if (use_x11) {

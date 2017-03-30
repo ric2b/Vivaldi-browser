@@ -6,7 +6,9 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -38,7 +40,7 @@ std::unique_ptr<base::ListValue> GetAvatarIcons() {
   std::unique_ptr<base::ListValue> avatar_icons(new base::ListValue);
   for (size_t i = 0; i < profiles::GetDefaultAvatarIconCount(); ++i) {
     std::string avatar_url = profiles::GetDefaultAvatarIconUrl(i);
-    avatar_icons->Append(new base::StringValue(avatar_url));
+    avatar_icons->AppendString(avatar_url);
   }
 
   return avatar_icons;
@@ -167,7 +169,7 @@ void SupervisedUserImportHandler::OnSupervisedUsersChanged() {
 }
 
 void SupervisedUserImportHandler::FetchSupervisedUsers() {
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "options.SupervisedUserListData.resetPromise");
   RequestSupervisedUserImportUpdate(NULL);
 }
@@ -219,7 +221,8 @@ void SupervisedUserImportHandler::SendExistingSupervisedUsers(
     std::string name;
     value->GetString(SupervisedUserSyncService::kName, &name);
 
-    base::DictionaryValue* supervised_user = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> supervised_user(
+        new base::DictionaryValue);
     supervised_user->SetString("id", it.key());
     supervised_user->SetString("name", name);
 
@@ -252,16 +255,16 @@ void SupervisedUserImportHandler::SendExistingSupervisedUsers(
         supervised_user_ids.find(it.key()) != supervised_user_ids.end();
     supervised_user->SetBoolean("onCurrentDevice", on_current_device);
 
-    supervised_users.Append(supervised_user);
+    supervised_users.Append(std::move(supervised_user));
   }
 
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "options.SupervisedUserListData.receiveExistingSupervisedUsers",
       supervised_users);
 }
 
 void SupervisedUserImportHandler::ClearSupervisedUsersAndShowError() {
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "options.SupervisedUserListData.onSigninError");
 }
 

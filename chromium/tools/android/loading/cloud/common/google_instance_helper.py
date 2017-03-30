@@ -19,6 +19,7 @@ class GoogleInstanceHelper(object):
     self._compute_api = discovery.build('compute','v1', credentials=credentials)
     self._project = project
     self._project_api_url = self._COMPUTE_API_ROOT + project
+    self._region = 'europe-west1'
     self._zone = 'europe-west1-c'
     self._logger = logger
 
@@ -58,9 +59,17 @@ class GoogleInstanceHelper(object):
     """Returns the name of the instance group associated with tag."""
     return 'group-' + tag
 
-  def CreateTemplate(self, tag, bucket):
-    """Creates an instance template for instances identified by tag and using
-    bucket for deployment. Returns True if successful.
+  def CreateTemplate(self, tag, bucket, task_dir):
+    """Creates an instance template for instances identified by tag.
+
+    Args:
+      tag: (string) Tag associated to a task.
+      bucket: (string) Root bucket where the deployment is located.
+      task_dir: (string) Subdirectory of |bucket| where task data is read and
+                         written.
+
+    Returns:
+      boolean: True if successful.
     """
     image_url = self._COMPUTE_API_ROOT + \
                 'ubuntu-os-cloud/global/images/ubuntu-1404-trusty-v20160406'
@@ -93,6 +102,8 @@ class GoogleInstanceHelper(object):
             'metadata': { 'items': [
                 {'key': 'cloud-storage-path',
                  'value': bucket},
+                {'key': 'task-dir',
+                 'value': task_dir},
                 {'key': 'startup-script-url',
                  'value': 'gs://%s/deployment/startup-script.sh' % bucket},
                 {'key': 'taskqueue-tag', 'value': tag}]}}}
@@ -177,4 +188,23 @@ class GoogleInstanceHelper(object):
     if not success:
       return -1
     return len(response.get('managedInstances', []))
+
+
+  def GetAvailableInstanceCount(self):
+    """Returns the number of instances that can be created, according to the
+    ComputeEngine quotas, or -1 on failure.
+    """
+    request = self._compute_api.regions().get(project=self._project,
+                                              region=self._region)
+    (success, response) = self._ExecuteApiRequest(request)
+    if not success:
+      self._logger.error('Could not get ComputeEngine region information.')
+      return -1
+    metric_name = 'IN_USE_ADDRESSES'
+    for quota in response.get('quotas', []):
+      if quota['metric'] == metric_name:
+        return quota['limit'] - quota['usage']
+    self._logger.error(
+        metric_name + ' quota not found in ComputeEngine response.')
+    return -1
 

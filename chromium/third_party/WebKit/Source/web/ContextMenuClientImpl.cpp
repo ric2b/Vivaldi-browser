@@ -109,7 +109,7 @@ static bool IsWhiteSpaceOrPunctuation(UChar c)
 static String selectMisspellingAsync(LocalFrame* selectedFrame, String& description, uint32_t& hash)
 {
     VisibleSelection selection = selectedFrame->selection().selection();
-    if (!selection.isCaretOrRange())
+    if (selection.isNone())
         return String();
 
     // Caret and range selections always return valid normalized ranges.
@@ -131,7 +131,16 @@ static String selectMisspellingAsync(LocalFrame* selectedFrame, String& descript
     return markerRange->text();
 }
 
-void ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu)
+bool ContextMenuClientImpl::shouldShowContextMenuFromTouch(const WebContextMenuData& data)
+{
+    return m_webView->page()->settings().alwaysShowContextMenuOnTouch()
+        || !data.linkURL.isEmpty()
+        || data.mediaType == WebContextMenuData::MediaTypeImage
+        || data.mediaType == WebContextMenuData::MediaTypeVideo
+        || data.isEditable;
+}
+
+bool ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu, bool fromTouch)
 {
     // Displaying the context menu in this function is a big hack as we don't
     // have context, i.e. whether this is being invoked via a script or in
@@ -139,7 +148,7 @@ void ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu)
     // Keyboard events KeyVK_APPS, Shift+F10). Check if this is being invoked
     // in response to the above input events before popping up the context menu.
     if (!ContextMenuAllowedScope::isContextMenuAllowed())
-        return;
+        return false;
 
     HitTestResult r = m_webView->page()->contextMenuController().hitTestResult();
 
@@ -362,10 +371,16 @@ void ContextMenuClientImpl::showContextMenu(const ContextMenu* defaultMenu)
         data.inputFieldType = WebContextMenuData::InputFieldTypeNone;
     }
 
+    if (fromTouch && !shouldShowContextMenuFromTouch(data))
+        return false;
+
     WebLocalFrameImpl* selectedWebFrame = WebLocalFrameImpl::fromFrame(selectedFrame);
     selectedWebFrame->setContextMenuNode(r.innerNodeOrImageMapImage());
-    if (selectedWebFrame->client())
-        selectedWebFrame->client()->showContextMenu(data);
+    if (!selectedWebFrame->client())
+        return false;
+
+    selectedWebFrame->client()->showContextMenu(data);
+    return true;
 }
 
 void ContextMenuClientImpl::clearContextMenu()

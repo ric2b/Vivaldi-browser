@@ -106,6 +106,7 @@ void ProxyMain::DidLoseOutputSurface() {
 }
 
 void ProxyMain::RequestNewOutputSurface() {
+  TRACE_EVENT0("cc", "ProxyMain::RequestNewOutputSurface");
   DCHECK(IsMainThread());
   layer_tree_host_->RequestNewOutputSurface();
 }
@@ -186,10 +187,6 @@ void ProxyMain::BeginMainFrame(
 
   layer_tree_host_->WillBeginMainFrame();
 
-  layer_tree_host_->ReportFixedRasterScaleUseCounters(
-      begin_main_frame_state->has_fixed_raster_scale_blurry_content,
-      begin_main_frame_state
-          ->has_fixed_raster_scale_potential_performance_regression);
   layer_tree_host_->BeginMainFrame(begin_main_frame_state->begin_frame_args);
   layer_tree_host_->AnimateLayers(
       begin_main_frame_state->begin_frame_args.frame_time);
@@ -406,6 +403,11 @@ void ProxyMain::Stop() {
 
   layer_tree_host_ = nullptr;
   started_ = false;
+}
+
+void ProxyMain::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {
+  TRACE_EVENT0("compositor-worker", "ThreadProxy::SetMutator");
+  channel_main_->InitializeMutatorOnImpl(std::move(mutator));
 }
 
 bool ProxyMain::SupportsImplScrolling() const {

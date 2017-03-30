@@ -4,6 +4,9 @@
 
 #include <stddef.h>
 
+#include <map>
+#include <set>
+#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -31,7 +34,7 @@
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "components/os_crypt/os_crypt.h"
+#include "components/os_crypt/os_crypt_mocker.h"
 #include "components/webdata/common/web_database.h"
 #include "sql/statement.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -123,9 +126,7 @@ class AutofillTableTest : public testing::Test {
 
  protected:
   void SetUp() override {
-#if defined(OS_MACOSX)
-    OSCrypt::UseMockKeychain(true);
-#endif
+    OSCryptMocker::SetUpWithSingleton();
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
     file_ = temp_dir_.path().AppendASCII("TestWebDatabase");
 
@@ -134,6 +135,8 @@ class AutofillTableTest : public testing::Test {
     db_->AddTable(table_.get());
     ASSERT_EQ(sql::INIT_OK, db_->Init(file_));
   }
+
+  void TearDown() override { OSCryptMocker::TearDown(); }
 
   base::FilePath file_;
   base::ScopedTempDir temp_dir_;
@@ -1783,6 +1786,33 @@ TEST_F(AutofillTableTest, SetServerCardUpdateUsageStats) {
   EXPECT_NE(base::Time(), outputs[0]->use_date());
   EXPECT_EQ(base::Time(), outputs[0]->modification_date());
   outputs.clear();
+}
+
+TEST_F(AutofillTableTest, UpdateServerCardBillingAddress) {
+  // Add a masked card.
+  CreditCard masked_card(CreditCard::MASKED_SERVER_CARD, "a123");
+  masked_card.SetRawInfo(CREDIT_CARD_NAME_FULL,
+                         ASCIIToUTF16("Paul F. Tompkins"));
+  masked_card.SetRawInfo(CREDIT_CARD_EXP_MONTH, ASCIIToUTF16("1"));
+  masked_card.SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, ASCIIToUTF16("2020"));
+  masked_card.SetRawInfo(CREDIT_CARD_NUMBER, ASCIIToUTF16("1111"));
+  masked_card.set_billing_address_id("billing-address-id-1");
+  masked_card.SetTypeForMaskedCard(kVisaCard);
+  test::SetServerCreditCards(table_.get(),
+                             std::vector<CreditCard>(1, masked_card));
+  ScopedVector<CreditCard> outputs;
+  table_->GetServerCreditCards(&outputs.get());
+  ASSERT_EQ(1u, outputs.size());
+
+  EXPECT_EQ("billing-address-id-1", outputs[0]->billing_address_id());
+
+  masked_card.set_billing_address_id("billing-address-id-2");
+  table_->UpdateServerCardBillingAddress(masked_card);
+  outputs.clear();
+  table_->GetServerCreditCards(&outputs.get());
+  ASSERT_EQ(1u, outputs.size());
+
+  EXPECT_EQ("billing-address-id-2", outputs[0]->billing_address_id());
 }
 
 TEST_F(AutofillTableTest, SetServerProfile) {

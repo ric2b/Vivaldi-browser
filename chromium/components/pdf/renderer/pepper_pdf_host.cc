@@ -5,8 +5,10 @@
 #include "components/pdf/renderer/pepper_pdf_host.h"
 
 #include "components/pdf/common/pdf_messages.h"
+#include "components/pdf/renderer/pdf_accessibility_tree.h"
 #include "content/public/common/referrer.h"
 #include "content/public/renderer/pepper_plugin_instance.h"
+#include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/render_view.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
@@ -79,6 +81,15 @@ int32_t PepperPDFHost::OnResourceMessageReceived(
                                       OnHostMsgSetLinkUnderCursor)
     PPAPI_DISPATCH_HOST_RESOURCE_CALL(PpapiHostMsg_PDF_SetContentRestriction,
                                       OnHostMsgSetContentRestriction)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(
+        PpapiHostMsg_PDF_SetAccessibilityViewportInfo,
+        OnHostMsgSetAccessibilityViewportInfo)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(
+        PpapiHostMsg_PDF_SetAccessibilityDocInfo,
+        OnHostMsgSetAccessibilityDocInfo)
+    PPAPI_DISPATCH_HOST_RESOURCE_CALL(
+        PpapiHostMsg_PDF_SetAccessibilityPageInfo,
+        OnHostMsgSetAccessibilityPageInfo)
   PPAPI_END_MESSAGE_MAP()
   return PP_ERROR_FAILED;
 }
@@ -181,6 +192,53 @@ int32_t PepperPDFHost::OnHostMsgSetLinkUnderCursor(
     return PP_ERROR_FAILED;
   instance->SetLinkUnderCursor(url);
   return PP_OK;
+}
+
+int32_t PepperPDFHost::OnHostMsgSetAccessibilityViewportInfo(
+    ppapi::host::HostMessageContext* context,
+    const PP_PrivateAccessibilityViewportInfo& viewport_info) {
+  content::PepperPluginInstance* instance =
+      host_->GetPluginInstance(pp_instance());
+  if (!instance)
+    return PP_ERROR_FAILED;
+  CreatePdfAccessibilityTreeIfNeeded(instance);
+  pdf_accessibility_tree_->SetAccessibilityViewportInfo(viewport_info);
+  return PP_OK;
+}
+
+int32_t PepperPDFHost::OnHostMsgSetAccessibilityDocInfo(
+    ppapi::host::HostMessageContext* context,
+    const PP_PrivateAccessibilityDocInfo& doc_info) {
+  content::PepperPluginInstance* instance =
+      host_->GetPluginInstance(pp_instance());
+  if (!instance)
+    return PP_ERROR_FAILED;
+  CreatePdfAccessibilityTreeIfNeeded(instance);
+  pdf_accessibility_tree_->SetAccessibilityDocInfo(doc_info);
+  return PP_OK;
+}
+
+int32_t PepperPDFHost::OnHostMsgSetAccessibilityPageInfo(
+    ppapi::host::HostMessageContext* context,
+    const PP_PrivateAccessibilityPageInfo& page_info,
+    const std::vector<PP_PrivateAccessibilityTextRunInfo>& text_run_info,
+    const std::vector<PP_PrivateAccessibilityCharInfo>& chars) {
+  content::PepperPluginInstance* instance =
+      host_->GetPluginInstance(pp_instance());
+  if (!instance)
+    return PP_ERROR_FAILED;
+  CreatePdfAccessibilityTreeIfNeeded(instance);
+  pdf_accessibility_tree_->SetAccessibilityPageInfo(
+      page_info, text_run_info, chars);
+  return PP_OK;
+}
+
+void PepperPDFHost::CreatePdfAccessibilityTreeIfNeeded(
+    content::PepperPluginInstance* instance) {
+  if (!pdf_accessibility_tree_) {
+    pdf_accessibility_tree_.reset(
+        new PdfAccessibilityTree(instance->GetRenderView()));
+  }
 }
 
 }  // namespace pdf

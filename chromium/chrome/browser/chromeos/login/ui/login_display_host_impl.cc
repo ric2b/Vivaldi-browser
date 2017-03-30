@@ -8,17 +8,20 @@
 #include <vector>
 
 #include "ash/audio/sounds.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/desktop_background/user_wallpaper_delegate.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "chrome/browser/browser_process.h"
@@ -103,6 +106,11 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "url/gurl.h"
+
+#if defined(MOJO_SHELL_CLIENT)
+#include "ash/public/interfaces/container.mojom.h"
+#include "components/mus/public/cpp/property_type_converters.h"
+#endif
 
 namespace {
 
@@ -1006,12 +1014,13 @@ void LoginDisplayHostImpl::ShutdownDisplayHost(bool post_quit_task) {
 
   shutting_down_ = true;
   registrar_.RemoveAll();
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
   if (post_quit_task)
     base::MessageLoop::current()->QuitWhenIdle();
 
   if (!completion_callback_.is_null())
-    base::MessageLoop::current()->PostTask(FROM_HERE, completion_callback_);
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                  completion_callback_);
 
   if (ash::Shell::HasInstance() &&
       finalize_animation_type_ == ANIMATION_ADD_USER) {
@@ -1140,6 +1149,14 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
     params.parent =
         ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
                                  ash::kShellWindowId_LockScreenContainer);
+  } else {
+#if defined(MOJO_SHELL_CLIENT)
+    params.mus_properties[ash::mojom::kWindowContainer_Property] =
+        mojo::ConvertTo<std::vector<uint8_t>>(
+            static_cast<int32_t>(ash::mojom::Container::LOGIN_WINDOWS));
+#else
+    NOTREACHED();
+#endif
   }
   login_window_ = new views::Widget;
   params.delegate = new LoginWidgetDelegate(login_window_);
@@ -1223,9 +1240,8 @@ void LoginDisplayHostImpl::TryToPlayStartupSound() {
     return;
   }
 
-  base::MessageLoop::current()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&EnableSystemSoundsForAccessibility),
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::Bind(&EnableSystemSoundsForAccessibility),
       media::SoundsManager::Get()->GetDuration(SOUND_STARTUP));
 }
 

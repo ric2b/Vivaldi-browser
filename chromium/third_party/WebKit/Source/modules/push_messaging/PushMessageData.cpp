@@ -11,7 +11,9 @@
 #include "core/dom/DOMArrayBuffer.h"
 #include "core/fileapi/Blob.h"
 #include "platform/blob/BlobData.h"
+#include "wtf/Assertions.h"
 #include "wtf/text/TextEncoding.h"
+#include <memory>
 #include <v8.h>
 
 namespace blink {
@@ -41,7 +43,7 @@ PushMessageData* PushMessageData::create(const ArrayBufferOrArrayBufferViewOrUSV
         return new PushMessageData(encodedString.data(), encodedString.length());
     }
 
-    ASSERT(messageData.isNull());
+    DCHECK(messageData.isNull());
     return nullptr;
 }
 
@@ -61,7 +63,7 @@ DOMArrayBuffer* PushMessageData::arrayBuffer() const
 
 Blob* PushMessageData::blob() const
 {
-    OwnPtr<BlobData> blobData = BlobData::create();
+    std::unique_ptr<BlobData> blobData = BlobData::create();
     blobData->appendBytes(m_data.data(), m_data.size());
 
     // Note that the content type of the Blob object is deliberately not being

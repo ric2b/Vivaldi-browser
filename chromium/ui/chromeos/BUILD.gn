@@ -8,7 +8,6 @@ component("ui_chromeos") {
   sources = [
     "accelerometer/accelerometer_util.cc",
     "accelerometer/accelerometer_util.h",
-    "accessibility_types.h",
     "ime/candidate_view.cc",
     "ime/candidate_view.h",
     "ime/candidate_window_view.cc",
@@ -21,6 +20,8 @@ component("ui_chromeos") {
     "ime/input_method_menu_manager.h",
     "ime/mode_indicator_view.cc",
     "ime/mode_indicator_view.h",
+    "material_design_icon_controller.cc",
+    "material_design_icon_controller.h",
     "network/network_connect.cc",
     "network/network_connect.h",
     "network/network_icon.cc",

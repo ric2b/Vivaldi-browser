@@ -129,7 +129,10 @@ class MenuRunnerCocoaTest : public ViewsTestBase {
 
   void MenuCancelCallback() {
     runner_->Cancel();
-    EXPECT_FALSE(runner_->IsRunning());
+    // For a syncronous menu, MenuRunner::IsRunning() should return true
+    // immediately after MenuRunner::Cancel() since the menu message loop has
+    // not yet terminated. It has only been marked for termination.
+    EXPECT_TRUE(runner_->IsRunning());
   }
 
   void MenuDeleteCallback() {
@@ -166,7 +169,7 @@ class MenuRunnerCocoaTest : public ViewsTestBase {
 };
 
 TEST_F(MenuRunnerCocoaTest, RunMenuAndCancel) {
-  base::TimeDelta min_time = ui::EventTimeForNow();
+  base::TimeTicks min_time = ui::EventTimeForNow();
 
   MenuRunner::RunResult result = RunMenu(base::Bind(
       &MenuRunnerCocoaTest::MenuCancelCallback, base::Unretained(this)));
@@ -209,7 +212,7 @@ TEST_F(MenuRunnerCocoaTest, RunMenuTwice) {
 TEST_F(MenuRunnerCocoaTest, CancelWithoutRunning) {
   runner_->Cancel();
   EXPECT_FALSE(runner_->IsRunning());
-  EXPECT_EQ(base::TimeDelta(), runner_->GetClosingEventTime());
+  EXPECT_EQ(base::TimeTicks(), runner_->GetClosingEventTime());
 }
 
 TEST_F(MenuRunnerCocoaTest, DeleteWithoutRunning) {

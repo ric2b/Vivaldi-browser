@@ -18,6 +18,7 @@
 #include "components/webdata/common/web_data_service_base.h"
 #include "components/webdata/common/web_data_service_consumer.h"
 #include "components/webdata/common/web_database.h"
+#include "sync/internal_api/public/base/model_type.h"
 
 class WebDatabaseService;
 
@@ -99,6 +100,7 @@ class AutofillWebDataService : public AutofillWebData,
 
   void UpdateServerCardUsageStats(const CreditCard& credit_card) override;
   void UpdateServerAddressUsageStats(const AutofillProfile& profile) override;
+  void UpdateServerCardBillingAddress(const CreditCard& credit_card) override;
 
   void RemoveAutofillDataModifiedBetween(const base::Time& delete_begin,
                                          const base::Time& delete_end) override;
@@ -127,6 +129,8 @@ class AutofillWebDataService : public AutofillWebData,
   ~AutofillWebDataService() override;
 
   virtual void NotifyAutofillMultipleChangedOnUIThread();
+
+  virtual void NotifySyncStartedOnUIThread(syncer::ModelType model_type);
 
   base::WeakPtr<AutofillWebDataService> AsWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();

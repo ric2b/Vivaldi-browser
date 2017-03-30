@@ -28,7 +28,7 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/web_contents_sizer.h"
 #include "chrome/common/extensions/chrome_extension_messages.h"
-#include "components/ui/zoom/zoom_controller.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -39,7 +39,7 @@
 #include "extensions/common/constants.h"
 
 #if defined(USE_ASH)
-#include "ash/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_constants.h"
 #endif
 
 #if defined(ENABLE_PRINTING)
@@ -197,7 +197,7 @@ void ChromeAppDelegate::InitWebContents(content::WebContents* web_contents) {
 
   // Kiosk app supports zooming.
   if (chrome::IsRunningInForcedAppMode())
-    ui_zoom::ZoomController::CreateForWebContents(web_contents);
+    zoom::ZoomController::CreateForWebContents(web_contents);
 }
 
 void ChromeAppDelegate::RenderViewCreated(
@@ -267,9 +267,9 @@ content::ColorChooser* ChromeAppDelegate::ShowColorChooser(
 }
 
 void ChromeAppDelegate::RunFileChooser(
-    content::WebContents* tab,
+    content::RenderFrameHost* render_frame_host,
     const content::FileChooserParams& params) {
-  FileSelectHelper::RunFileChooser(tab, params);
+  FileSelectHelper::RunFileChooser(render_frame_host, params);
 }
 
 void ChromeAppDelegate::RequestMediaAccessPermission(
@@ -293,7 +293,7 @@ bool ChromeAppDelegate::CheckMediaAccessPermission(
 
 int ChromeAppDelegate::PreferredIconSize() {
 #if defined(USE_ASH)
-  return ash::kShelfSize;
+  return ash::GetShelfConstant(ash::SHELF_SIZE);
 #else
   return extension_misc::EXTENSION_ICON_SMALL;
 #endif
@@ -347,12 +347,7 @@ void ChromeAppDelegate::OnShow() {
 void ChromeAppDelegate::Observe(int type,
                                 const content::NotificationSource& source,
                                 const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_APP_TERMINATING:
-      if (!terminating_callback_.is_null())
-        terminating_callback_.Run();
-      break;
-    default:
-      NOTREACHED() << "Received unexpected notification";
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_APP_TERMINATING, type);
+  if (!terminating_callback_.is_null())
+    terminating_callback_.Run();
 }

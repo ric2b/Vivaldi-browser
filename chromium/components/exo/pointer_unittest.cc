@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/shell_window_ids.h"
 #include "ash/shell.h"
 #include "components/exo/buffer.h"
 #include "components/exo/pointer.h"
@@ -28,12 +29,12 @@ class MockPointerDelegate : public PointerDelegate {
   MOCK_CONST_METHOD1(CanAcceptPointerEventsForSurface, bool(Surface*));
   MOCK_METHOD3(OnPointerEnter, void(Surface*, const gfx::PointF&, int));
   MOCK_METHOD1(OnPointerLeave, void(Surface*));
-  MOCK_METHOD2(OnPointerMotion, void(base::TimeDelta, const gfx::PointF&));
-  MOCK_METHOD3(OnPointerButton, void(base::TimeDelta, int, bool));
+  MOCK_METHOD2(OnPointerMotion, void(base::TimeTicks, const gfx::PointF&));
+  MOCK_METHOD3(OnPointerButton, void(base::TimeTicks, int, bool));
   MOCK_METHOD3(OnPointerScroll,
-               void(base::TimeDelta, const gfx::Vector2dF&, bool));
-  MOCK_METHOD1(OnPointerScrollCancel, void(base::TimeDelta));
-  MOCK_METHOD1(OnPointerScrollStop, void(base::TimeDelta));
+               void(base::TimeTicks, const gfx::Vector2dF&, bool));
+  MOCK_METHOD1(OnPointerScrollCancel, void(base::TimeTicks));
+  MOCK_METHOD1(OnPointerScrollStop, void(base::TimeTicks));
   MOCK_METHOD0(OnPointerFrame, void());
 };
 
@@ -54,7 +55,7 @@ TEST_F(PointerTest, SetCursor) {
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(1);
   EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().origin());
 
   std::unique_ptr<Surface> pointer_surface(new Surface);
   std::unique_ptr<Buffer> pointer_buffer(
@@ -92,7 +93,7 @@ TEST_F(PointerTest, OnPointerEnter) {
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(1);
   EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate, OnPointerDestroying(pointer.get()));
   pointer.reset();
@@ -115,10 +116,10 @@ TEST_F(PointerTest, OnPointerLeave) {
       .WillRepeatedly(testing::Return(true));
   EXPECT_CALL(delegate, OnPointerFrame()).Times(2);
   EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate, OnPointerLeave(surface.get()));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().bottom_right());
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().bottom_right());
 
   EXPECT_CALL(delegate, OnPointerDestroying(pointer.get()));
   pointer.reset();
@@ -142,10 +143,10 @@ TEST_F(PointerTest, OnPointerMotion) {
   EXPECT_CALL(delegate, OnPointerFrame()).Times(6);
 
   EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::PointF(1, 1)));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().origin() +
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().origin() +
                         gfx::Vector2d(1, 1));
 
   std::unique_ptr<Surface> sub_surface(new Surface);
@@ -163,15 +164,16 @@ TEST_F(PointerTest, OnPointerMotion) {
 
   EXPECT_CALL(delegate, OnPointerLeave(surface.get()));
   EXPECT_CALL(delegate, OnPointerEnter(sub_surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(sub_surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(sub_surface->window()->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::PointF(1, 1)));
-  generator.MoveMouseTo(sub_surface->GetBoundsInScreen().origin() +
+  generator.MoveMouseTo(sub_surface->window()->GetBoundsInScreen().origin() +
                         gfx::Vector2d(1, 1));
 
   std::unique_ptr<Surface> child_surface(new Surface);
   std::unique_ptr<ShellSurface> child_shell_surface(new ShellSurface(
-      child_surface.get(), shell_surface.get(), gfx::Rect(9, 9, 1, 1), true));
+      child_surface.get(), shell_surface.get(), gfx::Rect(9, 9, 1, 1), true,
+      ash::kShellWindowId_DefaultContainer));
   gfx::Size child_buffer_size(15, 15);
   std::unique_ptr<Buffer> child_buffer(
       new Buffer(exo_test_helper()->CreateGpuMemoryBuffer(child_buffer_size)));
@@ -183,10 +185,10 @@ TEST_F(PointerTest, OnPointerMotion) {
 
   EXPECT_CALL(delegate, OnPointerLeave(sub_surface.get()));
   EXPECT_CALL(delegate, OnPointerEnter(child_surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(child_surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(child_surface->window()->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate, OnPointerMotion(testing::_, gfx::PointF(10, 10)));
-  generator.MoveMouseTo(child_surface->GetBoundsInScreen().origin() +
+  generator.MoveMouseTo(child_surface->window()->GetBoundsInScreen().origin() +
                         gfx::Vector2d(10, 10));
 
   EXPECT_CALL(delegate, OnPointerDestroying(pointer.get()));
@@ -211,7 +213,7 @@ TEST_F(PointerTest, OnPointerButton) {
   EXPECT_CALL(delegate, OnPointerFrame()).Times(3);
 
   EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate,
               OnPointerButton(testing::_, ui::EF_LEFT_MOUSE_BUTTON, true));
@@ -235,7 +237,7 @@ TEST_F(PointerTest, OnPointerScroll) {
   MockPointerDelegate delegate;
   std::unique_ptr<Pointer> pointer(new Pointer(&delegate));
   ui::test::EventGenerator generator(ash::Shell::GetPrimaryRootWindow());
-  gfx::Point location = surface->GetBoundsInScreen().origin();
+  gfx::Point location = surface->window()->GetBoundsInScreen().origin();
 
   EXPECT_CALL(delegate, CanAcceptPointerEventsForSurface(surface.get()))
       .WillRepeatedly(testing::Return(true));
@@ -277,7 +279,7 @@ TEST_F(PointerTest, OnPointerScrollDiscrete) {
   EXPECT_CALL(delegate, OnPointerFrame()).Times(2);
 
   EXPECT_CALL(delegate, OnPointerEnter(surface.get(), gfx::PointF(), 0));
-  generator.MoveMouseTo(surface->GetBoundsInScreen().origin());
+  generator.MoveMouseTo(surface->window()->GetBoundsInScreen().origin());
 
   EXPECT_CALL(delegate,
               OnPointerScroll(testing::_, gfx::Vector2dF(1, 1), true));

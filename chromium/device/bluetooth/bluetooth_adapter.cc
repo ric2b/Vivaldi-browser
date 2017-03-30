@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
+#include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
@@ -159,7 +160,7 @@ BluetoothDevice::PairingDelegate* BluetoothAdapter::DefaultPairingDelegate() {
   return pairing_delegates_.front().first;
 }
 
-void BluetoothAdapter::NotifyAdapterStateChanged(bool powered) {
+void BluetoothAdapter::NotifyAdapterPoweredChanged(bool powered) {
   FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
                     AdapterPoweredChanged(this, powered));
 }
@@ -352,8 +353,7 @@ BluetoothAdapter::GetMergedDiscoveryFilterHelper(
     if (first_merge) {
       first_merge = false;
       if (curr_filter) {
-        result.reset(new BluetoothDiscoveryFilter(
-            BluetoothDiscoveryFilter::Transport::TRANSPORT_DUAL));
+        result.reset(new BluetoothDiscoveryFilter(BLUETOOTH_TRANSPORT_DUAL));
         result->CopyFrom(*curr_filter);
       }
       continue;
@@ -363,6 +363,38 @@ BluetoothAdapter::GetMergedDiscoveryFilterHelper(
   }
 
   return result;
+}
+
+void BluetoothAdapter::RemoveTimedOutDevices() {
+  for (DevicesMap::iterator it = devices_.begin(); it != devices_.end();) {
+    BluetoothDevice* device = it->second;
+    if (device->IsPaired() || device->IsConnected() ||
+        device->IsGattConnected()) {
+      ++it;
+      continue;
+    }
+
+    base::Time last_update_time = device->GetLastUpdateTime();
+
+    bool device_expired =
+        (base::Time::NowFromSystemTime() - last_update_time) > timeoutSec;
+    VLOG(1) << "device: " << device->GetAddress()
+            << ", last_update: " << last_update_time
+            << ", exp: " << device_expired;
+
+    if (!device_expired) {
+      ++it;
+      continue;
+    }
+    DevicesMap::iterator next = it;
+    next++;
+    std::unique_ptr<BluetoothDevice> removed_device =
+        devices_.take_and_erase(it);
+    it = next;
+
+    FOR_EACH_OBSERVER(BluetoothAdapter::Observer, observers_,
+                      DeviceRemoved(this, removed_device.get()));
+  }
 }
 
 // static
@@ -380,5 +412,9 @@ void BluetoothAdapter::RecordBluetoothDiscoverySessionStopOutcome(
       "Bluetooth.DiscoverySession.Stop.Outcome", static_cast<int>(outcome),
       static_cast<int>(UMABluetoothDiscoverySessionOutcome::COUNT));
 }
+
+// static
+const base::TimeDelta BluetoothAdapter::timeoutSec =
+    base::TimeDelta::FromSeconds(180);
 
 }  // namespace device

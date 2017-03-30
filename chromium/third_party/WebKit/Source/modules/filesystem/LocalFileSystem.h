@@ -33,9 +33,11 @@
 
 #include "core/workers/WorkerClients.h"
 #include "platform/FileSystemType.h"
+#include "platform/Supplementable.h"
+#include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 #include "wtf/Functional.h"
-#include "wtf/PassOwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -51,14 +53,14 @@ class LocalFileSystem final : public GarbageCollectedFinalized<LocalFileSystem>,
     USING_GARBAGE_COLLECTED_MIXIN(LocalFileSystem);
     WTF_MAKE_NONCOPYABLE(LocalFileSystem);
 public:
-    static LocalFileSystem* create(PassOwnPtr<FileSystemClient>);
-    virtual ~LocalFileSystem();
+    static LocalFileSystem* create(std::unique_ptr<FileSystemClient>);
+    ~LocalFileSystem();
 
-    void resolveURL(ExecutionContext*, const KURL&, PassOwnPtr<AsyncFileSystemCallbacks>);
-    void requestFileSystem(ExecutionContext*, FileSystemType, long long size, PassOwnPtr<AsyncFileSystemCallbacks>);
-    void deleteFileSystem(ExecutionContext*, FileSystemType, PassOwnPtr<AsyncFileSystemCallbacks>);
+    void resolveURL(ExecutionContext*, const KURL&, std::unique_ptr<AsyncFileSystemCallbacks>);
+    void requestFileSystem(ExecutionContext*, FileSystemType, long long size, std::unique_ptr<AsyncFileSystemCallbacks>);
+    void deleteFileSystem(ExecutionContext*, FileSystemType, std::unique_ptr<AsyncFileSystemCallbacks>);
 
-    FileSystemClient* client() { return m_client.get(); }
+    FileSystemClient* client() const { return m_client.get(); }
 
     static const char* supplementName();
     static LocalFileSystem* from(ExecutionContext&);
@@ -69,18 +71,19 @@ public:
         Supplement<WorkerClients>::trace(visitor);
     }
 
-protected:
-    explicit LocalFileSystem(PassOwnPtr<FileSystemClient>);
-
 private:
-    WebFileSystem* fileSystem() const;
-    void requestFileSystemAccessInternal(ExecutionContext*, std::unique_ptr<SameThreadClosure> allowed, std::unique_ptr<SameThreadClosure> denied);
+    explicit LocalFileSystem(std::unique_ptr<FileSystemClient>);
+
+    WebFileSystem* getFileSystem() const;
     void fileSystemNotAvailable(ExecutionContext*, CallbackWrapper*);
+
+    void requestFileSystemAccessInternal(ExecutionContext*, std::unique_ptr<WTF::Closure> allowed, std::unique_ptr<WTF::Closure> denied);
     void fileSystemNotAllowedInternal(ExecutionContext*, CallbackWrapper*);
     void fileSystemAllowedInternal(ExecutionContext*, FileSystemType, CallbackWrapper*);
     void resolveURLInternal(ExecutionContext*, const KURL&, CallbackWrapper*);
     void deleteFileSystemInternal(ExecutionContext*, FileSystemType, CallbackWrapper*);
-    OwnPtr<FileSystemClient> m_client;
+
+    std::unique_ptr<FileSystemClient> m_client;
 };
 
 } // namespace blink

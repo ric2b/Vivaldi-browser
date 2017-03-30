@@ -5,7 +5,6 @@
 #include "chrome/browser/net/predictor.h"
 
 #include <stddef.h>
-#include <time.h>
 
 #include <algorithm>
 #include <memory>
@@ -17,23 +16,19 @@
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/url_info.h"
-#include "components/network_hints/common/network_hints_common.h"
 #include "content/public/test/test_browser_thread.h"
-#include "net/base/address_list.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
-#include "net/base/winsock_init.h"
-#include "net/dns/mock_host_resolver.h"
 #include "net/http/transport_security_state.h"
 #include "net/proxy/proxy_config_service_fixed.h"
 #include "net/proxy/proxy_service.h"
-#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 using base::Time;
 using base::TimeDelta;
@@ -41,232 +36,17 @@ using content::BrowserThread;
 
 namespace chrome_browser_net {
 
-class WaitForResolutionHelper;
-
-class WaitForResolutionHelper {
- public:
-  WaitForResolutionHelper(Predictor* predictor,
-                          const UrlList& hosts,
-                          base::RepeatingTimer* timer,
-                          int checks_until_quit)
-      : predictor_(predictor),
-        hosts_(hosts),
-        timer_(timer),
-        checks_until_quit_(checks_until_quit) {}
-
-  void CheckIfResolutionsDone() {
-    if (--checks_until_quit_ > 0) {
-      for (UrlList::const_iterator i = hosts_.begin(); i != hosts_.end(); ++i)
-        if (predictor_->GetResolutionDuration(*i) ==
-            UrlInfo::NullDuration())
-          return;  // We don't have resolution for that host.
-    }
-
-    // When all hostnames have been resolved, or we've hit the limit,
-    // exit the loop.
-    timer_->Stop();
-    base::MessageLoop::current()->QuitWhenIdle();
-    delete timer_;
-    delete this;
-  }
-
- private:
-  Predictor* predictor_;
-  const UrlList hosts_;
-  base::RepeatingTimer* timer_;
-  int checks_until_quit_;
-};
-
 class PredictorTest : public testing::Test {
  public:
   PredictorTest()
       : ui_thread_(BrowserThread::UI, &loop_),
-        io_thread_(BrowserThread::IO, &loop_),
-        host_resolver_(new net::MockCachingHostResolver()) {
-  }
-
- protected:
-  void SetUp() override {
-#if defined(OS_WIN)
-    net::EnsureWinsockInit();
-#endif
-    Predictor::set_max_parallel_resolves(
-        Predictor::kMaxSpeculativeParallelResolves);
-    Predictor::set_max_queueing_delay(
-        Predictor::kMaxSpeculativeResolveQueueDelayMs);
-    // Since we are using a caching HostResolver, the following latencies will
-    // only be incurred by the first request, after which the result will be
-    // cached internally by |host_resolver_|.
-    net::RuleBasedHostResolverProc* rules = host_resolver_->rules();
-    rules->AddRuleWithLatency("www.google.com", "127.0.0.1", 50);
-    rules->AddRuleWithLatency("gmail.google.com.com", "127.0.0.1", 70);
-    rules->AddRuleWithLatency("mail.google.com", "127.0.0.1", 44);
-    rules->AddRuleWithLatency("gmail.com", "127.0.0.1", 63);
-  }
-
-  void WaitForResolution(Predictor* predictor, const UrlList& hosts) {
-    base::RepeatingTimer* timer = new base::RepeatingTimer();
-    // By default allow the loop to run for a minute -- 600 iterations.
-    timer->Start(FROM_HERE, TimeDelta::FromMilliseconds(100),
-                 new WaitForResolutionHelper(predictor, hosts, timer, 600),
-                 &WaitForResolutionHelper::CheckIfResolutionsDone);
-    base::MessageLoop::current()->Run();
-  }
-
-  void WaitForResolutionWithLimit(
-      Predictor* predictor, const UrlList& hosts, int limit) {
-    base::RepeatingTimer* timer = new base::RepeatingTimer();
-    timer->Start(FROM_HERE, TimeDelta::FromMilliseconds(100),
-                 new WaitForResolutionHelper(predictor, hosts, timer, limit),
-                 &WaitForResolutionHelper::CheckIfResolutionsDone);
-    base::MessageLoop::current()->Run();
-  }
+        io_thread_(BrowserThread::IO, &loop_) {}
 
  private:
-  // IMPORTANT: do not move this below |host_resolver_|; the host resolver
-  // must not outlive the message loop, otherwise bad things can happen
-  // (like posting to a deleted message loop).
   base::MessageLoopForUI loop_;
   content::TestBrowserThread ui_thread_;
   content::TestBrowserThread io_thread_;
-
- protected:
-  std::unique_ptr<net::MockCachingHostResolver> host_resolver_;
 };
-
-//------------------------------------------------------------------------------
-
-TEST_F(PredictorTest, StartupShutdownTest) {
-  Predictor testing_master(true, true);
-  testing_master.Shutdown();
-}
-
-
-TEST_F(PredictorTest, ShutdownWhenResolutionIsPendingTest) {
-  std::unique_ptr<net::HostResolver> host_resolver(
-      new net::HangingHostResolver());
-
-  Predictor testing_master(true, true);
-  testing_master.SetHostResolver(host_resolver.get());
-
-  GURL localhost("http://localhost:80");
-  UrlList names;
-  names.push_back(localhost);
-
-  testing_master.ResolveList(names, UrlInfo::PAGE_SCAN_MOTIVATED);
-
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
-      base::TimeDelta::FromMilliseconds(500));
-  base::MessageLoop::current()->Run();
-
-  EXPECT_FALSE(testing_master.WasFound(localhost));
-
-  testing_master.Shutdown();
-
-  // Clean up after ourselves.
-  base::MessageLoop::current()->RunUntilIdle();
-}
-
-TEST_F(PredictorTest, SingleLookupTest) {
-  Predictor testing_master(true, true);
-  testing_master.SetHostResolver(host_resolver_.get());
-
-  GURL goog("http://www.google.com:80");
-
-  UrlList names;
-  names.push_back(goog);
-
-  // Try to flood the predictor with many concurrent requests.
-  for (int i = 0; i < 10; i++)
-    testing_master.ResolveList(names, UrlInfo::PAGE_SCAN_MOTIVATED);
-
-  WaitForResolution(&testing_master, names);
-
-  EXPECT_TRUE(testing_master.WasFound(goog));
-
-  base::MessageLoop::current()->RunUntilIdle();
-
-  EXPECT_GT(testing_master.peak_pending_lookups(), names.size() / 2);
-  EXPECT_LE(testing_master.peak_pending_lookups(), names.size());
-  EXPECT_LE(testing_master.peak_pending_lookups(),
-            testing_master.max_concurrent_dns_lookups());
-
-  testing_master.Shutdown();
-}
-
-TEST_F(PredictorTest, ConcurrentLookupTest) {
-  host_resolver_->rules()->AddSimulatedFailure("*.notfound");
-
-  Predictor testing_master(true, true);
-  testing_master.SetHostResolver(host_resolver_.get());
-
-  GURL goog("http://www.google.com:80"),
-      goog2("http://gmail.google.com.com:80"),
-      goog3("http://mail.google.com:80"),
-      goog4("http://gmail.com:80");
-  GURL bad1("http://bad1.notfound:80"),
-      bad2("http://bad2.notfound:80");
-
-  UrlList names;
-  names.push_back(goog);
-  names.push_back(goog3);
-  names.push_back(bad1);
-  names.push_back(goog2);
-  names.push_back(bad2);
-  names.push_back(goog4);
-  names.push_back(goog);
-
-  // Try to flood the predictor with many concurrent requests.
-  for (int i = 0; i < 10; i++)
-    testing_master.ResolveList(names, UrlInfo::PAGE_SCAN_MOTIVATED);
-
-  WaitForResolution(&testing_master, names);
-
-  EXPECT_TRUE(testing_master.WasFound(goog));
-  EXPECT_TRUE(testing_master.WasFound(goog3));
-  EXPECT_TRUE(testing_master.WasFound(goog2));
-  EXPECT_TRUE(testing_master.WasFound(goog4));
-  EXPECT_FALSE(testing_master.WasFound(bad1));
-  EXPECT_FALSE(testing_master.WasFound(bad2));
-
-  base::MessageLoop::current()->RunUntilIdle();
-
-  EXPECT_FALSE(testing_master.WasFound(bad1));
-  EXPECT_FALSE(testing_master.WasFound(bad2));
-
-  EXPECT_LE(testing_master.peak_pending_lookups(), names.size());
-  EXPECT_LE(testing_master.peak_pending_lookups(),
-            testing_master.max_concurrent_dns_lookups());
-
-  testing_master.Shutdown();
-}
-
-TEST_F(PredictorTest, MassiveConcurrentLookupTest) {
-  host_resolver_->rules()->AddSimulatedFailure("*.notfound");
-
-  Predictor testing_master(true, true);
-  testing_master.SetHostResolver(host_resolver_.get());
-
-  UrlList names;
-  for (int i = 0; i < 100; i++)
-    names.push_back(GURL(
-        "http://host" + base::IntToString(i) + ".notfound:80"));
-
-  // Try to flood the predictor with many concurrent requests.
-  for (int i = 0; i < 10; i++)
-    testing_master.ResolveList(names, UrlInfo::PAGE_SCAN_MOTIVATED);
-
-  WaitForResolution(&testing_master, names);
-
-  base::MessageLoop::current()->RunUntilIdle();
-
-  EXPECT_LE(testing_master.peak_pending_lookups(), names.size());
-  EXPECT_LE(testing_master.peak_pending_lookups(),
-            testing_master.max_concurrent_dns_lookups());
-
-  testing_master.Shutdown();
-}
 
 //------------------------------------------------------------------------------
 // Functions to help synthesize and test serializations of subresource referrer
@@ -302,8 +82,7 @@ static base::ListValue* FindSerializationMotivation(
 // Create a new empty serialization list.
 static base::ListValue* NewEmptySerializationList() {
   base::ListValue* list = new base::ListValue;
-  list->Append(
-      new base::FundamentalValue(Predictor::kPredictorReferrerVersion));
+  list->AppendInteger(Predictor::kPredictorReferrerVersion);
   return list;
 }
 
@@ -315,12 +94,12 @@ static void AddToSerializedList(const GURL& motivation,
                                 double use_rate,
                                 base::ListValue* referral_list) {
   // Find the motivation if it is already used.
-  base::ListValue* motivation_list = FindSerializationMotivation(motivation,
-                                                           referral_list);
+  base::ListValue* motivation_list =
+      FindSerializationMotivation(motivation, referral_list);
   if (!motivation_list) {
     // This is the first mention of this motivation, so build a list.
     motivation_list = new base::ListValue;
-    motivation_list->Append(new base::StringValue(motivation.spec()));
+    motivation_list->AppendString(motivation.spec());
     // Provide empty subresource list.
     motivation_list->Append(new base::ListValue());
 
@@ -336,8 +115,8 @@ static void AddToSerializedList(const GURL& motivation,
   // case, during deserialization, the latency value we supply plus the
   // existing value(s) will be added to the referrer.
 
-  subresource_list->Append(new base::StringValue(subresource.spec()));
-  subresource_list->Append(new base::FundamentalValue(use_rate));
+  subresource_list->AppendString(subresource.spec());
+  subresource_list->AppendDouble(use_rate);
 }
 
 // For a given motivation, and subresource, find what latency is currently
@@ -365,12 +144,14 @@ static bool GetDataFromSerialization(const GURL& motivation,
   return false;
 }
 
-//------------------------------------------------------------------------------
+TEST_F(PredictorTest, StartupShutdownTest) {
+  Predictor testing_master(true, true);
+  testing_master.Shutdown();
+}
 
 // Make sure nil referral lists really have no entries, and no latency listed.
 TEST_F(PredictorTest, ReferrerSerializationNilTest) {
   Predictor predictor(true, true);
-  predictor.SetHostResolver(host_resolver_.get());
 
   std::unique_ptr<base::ListValue> referral_list(NewEmptySerializationList());
   predictor.SerializeReferrers(referral_list.get());
@@ -387,7 +168,6 @@ TEST_F(PredictorTest, ReferrerSerializationNilTest) {
 // serialization without being changed.
 TEST_F(PredictorTest, ReferrerSerializationSingleReferrerTest) {
   Predictor predictor(true, true);
-  predictor.SetHostResolver(host_resolver_.get());
   const GURL motivation_url("http://www.google.com:91");
   const GURL subresource_url("http://icons.google.com:90");
   const double kUseRate = 23.4;
@@ -409,73 +189,24 @@ TEST_F(PredictorTest, ReferrerSerializationSingleReferrerTest) {
   predictor.Shutdown();
 }
 
-// Check that GetHtmlReferrerLists() doesn't crash when given duplicated
-// domains for referring URL, and that it sorts the results in the
-// correct order.
+// Test that the referrers are sorted in MRU order in the HTML UI.
 TEST_F(PredictorTest, GetHtmlReferrerLists) {
-  Predictor predictor(true, true);
-  predictor.SetHostResolver(host_resolver_.get());
-  const double kUseRate = 23.4;
-  std::unique_ptr<base::ListValue> referral_list(NewEmptySerializationList());
+  SimplePredictor predictor(true, true);
 
-  AddToSerializedList(
-      GURL("http://d.google.com/x1"),
-      GURL("http://foo.com/"),
-      kUseRate, referral_list.get());
-
-  // Duplicated hostname (d.google.com). This should not cause any crashes
-  // (i.e. crbug.com/116345)
-  AddToSerializedList(
-      GURL("http://d.google.com/x2"),
-      GURL("http://foo.com/"),
-      kUseRate, referral_list.get());
-
-  AddToSerializedList(
-      GURL("http://a.yahoo.com/y"),
-      GURL("http://foo1.com/"),
-      kUseRate, referral_list.get());
-
-  AddToSerializedList(
-      GURL("http://b.google.com/x3"),
-      GURL("http://foo2.com/"),
-      kUseRate, referral_list.get());
-
-  AddToSerializedList(
-      GURL("http://d.yahoo.com/x5"),
-      GURL("http://i.like.turtles/"),
-      kUseRate, referral_list.get());
-
-  AddToSerializedList(
-      GURL("http://c.yahoo.com/x4"),
-      GURL("http://foo3.com/"),
-      kUseRate, referral_list.get());
-
-  predictor.DeserializeReferrers(*referral_list.get());
+  predictor.LearnFromNavigation(GURL("http://www.source_b.test"),
+                                GURL("http://www.target_b.test"));
+  predictor.LearnFromNavigation(GURL("http://www.source_a.test"),
+                                GURL("http://www.target_a.test"));
+  predictor.LearnFromNavigation(GURL("http://www.source_c.test"),
+                                GURL("http://www.target_c.test"));
 
   std::string html;
   predictor.GetHtmlReferrerLists(&html);
 
-  // The lexicographic sorting of hostnames would be:
-  //   a.yahoo.com
-  //   b.google.com
-  //   c.yahoo.com
-  //   d.google.com
-  //   d.yahoo.com
-  //
-  // However we expect to sort them by domain in the output:
-  //   b.google.com
-  //   d.google.com
-  //   a.yahoo.com
-  //   c.yahoo.com
-  //   d.yahoo.com
-
   size_t pos[] = {
-      html.find("<td rowspan=1>http://b.google.com/x3"),
-      html.find("<td rowspan=1>http://d.google.com/x1"),
-      html.find("<td rowspan=1>http://d.google.com/x2"),
-      html.find("<td rowspan=1>http://a.yahoo.com/y"),
-      html.find("<td rowspan=1>http://c.yahoo.com/x4"),
-      html.find("<td rowspan=1>http://d.yahoo.com/x5"),
+      html.find("<td rowspan=1>http://www.source_c.test"),
+      html.find("<td rowspan=1>http://www.source_a.test"),
+      html.find("<td rowspan=1>http://www.source_b.test"),
   };
 
   // Make sure things appeared in the expected order.
@@ -486,98 +217,56 @@ TEST_F(PredictorTest, GetHtmlReferrerLists) {
   predictor.Shutdown();
 }
 
-// Verify that two floats are within 1% of each other in value.
-#define EXPECT_SIMILAR(a, b) do { \
-    double espilon_ratio = 1.01;  \
-    if ((a) < 0.)  \
-      espilon_ratio = 1 / espilon_ratio;  \
-    EXPECT_LT(a, espilon_ratio * (b));   \
-    EXPECT_GT((a) * espilon_ratio, b);   \
-    } while (0)
+// Expect the exact same HTML when the predictor's referrers are serialized and
+// deserialized (implies ordering remains the same).
+TEST_F(PredictorTest, SerializeAndDeserialize) {
+  SimplePredictor predictor(true, true);
 
+  for (int i = 0; i < Predictor::kMaxReferrers * 2; ++i) {
+    predictor.LearnFromNavigation(
+        GURL(base::StringPrintf("http://www.source_%d.test", i)),
+        GURL(base::StringPrintf("http://www.target_%d.test", i)));
+  }
+  std::string html;
+  predictor.GetHtmlReferrerLists(&html);
 
-// Make sure the Trim() functionality works as expected.
-TEST_F(PredictorTest, ReferrerSerializationTrimTest) {
-  Predictor predictor(true, true);
-  predictor.SetHostResolver(host_resolver_.get());
-  GURL motivation_url("http://www.google.com:110");
+  base::ListValue referral_list;
+  predictor.SerializeReferrers(&referral_list);
+  predictor.DeserializeReferrers(referral_list);
 
-  GURL icon_subresource_url("http://icons.google.com:111");
-  const double kRateIcon = 16.0 * Predictor::kDiscardableExpectedValue;
-  GURL img_subresource_url("http://img.google.com:118");
-  const double kRateImg = 8.0 * Predictor::kDiscardableExpectedValue;
+  std::string html2;
+  predictor.GetHtmlReferrerLists(&html2);
 
-  std::unique_ptr<base::ListValue> referral_list(NewEmptySerializationList());
-  AddToSerializedList(
-      motivation_url, icon_subresource_url, kRateIcon, referral_list.get());
-  AddToSerializedList(
-      motivation_url, img_subresource_url, kRateImg, referral_list.get());
-
-  predictor.DeserializeReferrers(*referral_list.get());
-
-  base::ListValue recovered_referral_list;
-  predictor.SerializeReferrers(&recovered_referral_list);
-  EXPECT_EQ(2U, recovered_referral_list.GetSize());
-  double rate;
-  EXPECT_TRUE(GetDataFromSerialization(
-      motivation_url, icon_subresource_url, recovered_referral_list,
-      &rate));
-  EXPECT_SIMILAR(rate, kRateIcon);
-
-  EXPECT_TRUE(GetDataFromSerialization(
-      motivation_url, img_subresource_url, recovered_referral_list, &rate));
-  EXPECT_SIMILAR(rate, kRateImg);
-
-  // Each time we Trim 24 times, the user_rate figures should reduce by a factor
-  // of two,  until they are small, and then a trim will delete the whole entry.
-  for (int i = 0; i < 24; ++i)
-    predictor.TrimReferrersNow();
-  predictor.SerializeReferrers(&recovered_referral_list);
-  EXPECT_EQ(2U, recovered_referral_list.GetSize());
-  EXPECT_TRUE(GetDataFromSerialization(
-      motivation_url, icon_subresource_url, recovered_referral_list, &rate));
-  EXPECT_SIMILAR(rate, kRateIcon / 2);
-
-  EXPECT_TRUE(GetDataFromSerialization(
-      motivation_url, img_subresource_url, recovered_referral_list, &rate));
-  EXPECT_SIMILAR(rate, kRateImg / 2);
-
-  for (int i = 0; i < 24; ++i)
-    predictor.TrimReferrersNow();
-  predictor.SerializeReferrers(&recovered_referral_list);
-  EXPECT_EQ(2U, recovered_referral_list.GetSize());
-  EXPECT_TRUE(GetDataFromSerialization(
-      motivation_url, icon_subresource_url, recovered_referral_list, &rate));
-  EXPECT_SIMILAR(rate, kRateIcon / 4);
-  EXPECT_TRUE(GetDataFromSerialization(
-      motivation_url, img_subresource_url, recovered_referral_list, &rate));
-  EXPECT_SIMILAR(rate, kRateImg / 4);
-
-  for (int i = 0; i < 24; ++i)
-    predictor.TrimReferrersNow();
-  predictor.SerializeReferrers(&recovered_referral_list);
-  EXPECT_EQ(2U, recovered_referral_list.GetSize());
-  EXPECT_TRUE(GetDataFromSerialization(
-      motivation_url, icon_subresource_url, recovered_referral_list, &rate));
-  EXPECT_SIMILAR(rate, kRateIcon / 8);
-
-  // Img is below threshold, and so it gets deleted.
-  EXPECT_FALSE(GetDataFromSerialization(
-      motivation_url, img_subresource_url, recovered_referral_list, &rate));
-
-  for (int i = 0; i < 24; ++i)
-    predictor.TrimReferrersNow();
-  predictor.SerializeReferrers(&recovered_referral_list);
-  // Icon is also trimmed away, so entire set gets discarded.
-  EXPECT_EQ(1U, recovered_referral_list.GetSize());
-  EXPECT_FALSE(GetDataFromSerialization(
-      motivation_url, icon_subresource_url, recovered_referral_list, &rate));
-  EXPECT_FALSE(GetDataFromSerialization(
-      motivation_url, img_subresource_url, recovered_referral_list, &rate));
+  EXPECT_EQ(html, html2);
 
   predictor.Shutdown();
 }
 
+// Filling the MRU cache should evict entries that were used less recently.
+TEST_F(PredictorTest, FillMRUCache) {
+  SimplePredictor predictor(true, true);
+
+  for (int i = 0; i < Predictor::kMaxReferrers * 2; ++i) {
+    predictor.LearnFromNavigation(
+        GURL(base::StringPrintf("http://www.source_%d.test", i)),
+        GURL(base::StringPrintf("http://www.target_%d.test", i)));
+  }
+
+  std::string html;
+  predictor.GetHtmlReferrerLists(&html);
+
+  for (int i = 0; i < Predictor::kMaxReferrers; ++i) {
+    EXPECT_EQ(html.find(base::StringPrintf("http://www.source_%d.test", i)),
+              std::string::npos);
+  }
+  for (int i = Predictor::kMaxReferrers; i < Predictor::kMaxReferrers * 2;
+       ++i) {
+    EXPECT_NE(html.find(base::StringPrintf("http://www.source_%d.test", i)),
+              std::string::npos);
+  }
+
+  predictor.Shutdown();
+}
 
 TEST_F(PredictorTest, PriorityQueuePushPopTest) {
   Predictor::HostNameQueue queue;
@@ -688,7 +377,6 @@ TEST_F(PredictorTest, CanonicalizeUrl) {
 
 TEST_F(PredictorTest, DiscardPredictorResults) {
   SimplePredictor predictor(true, true);
-  predictor.SetHostResolver(host_resolver_.get());
   base::ListValue referral_list;
   predictor.SerializeReferrers(&referral_list);
   EXPECT_EQ(1U, referral_list.GetSize());
@@ -765,6 +453,33 @@ TEST_F(PredictorTest, HSTSRedirectSubresources) {
   AddToSerializedList(
       kHttpsUrl, kSubresourceUrl, kUseRate, referral_list.get());
   predictor.DeserializeReferrers(*referral_list.get());
+
+  predictor.PreconnectUrlAndSubresources(kHttpUrl, GURL());
+  ASSERT_EQ(2u, observer.preconnected_urls_.size());
+  EXPECT_EQ(kHttpsUrl, observer.preconnected_urls_[0]);
+  EXPECT_EQ(kSubresourceUrl, observer.preconnected_urls_[1]);
+
+  predictor.Shutdown();
+}
+
+TEST_F(PredictorTest, HSTSRedirectLearnedSubresource) {
+  const GURL kHttpUrl("http://example.com");
+  const GURL kHttpsUrl("https://example.com");
+  const GURL kSubresourceUrl("https://images.example.com");
+
+  const base::Time expiry =
+      base::Time::Now() + base::TimeDelta::FromSeconds(1000);
+  net::TransportSecurityState state;
+  state.AddHSTS(kHttpUrl.host(), expiry, false);
+
+  SimplePredictor predictor(true, true);
+  TestPredictorObserver observer;
+  predictor.SetObserver(&observer);
+  predictor.SetTransportSecurityState(&state);
+
+  // Note that the predictor would also learn the HSTS redirect from kHttpUrl to
+  // kHttpsUrl during the navigation.
+  predictor.LearnFromNavigation(kHttpUrl, kSubresourceUrl);
 
   predictor.PreconnectUrlAndSubresources(kHttpUrl, GURL());
   ASSERT_EQ(2u, observer.preconnected_urls_.size());

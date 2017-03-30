@@ -9,6 +9,7 @@
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
+#include "ui/aura/client/cursor_client_observer.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/input_method_observer.h"
 #include "ui/base/ime/text_input_client.h"
@@ -19,9 +20,11 @@ namespace chromeos {
 
 // Manage visual highlights that Chrome OS can draw around the focused
 // object, the cursor, and the text caret for accessibility.
-class AccessibilityHighlightManager : public ui::EventHandler,
-                                      public content::NotificationObserver,
-                                      public ui::InputMethodObserver {
+class AccessibilityHighlightManager
+    : public ui::EventHandler,
+      public content::NotificationObserver,
+      public ui::InputMethodObserver,
+      public aura::client::CursorClientObserver {
  public:
   AccessibilityHighlightManager();
   ~AccessibilityHighlightManager() override;
@@ -30,9 +33,12 @@ class AccessibilityHighlightManager : public ui::EventHandler,
   void HighlightCursor(bool cursor);
   void HighlightCaret(bool caret);
 
- private:
+  void RegisterObservers();
+
+ protected:
   // ui::EventHandler overrides:
   void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnKeyEvent(ui::KeyEvent* event) override;
 
   // content::NotificationObserver overrides:
   void Observe(int type,
@@ -48,6 +54,15 @@ class AccessibilityHighlightManager : public ui::EventHandler,
   void OnTextInputStateChanged(const ui::TextInputClient* client) override;
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override;
 
+  // aura::client::CursorClientObserver
+  void OnCursorVisibilityChanged(bool is_visible) override;
+
+  virtual bool IsCursorVisible();
+
+ private:
+  void UpdateFocusAndCaretHighlights();
+  void UpdateCursorHighlight();
+
   bool focus_ = false;
   gfx::Rect focus_rect_;
 
@@ -55,8 +70,10 @@ class AccessibilityHighlightManager : public ui::EventHandler,
   gfx::Point cursor_point_;
 
   bool caret_ = false;
+  bool caret_visible_ = false;
   gfx::Point caret_point_;
 
+  bool registered_observers_ = false;
   content::NotificationRegistrar registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(AccessibilityHighlightManager);

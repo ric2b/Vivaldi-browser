@@ -14,7 +14,6 @@ import android.accounts.Account;
 import android.accounts.AccountManager;
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.preference.PreferenceManager;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
@@ -89,8 +88,7 @@ public class ChromeBackupAgentTest {
 
     @Test
     public void testOnRestoreFinished() throws UnsupportedEncodingException {
-        SharedPreferences sharedPrefs =
-                PreferenceManager.getDefaultSharedPreferences(Robolectric.application);
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putBoolean("crash_dump_upload", false);
         editor.putString("google.services.username", "user1");
@@ -126,8 +124,7 @@ public class ChromeBackupAgentTest {
 
     @Test
     public void testOnRestoreFinishedNoUser() throws UnsupportedEncodingException {
-        SharedPreferences sharedPrefs =
-                PreferenceManager.getDefaultSharedPreferences(Robolectric.application);
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putBoolean("crash_dump_upload", false);
         editor.putString("junk", "junk");
@@ -156,8 +153,7 @@ public class ChromeBackupAgentTest {
 
     @Test
     public void testOnRestoreFinishedWrongUser() throws UnsupportedEncodingException {
-        SharedPreferences sharedPrefs =
-                PreferenceManager.getDefaultSharedPreferences(Robolectric.application);
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
         SharedPreferences.Editor editor = sharedPrefs.edit();
         editor.putBoolean("crash_dump_upload", false);
         editor.putString("google.services.username", "wrong_user");

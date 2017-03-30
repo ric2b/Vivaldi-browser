@@ -57,7 +57,7 @@ void IOSurfaceContextNoOp(scoped_refptr<ui::IOSurfaceContext>) {
 
 namespace gpu {
 
-scoped_refptr<gfx::GLSurface> ImageTransportSurfaceCreateNativeSurface(
+scoped_refptr<gl::GLSurface> ImageTransportSurfaceCreateNativeSurface(
     GpuChannelManager* manager,
     GpuCommandBufferStub* stub,
     SurfaceHandle handle) {
@@ -86,8 +86,7 @@ ImageTransportSurfaceOverlayMac::~ImageTransportSurfaceOverlayMac() {
   Destroy();
 }
 
-bool ImageTransportSurfaceOverlayMac::Initialize(
-    gfx::GLSurface::Format format) {
+bool ImageTransportSurfaceOverlayMac::Initialize(gl::GLSurface::Format format) {
   if (!stub_.get() || !stub_->decoder())
     return false;
 
@@ -114,9 +113,9 @@ bool ImageTransportSurfaceOverlayMac::Initialize(
 void ImageTransportSurfaceOverlayMac::Destroy() {
   ca_layer_tree_coordinator_.reset();
   if (previous_frame_fence_) {
-    gfx::ScopedSetGLToRealGLApi scoped_set_gl_api;
+    gl::ScopedSetGLToRealGLApi scoped_set_gl_api;
     // Ensure we are using the context with which the fence was created.
-    gfx::ScopedCGLSetCurrentContext scoped_set_current(fence_context_obj_);
+    gl::ScopedCGLSetCurrentContext scoped_set_current(fence_context_obj_);
     CheckGLErrors("Before destroy fence");
     previous_frame_fence_.reset();
     CheckGLErrors("After destroy fence");
@@ -144,7 +143,7 @@ void ImageTransportSurfaceOverlayMac::SendAcceleratedSurfaceBuffersSwapped(
     std::vector<ui::LatencyInfo> latency_info) {
   // TRACE_EVENT for gpu tests:
   TRACE_EVENT_INSTANT2("test_gpu", "SwapBuffers", TRACE_EVENT_SCOPE_THREAD,
-                       "GLImpl", static_cast<int>(gfx::GetGLImplementation()),
+                       "GLImpl", static_cast<int>(gl::GetGLImplementation()),
                        "width", size.width());
 
   GpuCommandBufferMsg_SwapBuffersCompleted_Params params;
@@ -159,6 +158,22 @@ void ImageTransportSurfaceOverlayMac::SendAcceleratedSurfaceBuffersSwapped(
   params.scale_factor = scale_factor;
   params.latency_info = std::move(latency_info);
   params.result = gfx::SwapResult::SWAP_ACK;
+
+  for (auto& query : ca_layer_in_use_queries_) {
+    gpu::TextureInUseResponse response;
+    response.texture = query.texture;
+    bool in_use = false;
+    gl::GLImageIOSurface* io_surface_image =
+        gl::GLImageIOSurface::FromGLImage(query.image.get());
+    if (io_surface_image) {
+      in_use = io_surface_image->CanCheckIOSurfaceIsInUse() &&
+               IOSurfaceIsInUse(io_surface_image->io_surface());
+    }
+    response.in_use = in_use;
+    params.in_use_responses.push_back(std::move(response));
+  }
+  ca_layer_in_use_queries_.clear();
+
   stub_->SendSwapBuffersCompleted(params);
 }
 
@@ -168,8 +183,8 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
 
   // If supported, use GLFence to ensure that we haven't gotten more than one
   // frame ahead of GL.
-  if (gfx::GLFence::IsSupported()) {
-    gfx::ScopedSetGLToRealGLApi scoped_set_gl_api;
+  if (gl::GLFence::IsSupported()) {
+    gl::ScopedSetGLToRealGLApi scoped_set_gl_api;
     CheckGLErrors("Before fence/flush");
 
     // If we have gotten more than one frame ahead of GL, wait for the previous
@@ -178,7 +193,7 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
       TRACE_EVENT0("gpu", "ImageTransportSurfaceOverlayMac::ClientWait");
 
       // Ensure we are using the context with which the fence was created.
-      gfx::ScopedCGLSetCurrentContext scoped_set_current(fence_context_obj_);
+      gl::ScopedCGLSetCurrentContext scoped_set_current(fence_context_obj_);
 
       // While we could call GLFence::ClientWait, this performs a busy wait on
       // Mac, leading to high CPU usage. Instead we poll with a 1ms delay. This
@@ -200,7 +215,7 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
     }
 
     // Create a fence for the current frame's work and save the context.
-    previous_frame_fence_.reset(gfx::GLFence::Create());
+    previous_frame_fence_.reset(gl::GLFence::Create());
     fence_context_obj_.reset(CGLGetCurrentContext(),
                              base::scoped_policy::RETAIN);
 
@@ -211,7 +226,7 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
   } else {
     // GLFence isn't supported - issue a glFinish on each frame to ensure
     // there is backpressure from GL.
-    gfx::ScopedSetGLToRealGLApi scoped_set_gl_api;
+    gl::ScopedSetGLToRealGLApi scoped_set_gl_api;
     TRACE_EVENT0("gpu", "ImageTransportSurfaceOverlayMac::glFinish");
     CheckGLErrors("Before finish");
     glFinish();
@@ -227,7 +242,7 @@ gfx::SwapResult ImageTransportSurfaceOverlayMac::SwapBuffersInternal(
   // appropriate window.
 
   // Update the latency info to reflect the swap time.
-  for (auto latency_info : latency_info_) {
+  for (auto& latency_info : latency_info_) {
     latency_info.AddLatencyNumberWithTimestamp(
         ui::INPUT_EVENT_GPU_SWAP_BUFFER_COMPONENT, 0, 0, finish_time, 1);
     latency_info.AddLatencyNumberWithTimestamp(
@@ -283,7 +298,7 @@ void* ImageTransportSurfaceOverlayMac::GetHandle() {
   return nullptr;
 }
 
-bool ImageTransportSurfaceOverlayMac::OnMakeCurrent(gfx::GLContext* context) {
+bool ImageTransportSurfaceOverlayMac::OnMakeCurrent(gl::GLContext* context) {
   // Ensure that the context is on the appropriate GL renderer. The GL renderer
   // will generally only change when the GPU changes.
   if (gl_renderer_id_ && context)
@@ -305,8 +320,14 @@ bool ImageTransportSurfaceOverlayMac::ScheduleOverlayPlane(
     DLOG(ERROR) << "Invalid non-zero Z order.";
     return false;
   }
+  gl::GLImageIOSurface* io_surface_image =
+      gl::GLImageIOSurface::FromGLImage(image);
+  if (!io_surface_image) {
+    DLOG(ERROR) << "Not an IOSurface image.";
+    return false;
+  }
   return ca_layer_tree_coordinator_->SetPendingGLRendererBackbuffer(
-      static_cast<gl::GLImageIOSurface*>(image)->io_surface());
+      io_surface_image->io_surface());
 }
 
 bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
@@ -325,7 +346,11 @@ bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer;
   if (contents_image) {
     gl::GLImageIOSurface* io_surface_image =
-        static_cast<gl::GLImageIOSurface*>(contents_image);
+        gl::GLImageIOSurface::FromGLImage(contents_image);
+    if (!io_surface_image) {
+      DLOG(ERROR) << "Cannot schedule CALayer with non-IOSurface GLImage";
+      return false;
+    }
     io_surface = io_surface_image->io_surface();
     cv_pixel_buffer = io_surface_image->cv_pixel_buffer();
   }
@@ -335,6 +360,11 @@ bool ImageTransportSurfaceOverlayMac::ScheduleCALayer(
                         cv_pixel_buffer, contents_rect,
                         gfx::ToEnclosingRect(rect), background_color,
                         edge_aa_mask, opacity, filter);
+}
+
+void ImageTransportSurfaceOverlayMac::ScheduleCALayerInUseQuery(
+    std::vector<CALayerInUseQuery> queries) {
+  ca_layer_in_use_queries_.swap(queries);
 }
 
 bool ImageTransportSurfaceOverlayMac::IsSurfaceless() const {

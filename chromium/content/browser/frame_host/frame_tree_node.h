@@ -13,10 +13,12 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "content/browser/frame_host/frame_tree_node_blame_context.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_replication_state.h"
+#include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -155,9 +157,9 @@ class CONTENT_EXPORT FrameTreeNode {
   // new document comes with a fresh set of CSP http headers).
   void ResetContentSecurityPolicy();
 
-  // Sets the current enforcement of strict mixed content checking and
-  // notifies proxies about the update.
-  void SetEnforceStrictMixedContentChecking(bool should_enforce);
+  // Sets the current insecure request policy, and notifies proxies about the
+  // update.
+  void SetInsecureRequestPolicy(blink::WebInsecureRequestPolicy policy);
 
   // Returns the currently active sandbox flags for this frame.  This includes
   // flags inherited from parent frames and the currently active flags from the
@@ -290,10 +292,11 @@ class CONTENT_EXPORT FrameTreeNode {
   // FrameTreeNode.
   void BeforeUnloadCanceled();
 
+  // Returns the BlameContext associated with this node.
+  FrameTreeNodeBlameContext& blame_context() { return blame_context_; }
+
  private:
   class OpenerDestroyedObserver;
-
-  void TraceSnapshot() const;
 
   FrameTreeNode* GetSibling(int relative_offset) const;
 
@@ -375,6 +378,11 @@ class CONTENT_EXPORT FrameTreeNode {
   base::ObserverList<Observer> observers_;
 
   base::TimeTicks last_focus_time_;
+
+  // A helper for tracing the snapshots of this FrameTreeNode and attributing
+  // browser process activities to this node (when possible).  It is unrelated
+  // to the core logic of FrameTreeNode.
+  FrameTreeNodeBlameContext blame_context_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameTreeNode);
 };

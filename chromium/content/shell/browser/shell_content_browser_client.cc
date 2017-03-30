@@ -17,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -117,6 +118,22 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
   return -1;
 }
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
+
+// A provider of services for Geolocation.
+class ShellGeolocationDelegate : public content::GeolocationDelegate {
+ public:
+  explicit ShellGeolocationDelegate(ShellBrowserContext* context)
+      : context_(context) {}
+
+  AccessTokenStore* CreateAccessTokenStore() final {
+    return new ShellAccessTokenStore(context_);
+  }
+
+ private:
+  ShellBrowserContext* context_;
+
+  DISALLOW_COPY_AND_ASSIGN(ShellGeolocationDelegate);
+};
 
 }  // namespace
 
@@ -353,8 +370,8 @@ ShellBrowserContext*
   return shell_browser_main_parts_->off_the_record_browser_context();
 }
 
-AccessTokenStore* ShellContentBrowserClient::CreateAccessTokenStore() {
-  return new ShellAccessTokenStore(browser_context());
+GeolocationDelegate* ShellContentBrowserClient::CreateGeolocationDelegate() {
+  return new ShellGeolocationDelegate(browser_context());
 }
 
 }  // namespace content

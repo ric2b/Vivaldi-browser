@@ -120,10 +120,12 @@ class DeviceSettingsTestHelper : public SessionManagerClient {
   void GetServerBackedStateKeys(const StateKeysCallback& callback) override;
 
   void CheckArcAvailability(const ArcCallback& callback) override;
-  void StartArcInstance(const std::string& socket_path,
+  void StartArcInstance(const cryptohome::Identification& cryptohome_id,
                         const ArcCallback& callback) override;
   void StopArcInstance(const ArcCallback& callback) override;
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override;
+  void RemoveArcData(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override;
 
  private:
   struct PolicyState {

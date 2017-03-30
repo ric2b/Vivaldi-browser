@@ -53,6 +53,7 @@
 <if expr="chromeos">
 <link rel="stylesheet" href="chromeos/third_party_ime_confirm_overlay.css">
 <link rel="stylesheet" href="chromeos/accounts_options_page.css">
+<link rel="stylesheet" href="chromeos/arc_opt_out_confirm_overlay.css">
 <link rel="stylesheet" href="chromeos/bluetooth.css">
 <link rel="stylesheet" href="chromeos/change_picture_options.css">
 <link rel="stylesheet" href="chromeos/consumer_management_overlay.css">
@@ -61,6 +62,8 @@
 <link rel="stylesheet" href="chromeos/internet_detail.css">
 <link rel="stylesheet" href="chromeos/keyboard_overlay.css">
 <link rel="stylesheet" href="chromeos/pointer_overlay.css">
+<link rel="stylesheet" href="chromeos/storage_clear_drive_cache_overlay.css">
+<link rel="stylesheet" href="chromeos/storage_manager.css">
 <link rel="stylesheet" href="factory_reset_overlay.css">
 <link rel="stylesheet" href="../help/channel_change_page.css">
 </if>
@@ -131,6 +134,7 @@
   <include src="sync_setup_overlay.html">
 <if expr="chromeos">
   <include src="chromeos/accounts_options.html">
+  <include src="chromeos/arc_opt_out_confirm_overlay.html">
   <include src="chromeos/bluetooth_add_device_overlay.html">
   <include src="chromeos/bluetooth_pair_device_overlay.html">
   <include src="chromeos/change_picture_options.html">
@@ -139,6 +143,7 @@
   <include src="chromeos/keyboard_overlay.html">
   <include src="chromeos/pointer_overlay.html">
   <include src="chromeos/power_overlay.html">
+  <include src="chromeos/storage_manager.html">
   <include src="factory_reset_overlay.html">
 </if>
 <if expr="use_nss_certs">
@@ -163,6 +168,7 @@
   <include src="chromeos/display_overscan.html">
   <include src="chromeos/internet_detail.html">
   <include src="chromeos/preferred_networks.html">
+  <include src="chromeos/storage_clear_drive_cache_overlay.html">
   <include src="chromeos/third_party_ime_confirm_overlay.html">
   <include src="../help/channel_change_page.html">
 </if>

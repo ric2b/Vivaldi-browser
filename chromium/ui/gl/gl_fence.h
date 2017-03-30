@@ -8,7 +8,7 @@
 #include "base/macros.h"
 #include "ui/gl/gl_export.h"
 
-namespace gfx {
+namespace gl {
 
 class GL_EXPORT GLFence {
  public:
@@ -31,10 +31,13 @@ class GL_EXPORT GLFence {
   // Resets the fence to the original state.
   virtual void ResetState();
 
+  // Loses the reference to the fence. Useful if the context is lost.
+  virtual void Invalidate();
+
  private:
   DISALLOW_COPY_AND_ASSIGN(GLFence);
 };
 
-}  // namespace gfx
+}  // namespace gl
 
 #endif  // UI_GL_GL_FENCE_H_

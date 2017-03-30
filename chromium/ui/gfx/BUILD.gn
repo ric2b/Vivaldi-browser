@@ -62,10 +62,10 @@ component("gfx") {
     "color_analysis.cc",
     "color_analysis.h",
     "color_palette.h",
-    "color_profile.cc",
-    "color_profile.h",
-    "color_profile_mac.mm",
-    "color_profile_win.cc",
+    "color_space.cc",
+    "color_space.h",
+    "color_space_mac.mm",
+    "color_space_win.cc",
     "color_utils.cc",
     "color_utils.h",
     "favicon_size.cc",
@@ -199,6 +199,8 @@ component("gfx") {
     "win/singleton_hwnd.h",
     "win/singleton_hwnd_observer.cc",
     "win/singleton_hwnd_observer.h",
+    "win/text_analysis_source.cc",
+    "win/text_analysis_source.h",
     "win/window_impl.cc",
     "win/window_impl.h",
   ]
@@ -237,6 +239,7 @@ component("gfx") {
   public_deps = [
     ":memory_buffer_sources",
     ":native_widget_types",
+    ":selection_bound_sources",
     "//base",
     "//skia",
     "//third_party/icu",
@@ -377,6 +380,7 @@ component("gfx") {
   if (is_mac) {
     libs = [
       "AppKit.framework",
+      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreFoundation.framework",
       "CoreGraphics.framework",
       "CoreText.framework",
@@ -413,6 +417,7 @@ action("aggregate_vector_icons") {
   sources = [
     "vector_icons/account_box.icon",
     "vector_icons/account_child_invert.icon",
+    "vector_icons/account_circle.icon",
     "vector_icons/apps.icon",
     "vector_icons/autologin.icon",
     "vector_icons/bar_close.1x.icon",
@@ -420,14 +425,26 @@ action("aggregate_vector_icons") {
     "vector_icons/blocked_badge.icon",
     "vector_icons/browser_tools.1x.icon",
     "vector_icons/browser_tools.icon",
+    "vector_icons/browser_tools_error.1x.icon",
+    "vector_icons/browser_tools_error.icon",
+    "vector_icons/browser_tools_update.1x.icon",
+    "vector_icons/browser_tools_update.icon",
+    "vector_icons/browser_tools_warning.1x.icon",
+    "vector_icons/browser_tools_warning.icon",
     "vector_icons/business.icon",
     "vector_icons/check_circle.icon",
+    "vector_icons/checkbox_active.icon",
+    "vector_icons/checkbox_normal.icon",
     "vector_icons/chrome_product.icon",
+    "vector_icons/close_all.icon",
     "vector_icons/code.icon",
+    "vector_icons/combobox_arrow_mac_disabled.icon",
+    "vector_icons/combobox_arrow_mac_enabled.icon",
     "vector_icons/cookie.icon",
     "vector_icons/crashed_tab.icon",
     "vector_icons/credit_card.1x.icon",
     "vector_icons/credit_card.icon",
+    "vector_icons/eol.icon",
     "vector_icons/error_circle.icon",
     "vector_icons/extension.icon",
     "vector_icons/extension_crashed.icon",
@@ -451,24 +468,20 @@ action("aggregate_vector_icons") {
     "vector_icons/image.icon",
     "vector_icons/incognito.1x.icon",
     "vector_icons/incognito.icon",
-    "vector_icons/keyword_search.1x.icon",
-    "vector_icons/keyword_search.icon",
+    "vector_icons/info_outline.icon",
     "vector_icons/laptop.icon",
     "vector_icons/location_bar_http.1x.icon",
     "vector_icons/location_bar_http.icon",
     "vector_icons/location_bar_https_invalid.1x.icon",
     "vector_icons/location_bar_https_invalid.icon",
-    "vector_icons/location_bar_https_invalid_invert.1x.icon",
-    "vector_icons/location_bar_https_invalid_invert.icon",
     "vector_icons/location_bar_https_valid.1x.icon",
     "vector_icons/location_bar_https_valid.icon",
     "vector_icons/location_bar_https_valid_in_chip.1x.icon",
     "vector_icons/location_bar_https_valid_in_chip.icon",
-    "vector_icons/location_bar_https_valid_invert.1x.icon",
-    "vector_icons/location_bar_https_valid_invert.icon",
     "vector_icons/location_bar_star.icon",
     "vector_icons/location_bar_star_active.icon",
     "vector_icons/location_on.icon",
+    "vector_icons/lock.icon",
     "vector_icons/menu_check.1x.icon",
     "vector_icons/menu_check.icon",
     "vector_icons/menu_radio_empty.icon",
@@ -488,6 +501,7 @@ action("aggregate_vector_icons") {
     "vector_icons/navigate_stop.1x.icon",
     "vector_icons/navigate_stop.icon",
     "vector_icons/notifications.icon",
+    "vector_icons/notifications_off.icon",
     "vector_icons/omnibox_calculator.1x.icon",
     "vector_icons/omnibox_calculator.icon",
     "vector_icons/omnibox_extension_app.1x.icon",
@@ -504,13 +518,37 @@ action("aggregate_vector_icons") {
     "vector_icons/pdf.icon",
     "vector_icons/photo_camera.icon",
     "vector_icons/protocol_handler.icon",
+    "vector_icons/radio_button_active.icon",
+    "vector_icons/radio_button_normal.icon",
     "vector_icons/remove_box.icon",
     "vector_icons/remove_circle.icon",
     "vector_icons/sad_tab.icon",
+    "vector_icons/settings.icon",
+    "vector_icons/shelf_applist.1x.icon",
+    "vector_icons/shelf_applist.icon",
+    "vector_icons/shelf_keyboard.1x.icon",
+    "vector_icons/shelf_keyboard.icon",
+    "vector_icons/shelf_notifications.1x.icon",
+    "vector_icons/shelf_notifications.icon",
+    "vector_icons/shelf_overflow.1x.icon",
+    "vector_icons/shelf_overflow.icon",
+    "vector_icons/shelf_overview.1x.icon",
+    "vector_icons/shelf_overview.icon",
     "vector_icons/smartphone.icon",
     "vector_icons/submenu_arrow.1x.icon",
     "vector_icons/submenu_arrow.icon",
     "vector_icons/supervisor_account.icon",
+    "vector_icons/sync_problem.icon",
+    "vector_icons/system_tray_battery.1x.icon",
+    "vector_icons/system_tray_battery.icon",
+    "vector_icons/system_tray_battery_alert.1x.icon",
+    "vector_icons/system_tray_battery_alert.icon",
+    "vector_icons/system_tray_battery_bolt.1x.icon",
+    "vector_icons/system_tray_battery_bolt.icon",
+    "vector_icons/system_tray_battery_unreliable.1x.icon",
+    "vector_icons/system_tray_battery_unreliable.icon",
+    "vector_icons/system_tray_battery_x.1x.icon",
+    "vector_icons/system_tray_battery_x.icon",
     "vector_icons/tab.icon",
     "vector_icons/tab_audio.1x.icon",
     "vector_icons/tab_audio.icon",
@@ -528,6 +566,7 @@ action("aggregate_vector_icons") {
     "vector_icons/tablet.icon",
     "vector_icons/translate.icon",
     "vector_icons/upgrade_menu_item.icon",
+    "vector_icons/videocam.icon",
     "vector_icons/warning.icon",
     "vector_icons/warning_badge.icon",
     "vector_icons/web.icon",
@@ -536,6 +575,7 @@ action("aggregate_vector_icons") {
     "vector_icons/window_control_close.1x.icon",
     "vector_icons/window_control_close.icon",
     "vector_icons/window_control_left_snapped.1x.icon",
+    "vector_icons/window_control_left_snapped.icon",
     "vector_icons/window_control_maximize.1x.icon",
     "vector_icons/window_control_maximize.icon",
     "vector_icons/window_control_minimize.1x.icon",
@@ -563,10 +603,6 @@ action("aggregate_vector_icons") {
     "--output_cc=" + rebase_path(vector_icons_cc_file, root_build_dir),
     "--output_h=" + rebase_path(vector_icons_h_file, root_build_dir),
   ]
-
-  if (is_mac) {
-    sources += [ "vector_icons/combobox_arrow_mac.icon" ]
-  }
 }
 
 # Looking for gfx_geometry? It's //ui/gfx/geometry:geometry
@@ -579,6 +615,36 @@ source_set("native_widget_types") {
 
   public_deps = [
     "//base",
+  ]
+}
+
+group("selection_bound") {
+  if (is_component_build) {
+    public_deps = [
+      ":gfx",
+    ]
+  } else {
+    public_deps = [
+      ":selection_bound_sources",
+    ]
+  }
+}
+
+# Depend on this to use selection_bound.h without pulling in all of gfx.
+source_set("selection_bound_sources") {
+  visibility = [ ":*" ]
+
+  sources = [
+    "gfx_export.h",
+    "selection_bound.cc",
+    "selection_bound.h",
+  ]
+
+  defines = [ "GFX_IMPLEMENTATION" ]
+
+  public_deps = [
+    "//base",
+    "//ui/gfx/geometry",
   ]
 }
 
@@ -623,7 +689,10 @@ source_set("memory_buffer_sources") {
   }
 
   if (use_ozone) {
-    sources += [ "native_pixmap_handle_ozone.h" ]
+    sources += [
+      "native_pixmap_handle_ozone.cc",
+      "native_pixmap_handle_ozone.h",
+    ]
   }
 
   defines = [ "GFX_IMPLEMENTATION" ]
@@ -708,7 +777,6 @@ test("gfx_unittests") {
       "codec/jpeg_codec_unittest.cc",
       "codec/png_codec_unittest.cc",
       "color_analysis_unittest.cc",
-      "color_profile_mac_unittest.mm",
       "color_utils_unittest.cc",
       "font_fallback_mac_unittest.cc",
       "font_list_unittest.cc",
@@ -728,12 +796,14 @@ test("gfx_unittests") {
       "image/image_mac_unittest.mm",
       "image/image_util_unittest.cc",
       "mac/coordinate_conversion_unittest.mm",
+      "mojo/struct_traits_unittest.cc",
       "nine_image_painter_unittest.cc",
       "path_mac_unittest.mm",
       "platform_font_mac_unittest.mm",
       "range/range_mac_unittest.mm",
       "range/range_unittest.cc",
       "range/range_win_unittest.cc",
+      "selection_bound_unittest.cc",
       "sequential_id_generator_unittest.cc",
       "shadow_value_unittest.cc",
       "skbitmap_operations_unittest.cc",
@@ -791,12 +861,12 @@ test("gfx_unittests") {
 
   if (is_win) {
     sources += [
-      "color_profile_win_unittest.cc",
       "font_fallback_win_unittest.cc",
       "icon_util_unittest.cc",
       "icon_util_unittests.rc",
       "path_win_unittest.cc",
       "platform_font_win_unittest.cc",
+      "win/text_analysis_source_unittest.cc",
     ]
 
     ldflags = [
@@ -809,6 +879,15 @@ test("gfx_unittests") {
       "d3d10_1.lib",
       "imm32.lib",
       "oleacc.lib",
+    ]
+  }
+
+  if (!is_ios) {
+    deps += [
+      "//mojo/edk/system",
+      "//mojo/public/cpp/bindings",
+      "//ui/gfx/geometry/mojo:unit_test",
+      "//ui/gfx/mojo:test_interfaces",
     ]
   }
 }

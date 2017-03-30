@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <string>
 
 #include "base/macros.h"
 #include "base/memory/shared_memory_handle.h"
@@ -23,6 +24,8 @@ class Point;
 }
 
 namespace exo {
+class NotificationSurface;
+class NotificationSurfaceManager;
 class SharedMemory;
 class ShellSurface;
 class SubSurface;
@@ -38,6 +41,7 @@ class Buffer;
 class Display {
  public:
   Display();
+  explicit Display(NotificationSurfaceManager* notification_surface_manager);
   ~Display();
 
   // Creates a new surface.
@@ -51,10 +55,12 @@ class Display {
 
 #if defined(USE_OZONE)
   // Creates a buffer for a Linux DMA-buf file descriptor.
-  std::unique_ptr<Buffer> CreateLinuxDMABufBuffer(base::ScopedFD fd,
-                                                  const gfx::Size& size,
-                                                  gfx::BufferFormat format,
-                                                  int stride);
+  std::unique_ptr<Buffer> CreateLinuxDMABufBuffer(
+      const gfx::Size& size,
+      gfx::BufferFormat format,
+      const std::vector<int>& strides,
+      const std::vector<int>& offsets,
+      std::vector<base::ScopedFD>&& fds);
 #endif
 
   // Creates a shell surface for an existing surface.
@@ -67,12 +73,23 @@ class Display {
       ShellSurface* parent,
       const gfx::Point& position);
 
+  // Creates a remote shell surface for an existing surface using |container|.
+  std::unique_ptr<ShellSurface> CreateRemoteShellSurface(Surface* surface,
+                                                         int container);
+
   // Creates a sub-surface for an existing surface. The sub-surface will be
   // a child of |parent|.
   std::unique_ptr<SubSurface> CreateSubSurface(Surface* surface,
                                                Surface* parent);
 
+  // Creates a notification surface for a surface and notification id.
+  std::unique_ptr<NotificationSurface> CreateNotificationSurface(
+      Surface* surface,
+      const std::string& notification_id);
+
  private:
+  NotificationSurfaceManager* const notification_surface_manager_;
+
   DISALLOW_COPY_AND_ASSIGN(Display);
 };
 

@@ -10,7 +10,7 @@
       'bookmarks_private.json',
       'browser_action_utilities.json',
       'editcommand.json',
-      'history_search.json',
+      'history_private.json',
       'import_data.json',
       'mousegestures.json',
       'notes.json',

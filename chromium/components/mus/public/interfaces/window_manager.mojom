@@ -6,9 +6,10 @@ module mus.mojom;
 
 import "components/mus/public/interfaces/cursor.mojom";
 import "components/mus/public/interfaces/event_matcher.mojom";
-import "components/mus/public/interfaces/input_events.mojom";
 import "components/mus/public/interfaces/window_manager_constants.mojom";
-import "ui/mojo/geometry/geometry.mojom";
+import "components/mus/public/interfaces/window_tree_constants.mojom";
+import "ui/events/mojo/event.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // WindowManager is used when a WindowTreeClient attempts to modify
 // a property of the embed root. When this happens WindowTree calls the
@@ -50,20 +51,40 @@ interface WindowManager {
   const string kWindowIgnoredByShelf_Property = "prop:window-ignored-by-shelf";
   // The application ID (eg. 'mojo:foo'). Type: mojom::String
   const string kAppID_Property = "prop:app-id";
+  // Specifies that the system default caption and icon should not be rendered,
+  // and the client area should be equivalent to the window area. Type: bool
+  const string kRemoveStandardFrame_Property = "prop:remove-standard-frame";
+
+  // Called immediately when the WindowManager is obtained.
+  OnConnect(uint16 client_id);
+
+  // Called when a new display is added. |root| gives the root window specific
+  // to this WindowManager for |display|.
+  WmNewDisplayAdded(Display display, WindowData root, bool parent_drawn);
 
   // When the WindowManager completes a request it must call back to
   // WindowManagerClient::WmResponse().
-  WmSetBounds(uint32 change_id, uint32 window_id, mojo.Rect bounds);
+  WmSetBounds(uint32 change_id, uint32 window_id, gfx.mojom.Rect bounds);
   WmSetProperty(uint32 change_id,
                 uint32 window_id,
                 string name,
                 array<uint8>? value);
+  
   // Asks the WindowManager to create a new window.
+  // |requesting_client_id| is the id of the client issuing the request. This
+  // allows the window manager to track top level windows by client.
   WmCreateTopLevelWindow(uint32 change_id,
+                         uint16 requesting_client_id,
                          map<string, array<uint8>> properties);
 
+  // A WindowTreeClient is considered "janky" by Mus when it stops ACK'ing input
+  // events within a reasonable timeframe. When a client enters or exits this
+  // state, Mus will tell the window manager about it so that the window manager
+  // can update the UI for the janky windows.
+  WmClientJankinessChanged(uint16 client_id, bool janky);
+
   // An accelerator registered via AddAccelerator() has been triggered.
-  OnAccelerator(uint32 id, Event event);
+  OnAccelerator(uint32 id, ui.mojom.Event event);
 };
 
 // This interface is only used as an associated interface and is associated
@@ -82,7 +103,7 @@ interface WindowManagerClient {
   SetUnderlaySurfaceOffsetAndExtendedHitArea(uint32 window_id,
                                              int32 x_offset,
                                              int32 y_offset,
-                                             mojo.Insets hit_area);
+                                             gfx.mojom.Insets hit_area);
 
   // Add and remove accelerators. When accelerators are registered the
   // WindowManager receives the event via OnAccelerator() rather than the

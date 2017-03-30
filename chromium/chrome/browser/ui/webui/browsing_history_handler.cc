@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <set>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -498,7 +499,7 @@ void BrowsingHistoryHandler::HandleRemoveVisits(const base::ListValue* args) {
   if (delete_task_tracker_.HasTrackedTasks() ||
       has_pending_delete_request_ ||
       !profile->GetPrefs()->GetBoolean(prefs::kAllowDeletingBrowserHistory)) {
-    web_ui()->CallJavascriptFunction("deleteFailed");
+    web_ui()->CallJavascriptFunctionUnsafe("deleteFailed");
     return;
   }
 
@@ -713,14 +714,13 @@ void BrowsingHistoryHandler::ReturnResultsToFrontEnd() {
            query_results_.begin(); it != query_results_.end(); ++it) {
     std::unique_ptr<base::Value> value(
         it->ToValue(bookmark_model, supervised_user_service, sync_service));
-    results_value.Append(value.release());
+    results_value.Append(std::move(value));
   }
 
-  web_ui()->CallJavascriptFunction(
-      "historyResult", results_info_value_, results_value);
-  web_ui()->CallJavascriptFunction(
-      "showNotification",
-      base::FundamentalValue(has_synced_results_),
+  web_ui()->CallJavascriptFunctionUnsafe("historyResult", results_info_value_,
+                                         results_value);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "showNotification", base::FundamentalValue(has_synced_results_),
       base::FundamentalValue(has_other_forms_of_browsing_history_));
   results_info_value_.Clear();
   query_results_.clear();
@@ -870,9 +870,8 @@ void BrowsingHistoryHandler::OtherFormsOfBrowsingHistoryQueryComplete(
   RecordMetricsForNoticeAboutOtherFormsOfBrowsingHistory(
       has_other_forms_of_browsing_history_);
 
-  web_ui()->CallJavascriptFunction(
-      "showNotification",
-      base::FundamentalValue(has_synced_results_),
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "showNotification", base::FundamentalValue(has_synced_results_),
       base::FundamentalValue(has_other_forms_of_browsing_history_));
 }
 
@@ -882,7 +881,7 @@ void BrowsingHistoryHandler::RemoveComplete() {
   // Notify the page that the deletion request is complete, but only if a web
   // history delete request is not still pending.
   if (!has_pending_delete_request_)
-    web_ui()->CallJavascriptFunction("deleteComplete");
+    web_ui()->CallJavascriptFunctionUnsafe("deleteComplete");
 }
 
 void BrowsingHistoryHandler::RemoveWebHistoryComplete(bool success) {
@@ -957,5 +956,5 @@ void BrowsingHistoryHandler::OnURLsDeleted(
     const history::URLRows& deleted_rows,
     const std::set<GURL>& favicon_urls) {
   if (all_history || DeletionsDiffer(deleted_rows, urls_to_be_deleted_))
-    web_ui()->CallJavascriptFunction("historyDeleted");
+    web_ui()->CallJavascriptFunctionUnsafe("historyDeleted");
 }

@@ -14,6 +14,11 @@
 // This doesn't currently work with alias_for.
 
 
+// - descriptor_only
+// These are actually descriptors and not CSS properties. Properties with
+// the same name as a descriptor do not get this flag.
+
+
 // - longhands=property;other-property
 // The property is a shorthand for several other properties.
 
@@ -163,7 +168,7 @@ border-top-left-radius interpolable, initial=initialBorderRadius, converter=conv
 border-top-right-radius interpolable, initial=initialBorderRadius, converter=convertRadius
 border-top-style type_name=EBorderStyle, initial=initialBorderStyle
 border-top-width interpolable, initial=initialBorderWidth, converter=convertLineWidth<unsigned>, typedom_types=[Length], keywords=[thin|medium|thick], supports_percentage
-bottom interpolable, initial=initialOffset, converter=convertLengthOrAuto
+bottom typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
 box-shadow interpolable, converter=convertShadow
 box-sizing
 break-after type_name=EBreak
@@ -193,7 +198,7 @@ empty-cells inherited, type_name=EEmptyCells
 fill interpolable, inherited, svg, setter=setFillPaint, custom_all
 fill-opacity interpolable, inherited, svg, converter=convertNumberOrPercentage
 fill-rule inherited, svg, type_name=WindRule
-filter svg, name_for_methods=FilterResource, converter=convertFragmentIdentifier
+filter interpolable, converter=convertFilterOperations
 flex-basis interpolable, converter=convertLengthOrAuto
 flex-direction
 flex-grow interpolable, type_name=float
@@ -214,7 +219,7 @@ grid-row-start runtime_flag=CSSGridLayout, converter=convertGridPosition
 grid-template-areas runtime_flag=CSSGridLayout, custom_all
 grid-template-columns runtime_flag=CSSGridLayout, custom_all
 grid-template-rows runtime_flag=CSSGridLayout, custom_all
-height interpolable, initial=initialSize, converter=convertLengthSizing
+height typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialSize, converter=convertLengthSizing
 hyphens runtime_flag=CSSHyphens, inherited, type_name=Hyphens
 image-rendering inherited
 image-orientation runtime_flag=ImageOrientation, inherited, name_for_methods=RespectImageOrientation, converter=convertImageOrientation
@@ -222,7 +227,7 @@ isolation
 justify-content initial=initialContentAlignment, converter=convertContentAlignmentData
 justify-items runtime_flag=CSSGridLayout, initial=initialSelfAlignment, converter=convertSelfOrDefaultAlignmentData
 justify-self runtime_flag=CSSGridLayout, initial=initialSelfAlignment, converter=convertSelfOrDefaultAlignmentData
-left interpolable, initial=initialOffset, converter=convertLengthOrAuto
+left typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
 letter-spacing interpolable, inherited, initial=initialLetterWordSpacing, converter=convertSpacing
 lighting-color interpolable, svg, converter=convertColor
 line-height interpolable, inherited, getter=specifiedLineHeight, converter=convertLineHeight
@@ -270,10 +275,10 @@ pointer-events inherited
 position custom_inherit
 quotes inherited, converter=convertQuotes
 resize custom_value
-right interpolable, initial=initialOffset, converter=convertLengthOrAuto
+right typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
 r interpolable, svg, converter=convertLength
-rx interpolable, svg, converter=convertLength
-ry interpolable, svg, converter=convertLength
+rx interpolable, svg, converter=convertLengthOrAuto
+ry interpolable, svg, converter=convertLengthOrAuto
 scroll-behavior runtime_flag=CSSOMSmoothScroll, type_name=ScrollBehavior
 scroll-snap-type runtime_flag=CSSScrollSnapPoints, type_name=ScrollSnapType
 scroll-snap-points-x runtime_flag=CSSScrollSnapPoints, converter=convertSnapPoints
@@ -312,11 +317,12 @@ text-indent interpolable, inherited, custom_all
 text-justify runtime_flag=CSS3Text, inherited, type_name=TextJustify
 text-overflow type_name=TextOverflow
 text-shadow interpolable, inherited, converter=convertShadow
+text-size-adjust inherited, converter=convertTextSizeAdjust, type_name=TextSizeAdjust
 text-transform inherited
 text-underline-position runtime_flag=CSS3TextDecorations, inherited, type_name=TextUnderlinePosition
-top interpolable, initial=initialOffset, converter=convertLengthOrAuto
+top typedom_types=[Length], keywords=[auto], supports_percentage, interpolable, initial=initialOffset, converter=convertLengthOrAuto
 touch-action converter=convertFlags<TouchAction>, type_name=TouchAction
-transform interpolable, custom_value
+transform typedom_types=[Transform], keywords=[none], interpolable, custom_value
 transform-origin interpolable, converter=convertTransformOrigin
 transform-style name_for_methods=TransformStyle3D
 translate runtime_flag=CSSIndependentTransformProperties, converter=convertTranslate, interpolable
@@ -349,7 +355,7 @@ y interpolable, svg, converter=convertLength
 -webkit-box-orient
 -webkit-box-pack
 -webkit-box-reflect converter=convertBoxReflect
--webkit-clip-path interpolable, custom_value
+-webkit-clip-path interpolable, converter=convertClipPath
 column-count interpolable, type_name=unsigned short, custom_all
 column-gap interpolable, converter=convertComputedLength<float>, custom_all
 column-rule-color interpolable, custom_all
@@ -357,7 +363,6 @@ column-rule-style type_name=EBorderStyle, initial=initialBorderStyle
 column-rule-width interpolable, converter=convertLineWidth<unsigned short>
 column-span type_name=ColumnSpan
 column-width interpolable, converter=convertComputedLength<float>, custom_all
--webkit-filter interpolable, converter=convertFilterOperations
 -webkit-highlight inherited, converter=convertString<CSSValueNone>
 -webkit-hyphenate-character inherited, name_for_methods=HyphenationString, converter=convertString<CSSValueAuto>
 -webkit-line-break inherited, type_name=LineBreak
@@ -443,16 +448,19 @@ z-index interpolable, type_name=int, custom_all
 // TODO(timloh): This seems wrong, most of these shouldn't reach the StyleBuilder
 
 all builder_skip
-font-display builder_skip, runtime_flag=CSSFontDisplay
-max-zoom builder_skip
-min-zoom builder_skip
-orientation builder_skip
 page builder_skip
-src builder_skip
-unicode-range builder_skip
-user-zoom builder_skip
 -webkit-font-size-delta builder_skip
 -webkit-text-decorations-in-effect inherited, builder_skip
+
+// Descriptors
+
+font-display descriptor_only, runtime_flag=CSSFontDisplay
+max-zoom descriptor_only
+min-zoom descriptor_only
+orientation descriptor_only
+src descriptor_only
+unicode-range descriptor_only
+user-zoom descriptor_only
 
 // Shorthands
 
@@ -552,6 +560,7 @@ columns longhands=column-width;column-count
 -webkit-column-span alias_for=column-span
 -webkit-column-width alias_for=column-width
 -webkit-columns alias_for=columns
+-webkit-filter alias_for=filter
 -webkit-flex alias_for=flex
 -webkit-flex-basis alias_for=flex-basis
 -webkit-flex-direction alias_for=flex-direction
@@ -568,6 +577,7 @@ columns longhands=column-width;column-count
 -webkit-shape-image-threshold alias_for=shape-image-threshold
 -webkit-shape-margin alias_for=shape-margin
 -webkit-shape-outside alias_for=shape-outside
+-webkit-text-size-adjust alias_for=text-size-adjust
 -webkit-transform alias_for=transform
 -webkit-transform-origin alias_for=transform-origin
 -webkit-transform-style alias_for=transform-style

@@ -126,11 +126,9 @@ void MediaDocumentParser::createDocumentStructure()
 {
     ASSERT(document());
     HTMLHtmlElement* rootElement = HTMLHtmlElement::create(*document());
-    rootElement->insertedByParser();
     document()->appendChild(rootElement);
+    rootElement->insertedByParser();
 
-    document()->frame()->loader().dispatchDocumentElementAvailable();
-    document()->frame()->loader().runScriptsAtDocumentElementAvailable();
     if (isDetached())
         return; // runScriptsAtDocumentElementAvailable can detach the frame.
 
@@ -256,7 +254,7 @@ void MediaDocument::defaultEventHandler(Event* event)
             return;
 
         KeyboardEvent* keyboardEvent = toKeyboardEvent(event);
-        if (keyboardEvent->keyIdentifier() == "U+0020" || keyboardEvent->keyCode() == VKEY_MEDIA_PLAY_PAUSE) {
+        if (keyboardEvent->key() == " " || keyboardEvent->keyCode() == VKEY_MEDIA_PLAY_PAUSE) {
             // space or media key (play/pause)
             video->togglePlayState();
             event->setDefaultHandled();

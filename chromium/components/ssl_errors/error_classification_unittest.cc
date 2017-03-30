@@ -12,11 +12,11 @@
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/testing_pref_service.h"
 #include "net/base/net_errors.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/x509_cert_types.h"
 #include "net/cert/x509_certificate.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_certificate_data.h"
+#include "net/test/test_data_directory.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -27,7 +27,7 @@ TEST_F(SSLErrorClassificationTest, TestNameMismatch) {
   scoped_refptr<net::X509Certificate> google_cert(
       net::X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(google_der), sizeof(google_der)));
-  ASSERT_NE(static_cast<net::X509Certificate*>(NULL), google_cert.get());
+  ASSERT_TRUE(google_cert.get());
   std::vector<std::string> dns_names_google;
   google_cert->GetDNSNames(&dns_names_google);
   ASSERT_EQ(1u, dns_names_google.size());  // ["www.google.com"]
@@ -115,7 +115,7 @@ TEST_F(SSLErrorClassificationTest, TestNameMismatch) {
   scoped_refptr<net::X509Certificate> webkit_cert(
       net::X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(webkit_der), sizeof(webkit_der)));
-  ASSERT_NE(static_cast<net::X509Certificate*>(NULL), webkit_cert.get());
+  ASSERT_TRUE(webkit_cert.get());
   std::vector<std::string> dns_names_webkit;
   webkit_cert->GetDNSNames(&dns_names_webkit);
   ASSERT_EQ(2u, dns_names_webkit.size());  // ["*.webkit.org", "webkit.org"]

@@ -11,9 +11,12 @@
 
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/location.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/about_flags.h"
 #include "chrome/browser/browser_process.h"
@@ -32,6 +35,7 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/user_manager.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
@@ -104,10 +108,10 @@ class BrowserAddedForProfileObserver : public chrome::BrowserListObserver {
       // By the time the browser is added a tab (or multiple) are about to be
       // added. Post the callback to the message loop so it gets executed after
       // the tabs are created.
-      base::MessageLoop::current()->PostTask(
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
           FROM_HERE,
           base::Bind(callback_, profile_, Profile::CREATE_STATUS_INITIALIZED));
-      base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+      base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
     }
   }
 
@@ -132,9 +136,15 @@ void OnUserManagerSystemProfileCreated(
   if (status != Profile::CREATE_STATUS_INITIALIZED || callback.is_null())
     return;
 
+  // Force Material Design user manager on when Material Design settings are on.
+  bool use_material_design_user_manager =
+      switches::IsMaterialDesignUserManager() ||
+      base::FeatureList::IsEnabled(features::kMaterialDesignSettingsFeature);
+
   // Tell the webui which user should be focused.
-  std::string page = switches::IsMaterialDesignUserManager() ?
-      chrome::kChromeUIMdUserManagerUrl : chrome::kChromeUIUserManagerURL;
+  std::string page = use_material_design_user_manager
+                         ? chrome::kChromeUIMdUserManagerUrl
+                         : chrome::kChromeUIUserManagerURL;
 
   if (tutorial_mode == profiles::USER_MANAGER_TUTORIAL_OVERVIEW) {
     page += profiles::kUserManagerDisplayTutorial;
@@ -158,6 +168,20 @@ void OnUserManagerSystemProfileCreated(
     page += profiles::kUserManagerSelectProfileAppLauncher;
   }
   callback.Run(system_profile, page);
+}
+
+// Called in profiles::LoadProfileAsync once profile is loaded. It runs
+// |callback| if it isn't null.
+void ProfileLoadedCallback(ProfileManager::CreateCallback callback,
+                           Profile* profile,
+                           Profile::CreateStatus status) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  if (status != Profile::CREATE_STATUS_INITIALIZED)
+    return;
+
+  if (!callback.is_null())
+    callback.Run(profile, Profile::CREATE_STATUS_INITIALIZED);
 }
 
 }  // namespace
@@ -274,6 +298,14 @@ void OpenBrowserWindowForProfile(
 }
 
 #if !defined(OS_ANDROID)
+
+void LoadProfileAsync(const base::FilePath& path,
+                      ProfileManager::CreateCallback callback) {
+  g_browser_process->profile_manager()->CreateProfileAsync(
+      path, base::Bind(&ProfileLoadedCallback, callback), base::string16(),
+      std::string(), std::string());
+}
+
 void SwitchToProfile(const base::FilePath& path,
                      bool always_create,
                      ProfileManager::CreateCallback callback,
@@ -328,7 +360,7 @@ void CreateAndSwitchToNewProfile(ProfileManager::CreateCallback callback,
   ProfileMetrics::LogProfileAddNewUser(metric);
 }
 
-void GuestBrowserCloseSuccess(const base::FilePath& profile_path) {
+void ProfileBrowserCloseSuccess(const base::FilePath& profile_path) {
   UserManager::Show(base::FilePath(),
                     profiles::USER_MANAGER_NO_TUTORIAL,
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
@@ -341,7 +373,7 @@ void CloseGuestProfileWindows() {
 
   if (profile) {
     BrowserList::CloseAllBrowsersWithProfile(
-        profile, base::Bind(&GuestBrowserCloseSuccess));
+        profile, base::Bind(&ProfileBrowserCloseSuccess));
   }
 }
 
@@ -407,6 +439,12 @@ bool IsLockAvailable(Profile* profile) {
       return true;
   }
   return false;
+}
+
+void CloseProfileWindows(Profile* profile) {
+  DCHECK(profile);
+  BrowserList::CloseAllBrowsersWithProfile(
+      profile, base::Bind(&ProfileBrowserCloseSuccess));
 }
 
 void CreateSystemProfileForUserManager(

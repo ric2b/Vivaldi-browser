@@ -21,10 +21,6 @@ namespace app_list {
 
 namespace {
 
-// Maximum number of results to show. Ignored if the AppListMixer field trial is
-// "Blended".
-const size_t kMaxResults = 6;
-
 // The minimum number of results to show, if the AppListMixer field trial is
 // "Blended". If this quota is not reached, the per-group limitations are
 // removed and we try again. (We may still not reach the minumum, but at least
@@ -201,7 +197,8 @@ void Mixer::AddProviderToGroup(size_t group_id, SearchProvider* provider) {
 }
 
 void Mixer::MixAndPublish(bool is_voice_query,
-                          const KnownResults& known_results) {
+                          const KnownResults& known_results,
+                          size_t num_max_results) {
   FetchResults(is_voice_query, known_results);
 
   SortedResults results;
@@ -242,7 +239,7 @@ void Mixer::MixAndPublish(bool is_voice_query,
       std::sort(results.begin() + original_size, results.end());
     }
   } else {
-    results.reserve(kMaxResults);
+    results.reserve(num_max_results);
 
     // Add results from non-omnibox groups first. Limit to the maximum number of
     // results in each group.
@@ -267,16 +264,17 @@ void Mixer::MixAndPublish(bool is_voice_query,
       CHECK_LT(omnibox_group_, groups_.size());
       const Group& omnibox_group = *groups_[omnibox_group_];
       const size_t omnibox_results = std::min(
-          omnibox_group.results().size(),
-          results.size() < kMaxResults ? kMaxResults - results.size() : 1);
+          omnibox_group.results().size(), results.size() < num_max_results
+                                              ? num_max_results - results.size()
+                                              : 1);
       results.insert(results.end(), omnibox_group.results().begin(),
                      omnibox_group.results().begin() + omnibox_results);
     }
 
     std::sort(results.begin(), results.end());
     RemoveDuplicates(&results);
-    if (results.size() > kMaxResults)
-      results.resize(kMaxResults);
+    if (results.size() > num_max_results)
+      results.resize(num_max_results);
   }
 
   Publish(results, ui_results_);

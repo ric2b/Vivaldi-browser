@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -45,6 +46,7 @@
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
 #include "components/guest_view/browser/guest_view_manager_factory.h"
 #include "components/guest_view/browser/test_guest_view_manager.h"
+#include "content/public/browser/ax_event_notification_details.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/interstitial_page_delegate.h"
@@ -74,6 +76,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "ui/aura/env.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/compositor/compositor.h"
@@ -92,6 +95,7 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "ash/common/accessibility_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/speech_monitor.h"
 #endif
@@ -243,6 +247,114 @@ views::View* FindWebView(views::View* view) {
   }
   return nullptr;
 }
+
+// Waits for select control shown/closed.
+class SelectControlWaiter : public aura::WindowObserver,
+                            public aura::EnvObserver {
+ public:
+  SelectControlWaiter() {
+    aura::Env::GetInstanceDontCreate()->AddObserver(this);
+  }
+
+  ~SelectControlWaiter() override {
+    aura::Env::GetInstanceDontCreate()->RemoveObserver(this);
+  }
+
+  void Wait(bool wait_for_widget_shown) {
+    wait_for_widget_shown_ = wait_for_widget_shown;
+    message_loop_runner_ = new content::MessageLoopRunner;
+    message_loop_runner_->Run();
+    base::RunLoop().RunUntilIdle();
+  }
+
+  void OnWindowVisibilityChanged(aura::Window* window, bool visible) override {
+    if (wait_for_widget_shown_ && visible)
+      message_loop_runner_->Quit();
+  }
+
+  void OnWindowInitialized(aura::Window* window) override {
+    if (window->type() != ui::wm::WINDOW_TYPE_MENU)
+      return;
+    window->AddObserver(this);
+    observed_windows_.insert(window);
+  }
+
+  void OnWindowDestroyed(aura::Window* window) override {
+    observed_windows_.erase(window);
+    if (!wait_for_widget_shown_ && observed_windows_.empty())
+      message_loop_runner_->Quit();
+  }
+
+ private:
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+  std::set<aura::Window*> observed_windows_;
+  bool wait_for_widget_shown_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(SelectControlWaiter);
+};
+
+// Simulate real click with delay between mouse down and up.
+class LeftMouseClick {
+ public:
+  explicit LeftMouseClick(content::WebContents* web_contents)
+      : web_contents_(web_contents) {}
+
+  ~LeftMouseClick() {
+    DCHECK(click_completed_);
+  }
+
+  void Click(const gfx::Point& point, int duration_ms) {
+    DCHECK(click_completed_);
+    click_completed_ = false;
+    mouse_event_.type = blink::WebInputEvent::MouseDown;
+    mouse_event_.button = blink::WebMouseEvent::ButtonLeft;
+    mouse_event_.x = point.x();
+    mouse_event_.y = point.y();
+    mouse_event_.modifiers = 0;
+    const gfx::Rect offset = web_contents_->GetContainerBounds();
+    mouse_event_.globalX = point.x() + offset.x();
+    mouse_event_.globalY = point.y() + offset.y();
+    mouse_event_.clickCount = 1;
+    web_contents_->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+        mouse_event_);
+
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::Bind(&LeftMouseClick::SendMouseUp,
+                              base::Unretained(this)),
+        base::TimeDelta::FromMilliseconds(duration_ms));
+  }
+
+  // Wait for click completed.
+  void Wait() {
+    if (click_completed_)
+      return;
+    message_loop_runner_ = new content::MessageLoopRunner;
+    message_loop_runner_->Run();
+    message_loop_runner_ = nullptr;
+  }
+
+ private:
+  void SendMouseUp() {
+    mouse_event_.type = blink::WebInputEvent::MouseUp;
+    web_contents_->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+        mouse_event_);
+    click_completed_ = true;
+    if (message_loop_runner_)
+      message_loop_runner_->Quit();
+  }
+
+  // Unowned pointer.
+  content::WebContents* web_contents_;
+
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+
+  blink::WebMouseEvent mouse_event_;
+
+  bool click_completed_ = true;
+
+  DISALLOW_COPY_AND_ASSIGN(LeftMouseClick);
+};
+
 #endif
 
 }  // namespace
@@ -1124,6 +1236,43 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestWebRequestAPIErrorOccurred) {
   TestHelper("testWebRequestAPIErrorOccurred", "web_view/shim", NO_TEST_SERVER);
 }
 
+#if defined(USE_AURA)
+// Test validates that select tag can be shown and hidden in webview safely
+// using quick touch.
+IN_PROC_BROWSER_TEST_P(WebViewTest, SelectShowHide) {
+  LoadAppWithGuest("web_view/select");
+
+  content::WebContents* embedder_contents = GetFirstAppWindowWebContents();
+  ASSERT_TRUE(embedder_contents);
+
+  std::vector<content::WebContents*> guest_contents_list;
+  GetGuestViewManager()->GetGuestWebContentsList(&guest_contents_list);
+  ASSERT_EQ(1u, guest_contents_list.size());
+  content::WebContents* guest_contents = guest_contents_list[0];
+
+  const gfx::Rect embedder_rect = embedder_contents->GetContainerBounds();
+  const gfx::Rect guest_rect = guest_contents->GetContainerBounds();
+  const gfx::Point click_point(guest_rect.x() - embedder_rect.x() + 10,
+                               guest_rect.y() - embedder_rect.y() + 10);
+
+  // Important, pass mouse click to embedder in order to transfer focus. Note
+  // that SelectControlWaiter may be waited ealier than click is completed.
+  LeftMouseClick mouse_click(embedder_contents);
+  SelectControlWaiter select_control_waiter;
+
+  for (int i = 0; i < 5; ++i) {
+    const int click_duration_ms = 10 + i * 25;
+    mouse_click.Click(click_point, click_duration_ms);
+    select_control_waiter.Wait(true);
+    mouse_click.Wait();
+
+    mouse_click.Click(click_point, click_duration_ms);
+    select_control_waiter.Wait(false);
+    mouse_click.Wait();
+  }
+}
+#endif
+
 // http://crbug.com/315920
 #if defined(GOOGLE_CHROME_BUILD) && (defined(OS_WIN) || defined(OS_LINUX))
 #define MAYBE_Shim_TestChromeExtensionURL DISABLED_Shim_TestChromeExtensionURL
@@ -1361,6 +1510,12 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, Shim_TestDeclarativeWebRequestAPI) {
              NEEDS_TEST_SERVER);
 }
 
+// Very flaky on Mac: http://crbug.com/614377
+#ifdef OS_MAC
+#define MAYBE_Shim_TestDeclarativeWebRequestAPISendMessage DISABLED_Shim_TestDeclarativeWebRequestAPISendMessage
+#else
+#define MAYBE_Shim_TestDeclarativeWebRequestAPISendMessage Shim_TestDeclarativeWebRequestAPISendMessage
+#endif
 IN_PROC_BROWSER_TEST_P(WebViewTest,
                        Shim_TestDeclarativeWebRequestAPISendMessage) {
   TestHelper("testDeclarativeWebRequestAPISendMessage",
@@ -1532,7 +1687,16 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialTeardown) {
 
 // This test makes sure the browser process does not crash if browser is shut
 // down while an interstitial page is being shown in guest.
-IN_PROC_BROWSER_TEST_P(WebViewTest, InterstitialTeardownOnBrowserShutdown) {
+// Flaky on Windows. http://crbug.com/619508.
+#if defined(OS_WIN)
+#define MAYBE_InterstitialTeardownOnBrowserShutdown \
+    DISABLED_InterstitialTeardownOnBrowserShutdown
+#else
+#define MAYBE_InterstitialTeardownOnBrowserShutdown \
+    InterstitialTeardownOnBrowserShutdown
+#endif
+IN_PROC_BROWSER_TEST_P(WebViewTest,
+                       MAYBE_InterstitialTeardownOnBrowserShutdown) {
   InterstitialTeardownTestHelper();
 
   // Now close the app while interstitial page being shown in guest.
@@ -1647,16 +1811,11 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, PRE_StoragePersistence) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   // We don't care where the main browser is on this test.
   ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
-  // Start the app for the pre-test.
-  LoadAndLaunchPlatformApp("web_view/storage_persistence",
-                           "WebViewTest.LAUNCHED");
-
-  // Send a message to run the PRE_StoragePersistence part of the test.
-  SendMessageToEmbedder("run-pre-test");
-
-  ExtensionTestMessageListener test_passed_listener("WebViewTest.PASSED",
-                                                    false);
-  EXPECT_TRUE(test_passed_listener.WaitUntilSatisfied());
+  // Since this test is PRE_ step, we need file access.
+  ASSERT_TRUE(RunPlatformAppTestWithFlags(
+      "platform_apps/web_view/storage_persistence", "PRE_StoragePersistence",
+      kFlagEnableFileAccess))
+      << message_;
 }
 
 // This is the post-reset portion of the StoragePersistence test.  See
@@ -1665,16 +1824,13 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, StoragePersistence) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   // We don't care where the main browser is on this test.
   ui_test_utils::NavigateToURL(browser(), GURL("about:blank"));
-  // Start the app for the pre-test.
-  LoadAndLaunchPlatformApp("web_view/storage_persistence",
-                           "WebViewTest.LAUNCHED");
 
-  // Send a message to run the StoragePersistence part of the test.
-  SendMessageToEmbedder("run-test");
-
-  ExtensionTestMessageListener test_passed_listener("WebViewTest.PASSED",
-                                                    false);
-  EXPECT_TRUE(test_passed_listener.WaitUntilSatisfied());
+  // Since this test has PRE_ step, we need file access (possibly because we
+  // need to access previous profile).
+  ASSERT_TRUE(RunPlatformAppTestWithFlags(
+      "platform_apps/web_view/storage_persistence", "StoragePersistence",
+      kFlagEnableFileAccess))
+      << message_;
 }
 
 // This tests DOM storage isolation for packaged apps with webview tags. It
@@ -1724,13 +1880,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, IndexedDBIsolation) {
 // This test ensures that closing app window on 'loadcommit' does not crash.
 // The test launches an app with guest and closes the window on loadcommit. It
 // then launches the app window again. The process is repeated 3 times.
-// http://crbug.com/291278
-#if defined(OS_WIN) || defined(MAC_OS_X_VERSION_10_9)
-#define MAYBE_CloseOnLoadcommit DISABLED_CloseOnLoadcommit
-#else
-#define MAYBE_CloseOnLoadcommit CloseOnLoadcommit
-#endif
-IN_PROC_BROWSER_TEST_P(WebViewTest, MAYBE_CloseOnLoadcommit) {
+IN_PROC_BROWSER_TEST_P(WebViewTest, CloseOnLoadcommit) {
   LoadAndLaunchPlatformApp("web_view/close_on_loadcommit",
                            "done-close-on-loadcommit");
 }
@@ -2059,7 +2209,7 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, DISABLED_ChromeVoxInjection) {
 
   chromeos::SpeechMonitor monitor;
   chromeos::AccessibilityManager::Get()->EnableSpokenFeedback(
-      true, ui::A11Y_NOTIFICATION_NONE);
+      true, ash::A11Y_NOTIFICATION_NONE);
   EXPECT_TRUE(monitor.SkipChromeVoxEnabledMessage());
 
   ASSERT_TRUE(StartEmbeddedTestServer());
@@ -2267,6 +2417,14 @@ IN_PROC_BROWSER_TEST_P(WebViewTest, ClearData) {
   ASSERT_TRUE(RunPlatformAppTestWithArg(
       "platform_apps/web_view/common", "cleardata"))
           << message_;
+}
+
+// Regression test for https://crbug.com/615429.
+IN_PROC_BROWSER_TEST_P(WebViewTest, ClearDataTwice) {
+  ASSERT_TRUE(StartEmbeddedTestServer());  // For serving guest pages.
+  ASSERT_TRUE(RunPlatformAppTestWithArg("platform_apps/web_view/common",
+                                        "cleardata_twice"))
+      << message_;
 }
 
 #if defined(OS_WIN)
@@ -3102,8 +3260,9 @@ IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, FocusAccessibility) {
   // Now keep pressing the Tab key until focus lands on a button.
   while (content::GetFocusedAccessibilityNodeInfo(web_contents).role !=
              ui::AX_ROLE_BUTTON) {
-    content::SimulateKeyPress(
-        web_contents, ui::VKEY_TAB, false, false, false, false);
+    content::SimulateKeyPress(web_contents, ui::DomKey::FromCharacter('\t'),
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
     content::WaitForAccessibilityFocusChange();
   }
 
@@ -3112,6 +3271,80 @@ IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, FocusAccessibility) {
   ui::AXNodeData node_data =
       content::GetFocusedAccessibilityNodeInfo(web_contents);
   EXPECT_EQ("Guest button", node_data.GetStringAttribute(ui::AX_ATTR_NAME));
+}
+
+class WebContentsAccessibilityEventWatcher
+    : public content::WebContentsObserver {
+ public:
+  WebContentsAccessibilityEventWatcher(
+      content::WebContents* web_contents,
+      ui::AXEvent event)
+      : content::WebContentsObserver(web_contents),
+        event_(event),
+        count_(0) {}
+  ~WebContentsAccessibilityEventWatcher() override {}
+
+  void Wait() {
+    if (count_ == 0) {
+      loop_runner_ = new content::MessageLoopRunner();
+      loop_runner_->Run();
+    }
+  }
+
+  void AccessibilityEventReceived(
+      const std::vector<content::AXEventNotificationDetails>& details_vector)
+          override {
+    for (auto& details : details_vector) {
+      if (details.event_type == event_ && details.update.nodes.size() > 0) {
+        count_++;
+        node_data_ = details.update.nodes[0];
+        loop_runner_->Quit();
+      }
+    }
+  }
+
+  size_t count() const { return count_; }
+
+  const ui::AXNodeData& node_data() const { return node_data_; }
+
+ private:
+  scoped_refptr<content::MessageLoopRunner> loop_runner_;
+  ui::AXEvent event_;
+  ui::AXNodeData node_data_;
+  size_t count_;
+};
+
+IN_PROC_BROWSER_TEST_P(WebViewAccessibilityTest, TouchAccessibility) {
+  LoadAppWithGuest("web_view/touch_accessibility");
+  content::WebContents* web_contents = GetFirstAppWindowWebContents();
+  content::EnableAccessibilityForWebContents(web_contents);
+  content::WebContents* guest_web_contents = GetGuestWebContents();
+  content::EnableAccessibilityForWebContents(guest_web_contents);
+
+  // Listen for accessibility events on both WebContents.
+  WebContentsAccessibilityEventWatcher main_event_watcher(
+      web_contents, ui::AX_EVENT_HOVER);
+  WebContentsAccessibilityEventWatcher guest_event_watcher(
+      guest_web_contents, ui::AX_EVENT_HOVER);
+
+  // Send an accessibility touch event to the main WebContents, but
+  // positioned on top of the button inside the inner WebView.
+  blink::WebMouseEvent accessibility_touch_event;
+  accessibility_touch_event.type = blink::WebInputEvent::MouseMove;
+  accessibility_touch_event.x = 95;
+  accessibility_touch_event.y = 55;
+  accessibility_touch_event.modifiers =
+      blink::WebInputEvent::IsTouchAccessibility;
+  web_contents->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
+      accessibility_touch_event);
+
+  // Ensure that we got just a single hover event on the guest WebContents,
+  // and that it was fired on a button.
+  guest_event_watcher.Wait();
+  ui::AXNodeData hit_node = guest_event_watcher.node_data();
+  EXPECT_EQ(1U, guest_event_watcher.count());
+  EXPECT_EQ(ui::AX_ROLE_BUTTON, hit_node.role);
+  EXPECT_EQ(0U, main_event_watcher.count());
 }
 
 class WebViewGuestScrollTest
@@ -3153,7 +3386,7 @@ class ScrollWaiter {
 
   void WaitForScrollChange(gfx::Vector2dF target_offset) {
     while (target_offset != host_view_->GetLastScrollOffset())
-      base::MessageLoop::current()->RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
   }
 
  private:

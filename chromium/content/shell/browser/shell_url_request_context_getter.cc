@@ -17,6 +17,7 @@
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/worker_pool.h"
 #include "build/build_config.h"
+#include "components/network_session_configurator/switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/common/content_switches.h"
@@ -25,6 +26,8 @@
 #include "content/shell/common/shell_switches.h"
 #include "net/base/cache_type.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/cookies/cookie_monster.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
@@ -111,6 +114,11 @@ ShellURLRequestContextGetter::GetProxyService() {
       std::move(proxy_config_service_), 0, url_request_context_->net_log());
 }
 
+bool ShellURLRequestContextGetter::ShouldEnableReferrerPolicyHeader() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableExperimentalWebPlatformFeatures);
+}
+
 net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -122,6 +130,10 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     url_request_context_->set_net_log(net_log_);
     network_delegate_ = CreateNetworkDelegate();
     url_request_context_->set_network_delegate(network_delegate_.get());
+    // TODO(estark): Remove this once the Referrer-Policy header is no
+    // longer an experimental feature. https://crbug.com/619228
+    url_request_context_->set_enable_referrer_policy_header(
+        ShouldEnableReferrerPolicyHeader());
     storage_.reset(
         new net::URLRequestContextStorage(url_request_context_.get()));
     storage_->set_cookie_store(CreateCookieStore(CookieStoreConfig()));
@@ -138,6 +150,10 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
     storage_->set_cert_verifier(net::CertVerifier::CreateDefault());
     storage_->set_transport_security_state(
         base::WrapUnique(new net::TransportSecurityState));
+    storage_->set_cert_transparency_verifier(
+        base::WrapUnique(new net::MultiLogCTVerifier));
+    storage_->set_ct_policy_enforcer(
+        base::WrapUnique(new net::CTPolicyEnforcer));
     storage_->set_proxy_service(GetProxyService());
     storage_->set_ssl_config_service(new net::SSLConfigServiceDefaults);
     storage_->set_http_auth_handler_factory(
@@ -164,6 +180,10 @@ net::URLRequestContext* ShellURLRequestContextGetter::GetURLRequestContext() {
         url_request_context_->cert_verifier();
     network_session_params.transport_security_state =
         url_request_context_->transport_security_state();
+    network_session_params.cert_transparency_verifier =
+        url_request_context_->cert_transparency_verifier();
+    network_session_params.ct_policy_enforcer =
+        url_request_context_->ct_policy_enforcer();
     network_session_params.channel_id_service =
         url_request_context_->channel_id_service();
     network_session_params.proxy_service =

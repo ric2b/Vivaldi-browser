@@ -8,6 +8,7 @@
 #include "base/feature_list.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/prefs/testing_pref_service.h"
@@ -66,13 +67,13 @@ TEST_F(SSLConfigServiceManagerPrefTest, GoodDisabledCipherSuites) {
   EXPECT_TRUE(old_config.disabled_cipher_suites.empty());
 
   base::ListValue* list_value = new base::ListValue();
-  list_value->Append(new base::StringValue("0x0004"));
-  list_value->Append(new base::StringValue("0x0005"));
+  list_value->AppendString("0x0004");
+  list_value->AppendString("0x0005");
   local_state.SetUserPref(ssl_config::prefs::kCipherSuiteBlacklist, list_value);
 
   // Pump the message loop to notify the SSLConfigServiceManagerPref that the
   // preferences changed.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   SSLConfig config;
   config_service->GetSSLConfig(&config);
@@ -102,15 +103,15 @@ TEST_F(SSLConfigServiceManagerPrefTest, BadDisabledCipherSuites) {
   EXPECT_TRUE(old_config.disabled_cipher_suites.empty());
 
   base::ListValue* list_value = new base::ListValue();
-  list_value->Append(new base::StringValue("0x0004"));
-  list_value->Append(new base::StringValue("TLS_NOT_WITH_A_CIPHER_SUITE"));
-  list_value->Append(new base::StringValue("0x0005"));
-  list_value->Append(new base::StringValue("0xBEEFY"));
+  list_value->AppendString("0x0004");
+  list_value->AppendString("TLS_NOT_WITH_A_CIPHER_SUITE");
+  list_value->AppendString("0x0005");
+  list_value->AppendString("0xBEEFY");
   local_state.SetUserPref(ssl_config::prefs::kCipherSuiteBlacklist, list_value);
 
   // Pump the message loop to notify the SSLConfigServiceManagerPref that the
   // preferences changed.
-  message_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   SSLConfig config;
   config_service->GetSSLConfig(&config);
@@ -177,35 +178,12 @@ TEST_F(SSLConfigServiceManagerPrefTest, NoSSL3) {
   EXPECT_LE(net::SSL_PROTOCOL_VERSION_TLS1, ssl_config.version_min);
 }
 
-// Tests that fallback beyond TLS 1.0 cannot be re-enabled.
-TEST_F(SSLConfigServiceManagerPrefTest, NoTLS1Fallback) {
-  scoped_refptr<TestingPrefStore> local_state_store(new TestingPrefStore());
-
-  TestingPrefServiceSimple local_state;
-  local_state.SetUserPref(ssl_config::prefs::kSSLVersionFallbackMin,
-                          new base::StringValue("tls1"));
-  SSLConfigServiceManager::RegisterPrefs(local_state.registry());
-
-  std::unique_ptr<SSLConfigServiceManager> config_manager(
-      SSLConfigServiceManager::CreateDefaultManager(
-          &local_state, base::ThreadTaskRunnerHandle::Get()));
-  ASSERT_TRUE(config_manager.get());
-  scoped_refptr<SSLConfigService> config_service(config_manager->Get());
-  ASSERT_TRUE(config_service.get());
-
-  SSLConfig ssl_config;
-  config_service->GetSSLConfig(&ssl_config);
-  // The command-line option must not have been honored.
-  EXPECT_EQ(net::SSL_PROTOCOL_VERSION_TLS1_2, ssl_config.version_fallback_min);
-}
-
-// Tests that the TLS 1.1 fallback may be re-enabled via features.
-TEST_F(SSLConfigServiceManagerPrefTest, TLSFallbackFeature) {
+// Tests that DHE may be re-enabled via features.
+TEST_F(SSLConfigServiceManagerPrefTest, DHEFeature) {
   // Toggle the feature.
   base::FeatureList::ClearInstanceForTesting();
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-  feature_list->InitializeFromCommandLine("SSLVersionFallbackTLSv1.1",
-                                          std::string());
+  feature_list->InitializeFromCommandLine("DHECiphers", std::string());
   base::FeatureList::SetInstance(std::move(feature_list));
 
   TestingPrefServiceSimple local_state;
@@ -220,5 +198,5 @@ TEST_F(SSLConfigServiceManagerPrefTest, TLSFallbackFeature) {
   // The feature should have switched the default version_fallback_min value.
   SSLConfig ssl_config;
   config_service->GetSSLConfig(&ssl_config);
-  EXPECT_EQ(net::SSL_PROTOCOL_VERSION_TLS1_1, ssl_config.version_fallback_min);
+  EXPECT_TRUE(ssl_config.dhe_enabled);
 }

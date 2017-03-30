@@ -8,13 +8,13 @@
 
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_delegate.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/test_screenshot_delegate.h"
 #include "ash/test/test_session_state_delegate.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -108,8 +108,8 @@ TEST_F(AcceleratorFilterTest, CanConsumeSystemKeys) {
   EXPECT_FALSE(press_a.stopped_propagation());
 
   // System keys are directly consumed.
-  ui::KeyEvent press_mute(
-      ui::ET_KEY_PRESSED, ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
+  ui::KeyEvent press_mute(ui::ET_KEY_PRESSED, ui::VKEY_VOLUME_MUTE,
+                          ui::EF_NONE);
   {
     ui::Event::DispatcherApi dispatch_helper(&press_mute);
     dispatch_helper.set_target(root_window);
@@ -120,8 +120,8 @@ TEST_F(AcceleratorFilterTest, CanConsumeSystemKeys) {
   // Setting a window property on the target allows system keys to pass through.
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(1));
   wm::GetWindowState(window.get())->set_can_consume_system_keys(true);
-  ui::KeyEvent press_volume_up(
-      ui::ET_KEY_PRESSED, ui::VKEY_VOLUME_UP, ui::EF_NONE);
+  ui::KeyEvent press_volume_up(ui::ET_KEY_PRESSED, ui::VKEY_VOLUME_UP,
+                               ui::EF_NONE);
   ui::Event::DispatcherApi dispatch_helper(&press_volume_up);
   dispatch_helper.set_target(window.get());
   filter.OnKeyEvent(&press_volume_up);

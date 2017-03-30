@@ -4,11 +4,13 @@
 
 #include "ash/system/toast/toast_overlay.h"
 
+#include "ash/common/shelf/wm_shelf.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_root_window_controller.h"
+#include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/screen_util.h"
-#include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/wm/window_animations.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -48,9 +50,16 @@ const SkColor kButtonTextColor = SkColorSetARGB(0xFF, 0x7B, 0xAA, 0xF7);
 // These values are in DIP.
 const int kToastHorizontalSpacing = 16;
 const int kToastVerticalSpacing = 16;
-const int kToastChildSpacing = 32;
 const int kToastMaximumWidth = 568;
 const int kToastMinimumWidth = 288;
+
+// Returns the shelf for the primary display.
+WmShelf* GetPrimaryShelf() {
+  return WmShell::Get()
+      ->GetPrimaryRootWindow()
+      ->GetRootWindowController()
+      ->GetShelf();
+}
 
 }  // anonymous namespace
 
@@ -61,13 +70,7 @@ class ToastOverlayLabel : public views::Label {
   explicit ToastOverlayLabel(const std::string& label);
   ~ToastOverlayLabel() override;
 
-  void SetMaximumWidth(int width);
-
  private:
-  int maximum_width_ = 0;
-
-  gfx::Size GetPreferredSize() const override;
-
   DISALLOW_COPY_AND_ASSIGN(ToastOverlayLabel);
 };
 
@@ -82,22 +85,15 @@ ToastOverlayLabel::ToastOverlayLabel(const std::string& label) {
   SetEnabledColor(SK_ColorWHITE);
   SetDisabledColor(SK_ColorWHITE);
   SetSubpixelRenderingEnabled(false);
+
+  int verticalSpacing =
+      kToastVerticalSpacing - (GetPreferredSize().height() - GetBaseline());
+  SetBorder(views::Border::CreateEmptyBorder(
+      verticalSpacing, kToastHorizontalSpacing, verticalSpacing,
+      kToastHorizontalSpacing));
 }
 
 ToastOverlayLabel::~ToastOverlayLabel() {}
-
-void ToastOverlayLabel::SetMaximumWidth(int width) {
-  maximum_width_ = width;
-}
-
-gfx::Size ToastOverlayLabel::GetPreferredSize() const {
-  gfx::Size original_size = Label::GetPreferredSize();
-
-  if (maximum_width_ != 0 && maximum_width_ < original_size.width())
-    return gfx::Size(maximum_width_, GetHeightForWidth(maximum_width_));
-  else
-    return original_size;
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 //  ToastOverlayButton
@@ -114,13 +110,23 @@ class ToastOverlayButton : public views::LabelButton {
 };
 
 ToastOverlayButton::ToastOverlayButton(views::ButtonListener* listener,
-                                       const base::string16& label)
-    : views::LabelButton(listener, label) {
+                                       const base::string16& text)
+    : views::LabelButton(listener, text) {
+  SetHasInkDrop(true);
+  set_has_ink_drop_action_on_click(true);
+  set_ink_drop_base_color(SK_ColorWHITE);
+
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
 
   SetEnabledTextColors(kButtonTextColor);
   SetFontList(rb->GetFontList(kTextFontStyle));
-  SetBorder(views::Border::NullBorder());
+
+  // Treat the space below the baseline as a margin.
+  int verticalSpacing = kToastVerticalSpacing -
+                        (GetPreferredSize().height() - label()->GetBaseline());
+  SetBorder(views::Border::CreateEmptyBorder(
+      verticalSpacing, kToastHorizontalSpacing, verticalSpacing,
+      kToastHorizontalSpacing));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -128,7 +134,9 @@ ToastOverlayButton::ToastOverlayButton(views::ButtonListener* listener,
 class ToastOverlayView : public views::View, public views::ButtonListener {
  public:
   // This object is not owned by the views hiearchy or by the widget.
-  ToastOverlayView(ToastOverlay* overlay, const std::string& text);
+  ToastOverlayView(ToastOverlay* overlay,
+                   const std::string& text,
+                   const std::string& dismiss_text);
   ~ToastOverlayView() override;
 
   // views::View overrides:
@@ -149,22 +157,23 @@ class ToastOverlayView : public views::View, public views::ButtonListener {
 };
 
 ToastOverlayView::ToastOverlayView(ToastOverlay* overlay,
-                                   const std::string& text)
+                                   const std::string& text,
+                                   const std::string& dismiss_text)
     : overlay_(overlay),
       button_(new ToastOverlayButton(
           this,
-          l10n_util::GetStringUTF16(IDS_ASH_TOAST_DISMISS_BUTTON))) {
+          dismiss_text.empty()
+              ? l10n_util::GetStringUTF16(IDS_ASH_TOAST_DISMISS_BUTTON)
+              : base::UTF8ToUTF16(dismiss_text))) {
   ToastOverlayLabel* label = new ToastOverlayLabel(text);
-  label->SetMaximumWidth(GetMaximumSize().width() -
-                         button_->GetPreferredSize().width() -
-                         kToastHorizontalSpacing * 2 - kToastChildSpacing);
+  label->SetMaximumWidth(
+      GetMaximumSize().width() - button_->GetPreferredSize().width() -
+      kToastHorizontalSpacing * 2 - kToastHorizontalSpacing * 2);
   AddChildView(label);
 
   AddChildView(button_);
 
-  auto layout = new views::BoxLayout(views::BoxLayout::kHorizontal,
-                                     kToastHorizontalSpacing,
-                                     kToastVerticalSpacing, kToastChildSpacing);
+  auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
   SetLayoutManager(layout);
   layout->SetFlexForView(label, 1);
   layout->SetFlexForView(button_, 0);
@@ -185,10 +194,7 @@ gfx::Size ToastOverlayView::GetMinimumSize() const {
 }
 
 gfx::Size ToastOverlayView::GetMaximumSize() const {
-  ShelfLayoutManager* shelf_layout_manager =
-      Shelf::ForPrimaryDisplay()->shelf_layout_manager();
-  gfx::Rect work_area_bounds = shelf_layout_manager->user_work_area_bounds();
-
+  gfx::Rect work_area_bounds = GetPrimaryShelf()->GetUserWorkAreaBounds();
   return gfx::Size(kToastMaximumWidth, work_area_bounds.height() - kOffset * 2);
 }
 
@@ -199,10 +205,13 @@ void ToastOverlayView::ButtonPressed(views::Button* sender,
 
 ///////////////////////////////////////////////////////////////////////////////
 //  ToastOverlay
-ToastOverlay::ToastOverlay(Delegate* delegate, const std::string& text)
+ToastOverlay::ToastOverlay(Delegate* delegate,
+                           const std::string& text,
+                           const std::string& dismiss_text)
     : delegate_(delegate),
       text_(text),
-      overlay_view_(new ToastOverlayView(this, text)),
+      dismiss_text_(dismiss_text),
+      overlay_view_(new ToastOverlayView(this, text, dismiss_text)),
       widget_size_(overlay_view_->GetPreferredSize()) {
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_POPUP;
@@ -213,6 +222,8 @@ ToastOverlay::ToastOverlay(Delegate* delegate, const std::string& text)
   params.remove_standard_frame = true;
   params.bounds = CalculateOverlayBounds();
   // Show toasts above the app list and below the lock screen.
+  // TODO(jamescook): Either this should be the primary root window, or the
+  // work area bounds computation should be for the target root window.
   params.parent = Shell::GetContainer(Shell::GetTargetRootWindow(),
                                       kShellWindowId_SystemModalContainer);
   overlay_widget_.reset(new views::Widget);
@@ -240,6 +251,13 @@ void ToastOverlay::Show(bool visible) {
 
   ui::LayerAnimator* animator = overlay_widget_->GetLayer()->GetAnimator();
   DCHECK(animator);
+  if (animator->is_animating()) {
+    // Showing during hiding animation doesn't happen since, ToastOverlay should
+    // be one-time-use and not be reused.
+    DCHECK(!visible);
+
+    return;
+  }
 
   base::TimeDelta original_duration = animator->GetTransitionDuration();
   ui::ScopedLayerAnimationSettings animation_settings(animator);
@@ -249,17 +267,18 @@ void ToastOverlay::Show(bool visible) {
 
   animation_settings.AddObserver(this);
 
-  if (visible)
+  if (visible) {
     overlay_widget_->Show();
-  else
+
+    // Notify accessibility about the overlay.
+    overlay_view_->NotifyAccessibilityEvent(ui::AX_EVENT_ALERT, false);
+  } else {
     overlay_widget_->Hide();
+  }
 }
 
 gfx::Rect ToastOverlay::CalculateOverlayBounds() {
-  ShelfLayoutManager* shelf_layout_manager =
-      Shelf::ForPrimaryDisplay()->shelf_layout_manager();
-
-  gfx::Rect bounds = shelf_layout_manager->user_work_area_bounds();
+  gfx::Rect bounds = GetPrimaryShelf()->GetUserWorkAreaBounds();
   int target_y = bounds.bottom() - widget_size_.height() - kOffset;
   bounds.ClampToCenteredSize(widget_size_);
   bounds.set_y(target_y);

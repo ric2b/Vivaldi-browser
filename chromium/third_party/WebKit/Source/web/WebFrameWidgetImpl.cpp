@@ -39,6 +39,7 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -46,9 +47,13 @@
 #include "core/page/ContextMenuController.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
+#include "core/page/PointerLockController.h"
 #include "platform/KeyboardCodes.h"
+#include "platform/graphics/CompositorMutatorClient.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/web/WebWidgetClient.h"
+#include "web/CompositorMutatorImpl.h"
+#include "web/CompositorProxyClientImpl.h"
 #include "web/ContextMenuAllowedScope.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebInputEventConversion.h"
@@ -56,6 +61,8 @@
 #include "web/WebPluginContainerImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 #include "web/WebViewFrameWidget.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -88,6 +95,7 @@ WebFrameWidgetsSet& WebFrameWidgetImpl::allInstances()
 WebFrameWidgetImpl::WebFrameWidgetImpl(WebWidgetClient* client, WebLocalFrame* localRoot)
     : m_client(client)
     , m_localRoot(toWebLocalFrameImpl(localRoot))
+    , m_mutator(nullptr)
     , m_layerTreeView(nullptr)
     , m_rootLayer(nullptr)
     , m_rootGraphicsLayer(nullptr)
@@ -115,6 +123,7 @@ DEFINE_TRACE(WebFrameWidgetImpl)
 {
     visitor->trace(m_localRoot);
     visitor->trace(m_mouseCaptureNode);
+    visitor->trace(m_mutator);
 }
 
 // WebWidget ------------------------------------------------------------------
@@ -131,6 +140,7 @@ void WebFrameWidgetImpl::close()
     // deleted.
     m_client = nullptr;
 
+    m_mutator = nullptr;
     m_layerTreeView = nullptr;
     m_rootLayer = nullptr;
     m_rootGraphicsLayer = nullptr;
@@ -194,6 +204,8 @@ void WebFrameWidgetImpl::resizeVisualViewport(const WebSize& newSize)
     // to use Page messages.  https://crbug.com/599688.
     page()->frameHost().visualViewport().setSize(newSize);
     page()->frameHost().visualViewport().clampToBoundaries();
+
+    view()->didUpdateFullScreenSize();
 }
 
 void WebFrameWidgetImpl::updateMainFrameLayoutSize()
@@ -218,12 +230,12 @@ void WebFrameWidgetImpl::setIgnoreInputEvents(bool newValue)
 
 void WebFrameWidgetImpl::didEnterFullScreen()
 {
-    // FIXME: Implement full screen for out-of-process iframes.
+    view()->didEnterFullScreen();
 }
 
 void WebFrameWidgetImpl::didExitFullScreen()
 {
-    // FIXME: Implement full screen for out-of-process iframes.
+    view()->didExitFullScreen();
 }
 
 void WebFrameWidgetImpl::beginFrame(double lastFrameTimeMonotonic)
@@ -334,7 +346,7 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(const WebInputEvent& in
         if (inputEvent.type == WebInputEvent::MouseUp)
             mouseCaptureLost();
 
-        OwnPtr<UserGestureIndicator> gestureIndicator;
+        std::unique_ptr<UserGestureIndicator> gestureIndicator;
 
         AtomicString eventType;
         switch (inputEvent.type) {
@@ -346,12 +358,12 @@ WebInputEventResult WebFrameWidgetImpl::handleInputEvent(const WebInputEvent& in
             break;
         case WebInputEvent::MouseDown:
             eventType = EventTypeNames::mousedown;
-            gestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
+            gestureIndicator = wrapUnique(new UserGestureIndicator(DefinitelyProcessingNewUserGesture));
             m_mouseCaptureGestureToken = gestureIndicator->currentToken();
             break;
         case WebInputEvent::MouseUp:
             eventType = EventTypeNames::mouseup;
-            gestureIndicator = adoptPtr(new UserGestureIndicator(m_mouseCaptureGestureToken.release()));
+            gestureIndicator = wrapUnique(new UserGestureIndicator(m_mouseCaptureGestureToken.release()));
             break;
         default:
             NOTREACHED();
@@ -397,6 +409,16 @@ void WebFrameWidgetImpl::scheduleAnimation()
     }
     if (m_client)
         m_client->scheduleAnimation();
+}
+
+CompositorProxyClient* WebFrameWidgetImpl::createCompositorProxyClient()
+{
+    if (!m_mutator) {
+        std::unique_ptr<CompositorMutatorClient> mutatorClient = CompositorMutatorImpl::createClient();
+        m_mutator = static_cast<CompositorMutatorImpl*>(mutatorClient->mutator());
+        m_layerTreeView->setMutatorClient(std::move(mutatorClient));
+    }
+    return new CompositorProxyClientImpl(m_mutator);
 }
 
 void WebFrameWidgetImpl::applyViewportDeltas(
@@ -616,6 +638,7 @@ void WebFrameWidgetImpl::willCloseLayerTreeView()
         page()->willCloseLayerTreeView(*m_layerTreeView);
 
     setIsAcceleratedCompositingActive(false);
+    m_mutator = nullptr;
     m_layerTreeView = nullptr;
     m_layerTreeViewClosed = true;
 }
@@ -624,6 +647,21 @@ void WebFrameWidgetImpl::didChangeWindowResizerRect()
 {
     if (m_localRoot->frameView())
         m_localRoot->frameView()->windowResizerRectChanged();
+}
+
+void WebFrameWidgetImpl::didAcquirePointerLock()
+{
+    page()->pointerLockController().didAcquirePointerLock();
+}
+
+void WebFrameWidgetImpl::didNotAcquirePointerLock()
+{
+    page()->pointerLockController().didNotAcquirePointerLock();
+}
+
+void WebFrameWidgetImpl::didLosePointerLock()
+{
+    page()->pointerLockController().didLosePointerLock();
 }
 
 void WebFrameWidgetImpl::handleMouseLeave(LocalFrame& mainFrame, const WebMouseEvent& event)
@@ -988,6 +1026,7 @@ Element* WebFrameWidgetImpl::focusedElement() const
 void WebFrameWidgetImpl::initializeLayerTreeView()
 {
     if (m_client) {
+        DCHECK(!m_mutator);
         m_client->initializeLayerTreeView();
         m_layerTreeView = m_client->layerTreeView();
     }
@@ -1071,21 +1110,10 @@ void WebFrameWidgetImpl::detachCompositorAnimationTimeline(CompositorAnimationTi
         m_layerTreeView->detachCompositorAnimationTimeline(compositorTimeline->animationTimeline());
 }
 
-void WebFrameWidgetImpl::setVisibilityState(WebPageVisibilityState visibilityState, bool isInitialState)
+void WebFrameWidgetImpl::setVisibilityState(WebPageVisibilityState visibilityState)
 {
-    if (!page())
-        return;
-
-    // FIXME: This is not correct, since Show and Hide messages for a frame's Widget do not necessarily
-    // correspond to Page visibility, but is necessary until we properly sort out OOPIF visibility.
-    page()->setVisibilityState(static_cast<PageVisibilityState>(visibilityState), isInitialState);
-
-    m_localRoot->frame()->frameScheduler()->setPageVisible(visibilityState == WebPageVisibilityStateVisible);
-
-    if (m_layerTreeView) {
-        bool visible = visibilityState == WebPageVisibilityStateVisible;
-        m_layerTreeView->setVisible(visible);
-    }
+    if (m_layerTreeView)
+        m_layerTreeView->setVisible(visibilityState == WebPageVisibilityStateVisible);
 }
 
 HitTestResult WebFrameWidgetImpl::hitTestResultForRootFramePos(const IntPoint& posInRootFrame)

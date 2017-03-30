@@ -39,7 +39,7 @@
 #include "components/sessions/core/session_id.h"
 #include "components/toolbar/toolbar_model.h"
 #include "components/translate/content/browser/content_translate_driver.h"
-#include "components/ui/zoom/zoom_observer.h"
+#include "components/zoom/zoom_observer.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/page_navigator.h"
@@ -112,7 +112,7 @@ class Browser : public TabStripModelObserver,
                 public SearchTabHelperDelegate,
                 public ChromeWebModalDialogManagerDelegate,
                 public BookmarkTabHelperDelegate,
-                public ui_zoom::ZoomObserver,
+                public zoom::ZoomObserver,
                 public content::PageNavigator,
                 public content::NotificationObserver,
 #if defined(ENABLE_EXTENSIONS)
@@ -312,7 +312,8 @@ class Browser : public TabStripModelObserver,
   gfx::Image GetCurrentPageIcon() const;
 
   // Gets the title of the window based on the selected tab's title.
-  base::string16 GetWindowTitleForCurrentTab() const;
+  // Disables additional formatting when |include_app_name| is false.
+  base::string16 GetWindowTitleForCurrentTab(bool include_app_name) const;
 
   // Prepares a title string for display (removes embedded newlines, etc).
   static void FormatTitleForDisplay(base::string16* title);
@@ -646,7 +647,7 @@ class Browser : public TabStripModelObserver,
       content::WebContents* web_contents,
       SkColor color,
       const std::vector<content::ColorSuggestion>& suggestions) override;
-  void RunFileChooser(content::WebContents* web_contents,
+  void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       const content::FileChooserParams& params) override;
   void EnumerateDirectory(content::WebContents* web_contents,
                           int request_id,
@@ -706,9 +707,6 @@ class Browser : public TabStripModelObserver,
   bool CanSaveContents(content::WebContents* web_contents) const override;
 
   // Overridden from SearchTabHelperDelegate:
-  void NavigateOnThumbnailClick(const GURL& url,
-                                WindowOpenDisposition disposition,
-                                content::WebContents* source_contents) override;
   void OnWebContentsInstantSupportDisabled(
       const content::WebContents* web_contents) override;
   OmniboxView* GetOmniboxView() override;
@@ -726,7 +724,7 @@ class Browser : public TabStripModelObserver,
 
   // Overridden from ZoomObserver:
   void OnZoomChanged(
-      const ui_zoom::ZoomController::ZoomChangedEventData& data) override;
+      const zoom::ZoomController::ZoomChangedEventData& data) override;
 
   // Overridden from SelectFileDialog::Listener:
   void FileSelected(const base::FilePath& path,

@@ -33,7 +33,6 @@
 #include "bindings/core/v8/ScriptController.h"
 
 #include "bindings/core/v8/BindingSecurity.h"
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8Binding.h"
@@ -84,7 +83,7 @@ bool ScriptController::canAccessFromCurrentOrigin(v8::Isolate* isolate, Frame* f
 {
     if (!frame)
         return false;
-    return !isolate->InContext() || BindingSecurity::shouldAllowAccessToFrame(isolate, callingDOMWindow(isolate), frame, ReportSecurityError);
+    return !isolate->InContext() || BindingSecurity::shouldAllowAccessToFrame(isolate, currentDOMWindow(isolate), frame, ReportSecurityError);
 }
 
 ScriptController::ScriptController(LocalFrame* frame)
@@ -135,13 +134,13 @@ v8::Local<v8::Value> ScriptController::executeScriptAndReturnValue(v8::Local<v8:
             v8CacheOptions = frame()->settings()->v8CacheOptions();
         if (source.resource() && !source.resource()->response().cacheStorageCacheName().isNull()) {
             switch (frame()->settings()->v8CacheStrategiesForCacheStorage()) {
-            case V8CacheStrategiesForCacheStorage::Default:
             case V8CacheStrategiesForCacheStorage::None:
                 v8CacheOptions = V8CacheOptionsNone;
                 break;
             case V8CacheStrategiesForCacheStorage::Normal:
                 v8CacheOptions = V8CacheOptionsCode;
                 break;
+            case V8CacheStrategiesForCacheStorage::Default:
             case V8CacheStrategiesForCacheStorage::Aggressive:
                 v8CacheOptions = V8CacheOptionsAlways;
                 break;
@@ -269,11 +268,6 @@ void ScriptController::clearWindowProxy()
     // when a frame is loading a new page. This creates a new context for the new page.
     m_windowProxyManager->clearForNavigation();
     MainThreadDebugger::instance()->didClearContextsForFrame(frame());
-}
-
-void ScriptController::setCaptureCallStackForUncaughtExceptions(v8::Isolate* isolate, bool value)
-{
-    isolate->SetCaptureStackTraceForUncaughtExceptions(value, V8StackTrace::maxCallStackSizeToCapture, stackTraceOptions);
 }
 
 void ScriptController::collectIsolatedContexts(Vector<std::pair<ScriptState*, SecurityOrigin*>>& result)

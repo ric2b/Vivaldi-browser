@@ -34,12 +34,21 @@
 #include "core/layout/api/LayoutBlockItem.h"
 #include "core/layout/api/LayoutItem.h"
 #include "core/paint/PaintInfo.h"
+#include "core/paint/PaintLayer.h"
 #include "platform/graphics/GraphicsContext.h"
+#include "platform/graphics/GraphicsLayer.h"
+#include "platform/graphics/paint/DrawingRecorder.h"
 
 namespace blink {
 
 CaretBase::CaretBase(CaretVisibility visibility)
     : m_caretVisibility(visibility)
+{
+}
+
+CaretBase::~CaretBase() = default;
+
+DEFINE_TRACE(CaretBase)
 {
 }
 
@@ -133,13 +142,23 @@ IntRect CaretBase::absoluteBoundsForLocalRect(Node* node, const LayoutRect& rect
     return caretPainter->localToAbsoluteQuad(FloatRect(localRect)).enclosingBoundingBox();
 }
 
+DisplayItemClient* CaretBase::displayItemClientForCaret(Node* node)
+{
+    LayoutBlock* caretLayoutBlock = caretLayoutObject(node);
+    if (!caretLayoutBlock)
+        return nullptr;
+    if (caretLayoutBlock->usesCompositedScrolling())
+        return static_cast<DisplayItemClient*>(caretLayoutBlock->layer()->graphicsLayerBackingForScrolling());
+    return caretLayoutBlock;
+}
+
 // TODO(yoichio): |node| is FrameSelection::m_previousCaretNode and this is bad
 // design. We should use only previous layoutObject or Rectangle to invalidate
 // old caret.
 void CaretBase::invalidateLocalCaretRect(Node* node, const LayoutRect& rect)
 {
-    LayoutBlockItem caretPainter = LayoutBlockItem(caretLayoutObject(node));
-    if (!caretPainter)
+    LayoutBlock* caretLayoutBlock = caretLayoutObject(node);
+    if (!caretLayoutBlock)
         return;
 
     // FIXME: Need to over-paint 1 pixel to workaround some rounding problems.
@@ -147,12 +166,10 @@ void CaretBase::invalidateLocalCaretRect(Node* node, const LayoutRect& rect)
     LayoutRect inflatedRect = rect;
     inflatedRect.inflate(LayoutUnit(1));
 
-    // FIXME: We should use mapLocalToAncestor() since we know we're not un-rooted.
-    mapCaretRectToCaretPainter(LayoutItem(node->layoutObject()), caretPainter, inflatedRect);
-
     // FIXME: We should not allow paint invalidation out of paint invalidation state. crbug.com/457415
     DisablePaintInvalidationStateAsserts disabler;
-    caretPainter.invalidatePaintRectangle(inflatedRect);
+
+    node->layoutObject()->invalidatePaintRectangle(inflatedRect, displayItemClientForCaret(node));
 }
 
 bool CaretBase::shouldRepaintCaret(Node& node) const
@@ -184,9 +201,16 @@ void CaretBase::invalidateCaretRect(Node* node, bool caretRectChanged)
     }
 }
 
-void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoint& paintOffset) const
+void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoint& paintOffset, DisplayItem::Type displayItemType) const
 {
     if (m_caretVisibility == CaretVisibility::Hidden)
+        return;
+
+    DisplayItemClient* displayItemClient = displayItemClientForCaret(node);
+    if (!displayItemClient)
+        return;
+
+    if (DrawingRecorder::useCachedDrawingIfPossible(context, *displayItemClient, displayItemType))
         return;
 
     LayoutRect drawingRect = localCaretRectWithoutUpdate();
@@ -205,7 +229,14 @@ void CaretBase::paintCaret(Node* node, GraphicsContext& context, const LayoutPoi
     if (element && element->layoutObject())
         caretColor = element->layoutObject()->resolveColor(CSSPropertyColor);
 
+    DrawingRecorder drawingRecorder(context, *displayItemClientForCaret(node), DisplayItem::Caret, FloatRect(drawingRect));
+
     context.fillRect(FloatRect(drawingRect), caretColor);
+}
+
+void CaretBase::setCaretVisibility(CaretVisibility visibility)
+{
+    m_caretVisibility = visibility;
 }
 
 } // namespace blink

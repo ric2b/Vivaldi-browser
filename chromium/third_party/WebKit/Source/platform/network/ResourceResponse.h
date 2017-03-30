@@ -34,10 +34,11 @@
 #include "platform/network/ResourceLoadInfo.h"
 #include "platform/network/ResourceLoadTiming.h"
 #include "platform/weborigin/KURL.h"
+#include "public/platform/WebURLResponse.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponseType.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
+#include "wtf/Vector.h"
 #include "wtf/text/CString.h"
 
 namespace blink {
@@ -60,6 +61,43 @@ public:
         SecurityStyleAuthenticated
     };
 
+    class PLATFORM_EXPORT SignedCertificateTimestamp final {
+    public:
+        SignedCertificateTimestamp(
+            String status,
+            String origin,
+            String logDescription,
+            String logId,
+            int64_t timestamp,
+            String hashAlgorithm,
+            String signatureAlgorithm,
+            String signatureData)
+            : m_status(status)
+            , m_origin(origin)
+            , m_logDescription(logDescription)
+            , m_logId(logId)
+            , m_timestamp(timestamp)
+            , m_hashAlgorithm(hashAlgorithm)
+            , m_signatureAlgorithm(signatureAlgorithm)
+            , m_signatureData(signatureData)
+        {
+        }
+        explicit SignedCertificateTimestamp(
+            const struct blink::WebURLResponse::SignedCertificateTimestamp&);
+        SignedCertificateTimestamp isolatedCopy() const;
+
+        String m_status;
+        String m_origin;
+        String m_logDescription;
+        String m_logId;
+        int64_t m_timestamp;
+        String m_hashAlgorithm;
+        String m_signatureAlgorithm;
+        String m_signatureData;
+    };
+
+    using SignedCertificateTimestampList = WTF::Vector<SignedCertificateTimestamp>;
+
     struct SecurityDetails {
         DISALLOW_NEW();
         SecurityDetails()
@@ -80,6 +118,7 @@ public:
         size_t numUnknownSCTs;
         size_t numInvalidSCTs;
         size_t numValidSCTs;
+        SignedCertificateTimestampList sctList;
     };
 
     class ExtraData : public RefCounted<ExtraData> {
@@ -90,7 +129,7 @@ public:
     explicit ResourceResponse(CrossThreadResourceResponseData*);
 
     // Gets a copy of the data suitable for passing to another thread.
-    PassOwnPtr<CrossThreadResourceResponseData> copyData() const;
+    std::unique_ptr<CrossThreadResourceResponseData> copyData() const;
 
     ResourceResponse();
     ResourceResponse(const KURL&, const AtomicString& mimeType, long long expectedLength, const AtomicString& textEncodingName, const String& filename);
@@ -177,7 +216,7 @@ public:
     void setSecurityStyle(SecurityStyle securityStyle) { m_securityStyle = securityStyle; }
 
     const SecurityDetails* getSecurityDetails() const { return &m_securityDetails; }
-    void setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, size_t numUnknownScts, size_t numInvalidScts, size_t numValidScts);
+    void setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, size_t numUnknownScts, size_t numInvalidScts, size_t numValidScts, const SignedCertificateTimestampList& sctList);
 
     long long appCacheID() const { return m_appCacheID; }
     void setAppCacheID(long long id) { m_appCacheID = id; }
@@ -224,6 +263,12 @@ public:
 
     const String& cacheStorageCacheName() const { return m_cacheStorageCacheName; }
     void setCacheStorageCacheName(const String& cacheStorageCacheName) { m_cacheStorageCacheName = cacheStorageCacheName; }
+
+    const Vector<String>& corsExposedHeaderNames() const { return m_corsExposedHeaderNames; }
+    void setCorsExposedHeaderNames(const Vector<String>& headerNames)
+    {
+        m_corsExposedHeaderNames = headerNames;
+    }
 
     int64_t responseTime() const { return m_responseTime; }
     void setResponseTime(int64_t responseTime) { m_responseTime = responseTime; }
@@ -346,6 +391,10 @@ private:
     // the ServiceWorker. Null if the response isn't from the CacheStorage.
     String m_cacheStorageCacheName;
 
+    // The headers that should be exposed according to CORS. Only guaranteed
+    // to be set if the response was fetched by a ServiceWorker.
+    Vector<String> m_corsExposedHeaderNames;
+
     // The time at which the response headers were received.  For cached
     // responses, this time could be "far" in the past.
     int64_t m_responseTime;
@@ -381,7 +430,7 @@ public:
     String m_suggestedFilename;
     int m_httpStatusCode;
     String m_httpStatusText;
-    OwnPtr<CrossThreadHTTPHeaderMapData> m_httpHeaders;
+    std::unique_ptr<CrossThreadHTTPHeaderMapData> m_httpHeaders;
     time_t m_lastModifiedDate;
     RefPtr<ResourceLoadTiming> m_resourceLoadTiming;
     CString m_securityInfo;

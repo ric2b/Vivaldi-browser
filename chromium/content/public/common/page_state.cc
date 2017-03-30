@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/files/file_path.h"
+#include "base/strings/nullable_string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/common/page_state_serialization.h"
 
@@ -84,20 +85,20 @@ PageState PageState::CreateForTesting(
   state.top.url_string = ToNullableString16(url.possibly_invalid_spec());
 
   if (optional_body_data || optional_body_file_path) {
-    state.top.http_body.is_null = false;
     if (optional_body_data) {
-      ExplodedHttpBodyElement element;
-      element.type = blink::WebHTTPBody::Element::TypeData;
-      element.data = optional_body_data;
-      state.top.http_body.elements.push_back(element);
+      std::string body_data(optional_body_data);
+      state.top.http_body.request_body = new ResourceRequestBodyImpl();
+      state.top.http_body.request_body->AppendBytes(body_data.data(),
+                                                    body_data.size());
     }
     if (optional_body_file_path) {
-      ExplodedHttpBodyElement element;
-      element.type = blink::WebHTTPBody::Element::TypeFile;
-      element.file_path =
-          ToNullableString16(optional_body_file_path->AsUTF8Unsafe());
-      state.top.http_body.elements.push_back(element);
-      state.referenced_files.push_back(element.file_path);
+      state.top.http_body.request_body = new ResourceRequestBodyImpl();
+      state.top.http_body.request_body->AppendFileRange(
+          *optional_body_file_path,
+          0, std::numeric_limits<uint64_t>::max(),
+          base::Time());
+      state.referenced_files.push_back(base::NullableString16(
+          optional_body_file_path->AsUTF16Unsafe(), false));
     }
     state.top.http_body.contains_passwords =
         body_contains_password_data;

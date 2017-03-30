@@ -80,6 +80,23 @@ using ::testing::_;
       grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(    \
           grand_child.get()));
 
+#define EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(code_to_test)                  \
+  code_to_test;                                                              \
+  root->layer_tree_host()->BuildPropertyTreesForTesting();                   \
+  EXPECT_TRUE(root->layer_property_changed());                               \
+  EXPECT_FALSE(root->subtree_property_changed());                            \
+  EXPECT_TRUE(root->layer_tree_host()->LayerNeedsPushPropertiesForTesting(   \
+      root.get()));                                                          \
+  EXPECT_FALSE(child->layer_property_changed());                             \
+  EXPECT_FALSE(child->subtree_property_changed());                           \
+  EXPECT_FALSE(child->layer_tree_host()->LayerNeedsPushPropertiesForTesting( \
+      child.get()));                                                         \
+  EXPECT_FALSE(grand_child->layer_property_changed());                       \
+  EXPECT_FALSE(grand_child->subtree_property_changed());                     \
+  EXPECT_FALSE(                                                              \
+      grand_child->layer_tree_host()->LayerNeedsPushPropertiesForTesting(    \
+          grand_child.get()));
+
 namespace cc {
 
 // This class is a friend of Layer, and is used as a wrapper for all the tests
@@ -883,6 +900,9 @@ class LayerTest : public testing::Test {
     params.client = &fake_client_;
     params.settings = &settings_;
     params.task_graph_runner = &task_graph_runner_;
+    params.animation_host =
+        AnimationHost::CreateForTesting(ThreadInstance::MAIN);
+
     layer_tree_host_.reset(
         new StrictMock<MockLayerTreeHost>(&fake_client_, &params));
   }
@@ -1106,6 +1126,12 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
       child->PushPropertiesTo(child_impl.get());
       child2->PushPropertiesTo(child2_impl.get());
       grand_child->PushPropertiesTo(grand_child_impl.get()));
+
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  EXECUTE_AND_VERIFY_ONLY_LAYER_CHANGED(
+      root->SetBackgroundFilters(arbitrary_filters));
+  EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(
+      root->PushPropertiesTo(root_impl.get()));
 
   gfx::PointF arbitrary_point_f = gfx::PointF(0.125f, 0.25f);
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
@@ -1547,8 +1573,7 @@ TEST_F(LayerTest, CheckSetNeedsDisplayCausesCorrectBehavior) {
 
   gfx::Size test_bounds = gfx::Size(501, 508);
 
-  gfx::Rect dirty1 = gfx::Rect(10, 15, 1, 2);
-  gfx::Rect dirty2 = gfx::Rect(20, 25, 3, 4);
+  gfx::Rect dirty_rect = gfx::Rect(10, 15, 1, 2);
   gfx::Rect out_of_bounds_dirty_rect = gfx::Rect(400, 405, 500, 502);
 
   // Before anything, test_layer should not be dirty.
@@ -1588,7 +1613,7 @@ TEST_F(LayerTest, CheckSetNeedsDisplayCausesCorrectBehavior) {
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetIsDrawable(false));
   test_layer->ResetNeedsDisplayForTesting();
   EXPECT_FALSE(test_layer->NeedsDisplayForTesting());
-  EXPECT_SET_NEEDS_UPDATE(0, test_layer->SetNeedsDisplayRect(dirty1));
+  EXPECT_SET_NEEDS_UPDATE(0, test_layer->SetNeedsDisplayRect(dirty_rect));
   EXPECT_TRUE(test_layer->NeedsDisplayForTesting());
 }
 
@@ -1684,7 +1709,7 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
       gfx::Rect(10, 10)));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetForceRenderSurfaceForTesting(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetHideLayerAndSubtree(true));
-  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetElementId(2));
+  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetElementId(ElementId(2, 0)));
   EXPECT_SET_NEEDS_COMMIT(
       1, test_layer->SetMutableProperties(MutableProperty::kTransform));
 
@@ -1708,7 +1733,8 @@ TEST_F(LayerTest, PushPropertiesAccumulatesUpdateRect) {
   EXPECT_SET_NEEDS_FULL_TREE_SYNC(1,
                                   layer_tree_host_->SetRootLayer(test_layer));
 
-  host_impl_.active_tree()->SetRootLayer(std::move(impl_layer));
+  host_impl_.active_tree()->SetRootLayerForTesting(std::move(impl_layer));
+  host_impl_.active_tree()->BuildLayerListForTesting();
   LayerImpl* impl_layer_ptr = host_impl_.active_tree()->LayerById(1);
   test_layer->SetNeedsDisplayRect(gfx::Rect(5, 5));
   test_layer->PushPropertiesTo(impl_layer_ptr);
@@ -1818,6 +1844,8 @@ class LayerTreeHostFactory {
     params.gpu_memory_buffer_manager = &gpu_memory_buffer_manager_;
     params.settings = &settings;
     params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
+    params.animation_host =
+        AnimationHost::CreateForTesting(ThreadInstance::MAIN);
     return LayerTreeHost::CreateSingleThreaded(&client_, &params);
   }
 
@@ -2481,15 +2509,15 @@ TEST_F(LayerTest, ElementIdAndMutablePropertiesArePushed) {
 
   EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(2);
 
-  test_layer->SetElementId(2);
+  test_layer->SetElementId(ElementId(2, 0));
   test_layer->SetMutableProperties(MutableProperty::kTransform);
 
-  EXPECT_EQ(0lu, impl_layer->element_id());
+  EXPECT_FALSE(impl_layer->element_id());
   EXPECT_EQ(MutableProperty::kNone, impl_layer->mutable_properties());
 
   test_layer->PushPropertiesTo(impl_layer.get());
 
-  EXPECT_EQ(2lu, impl_layer->element_id());
+  EXPECT_EQ(ElementId(2, 0), impl_layer->element_id());
   EXPECT_EQ(MutableProperty::kTransform, impl_layer->mutable_properties());
 }
 

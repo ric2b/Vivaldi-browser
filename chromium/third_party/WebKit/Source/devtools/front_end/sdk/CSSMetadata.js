@@ -293,6 +293,9 @@ WebInspector.CSSMetadata._propertyDataMap = {
     "overflow": { values: [
         "hidden", "auto", "visible", "overlay", "scroll"
     ] },
+    "contain": { values: [
+        "none", "strict", "content", "size", "layout", "style", "paint"
+    ] },
     "text-rendering": { values: [
         "auto", "optimizeSpeed", "optimizeLegibility", "geometricPrecision"
     ] },
@@ -429,7 +432,7 @@ WebInspector.CSSMetadata._propertyDataMap = {
         "repeat", "stretch"
     ] },
     "text-decoration": { values: [
-        "blink", "line-through", "overline", "underline"
+        "none", "blink", "line-through", "overline", "underline"
     ] },
     "position": { values: [
         "absolute", "fixed", "relative", "static"

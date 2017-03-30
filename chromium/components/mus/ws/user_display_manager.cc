@@ -6,29 +6,24 @@
 
 #include "components/mus/ws/display.h"
 #include "components/mus/ws/display_manager.h"
-#include "components/mus/ws/window_manager_state.h"
+#include "components/mus/ws/display_manager_delegate.h"
 
 namespace mus {
 namespace ws {
 
 UserDisplayManager::UserDisplayManager(ws::DisplayManager* display_manager,
+                                       DisplayManagerDelegate* delegate,
                                        const UserId& user_id)
     : display_manager_(display_manager),
+      delegate_(delegate),
       user_id_(user_id),
-      current_cursor_location_(0),
-      cursor_location_memory_(nullptr) {
-  for (const WindowManagerState* wms : GetWindowManagerStatesForUser()) {
-    if (wms->got_frame_decoration_values()) {
-      got_valid_frame_decorations_ = true;
-      break;
-    }
-  }
-}
+      got_valid_frame_decorations_(
+          delegate->GetFrameDecorationsForUser(user_id, nullptr)),
+      current_cursor_location_(0) {}
 
 UserDisplayManager::~UserDisplayManager() {}
 
-void UserDisplayManager::OnFrameDecorationValuesChanged(
-    WindowManagerState* wms) {
+void UserDisplayManager::OnFrameDecorationValuesChanged() {
   if (!got_valid_frame_decorations_) {
     got_valid_frame_decorations_ = true;
     display_manager_observers_.ForAllPtrs([this](
@@ -38,12 +33,13 @@ void UserDisplayManager::OnFrameDecorationValuesChanged(
     return;
   }
 
+  mojo::Array<mojom::DisplayPtr> displays = GetAllDisplays();
   display_manager_observers_.ForAllPtrs(
-      [this, &wms](mojom::DisplayManagerObserver* observer) {
-        CallOnDisplayChanged(wms, observer);
+      [this, &displays](mojom::DisplayManagerObserver* observer) {
+        observer->OnDisplaysChanged(displays.Clone());
       });
   if (test_observer_)
-    CallOnDisplayChanged(wms, test_observer_);
+    test_observer_->OnDisplaysChanged(displays.Clone());
 }
 
 void UserDisplayManager::AddDisplayManagerBinding(
@@ -52,10 +48,8 @@ void UserDisplayManager::AddDisplayManagerBinding(
 }
 
 void UserDisplayManager::OnWillDestroyDisplay(Display* display) {
-  if (!display->GetWindowManagerStateForUser(user_id_)
-           ->got_frame_decoration_values()) {
+  if (!got_valid_frame_decorations_)
     return;
-  }
 
   display_manager_observers_.ForAllPtrs(
       [this, &display](mojom::DisplayManagerObserver* observer) {
@@ -69,61 +63,50 @@ void UserDisplayManager::OnMouseCursorLocationChanged(const gfx::Point& point) {
   current_cursor_location_ =
       static_cast<base::subtle::Atomic32>(
           (point.x() & 0xFFFF) << 16 | (point.y() & 0xFFFF));
-  if (cursor_location_memory_) {
-    base::subtle::NoBarrier_Store(cursor_location_memory_,
+  if (cursor_location_memory()) {
+    base::subtle::NoBarrier_Store(cursor_location_memory(),
                                   current_cursor_location_);
   }
+}
+
+void UserDisplayManager::OnDisplayUpdate(Display* display) {
+  if (!got_valid_frame_decorations_)
+    return;
+
+  mojo::Array<mojom::DisplayPtr> displays(1);
+  displays[0] = display->ToMojomDisplay();
+  delegate_->GetFrameDecorationsForUser(
+      user_id_, &(displays[0]->frame_decoration_values));
+  display_manager_observers_.ForAllPtrs(
+      [this, &displays](mojom::DisplayManagerObserver* observer) {
+        observer->OnDisplaysChanged(displays.Clone());
+      });
+  if (test_observer_)
+    test_observer_->OnDisplaysChanged(displays.Clone());
 }
 
 mojo::ScopedSharedBufferHandle UserDisplayManager::GetCursorLocationMemory() {
-  if (!cursor_location_memory_) {
+  if (!cursor_location_handle_.is_valid()) {
     // Create our shared memory segment to share the cursor state with our
     // window clients.
-    MojoResult result = mojo::CreateSharedBuffer(nullptr,
-                                                 sizeof(base::subtle::Atomic32),
-                                                 &cursor_location_handle_);
-    if (result != MOJO_RESULT_OK)
-      return mojo::ScopedSharedBufferHandle();
-    DCHECK(cursor_location_handle_.is_valid());
+    cursor_location_handle_ =
+        mojo::SharedBufferHandle::Create(sizeof(base::subtle::Atomic32));
 
-    result = mojo::MapBuffer(cursor_location_handle_.get(), 0,
-                             sizeof(base::subtle::Atomic32),
-                             reinterpret_cast<void**>(&cursor_location_memory_),
-                             MOJO_MAP_BUFFER_FLAG_NONE);
-    if (result != MOJO_RESULT_OK)
+    if (!cursor_location_handle_.is_valid())
       return mojo::ScopedSharedBufferHandle();
-    DCHECK(cursor_location_memory_);
 
-    base::subtle::NoBarrier_Store(cursor_location_memory_,
+    cursor_location_mapping_ =
+        cursor_location_handle_->Map(sizeof(base::subtle::Atomic32));
+    if (!cursor_location_mapping_)
+      return mojo::ScopedSharedBufferHandle();
+    base::subtle::NoBarrier_Store(cursor_location_memory(),
                                   current_cursor_location_);
   }
 
-  mojo::ScopedSharedBufferHandle duped;
-  MojoDuplicateBufferHandleOptions options = {
-    sizeof(MojoDuplicateBufferHandleOptions),
-    MOJO_DUPLICATE_BUFFER_HANDLE_OPTIONS_FLAG_READ_ONLY
-  };
-  MojoResult result = mojo::DuplicateBuffer(cursor_location_handle_.get(),
-                                            &options, &duped);
-  if (result != MOJO_RESULT_OK)
-    return mojo::ScopedSharedBufferHandle();
-  DCHECK(duped.is_valid());
-
-  return duped;
+  return cursor_location_handle_->Clone(
+      mojo::SharedBufferHandle::AccessMode::READ_ONLY);
 }
 
-
-std::set<const WindowManagerState*>
-UserDisplayManager::GetWindowManagerStatesForUser() const {
-  std::set<const WindowManagerState*> result;
-  for (const Display* display : display_manager_->displays()) {
-    const WindowManagerState* wms =
-        display->GetWindowManagerStateForUser(user_id_);
-    if (wms && wms->got_frame_decoration_values())
-      result.insert(wms);
-  }
-  return result;
-}
 
 void UserDisplayManager::OnObserverAdded(
     mojom::DisplayManagerObserver* observer) {
@@ -136,32 +119,25 @@ void UserDisplayManager::OnObserverAdded(
   CallOnDisplays(observer);
 }
 
-void UserDisplayManager::CallOnDisplays(
-    mojom::DisplayManagerObserver* observer) {
-  std::set<const WindowManagerState*> wmss = GetWindowManagerStatesForUser();
-  mojo::Array<mojom::DisplayPtr> display_ptrs(wmss.size());
+mojo::Array<mojom::DisplayPtr> UserDisplayManager::GetAllDisplays() {
+  const std::set<Display*>& displays = display_manager_->displays();
+  mojo::Array<mojom::DisplayPtr> display_ptrs(displays.size());
   {
     size_t i = 0;
     // TODO(sky): need ordering!
-    for (const WindowManagerState* wms : wmss) {
-      display_ptrs[i] = wms->ToMojomDisplay();
+    for (Display* display : displays) {
+      display_ptrs[i] = display->ToMojomDisplay();
+      delegate_->GetFrameDecorationsForUser(
+          user_id_, &(display_ptrs[i]->frame_decoration_values));
       ++i;
     }
   }
-  observer->OnDisplays(std::move(display_ptrs));
+  return display_ptrs;
 }
 
-void UserDisplayManager::CallOnDisplayChanged(
-    WindowManagerState* wms,
+void UserDisplayManager::CallOnDisplays(
     mojom::DisplayManagerObserver* observer) {
-  mojo::Array<mojom::DisplayPtr> displays(1);
-  displays[0] = wms->ToMojomDisplay();
-  display_manager_observers_.ForAllPtrs(
-      [&displays](mojom::DisplayManagerObserver* observer) {
-        observer->OnDisplaysChanged(displays.Clone());
-      });
-  if (test_observer_)
-    test_observer_->OnDisplaysChanged(displays.Clone());
+  observer->OnDisplays(GetAllDisplays());
 }
 
 void UserDisplayManager::AddObserver(

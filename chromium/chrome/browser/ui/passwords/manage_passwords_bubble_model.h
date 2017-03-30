@@ -73,6 +73,14 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
   void OnPasswordAction(const autofill::PasswordForm& password_form,
                         PasswordAction action);
 
+  // Called by the view when the "Sign in" button in the promo bubble is
+  // clicked.
+  void OnSignInToChromeClicked();
+
+  // Called by the view when the "No thanks" button in the promo bubble is
+  // clicked.
+  void OnSkipSignInClicked();
+
   password_manager::ui::State state() const { return state_; }
 
   const base::string16& title() const { return title_; }
@@ -105,16 +113,12 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
   // Lock.
   bool ShouldShowGoogleSmartLockWelcome() const;
 
-#if defined(UNIT_TEST)
-  // Gets the reason the bubble was dismissed.
-  password_manager::metrics_util::UIDismissalReason dismissal_reason() const {
-    return dismissal_reason_;
-  }
+  // Returns true and updates the internal state iff the Save bubble should
+  // switch to the Chrome Sign In promo after the password was saved. Otherwise,
+  // returns false and leaves the current state.
+  bool ReplaceToShowSignInPromoIfNeeded();
 
-  void set_clock(std::unique_ptr<base::Clock> clock) {
-    clock_ = std::move(clock);
-  }
-#endif
+  void SetClockForTesting(std::unique_ptr<base::Clock> clock);
 
  private:
   enum UserBehaviorOnUpdateBubble {
@@ -122,6 +126,7 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
     NOPE_CLICKED,
     NO_INTERACTION
   };
+  class InteractionKeeper;
   // Updates |title_| and |title_brand_link_range_| for the
   // PENDING_PASSWORD_STATE.
   void UpdatePendingStateTitle();
@@ -142,16 +147,9 @@ class ManagePasswordsBubbleModel : public content::WebContentsObserver {
   base::string16 manage_link_;
   base::string16 save_confirmation_text_;
   gfx::Range save_confirmation_link_range_;
-  password_manager::metrics_util::UIDisplayDisposition display_disposition_;
-  password_manager::metrics_util::UIDismissalReason dismissal_reason_;
-  password_manager::metrics_util::UpdatePasswordSubmissionEvent
-      update_password_submission_event_;
 
-  // Current statistics for the save password bubble;
-  password_manager::InteractionsStats interaction_stats_;
-
-  // Used to retrieve the current time, in base::Time units.
-  std::unique_ptr<base::Clock> clock_;
+  // Responsible for recording all the interactions required.
+  std::unique_ptr<InteractionKeeper> interaction_keeper_;
 
   DISALLOW_COPY_AND_ASSIGN(ManagePasswordsBubbleModel);
 };

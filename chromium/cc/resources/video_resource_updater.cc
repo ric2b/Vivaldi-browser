@@ -191,7 +191,8 @@ VideoResourceUpdater::AllocateResource(const gfx::Size& plane_size,
     gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
 
     gl->GenMailboxCHROMIUM(mailbox.name);
-    ResourceProvider::ScopedWriteLockGL lock(resource_provider_, resource_id);
+    ResourceProvider::ScopedWriteLockGL lock(resource_provider_, resource_id,
+                                             false);
     gl->ProduceTextureDirectCHROMIUM(
         lock.texture_id(),
         resource_provider_->GetResourceTextureTarget(resource_id),
@@ -584,9 +585,7 @@ void VideoResourceUpdater::CopyPlaneTexture(
   resource->add_ref();
 
   ResourceProvider::ScopedWriteLockGL lock(resource_provider_,
-                                           resource->resource_id());
-  uint32_t texture_id = lock.texture_id();
-
+                                           resource->resource_id(), false);
   DCHECK_EQ(
       resource_provider_->GetResourceTextureTarget(resource->resource_id()),
       (GLenum)GL_TEXTURE_2D);
@@ -594,7 +593,7 @@ void VideoResourceUpdater::CopyPlaneTexture(
   gl->WaitSyncTokenCHROMIUM(mailbox_holder.sync_token.GetConstData());
   uint32_t src_texture_id = gl->CreateAndConsumeTextureCHROMIUM(
       mailbox_holder.texture_target, mailbox_holder.mailbox.name);
-  gl->CopySubTextureCHROMIUM(src_texture_id, texture_id, 0, 0, 0, 0,
+  gl->CopySubTextureCHROMIUM(src_texture_id, lock.texture_id(), 0, 0, 0, 0,
                              output_plane_resource_size.width(),
                              output_plane_resource_size.height(), false, false,
                              false);
@@ -609,9 +608,9 @@ void VideoResourceUpdater::CopyPlaneTexture(
   // Done with the source video frame texture at this point.
   video_frame->UpdateReleaseSyncToken(&client);
 
-  external_resources->mailboxes.push_back(TextureMailbox(
-      resource->mailbox(), sync_token, GL_TEXTURE_2D, video_frame->coded_size(),
-      gfx::GpuMemoryBufferId(), false, false));
+  external_resources->mailboxes.push_back(
+      TextureMailbox(resource->mailbox(), sync_token, GL_TEXTURE_2D,
+                     video_frame->coded_size(), false, false));
 
   external_resources->release_callbacks.push_back(
       base::Bind(&RecycleResource, AsWeakPtr(), resource->resource_id()));
@@ -647,13 +646,12 @@ VideoFrameExternalResources VideoResourceUpdater::CreateForHardwarePlanes(
             media::VideoFrameMetadata::COPY_REQUIRED)) {
       CopyPlaneTexture(video_frame.get(), mailbox_holder, &external_resources);
     } else {
-      external_resources.mailboxes.push_back(
-          TextureMailbox(mailbox_holder.mailbox, mailbox_holder.sync_token,
-                         mailbox_holder.texture_target,
-                         video_frame->coded_size(), gfx::GpuMemoryBufferId(),
-                         video_frame->metadata()->IsTrue(
-                             media::VideoFrameMetadata::ALLOW_OVERLAY),
-                         false));
+      external_resources.mailboxes.push_back(TextureMailbox(
+          mailbox_holder.mailbox, mailbox_holder.sync_token,
+          mailbox_holder.texture_target, video_frame->coded_size(),
+          video_frame->metadata()->IsTrue(
+              media::VideoFrameMetadata::ALLOW_OVERLAY),
+          false));
 
       external_resources.release_callbacks.push_back(
           base::Bind(&ReturnTexture, AsWeakPtr(), video_frame));

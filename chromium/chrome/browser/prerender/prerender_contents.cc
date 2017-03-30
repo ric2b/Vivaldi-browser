@@ -23,12 +23,10 @@
 #include "chrome/browser/prerender/prerender_resource_throttle.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_management/web_contents_tags.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/web_contents_sizer.h"
 #include "chrome/common/prerender_messages.h"
 #include "chrome/common/render_messages.h"
-#include "chrome/common/url_constants.h"
 #include "components/history/core/browser/history_types.h"
 #include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/browser_thread.h"
@@ -240,7 +238,7 @@ void PrerenderContents::StartPrerendering(
   DCHECK(profile_ != NULL);
   DCHECK(!size.IsEmpty());
   DCHECK(!prerendering_has_started_);
-  DCHECK(prerender_contents_.get() == NULL);
+  DCHECK(!prerender_contents_);
   DCHECK(size_.IsEmpty());
   DCHECK_EQ(1U, alias_urls_.size());
 
@@ -607,7 +605,7 @@ void PrerenderContents::Destroy(FinalStatus final_status) {
 }
 
 base::ProcessMetrics* PrerenderContents::MaybeGetProcessMetrics() {
-  if (process_metrics_.get() == NULL) {
+  if (!process_metrics_) {
     // If a PrenderContents hasn't started prerending, don't be fully formed.
     if (!GetRenderViewHost() || !GetRenderViewHost()->GetProcess())
       return NULL;

@@ -6,8 +6,10 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/history/core/browser/web_history_service.h"
 #include "components/sync_driver/sync_service.h"
 #include "components/version_info/version_info.h"
@@ -37,7 +39,7 @@ class MergeBooleanCallbacks {
       return;
 
     target_callback_.Run(final_response_);
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
   }
 
  private:
@@ -108,21 +110,6 @@ void ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
       channel,
       base::Bind(
           &MergeBooleanCallbacks::RunCallback, base::Unretained(merger)));
-}
-
-// TODO(crbug.com/614319): This function is deprecated and should be removed.
-void ShouldPopupDialogAboutOtherFormsOfBrowsingHistory(
-    const sync_driver::SyncService* sync_service,
-    history::WebHistoryService* history_service,
-    base::Callback<void(bool)> callback) {
-  if (!history_service ||
-      !testing::g_override_other_forms_of_browsing_history_query) {
-    callback.Run(false);
-    return;
-  }
-
-  ShouldShowNoticeAboutOtherFormsOfBrowsingHistory(
-      sync_service, history_service, callback);
 }
 
 }  // namespace browsing_data_ui

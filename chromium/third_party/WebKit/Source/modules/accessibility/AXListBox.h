@@ -36,6 +36,7 @@ namespace blink {
 class AXObjectCacheImpl;
 
 class AXListBox final : public AXLayoutObject {
+    WTF_MAKE_NONCOPYABLE(AXListBox);
 
 private:
     AXListBox(LayoutObject*, AXObjectCacheImpl&);
@@ -46,7 +47,7 @@ public:
 
     AccessibilityRole determineAccessibilityRole() final;
     bool isAXListBox() const override { return true; }
-    AXObject* activeDescendant() const override;
+    AXObject* activeDescendant() final;
 
     void activeIndexChanged();
 

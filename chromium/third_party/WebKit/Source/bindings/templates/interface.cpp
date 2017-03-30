@@ -101,6 +101,9 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
 {% set setter = indexed_property_setter %}
 static void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info)
 {
+    {% if setter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if setter.is_custom %}
     {{v8_class}}::indexedPropertySetterCustom(index, v8Value, info);
     {% else %}
@@ -150,6 +153,9 @@ static void indexedPropertyDeleter(uint32_t index, const v8::PropertyCallbackInf
 {% set deleter = indexed_property_deleter %}
 static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>& info)
 {
+    {% if deleter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if deleter.is_custom %}
     {{v8_class}}::indexedPropertyDeleterCustom(index, info);
     {% else %}
@@ -275,6 +281,9 @@ static void namedPropertySetterCallback(v8::Local<v8::Name> name, v8::Local<v8::
 {
     if (!name->IsString())
         return;
+    {% if setter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if setter.is_custom %}
     {{v8_class}}::namedPropertySetterCustom(name, v8Value, info);
     {% else %}
@@ -379,6 +388,9 @@ static void namedPropertyDeleterCallback(v8::Local<v8::Name> name, const v8::Pro
 {
     if (!name->IsString())
         return;
+    {% if deleter.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
+    {% endif %}
     {% if deleter.is_custom %}
     {{v8_class}}::namedPropertyDeleterCustom(name, info);
     {% else %}
@@ -438,19 +450,19 @@ static void {{cpp_class}}OriginSafeMethodSetter(v8::Local<v8::Name> name, v8::Lo
 {
     if (!name->IsString())
         return;
-    v8::Local<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.This(), info.GetIsolate());
+    v8::Local<v8::Object> holder = {{v8_class}}::findInstanceInPrototypeChain(info.Holder(), info.GetIsolate());
     if (holder.IsEmpty())
         return;
     {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     v8::String::Utf8Value attributeName(name);
     ExceptionState exceptionState(ExceptionState::SetterContext, *attributeName, "{{interface_name}}", info.Holder(), info.GetIsolate());
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         exceptionState.throwIfNeeded();
         return;
     }
 
-    {# The findInstanceInPrototypeChain() call above only returns a non-empty handle if info.This() is an Object. #}
-    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.This()), name.As<v8::String>(), v8Value);
+    {# The findInstanceInPrototypeChain() call above only returns a non-empty handle if info.Holder() is an Object. #}
+    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), v8::Local<v8::Object>::Cast(info.Holder()), name.As<v8::String>(), v8Value);
 }
 
 static void {{cpp_class}}OriginSafeMethodSetterCallback(v8::Local<v8::Name> name, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info)
@@ -709,7 +721,7 @@ v8::Local<v8::FunctionTemplate> {{v8_class}}::domTemplateForNamedPropertiesObjec
 {
     v8::Local<v8::FunctionTemplate> parentTemplate = V8{{parent_interface}}::domTemplate(isolate, world);
 
-    v8::Local<v8::FunctionTemplate> namedPropertiesObjectFunctionTemplate = v8::FunctionTemplate::New(isolate);
+    v8::Local<v8::FunctionTemplate> namedPropertiesObjectFunctionTemplate = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
     namedPropertiesObjectFunctionTemplate->SetClassName(v8AtomicString(isolate, "{{interface_name}}Properties"));
     namedPropertiesObjectFunctionTemplate->Inherit(parentTemplate);
 
@@ -724,19 +736,15 @@ v8::Local<v8::FunctionTemplate> {{v8_class}}::domTemplateForNamedPropertiesObjec
 {% endif %}
 {% endblock %}
 
-
 {##############################################################################}
 {% block has_instance %}
+{% if not is_array_buffer_or_view %}
+
 bool {{v8_class}}::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
-    {% if is_array_buffer_or_view %}
-    return v8Value->Is{{interface_name}}();
-    {% else %}
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
-    {% endif %}
 }
 
-{% if not is_array_buffer_or_view %}
 v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->findInstanceInPrototypeChain(&wrapperTypeInfo, v8Value);
@@ -836,7 +844,11 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
 {% block to_impl_with_type_check %}
 {{cpp_class}}* {{v8_class}}::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
+{% if is_array_buffer_or_view %}
+    return value->Is{{interface_name}}() ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
+{% else %}
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
+{% endif %}
 }
 
 {% endblock %}
@@ -858,7 +870,7 @@ void {{v8_class}}::installConditionallyEnabledProperties(v8::Local<v8::Object> i
 {##############################################################################}
 {% block prepare_prototype_and_interface_object %}
 {% from 'methods.cpp' import install_conditionally_enabled_methods with context %}
-{% if unscopeables or has_conditional_attributes_on_prototype or conditionally_enabled_methods %}
+{% if unscopeables or has_conditional_attributes_on_prototype or methods | conditionally_exposed(is_partial) %}
 void {{v8_class}}::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> context, const DOMWrapperWorld& world, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate)
 {
     v8::Isolate* isolate = context->GetIsolate();
@@ -868,7 +880,7 @@ void {{v8_class}}::preparePrototypeAndInterfaceObject(v8::Local<v8::Context> con
 {% if has_conditional_attributes_on_prototype %}
     {{install_conditionally_enabled_attributes_on_prototype() | indent}}
 {% endif %}
-{% if conditionally_enabled_methods %}
+{% if methods | conditionally_exposed(is_partial) %}
     {{install_conditionally_enabled_methods() | indent}}
 {% endif %}
 }

@@ -4,6 +4,7 @@
 
 #include "ash/wm/screen_dimmer.h"
 
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/wm/dim_window.h"
 #include "base/time/time.h"
@@ -57,11 +58,11 @@ ScreenDimmer::ScreenDimmer(int container_id)
       target_opacity_(0.5f),
       is_dimming_(false),
       at_bottom_(false) {
-  Shell::GetInstance()->AddShellObserver(this);
+  WmShell::Get()->AddShellObserver(this);
 }
 
 ScreenDimmer::~ScreenDimmer() {
-  Shell::GetInstance()->RemoveShellObserver(this);
+  WmShell::Get()->RemoveShellObserver(this);
 }
 
 void ScreenDimmer::SetDimming(bool should_dim) {
@@ -84,7 +85,7 @@ aura::Window* ScreenDimmer::FindContainer(int container_id) {
              : primary->GetChildById(container_id);
 }
 
-void ScreenDimmer::OnRootWindowAdded(aura::Window* root_window) {
+void ScreenDimmer::OnRootWindowAdded(WmWindow* root_window) {
   Update(is_dimming_);
 }
 

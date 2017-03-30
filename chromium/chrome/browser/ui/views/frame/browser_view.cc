@@ -84,8 +84,8 @@
 #include "chrome/browser/ui/views/location_bar/zoom_bubble_view.h"
 #include "chrome/browser/ui/views/new_back_shortcut_bubble.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
-#include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
 #include "chrome/browser/ui/views/profiles/profile_chooser_view.h"
+#include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/session_crashed_bubble_view.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
 #include "chrome/browser/ui/views/tabs/browser_tab_strip_controller.h"
@@ -166,7 +166,7 @@
 #endif
 
 #if defined(OS_WIN)
-#include "chrome/browser/jumplist_win.h"
+#include "chrome/browser/win/jumplist.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/native_theme/native_theme_dark_win.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
@@ -175,10 +175,6 @@
 #if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
 #include "chrome/browser/ui/sync/one_click_signin_links_delegate_impl.h"
 #include "chrome/browser/ui/views/sync/one_click_signin_dialog_view.h"
-#endif
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #endif
 
 #if defined(OS_LINUX)
@@ -546,7 +542,7 @@ void BrowserView::Paint1pxHorizontalLine(gfx::Canvas* canvas,
   gfx::ScopedCanvas scoped_canvas(canvas);
   const float scale = canvas->UndoDeviceScaleFactor();
   gfx::RectF rect(gfx::ScaleRect(gfx::RectF(bounds), scale));
-  const int inset = rect.height() - 1;
+  const float inset = rect.height() - 1;
   rect.Inset(0, at_bottom ? inset : 0, 0, at_bottom ? 0 : inset);
   SkPaint paint;
   paint.setColor(color);
@@ -616,32 +612,6 @@ bool BrowserView::IsGuestSession() const {
 
 bool BrowserView::IsRegularOrGuestSession() const {
   return profiles::IsRegularOrGuestSession(browser_.get());
-}
-
-bool BrowserView::ShouldShowAvatar() const {
-#if defined(OS_CHROMEOS)
-  if (!browser_->is_type_tabbed() && !browser_->is_app())
-    return false;
-  // Don't show incognito avatar in the guest session.
-  if (IsOffTheRecord() && !IsGuestSession())
-    return true;
-  return chrome::MultiUserWindowManager::ShouldShowAvatar(GetNativeWindow());
-#else
-  if (!IsBrowserTypeNormal())
-    return false;
-  if (IsOffTheRecord())  // Desktop guest is incognito and needs avatar.
-    return true;
-  // Tests may not have a profile manager.
-  if (!g_browser_process->profile_manager())
-    return false;
-  ProfileAttributesEntry* entry;
-  if (!g_browser_process->profile_manager()->GetProfileAttributesStorage().
-      GetProfileAttributesWithPath(browser_->profile()->GetPath(), &entry)) {
-    return false;
-  }
-
-  return AvatarMenu::ShouldShowAvatarMenu();
-#endif
 }
 
 bool BrowserView::GetAccelerator(int cmd_id,
@@ -963,8 +933,7 @@ void BrowserView::Restore() {
 }
 
 void BrowserView::EnterFullscreen(const GURL& url,
-                                  ExclusiveAccessBubbleType bubble_type,
-                                  bool with_toolbar) {
+                                  ExclusiveAccessBubbleType bubble_type) {
   if (IsFullscreen())
     return;  // Nothing to do.
 
@@ -1385,7 +1354,7 @@ void BrowserView::UserChangedTheme() {
 void BrowserView::ShowWebsiteSettings(
     Profile* profile,
     content::WebContents* web_contents,
-    const GURL& url,
+    const GURL& virtual_url,
     const security_state::SecurityStateModel::SecurityInfo& security_info) {
   // Some browser windows have a location icon embedded in the frame. Try to
   // use that if it exists. If it doesn't exist, use the location icon from
@@ -1395,7 +1364,7 @@ void BrowserView::ShowWebsiteSettings(
     popup_anchor = GetLocationBarView()->location_icon_view()->GetImageView();
 
   WebsiteSettingsPopupView::ShowPopup(popup_anchor, gfx::Rect(), profile,
-                                      web_contents, url, security_info);
+                                      web_contents, virtual_url, security_info);
 }
 
 void BrowserView::ShowAppMenu() {
@@ -1687,16 +1656,17 @@ bool BrowserView::CanActivate() const {
 }
 
 base::string16 BrowserView::GetWindowTitle() const {
-  return browser_->GetWindowTitleForCurrentTab();
+  return browser_->GetWindowTitleForCurrentTab(true /* include_app_name */);
 }
 
 base::string16 BrowserView::GetAccessibleWindowTitle() const {
+  const bool include_app_name = false;
   if (IsOffTheRecord()) {
     return l10n_util::GetStringFUTF16(
         IDS_ACCESSIBLE_INCOGNITO_WINDOW_TITLE_FORMAT,
-        GetWindowTitle());
+        browser_->GetWindowTitleForCurrentTab(include_app_name));
   }
-  return GetWindowTitle();
+  return browser_->GetWindowTitleForCurrentTab(include_app_name);
 }
 
 views::View* BrowserView::GetInitiallyFocusedView() {
@@ -1831,6 +1801,15 @@ views::View* BrowserView::GetContentsView() {
 
 views::ClientView* BrowserView::CreateClientView(views::Widget* widget) {
   return this;
+}
+
+void BrowserView::OnWidgetDestroying(views::Widget* widget) {
+  // Destroy any remaining WebContents early on. Doing so may result in
+  // calling back to one of the Views/LayoutManagers or supporting classes of
+  // BrowserView. By destroying here we ensure all said classes are valid.
+  ScopedVector<content::WebContents> contents;
+  while (browser()->tab_strip_model()->count())
+    contents.push_back(browser()->tab_strip_model()->DetachWebContentsAt(0));
 }
 
 void BrowserView::OnWidgetActivationChanged(views::Widget* widget,

@@ -88,6 +88,9 @@ class FormStructure {
   static std::vector<FormDataPredictions> GetFieldTypePredictions(
       const std::vector<FormStructure*>& form_structures);
 
+  // Returns whether sending autofill field metadata to the server is enabled.
+  static bool IsAutofillFieldMetadataEnabled();
+
   // The unique signature for this form, composed of the target url domain,
   // the form name, and the form field names in a 64-bit hash.
   std::string FormSignature() const;
@@ -131,6 +134,11 @@ class FormStructure {
                          rappor::RapporService* rappor_service,
                          bool did_show_suggestions,
                          bool observed_submission) const;
+
+  // Log the quality of the heuristics and server predictions for this form
+  // structure, if autocomplete attributes are present on the fields (they are
+  // used as golden truths).
+  void LogQualityMetricsBasedOnAutocomplete() const;
 
   // Classifies each field in |fields_| based upon its |autocomplete| attribute,
   // if the attribute is available.  The association is stored into the field's

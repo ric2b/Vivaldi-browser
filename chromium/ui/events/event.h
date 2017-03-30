@@ -28,10 +28,6 @@ namespace gfx {
 class Transform;
 }
 
-namespace IPC {
-template <class P> struct ParamTraits;
-}
-
 namespace ui {
 class EventTarget;
 class KeyEvent;
@@ -77,7 +73,7 @@ class EVENTS_EXPORT Event {
   EventType type() const { return type_; }
   const std::string& name() const { return name_; }
   // time_stamp represents time since machine was booted.
-  const base::TimeDelta& time_stamp() const { return time_stamp_; }
+  const base::TimeTicks time_stamp() const { return time_stamp_; }
   int flags() const { return flags_; }
 
   // This is only intended to be used externally by classes that are modifying
@@ -282,13 +278,13 @@ class EVENTS_EXPORT Event {
   bool handled() const { return result_ != ER_UNHANDLED; }
 
  protected:
-  Event(EventType type, base::TimeDelta time_stamp, int flags);
+  Event(EventType type, base::TimeTicks time_stamp, int flags);
   Event(const base::NativeEvent& native_event, EventType type, int flags);
   Event(const Event& copy);
   void SetType(EventType type);
   void set_cancelable(bool cancelable) { cancelable_ = cancelable; }
 
-  void set_time_stamp(const base::TimeDelta& time_stamp) {
+  void set_time_stamp(base::TimeTicks time_stamp) {
     time_stamp_ = time_stamp;
   }
 
@@ -297,12 +293,9 @@ class EVENTS_EXPORT Event {
  private:
   friend class EventTestApi;
 
-  // For (de)serialization.
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-
   EventType type_;
   std::string name_;
-  base::TimeDelta time_stamp_;
+  base::TimeTicks time_stamp_;
   LatencyInfo latency_;
   int flags_;
   base::NativeEvent native_event_;
@@ -321,17 +314,16 @@ class EVENTS_EXPORT CancelModeEvent : public Event {
  public:
   CancelModeEvent();
   ~CancelModeEvent() override;
-
- private:
-  // For (de)serialization.
-  CancelModeEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : Event(type, time_stamp, flags) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::CancelModeEvent>;
 };
 
 class EVENTS_EXPORT LocatedEvent : public Event {
  public:
+  // Convenience function that casts |event| to a LocatedEvent if it is one,
+  // otherwise returns null.
+  static const ui::LocatedEvent* FromIfValid(const ui::Event* event) {
+    return event && event->IsLocatedEvent() ? event->AsLocatedEvent() : nullptr;
+  }
+
   ~LocatedEvent() override;
 
   float x() const { return location_.x(); }
@@ -372,12 +364,6 @@ class EVENTS_EXPORT LocatedEvent : public Event {
  protected:
   friend class LocatedEventTestApi;
 
-  // For (de)serialization.
-  LocatedEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : Event(type, time_stamp, flags) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::LocatedEvent>;
-
   explicit LocatedEvent(const base::NativeEvent& native_event);
 
   // Create a new LocatedEvent which is identical to the provided model.
@@ -395,7 +381,7 @@ class EVENTS_EXPORT LocatedEvent : public Event {
   LocatedEvent(EventType type,
                const gfx::PointF& location,
                const gfx::PointF& root_location,
-               base::TimeDelta time_stamp,
+               base::TimeTicks time_stamp,
                int flags);
 
   gfx::PointF location_;
@@ -438,9 +424,6 @@ struct EVENTS_EXPORT PointerDetails {
            tilt_y == other.tilt_y;
   }
 
-  // For serialization.
-  friend struct IPC::ParamTraits<ui::PointerDetails>;
-
   // The type of pointer device.
   EventPointerType pointer_type = EventPointerType::POINTER_TYPE_UNKNOWN;
 
@@ -464,6 +447,9 @@ struct EVENTS_EXPORT PointerDetails {
 class EVENTS_EXPORT MouseEvent : public LocatedEvent {
  public:
   explicit MouseEvent(const base::NativeEvent& native_event);
+
+  // |pointer_event.IsMousePointerEvent()| must be true.
+  explicit MouseEvent(const PointerEvent& pointer_event);
 
   // Create a new MouseEvent based on the provided model.
   // Uses the provided |type| and |flags| for the new event.
@@ -492,7 +478,7 @@ class EVENTS_EXPORT MouseEvent : public LocatedEvent {
   MouseEvent(EventType type,
              const gfx::Point& location,
              const gfx::Point& root_location,
-             base::TimeDelta time_stamp,
+             base::TimeTicks time_stamp,
              int flags,
              int changed_button_flags);
 
@@ -560,13 +546,6 @@ class EVENTS_EXPORT MouseEvent : public LocatedEvent {
     pointer_details_ = details;
   }
 
- protected:
-  // For (de)serialization.
-  MouseEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : LocatedEvent(type, time_stamp, flags) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::MouseEvent>;
-
  private:
   FRIEND_TEST_ALL_PREFIXES(EventTest, DoubleClickRequiresRelease);
   FRIEND_TEST_ALL_PREFIXES(EventTest, SingleClickRightLeft);
@@ -616,7 +595,7 @@ class EVENTS_EXPORT MouseWheelEvent : public MouseEvent {
   MouseWheelEvent(const gfx::Vector2d& offset,
                   const gfx::Point& location,
                   const gfx::Point& root_location,
-                  base::TimeDelta time_stamp,
+                  base::TimeTicks time_stamp,
                   int flags,
                   int changed_button_flags);
 
@@ -627,18 +606,15 @@ class EVENTS_EXPORT MouseWheelEvent : public MouseEvent {
   const gfx::Vector2d& offset() const { return offset_; }
 
  private:
-  // For (de)serialization.
-  MouseWheelEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : MouseEvent(type, time_stamp, flags) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::MouseWheelEvent>;
-
   gfx::Vector2d offset_;
 };
 
 class EVENTS_EXPORT TouchEvent : public LocatedEvent {
  public:
   explicit TouchEvent(const base::NativeEvent& native_event);
+
+  // |pointer_event.IsTouchPointerEvent()| must be true.
+  explicit TouchEvent(const PointerEvent& pointer_event);
 
   // Create a new TouchEvent which is identical to the provided model.
   // If source / target windows are provided, the model location will be
@@ -656,13 +632,13 @@ class EVENTS_EXPORT TouchEvent : public LocatedEvent {
   TouchEvent(EventType type,
              const gfx::Point& location,
              int touch_id,
-             base::TimeDelta time_stamp);
+             base::TimeTicks time_stamp);
 
   TouchEvent(EventType type,
              const gfx::Point& location,
              int flags,
              int touch_id,
-             base::TimeDelta timestamp,
+             base::TimeTicks timestamp,
              float radius_x,
              float radius_y,
              float angle,
@@ -705,13 +681,6 @@ class EVENTS_EXPORT TouchEvent : public LocatedEvent {
   }
 
  private:
-  // For (de)serialization.
-  TouchEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : LocatedEvent(type, time_stamp, flags),
-        should_remove_native_touch_id_mapping_(false) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::TouchEvent>;
-
   // Adjusts rotation_angle_ to within the acceptable range.
   void FixRotationAngle();
 
@@ -755,22 +724,15 @@ class EVENTS_EXPORT PointerEvent : public LocatedEvent {
   explicit PointerEvent(const TouchEvent& touch_event);
 
   PointerEvent(EventType type,
-               EventPointerType pointer_type,
                const gfx::Point& location,
                const gfx::Point& root_location,
                int flags,
                int pointer_id,
-               base::TimeDelta time_stamp);
+               const PointerDetails& pointer_details,
+               base::TimeTicks time_stamp);
 
   int32_t pointer_id() const { return pointer_id_; }
   const PointerDetails& pointer_details() const { return details_; }
-
- protected:
-  // For (de)serialization.
-  PointerEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : LocatedEvent(type, time_stamp, flags) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::PointerEvent>;
 
  private:
   int32_t pointer_id_;
@@ -833,6 +795,10 @@ class EVENTS_EXPORT KeyEvent : public Event {
   // (WM_CHAR). Other systems have only keystroke events.
   explicit KeyEvent(const base::NativeEvent& native_event);
 
+  // Create a KeyEvent from a NativeEvent but with mocked flags.
+  // This method is necessary for Windows since MSG does not contain all flags.
+  KeyEvent(const base::NativeEvent& native_event, int event_flags);
+
   // Create a keystroke event from a legacy KeyboardCode.
   // This should not be used in new code.
   KeyEvent(EventType type, KeyboardCode key_code, int flags);
@@ -843,7 +809,7 @@ class EVENTS_EXPORT KeyEvent : public Event {
            DomCode code,
            int flags,
            DomKey key,
-           base::TimeDelta time_stamp);
+           base::TimeTicks time_stamp);
 
   // Create a character event.
   KeyEvent(base::char16 character, KeyboardCode key_code, int flags);
@@ -942,11 +908,6 @@ class EVENTS_EXPORT KeyEvent : public Event {
   void set_is_char(bool is_char) { is_char_ = is_char; }
 
  private:
-  // For (de)serialization.
-  KeyEvent(EventType type, base::TimeDelta time_stamp, int flags);
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::KeyEvent>;
-
   // Determine key_ on a keystroke event from code_ and flags().
   void ApplyLayout() const;
 
@@ -1005,7 +966,7 @@ class EVENTS_EXPORT ScrollEvent : public MouseEvent {
   // Used for tests.
   ScrollEvent(EventType type,
               const gfx::Point& location,
-              base::TimeDelta time_stamp,
+              base::TimeTicks time_stamp,
               int flags,
               float x_offset,
               float y_offset,
@@ -1025,12 +986,6 @@ class EVENTS_EXPORT ScrollEvent : public MouseEvent {
   int finger_count() const { return finger_count_; }
 
  private:
-  // For (de)serialization.
-  ScrollEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : MouseEvent(type, time_stamp, flags) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::ScrollEvent>;
-
   // Potential accelerated offsets.
   float x_offset_;
   float y_offset_;
@@ -1043,11 +998,14 @@ class EVENTS_EXPORT ScrollEvent : public MouseEvent {
 
 class EVENTS_EXPORT GestureEvent : public LocatedEvent {
  public:
+    // The constructor takes a default unique_touch_id of zero to support many
+    // (80+) existing tests that doesn't care about this id.
   GestureEvent(float x,
                float y,
                int flags,
-               base::TimeDelta time_stamp,
-               const GestureEventDetails& details);
+               base::TimeTicks time_stamp,
+               const GestureEventDetails& details,
+               uint32_t unique_touch_event_id = 0);
 
   // Create a new GestureEvent which is identical to the provided model.
   // If source / target windows are provided, the model location will be
@@ -1062,14 +1020,19 @@ class EVENTS_EXPORT GestureEvent : public LocatedEvent {
 
   const GestureEventDetails& details() const { return details_; }
 
- private:
-  // For (de)serialization.
-  GestureEvent(EventType type, base::TimeDelta time_stamp, int flags)
-      : LocatedEvent(type, time_stamp, flags) {}
-  friend struct IPC::ParamTraits<ui::ScopedEvent>;
-  friend struct IPC::ParamTraits<ui::GestureEvent>;
+  uint32_t unique_touch_event_id() const {
+    return unique_touch_event_id_;
+  }
 
+ private:
   GestureEventDetails details_;
+
+  // The unique id of the touch event that caused the gesture event to be
+  // dispatched. This field gets a non-zero value only for gestures that are
+  // released through TouchDispositionGestureFilter::SendGesture. The gesture
+  // events that aren't fired directly in response to processing a touch-event
+  // (e.g. timer fired ones), this id is zero. See crbug.com/618738.
+  uint32_t unique_touch_event_id_;
 };
 
 }  // namespace ui

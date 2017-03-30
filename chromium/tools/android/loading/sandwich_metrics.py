@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -26,25 +27,18 @@ from telemetry.internal.image_processing import video
 from telemetry.util import image_util
 from telemetry.util import rgba_color
 
+import common_util
 import loading_trace as loading_trace_module
 import sandwich_runner
-import sandwich_misc
 import tracing
 
 
-CSV_FIELD_NAMES = [
-    'repeat_id',
-    'url',
+COMMON_CSV_COLUMN_NAMES = [
     'chromium_commit',
     'platform',
-    'subresource_discoverer',
-    'subresource_count',
-    # The amount of subresources detected at SetupBenchmark step.
-    'subresource_count_theoretic',
-    # Amount of subresources for caching as suggested by the subresource
-    # discoverer.
-    'cached_subresource_count_theoretic',
-    'cached_subresource_count',
+    'first_layout',
+    'first_contentful_paint',
+    'first_meaningful_paint',
     'total_load',
     'js_onload_event',
     'browser_malloc_avg',
@@ -57,7 +51,14 @@ CSV_FIELD_NAMES = [
 
 _UNAVAILABLE_CSV_VALUE = 'unavailable'
 
-_TRACKED_EVENT_NAMES = set(['requestStart', 'loadEventStart', 'loadEventEnd'])
+_FAILED_CSV_VALUE = 'failed'
+
+_TRACKED_EVENT_NAMES = set([
+    'requestStart',
+    'loadEventStart',
+    'loadEventEnd',
+    'firstContentfulPaint',
+    'firstLayout'])
 
 # Points of a completeness record.
 #
@@ -119,29 +120,38 @@ def _GetWebPageTrackedEvents(tracing_track):
     tracing_track: The tracing.TracingTrack.
 
   Returns:
-    Dictionary all tracked events.
+    A dict mapping event.name -> tracing.Event for each first occurrence of a
+        tracked event.
   """
-  main_frame = None
+  main_frame_id = None
   tracked_events = {}
-  for event in tracing_track.GetEvents():
+  sorted_events = sorted(tracing_track.GetEvents(),
+                         key=lambda event: event.start_msec)
+  for event in sorted_events:
     if event.category != 'blink.user_timing':
       continue
     event_name = event.name
-    # Ignore events until about:blank's unloadEventEnd that give the main
-    # frame id.
-    if not main_frame:
-      if event_name == 'unloadEventEnd':
-        main_frame = event.args['frame']
-        logging.info('found about:blank\'s event \'unloadEventEnd\'')
+
+    # Find the id of the main frame. Skip all events until it is found.
+    if not main_frame_id:
+      # Tracing (in Sandwich) is started after about:blank is fully loaded,
+      # hence the first navigationStart in the trace registers the correct frame
+      # id.
+      if event_name == 'navigationStart':
+        logging.info('  Found navigationStart at: %f', event.start_msec)
+        main_frame_id = event.args['frame']
       continue
-    # Ignore sub-frames events. requestStart don't have the frame set but it
-    # is fine since tracking the first one after about:blank's unloadEventEnd.
-    if 'frame' in event.args and event.args['frame'] != main_frame:
+
+    # Ignore events with frame id attached, but not being the main frame.
+    if 'frame' in event.args and event.args['frame'] != main_frame_id:
       continue
+
+    # Capture trace events by the first time of their appearance. Note: some
+    # important events (like requestStart) do not have a frame id attached.
     if event_name in _TRACKED_EVENT_NAMES and event_name not in tracked_events:
-      logging.info('found url\'s event \'%s\'' % event_name)
       tracked_events[event_name] = event
-  assert len(tracked_events) == len(_TRACKED_EVENT_NAMES)
+      logging.info('  Event %s first appears at: %f', event_name,
+          event.start_msec)
   return tracked_events
 
 
@@ -149,19 +159,59 @@ def _ExtractDefaultMetrics(loading_trace):
   """Extracts all the default metrics from a given trace.
 
   Args:
-    loading_trace: loading_trace_module.LoadingTrace.
+    loading_trace: loading_trace.LoadingTrace.
 
   Returns:
     Dictionary with all trace extracted fields set.
   """
+  END_REQUEST_EVENTS = [
+      ('first_layout', 'requestStart', 'firstLayout'),
+      ('first_contentful_paint', 'requestStart', 'firstContentfulPaint'),
+      ('total_load', 'requestStart', 'loadEventEnd'),
+      ('js_onload_event', 'loadEventStart', 'loadEventEnd')]
   web_page_tracked_events = _GetWebPageTrackedEvents(
       loading_trace.tracing_track)
-  return {
-    'total_load': (web_page_tracked_events['loadEventEnd'].start_msec -
-                   web_page_tracked_events['requestStart'].start_msec),
-    'js_onload_event': (web_page_tracked_events['loadEventEnd'].start_msec -
-                        web_page_tracked_events['loadEventStart'].start_msec)
-  }
+  metrics = {}
+  for metric_name, start_event_name, end_event_name in END_REQUEST_EVENTS:
+    try:
+      metrics[metric_name] = (
+          web_page_tracked_events[end_event_name].start_msec -
+          web_page_tracked_events[start_event_name].start_msec)
+    except KeyError as error:
+      logging.error('could not extract metric %s: missing trace event: %s' % (
+          metric_name, str(error)))
+      metrics[metric_name] = _FAILED_CSV_VALUE
+  return metrics
+
+
+def _ExtractTimeToFirstMeaningfulPaint(loading_trace):
+  """Extracts the time to first meaningful paint from a given trace.
+
+  Args:
+    loading_trace: loading_trace_module.LoadingTrace.
+
+  Returns:
+    Time to first meaningful paint in milliseconds.
+  """
+  required_categories = set(sandwich_runner.TTFMP_ADDITIONAL_CATEGORIES)
+  if not required_categories.issubset(loading_trace.tracing_track.Categories()):
+    return _UNAVAILABLE_CSV_VALUE
+  logging.info('  Extracting first_meaningful_paint')
+  events = [e.ToJsonDict() for e in loading_trace.tracing_track.GetEvents()]
+  with common_util.TemporaryDirectory(prefix='sandwich_tmp_') as tmp_dir:
+    chrome_trace_path = os.path.join(tmp_dir, 'chrome_trace.json')
+    with open(chrome_trace_path, 'w') as output_file:
+      json.dump({'traceEvents': events, 'metadata': {}}, output_file)
+    catapult_run_metric_bin_path = os.path.join(
+        _SRC_DIR, 'third_party', 'catapult', 'tracing', 'bin', 'run_metric')
+    output = subprocess.check_output(
+        [catapult_run_metric_bin_path, 'firstPaintMetric', chrome_trace_path])
+  json_output = json.loads(output)
+  for metric in json_output[chrome_trace_path]['pairs']['values']:
+    if metric['name'] == 'firstMeaningfulPaint_avg':
+      return metric['numeric']['value']
+  logging.info('  Extracting first_meaningful_paint: failed')
+  return _FAILED_CSV_VALUE
 
 
 def _ExtractMemoryMetrics(loading_trace):
@@ -191,30 +241,6 @@ def _ExtractMemoryMetrics(loading_trace):
   return {
     'browser_malloc_avg': browser_malloc_sum / float(len(browser_dump_events)),
     'browser_malloc_max': browser_malloc_max
-  }
-
-
-def _ExtractBenchmarkStatistics(benchmark_setup, loading_trace):
-  """Extracts some useful statistics from a benchmark run.
-
-  Args:
-    benchmark_setup: benchmark_setup: dict representing the benchmark setup
-        JSON. The JSON format is according to:
-            SandwichTaskBuilder.PopulateLoadBenchmark.SetupBenchmark.
-    loading_trace: loading_trace_module.LoadingTrace.
-
-  Returns:
-    Dictionary with all extracted fields set.
-  """
-  return {
-    'subresource_discoverer': benchmark_setup['subresource_discoverer'],
-    'subresource_count': len(sandwich_misc.ListUrlRequests(
-        loading_trace, sandwich_misc.RequestOutcome.All)),
-    'subresource_count_theoretic': len(benchmark_setup['url_resources']),
-    'cached_subresource_count': len(sandwich_misc.ListUrlRequests(
-        loading_trace, sandwich_misc.RequestOutcome.ServedFromCache)),
-    'cached_subresource_count_theoretic':
-        len(benchmark_setup['cache_whitelist']),
   }
 
 
@@ -255,7 +281,7 @@ def _ExtractCompletenessRecordFromVideo(video_path):
   return [(time, FrameProgress(hist)) for time, hist in histograms]
 
 
-def ComputeSpeedIndex(completeness_record):
+def _ComputeSpeedIndex(completeness_record):
   """Computes the speed-index from a completeness record.
 
   Args:
@@ -277,72 +303,43 @@ def ComputeSpeedIndex(completeness_record):
   return speed_index
 
 
-def _ExtractMetricsFromRunDirectory(benchmark_setup, run_directory_path):
-  """Extracts all the metrics from traces and video of a sandwich run.
+def ExtractCommonMetricsFromRepeatDirectory(repeat_dir, trace):
+  """Extracts all the metrics from traces and video of a sandwich run repeat
+  directory.
 
   Args:
-    benchmark_setup: benchmark_setup: dict representing the benchmark setup
-        JSON. The JSON format is according to:
-            SandwichTaskBuilder.PopulateLoadBenchmark.SetupBenchmark.
-    run_directory_path: Path of the run directory.
+    repeat_dir: Path of the repeat directory within a run directory.
+    trace: preloaded LoadingTrace in |repeat_dir|
+
+  Contract:
+    trace == LoadingTrace.FromJsonFile(
+        os.path.join(repeat_dir, sandwich_runner.TRACE_FILENAME))
 
   Returns:
     Dictionary of extracted metrics.
   """
-  trace_path = os.path.join(run_directory_path, 'trace.json')
-  logging.info('processing trace \'%s\'' % trace_path)
-  loading_trace = loading_trace_module.LoadingTrace.FromJsonFile(trace_path)
   run_metrics = {
-      'url': loading_trace.url,
-      'chromium_commit': loading_trace.metadata['chromium_commit'],
-      'platform': (loading_trace.metadata['platform']['os'] + '-' +
-          loading_trace.metadata['platform']['product_model'])
+      'chromium_commit': trace.metadata['chromium_commit'],
+      'platform': (trace.metadata['platform']['os'] + '-' +
+          trace.metadata['platform']['product_model'])
   }
-  run_metrics.update(_ExtractDefaultMetrics(loading_trace))
-  run_metrics.update(_ExtractMemoryMetrics(loading_trace))
-  run_metrics.update(
-      _ExtractBenchmarkStatistics(benchmark_setup, loading_trace))
-  video_path = os.path.join(run_directory_path, 'video.mp4')
+  run_metrics.update(_ExtractDefaultMetrics(trace))
+  run_metrics.update(_ExtractMemoryMetrics(trace))
+  run_metrics['first_meaningful_paint'] = _ExtractTimeToFirstMeaningfulPaint(
+      trace)
+  video_path = os.path.join(repeat_dir, sandwich_runner.VIDEO_FILENAME)
   if os.path.isfile(video_path):
     logging.info('processing speed-index video \'%s\'' % video_path)
-    completeness_record = _ExtractCompletenessRecordFromVideo(video_path)
-    run_metrics['speed_index'] = ComputeSpeedIndex(completeness_record)
+    try:
+      completeness_record = _ExtractCompletenessRecordFromVideo(video_path)
+      run_metrics['speed_index'] = _ComputeSpeedIndex(completeness_record)
+    except video.BoundingBoxNotFoundException:
+      # Sometimes the bounding box for the web content area is not present. Skip
+      # calculating Speed Index.
+      run_metrics['speed_index'] = _FAILED_CSV_VALUE
   else:
     run_metrics['speed_index'] = _UNAVAILABLE_CSV_VALUE
-  for key, value in loading_trace.metadata['network_emulation'].iteritems():
+  for key, value in trace.metadata['network_emulation'].iteritems():
     run_metrics['net_emul.' + key] = value
+  assert set(run_metrics.keys()) == set(COMMON_CSV_COLUMN_NAMES)
   return run_metrics
-
-
-def ExtractMetricsFromRunnerOutputDirectory(benchmark_setup_path,
-                                            output_directory_path):
-  """Extracts all the metrics from all the traces of a sandwich runner output
-  directory.
-
-  Args:
-    benchmark_setup_path: Path of the JSON of the benchmark setup.
-    output_directory_path: The sandwich runner's output directory to extract the
-        metrics from.
-
-  Returns:
-    List of dictionaries.
-  """
-  benchmark_setup = json.load(open(benchmark_setup_path))
-  assert os.path.isdir(output_directory_path)
-  metrics = []
-  for node_name in os.listdir(output_directory_path):
-    if not os.path.isdir(os.path.join(output_directory_path, node_name)):
-      continue
-    try:
-      repeat_id = int(node_name)
-    except ValueError:
-      continue
-    run_directory_path = os.path.join(output_directory_path, node_name)
-    run_metrics = _ExtractMetricsFromRunDirectory(
-        benchmark_setup, run_directory_path)
-    run_metrics['repeat_id'] = repeat_id
-    assert set(run_metrics.keys()) == set(CSV_FIELD_NAMES)
-    metrics.append(run_metrics)
-  assert len(metrics) > 0, ('Looks like \'{}\' was not a sandwich runner ' +
-                            'output directory.').format(output_directory_path)
-  return metrics

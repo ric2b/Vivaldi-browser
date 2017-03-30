@@ -33,23 +33,22 @@
 
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/Worker.h"
 #include "core/workers/WorkerInspectorProxy.h"
 #include "wtf/Forward.h"
 #include "wtf/HashMap.h"
 
 namespace blink {
 class InspectedFrames;
-class PageConsoleAgent;
 class KURL;
 class WorkerInspectorProxy;
 
 class CORE_EXPORT InspectorWorkerAgent final
-    : public InspectorBaseAgent<InspectorWorkerAgent, protocol::Frontend::Worker>
-    , public protocol::Backend::Worker
+    : public InspectorBaseAgent<protocol::Worker::Metainfo>
     , public WorkerInspectorProxy::PageInspector {
     WTF_MAKE_NONCOPYABLE(InspectorWorkerAgent);
 public:
-    static InspectorWorkerAgent* create(InspectedFrames*, PageConsoleAgent*);
+    explicit InspectorWorkerAgent(InspectedFrames*);
     ~InspectorWorkerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
@@ -70,19 +69,16 @@ public:
     void setTracingSessionId(const String&);
 
 private:
-    InspectorWorkerAgent(InspectedFrames*, PageConsoleAgent*);
     bool enabled();
     void connectToAllProxies();
     void connectToProxy(WorkerInspectorProxy*, bool waitingForDebugger);
 
     // WorkerInspectorProxy::PageInspector implementation.
     void dispatchMessageFromWorker(WorkerInspectorProxy*, const String& message) override;
-    void workerConsoleAgentEnabled(WorkerInspectorProxy*) override;
 
     Member<InspectedFrames> m_inspectedFrames;
     HeapHashMap<String, Member<WorkerInspectorProxy>> m_connectedProxies;
     String m_tracingSessionId;
-    Member<PageConsoleAgent> m_consoleAgent;
 };
 
 } // namespace blink

@@ -91,21 +91,13 @@ class TestTickClock : public base::TickClock {
   DISALLOW_COPY_AND_ASSIGN(TestTickClock);
 };
 
-class TestKeyEvent : public ui::KeyEvent {
- public:
-  TestKeyEvent(const base::NativeEvent& native_event, int flags)
-      : KeyEvent(native_event) {
-    set_flags(flags);
-  }
-};
-
 class TestTouchEvent : public ui::TouchEvent {
  public:
   TestTouchEvent(ui::EventType type,
                  const gfx::Point& root_location,
                  int touch_id,
                  int flags,
-                 base::TimeDelta timestamp)
+                 base::TimeTicks timestamp)
       : TouchEvent(type,
                    root_location,
                    flags,
@@ -169,6 +161,7 @@ EventGenerator::EventGenerator(EventGeneratorDelegate* delegate)
 EventGenerator::~EventGenerator() {
   pending_events_.clear();
   delegate()->SetContext(NULL, NULL, NULL);
+  ui::SetEventTickClockForTesting(nullptr);
 }
 
 void EventGenerator::PressLeftButton() {
@@ -222,7 +215,7 @@ void EventGenerator::MoveMouseToWithNative(const gfx::Point& point_in_host,
   ui::ScopedXI2Event xevent;
   xevent.InitMotionEvent(point_in_host, point_for_native, flags_);
   static_cast<XEvent*>(xevent)->xmotion.time =
-      Now().InMilliseconds() & UINT32_MAX;
+      (Now() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
   ui::MouseEvent mouseev(xevent);
 #elif defined(USE_OZONE)
   // Ozone uses the location in native event as a system location.
@@ -342,8 +335,9 @@ void EventGenerator::PressMoveAndReleaseTouchToCenterOf(EventTarget* window) {
 }
 
 void EventGenerator::GestureEdgeSwipe() {
-  ui::GestureEvent gesture(
-      0, 0, 0, Now(), ui::GestureEventDetails(ui::ET_GESTURE_WIN8_EDGE_SWIPE));
+  GestureEventDetails details(ET_GESTURE_WIN8_EDGE_SWIPE);
+  details.set_device_type(GestureDeviceType::DEVICE_TOUCHSCREEN);
+  GestureEvent gesture(0, 0, 0, Now(), details);
   Dispatch(&gesture);
 }
 
@@ -400,7 +394,7 @@ void EventGenerator::GestureScrollSequenceWithCallback(
     int steps,
     const ScrollStepCallback& callback) {
   const int kTouchId = 5;
-  base::TimeDelta timestamp = Now();
+  base::TimeTicks timestamp = Now();
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, start, 0, kTouchId,
                        timestamp, 5.0f, 5.0f, 0.0f, 1.0f);
   Dispatch(&press);
@@ -460,8 +454,8 @@ void EventGenerator::GestureMultiFingerScrollWithDelays(
     points[i] = start[i];
   }
 
-  base::TimeDelta press_time_first = Now();
-  base::TimeDelta press_time[kMaxTouchPoints];
+  base::TimeTicks press_time_first = Now();
+  base::TimeTicks press_time[kMaxTouchPoints];
   bool pressed[kMaxTouchPoints];
   for (int i = 0; i < count; ++i) {
     pressed[i] = false;
@@ -471,7 +465,8 @@ void EventGenerator::GestureMultiFingerScrollWithDelays(
 
   int last_id = 0;
   for (int step = 0; step < steps; ++step) {
-    base::TimeDelta move_time = press_time_first +
+    base::TimeTicks move_time =
+        press_time_first +
         base::TimeDelta::FromMilliseconds(event_separation_time_ms * step);
 
     while (last_id < count &&
@@ -495,7 +490,8 @@ void EventGenerator::GestureMultiFingerScrollWithDelays(
     }
   }
 
-  base::TimeDelta release_time = press_time_first +
+  base::TimeTicks release_time =
+      press_time_first +
       base::TimeDelta::FromMilliseconds(event_separation_time_ms * steps);
   for (int i = 0; i < last_id; ++i) {
     ui::TouchEvent release(
@@ -510,7 +506,7 @@ void EventGenerator::ScrollSequence(const gfx::Point& start,
                                     float y_offset,
                                     int steps,
                                     int num_fingers) {
-  base::TimeDelta timestamp = Now();
+  base::TimeTicks timestamp = Now();
   ui::ScrollEvent fling_cancel(ui::ET_SCROLL_FLING_CANCEL,
                                start,
                                timestamp,
@@ -549,7 +545,7 @@ void EventGenerator::ScrollSequence(const gfx::Point& start,
                                     const std::vector<gfx::PointF>& offsets,
                                     int num_fingers) {
   size_t steps = offsets.size();
-  base::TimeDelta timestamp = Now();
+  base::TimeTicks timestamp = Now();
   ui::ScrollEvent fling_cancel(ui::ET_SCROLL_FLING_CANCEL,
                                start,
                                timestamp,
@@ -596,17 +592,16 @@ void EventGenerator::Dispatch(ui::Event* event) {
 void EventGenerator::SetTickClock(std::unique_ptr<base::TickClock> tick_clock) {
   scoped_refptr<ClonableTickClock> clonable =
       new ClonableTickClock(std::move(tick_clock));
-#if defined(USE_X11)
-  ResetTimestampRolloverCountersForTesting(clonable->Clone());
-#endif
+  ui::SetEventTickClockForTesting(clonable->Clone());
   tick_clock_ = clonable->Clone();
 }
 
-base::TimeDelta EventGenerator::Now() {
+base::TimeTicks EventGenerator::Now() {
   // This is the same as what EventTimeForNow() does, but here we do it
   // with a tick clock that can be replaced with a simulated clock for tests.
-  return base::TimeDelta::FromInternalValue(
-      tick_clock_->NowTicks().ToInternalValue());
+  // TODO(majidvp): The tick clock used by |ui::EventTimeForNow()| is now
+  // mockable so we no longer need this.
+  return tick_clock_->NowTicks();
 }
 
 void EventGenerator::Init(gfx::NativeWindow root_window,
@@ -627,7 +622,7 @@ void EventGenerator::DispatchKeyEvent(bool is_press,
       ui::UsLayoutKeyboardCodeToDomCode(key_code), flags);
   if (is_press && character) {
     MSG native_event = { NULL, WM_KEYDOWN, key_code, 0 };
-    TestKeyEvent keyev(native_event, flags);
+    ui::KeyEvent keyev(native_event, flags);
     Dispatch(&keyev);
     // On Windows, WM_KEYDOWN event is followed by WM_CHAR with a character
     // if the key event cooresponds to a real character.
@@ -636,14 +631,15 @@ void EventGenerator::DispatchKeyEvent(bool is_press,
   }
   MSG native_event =
       { NULL, (is_press ? key_press : WM_KEYUP), key_code, 0 };
-  native_event.time = Now().InMicroseconds();
-  TestKeyEvent keyev(native_event, flags);
+  native_event.time = (Now() - base::TimeTicks()).InMicroseconds();
+  ui::KeyEvent keyev(native_event, flags);
 #elif defined(USE_X11)
   ui::ScopedXI2Event xevent;
   xevent.InitKeyEvent(is_press ? ui::ET_KEY_PRESSED : ui::ET_KEY_RELEASED,
                       key_code,
                       flags);
-  static_cast<XEvent*>(xevent)->xkey.time = Now().InMilliseconds() & UINT32_MAX;
+  static_cast<XEvent*>(xevent)->xkey.time =
+      (Now() - base::TimeTicks()).InMilliseconds() & UINT32_MAX;
   ui::KeyEvent keyev(xevent);
 #else
   ui::EventType type = is_press ? ui::ET_KEY_PRESSED : ui::ET_KEY_RELEASED;

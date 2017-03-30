@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "extensions/browser/api/web_request/form_data_parser.h"
@@ -44,11 +45,11 @@ namespace extensions {
 namespace subtle {
 
 void AppendKeyValuePair(const char* key,
-                        base::Value* value,
+                        std::unique_ptr<base::Value> value,
                         base::ListValue* list) {
-  base::DictionaryValue* dictionary = new base::DictionaryValue;
-  dictionary->SetWithoutPathExpansion(key, value);
-  list->Append(dictionary);
+  std::unique_ptr<base::DictionaryValue> dictionary(new base::DictionaryValue);
+  dictionary->SetWithoutPathExpansion(key, std::move(value));
+  list->Append(std::move(dictionary));
 }
 
 }  // namespace subtle
@@ -97,7 +98,7 @@ void RawDataPresenter::FeedNextBytes(const char* bytes, size_t size) {
 void RawDataPresenter::FeedNextFile(const std::string& filename) {
   // Insert the file path instead of the contents, which may be too large.
   subtle::AppendKeyValuePair(keys::kRequestBodyRawFileKey,
-                             new base::StringValue(filename),
+                             base::MakeUnique<base::StringValue>(filename),
                              list_.get());
 }
 
@@ -125,8 +126,8 @@ void ParsedDataPresenter::FeedNext(const net::UploadElementReader& reader) {
 
   FormDataParser::Result result;
   while (parser_->GetNextNameValue(&result)) {
-    GetOrCreateList(dictionary_.get(), result.name())->Append(
-        new base::StringValue(result.value()));
+    GetOrCreateList(dictionary_.get(), result.name())
+        ->AppendString(result.value());
   }
 }
 

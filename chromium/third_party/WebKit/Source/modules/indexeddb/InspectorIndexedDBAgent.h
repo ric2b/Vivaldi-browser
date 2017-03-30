@@ -32,8 +32,8 @@
 #define InspectorIndexedDBAgent_h
 
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/IndexedDB.h"
 #include "modules/ModulesExport.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -41,7 +41,7 @@ namespace blink {
 class InspectedFrames;
 
 
-class MODULES_EXPORT InspectorIndexedDBAgent final : public InspectorBaseAgent<InspectorIndexedDBAgent, protocol::Frontend::IndexedDB>, public protocol::Backend::IndexedDB {
+class MODULES_EXPORT InspectorIndexedDBAgent final : public InspectorBaseAgent<protocol::IndexedDB::Metainfo> {
 public:
     static InspectorIndexedDBAgent* create(InspectedFrames*);
 
@@ -53,10 +53,10 @@ public:
     // Called from the front-end.
     void enable(ErrorString*) override;
     void disable(ErrorString*) override;
-    void requestDatabaseNames(ErrorString*, const String& securityOrigin, PassOwnPtr<RequestDatabaseNamesCallback>) override;
-    void requestDatabase(ErrorString*, const String& securityOrigin, const String& databaseName, PassOwnPtr<RequestDatabaseCallback>) override;
-    void requestData(ErrorString*, const String& securityOrigin, const String& databaseName, const String& objectStoreName, const String& indexName, int skipCount, int pageSize, const Maybe<protocol::IndexedDB::KeyRange>&, PassOwnPtr<RequestDataCallback>) override;
-    void clearObjectStore(ErrorString*, const String& securityOrigin, const String& databaseName, const String& objectStoreName, PassOwnPtr<ClearObjectStoreCallback>) override;
+    void requestDatabaseNames(ErrorString*, const String& securityOrigin, std::unique_ptr<RequestDatabaseNamesCallback>) override;
+    void requestDatabase(ErrorString*, const String& securityOrigin, const String& databaseName, std::unique_ptr<RequestDatabaseCallback>) override;
+    void requestData(ErrorString*, const String& securityOrigin, const String& databaseName, const String& objectStoreName, const String& indexName, int skipCount, int pageSize, const Maybe<protocol::IndexedDB::KeyRange>&, std::unique_ptr<RequestDataCallback>) override;
+    void clearObjectStore(ErrorString*, const String& securityOrigin, const String& databaseName, const String& objectStoreName, std::unique_ptr<ClearObjectStoreCallback>) override;
 
 private:
     explicit InspectorIndexedDBAgent(InspectedFrames*);

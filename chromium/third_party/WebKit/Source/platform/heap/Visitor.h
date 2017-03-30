@@ -35,10 +35,10 @@
 #include "platform/heap/GarbageCollected.h"
 #include "wtf/Allocator.h"
 #include "wtf/Assertions.h"
-#include "wtf/Deque.h"
 #include "wtf/Forward.h"
 #include "wtf/HashTraits.h"
 #include "wtf/TypeTraits.h"
+#include <memory>
 
 namespace blink {
 
@@ -262,7 +262,7 @@ public:
         WeakProcessing,
     };
 
-    static PassOwnPtr<Visitor> create(ThreadState*, BlinkGC::GCType);
+    static std::unique_ptr<Visitor> create(ThreadState*, BlinkGC::GCType);
 
     virtual ~Visitor();
 
@@ -318,12 +318,12 @@ public:
 
     virtual bool ensureMarked(const void*) = 0;
 
+    virtual void registerWeakCellWithCallback(void**, WeakCallback) = 0;
+
     inline MarkingMode getMarkingMode() const { return m_markingMode; }
 
 protected:
     Visitor(ThreadState*, MarkingMode);
-
-    virtual void registerWeakCellWithCallback(void**, WeakCallback) = 0;
 
 private:
     static Visitor* fromHelper(VisitorHelper<Visitor>* helper) { return static_cast<Visitor*>(helper); }

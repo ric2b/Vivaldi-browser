@@ -19,6 +19,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_service.h"
 #include "components/data_reduction_proxy/core/browser/data_usage_store.h"
+#include "components/data_reduction_proxy/core/browser/data_use_group.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_switches.h"
 #include "components/prefs/pref_service.h"
@@ -180,21 +181,23 @@ void RecordDailyContentLengthHistograms(
   UMA_HISTOGRAM_COUNTS(
       "Net.DailyContentLength_ViaDataReductionProxy",
       received_length_via_data_reduction_proxy >> 10);
+  UMA_HISTOGRAM_PERCENTAGE(
+      "Net.DailyContentPercent_ViaDataReductionProxy",
+      (100 * received_length_via_data_reduction_proxy) / received_length);
 
-  int percent_via_data_reduction_proxy = 0;
+  if (original_length_via_data_reduction_proxy <= 0)
+    return;
+  int percent_savings_via_data_reduction_proxy = 0;
   if (original_length_via_data_reduction_proxy >
       received_length_via_data_reduction_proxy) {
-    percent_via_data_reduction_proxy =
+    percent_savings_via_data_reduction_proxy =
         100 * (original_length_via_data_reduction_proxy -
                received_length_via_data_reduction_proxy) /
         original_length_via_data_reduction_proxy;
   }
   UMA_HISTOGRAM_PERCENTAGE(
       "Net.DailyContentSavingPercent_ViaDataReductionProxy",
-      percent_via_data_reduction_proxy);
-  UMA_HISTOGRAM_PERCENTAGE(
-      "Net.DailyContentPercent_ViaDataReductionProxy",
-      (100 * received_length_via_data_reduction_proxy) / received_length);
+      percent_savings_via_data_reduction_proxy);
 }
 
 // Given a |net::NetworkChangeNotifier::ConnectionType|, returns the
@@ -453,7 +456,7 @@ void DataReductionProxyCompressionStats::UpdateContentLengths(
     int64_t original_size,
     bool data_reduction_proxy_enabled,
     DataReductionProxyRequestType request_type,
-    const std::string& data_usage_host,
+    const scoped_refptr<DataUseGroup>& data_use_group,
     const std::string& mime_type) {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("loader",
@@ -464,7 +467,11 @@ void DataReductionProxyCompressionStats::UpdateContentLengths(
   IncreaseInt64Pref(data_reduction_proxy::prefs::kHttpOriginalContentLength,
                     original_size);
 
-  RecordDataUsage(data_usage_host, data_used, original_size, base::Time::Now());
+  std::string data_use_host;
+  if (data_use_group) {
+    data_use_host = data_use_group->GetHostname();
+  }
+  RecordDataUsage(data_use_host, data_used, original_size, base::Time::Now());
   RecordRequestSizePrefs(data_used, original_size, data_reduction_proxy_enabled,
                          request_type, mime_type, base::Time::Now());
 }
@@ -1141,7 +1148,6 @@ void DataReductionProxyCompressionStats::RecordDataUsage(
   }
 
   std::string normalized_host = NormalizeHostname(data_usage_host);
-
   auto j = data_usage_map_.add(normalized_host,
                                base::WrapUnique(new PerSiteDataUsage()));
   PerSiteDataUsage* per_site_usage = j.first->second;

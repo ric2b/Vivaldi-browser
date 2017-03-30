@@ -74,7 +74,6 @@ component("base") {
     "clipboard/clipboard_util_win.h",
     "clipboard/clipboard_win.cc",
     "clipboard/clipboard_win.h",
-    "clipboard/custom_data_helper_linux.cc",
     "clipboard/custom_data_helper_mac.mm",
     "cocoa/animation_utils.h",
     "cocoa/appkit_utils.h",
@@ -151,11 +150,10 @@ component("base") {
     "device_form_factor_desktop.cc",
     "device_form_factor_ios.mm",
     "dragdrop/drag_drop_types.h",
+    "dragdrop/drag_drop_types_mac.mm",
     "dragdrop/drag_drop_types_win.cc",
     "dragdrop/drag_source_win.cc",
     "dragdrop/drag_source_win.h",
-    "dragdrop/drag_utils_aura.cc",
-    "dragdrop/drag_utils_mac.mm",
     "dragdrop/drag_utils_win.cc",
     "dragdrop/drop_target_event.cc",
     "dragdrop/drop_target_event.h",
@@ -233,8 +231,6 @@ component("base") {
     "template_expressions.h",
     "theme_provider.cc",
     "theme_provider.h",
-    "touch/selection_bound.cc",
-    "touch/selection_bound.h",
     "touch/touch_device.h",
     "touch/touch_editing_controller.cc",
     "touch/touch_editing_controller.h",
@@ -279,6 +275,9 @@ component("base") {
     "win/mouse_wheel_util.h",
     "win/open_file_name_win.cc",
     "win/open_file_name_win.h",
+    "win/osk_display_manager.cc",
+    "win/osk_display_manager.h",
+    "win/osk_display_observer.h",
     "win/scoped_ole_initializer.cc",
     "win/scoped_ole_initializer.h",
     "win/shell.cc",
@@ -305,6 +304,9 @@ component("base") {
       "clipboard/clipboard.cc",
       "clipboard/clipboard.h",
       "clipboard/clipboard_constants.cc",
+      "clipboard/clipboard_monitor.cc",
+      "clipboard/clipboard_monitor.h",
+      "clipboard/clipboard_observer.h",
       "clipboard/custom_data_helper.cc",
       "clipboard/custom_data_helper.h",
       "clipboard/scoped_clipboard_writer.cc",
@@ -368,6 +370,7 @@ component("base") {
     "//base/third_party/dynamic_annotations",
     "//net",
     "//third_party/icu",
+    "//third_party/zlib:zlib",
     "//ui/base:ui_data_pack",
     "//ui/display",
     "//ui/events",
@@ -439,16 +442,11 @@ component("base") {
     sources -= [
       "cursor/cursor.cc",
       "cursor/cursor.h",
-      "dragdrop/drag_utils_aura.cc",
     ]
   }
 
   if (!use_aura || !is_linux) {
     sources -= [ "resource/resource_bundle_auralinux.cc" ]
-  }
-
-  if (use_aura && is_win) {
-    sources -= [ "dragdrop/drag_utils_aura.cc" ]
   }
 
   if (is_linux) {
@@ -518,8 +516,6 @@ component("base") {
     sources -= [
       "cursor/image_cursors.cc",
       "cursor/image_cursors.h",
-      "dragdrop/drag_utils.cc",
-      "dragdrop/drag_utils.h",
     ]
 
     libs += [
@@ -596,7 +592,7 @@ component("base") {
 
   # Aura clipboard.
   if (use_aura) {
-    if (use_x11) {
+    if (use_clipboard_aurax11) {
       sources += [
         "clipboard/clipboard_aurax11.cc",
         "clipboard/clipboard_aurax11.h",
@@ -731,6 +727,7 @@ test("ui_base_unittests") {
     "resource/resource_bundle_unittest.cc",
     "resource/scale_factor_unittest.cc",
     "template_expressions_unittest.cc",
+    "test/page_transition_types_unittest.cc",
     "test/run_all_unittests.cc",
     "user_activity/user_activity_detector_unittest.cc",
   ]
@@ -779,7 +776,6 @@ test("ui_base_unittests") {
       "models/tree_node_model_unittest.cc",
       "test/data/resource.h",
       "text/bytes_formatting_unittest.cc",
-      "touch/selection_bound_unittest.cc",
       "webui/web_ui_util_unittest.cc",
     ]
   }
@@ -847,6 +843,7 @@ test("ui_base_unittests") {
       "dragdrop/os_exchange_data_win_unittest.cc",
       "win/hwnd_subclass_unittest.cc",
       "win/open_file_name_win_unittest.cc",
+      "win/osk_display_manager_unittest.cc",
     ]
 
     ldflags = [

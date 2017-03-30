@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/id_map.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -64,7 +65,7 @@ class ServiceWorkerContextClient
     : public blink::WebServiceWorkerContextClient {
  public:
   using SyncCallback =
-      mojo::Callback<void(blink::mojom::ServiceWorkerEventStatus)>;
+      base::Callback<void(blink::mojom::ServiceWorkerEventStatus)>;
 
   // Returns a thread-specific client instance.  This does NOT create a
   // new instance.
@@ -82,11 +83,10 @@ class ServiceWorkerContextClient
                          int embedded_worker_id,
                          const IPC::Message& message);
 
-  // Called some time after the worker has started. Attempts to use the
-  // ServiceRegistry to connect to services before this method is called are
-  // queued up and will resolve after this method is called.
-  void BindServiceRegistry(shell::mojom::InterfaceProviderRequest services,
-                           shell::mojom::InterfaceProviderPtr exposed_services);
+  // Called some time after the worker has started.
+  void BindInterfaceProviders(
+      shell::mojom::InterfaceProviderRequest request,
+      shell::mojom::InterfaceProviderPtr remote_interfaces);
 
   // WebServiceWorkerContextClient overrides.
   blink::WebURL scope() const override;
@@ -136,10 +136,12 @@ class ServiceWorkerContextClient
   void didHandleInstallEvent(
       int request_id,
       blink::WebServiceWorkerEventResult result) override;
-  void didHandleFetchEvent(int request_id) override;
-  void didHandleFetchEvent(
-      int request_id,
+  void respondToFetchEvent(int response_id) override;
+  void respondToFetchEvent(
+      int response_id,
       const blink::WebServiceWorkerResponse& response) override;
+  void didHandleFetchEvent(int event_finish_id,
+                           blink::WebServiceWorkerEventResult result) override;
   void didHandleNotificationClickEvent(
       int request_id,
       blink::WebServiceWorkerEventResult result) override;
@@ -199,7 +201,9 @@ class ServiceWorkerContextClient
       int request_id,
       const ServiceWorkerMsg_ExtendableMessageEvent_Params& params);
   void OnInstallEvent(int request_id);
-  void OnFetchEvent(int request_id, const ServiceWorkerFetchRequest& request);
+  void OnFetchEvent(int response_id,
+                    int event_finish_id,
+                    const ServiceWorkerFetchRequest& request);
   void OnNotificationClickEvent(
       int request_id,
       int64_t persistent_notification_id,

@@ -592,6 +592,49 @@ void CrasAudioHandler::NodesChanged() {
     GetNodes();
 }
 
+void CrasAudioHandler::OutputNodeVolumeChanged(uint64_t node_id, int volume) {
+  const AudioDevice* device = this->GetDeviceFromId(node_id);
+
+  // If this is not an active output node, ignore this event. Because when this
+  // node set to active, it will be applied with the volume value stored in
+  // preference.
+  if (!device || !device->active || device->is_input) {
+    LOG(ERROR) << "Unexpexted OutputNodeVolumeChanged received on node: 0x"
+               << std::hex << node_id;
+    return;
+  }
+
+  // Sync internal volume state and notify UI for the change. We trust cras
+  // signal to report the volume state of the device, no matter which source
+  // set the volume, i.e., volume could be set from non-chrome source, like
+  // Bluetooth headset, etc. Assume all active output devices share a single
+  // volume.
+  output_volume_ = volume;
+  audio_pref_handler_->SetVolumeGainValue(*device, volume);
+
+  if (initializing_audio_state_) {
+    // Do not notify the observers for volume changed event if CrasAudioHandler
+    // is initializing its state, i.e., the volume change event is in responding
+    // to SetOutputNodeVolume request from intializaing audio state, not
+    // from user action, no need to notify UI to pop uo the volume slider bar.
+    if (init_node_id_ == node_id && init_volume_ == volume) {
+      init_volume_count_--;
+      if (!init_volume_count_)
+        initializing_audio_state_ = false;
+      return;
+    } else {
+      // Reset the initializing_audio_state_ in case SetOutputNodeVolume request
+      // is lost by cras due to cras is not ready when CrasAudioHandler is being
+      // initialized.
+      initializing_audio_state_ = false;
+      init_volume_count_ = 0;
+    }
+  }
+
+  FOR_EACH_OBSERVER(AudioObserver, observers_,
+                    OnOutputNodeVolumeChanged(node_id, volume));
+}
+
 void CrasAudioHandler::ActiveOutputNodeChanged(uint64_t node_id) {
   if (active_output_node_id_ == node_id)
     return;
@@ -693,6 +736,16 @@ void CrasAudioHandler::SetupAudioOutputState() {
   output_volume_ = audio_pref_handler_->GetOutputVolumeValue(device);
 
   SetOutputMuteInternal(output_mute_on_);
+
+  if (initializing_audio_state_) {
+    // During power up, InitializeAudioState() could be called twice, first
+    // by CrasAudioHandler constructor, then by cras server restarting signal,
+    // both sending SetOutputNodeVolume requests, and could lead to two
+    // OutputNodeVolumeChanged signals.
+    init_volume_count_++;
+    init_node_id_ = active_output_node_id_;
+    init_volume_ = output_volume_;
+  }
   SetOutputNodeVolume(active_output_node_id_, output_volume_);
 }
 
@@ -720,6 +773,7 @@ void CrasAudioHandler::SetupAdditionalActiveAudioNodeState(uint64_t node_id) {
 }
 
 void CrasAudioHandler::InitializeAudioState() {
+  initializing_audio_state_ = true;
   ApplyAudioPolicy();
 
   // Defer querying cras for GetNodes until cras service becomes available.
@@ -767,23 +821,20 @@ void CrasAudioHandler::SetOutputNodeVolume(uint64_t node_id, int volume) {
 
 void CrasAudioHandler::SetOutputNodeVolumePercent(uint64_t node_id,
                                                   int volume_percent) {
-  const AudioDevice* device = this->GetDeviceFromId(node_id);
+  const AudioDevice* device = GetDeviceFromId(node_id);
   if (!device || device->is_input)
     return;
 
   volume_percent = min(max(volume_percent, 0), 100);
   if (volume_percent <= kMuteThresholdPercent)
     volume_percent = 0;
-  if (node_id == active_output_node_id_)
-    output_volume_ = volume_percent;
 
+  // Save the volume setting in pref in case this is called on non-active
+  // node for configuration.
   audio_pref_handler_->SetVolumeGainValue(*device, volume_percent);
 
-  if (device->active) {
+  if (device->active)
     SetOutputNodeVolume(node_id, volume_percent);
-    FOR_EACH_OBSERVER(AudioObserver, observers_,
-                      OnOutputNodeVolumeChanged(node_id, volume_percent));
-  }
 }
 
 bool  CrasAudioHandler::SetOutputMuteInternal(bool mute_on) {
@@ -964,11 +1015,17 @@ bool CrasAudioHandler::GetActiveDeviceFromUserPref(bool is_input,
 
     bool active = false;
     bool activate_by_user = false;
+    // If the device entry is not found in prefs, it is likley a new audio
+    // device plugged in after the cros is powered down. We should ignore the
+    // previously saved active device, and select the active device by priority.
+    // crbug.com/622045.
     if (!audio_pref_handler_->GetDeviceActive(device, &active,
-                                              &activate_by_user) ||
-        !active) {
-      continue;
+                                              &activate_by_user)) {
+      return false;
     }
+
+    if (!active)
+      continue;
 
     if (!found_active_device) {
       found_active_device = true;

@@ -44,6 +44,7 @@ const CGFloat kWindowGradientHeight = 24.0;
 - (void)adjustZoomButton:(NSNotification*)notification;
 - (void)adjustButton:(NSButton*)button
               ofKind:(NSWindowButton)kind;
+- (void)childWindowsDidChange;
 
 @end
 
@@ -213,21 +214,6 @@ const CGFloat kWindowGradientHeight = 24.0;
   return [super constrainFrameRect:frame toScreen:screen];
 }
 
-// This method is overridden in order to send the toggle fullscreen message
-// through the cross-platform browser framework before going fullscreen.  The
-// message will eventually come back as a call to |-toggleSystemFullScreen|,
-// which in turn calls AppKit's |NSWindow -toggleFullScreen:|.
-- (void)toggleFullScreen:(id)sender {
-  id delegate = [self delegate];
-  if ([delegate respondsToSelector:@selector(handleLionToggleFullscreen)])
-    [delegate handleLionToggleFullscreen];
-}
-
-- (void)toggleSystemFullScreen {
-  if ([super respondsToSelector:@selector(toggleFullScreen:)])
-    [super toggleFullScreen:nil];
-}
-
 - (NSPoint)fullScreenButtonOriginAdjustment {
   if (!hasTabStrip_)
     return NSZeroPoint;
@@ -357,6 +343,23 @@ const CGFloat kWindowGradientHeight = 24.0;
     return [NSColor whiteColor];
   else
     return [NSColor windowFrameTextColor];
+}
+
+- (void)addChildWindow:(NSWindow*)childWindow
+               ordered:(NSWindowOrderingMode)orderingMode {
+  [super addChildWindow:childWindow ordered:orderingMode];
+  [self childWindowsDidChange];
+}
+
+- (void)removeChildWindow:(NSWindow*)childWindow {
+  [super removeChildWindow:childWindow];
+  [self childWindowsDidChange];
+}
+
+- (void)childWindowsDidChange {
+  id delegate = [self delegate];
+  if ([delegate respondsToSelector:@selector(childWindowsDidChange)])
+    [delegate childWindowsDidChange];
 }
 
 @end

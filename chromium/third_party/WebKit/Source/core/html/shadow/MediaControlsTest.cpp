@@ -8,11 +8,13 @@
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/StyleEngine.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -83,7 +85,7 @@ protected:
     Document& document() { return m_pageHolder->document(); }
 
 private:
-    OwnPtr<DummyPageHolder> m_pageHolder;
+    std::unique_ptr<DummyPageHolder> m_pageHolder;
     Persistent<MediaControls> m_mediaControls;
 };
 

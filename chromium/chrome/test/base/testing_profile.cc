@@ -75,11 +75,12 @@
 #include "components/policy/core/common/schema.h"
 #include "components/prefs/testing_pref_store.h"
 #include "components/proxy_config/pref_proxy_config_tracker.h"
+#include "components/syncable_prefs/pref_service_mock_factory.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
 #include "components/syncable_prefs/testing_pref_service_syncable.h"
-#include "components/ui/zoom/zoom_event_manager.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/webdata_services/web_data_service_wrapper.h"
+#include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/notification_service.h"
@@ -93,6 +94,8 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "net/url_request/url_request_test_util.h"
+#include "sync/api/fake_sync_change_processor.h"
+#include "sync/api/sync_error_factory_mock.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -116,6 +119,7 @@
 
 #if defined(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "chrome/browser/supervised_user/supervised_user_pref_store.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service.h"
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif
@@ -330,6 +334,7 @@ TestingProfile::TestingProfile(
       force_incognito_(false),
       original_profile_(parent),
       guest_session_(guest_session),
+      supervised_user_id_(supervised_user_id),
       last_session_exited_cleanly_(true),
 #if defined(ENABLE_EXTENSIONS)
       extension_special_storage_policy_(extension_policy),
@@ -419,10 +424,29 @@ void TestingProfile::Init() {
   ChromeBrowserMainExtraPartsProfiles::
       EnsureBrowserContextKeyedServiceFactoriesBuilt();
 
+#if defined(ENABLE_SUPERVISED_USERS)
+  if (!IsOffTheRecord()) {
+    SupervisedUserSettingsService* settings_service =
+        SupervisedUserSettingsServiceFactory::GetForProfile(this);
+    TestingPrefStore* store = new TestingPrefStore();
+    settings_service->Init(store);
+    settings_service->MergeDataAndStartSyncing(
+        syncer::SUPERVISED_USER_SETTINGS, syncer::SyncDataList(),
+        std::unique_ptr<syncer::SyncChangeProcessor>(
+            new syncer::FakeSyncChangeProcessor),
+        std::unique_ptr<syncer::SyncErrorFactory>(
+            new syncer::SyncErrorFactoryMock));
+
+    store->SetInitializationCompleted();
+  }
+#endif
+
   if (prefs_.get())
     user_prefs::UserPrefs::Set(this, prefs_.get());
   else if (IsOffTheRecord())
     CreateIncognitoPrefService();
+  else if (!supervised_user_id_.empty())
+    CreatePrefServiceForSupervisedUser();
   else
     CreateTestingPrefService();
 
@@ -473,16 +497,6 @@ void TestingProfile::Init() {
 
   browser_context_dependency_manager_->CreateBrowserContextServicesForTest(
       this);
-
-#if defined(ENABLE_SUPERVISED_USERS)
-  if (!IsOffTheRecord()) {
-    SupervisedUserSettingsService* settings_service =
-        SupervisedUserSettingsServiceFactory::GetForProfile(this);
-    TestingPrefStore* store = new TestingPrefStore();
-    settings_service->Init(store);
-    store->SetInitializationCompleted();
-  }
-#endif
 }
 
 void TestingProfile::FinishInit() {
@@ -578,13 +592,13 @@ void TestingProfile::DestroyHistoryService() {
   // moving to the next test. Note: if this never terminates, somebody is
   // probably leaking a reference to the history backend, so it never calls
   // our destroy task.
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   // Make sure we don't have any event pending that could disrupt the next
   // test.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 void TestingProfile::CreateBookmarkModel(bool delete_file) {
@@ -634,11 +648,11 @@ std::unique_ptr<content::ZoomLevelDelegate>
 TestingProfile::CreateZoomLevelDelegate(const base::FilePath& partition_path) {
   return base::WrapUnique(new ChromeZoomLevelPrefs(
       GetPrefs(), GetPath(), partition_path,
-      ui_zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
+      zoom::ZoomEventManager::GetForBrowserContext(this)->GetWeakPtr()));
 }
 
 scoped_refptr<base::SequencedTaskRunner> TestingProfile::GetIOTaskRunner() {
-  return base::MessageLoop::current()->task_runner();
+  return base::ThreadTaskRunnerHandle::Get();
 }
 
 syncable_prefs::TestingPrefServiceSyncable*
@@ -746,6 +760,25 @@ void TestingProfile::CreateTestingPrefService() {
   prefs_.reset(testing_prefs_);
   user_prefs::UserPrefs::Set(this, prefs_.get());
   chrome::RegisterUserProfilePrefs(testing_prefs_->registry());
+}
+
+void TestingProfile::CreatePrefServiceForSupervisedUser() {
+  DCHECK(!prefs_.get());
+  DCHECK(!supervised_user_id_.empty());
+  syncable_prefs::PrefServiceMockFactory factory;
+  SupervisedUserSettingsService* supervised_user_settings =
+      SupervisedUserSettingsServiceFactory::GetForProfile(this);
+  scoped_refptr<PrefStore> supervised_user_prefs =
+      make_scoped_refptr(new SupervisedUserPrefStore(supervised_user_settings));
+
+  factory.set_supervised_user_prefs(supervised_user_prefs);
+
+  scoped_refptr<user_prefs::PrefRegistrySyncable> registry(
+      new user_prefs::PrefRegistrySyncable);
+
+  prefs_ = factory.CreateSyncable(registry.get());
+  chrome::RegisterUserProfilePrefs(registry.get());
+  user_prefs::UserPrefs::Set(this, prefs_.get());
 }
 
 void TestingProfile::CreateIncognitoPrefService() {
@@ -867,7 +900,7 @@ void TestingProfile::BlockUntilHistoryProcessesPendingRequests() {
   history_service->ScheduleDBTask(
       std::unique_ptr<history::HistoryDBTask>(new QuittingHistoryDBTask()),
       &tracker);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 chrome_browser_net::Predictor* TestingProfile::GetNetworkPredictor() {

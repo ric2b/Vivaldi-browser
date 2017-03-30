@@ -5,14 +5,15 @@
 #ifndef CSSLengthValue_h
 #define CSSLengthValue_h
 
-#include "core/css/cssom/StyleValue.h"
+#include "core/css/CSSPrimitiveValue.h"
+#include "core/css/cssom/CSSStyleValue.h"
 
 namespace blink {
 
-class CalcDictionary;
+class CSSCalcDictionary;
 class ExceptionState;
 
-class CORE_EXPORT CSSLengthValue : public StyleValue {
+class CORE_EXPORT CSSLengthValue : public CSSStyleValue {
     WTF_MAKE_NONCOPYABLE(CSSLengthValue);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -25,9 +26,9 @@ public:
 
     virtual bool containsPercent() const = 0;
 
-    static CSSLengthValue* from(const String& cssString, ExceptionState&);
+    static CSSLengthValue* from(const String& cssText, ExceptionState&);
     static CSSLengthValue* from(double value, const String& typeStr, ExceptionState&);
-    static CSSLengthValue* from(const CalcDictionary&, ExceptionState&);
+    static CSSLengthValue* from(const CSSCalcDictionary&, ExceptionState&);
 
 protected:
     CSSLengthValue() {}
@@ -47,11 +48,11 @@ protected:
     static const int kNumSupportedUnits = 15;
 };
 
-DEFINE_TYPE_CASTS(CSSLengthValue, StyleValue, value,
-    (value->type() == StyleValue::SimpleLengthType
-        || value->type() == StyleValue::CalcLengthType),
-    (value.type() == StyleValue::SimpleLengthType
-        || value.type() == StyleValue::CalcLengthType));
+DEFINE_TYPE_CASTS(CSSLengthValue, CSSStyleValue, value,
+    (value->type() == CSSStyleValue::SimpleLengthType
+        || value->type() == CSSStyleValue::CalcLengthType),
+    (value.type() == CSSStyleValue::SimpleLengthType
+        || value.type() == CSSStyleValue::CalcLengthType));
 
 } // namespace blink
 

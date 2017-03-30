@@ -7,10 +7,13 @@
 
 #include <stdint.h>
 
+#include "base/callback.h"
+
 class GURL;
 
 namespace content {
 class BrowserContext;
+class WebContents;
 }
 
 namespace offline_pages {
@@ -22,16 +25,24 @@ class OfflinePageUtils {
   static bool MightBeOfflineURL(const GURL& url);
 
   // Gets an offline URL of an offline page with |online_url| if one exists.
-  static GURL GetOfflineURLForOnlineURL(
+  static void GetOfflineURLForOnlineURL(
       content::BrowserContext* browser_context,
-      const GURL& online_url);
+      const GURL& online_url,
+      const base::Callback<void(const GURL&)>& callback);
 
   // Gets an online URL of an offline page with |offline_url| if one exists.
-  static GURL GetOnlineURLForOfflineURL(
+  // Deprecated.  Use |GetOnlineURLForOfflineURL|.
+  static GURL MaybeGetOnlineURLForOfflineURL(
       content::BrowserContext* browser_context,
       const GURL& offline_url);
 
+  static void GetOnlineURLForOfflineURL(
+      content::BrowserContext* browser_context,
+      const GURL& offline_url,
+      const base::Callback<void(const GURL&)>& callback);
+
   // Checks whether |offline_url| points to an offline page.
+  // Deprecated.  Use something else.
   static bool IsOfflinePage(content::BrowserContext* browser_context,
                             const GURL& offline_url);
 
@@ -43,6 +54,17 @@ class OfflinePageUtils {
   // Marks that the offline page related to the |offline_url| has been accessed.
   static void MarkPageAccessed(content::BrowserContext* browser_context,
                                const GURL& offline_url);
+
+  // Gets the offline page corresponding to the given web contents.  The
+  // returned pointer is owned by the web_contents and may be deleted by user
+  // navigation, so it is unsafe to store a copy of the returned pointer.
+  static const OfflinePageItem* GetOfflinePageFromWebContents(
+      content::WebContents* web_contents);
+
+  // Gets an Android Tab ID from a tab containing |web_contents|. Returns false,
+  // when tab is not available. Returns true otherwise and sets |tab_id| to the
+  // ID of the tab.
+  static bool GetTabId(content::WebContents* web_contents, int* tab_id);
 };
 
 }  // namespace offline_pages

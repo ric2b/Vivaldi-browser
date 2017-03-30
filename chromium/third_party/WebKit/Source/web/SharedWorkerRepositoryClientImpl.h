@@ -33,8 +33,9 @@
 
 #include "core/workers/SharedWorkerRepositoryClient.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -44,14 +45,14 @@ class SharedWorkerRepositoryClientImpl final : public SharedWorkerRepositoryClie
     WTF_MAKE_NONCOPYABLE(SharedWorkerRepositoryClientImpl);
     USING_FAST_MALLOC(SharedWorkerRepositoryClientImpl);
 public:
-    static PassOwnPtr<SharedWorkerRepositoryClientImpl> create(WebSharedWorkerRepositoryClient* client)
+    static std::unique_ptr<SharedWorkerRepositoryClientImpl> create(WebSharedWorkerRepositoryClient* client)
     {
-        return adoptPtr(new SharedWorkerRepositoryClientImpl(client));
+        return wrapUnique(new SharedWorkerRepositoryClientImpl(client));
     }
 
     ~SharedWorkerRepositoryClientImpl() override { }
 
-    void connect(SharedWorker*, PassOwnPtr<WebMessagePortChannel>, const KURL&, const String& name, ExceptionState&) override;
+    void connect(SharedWorker*, WebMessagePortChannelUniquePtr, const KURL&, const String& name, ExceptionState&) override;
     void documentDetached(Document*) override;
 
 private:

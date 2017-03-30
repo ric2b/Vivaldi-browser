@@ -55,16 +55,33 @@ class TestSurfaceFactoryClient : public SurfaceFactoryClient {
   DISALLOW_COPY_AND_ASSIGN(TestSurfaceFactoryClient);
 };
 
-class SurfaceFactoryTest : public testing::Test {
+gpu::SyncToken GenTestSyncToken(int id) {
+  gpu::SyncToken token;
+  token.Set(gpu::CommandBufferNamespace::GPU_IO, 0,
+            gpu::CommandBufferId::FromUnsafeValue(id), 1);
+  return token;
+}
+
+class SurfaceFactoryTest : public testing::Test, public SurfaceDamageObserver {
  public:
   SurfaceFactoryTest()
-      : factory_(new SurfaceFactory(&manager_, &client_)), surface_id_(3) {
+      : factory_(new SurfaceFactory(&manager_, &client_)),
+        surface_id_(0, 3, 0),
+        frame_sync_token_(GenTestSyncToken(4)),
+        consumer_sync_token_(GenTestSyncToken(5)) {
+    manager_.AddObserver(this);
     factory_->Create(surface_id_);
+  }
+
+  // SurfaceDamageObserver implementation.
+  void OnSurfaceDamaged(SurfaceId id, bool* changed) override {
+    *changed = true;
   }
 
   ~SurfaceFactoryTest() override {
     if (!surface_id_.is_null())
       factory_->Destroy(surface_id_);
+    manager_.RemoveObserver(this);
   }
 
   void SubmitCompositorFrameWithResources(ResourceId* resource_ids,
@@ -74,10 +91,11 @@ class SurfaceFactoryTest : public testing::Test {
       TransferableResource resource;
       resource.id = resource_ids[i];
       resource.mailbox_holder.texture_target = GL_TEXTURE_2D;
+      resource.mailbox_holder.sync_token = frame_sync_token_;
       frame_data->resource_list.push_back(resource);
     }
-    std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
-    frame->delegated_frame_data = std::move(frame_data);
+    CompositorFrame frame;
+    frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(surface_id_, std::move(frame),
                                     SurfaceFactory::DrawCallback());
   }
@@ -88,6 +106,7 @@ class SurfaceFactoryTest : public testing::Test {
     ReturnedResourceArray unref_array;
     for (size_t i = 0; i < num_ids_to_unref; ++i) {
       ReturnedResource resource;
+      resource.sync_token = consumer_sync_token_;
       resource.id = ids_to_unref[i];
       resource.count = counts_to_unref[i];
       unref_array.push_back(resource);
@@ -97,12 +116,14 @@ class SurfaceFactoryTest : public testing::Test {
 
   void CheckReturnedResourcesMatchExpected(ResourceId* expected_returned_ids,
                                            int* expected_returned_counts,
-                                           size_t expected_resources) {
+                                           size_t expected_resources,
+                                           gpu::SyncToken expected_sync_token) {
     const ReturnedResourceArray& actual_resources =
         client_.returned_resources();
     ASSERT_EQ(expected_resources, actual_resources.size());
     for (size_t i = 0; i < expected_resources; ++i) {
       ReturnedResource resource = actual_resources[i];
+      EXPECT_EQ(expected_sync_token, resource.sync_token);
       EXPECT_EQ(expected_returned_ids[i], resource.id);
       EXPECT_EQ(expected_returned_counts[i], resource.count);
     }
@@ -112,7 +133,7 @@ class SurfaceFactoryTest : public testing::Test {
   void RefCurrentFrameResources() {
     Surface* surface = manager_.GetSurfaceForId(surface_id_);
     factory_->RefResources(
-        surface->GetEligibleFrame()->delegated_frame_data->resource_list);
+        surface->GetEligibleFrame().delegated_frame_data->resource_list);
   }
 
  protected:
@@ -120,6 +141,14 @@ class SurfaceFactoryTest : public testing::Test {
   TestSurfaceFactoryClient client_;
   std::unique_ptr<SurfaceFactory> factory_;
   SurfaceId surface_id_;
+
+  // This is the sync token submitted with the frame. It should never be
+  // returned to the client.
+  const gpu::SyncToken frame_sync_token_;
+
+  // This is the sync token returned by the consumer. It should always be
+  // returned to the client.
+  const gpu::SyncToken consumer_sync_token_;
 };
 
 // Tests submitting a frame with resources followed by one with no resources
@@ -141,9 +170,10 @@ TEST_F(SurfaceFactoryTest, ResourceLifetimeSimple) {
 
   ResourceId expected_returned_ids[] = {1, 2, 3};
   int expected_returned_counts[] = {1, 1, 1};
-  CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                      expected_returned_counts,
-                                      arraysize(expected_returned_counts));
+  // Resources were never consumed so no sync token should be set.
+  CheckReturnedResourcesMatchExpected(
+      expected_returned_ids, expected_returned_counts,
+      arraysize(expected_returned_counts), gpu::SyncToken());
 }
 
 // Tests submitting a frame with resources followed by one with no resources
@@ -174,9 +204,9 @@ TEST_F(SurfaceFactoryTest, ResourceLifetimeSimpleWithProviderHoldingAlive) {
 
   ResourceId expected_returned_ids[] = {1, 2, 3};
   int expected_returned_counts[] = {1, 1, 1};
-  CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                      expected_returned_counts,
-                                      arraysize(expected_returned_counts));
+  CheckReturnedResourcesMatchExpected(
+      expected_returned_ids, expected_returned_counts,
+      arraysize(expected_returned_counts), consumer_sync_token_);
 }
 
 // Tests referencing a resource, unref'ing it to zero, then using it again
@@ -252,9 +282,9 @@ TEST_F(SurfaceFactoryTest, ResourceRefMultipleTimes) {
 
     ResourceId expected_returned_ids[] = {3};
     int expected_returned_counts[] = {1};
-    CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                        expected_returned_counts,
-                                        arraysize(expected_returned_counts));
+    CheckReturnedResourcesMatchExpected(
+        expected_returned_ids, expected_returned_counts,
+        arraysize(expected_returned_counts), consumer_sync_token_);
   }
 
   // Expected refs remaining:
@@ -268,9 +298,9 @@ TEST_F(SurfaceFactoryTest, ResourceRefMultipleTimes) {
 
     ResourceId expected_returned_ids[] = {5};
     int expected_returned_counts[] = {1};
-    CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                        expected_returned_counts,
-                                        arraysize(expected_returned_counts));
+    CheckReturnedResourcesMatchExpected(
+        expected_returned_ids, expected_returned_counts,
+        arraysize(expected_returned_counts), consumer_sync_token_);
   }
 
   // Now, just 2 refs remaining on resource 4. Unref both at once and make sure
@@ -283,9 +313,9 @@ TEST_F(SurfaceFactoryTest, ResourceRefMultipleTimes) {
 
     ResourceId expected_returned_ids[] = {4};
     int expected_returned_counts[] = {2};
-    CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                        expected_returned_counts,
-                                        arraysize(expected_returned_counts));
+    CheckReturnedResourcesMatchExpected(
+        expected_returned_ids, expected_returned_counts,
+        arraysize(expected_returned_counts), consumer_sync_token_);
   }
 }
 
@@ -311,9 +341,9 @@ TEST_F(SurfaceFactoryTest, ResourceLifetime) {
     SCOPED_TRACE("second frame");
     ResourceId expected_returned_ids[] = {1};
     int expected_returned_counts[] = {1};
-    CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                        expected_returned_counts,
-                                        arraysize(expected_returned_counts));
+    CheckReturnedResourcesMatchExpected(
+        expected_returned_ids, expected_returned_counts,
+        arraysize(expected_returned_counts), gpu::SyncToken());
   }
 
   // The third frame references a disjoint set of resources, so we expect to
@@ -328,9 +358,9 @@ TEST_F(SurfaceFactoryTest, ResourceLifetime) {
     SCOPED_TRACE("third frame");
     ResourceId expected_returned_ids[] = {2, 3, 4};
     int expected_returned_counts[] = {2, 2, 1};
-    CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                        expected_returned_counts,
-                                        arraysize(expected_returned_counts));
+    CheckReturnedResourcesMatchExpected(
+        expected_returned_ids, expected_returned_counts,
+        arraysize(expected_returned_counts), gpu::SyncToken());
   }
 
   // Simulate a ResourceProvider taking a ref on all of the resources.
@@ -360,9 +390,9 @@ TEST_F(SurfaceFactoryTest, ResourceLifetime) {
     SCOPED_TRACE("fourth frame, first unref");
     ResourceId expected_returned_ids[] = {10, 11};
     int expected_returned_counts[] = {1, 1};
-    CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                        expected_returned_counts,
-                                        arraysize(expected_returned_counts));
+    CheckReturnedResourcesMatchExpected(
+        expected_returned_ids, expected_returned_counts,
+        arraysize(expected_returned_counts), consumer_sync_token_);
   }
 
   {
@@ -382,25 +412,54 @@ TEST_F(SurfaceFactoryTest, ResourceLifetime) {
     SCOPED_TRACE("fourth frame, second unref");
     ResourceId expected_returned_ids[] = {12, 13};
     int expected_returned_counts[] = {2, 2};
-    CheckReturnedResourcesMatchExpected(expected_returned_ids,
-                                        expected_returned_counts,
-                                        arraysize(expected_returned_counts));
+    CheckReturnedResourcesMatchExpected(
+        expected_returned_ids, expected_returned_counts,
+        arraysize(expected_returned_counts), consumer_sync_token_);
   }
 }
 
 TEST_F(SurfaceFactoryTest, BlankNoIndexIncrement) {
-  SurfaceId surface_id(6);
+  SurfaceId surface_id(0, 6, 0);
   factory_->Create(surface_id);
   Surface* surface = manager_.GetSurfaceForId(surface_id);
   ASSERT_NE(nullptr, surface);
   EXPECT_EQ(2, surface->frame_index());
-  std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
-  frame->delegated_frame_data.reset(new DelegatedFrameData);
+  CompositorFrame frame;
+  frame.delegated_frame_data.reset(new DelegatedFrameData);
 
   factory_->SubmitCompositorFrame(surface_id, std::move(frame),
                                   SurfaceFactory::DrawCallback());
   EXPECT_EQ(2, surface->frame_index());
   factory_->Destroy(surface_id);
+}
+
+void CreateSurfaceDrawCallback(SurfaceFactory* factory,
+                               uint32_t* execute_count,
+                               SurfaceDrawStatus* result,
+                               SurfaceDrawStatus drawn) {
+  SurfaceId new_id(0, 7, 0);
+  factory->Create(new_id);
+  factory->Destroy(new_id);
+  *execute_count += 1;
+  *result = drawn;
+}
+
+TEST_F(SurfaceFactoryTest, AddDuringDestroy) {
+  SurfaceId surface_id(0, 6, 0);
+  factory_->Create(surface_id);
+  CompositorFrame frame;
+  frame.delegated_frame_data.reset(new DelegatedFrameData);
+
+  uint32_t execute_count = 0;
+  SurfaceDrawStatus drawn = SurfaceDrawStatus::DRAW_SKIPPED;
+  factory_->SubmitCompositorFrame(
+      surface_id, std::move(frame),
+      base::Bind(&CreateSurfaceDrawCallback, base::Unretained(factory_.get()),
+                 &execute_count, &drawn));
+  EXPECT_EQ(0u, execute_count);
+  factory_->Destroy(surface_id);
+  EXPECT_EQ(1u, execute_count);
+  EXPECT_EQ(SurfaceDrawStatus::DRAW_SKIPPED, drawn);
 }
 
 void DrawCallback(uint32_t* execute_count,
@@ -412,7 +471,7 @@ void DrawCallback(uint32_t* execute_count,
 
 // Tests doing a DestroyAll before shutting down the factory;
 TEST_F(SurfaceFactoryTest, DestroyAll) {
-  SurfaceId id(7);
+  SurfaceId id(0, 7, 0);
   factory_->Create(id);
 
   std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
@@ -420,8 +479,8 @@ TEST_F(SurfaceFactoryTest, DestroyAll) {
   resource.id = 1;
   resource.mailbox_holder.texture_target = GL_TEXTURE_2D;
   frame_data->resource_list.push_back(resource);
-  std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
-  frame->delegated_frame_data = std::move(frame_data);
+  CompositorFrame frame;
+  frame.delegated_frame_data = std::move(frame_data);
   uint32_t execute_count = 0;
   SurfaceDrawStatus drawn = SurfaceDrawStatus::DRAW_SKIPPED;
 
@@ -435,7 +494,7 @@ TEST_F(SurfaceFactoryTest, DestroyAll) {
 }
 
 TEST_F(SurfaceFactoryTest, DestroySequence) {
-  SurfaceId id2(5);
+  SurfaceId id2(0, 5, 0);
   factory_->Create(id2);
 
   manager_.RegisterSurfaceIdNamespace(0);
@@ -446,10 +505,10 @@ TEST_F(SurfaceFactoryTest, DestroySequence) {
   factory_->Destroy(id2);
 
   std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
-  std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
-  frame->metadata.satisfies_sequences.push_back(6);
-  frame->metadata.satisfies_sequences.push_back(4);
-  frame->delegated_frame_data = std::move(frame_data);
+  CompositorFrame frame;
+  frame.metadata.satisfies_sequences.push_back(6);
+  frame.metadata.satisfies_sequences.push_back(4);
+  frame.delegated_frame_data = std::move(frame_data);
   DCHECK(manager_.GetSurfaceForId(id2));
   factory_->SubmitCompositorFrame(surface_id_, std::move(frame),
                                   SurfaceFactory::DrawCallback());
@@ -468,7 +527,7 @@ TEST_F(SurfaceFactoryTest, DestroySequence) {
 // Sequences to be ignored.
 TEST_F(SurfaceFactoryTest, InvalidIdNamespace) {
   uint32_t id_namespace = 9u;
-  SurfaceId id(5);
+  SurfaceId id(id_namespace, 5, 0);
   factory_->Create(id);
 
   manager_.RegisterSurfaceIdNamespace(id_namespace);
@@ -487,7 +546,7 @@ TEST_F(SurfaceFactoryTest, InvalidIdNamespace) {
 }
 
 TEST_F(SurfaceFactoryTest, DestroyCycle) {
-  SurfaceId id2(5);
+  SurfaceId id2(0, 5, 0);
   factory_->Create(id2);
 
   manager_.RegisterSurfaceIdNamespace(0);
@@ -500,9 +559,9 @@ TEST_F(SurfaceFactoryTest, DestroyCycle) {
     std::unique_ptr<RenderPass> render_pass(RenderPass::Create());
     std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     frame_data->render_pass_list.push_back(std::move(render_pass));
-    std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
-    frame->metadata.referenced_surfaces.push_back(surface_id_);
-    frame->delegated_frame_data = std::move(frame_data);
+    CompositorFrame frame;
+    frame.metadata.referenced_surfaces.push_back(surface_id_);
+    frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(id2, std::move(frame),
                                     SurfaceFactory::DrawCallback());
   }
@@ -513,9 +572,9 @@ TEST_F(SurfaceFactoryTest, DestroyCycle) {
     std::unique_ptr<RenderPass> render_pass(RenderPass::Create());
     std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     frame_data->render_pass_list.push_back(std::move(render_pass));
-    std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
-    frame->metadata.referenced_surfaces.push_back(id2);
-    frame->delegated_frame_data = std::move(frame_data);
+    CompositorFrame frame;
+    frame.metadata.referenced_surfaces.push_back(id2);
+    frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(surface_id_, std::move(frame),
                                     SurfaceFactory::DrawCallback());
   }
@@ -547,9 +606,9 @@ TEST_F(SurfaceFactoryTest, DuplicateCopyRequest) {
     std::unique_ptr<RenderPass> render_pass(RenderPass::Create());
     std::unique_ptr<DelegatedFrameData> frame_data(new DelegatedFrameData);
     frame_data->render_pass_list.push_back(std::move(render_pass));
-    std::unique_ptr<CompositorFrame> frame(new CompositorFrame);
-    frame->metadata.referenced_surfaces.push_back(surface_id_);
-    frame->delegated_frame_data = std::move(frame_data);
+    CompositorFrame frame;
+    frame.metadata.referenced_surfaces.push_back(surface_id_);
+    frame.delegated_frame_data = std::move(frame_data);
     factory_->SubmitCompositorFrame(surface_id_, std::move(frame),
                                     SurfaceFactory::DrawCallback());
   }

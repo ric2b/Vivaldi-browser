@@ -56,14 +56,6 @@ IPC_STRUCT_BEGIN(GpuMsg_CreateGpuMemoryBuffer_Params)
   IPC_STRUCT_MEMBER(gpu::SurfaceHandle, surface_handle)
 IPC_STRUCT_END()
 
-IPC_STRUCT_BEGIN(GpuMsg_CreateGpuMemoryBufferFromHandle_Params)
-  IPC_STRUCT_MEMBER(gfx::GpuMemoryBufferHandle, handle)
-  IPC_STRUCT_MEMBER(gfx::GpuMemoryBufferId, id)
-  IPC_STRUCT_MEMBER(gfx::Size, size)
-  IPC_STRUCT_MEMBER(gfx::BufferFormat, format)
-  IPC_STRUCT_MEMBER(int32_t, client_id)
-IPC_STRUCT_END()
-
 IPC_STRUCT_TRAITS_BEGIN(content::EstablishChannelParams)
   IPC_STRUCT_TRAITS_MEMBER(client_id)
   IPC_STRUCT_TRAITS_MEMBER(client_tracing_id)
@@ -86,6 +78,7 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::GpuPreferences)
 #if defined(OS_WIN)
   IPC_STRUCT_TRAITS_MEMBER(enable_accelerated_vpx_decode)
   IPC_STRUCT_TRAITS_MEMBER(enable_zero_copy_dxgi_video)
+  IPC_STRUCT_TRAITS_MEMBER(enable_nv12_dxgi_video)
 #endif
   IPC_STRUCT_TRAITS_MEMBER(compile_shader_always_succeeds)
   IPC_STRUCT_TRAITS_MEMBER(disable_gl_error_limit)
@@ -107,6 +100,7 @@ IPC_STRUCT_TRAITS_BEGIN(gpu::GpuPreferences)
   IPC_STRUCT_TRAITS_MEMBER(enable_gpu_service_logging)
   IPC_STRUCT_TRAITS_MEMBER(enable_gpu_service_tracing)
   IPC_STRUCT_TRAITS_MEMBER(enable_unsafe_es3_apis)
+  IPC_STRUCT_TRAITS_MEMBER(use_passthrough_cmd_decoder)
 IPC_STRUCT_TRAITS_END()
 
 //------------------------------------------------------------------------------
@@ -140,11 +134,6 @@ IPC_MESSAGE_CONTROL1(GpuMsg_CloseChannel, int32_t /* client_id */)
 // Tells the GPU process to create a new gpu memory buffer.
 IPC_MESSAGE_CONTROL1(GpuMsg_CreateGpuMemoryBuffer,
                      GpuMsg_CreateGpuMemoryBuffer_Params)
-
-// Tells the GPU process to create a new gpu memory buffer from an existing
-// handle.
-IPC_MESSAGE_CONTROL1(GpuMsg_CreateGpuMemoryBufferFromHandle,
-                     GpuMsg_CreateGpuMemoryBufferFromHandle_Params)
 
 // Tells the GPU process to destroy buffer.
 IPC_MESSAGE_CONTROL3(GpuMsg_DestroyGpuMemoryBuffer,
@@ -250,3 +239,6 @@ IPC_MESSAGE_CONTROL3(GpuHostMsg_OnLogMessage,
                      int /*severity*/,
                      std::string /* header */,
                      std::string /* message */)
+
+// Sent by the GPU process to indicate that a fields trial has been activated.
+IPC_MESSAGE_CONTROL1(GpuHostMsg_FieldTrialActivated, std::string /* name */)

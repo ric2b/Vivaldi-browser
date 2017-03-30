@@ -27,9 +27,12 @@ struct AX_EXPORT AXViewState {
   AXViewState();
   ~AXViewState();
 
+  // Helper to check whether |state_flag| is set in the given |state|.
+  static bool IsFlagSet(uint32_t state, ui::AXState state_flag);
+
   // Set or check bits in |state_|.
-  void AddStateFlag(ui::AXState state);
-  bool HasStateFlag(ui::AXState state) const;
+  void AddStateFlag(ui::AXState state_flag);
+  bool HasStateFlag(ui::AXState state_flag) const;
 
   // The view's state, a bitmask containing fields such as checked
   // (for a checkbox) and protected (for a password text box). This "state"
@@ -50,6 +53,9 @@ struct AX_EXPORT AXViewState {
 
   // The keyboard shortcut to activate this view, if any.
   base::string16 keyboard_shortcut;
+
+  // The view's placeholder value, used only for views with editable text.
+  base::string16 placeholder;
 
   // The selection start and end. Only applies to views with text content,
   // such as a text box or combo box; start and end should be -1 otherwise.

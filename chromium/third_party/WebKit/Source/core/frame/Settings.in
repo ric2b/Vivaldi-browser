@@ -339,6 +339,11 @@ inlineTextBoxAccessibilityEnabled initial=false
 # Typically enabled on Windows to match platform convention.
 showContextMenuOnMouseUp initial=false
 
+# If true, context menu will be shown on any long press event.
+# Used on Android to prevent a context menu from being shown in certain situations
+# (i.e. long pressing an empty div)
+alwaysShowContextMenuOnTouch initial=true
+
 disableReadingFromCanvas initial=false
 strictMixedContentChecking initial=false
 strictMixedContentCheckingForPlugin initial=false
@@ -372,23 +377,11 @@ textTrackMarginPercentage type=double, initial=0
 
 lowPriorityIframes initial=false
 
-mainResourceOnlyProgress initial=false
+progressBarCompletion type=ProgressBarCompletion, initial=ProgressBarCompletion::LoadEvent
 
 # Do we want to try to save screen real estate in the media player by hiding
 # the volume slider / mute button?
 preferHiddenVolumeControls initial=false
-
-# Controls for resource fetch prioritization.
-# Overall rationale and details here: https://docs.google.com/document/d/1bCDuq9H1ih9iNjgzyAL0gpwNFiEP4TZS-YLRp_RuMlc/edit?usp=sharing
-fetchDeferLateScripts initial=false
-fetchIncreaseFontPriority initial=false
-fetchIncreaseAsyncScriptPriority initial=false
-# Increases the priorities for CSS, Scripts, Fonts and Images all by one level
-# and parser-blocking scripts and visible images by 2.
-# This is used in conjunction with logic on the Chrome side to raise the threshold
-# of "layout-blocking" resources and provide a boost to resources that are needed
-# as soon as possible for something currently on the screen.
-fetchIncreasePriorities initial=false
 
 # Whether to disallow network fetches for parser blocking scripts in the main
 # frame inserted via document.write, for users on slow connections.
@@ -405,10 +398,6 @@ autoplayExperimentMode type=String, initial="off"
 # which in turn affects media queries.
 resizeIsDeviceSizeChange initial=false
 
-# Whether the browser process sends gesture events for wheel events.
-# Can be removed when crbug.com/598798 is fixed.
-wheelGesturesEnabled initial=false
-
 # If set to a positive value, emit a console warning once for each non-passive
 # event listener that caused an event to be dispatched to main thread and
 # delayed by more than the specified time (in seconds).
@@ -419,3 +408,11 @@ blockedMainThreadEventsWarningThreshold type=double, initial=0
 # when there is greater adoption, interventions to force it on and associated devtools
 # to enable it have been shipped.
 passiveListenerDefault type=PassiveListenerDefault, initial=PassiveListenerDefault::False
+
+# Use default interpolation quality to scale bitmap images if quality is not determined
+# in other ways. This can help us writing reftests containing scaled images.
+useDefaultImageInterpolationQuality initial=false
+
+# Variant of the ParseHTMLOnMainThread experiment. One experiment immediately
+# tokenizes input bytes. The default is to tokenize with a post task.
+parseHTMLOnMainThreadSyncTokenize initial=false

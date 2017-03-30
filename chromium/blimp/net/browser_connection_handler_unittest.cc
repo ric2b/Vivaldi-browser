@@ -9,9 +9,12 @@
 #include <string>
 
 #include "base/callback_helpers.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "blimp/common/proto/blimp_message.pb.h"
 #include "blimp/net/blimp_message_processor.h"
 #include "blimp/net/common.h"
@@ -48,10 +51,10 @@ MATCHER_P(EqualsMessageIgnoringId, message, "") {
 
 class FakeFeature {
  public:
-  FakeFeature(BlimpMessage::Type type,
+  FakeFeature(BlimpMessage::FeatureCase feature_case,
               BrowserConnectionHandler* connection_handler) {
-    outgoing_message_processor_ =
-        connection_handler->RegisterFeature(type, &incoming_message_processor_);
+    outgoing_message_processor_ = connection_handler->RegisterFeature(
+        feature_case, &incoming_message_processor_);
   }
 
   ~FakeFeature() {}
@@ -99,7 +102,7 @@ class FakeBlimpConnection : public BlimpConnection,
   // BlimpMessageProcessor implementation.
   void ProcessMessage(std::unique_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override {
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&FakeBlimpConnection::ForwardMessage,
                               base::Unretained(this), base::Passed(&message)));
 
@@ -113,14 +116,14 @@ class FakeBlimpConnection : public BlimpConnection,
 
 std::unique_ptr<BlimpMessage> CreateInputMessage(int tab_id) {
   std::unique_ptr<BlimpMessage> output(new BlimpMessage);
-  output->set_type(BlimpMessage::INPUT);
+  output->mutable_input();
   output->set_target_tab_id(tab_id);
   return output;
 }
 
 std::unique_ptr<BlimpMessage> CreateControlMessage(int tab_id) {
   std::unique_ptr<BlimpMessage> output(new BlimpMessage);
-  output->set_type(BlimpMessage::TAB_CONTROL);
+  output->mutable_tab_control();
   output->set_target_tab_id(tab_id);
   return output;
 }
@@ -132,14 +135,14 @@ class BrowserConnectionHandlerTest : public testing::Test {
         engine_connection_handler_(new BrowserConnectionHandler) {
     SetupConnections();
 
-    client_input_feature_.reset(
-        new FakeFeature(BlimpMessage::INPUT, client_connection_handler_.get()));
-    engine_input_feature_.reset(
-        new FakeFeature(BlimpMessage::INPUT, engine_connection_handler_.get()));
+    client_input_feature_.reset(new FakeFeature(
+        BlimpMessage::kInput, client_connection_handler_.get()));
+    engine_input_feature_.reset(new FakeFeature(
+        BlimpMessage::kInput, engine_connection_handler_.get()));
     client_control_feature_.reset(new FakeFeature(
-        BlimpMessage::TAB_CONTROL, client_connection_handler_.get()));
+        BlimpMessage::kTabControl, client_connection_handler_.get()));
     engine_control_feature_.reset(new FakeFeature(
-        BlimpMessage::TAB_CONTROL, engine_connection_handler_.get()));
+        BlimpMessage::kTabControl, engine_connection_handler_.get()));
   }
 
   ~BrowserConnectionHandlerTest() override {}

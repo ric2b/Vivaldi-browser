@@ -36,7 +36,7 @@
 #include "public/platform/WebContentLayerClient.h"
 #include "web/WebExport.h"
 #include "wtf/Forward.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -52,7 +52,7 @@ class WEB_EXPORT LinkHighlightImpl final : public LinkHighlight
     , public CompositorAnimationDelegate
     , public CompositorAnimationPlayerClient {
 public:
-    static PassOwnPtr<LinkHighlightImpl> create(Node*, WebViewImpl*);
+    static std::unique_ptr<LinkHighlightImpl> create(Node*, WebViewImpl*);
     ~LinkHighlightImpl() override;
 
     WebContentLayer* contentLayer();
@@ -91,14 +91,15 @@ private:
     // size since the last call to this function.
     bool computeHighlightLayerPathAndPosition(const LayoutBoxModelObject&);
 
-    OwnPtr<WebContentLayer> m_contentLayer;
-    OwnPtr<WebLayer> m_clipLayer;
+    std::unique_ptr<WebContentLayer> m_contentLayer;
+    std::unique_ptr<WebLayer> m_clipLayer;
     Path m_path;
 
     Persistent<Node> m_node;
     WebViewImpl* m_owningWebViewImpl;
     GraphicsLayer* m_currentGraphicsLayer;
-    OwnPtr<CompositorAnimationPlayer> m_compositorPlayer;
+    bool m_isScrollingGraphicsLayer;
+    std::unique_ptr<CompositorAnimationPlayer> m_compositorPlayer;
 
     bool m_geometryNeedsUpdate;
     bool m_isAnimating;

@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -28,13 +29,13 @@ class PingServiceImpl : public test::PingService {
   ~PingServiceImpl() override {}
 
   // |PingService| methods:
-  void Ping(const Callback<void()>& callback) override;
+  void Ping(const PingCallback& callback) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PingServiceImpl);
 };
 
-void PingServiceImpl::Ping(const Callback<void()>& callback) {
+void PingServiceImpl::Ping(const PingCallback& callback) {
   callback.Run();
 }
 
@@ -65,7 +66,7 @@ void PingPongTest::Run(unsigned int iterations) {
 
   base::RunLoop run_loop;
   quit_closure_ = run_loop.QuitClosure();
-  service_->Ping([this]() { OnPingDone(); });
+  service_->Ping(base::Bind(&PingPongTest::OnPingDone, base::Unretained(this)));
   run_loop.Run();
 }
 
@@ -76,7 +77,7 @@ void PingPongTest::OnPingDone() {
     return;
   }
 
-  service_->Ping([this]() { OnPingDone(); });
+  service_->Ping(base::Bind(&PingPongTest::OnPingDone, base::Unretained(this)));
 }
 
 struct BoundPingService {

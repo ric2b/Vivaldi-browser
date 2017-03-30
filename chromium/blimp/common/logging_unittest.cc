@@ -7,8 +7,10 @@
 
 #include "base/at_exit.h"
 #include "base/strings/stringprintf.h"
+#include "blimp/common/create_blimp_message.h"
 #include "blimp/common/logging.h"
 #include "blimp/common/proto/blimp_message.pb.h"
+#include "blimp/common/proto/blob_channel.pb.h"
 #include "blimp/net/test_common.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -43,7 +45,7 @@ class LoggingTest : public testing::Test {
 
 TEST_F(LoggingTest, Compositor) {
   BlimpMessage base_msg;
-  base_msg.set_type(BlimpMessage::COMPOSITOR);
+  base_msg.mutable_compositor();
   base_msg.set_target_tab_id(kTargetTab);
   VerifyLogOutput("type=COMPOSITOR render_widget_id=0 target_tab_id=123",
                   base_msg);
@@ -55,7 +57,6 @@ TEST_F(LoggingTest, Input) {
       " target_tab_id=123";
 
   BlimpMessage base_msg;
-  base_msg.set_type(BlimpMessage::INPUT);
   base_msg.set_target_tab_id(kTargetTab);
   base_msg.mutable_input()->set_type(InputMessage::Type_GestureScrollBegin);
   base_msg.mutable_input()->set_render_widget_id(1);
@@ -102,7 +103,6 @@ TEST_F(LoggingTest, Input) {
 
 TEST_F(LoggingTest, Navigation) {
   BlimpMessage base_msg;
-  base_msg.set_type(BlimpMessage::NAVIGATION);
   base_msg.set_target_tab_id(kTargetTab);
 
   BlimpMessage navigation_state_msg = base_msg;
@@ -152,21 +152,20 @@ TEST_F(LoggingTest, Navigation) {
 
 TEST_F(LoggingTest, TabControl) {
   BlimpMessage base_msg;
-  base_msg.set_type(BlimpMessage::TAB_CONTROL);
   base_msg.set_target_tab_id(kTargetTab);
 
   BlimpMessage create_tab_msg = base_msg;
-  create_tab_msg.mutable_tab_control()->set_type(TabControlMessage::CREATE_TAB);
+  create_tab_msg.mutable_tab_control()->mutable_create_tab();
   VerifyLogOutput("type=TAB_CONTROL subtype=CREATE_TAB target_tab_id=123",
                   create_tab_msg);
 
   BlimpMessage close_tab_msg = base_msg;
-  close_tab_msg.mutable_tab_control()->set_type(TabControlMessage::CLOSE_TAB);
+  close_tab_msg.mutable_tab_control()->mutable_close_tab();
   VerifyLogOutput("type=TAB_CONTROL subtype=CLOSE_TAB target_tab_id=123",
                   close_tab_msg);
 
   BlimpMessage size_msg = base_msg;
-  size_msg.mutable_tab_control()->set_type(TabControlMessage::SIZE);
+  size_msg.mutable_tab_control()->mutable_size();
   size_msg.mutable_tab_control()->mutable_size()->set_width(640);
   size_msg.mutable_tab_control()->mutable_size()->set_height(480);
   size_msg.mutable_tab_control()->mutable_size()->set_device_pixel_ratio(2);
@@ -177,11 +176,9 @@ TEST_F(LoggingTest, TabControl) {
 
 TEST_F(LoggingTest, ProtocolControl) {
   BlimpMessage base_msg;
-  base_msg.set_type(BlimpMessage::PROTOCOL_CONTROL);
 
   BlimpMessage start_connection_msg = base_msg;
-  start_connection_msg.mutable_protocol_control()->set_type(
-      ProtocolControlMessage::START_CONNECTION);
+  start_connection_msg.mutable_protocol_control()->mutable_start_connection();
   start_connection_msg.mutable_protocol_control()
       ->mutable_start_connection()
       ->set_client_token("token");
@@ -193,9 +190,7 @@ TEST_F(LoggingTest, ProtocolControl) {
       "client_token=\"token\" protocol_version=2",
       start_connection_msg);
 
-  BlimpMessage checkpoint_msg = base_msg;
-  start_connection_msg.mutable_protocol_control()->set_type(
-      ProtocolControlMessage::CHECKPOINT_ACK);
+  start_connection_msg.mutable_protocol_control()->mutable_checkpoint_ack();
   start_connection_msg.mutable_protocol_control()
       ->mutable_checkpoint_ack()
       ->set_checkpoint_id(123);
@@ -207,7 +202,6 @@ TEST_F(LoggingTest, ProtocolControl) {
 
 TEST_F(LoggingTest, RenderWidget) {
   BlimpMessage base_msg;
-  base_msg.set_type(BlimpMessage::RENDER_WIDGET);
   base_msg.mutable_render_widget()->set_render_widget_id(123);
 
   BlimpMessage initialize_msg = base_msg;
@@ -228,9 +222,20 @@ TEST_F(LoggingTest, RenderWidget) {
                   deleted_msg);
 }
 
+TEST_F(LoggingTest, BlobChannel) {
+  BlobChannelMessage* blob_message = nullptr;
+  std::unique_ptr<BlimpMessage> blimp_message =
+      CreateBlimpMessage(&blob_message);
+  blob_message->mutable_transfer_blob()->set_blob_id("AAA");
+  blob_message->mutable_transfer_blob()->set_payload("123");
+
+  VerifyLogOutput(
+      "type=BLOB_CHANNEL subtype=TRANSFER_BLOB id=\"414141\" payload_size=3",
+      *blimp_message);
+}
+
 TEST_F(LoggingTest, Settings) {
   BlimpMessage message;
-  message.set_type(BlimpMessage::SETTINGS);
   message.mutable_settings()
       ->mutable_engine_settings()
       ->set_record_whole_document(true);
@@ -239,6 +244,31 @@ TEST_F(LoggingTest, Settings) {
   VerifyLogOutput(
       "type=SETTINGS subtype=ENGINE_SETTINGS record_whole_document=true "
       "client_os_info=\"wibble\"",
+      message);
+}
+
+TEST_F(LoggingTest, Ime) {
+  BlimpMessage message;
+  message.mutable_ime()->set_render_widget_id(1);
+
+  // Test SHOW_IME.
+  message.mutable_ime()->set_type(ImeMessage::SHOW_IME);
+  message.mutable_ime()->set_text_input_type(ImeMessage::NONE);
+  VerifyLogOutput(
+      "type=IME render_widget_id=1 subtype=SHOW_IME text_input_type=0",
+      message);
+
+  // Test HIDE_IME.
+  message.mutable_ime()->set_type(ImeMessage::HIDE_IME);
+  VerifyLogOutput(
+      "type=IME render_widget_id=1 subtype=HIDE_IME",
+      message);
+
+  // Test SET_TEXT.
+  message.mutable_ime()->set_type(ImeMessage::SET_TEXT);
+  message.mutable_ime()->set_ime_text("1234");
+  VerifyLogOutput(
+      "type=IME render_widget_id=1 subtype=SET_TEXT ime_text(length)=4",
       message);
 }
 

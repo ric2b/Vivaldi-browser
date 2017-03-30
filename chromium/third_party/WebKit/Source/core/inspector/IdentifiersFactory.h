@@ -39,7 +39,6 @@ class InspectedFrames;
 class CORE_EXPORT IdentifiersFactory {
     STATIC_ONLY(IdentifiersFactory);
 public:
-    static void setProcessId(long);
     static String createIdentifier();
 
     static String requestId(unsigned long identifier);

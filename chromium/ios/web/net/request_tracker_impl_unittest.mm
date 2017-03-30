@@ -20,6 +20,8 @@
 #include "ios/web/public/test/test_web_thread.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/http_response_headers.h"
+#include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_job_factory.h"
@@ -262,10 +264,8 @@ class RequestTrackerTest : public PlatformTest {
         net::HttpResponseInfo* response =
             const_cast<net::HttpResponseInfo*>(&requests_[i]->response_info());
 
-        response->ssl_info.cert = new net::X509Certificate(
-            "subject", "issuer",
-            base::Time::Now() - base::TimeDelta::FromDays(2),
-            base::Time::Now() + base::TimeDelta::FromDays(2));
+        response->ssl_info.cert = net::ImportCertFromFile(
+            net::GetTestCertsDirectory(), "ok_cert.pem");
         response->ssl_info.cert_status = 0;  // No errors.
         response->ssl_info.security_bits = 128;
 
@@ -488,11 +488,9 @@ void TwoStartsSSLCallback(bool* called, bool ok) {
 
 // crbug/386180
 TEST_F(RequestTrackerTest, DISABLED_TwoStartsNoEstimate) {
-  net::X509Certificate* cert =
-      new net::X509Certificate("subject", "issuer", base::Time::Now(),
-                               base::Time::Max());
   net::SSLInfo ssl_info;
-  ssl_info.cert = cert;
+  ssl_info.cert =
+      net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
   ssl_info.cert_status = net::CERT_STATUS_AUTHORITY_INVALID;
   scoped_refptr<MockCertificatePolicyCache> cache;
   tracker_->SetCertificatePolicyCacheForTest(cache.get());

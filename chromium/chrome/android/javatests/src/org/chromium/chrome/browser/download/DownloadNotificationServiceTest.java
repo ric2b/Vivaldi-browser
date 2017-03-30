@@ -29,6 +29,8 @@ import java.util.UUID;
  */
 public class DownloadNotificationServiceTest extends
         ServiceTestCase<MockDownloadNotificationService> {
+    private static final int MILLIS_PER_SECOND = 1000;
+
     private static class MockDownloadManagerService extends DownloadManagerService {
         final List<DownloadItem> mDownloads = new ArrayList<DownloadItem>();
 
@@ -45,6 +47,24 @@ public class DownloadNotificationServiceTest extends
         }
     }
 
+    private static class MockDownloadResumptionScheduler extends DownloadResumptionScheduler {
+        boolean mScheduled;
+
+        public MockDownloadResumptionScheduler(Context context) {
+            super(context);
+        }
+
+        @Override
+        public void schedule(boolean allowMeteredConnection) {
+            mScheduled = true;
+        }
+
+        @Override
+        public void cancelTask() {
+            mScheduled = false;
+        }
+    }
+
     public DownloadNotificationServiceTest() {
         super(MockDownloadNotificationService.class);
     }
@@ -52,6 +72,16 @@ public class DownloadNotificationServiceTest extends
     @Override
     protected void setupService() {
         super.setupService();
+    }
+
+    @Override
+    protected void tearDown() throws Exception {
+        super.setupService();
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
+        SharedPreferences.Editor editor = sharedPrefs.edit();
+        editor.remove(DownloadNotificationService.PENDING_DOWNLOAD_NOTIFICATIONS);
+        editor.apply();
+        super.tearDown();
     }
 
     private void startNotificationService() {
@@ -96,6 +126,51 @@ public class DownloadNotificationServiceTest extends
         startNotificationService();
         assertTrue(getService().isPaused());
         assertTrue(getService().getNotificationIds().isEmpty());
+    }
+
+    /**
+     * Tests that download resumption task is scheduled when notification service is started
+     * without any download action.
+     */
+    @SmallTest
+    @Feature({"Download"})
+    public void testResumptionScheduledWithoutDownloadOperationIntent() throws Exception {
+        MockDownloadResumptionScheduler scheduler = new MockDownloadResumptionScheduler(
+                getSystemContext().getApplicationContext());
+        DownloadResumptionScheduler.setDownloadResumptionScheduler(scheduler);
+        setupService();
+        Set<String> notifications = new HashSet<String>();
+        notifications.add(new DownloadSharedPreferenceEntry(1, true, true,
+                UUID.randomUUID().toString(), "test1").getSharedPreferenceString());
+        SharedPreferences sharedPrefs = ContextUtils.getAppSharedPreferences();
+        SharedPreferences.Editor editor = sharedPrefs.edit();
+        editor.putStringSet(
+                DownloadNotificationService.PENDING_DOWNLOAD_NOTIFICATIONS, notifications);
+        editor.apply();
+        startNotificationService();
+        assertTrue(scheduler.mScheduled);
+    }
+
+    /**
+     * Tests that download resumption task is not scheduled when notification service is started
+     * with a download action.
+     */
+    @SmallTest
+    @Feature({"Download"})
+    public void testResumptionNotScheduledWithDownloadOperationIntent() {
+        MockDownloadResumptionScheduler scheduler = new MockDownloadResumptionScheduler(
+                getSystemContext().getApplicationContext());
+        DownloadResumptionScheduler.setDownloadResumptionScheduler(scheduler);
+        setupService();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                Intent intent = new Intent(getService(), MockDownloadNotificationService.class);
+                intent.setAction(DownloadNotificationService.ACTION_DOWNLOAD_RESUME_ALL);
+                startService(intent);
+            }
+        });
+        assertFalse(scheduler.mScheduled);
     }
 
     /**
@@ -155,26 +230,26 @@ public class DownloadNotificationServiceTest extends
 
         DownloadNotificationService service = bindNotificationService();
         String guid3 = UUID.randomUUID().toString();
-        service.notifyDownloadProgress(1, guid3, "test", 1, 1L, 1L, true, true);
+        service.notifyDownloadProgress(guid3, "test", 1, 1L, 1L, true, true);
         assertEquals(3, getService().getNotificationIds().size());
-        assertTrue(getService().getNotificationIds().contains(1));
+        int lastNotificationId = getService().getLastAddedNotificationId();
         Set<String> entries = DownloadManagerService.getStoredDownloadInfo(
                 sharedPrefs, DownloadNotificationService.PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(3, entries.size());
 
-        service.notifyDownloadSuccessful(3, guid1, "success", null);
+        service.notifyDownloadSuccessful(guid1, "success", null);
         entries = DownloadManagerService.getStoredDownloadInfo(
                 sharedPrefs, DownloadNotificationService.PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(2, entries.size());
 
-        service.notifyDownloadFailed(4, guid2, "failed");
+        service.notifyDownloadFailed(guid2, "failed");
         entries = DownloadManagerService.getStoredDownloadInfo(
                 sharedPrefs, DownloadNotificationService.PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(1, entries.size());
 
-        service.cancelNotification(1, guid3);
+        service.notifyDownloadCanceled(guid3);
         assertEquals(2, getService().getNotificationIds().size());
-        assertFalse(getService().getNotificationIds().contains(1));
+        assertFalse(getService().getNotificationIds().contains(lastNotificationId));
     }
 
     /**
@@ -187,9 +262,8 @@ public class DownloadNotificationServiceTest extends
         startNotificationService();
         DownloadNotificationService service = bindNotificationService();
         String guid = UUID.randomUUID().toString();
-        service.notifyDownloadSuccessful(1, guid, "test", null);
+        service.notifyDownloadSuccessful(guid, "test", null);
         assertEquals(1, getService().getNotificationIds().size());
-        assertTrue(getService().getNotificationIds().contains(1));
     }
 
     /**
@@ -233,7 +307,8 @@ public class DownloadNotificationServiceTest extends
         manager.mDownloads.clear();
         DownloadManagerService.setIsNetworkMeteredForTest(false);
         resumeAllDownloads(service);
-        assertEquals(2, manager.mDownloads.size());
+        assertEquals(1, manager.mDownloads.size());
+        assertEquals(manager.mDownloads.get(0).getDownloadInfo().getDownloadGuid(), guid1);
     }
 
     @SmallTest
@@ -255,5 +330,32 @@ public class DownloadNotificationServiceTest extends
         assertEquals("test,2.pdf", entry.fileName);
         assertTrue(entry.isResumable);
         assertEquals(uuid, entry.downloadGuid);
+    }
+
+    @SmallTest
+    @Feature({"Download"})
+    public void testFormatRemainingTime() {
+        Context context = getSystemContext().getApplicationContext();
+        assertEquals("0 secs left", DownloadNotificationService.formatRemainingTime(context, 0));
+        assertEquals("1 sec left", DownloadNotificationService.formatRemainingTime(
+                context, MILLIS_PER_SECOND));
+        assertEquals("1 min left", DownloadNotificationService.formatRemainingTime(context,
+                DownloadNotificationService.SECONDS_PER_MINUTE * MILLIS_PER_SECOND));
+        assertEquals("2 mins left", DownloadNotificationService.formatRemainingTime(context,
+                149 * MILLIS_PER_SECOND));
+        assertEquals("3 mins left", DownloadNotificationService.formatRemainingTime(context,
+                150 * MILLIS_PER_SECOND));
+        assertEquals("1 hour left", DownloadNotificationService.formatRemainingTime(context,
+                DownloadNotificationService.SECONDS_PER_HOUR * MILLIS_PER_SECOND));
+        assertEquals("2 hours left", DownloadNotificationService.formatRemainingTime(context,
+                149 * DownloadNotificationService.SECONDS_PER_MINUTE * MILLIS_PER_SECOND));
+        assertEquals("3 hours left", DownloadNotificationService.formatRemainingTime(context,
+                150 * DownloadNotificationService.SECONDS_PER_MINUTE * MILLIS_PER_SECOND));
+        assertEquals("1 day left", DownloadNotificationService.formatRemainingTime(context,
+                DownloadNotificationService.SECONDS_PER_DAY * MILLIS_PER_SECOND));
+        assertEquals("2 days left", DownloadNotificationService.formatRemainingTime(context,
+                59 * DownloadNotificationService.SECONDS_PER_HOUR * MILLIS_PER_SECOND));
+        assertEquals("3 days left", DownloadNotificationService.formatRemainingTime(context,
+                60 * DownloadNotificationService.SECONDS_PER_HOUR * MILLIS_PER_SECOND));
     }
 }

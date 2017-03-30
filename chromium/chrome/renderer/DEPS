@@ -19,6 +19,7 @@ include_rules = [
   "+components/network_hints/renderer",
   "+components/page_load_metrics/renderer",
   "+components/password_manager/content/renderer",
+  "+components/password_manager/core/common",
   "+components/pdf/renderer",
   "+components/plugins/renderer",
   "+components/printing/common",
@@ -26,6 +27,7 @@ include_rules = [
   "+components/signin/core/common",
   "+components/startup_metric_utils/common",
   "+components/strings/grit",  # For generated headers
+  "+components/subresource_filter/content/renderer",
   "+components/translate/content/common",
   "+components/translate/content/renderer",
   "+components/translate/core/common",
@@ -44,6 +46,7 @@ include_rules = [
   "+media/base",
   "+ppapi/c",
   "+ppapi/shared_impl",
+  "+services/shell/public/cpp",
   "+skia",
   "+storage/common",
 ]

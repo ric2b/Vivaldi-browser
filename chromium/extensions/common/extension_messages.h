@@ -106,6 +106,14 @@ IPC_STRUCT_BEGIN(ExtensionHostMsg_Request_Params)
 
   // True if request is executed in response to an explicit user gesture.
   IPC_STRUCT_MEMBER(bool, user_gesture)
+
+  // If this API call is for a service worker, then this is the worker thread
+  // id. Otherwise, this is -1.
+  IPC_STRUCT_MEMBER(int, worker_thread_id)
+
+  // If this API call is for a service worker, then this is the embedded
+  // worker id. Otherwise, this is -1.
+  IPC_STRUCT_MEMBER(int, embedded_worker_id)
 IPC_STRUCT_END()
 
 // Allows an extension to execute code in a tab.
@@ -560,6 +568,11 @@ IPC_MESSAGE_ROUTED2(ExtensionMsg_GetAppInstallStateResponse,
                     std::string /* state */,
                     int32_t /* callback_id */)
 
+// Check whether the Port for extension messaging exists in the frame. If the
+// port ID is unknown, the frame replies with ExtensionHostMsg_CloseMessagePort.
+IPC_MESSAGE_ROUTED1(ExtensionMsg_ValidateMessagePort,
+                    int /* port_id */)
+
 // Dispatch the Port.onConnect event for message channels.
 IPC_MESSAGE_ROUTED5(ExtensionMsg_DispatchOnConnect,
                     int /* target_port_id */,
@@ -569,8 +582,9 @@ IPC_MESSAGE_ROUTED5(ExtensionMsg_DispatchOnConnect,
                     std::string /* tls_channel_id */)
 
 // Deliver a message sent with ExtensionHostMsg_PostMessage.
-IPC_MESSAGE_ROUTED2(ExtensionMsg_DeliverMessage,
+IPC_MESSAGE_ROUTED3(ExtensionMsg_DeliverMessage,
                     int /* target_port_id */,
+                    int /* source_tab_id */,
                     extensions::Message)
 
 // Dispatch the Port.onDisconnect event for message channels.
@@ -841,3 +855,27 @@ IPC_MESSAGE_ROUTED3(ExtensionHostMsg_AutomationQuerySelector_Result,
                     int /* request_id */,
                     ExtensionHostMsg_AutomationQuerySelector_Error /* error */,
                     int /* result_acc_obj_id */)
+
+// Tells the renderer whether or not activity logging is enabled. This is only
+// sent if logging is or was previously enabled; not being enabled is assumed
+// otherwise.
+IPC_MESSAGE_CONTROL1(ExtensionMsg_SetActivityLoggingEnabled, bool /* enabled */)
+
+// Messages related to Extension Service Worker.
+#undef IPC_MESSAGE_START
+#define IPC_MESSAGE_START ExtensionWorkerMsgStart
+// A service worker thread sends this message when an extension service worker
+// starts an API request. The browser will always respond with a
+// ExtensionMsg_ResponseWorker.
+IPC_MESSAGE_CONTROL1(ExtensionHostMsg_RequestWorker,
+                     ExtensionHostMsg_Request_Params)
+
+// The browser sends this message in response to all service worker extension
+// api calls. The response data (if any) is one of the base::Value subclasses,
+// wrapped as the first element in a ListValue.
+IPC_MESSAGE_CONTROL5(ExtensionMsg_ResponseWorker,
+                     int /* thread_id */,
+                     int /* request_id */,
+                     bool /* success */,
+                     base::ListValue /* response wrapper (see comment above) */,
+                     std::string /* error */)

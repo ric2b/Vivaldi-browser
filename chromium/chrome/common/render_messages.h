@@ -204,11 +204,9 @@ IPC_MESSAGE_CONTROL1(ChromeViewMsg_SetContentSettingRules,
 
 // Tells the renderer to create a FieldTrial, and by using a 100% probability
 // for the FieldTrial, forces the FieldTrial to have assigned group name.
-IPC_MESSAGE_CONTROL4(ChromeViewMsg_SetFieldTrialGroup,
+IPC_MESSAGE_CONTROL2(ChromeViewMsg_SetFieldTrialGroup,
                      std::string /* field trial name */,
-                     std::string /* group name that was assigned. */,
-                     base::ProcessId /* for debugging, the sender process id */,
-                     int32_t /* for debugging, the debug token */)
+                     std::string /* group name that was assigned. */)
 
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetPageSequenceNumber,
                     int /* page_seq_no */)
@@ -530,13 +528,6 @@ IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_InstantSupportDetermined,
 IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_SearchBoxDeleteMostVisitedItem,
                     int /* page_seq_no */,
                     GURL /* url */)
-
-// Tells InstantExtended to navigate the active tab to a possibly privileged
-// URL.
-IPC_MESSAGE_ROUTED3(ChromeViewHostMsg_SearchBoxNavigate,
-                    int /* page_seq_no */,
-                    GURL /* destination */,
-                    WindowOpenDisposition /* disposition */)
 
 // Tells InstantExtended to undo all most visited item deletions.
 IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_SearchBoxUndoAllMostVisitedDeletions,

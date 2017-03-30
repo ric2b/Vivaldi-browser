@@ -6,9 +6,12 @@
 
 #include <utility>
 
+#include "base/i18n/case_conversion.h"
+#include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -98,7 +101,7 @@ ExclusiveAccessBubbleViews::~ExclusiveAccessBubbleViews() {
   // the popup to synchronously hide, and then asynchronously close and delete
   // itself.
   popup_->Close();
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, popup_);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, popup_);
 }
 
 void ExclusiveAccessBubbleViews::UpdateContent(
@@ -173,6 +176,12 @@ void ExclusiveAccessBubbleViews::UpdateViewContent(
       link_visible = false;
     }
   }
+#if defined(OS_MACOSX)
+  // Mac keyboards use lowercase for everything except function keys, which are
+  // typically reserved for system use. Since |accelerator| is placed in a box
+  // to make it look like a keyboard key it looks weird to not follow suit.
+  accelerator = base::i18n::ToLower(accelerator);
+#endif
   base::string16 link_text;
   base::string16 exit_instruction_text;
   if (link_visible) {
@@ -194,7 +203,7 @@ views::View* ExclusiveAccessBubbleViews::GetBrowserRootView() const {
 
 void ExclusiveAccessBubbleViews::AnimationProgressed(
     const gfx::Animation* animation) {
-  int opacity = animation_->CurrentValueBetween(0, 255);
+  float opacity = static_cast<float>(animation_->CurrentValueBetween(0.0, 1.0));
   if (opacity == 0) {
     popup_->Hide();
   } else {

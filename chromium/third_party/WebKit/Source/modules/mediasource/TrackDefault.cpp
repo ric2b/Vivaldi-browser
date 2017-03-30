@@ -11,19 +11,19 @@
 
 namespace blink {
 
-static const AtomicString& audioKeyword()
+const AtomicString& TrackDefault::audioKeyword()
 {
     DEFINE_STATIC_LOCAL(const AtomicString, audio, ("audio"));
     return audio;
 }
 
-static const AtomicString& videoKeyword()
+const AtomicString& TrackDefault::videoKeyword()
 {
     DEFINE_STATIC_LOCAL(const AtomicString, video, ("video"));
     return video;
 }
 
-static const AtomicString& textKeyword()
+const AtomicString& TrackDefault::textKeyword()
 {
     DEFINE_STATIC_LOCAL(const AtomicString, text, ("text"));
     return text;
@@ -74,7 +74,7 @@ TrackDefault* TrackDefault::create(const AtomicString& type, const String& langu
             }
         }
     } else {
-        ASSERT_NOT_REACHED(); // IDL enforcement should prevent this case.
+        NOTREACHED(); // IDL enforcement should prevent this case.
         return nullptr;
     }
 

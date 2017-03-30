@@ -12,8 +12,9 @@ import android.graphics.Point;
 import android.graphics.PointF;
 import android.opengl.GLES20;
 
-import org.chromium.chromoting.TouchInputHandler;
+import org.chromium.chromoting.InputStub;
 import org.chromium.chromoting.jni.Client;
+import org.chromium.chromoting.jni.Display;
 
 import java.nio.FloatBuffer;
 
@@ -53,6 +54,7 @@ public class Cursor {
     private static final float CURSOR_MOVE_THRESHOLD = 1.0f;
 
     private final Client mClient;
+    private final Display mDisplay;
 
     private FloatBuffer mPositionCoordinates;
 
@@ -80,6 +82,7 @@ public class Cursor {
 
     public Cursor(Client client) {
         mClient = client;
+        mDisplay = (Display) client.getDisplay();
         mHalfFrameSize = new PointF(0.0f, 0.0f);
         mCursorPosition = new PointF(0.0f, 0.0f);
 
@@ -124,7 +127,7 @@ public class Cursor {
     public void moveTo(PointF position) {
         if (moveCursor(position)) {
             mClient.sendMouseEvent((int) position.x, (int) position.y,
-                    TouchInputHandler.BUTTON_UNDEFINED, false);
+                    InputStub.BUTTON_UNDEFINED, false);
         }
         mCursorPosition = position;
     }
@@ -140,7 +143,7 @@ public class Cursor {
             }
         }
 
-        Bitmap cursorBitmap = mClient.getCursorBitmap();
+        Bitmap cursorBitmap = mDisplay.getCursorBitmap();
 
         if (cursorBitmap == mCursorBitmap) {
             // Case when cursor image has not changed.
@@ -151,7 +154,7 @@ public class Cursor {
         }
 
         mCursorBitmap = cursorBitmap;
-        updatePosition(desktop, mCursorBitmap, mClient.getCursorHotspot());
+        updatePosition(desktop, mCursorBitmap, mDisplay.getCursorHotspot());
 
         TextureHelper.linkTexture(mTextureDataHandle, cursorBitmap);
 

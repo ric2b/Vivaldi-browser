@@ -42,7 +42,7 @@ class SynchronousCompositorOutputSurfaceClient {
   virtual void DidActivatePendingTree() = 0;
   virtual void Invalidate() = 0;
   virtual void SwapBuffers(uint32_t output_surface_id,
-                           cc::CompositorFrame* frame) = 0;
+                           cc::CompositorFrame frame) = 0;
 
  protected:
   virtual ~SynchronousCompositorOutputSurfaceClient() {}
@@ -60,8 +60,8 @@ class SynchronousCompositorOutputSurface
     : NON_EXPORTED_BASE(public cc::OutputSurface) {
  public:
   SynchronousCompositorOutputSurface(
-      const scoped_refptr<cc::ContextProvider>& context_provider,
-      const scoped_refptr<cc::ContextProvider>& worker_context_provider,
+      scoped_refptr<cc::ContextProvider> context_provider,
+      scoped_refptr<cc::ContextProvider> worker_context_provider,
       int routing_id,
       uint32_t output_surface_id,
       SynchronousCompositorRegistry* registry,
@@ -76,9 +76,12 @@ class SynchronousCompositorOutputSurface
   void DetachFromClient() override;
   void Reshape(const gfx::Size& size,
                float scale_factor,
+               const gfx::ColorSpace& color_space,
                bool has_alpha) override;
-  void SwapBuffers(cc::CompositorFrame* frame) override;
+  void SwapBuffers(cc::CompositorFrame frame) override;
   void Invalidate() override;
+  void BindFramebuffer() override;
+  uint32_t GetFramebufferCopyTextureFormat() override;
 
   // Partial SynchronousCompositor API implementation.
   void DemandDrawHw(const gfx::Size& surface_size,

@@ -38,7 +38,7 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
 
-// This needs to be here because Document.h also depends on it.
+// This needs to be here because Element.cpp also depends on it.
 #define DUMP_NODE_STATISTICS 0
 
 namespace blink {
@@ -203,6 +203,7 @@ public:
     Node* lastChild() const;
     Node& treeRoot() const;
     Node& shadowIncludingRoot() const;
+    bool isUnclosedNodeOf(const Node&) const;
 
     void prepend(const HeapVector<NodeOrString>&, ExceptionState&);
     void append(const HeapVector<NodeOrString>&, ExceptionState&);
@@ -228,7 +229,7 @@ public:
     void normalize();
 
     bool isEqualNode(Node*) const;
-    bool isSameNode(Node* other) const { return this == other; }
+    bool isSameNode(const Node* other) const { return this == other; }
     bool isDefaultNamespace(const AtomicString& namespaceURI) const;
     const AtomicString& lookupPrefix(const AtomicString& namespaceURI) const;
     const AtomicString& lookupNamespaceURI(const String& prefix) const;
@@ -295,10 +296,9 @@ public:
 
     bool canParticipateInFlatTree() const;
     bool isSlotOrActiveInsertionPoint() const;
-    bool slottable() const { return isElementNode() || isTextNode(); }
+    // A re-distribution across v0 and v1 shadow trees is not supported.
+    bool isSlotable() const { return isTextNode() || (isElementNode() && !isInsertionPoint()); }
     AtomicString slotName() const;
-
-    static AtomicString normalizeSlotName(const AtomicString&);
 
     bool hasCustomStyleCallbacks() const { return getFlag(HasCustomStyleCallbacksFlag); }
 
@@ -376,9 +376,7 @@ public:
     void setNeedsStyleRecalc(StyleChangeType, const StyleChangeReasonForTracing&);
     void clearNeedsStyleRecalc();
 
-#if DCHECK_IS_ON()
     bool needsDistributionRecalc() const;
-#endif
 
     bool childNeedsDistributionRecalc() const { return getFlag(ChildNeedsDistributionRecalcFlag); }
     void setChildNeedsDistributionRecalc()  { setFlag(ChildNeedsDistributionRecalcFlag); }
@@ -474,6 +472,12 @@ public:
         return *m_treeScope;
     }
 
+    TreeScope& containingTreeScope() const
+    {
+        DCHECK(isInTreeScope());
+        return *m_treeScope;
+    }
+
     bool inActiveDocument() const;
 
     // Returns true if this node is associated with a shadow-including document and is in its associated document's
@@ -490,7 +494,7 @@ public:
     bool isInV0ShadowTree() const;
     bool isChildOfV1ShadowHost() const;
     bool isChildOfV0ShadowHost() const;
-    bool isSlotAssignable() const { return isTextNode() || isElementNode(); }
+    ShadowRoot* v1ShadowRootOfParent() const;
 
     bool isDocumentTypeNode() const { return getNodeType() == DOCUMENT_TYPE_NODE; }
     virtual bool childTypeAllowed(NodeType) const { return false; }
@@ -676,7 +680,8 @@ public:
 
     bool isFinishedParsingChildren() const { return getFlag(IsFinishedParsingChildrenFlag); }
 
-    void updateAssignmentForInsertedInto(ContainerNode*);
+    void checkSlotChangeAfterInserted() { checkSlotChange(); }
+    void checkSlotChangeBeforeRemoved() { checkSlotChange(); }
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -796,6 +801,8 @@ private:
     // it is not safe to cache AtomicStrings because those are
     // per-thread.
     virtual String debugNodeName() const;
+
+    void checkSlotChange();
 
     enum EditableLevel { Editable, RichlyEditable };
     bool hasEditableStyle(EditableLevel, UserSelectAllTreatment = UserSelectAllIsAlwaysNonEditable) const;

@@ -254,8 +254,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
                              const GURL& base_url,
                              bool shared_worker_frontend,
                              const std::string& remote_frontend,
-                             bool can_dock,
-                             const std::string& settings);
+                             bool can_dock);
 
   static DevToolsWindow* CreateDevToolsWindowForWorker(Profile* profile);
   static void ToggleDevToolsWindow(
@@ -294,7 +293,7 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
       content::WebContents* web_contents,
       SkColor color,
       const std::vector<content::ColorSuggestion>& suggestions) override;
-  void RunFileChooser(content::WebContents* web_contents,
+  void RunFileChooser(content::RenderFrameHost* render_frame_host,
                       const content::FileChooserParams& params) override;
   bool PreHandleGestureEvent(content::WebContents* source,
                              const blink::WebGestureEvent& event) override;

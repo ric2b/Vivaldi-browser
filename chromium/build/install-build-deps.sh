@@ -109,7 +109,7 @@ dev_list="bison cdbs curl dpkg-dev elfutils devscripts fakeroot
           libwww-perl libxslt1-dev libxss-dev libxt-dev libxtst-dev openbox
           patch perl pkg-config python python-cherrypy3 python-crypto
           python-dev python-numpy python-opencv python-openssl python-psutil
-          python-yaml rpm ruby subversion ttf-dejavu-core wdiff zip
+          python-yaml rpm ruby subversion ttf-dejavu-core wdiff xcompmgr zip
           chrpath
           $chromeos_dev_list"
 
@@ -425,7 +425,7 @@ echo
 new_list_cmd="sudo apt-get install --reinstall $(echo $packages)"
 if new_list="$(yes n | LANGUAGE=en LANG=C $new_list_cmd)"; then
   # We probably never hit this following line.
-  echo "No missing packages, and the packages are up-to-date."
+  echo "No missing packages, and the packages are up to date."
 elif [ $? -eq 1 ]; then
   # We expect apt-get to have exit status of 1.
   # This indicates that we cancelled the install with "yes n|".
@@ -433,7 +433,7 @@ elif [ $? -eq 1 ]; then
     sed -e '1,/The following NEW packages will be installed:/d;s/^  //;t;d')
   new_list=$(echo "$new_list" | sed 's/ *$//')
   if [ -z "$new_list" ] ; then
-    echo "No missing packages, and the packages are up-to-date."
+    echo "No missing packages, and the packages are up to date."
   else
     echo "Installing missing packages: $new_list."
     sudo apt-get install ${do_quietly-} ${new_list}

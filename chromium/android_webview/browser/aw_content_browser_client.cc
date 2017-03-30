@@ -37,6 +37,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/geolocation_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -158,6 +159,19 @@ class AwAccessTokenStore : public content::AccessTokenStore {
   ~AwAccessTokenStore() override {}
 
   DISALLOW_COPY_AND_ASSIGN(AwAccessTokenStore);
+};
+
+// A provider of Geolocation services to override AccessTokenStore.
+class AwGeolocationDelegate : public content::GeolocationDelegate {
+ public:
+  AwGeolocationDelegate() = default;
+
+  content::AccessTokenStore* CreateAccessTokenStore() final {
+    return new AwAccessTokenStore();
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(AwGeolocationDelegate);
 };
 
 AwLocaleManager* g_locale_manager = NULL;
@@ -428,8 +442,9 @@ net::NetLog* AwContentBrowserClient::GetNetLog() {
   return browser_context_->GetAwURLRequestContext()->GetNetLog();
 }
 
-content::AccessTokenStore* AwContentBrowserClient::CreateAccessTokenStore() {
-  return new AwAccessTokenStore();
+content::GeolocationDelegate*
+AwContentBrowserClient::CreateGeolocationDelegate() {
+  return new AwGeolocationDelegate();
 }
 
 bool AwContentBrowserClient::IsFastShutdownPossible() {

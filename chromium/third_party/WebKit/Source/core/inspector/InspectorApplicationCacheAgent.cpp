@@ -40,8 +40,7 @@ static const char applicationCacheAgentEnabled[] = "applicationCacheAgentEnabled
 }
 
 InspectorApplicationCacheAgent::InspectorApplicationCacheAgent(InspectedFrames* inspectedFrames)
-    : InspectorBaseAgent<InspectorApplicationCacheAgent, protocol::Frontend::ApplicationCache>("ApplicationCache")
-    , m_inspectedFrames(inspectedFrames)
+    : m_inspectedFrames(inspectedFrames)
 {
 }
 
@@ -87,7 +86,7 @@ void InspectorApplicationCacheAgent::networkStateChanged(LocalFrame* frame, bool
         frontend()->networkStateUpdated(online);
 }
 
-void InspectorApplicationCacheAgent::getFramesWithManifests(ErrorString*, OwnPtr<protocol::Array<protocol::ApplicationCache::FrameWithManifest>>* result)
+void InspectorApplicationCacheAgent::getFramesWithManifests(ErrorString*, std::unique_ptr<protocol::Array<protocol::ApplicationCache::FrameWithManifest>>* result)
 {
     *result = protocol::Array<protocol::ApplicationCache::FrameWithManifest>::create();
 
@@ -100,7 +99,7 @@ void InspectorApplicationCacheAgent::getFramesWithManifests(ErrorString*, OwnPtr
         ApplicationCacheHost::CacheInfo info = host->applicationCacheInfo();
         String manifestURL = info.m_manifest.getString();
         if (!manifestURL.isEmpty()) {
-            OwnPtr<protocol::ApplicationCache::FrameWithManifest> value = protocol::ApplicationCache::FrameWithManifest::create()
+            std::unique_ptr<protocol::ApplicationCache::FrameWithManifest> value = protocol::ApplicationCache::FrameWithManifest::create()
                 .setFrameId(IdentifiersFactory::frameId(frame))
                 .setManifestURL(manifestURL)
                 .setStatus(static_cast<int>(host->getStatus())).build();
@@ -133,7 +132,7 @@ void InspectorApplicationCacheAgent::getManifestForFrame(ErrorString* errorStrin
     *manifestURL = info.m_manifest.getString();
 }
 
-void InspectorApplicationCacheAgent::getApplicationCacheForFrame(ErrorString* errorString, const String& frameId, OwnPtr<protocol::ApplicationCache::ApplicationCache>* applicationCache)
+void InspectorApplicationCacheAgent::getApplicationCacheForFrame(ErrorString* errorString, const String& frameId, std::unique_ptr<protocol::ApplicationCache::ApplicationCache>* applicationCache)
 {
     DocumentLoader* documentLoader = assertFrameWithDocumentLoader(errorString, frameId);
     if (!documentLoader)
@@ -148,7 +147,7 @@ void InspectorApplicationCacheAgent::getApplicationCacheForFrame(ErrorString* er
     *applicationCache = buildObjectForApplicationCache(resources, info);
 }
 
-PassOwnPtr<protocol::ApplicationCache::ApplicationCache> InspectorApplicationCacheAgent::buildObjectForApplicationCache(const ApplicationCacheHost::ResourceInfoList& applicationCacheResources, const ApplicationCacheHost::CacheInfo& applicationCacheInfo)
+std::unique_ptr<protocol::ApplicationCache::ApplicationCache> InspectorApplicationCacheAgent::buildObjectForApplicationCache(const ApplicationCacheHost::ResourceInfoList& applicationCacheResources, const ApplicationCacheHost::CacheInfo& applicationCacheInfo)
 {
     return protocol::ApplicationCache::ApplicationCache::create()
         .setManifestURL(applicationCacheInfo.m_manifest.getString())
@@ -159,9 +158,9 @@ PassOwnPtr<protocol::ApplicationCache::ApplicationCache> InspectorApplicationCac
         .build();
 }
 
-PassOwnPtr<protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>> InspectorApplicationCacheAgent::buildArrayForApplicationCacheResources(const ApplicationCacheHost::ResourceInfoList& applicationCacheResources)
+std::unique_ptr<protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>> InspectorApplicationCacheAgent::buildArrayForApplicationCacheResources(const ApplicationCacheHost::ResourceInfoList& applicationCacheResources)
 {
-    OwnPtr<protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>> resources = protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>::create();
+    std::unique_ptr<protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>> resources = protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>::create();
 
     ApplicationCacheHost::ResourceInfoList::const_iterator end = applicationCacheResources.end();
     ApplicationCacheHost::ResourceInfoList::const_iterator it = applicationCacheResources.begin();
@@ -171,25 +170,25 @@ PassOwnPtr<protocol::Array<protocol::ApplicationCache::ApplicationCacheResource>
     return resources;
 }
 
-PassOwnPtr<protocol::ApplicationCache::ApplicationCacheResource> InspectorApplicationCacheAgent::buildObjectForApplicationCacheResource(const ApplicationCacheHost::ResourceInfo& resourceInfo)
+std::unique_ptr<protocol::ApplicationCache::ApplicationCacheResource> InspectorApplicationCacheAgent::buildObjectForApplicationCacheResource(const ApplicationCacheHost::ResourceInfo& resourceInfo)
 {
     StringBuilder builder;
     if (resourceInfo.m_isMaster)
-        builder.appendLiteral("Master ");
+        builder.append("Master ");
 
     if (resourceInfo.m_isManifest)
-        builder.appendLiteral("Manifest ");
+        builder.append("Manifest ");
 
     if (resourceInfo.m_isFallback)
-        builder.appendLiteral("Fallback ");
+        builder.append("Fallback ");
 
     if (resourceInfo.m_isForeign)
-        builder.appendLiteral("Foreign ");
+        builder.append("Foreign ");
 
     if (resourceInfo.m_isExplicit)
-        builder.appendLiteral("Explicit ");
+        builder.append("Explicit ");
 
-    OwnPtr<protocol::ApplicationCache::ApplicationCacheResource> value = protocol::ApplicationCache::ApplicationCacheResource::create()
+    std::unique_ptr<protocol::ApplicationCache::ApplicationCacheResource> value = protocol::ApplicationCache::ApplicationCacheResource::create()
         .setUrl(resourceInfo.m_resource.getString())
         .setSize(static_cast<int>(resourceInfo.m_size))
         .setType(builder.toString()).build();

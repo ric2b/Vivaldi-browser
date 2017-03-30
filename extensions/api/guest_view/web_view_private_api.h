@@ -16,7 +16,7 @@ namespace extensions {
 namespace vivaldi {
 
 class WebViewPrivateSetVisibleFunction
-    : public WebViewInternalExtensionFunction {
+    : public LegacyWebViewInternalExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.setVisible",
                              WEBVIEWINTERNAL_SETVISIBLE);
@@ -32,7 +32,7 @@ class WebViewPrivateSetVisibleFunction
 };
 
 class WebViewInternalThumbnailFunction
-    : public WebViewInternalExtensionFunction {
+    : public LegacyWebViewInternalExtensionFunction {
  public:
   WebViewInternalThumbnailFunction();
 
@@ -131,7 +131,7 @@ class WebViewPrivateAddToThumbnailServiceFunction
 };
 
 class WebViewPrivateShowPageInfoFunction
-    : public WebViewInternalExtensionFunction {
+    : public LegacyWebViewInternalExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.showPageInfo",
                              WEBVIEWINTERNAL_SHOWPAGEINFO);
@@ -148,7 +148,7 @@ class WebViewPrivateShowPageInfoFunction
 };
 
 class WebViewPrivateSetIsFullscreenFunction
-    : public WebViewInternalExtensionFunction {
+    : public LegacyWebViewInternalExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.setIsFullscreen",
                              WEBVIEWINTERNAL_SETISFULLSCREEN);
@@ -165,7 +165,7 @@ class WebViewPrivateSetIsFullscreenFunction
 };
 
 class WebViewPrivateGetPageHistoryFunction
-    : public WebViewInternalExtensionFunction {
+    : public LegacyWebViewInternalExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.getPageHistory",
                              WEBVIEWINTERNAL_GETPAGEHISTORY);
@@ -182,7 +182,7 @@ class WebViewPrivateGetPageHistoryFunction
 };
 
 class WebViewPrivateSetExtensionHostFunction
-    : public WebViewInternalExtensionFunction {
+    : public LegacyWebViewInternalExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("webViewPrivate.setExtensionHost",
                              WEBVIEWINTERNAL_SETEXTENSIONHOST);
@@ -199,7 +199,7 @@ class WebViewPrivateSetExtensionHostFunction
 };
 
 class WebViewPrivateIsFocusedElementEditableFunction
-    : public WebViewInternalExtensionFunction {
+    : public LegacyWebViewInternalExtensionFunction {
  public:
     DECLARE_EXTENSION_FUNCTION("webViewPrivate.isFocusedElementEditable",
                                WEBVIEWINTERNAL_ISFOCUSEDELEMENTEDITABLE)

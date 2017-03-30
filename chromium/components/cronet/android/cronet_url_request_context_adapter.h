@@ -76,11 +76,14 @@ class CronetURLRequestContextAdapter
 
   net::URLRequestContext* GetURLRequestContext();
 
+  // Starts NetLog logging to file. This can be called on any thread.
   void StartNetLogToFile(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& jcaller,
                          const base::android::JavaParamRef<jstring>& jfile_name,
                          jboolean jlog_all);
 
+  // Stops NetLog logging to file. This can be called on any thread. This will
+  // flush any remaining writes to disk.
   void StopNetLog(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& jcaller);
 
@@ -90,10 +93,16 @@ class CronetURLRequestContextAdapter
   // Called on main Java thread to initialize URLRequestContext.
   void InitRequestContextOnMainThread();
 
-  // Enables the network quality estimator and optionally configures it to
-  // observe localhost requests, and to consider smaller responses when
-  // observing throughput. It is recommended that both options be set to false.
+  // Enables the network quality estimator.
+  // TODO(tbansal):  http://crbug.com/618034 Remove this API.
   void EnableNetworkQualityEstimator(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jcaller);
+
+  // Configures the network quality estimator to observe localhost requests, and
+  // to consider smaller responses when observing throughput for testing. This
+  // should be called after the network quality estimator has been enabled.
+  void ConfigureNetworkQualityEstimatorForTesting(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& jcaller,
       jboolean use_local_host_requests,
@@ -124,19 +133,17 @@ class CronetURLRequestContextAdapter
 
   scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner() const;
 
-  void StartNetLogToFileOnNetworkThread(const std::string& file_name,
-                                        bool log_all);
-
-  void StopNetLogOnNetworkThread();
-
   // Gets the file thread. Create one if there is none.
   base::Thread* GetFileThread();
 
-  // Instantiate and configure the network quality estimator. For default
-  // behavior, parameters should be set to false; otherwise the estimator
-  // can be configured to observe requests to localhost, as well as to use
-  // observe smaller responses when estimating throughput.
-  void EnableNetworkQualityEstimatorOnNetworkThread(
+  // Instantiate and configure the network quality estimator.
+  // TODO(tbansal):  http://crbug.com/618034 Remove this API.
+  void EnableNetworkQualityEstimatorOnNetworkThread();
+
+  // Configures the network quality estimator to observe requests to localhost,
+  // as well as to use smaller responses when estimating throughput. This
+  // should only be used for testing.
+  void ConfigureNetworkQualityEstimatorOnNetworkThreadForTesting(
       bool use_local_host_requests,
       bool use_smaller_responses);
 
@@ -154,15 +161,20 @@ class CronetURLRequestContextAdapter
       const base::TimeTicks& timestamp,
       net::NetworkQualityObservationSource source) override;
 
+  // Helper method to stop NetLog logging to file. This can be called on any
+  // thread. This will flush any remaining writes to disk.
+  void StopNetLogHelper();
+
   // Network thread is owned by |this|, but is destroyed from java thread.
   base::Thread* network_thread_;
 
   // File thread should be destroyed last.
   std::unique_ptr<base::Thread> file_thread_;
 
-  // |write_to_file_observer_| and |context_| should only be accessed on
-  // network thread.
+  // |write_to_file_observer_| should only be accessed with
+  // |write_to_file_observer_lock_|.
   std::unique_ptr<net::WriteToFileNetLogObserver> write_to_file_observer_;
+  base::Lock write_to_file_observer_lock_;
 
   // |pref_service_| should outlive the HttpServerPropertiesManager owned by
   // |context_|.

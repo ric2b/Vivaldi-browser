@@ -228,8 +228,12 @@
         'host/it2me/it2me_native_messaging_host_main.h',
         'host/security_key/remote_security_key_main.cc',
         'host/security_key/remote_security_key_main.h',
+        'host/setup/host_starter.cc',
+        'host/setup/host_starter.h',
         'host/setup/me2me_native_messaging_host_main.cc',
         'host/setup/me2me_native_messaging_host_main.h',
+        'host/setup/start_host_main.cc',
+        'host/setup/start_host_main.h',
         'host/win/chromoting_module.cc',
         'host/win/chromoting_module.h',
         'host/win/core.cc',
@@ -258,6 +262,7 @@
             'comctl32.lib',
             'rpcns4.lib',
             'rpcrt4.lib',
+            'sas.lib',
             'uuid.lib',
             'wtsapi32.lib',
           ],
@@ -353,6 +358,29 @@
         },
       },
     },  # end of target 'remoting_me2me_host'
+    {
+      # GN target: //remoting/host:remoting_start_host
+      'target_name': 'remoting_start_host',
+      'type': 'executable',
+      'variables': { 'enable_wexit_time_destructors': 1, },
+      'defines': [
+        'BINARY=BINARY_REMOTING_START_HOST',
+      ],
+      'dependencies': [
+        'remoting_core',
+        'remoting_windows_resources',
+      ],
+      'sources': [
+        '<(SHARED_INTERMEDIATE_DIR)/remoting/version.rc',
+        'host/setup/start_host_entry_point.cc',
+      ],
+      'msvs_settings': {
+        'VCLinkerTool': {
+          'IgnoreAllDefaultLibraries': 'true',
+          'SubSystem': '1', # /SUBSYSTEM:CONSOLE
+        },
+      },
+    },  # end of target 'remoting_start_host'
     {
       # GN version: //remoting/host:remote_security_key
       'target_name': 'remote_security_key',
@@ -535,7 +563,9 @@
     # component build is used the produced installation will not work due to
     # missing DLLs. We build it anyway to make sure the GYP scripts are executed
     # by the bots.
-    ['wix_exists == "True" and sas_dll_exists == "True"', {
+    # We do not release a 64 bits binary. So to avoid any potential
+    # misunderstanding, we only build 32 bits MSI file.
+    ['wix_exists == "True" and target_arch == "ia32"', {
       'targets': [
         {
           'target_name': 'remoting_host_installation',
@@ -623,7 +653,6 @@
           ],
           'generated_files': [
             '<@(_compiled_inputs)',
-            '<(sas_dll_path)/sas.dll',
             '<(SHARED_INTERMEDIATE_DIR)/remoting/CREDITS.txt',
             '<(PRODUCT_DIR)/remoting/com.google.chrome.remote_assistance.json',
             '<(PRODUCT_DIR)/remoting/com.google.chrome.remote_desktop.json',
@@ -632,7 +661,6 @@
           ],
           'generated_files_dst': [
             '<@(_compiled_inputs_dst)',
-            'files/sas.dll',
             'files/CREDITS.txt',
             'files/com.google.chrome.remote_assistance.json',
             'files/com.google.chrome.remote_desktop.json',
@@ -652,7 +680,6 @@
               ],
               'inputs': [
                 '<@(_compiled_inputs)',
-                '<(sas_dll_path)/sas.dll',
                 '<@(_source_files)',
                 'host/installer/build-installer-archive.py',
                 'resources/chromoting.ico',
@@ -687,7 +714,7 @@
           'type': 'none',
         },
       ],  # end of 'targets'
-    }],  # 'wix_exists == "True" and sas_dll_exists == "True"'
+    }],  # 'wix_exists == "True"
 
   ],  # end of 'conditions'
 }

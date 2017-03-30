@@ -38,6 +38,7 @@
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/text/StringHash.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -57,7 +58,7 @@ public:
     // m_databaseGuard and m_openDatabaseMapGuard currently don't overlap.
     // notificationMutex() is currently independent of the other locks.
 
-    bool canEstablishDatabase(DatabaseContext*, const String& name, const String& displayName, unsigned long estimatedSize, DatabaseError&);
+    bool canEstablishDatabase(DatabaseContext*, const String& name, const String& displayName, unsigned estimatedSize, DatabaseError&);
     String fullPathForDatabase(SecurityOrigin*, const String& name, bool createIfDoesNotExist = true);
 
     void addOpenDatabase(Database*);
@@ -74,10 +75,9 @@ public:
     void failedToOpenDatabase(Database*);
 
 private:
-    using DatabaseSet = HashSet<UntracedMember<Database>>;
+    using DatabaseSet = HashSet<CrossThreadPersistent<Database>>;
     using DatabaseNameMap = HashMap<String, DatabaseSet*>;
     using DatabaseOriginMap = HashMap<String, DatabaseNameMap*>;
-    class CloseOneDatabaseImmediatelyTask;
 
     DatabaseTracker();
 
@@ -85,10 +85,7 @@ private:
 
     Mutex m_openDatabaseMapGuard;
 
-    // This map contains untraced pointers to a garbage-collected class. We can't
-    // make this traceable because it is updated by multiple database threads.
-    // See http://crbug.com/417990
-    mutable OwnPtr<DatabaseOriginMap> m_openDatabaseMap;
+    mutable std::unique_ptr<DatabaseOriginMap> m_openDatabaseMap;
 };
 
 } // namespace blink

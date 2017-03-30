@@ -19,6 +19,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "media/base/audio_sample_types.h"
 #include "media/cast/common/rtp_time.h"
 #include "media/cast/constants.h"
 
@@ -123,7 +124,7 @@ class AudioEncoder::ImplBase
     // Encode all audio in |audio_bus| into zero or more frames.
     int src_pos = 0;
     while (src_pos < audio_bus->frames()) {
-      // Note: This is used to compute the deadline utilization and so it uses
+      // Note: This is used to compute the encoder utilization and so it uses
       // the real-world clock instead of the CastEnvironment clock, the latter
       // of which might be simulated.
       const base::TimeTicks start_time = base::TimeTicks::Now();
@@ -151,15 +152,15 @@ class AudioEncoder::ImplBase
                                "rtp_timestamp",
                                frame_rtp_timestamp_.lower_32_bits());
       if (EncodeFromFilledBuffer(&audio_frame->data)) {
-        // Compute deadline utilization as the real-world time elapsed divided
+        // Compute encoder utilization as the real-world time elapsed divided
         // by the signal duration.
-        audio_frame->deadline_utilization =
+        audio_frame->encoder_utilization =
             (base::TimeTicks::Now() - start_time).InSecondsF() /
-                frame_duration_.InSecondsF();
+            frame_duration_.InSecondsF();
 
         TRACE_EVENT_ASYNC_END1("cast.stream", "Audio Encode", audio_frame.get(),
-                               "Deadline utilization",
-                               audio_frame->deadline_utilization);
+                               "encoder_utilization",
+                               audio_frame->encoder_utilization);
 
         audio_frame->encode_completion_time =
             cast_environment_->Clock()->NowTicks();
@@ -281,14 +282,10 @@ class AudioEncoder::OpusImpl : public AudioEncoder::ImplBase {
                                  int source_offset,
                                  int buffer_fill_offset,
                                  int num_samples) final {
-    // Opus requires channel-interleaved samples in a single array.
-    for (int ch = 0; ch < audio_bus->channels(); ++ch) {
-      const float* src = audio_bus->channel(ch) + source_offset;
-      const float* const src_end = src + num_samples;
-      float* dest = buffer_.get() + buffer_fill_offset * num_channels_ + ch;
-      for (; src < src_end; ++src, dest += num_channels_)
-        *dest = *src;
-    }
+    DCHECK_EQ(audio_bus->channels(), num_channels_);
+    float* dest = buffer_.get() + (buffer_fill_offset * num_channels_);
+    audio_bus->ToInterleavedPartial<Float32SampleTypeTraits>(source_offset,
+                                                             num_samples, dest);
   }
 
   bool EncodeFromFilledBuffer(std::string* out) final {

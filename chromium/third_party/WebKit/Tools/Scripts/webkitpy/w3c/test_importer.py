@@ -26,46 +26,43 @@
 # SUCH DAMAGE.
 
 """
- This script imports a directory of W3C tests into WebKit.
+This script imports a directory of W3C tests into Blink.
 
- This script will import the tests into WebKit following these rules:
+This script takes a source repository directory, which it searches for files,
+then converts and copies files over to a destination directory.
 
-    - By default, all tests are imported under LayoutTests/w3c/[repo-name].
+Rules for importing:
 
-    - By default, only reftests and jstest are imported. This can be overridden
-      with a -a or --all argument
+ * By default, only reference tests and JS tests are imported, (because pixel
+   tests take longer to run). This can be overridden with the --all flag.
 
-    - Also by default, if test files by the same name already exist in the
-      destination directory, they are overwritten with the idea that running
-      this script would refresh files periodically.  This can also be
-      overridden by a -n or --no-overwrite flag
+ * By default, if test files by the same name already exist in the destination
+   directory, they are overwritten. This is because this script is used to
+   refresh files periodically. This can be overridden with the --no-overwrite flag.
 
-    - All files are converted to work in WebKit:
-         1. Paths to testharness.js scripts and vendor-prefix.js files are
-            modified to point to Webkit's copy of them in LayoutTests/resources,
-            using the correct relative path from the new location.
-         2. All CSS properties requiring the -webkit-vendor prefix are prefixed
-            (the list of what needs prefixes is read from Source/WebCore/CSS/CSSProperties.in).
-         3. Each reftest has its own copy of its reference file following
-            the naming conventions new-run-webkit-tests expects.
-         4. If a reference files lives outside the directory of the test that
-            uses it, it is checked for paths to support files as it will be
-            imported into a different relative position to the test file
-            (in the same directory).
-         5. Any tags with the class "instructions" have style="display:none" added
-            to them. Some w3c tests contain instructions to manual testers which we
-            want to strip out (the test result parser only recognizes pure testharness.js
-            output and not those instructions).
+ * All files are converted to work in Blink:
+     1. All CSS properties requiring the -webkit- vendor prefix are prefixed
+        (the list of what needs prefixes is read from Source/core/css/CSSProperties.in).
+     2. Each reftest has its own copy of its reference file following
+        the naming conventions new-run-webkit-tests expects.
+     3. If a reference files lives outside the directory of the test that
+        uses it, it is checked for paths to support files as it will be
+        imported into a different relative position to the test file
+        (in the same directory).
+     4. Any tags with the class "instructions" have style="display:none" added
+        to them. Some w3c tests contain instructions to manual testers which we
+        want to strip out (the test result parser only recognizes pure testharness.js
+        output and not those instructions).
 
-     - Upon completion, script outputs the total number tests imported, broken
-       down by test type
+ * Upon completion, script outputs the total number tests imported,
+   broken down by test type.
 
-     - Also upon completion, if we are not importing the files in place, each
-       directory where files are imported will have a w3c-import.log file written with
-       a timestamp, the list of CSS properties used that require prefixes, the list
-       of imported files, and guidance for future test modification and maintenance.
-       On subsequent imports, this file is read to determine if files have been
-       removed in the newer changesets. The script removes these files accordingly.
+ * Also upon completion, if we are not importing the files in place, each
+   directory where files are imported will have a w3c-import.log file written with
+   a timestamp, the list of CSS properties used that require prefixes, the list
+   of imported files, and guidance for future test modification and maintenance.
+   On subsequent imports, this file is read to determine if files have been
+   removed in the newer changesets. The script removes these files accordingly.
 """
 
 import logging
@@ -76,7 +73,6 @@ import sys
 
 from webkitpy.common.host import Host
 from webkitpy.common.webkit_finder import WebKitFinder
-from webkitpy.common.system.executive import ScriptError
 from webkitpy.layout_tests.models.test_expectations import TestExpectationParser
 from webkitpy.w3c.test_parser import TestParser
 from webkitpy.w3c.test_converter import convert_for_webkit
@@ -94,21 +90,13 @@ _log = logging.getLogger(__name__)
 def main(_argv, _stdout, _stderr):
     options, args = parse_args()
     host = Host()
-    dir_to_import = host.filesystem.normpath(os.path.abspath(args[0]))
-    if len(args) == 1:
-        top_of_repo = dir_to_import
-    else:
-        top_of_repo = host.filesystem.normpath(os.path.abspath(args[1]))
+    source_repo_path = host.filesystem.normpath(os.path.abspath(args[0]))
 
-    if not host.filesystem.exists(dir_to_import):
-        sys.exit('Directory %s not found!' % dir_to_import)
-    if not host.filesystem.exists(top_of_repo):
-        sys.exit('Repository directory %s not found!' % top_of_repo)
-    if top_of_repo not in dir_to_import:
-        sys.exit('Repository directory %s must be a parent of %s' % (top_of_repo, dir_to_import))
+    if not host.filesystem.exists(source_repo_path):
+        sys.exit('Repository directory %s not found!' % source_repo_path)
 
     configure_logging()
-    test_importer = TestImporter(host, dir_to_import, top_of_repo, options)
+    test_importer = TestImporter(host, source_repo_path, options)
     test_importer.do_import()
 
 
@@ -129,7 +117,7 @@ def configure_logging():
 
 
 def parse_args():
-    parser = optparse.OptionParser(usage='usage: %prog [options] [dir_to_import] [top_of_repo]')
+    parser = optparse.OptionParser(usage='usage: %prog [options] source_repo_path')
     parser.add_option('-n', '--no-overwrite', dest='overwrite', action='store_false', default=True,
                       help='Flag to prevent duplicate test files from overwriting existing tests. By default, they will be overwritten.')
     parser.add_option('-a', '--all', action='store_true', default=False,
@@ -142,22 +130,16 @@ def parse_args():
                       help='Dryrun only (don\'t actually write any results).')
 
     options, args = parser.parse_args()
-    if len(args) > 2:
-        parser.error('Incorrect number of arguments')
-    elif len(args) == 0:
-        # If no top-of-repo path was given, then assume that the user means to
-        # use the current working directory as the top-of-repo path.
-        # TODO(qyearsley): Remove this behavior, since it's a little confusing.
-        args = (os.getcwd(),)
+    if len(args) != 1:
+        parser.error('Incorrect number of arguments; source repo path is required.')
     return options, args
 
 
 class TestImporter(object):
 
-    def __init__(self, host, dir_to_import, top_of_repo, options):
+    def __init__(self, host, source_repo_path, options):
         self.host = host
-        self.dir_to_import = dir_to_import
-        self.top_of_repo = top_of_repo
+        self.source_repo_path = source_repo_path
         self.options = options
 
         self.filesystem = self.host.filesystem
@@ -165,21 +147,26 @@ class TestImporter(object):
         self._webkit_root = self.webkit_finder.webkit_base()
         self.layout_tests_dir = self.webkit_finder.path_from_webkit_base('LayoutTests')
         self.destination_directory = self.filesystem.normpath(self.filesystem.join(self.layout_tests_dir, options.destination,
-                                                                                   self.filesystem.basename(self.top_of_repo)))
-        self.import_in_place = (self.dir_to_import == self.destination_directory)
-        self.dir_above_repo = self.filesystem.dirname(self.top_of_repo)
+                                                                                   self.filesystem.basename(self.source_repo_path)))
+        self.import_in_place = (self.source_repo_path == self.destination_directory)
+        self.dir_above_repo = self.filesystem.dirname(self.source_repo_path)
 
         self.import_list = []
 
     def do_import(self):
-        _log.info("Importing %s into %s", self.dir_to_import, self.destination_directory)
-        self.find_importable_tests(self.dir_to_import)
+        _log.info("Importing %s into %s", self.source_repo_path, self.destination_directory)
+        self.find_importable_tests()
         self.import_tests()
 
-    def find_importable_tests(self, directory):
+    def find_importable_tests(self):
+        """Walks through the source directory to find what tests should be imported.
+
+        This function sets self.import_list, which contains information about how many
+        tests are being imported, and their source and destination paths.
+        """
         paths_to_skip = self.find_paths_to_skip()
 
-        for root, dirs, files in self.filesystem.walk(directory):
+        for root, dirs, files in self.filesystem.walk(self.source_repo_path):
             cur_dir = root.replace(self.dir_above_repo + '/', '') + '/'
             _log.info('  scanning ' + cur_dir + '...')
             total_tests = 0
@@ -215,7 +202,7 @@ class TestImporter(object):
 
             for filename in files:
                 path_full = self.filesystem.join(root, filename)
-                path_base = path_full.replace(directory + '/', '')
+                path_base = path_full.replace(self.source_repo_path + '/', '')
                 path_base = self.destination_directory.replace(self.layout_tests_dir + '/', '') + '/' + path_base
                 if path_base in paths_to_skip:
                     if not self.options.dry_run and self.import_in_place:
@@ -228,11 +215,18 @@ class TestImporter(object):
 
                 if filename.startswith('.') or filename.endswith('.pl'):
                     continue  # For some reason the w3c repo contains random perl scripts we don't care about.
+                if filename == 'OWNERS' or filename == 'reftest.list':
+                    continue  # These files fail our presubmits.
+                # see  http://crbug.com/584660 and
+                # http://crbug.com/582838.
+
 
                 fullpath = self.filesystem.join(root, filename)
 
                 mimetype = mimetypes.guess_type(fullpath)
-                if not 'html' in str(mimetype[0]) and not 'application/xhtml+xml' in str(mimetype[0]) and not 'application/xml' in str(mimetype[0]):
+                if ('html' not in str(mimetype[0]) and
+                        'application/xhtml+xml' not in str(mimetype[0]) and
+                        'application/xml' not in str(mimetype[0])):
                     copy_list.append({'src': fullpath, 'dest': filename})
                     continue
 
@@ -245,11 +239,14 @@ class TestImporter(object):
                 if test_info is None:
                     continue
 
-                if 'reference' in test_info.keys():
-                    reftests += 1
-                    total_tests += 1
-                    test_basename = self.filesystem.basename(test_info['test'])
+                if self.path_too_long(path_full):
+                    _log.warning('%s skipped due to long path. '
+                                 'Max length from repo base %d chars; see http://crbug.com/609871.',
+                                 path_full, MAX_PATH_LENGTH)
+                    continue
 
+                if 'reference' in test_info.keys():
+                    test_basename = self.filesystem.basename(test_info['test'])
                     # Add the ref file, following WebKit style.
                     # FIXME: Ideally we'd support reading the metadata
                     # directly rather than relying  on a naming convention.
@@ -261,6 +258,14 @@ class TestImporter(object):
                     # references but HTML tests.
                     ref_file += self.filesystem.splitext(test_info['reference'])[1]
 
+                    if self.path_too_long(path_full.replace(filename, ref_file)):
+                        _log.warning('%s skipped because path of ref file %s would be too long. '
+                                     'Max length from repo base %d chars; see http://crbug.com/609871.',
+                                     path_full, ref_file, MAX_PATH_LENGTH)
+                        continue
+
+                    reftests += 1
+                    total_tests += 1
                     copy_list.append({'src': test_info['reference'], 'dest': ref_file,
                                       'reference_support_info': test_info['reference_support_info']})
                     copy_list.append({'src': test_info['test'], 'dest': filename})
@@ -268,7 +273,7 @@ class TestImporter(object):
                 elif 'jstest' in test_info.keys():
                     jstests += 1
                     total_tests += 1
-                    copy_list.append({'src': fullpath, 'dest': filename})
+                    copy_list.append({'src': fullpath, 'dest': filename, 'is_jstest': True})
                 else:
                     total_tests += 1
                     copy_list.append({'src': fullpath, 'dest': filename})
@@ -297,6 +302,7 @@ class TestImporter(object):
         return paths_to_skip
 
     def import_tests(self):
+        """Reads |self.import_list|, and converts and copies files to their destination."""
         total_imported_tests = 0
         total_imported_reftests = 0
         total_imported_jstests = 0
@@ -314,7 +320,7 @@ class TestImporter(object):
 
             orig_path = dir_to_copy['dirname']
 
-            subpath = self.filesystem.relpath(orig_path, self.top_of_repo)
+            subpath = self.filesystem.relpath(orig_path, self.source_repo_path)
             new_path = self.filesystem.join(self.destination_directory, subpath)
 
             if not self.filesystem.exists(new_path):
@@ -333,11 +339,6 @@ class TestImporter(object):
 
                 if not self.filesystem.exists(orig_filepath):
                     _log.warning('%s not found. Possible error in the test.', orig_filepath)
-                    continue
-
-                if self.path_too_long(orig_filepath):
-                    _log.warning('%s skipped (longer than %d chars), to avoid hitting Windows max path length on builders (http://crbug.com/609871).',
-                                 orig_filepath, MAX_PATH_LENGTH)
                     continue
 
                 new_filepath = self.filesystem.join(new_path, file_to_copy['dest'])
@@ -359,10 +360,11 @@ class TestImporter(object):
                     # there's no harm in copying the identical thing.
                     _log.info('  %s' % relpath)
 
-                # Only html, xml, or css should be converted
-                # FIXME: Eventually, so should js when support is added for this type of conversion
+                # Only HTML, XML, or CSS should be converted.
+                # FIXME: Eventually, so should JS when support is added for this type of conversion.
                 mimetype = mimetypes.guess_type(orig_filepath)
-                if 'html' in str(mimetype[0]) or 'xml' in str(mimetype[0]) or 'css' in str(mimetype[0]):
+                if 'is_jstest' not in file_to_copy and (
+                        'html' in str(mimetype[0]) or 'xml' in str(mimetype[0]) or 'css' in str(mimetype[0])):
                     converted_file = convert_for_webkit(new_path, filename=orig_filepath,
                                                         reference_support_info=reference_support_info)
 
@@ -382,6 +384,8 @@ class TestImporter(object):
                 else:
                     if not self.import_in_place and not self.options.dry_run:
                         self.filesystem.copyfile(orig_filepath, new_filepath)
+                        if self.filesystem.read_binary_file(orig_filepath)[:2] == '#!':
+                            self.filesystem.make_executable(new_filepath)
 
                 copied_files.append(new_filepath.replace(self._webkit_root, ''))
 
@@ -405,17 +409,5 @@ class TestImporter(object):
         Args:
           Absolute path of file to be imported.
         """
-        path_from_repo_base = os.path.relpath(source_path, self.top_of_repo)
+        path_from_repo_base = os.path.relpath(source_path, self.source_repo_path)
         return len(path_from_repo_base) > MAX_PATH_LENGTH
-
-    def setup_destination_directory(self):
-        """ Creates a destination directory that mirrors that of the source directory """
-
-        new_subpath = self.dir_to_import[len(self.top_of_repo):]
-
-        destination_directory = self.filesystem.join(self.destination_directory, new_subpath)
-
-        if not self.filesystem.exists(destination_directory):
-            self.filesystem.maybe_make_directory(destination_directory)
-
-        _log.info('Tests will be imported into: %s', destination_directory)

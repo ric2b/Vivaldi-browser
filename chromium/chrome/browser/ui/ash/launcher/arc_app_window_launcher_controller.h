@@ -9,12 +9,17 @@
 #include <memory>
 #include <vector>
 
+#include "ash/common/shell_observer.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/ash/launcher/app_window_launcher_controller.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/aura/env_observer.h"
 #include "ui/aura/window_observer.h"
+
+namespace ash {
+class ShelfDelegate;
+}
 
 namespace aura {
 class Window;
@@ -27,13 +32,27 @@ class Widget;
 class ArcAppWindowLauncherItemController;
 class ChromeLauncherController;
 
+class Profile;
+
 class ArcAppWindowLauncherController : public AppWindowLauncherController,
                                        public aura::EnvObserver,
                                        public aura::WindowObserver,
+                                       public ash::ShellObserver,
                                        public ArcAppListPrefs::Observer {
  public:
-  explicit ArcAppWindowLauncherController(ChromeLauncherController* owner);
+  ArcAppWindowLauncherController(ChromeLauncherController* owner,
+                                 ash::ShelfDelegate* shelf_delegate);
   ~ArcAppWindowLauncherController() override;
+
+  // Returns shelf app id. Play Store app is mapped to Arc platform host app.
+  static std::string GetShelfAppIdFromArcAppId(const std::string& arc_app_id);
+
+  // Returns Arc app id. Arc platform host app is mapped to Play Store app.
+  static std::string GetArcAppIdFromShelfAppId(const std::string& shelf_app_id);
+
+  // AppWindowLauncherControllre:
+  void ActiveUserChanged(const std::string& user_email) override;
+  void AdditionalUserAddedToSession(Profile* profile) override;
 
   // aura::EnvObserver:
   void OnWindowInitialized(aura::Window* window) override;
@@ -48,6 +67,10 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
       aura::Window* gained_active,
       aura::Window* lost_active) override;
 
+  // ash::ShellObserver:
+  void OnMaximizeModeStarted() override;
+  void OnMaximizeModeEnded() override;
+
   // ArcAppListPrefs::Observer:
   void OnAppReadyChanged(const std::string& app_id, bool ready) override;
   void OnAppRemoved(const std::string& app_id) override;
@@ -56,26 +79,43 @@ class ArcAppWindowLauncherController : public AppWindowLauncherController,
                      const std::string& activity) override;
   void OnTaskDestroyed(int task_id) override;
   void OnTaskSetActive(int32_t task_id) override;
+  void OnTaskOrientationLockRequested(
+      int32_t task_id,
+      const arc::mojom::OrientationLock orientation_lock) override;
 
  private:
   class AppWindow;
 
   using TaskIdToAppWindow = std::map<int, std::unique_ptr<AppWindow>>;
+  using TaskIdToShelfAppIdMap = std::map<int, std::string>;
   using AppControllerMap =
       std::map<std::string, ArcAppWindowLauncherItemController*>;
 
+  void StartObserving(Profile* profile);
+  void StopObserving(Profile* profile);
+
+  void RegisterApp(AppWindow* app_window);
+  void UnregisterApp(AppWindow* app_window, bool close_controller);
+
   AppWindow* GetAppWindowForTask(int task_id);
 
-  void CheckForAppWindowWidget(aura::Window* window);
+  void MayAttachContollerToWindow(aura::Window* window);
+
+  void SetOrientationLockForAppWindow(AppWindow* app_window);
 
   // AppWindowLauncherController:
   AppWindowLauncherItemController* ControllerForWindow(
       aura::Window* window) override;
 
+  // Not owned
+  ash::ShelfDelegate* shelf_delegate_;
   int active_task_id_ = -1;
   TaskIdToAppWindow task_id_to_app_window_;
+  TaskIdToShelfAppIdMap task_id_to_shelf_app_id_;
   AppControllerMap app_controller_map_;
   std::vector<aura::Window*> observed_windows_;
+  Profile* observed_profile_ = nullptr;
+  bool observing_shell_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(ArcAppWindowLauncherController);
 };

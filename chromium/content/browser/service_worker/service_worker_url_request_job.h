@@ -14,6 +14,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/streams/stream_read_observer.h"
 #include "content/browser/streams/stream_register_observer.h"
@@ -43,7 +44,7 @@ class BlobStorageContext;
 namespace content {
 
 class ResourceContext;
-class ResourceRequestBody;
+class ResourceRequestBodyImpl;
 class ServiceWorkerContextCore;
 class ServiceWorkerFetchDispatcher;
 class ServiceWorkerProviderHost;
@@ -95,7 +96,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
-      scoped_refptr<ResourceRequestBody> body,
+      scoped_refptr<ResourceRequestBodyImpl> body,
       ServiceWorkerFetchType fetch_type,
       Delegate* delegate);
 
@@ -179,7 +180,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   void CreateRequestBodyBlob(std::string* blob_uuid, uint64_t* blob_size);
 
   // For FORWARD_TO_SERVICE_WORKER case.
-  void DidPrepareFetchEvent();
+  void DidPrepareFetchEvent(scoped_refptr<ServiceWorkerVersion> version);
   void DidDispatchFetchEvent(
       ServiceWorkerStatusCode status,
       ServiceWorkerFetchEventResult fetch_result,
@@ -265,7 +266,7 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   bool fall_back_required_;
   // ResourceRequestBody has a collection of BlobDataHandles attached to it
   // using the userdata mechanism. So we have to keep it not to free the blobs.
-  scoped_refptr<ResourceRequestBody> body_;
+  scoped_refptr<ResourceRequestBodyImpl> body_;
   std::unique_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
   scoped_refptr<ServiceWorkerVersion> streaming_version_;
   ServiceWorkerFetchType fetch_type_;
@@ -276,7 +277,12 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob
   bool response_is_in_cache_storage_ = false;
   std::string response_cache_storage_cache_name_;
 
+  ServiceWorkerHeaderList cors_exposed_header_names_;
+
   std::unique_ptr<BlobConstructionWaiter> blob_construction_waiter_;
+
+  bool worker_already_activated_ = false;
+  EmbeddedWorkerStatus initial_worker_status_ = EmbeddedWorkerStatus::STOPPED;
 
   base::WeakPtrFactory<ServiceWorkerURLRequestJob> weak_factory_;
 

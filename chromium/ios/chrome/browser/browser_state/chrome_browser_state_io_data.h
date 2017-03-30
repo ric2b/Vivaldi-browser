@@ -42,7 +42,6 @@ enum class ChromeBrowserStateType;
 }
 
 namespace net {
-class CertificateReportSender;
 class CertVerifier;
 class ChannelIDService;
 class CookieStore;
@@ -50,6 +49,7 @@ class HttpServerProperties;
 class HttpTransactionFactory;
 class ProxyConfigService;
 class ProxyService;
+class ReportSender;
 class ServerBoundCertService;
 class SSLConfigService;
 class TransportSecurityPersister;
@@ -203,7 +203,7 @@ class ChromeBrowserStateIOData {
 
   net::ProxyService* proxy_service() const { return proxy_service_.get(); }
 
-  base::WeakPtr<net::HttpServerProperties> http_server_properties() const;
+  net::HttpServerProperties* http_server_properties() const;
 
   void set_http_server_properties(
       std::unique_ptr<net::HttpServerProperties> http_server_properties) const;
@@ -291,8 +291,7 @@ class ChromeBrowserStateIOData {
   mutable std::unique_ptr<net::HttpServerProperties> http_server_properties_;
   mutable std::unique_ptr<net::TransportSecurityPersister>
       transport_security_persister_;
-  mutable std::unique_ptr<net::CertificateReportSender>
-      certificate_report_sender_;
+  mutable std::unique_ptr<net::ReportSender> certificate_report_sender_;
 
   // These are only valid in between LazyInitialize() and their accessor being
   // called.

@@ -8,7 +8,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
-#include "ash/system/tray_accessibility.h"
+#include "ash/common/system/accessibility_observer.h"
 #include "base/macros.h"
 #include "ui/chromeos/touch_exploration_controller.h"
 #include "ui/wm/public/activation_change_observer.h"
@@ -25,7 +25,7 @@ class RootWindowController;
 // TouchExplorationControllerDelegate which allows touch gestures to manipulate
 // the system.
 class ASH_EXPORT AshTouchExplorationManager
-    : public ash::AccessibilityObserver,
+    : public AccessibilityObserver,
       public ui::TouchExplorationControllerDelegate,
       public aura::client::ActivationChangeObserver {
  public:
@@ -35,7 +35,7 @@ class ASH_EXPORT AshTouchExplorationManager
 
   // AccessibilityObserver overrides:
   void OnAccessibilityModeChanged(
-      ui::AccessibilityNotificationVisibility notify) override;
+      AccessibilityNotificationVisibility notify) override;
 
   // TouchExplorationControllerDelegate overrides:
   void SetOutputLevel(int volume) override;
@@ -51,6 +51,10 @@ class ASH_EXPORT AshTouchExplorationManager
       aura::client::ActivationChangeObserver::ActivationReason reason,
       aura::Window* gained_active,
       aura::Window* lost_active) override;
+
+  // Update the touch exploration controller so that synthesized touch
+  // events are anchored at this point.
+  void SetTouchAccessibilityAnchorPoint(const gfx::Point& anchor_point);
 
  private:
   void UpdateTouchExplorationState();

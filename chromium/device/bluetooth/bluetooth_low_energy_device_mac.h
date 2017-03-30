@@ -83,9 +83,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
       const ConnectToServiceCallback& callback,
       const ConnectToServiceErrorCallback& error_callback) override;
 
-  // BluetoothDeviceMac override.
-  NSDate* GetLastUpdateTime() const override;
-
  protected:
   // BluetoothDevice override.
   std::string GetDeviceName() const override;
@@ -95,6 +92,11 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   // Methods used by BluetoothLowEnergyPeripheralBridge.
   void DidDiscoverPrimaryServices(NSError* error);
   void DidModifyServices(NSArray* invalidatedServices);
+  void DidDiscoverCharacteristics(CBService* cb_service, NSError* error);
+  void DidUpdateValue(CBCharacteristic* characteristic, NSError* error);
+  void DidWriteValue(CBCharacteristic* characteristic, NSError* error);
+  void DidUpdateNotificationState(CBCharacteristic* characteristic,
+                                  NSError* error);
 
   // Updates information about the device.
   virtual void Update(NSDictionary* advertisement_data, int rssi);
@@ -111,7 +113,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   friend class BluetoothAdapterMac;
   friend class BluetoothAdapterMacTest;
   friend class BluetoothLowEnergyPeripheralBridge;
+  friend class BluetoothRemoteGattServiceMac;
   friend class BluetoothTestMac;
+  friend class BluetoothRemoteGattServiceMac;
 
   // Returns the Bluetooth adapter.
   BluetoothAdapterMac* GetMacAdapter();
@@ -145,9 +149,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   // A local address for the device created by hashing the peripheral
   // identifier.
   std::string hash_address_;
-
-  // Stores the time of the most recent call to Update().
-  base::scoped_nsobject<NSDate> last_update_time_;
 
   // The services (identified by UUIDs) that this device provides.
   std::set<BluetoothUUID> advertised_uuids_;

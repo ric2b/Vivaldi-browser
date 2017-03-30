@@ -97,6 +97,8 @@ class RenderbufferAttachment
     // Nothing to do for renderbuffers.
   }
 
+  bool IsLayerValid() const override { return true; }
+
   bool ValidForAttachmentType(GLenum attachment_type,
                               ContextType context_type,
                               uint32_t max_color_attachments) override {
@@ -236,6 +238,14 @@ class TextureAttachment
 
   void DetachFromFramebuffer(Framebuffer* framebuffer) const override {
     texture_ref_->texture()->DetachFromFramebuffer();
+  }
+
+  bool IsLayerValid() const override {
+    Texture* texture = texture_ref_->texture();
+    DCHECK(texture);
+    GLsizei width, height, depth;
+    return (texture->GetLevelSize(target_, level_, &width, &height, &depth) &&
+            layer_ < depth);
   }
 
   bool ValidForAttachmentType(GLenum attachment_type,
@@ -443,6 +453,23 @@ void Framebuffer::ClearUnclearedIntRenderbufferAttachments(
   }
 }
 
+bool Framebuffer::HasSRGBAttachments() const {
+  for (AttachmentMap::const_iterator it = attachments_.begin();
+       it != attachments_.end(); ++it) {
+    GLenum internal_format = it->second->internal_format();
+    switch (internal_format) {
+      case GL_SRGB8:
+      case GL_SRGB8_ALPHA8:
+      case GL_SRGB_EXT:
+      case GL_SRGB_ALPHA_EXT:
+        return true;
+      default:
+        break;
+    }
+  }
+  return false;
+}
+
 bool Framebuffer::PrepareDrawBuffersForClear() const {
   std::unique_ptr<GLenum[]> buffers(new GLenum[manager_->max_draw_buffers_]);
   for (uint32_t i = 0; i < manager_->max_draw_buffers_; ++i)
@@ -561,6 +588,38 @@ GLenum Framebuffer::GetReadBufferTextureType() const {
   return attachment->texture_type();
 }
 
+GLsizei Framebuffer::GetSamples() const {
+  // Assume the framebuffer is complete, so return any attachment's samples.
+  auto iter = attachments_.begin();
+  if (iter == attachments_.end())
+    return -1;
+  Attachment* attachment = iter->second.get();
+  DCHECK(attachment);
+  return attachment->samples();
+}
+
+GLenum Framebuffer::GetDepthFormat() const {
+  auto iter = attachments_.find(GL_DEPTH_STENCIL_ATTACHMENT);
+  if (iter == attachments_.end())
+    iter = attachments_.find(GL_DEPTH_ATTACHMENT);
+  if (iter == attachments_.end())
+    return 0;
+  Attachment* attachment = iter->second.get();
+  DCHECK(attachment);
+  return attachment->internal_format();
+}
+
+GLenum Framebuffer::GetStencilFormat() const {
+  auto iter = attachments_.find(GL_DEPTH_STENCIL_ATTACHMENT);
+  if (iter == attachments_.end())
+    iter = attachments_.find(GL_STENCIL_ATTACHMENT);
+  if (iter == attachments_.end())
+    return 0;
+  Attachment* attachment = iter->second.get();
+  DCHECK(attachment);
+  return attachment->internal_format();
+}
+
 GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
   if (attachments_.empty()) {
     return GL_FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT;
@@ -568,6 +627,12 @@ GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
 
   GLsizei width = -1;
   GLsizei height = -1;
+  GLsizei samples = -1;
+  const bool kSamplesMustMatch =
+      feature_info->context_type() == CONTEXT_TYPE_WEBGL1 ||
+      feature_info->context_type() == CONTEXT_TYPE_WEBGL2 ||
+      !feature_info->feature_flags().chromium_framebuffer_mixed_samples;
+
   for (AttachmentMap::const_iterator it = attachments_.begin();
        it != attachments_.end(); ++it) {
     GLenum attachment_type = it->first;
@@ -575,6 +640,9 @@ GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
     if (!attachment->ValidForAttachmentType(attachment_type,
                                             feature_info->context_type(),
                                             manager_->max_color_attachments_)) {
+      return GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;
+    }
+    if (!attachment->IsLayerValid()) {
       return GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;
     }
     if (width < 0) {
@@ -588,6 +656,17 @@ GLenum Framebuffer::IsPossiblyComplete(const FeatureInfo* feature_info) const {
       // even though ES3 allows it, it is still forbidden to ensure consistent
       // behaviors across platforms.
       return GL_FRAMEBUFFER_INCOMPLETE_DIMENSIONS_EXT;
+    }
+
+    if (kSamplesMustMatch) {
+      if (samples < 0) {
+        samples = attachment->samples();
+      } else if (attachment->samples() != samples) {
+        // It's possible that the specified samples isn't the actual samples a
+        // GL implementation uses, but we always return INCOMPLETE_MULTISAMPLE
+        // here to ensure consistent behaviors across platforms.
+        return GL_FRAMEBUFFER_INCOMPLETE_MULTISAMPLE;
+      }
     }
     if (!attachment->CanRenderTo(feature_info)) {
       return GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT;

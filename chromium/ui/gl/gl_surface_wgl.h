@@ -10,7 +10,7 @@
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_surface.h"
 
-namespace gfx {
+namespace gl {
 
 // Base interface for WGL surfaces.
 class GL_EXPORT GLSurfaceWGL : public GLSurface {
@@ -32,13 +32,17 @@ class GL_EXPORT GLSurfaceWGL : public GLSurface {
 };
 
 // A surface used to render to a view.
-class NativeViewGLSurfaceWGL : public GLSurfaceWGL {
+class GL_EXPORT NativeViewGLSurfaceWGL : public GLSurfaceWGL {
  public:
   explicit NativeViewGLSurfaceWGL(gfx::AcceleratedWidget window);
 
   // Implement GLSurface.
   bool Initialize(GLSurface::Format format) override;
   void Destroy() override;
+  bool Resize(const gfx::Size& size,
+              float scale_factor,
+              bool has_alpha) override;
+  bool Recreate() override;
   bool IsOffscreen() override;
   gfx::SwapResult SwapBuffers() override;
   gfx::Size GetSize() override;
@@ -46,6 +50,8 @@ class NativeViewGLSurfaceWGL : public GLSurfaceWGL {
 
  private:
   ~NativeViewGLSurfaceWGL() override;
+
+  GLSurface::Format format_ = GLSurface::SURFACE_DEFAULT;
 
   gfx::AcceleratedWidget window_;
   gfx::AcceleratedWidget child_window_;
@@ -56,7 +62,7 @@ class NativeViewGLSurfaceWGL : public GLSurfaceWGL {
 
 
 // A surface used to render to an offscreen pbuffer.
-class PbufferGLSurfaceWGL : public GLSurfaceWGL {
+class GL_EXPORT PbufferGLSurfaceWGL : public GLSurfaceWGL {
  public:
   explicit PbufferGLSurfaceWGL(const gfx::Size& size);
 
@@ -78,6 +84,6 @@ class PbufferGLSurfaceWGL : public GLSurfaceWGL {
   DISALLOW_COPY_AND_ASSIGN(PbufferGLSurfaceWGL);
 };
 
-}  // namespace gfx
+}  // namespace gl
 
 #endif  // UI_GL_GL_SURFACE_WGL_H_

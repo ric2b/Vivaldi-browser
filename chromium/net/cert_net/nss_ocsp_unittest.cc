@@ -14,7 +14,6 @@
 #include "base/memory/ref_counted.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_proc.h"
@@ -24,6 +23,7 @@
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_interceptor.h"
 #include "net/url_request/url_request_test_job.h"
@@ -144,8 +144,10 @@ TEST_F(NssHttpTest, TestAia) {
 
   int flags = CertVerifier::VERIFY_CERT_IO_ENABLED;
   int error = verifier()->Verify(
-      test_cert.get(), "aia-host.invalid", std::string(), flags, NULL,
-      &verify_result, test_callback.callback(), &request, BoundNetLog());
+      CertVerifier::RequestParams(test_cert, "aia-host.invalid", flags,
+                                  std::string(), CertificateList()),
+      nullptr, &verify_result, test_callback.callback(), &request,
+      BoundNetLog());
   ASSERT_EQ(ERR_IO_PENDING, error);
 
   error = test_callback.WaitForResult();

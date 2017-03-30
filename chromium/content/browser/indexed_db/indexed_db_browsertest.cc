@@ -16,6 +16,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/thread_test_helper.h"
@@ -93,8 +94,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
     if (result != "pass") {
       std::string js_result;
       ASSERT_TRUE(ExecuteScriptAndExtractString(
-          the_browser->web_contents(),
-          "window.domAutomationController.send(getLog())",
+          the_browser, "window.domAutomationController.send(getLog())",
           &js_result));
       FAIL() << "Failed: " << js_result;
     }
@@ -156,7 +156,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
         BrowserMainLoop::GetInstance()->indexed_db_thread()->task_runner()));
     EXPECT_TRUE(helper->Run());
     // Wait for DidGetDiskUsage to be called.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     return disk_usage_;
   }
 
@@ -170,7 +170,7 @@ class IndexedDBBrowserTest : public ContentBrowserTest,
         BrowserMainLoop::GetInstance()->indexed_db_thread()->task_runner()));
     EXPECT_TRUE(helper->Run());
     // Wait for DidGetBlobFileCount to be called.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     return blob_file_count_;
   }
 
@@ -466,7 +466,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed, DISABLED_BlobDidAck) {
   SimpleTest(GetTestUrl("indexeddb", "blob_did_ack.html"));
   // Wait for idle so that the blob ack has time to be received/processed by
   // the browser process.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   content::ChromeBlobStorageContext* blob_context =
       ChromeBlobStorageContext::GetFor(
           shell()->web_contents()->GetBrowserContext());
@@ -479,7 +479,7 @@ IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTestWithGCExposed,
   SimpleTest(GetTestUrl("indexeddb", "blob_did_ack_prefetch.html"));
   // Wait for idle so that the blob ack has time to be received/processed by
   // the browser process.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   content::ChromeBlobStorageContext* blob_context =
       ChromeBlobStorageContext::GetFor(
           shell()->web_contents()->GetBrowserContext());
@@ -610,7 +610,9 @@ static std::unique_ptr<net::test_server::HttpResponse> CorruptDBRequestHandler(
 
   if (request_path == "corruptdb" && !request_query.empty()) {
     VLOG(0) << "Requested to corrupt IndexedDB: " << request_query;
-    base::WaitableEvent signal_when_finished(false, false);
+    base::WaitableEvent signal_when_finished(
+        base::WaitableEvent::ResetPolicy::AUTOMATIC,
+        base::WaitableEvent::InitialState::NOT_SIGNALED);
     context->TaskRunner()->PostTask(
         FROM_HERE,
         base::Bind(&CorruptIndexedDBDatabase, base::ConstRef(context), origin,
@@ -730,8 +732,7 @@ INSTANTIATE_TEST_CASE_P(IndexedDBBrowserTestInstantiation,
                                           "failTransactionCommit",
                                           "clearObjectStore"));
 
-IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest,
-                       DeleteCompactsBackingStore) {
+IN_PROC_BROWSER_TEST_F(IndexedDBBrowserTest, DeleteCompactsBackingStore) {
   const GURL test_url = GetTestUrl("indexeddb", "delete_compact.html");
   SimpleTest(GURL(test_url.spec() + "#fill"));
   int64_t after_filling = RequestDiskUsage();

@@ -13,10 +13,13 @@
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/ntp_snippets/ntp_snippet.h"
+#include "components/ntp_snippets/ntp_snippets_constants.h"
 #include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/signin/core/browser/fake_signin_manager.h"
 #include "components/signin/core/browser/test_signin_client.h"
+#include "components/variations/entropy_provider.h"
+#include "components/variations/variations_associated_data.h"
 #include "google_apis/google_api_keys.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_test_util.h"
@@ -24,6 +27,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace ntp_snippets {
+
 namespace {
 
 using testing::ElementsAre;
@@ -36,8 +40,14 @@ using testing::PrintToString;
 using testing::SizeIs;
 using testing::StartsWith;
 
-const char kTestContentSnippetsServerFormat[] =
+const char kTestChromeReaderUrlFormat[] =
     "https://chromereader-pa.googleapis.com/v1/fetch?key=%s";
+const char kTestChromeContentSuggestionsUrlFormat[] =
+    "https://chromecontentsuggestions-pa.googleapis.com/v1/snippets/"
+    "list?key=%s";
+const char kContentSuggestionsBackend[] =
+    "https://chromecontentsuggestions-pa.googleapis.com/v1/snippets/list";
+
 // Artificial time delay for JSON parsing.
 const int64_t kTestJsonParsingLatencyMs = 20;
 
@@ -49,6 +59,25 @@ MATCHER_P(PointeeSizeIs,
           size,
           std::string("contains a value with size ") + PrintToString(size)) {
   return arg && static_cast<int>(arg->size()) == size;
+}
+
+MATCHER_P(EqualsJSON, json, "equals JSON") {
+  std::unique_ptr<base::Value> expected = base::JSONReader::Read(json);
+  if (!expected) {
+    *result_listener << "INTERNAL ERROR: couldn't parse expected JSON";
+    return false;
+  }
+
+  std::string err_msg;
+  int err_line, err_col;
+  std::unique_ptr<base::Value> actual = base::JSONReader::ReadAndReturnError(
+      arg, base::JSON_PARSE_RFC, nullptr, &err_msg, &err_line, &err_col);
+  if (!actual) {
+    *result_listener << "input:" << err_line << ":" << err_col << ": "
+                     << "parse error: " << err_msg;
+    return false;
+  }
+  return base::Value::Equals(actual.get(), expected.get());
 }
 
 class MockSnippetsAvailableCallback {
@@ -94,10 +123,35 @@ void ParseJsonDelayed(
       base::TimeDelta::FromMilliseconds(kTestJsonParsingLatencyMs));
 }
 
+class VariationParams {
+ public:
+  VariationParams(const std::string& trial_name,
+                  const std::map<std::string, std::string>& params)
+      : field_trial_list_(new metrics::SHA1EntropyProvider("foo")) {
+    variations::AssociateVariationParams(trial_name, "Group1", params);
+    base::FieldTrialList::CreateFieldTrial(trial_name, "Group1");
+  }
+
+  ~VariationParams() { variations::testing::ClearAllVariationParams(); }
+
+ private:
+  base::FieldTrialList field_trial_list_;
+};
+
+}  // namespace
+
 class NTPSnippetsFetcherTest : public testing::Test {
  public:
   NTPSnippetsFetcherTest()
-      : mock_task_runner_(new base::TestMockTimeTaskRunner()),
+      : NTPSnippetsFetcherTest(
+            GURL(base::StringPrintf(kTestChromeReaderUrlFormat,
+                                    google_apis::GetAPIKey().c_str())),
+            std::map<std::string, std::string>()) {}
+
+  NTPSnippetsFetcherTest(const GURL& gurl,
+                         const std::map<std::string, std::string>& params)
+      : params_(ntp_snippets::kStudyName, params),
+        mock_task_runner_(new base::TestMockTimeTaskRunner()),
         mock_task_runner_handle_(mock_task_runner_),
         signin_client_(new TestSigninClient(nullptr)),
         account_tracker_(new AccountTrackerService()),
@@ -112,8 +166,7 @@ class NTPSnippetsFetcherTest : public testing::Test {
             base::Bind(&ParseJsonDelayed),
             /*is_stable_channel=*/true),
         test_lang_("en-US"),
-        test_url_(base::StringPrintf(kTestContentSnippetsServerFormat,
-                                     google_apis::GetAPIKey().c_str())) {
+        test_url_(gurl) {
     snippets_fetcher_.SetCallback(
         base::Bind(&MockSnippetsAvailableCallback::WrappedRun,
                    base::Unretained(&mock_callback_)));
@@ -152,6 +205,7 @@ class NTPSnippetsFetcherTest : public testing::Test {
   }
 
  private:
+  VariationParams params_;
   scoped_refptr<base::TestMockTimeTaskRunner> mock_task_runner_;
   base::ThreadTaskRunnerHandle mock_task_runner_handle_;
   FailingFakeURLFetcherFactory failing_url_fetcher_factory_;
@@ -170,6 +224,118 @@ class NTPSnippetsFetcherTest : public testing::Test {
 
   DISALLOW_COPY_AND_ASSIGN(NTPSnippetsFetcherTest);
 };
+
+class NTPSnippetsContentSuggestionsFetcherTest : public NTPSnippetsFetcherTest {
+ public:
+  NTPSnippetsContentSuggestionsFetcherTest()
+      : NTPSnippetsFetcherTest(
+            GURL(base::StringPrintf(kTestChromeContentSuggestionsUrlFormat,
+                                    google_apis::GetAPIKey().c_str())),
+            std::map<std::string, std::string>{
+                {"content_suggestions_backend", kContentSuggestionsBackend}}) {}
+};
+
+TEST_F(NTPSnippetsFetcherTest, BuildRequestAuthenticated) {
+  NTPSnippetsFetcher::RequestParams params;
+  params.obfuscated_gaia_id = "0BFUSGAIA";
+  params.only_return_personalized_results = true;
+  params.user_locale = "en";
+  params.host_restricts = {"chromium.org"};
+  params.count_to_fetch = 25;
+
+  params.fetch_api = NTPSnippetsFetcher::CHROME_READER_API;
+  EXPECT_THAT(params.BuildRequest(),
+              EqualsJSON("{"
+                         "  \"response_detail_level\": \"STANDARD\","
+                         "  \"obfuscated_gaia_id\": \"0BFUSGAIA\","
+                         "  \"user_locale\": \"en\","
+                         "  \"advanced_options\": {"
+                         "    \"local_scoring_params\": {"
+                         "      \"content_params\": {"
+                         "        \"only_return_personalized_results\": true"
+                         "      },"
+                         "      \"content_restricts\": ["
+                         "        {"
+                         "          \"type\": \"METADATA\","
+                         "          \"value\": \"TITLE\""
+                         "        },"
+                         "        {"
+                         "          \"type\": \"METADATA\","
+                         "          \"value\": \"SNIPPET\""
+                         "        },"
+                         "        {"
+                         "          \"type\": \"METADATA\","
+                         "          \"value\": \"THUMBNAIL\""
+                         "        }"
+                         "      ],"
+                         "      \"content_selectors\": ["
+                         "        {"
+                         "          \"type\": \"HOST_RESTRICT\","
+                         "          \"value\": \"chromium.org\""
+                         "        }"
+                         "      ]"
+                         "    },"
+                         "    \"global_scoring_params\": {"
+                         "      \"num_to_return\": 25,"
+                         "      \"sort_type\": 1"
+                         "    }"
+                         "  }"
+                         "}"));
+
+  params.fetch_api = NTPSnippetsFetcher::CHROME_CONTENT_SUGGESTIONS_API;
+  EXPECT_THAT(params.BuildRequest(),
+              EqualsJSON("{"
+                         "  \"uiLanguage\": \"en\","
+                         "  \"regularlyVisitedHostName\": ["
+                         "    \"chromium.org\""
+                         "  ]"
+                         "}"));
+}
+
+TEST_F(NTPSnippetsFetcherTest, BuildRequestUnauthenticated) {
+  NTPSnippetsFetcher::RequestParams params;
+  params.only_return_personalized_results = false;
+  params.host_restricts = {};
+  params.count_to_fetch = 10;
+
+  params.fetch_api = NTPSnippetsFetcher::CHROME_READER_API;
+  EXPECT_THAT(params.BuildRequest(),
+              EqualsJSON("{"
+                         "  \"response_detail_level\": \"STANDARD\","
+                         "  \"advanced_options\": {"
+                         "    \"local_scoring_params\": {"
+                         "      \"content_params\": {"
+                         "        \"only_return_personalized_results\": false"
+                         "      },"
+                         "      \"content_restricts\": ["
+                         "        {"
+                         "          \"type\": \"METADATA\","
+                         "          \"value\": \"TITLE\""
+                         "        },"
+                         "        {"
+                         "          \"type\": \"METADATA\","
+                         "          \"value\": \"SNIPPET\""
+                         "        },"
+                         "        {"
+                         "          \"type\": \"METADATA\","
+                         "          \"value\": \"THUMBNAIL\""
+                         "        }"
+                         "      ],"
+                         "      \"content_selectors\": []"
+                         "    },"
+                         "    \"global_scoring_params\": {"
+                         "      \"num_to_return\": 10,"
+                         "      \"sort_type\": 1"
+                         "    }"
+                         "  }"
+                         "}"));
+
+  params.fetch_api = NTPSnippetsFetcher::CHROME_CONTENT_SUGGESTIONS_API;
+  EXPECT_THAT(params.BuildRequest(),
+              EqualsJSON("{"
+                         "  \"regularlyVisitedHostName\": []"
+                         "}"));
+}
 
 TEST_F(NTPSnippetsFetcherTest, ShouldNotFetchOnCreation) {
   // The lack of registered baked in responses would cause any fetch to fail.
@@ -210,6 +376,36 @@ TEST_F(NTPSnippetsFetcherTest, ShouldFetchSuccessfully) {
                                        /*count=*/1)));
 }
 
+TEST_F(NTPSnippetsContentSuggestionsFetcherTest, ShouldFetchSuccessfully) {
+  const std::string kJsonStr =
+      "{\"snippet\" : [{"
+      "  \"id\" : [\"http://localhost/foobar\"],"
+      "  \"title\" : \"Foo Barred from Baz\","
+      "  \"summaryText\" : \"...\","
+      "  \"fullPageUrl\" : \"http://localhost/foobar\","
+      "  \"publishTime\" : \"2016-06-30T11:01:37.000Z\","
+      "  \"expirationTime\" : \"2016-07-01T11:01:37.000Z\","
+      "  \"publisherName\" : \"Foo News\","
+      "  \"imageUrl\" : \"http://localhost/foobar.jpg\","
+      "  \"ampUrl\" : \"http://localhost/amp\","
+      "  \"faviconUrl\" : \"http://localhost/favicon.ico\" "
+      "}]}";
+  SetFakeResponse(/*data=*/kJsonStr, net::HTTP_OK,
+                  net::URLRequestStatus::SUCCESS);
+  EXPECT_CALL(mock_callback(), Run(/*snippets=*/PointeeSizeIs(1))).Times(1);
+  snippets_fetcher().FetchSnippetsFromHosts(test_hosts(), test_lang(),
+                                            /*count=*/1);
+  FastForwardUntilNoTasksRemain();
+  EXPECT_THAT(snippets_fetcher().last_status(), Eq("OK"));
+  EXPECT_THAT(snippets_fetcher().last_json(), Eq(kJsonStr));
+  EXPECT_THAT(histogram_tester().GetAllSamples(
+                  "NewTabPage.Snippets.FetchHttpResponseOrErrorCode"),
+              ElementsAre(base::Bucket(/*min=*/200, /*count=*/1)));
+  EXPECT_THAT(histogram_tester().GetAllSamples("NewTabPage.Snippets.FetchTime"),
+              ElementsAre(base::Bucket(/*min=*/kTestJsonParsingLatencyMs,
+                                       /*count=*/1)));
+}
+
 TEST_F(NTPSnippetsFetcherTest, ShouldFetchSuccessfullyEmptyList) {
   const std::string kJsonStr = "{\"recos\": []}";
   SetFakeResponse(/*data=*/kJsonStr, net::HTTP_OK,
@@ -228,56 +424,10 @@ TEST_F(NTPSnippetsFetcherTest, ShouldFetchSuccessfullyEmptyList) {
               ElementsAre(base::Bucket(/*min=*/200, /*count=*/1)));
 }
 
-TEST_F(NTPSnippetsFetcherTest, ShouldReportEmptyHostsError) {
-  EXPECT_CALL(mock_callback(), Run(/*snippets=*/Not(HasValue()))).Times(1);
-  snippets_fetcher().FetchSnippetsFromHosts(/*hosts=*/std::set<std::string>(),
-                                            /*language_code=*/"en-US",
-                                            /*count=*/1);
-  FastForwardUntilNoTasksRemain();
-  EXPECT_THAT(snippets_fetcher().last_status(),
-              Eq("Cannot fetch for empty hosts list."));
-  EXPECT_THAT(snippets_fetcher().last_json(), IsEmpty());
-  EXPECT_THAT(
-      histogram_tester().GetAllSamples("NewTabPage.Snippets.FetchResult"),
-      ElementsAre(base::Bucket(/*min=*/1, /*count=*/1)));
-  EXPECT_THAT(histogram_tester().GetAllSamples(
-                  "NewTabPage.Snippets.FetchHttpResponseOrErrorCode"),
-              IsEmpty());
-  // This particular error gets triggered prior to JSON parsing and hence tests
-  // observe no fetch latency.
-  EXPECT_THAT(histogram_tester().GetAllSamples("NewTabPage.Snippets.FetchTime"),
-              ElementsAre(base::Bucket(/*min=*/0, /*count=*/1)));
-}
-
-TEST_F(NTPSnippetsFetcherTest, ShouldRestrictToHosts) {
-  net::TestURLFetcherFactory test_url_fetcher_factory;
-  snippets_fetcher().FetchSnippetsFromHosts(
-      {"www.somehost1.com", "www.somehost2.com"}, test_lang(), /*count=*/17);
-  net::TestURLFetcher* fetcher = test_url_fetcher_factory.GetFetcherByID(0);
-  ASSERT_THAT(fetcher, NotNull());
-  std::unique_ptr<base::Value> value =
-      base::JSONReader::Read(fetcher->upload_data());
-  ASSERT_TRUE(value) << " failed to parse JSON: "
-                     << PrintToString(fetcher->upload_data());
-  const base::DictionaryValue* dict = nullptr;
-  ASSERT_TRUE(value->GetAsDictionary(&dict));
-  const base::DictionaryValue* local_scoring_params = nullptr;
-  ASSERT_TRUE(dict->GetDictionary("advanced_options.local_scoring_params",
-                                  &local_scoring_params));
-  const base::ListValue* content_selectors = nullptr;
-  ASSERT_TRUE(
-      local_scoring_params->GetList("content_selectors", &content_selectors));
-  ASSERT_THAT(content_selectors->GetSize(), Eq(static_cast<size_t>(2)));
-  const base::DictionaryValue* content_selector = nullptr;
-  ASSERT_TRUE(content_selectors->GetDictionary(0, &content_selector));
-  std::string content_selector_value;
-  EXPECT_TRUE(content_selector->GetString("value", &content_selector_value));
-  EXPECT_THAT(content_selector_value, Eq("www.somehost1.com"));
-  ASSERT_TRUE(content_selectors->GetDictionary(1, &content_selector));
-  EXPECT_TRUE(content_selector->GetString("value", &content_selector_value));
-  EXPECT_THAT(content_selector_value, Eq("www.somehost2.com"));
-}
-
+// TODO(jkrcal) Return the tests ShouldReportEmptyHostsError and
+// ShouldRestrictToHosts once we have a way to change variation parameters from
+// unittests. The tests were tailored to previous default value of the parameter
+// fetching_host_restrict, which changed now.
 TEST_F(NTPSnippetsFetcherTest, ShouldReportUrlStatusError) {
   SetFakeResponse(/*data=*/std::string(), net::HTTP_NOT_FOUND,
                   net::URLRequestStatus::FAILED);
@@ -407,5 +557,16 @@ TEST_F(NTPSnippetsFetcherTest, ShouldCancelOngoingFetch) {
                                        /*count=*/1)));
 }
 
-}  // namespace
+::std::ostream& operator<<(
+    ::std::ostream& os,
+    const NTPSnippetsFetcher::OptionalSnippets& snippets) {
+  if (snippets) {
+    // Matchers above aren't any more precise than this, so this is sufficient
+    // for test-failure diagnostics.
+    return os << "list with " << snippets->size() << " elements";
+  } else {
+    return os << "null";
+  }
+}
+
 }  // namespace ntp_snippets

@@ -73,10 +73,6 @@ class CONTENT_EXPORT WebRtcAudioRenderer
     float volume_;
   };
 
-
-  // Returns platform specific optimal buffer size for rendering audio.
-  static int GetOptimalBufferSize(int sample_rate, int hardware_buffer_size);
-
   WebRtcAudioRenderer(
       const scoped_refptr<base::SingleThreadTaskRunner>& signaling_thread,
       const blink::WebMediaStream& media_stream,
@@ -108,6 +104,9 @@ class CONTENT_EXPORT WebRtcAudioRenderer
   int channels() const { return sink_params_.channels(); }
   int sample_rate() const { return sink_params_.sample_rate(); }
   int frames_per_buffer() const { return sink_params_.frames_per_buffer(); }
+
+  // Returns true if called on rendering thread, otherwise false.
+  bool CurrentThreadIsRenderingThread();
 
  private:
   // MediaStreamAudioRenderer implementation.  This is private since we want
@@ -155,7 +154,6 @@ class CONTENT_EXPORT WebRtcAudioRenderer
 
   // Used to DCHECK that we are called on the correct thread.
   base::ThreadChecker thread_checker_;
-  base::ThreadChecker audio_renderer_thread_checker_;
 
   // Flag to keep track the state of the renderer.
   State state_;

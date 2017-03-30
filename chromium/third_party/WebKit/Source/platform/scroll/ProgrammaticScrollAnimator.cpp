@@ -7,11 +7,12 @@
 #include "platform/animation/CompositorAnimation.h"
 #include "platform/animation/CompositorScrollOffsetAnimationCurve.h"
 #include "platform/geometry/IntPoint.h"
-#include "platform/graphics/CompositorFactory.h"
 #include "platform/graphics/GraphicsLayer.h"
 #include "platform/scroll/ScrollableArea.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -28,7 +29,7 @@ ProgrammaticScrollAnimator::~ProgrammaticScrollAnimator()
 void ProgrammaticScrollAnimator::resetAnimationState()
 {
     ScrollAnimatorCompositorCoordinator::resetAnimationState();
-    m_animationCurve.clear();
+    m_animationCurve.reset();
     m_startTime = 0.0;
 }
 
@@ -50,10 +51,9 @@ void ProgrammaticScrollAnimator::animateToOffset(FloatPoint offset)
 
     m_startTime = 0.0;
     m_targetOffset = offset;
-    m_animationCurve = adoptPtr(CompositorFactory::current().createScrollOffsetAnimationCurve(
+    m_animationCurve = CompositorScrollOffsetAnimationCurve::create(
         compositorOffsetFromBlinkOffset(m_targetOffset),
-        CompositorAnimationCurve::TimingFunctionTypeEaseInOut,
-        CompositorScrollOffsetAnimationCurve::ScrollDurationDeltaBased));
+        CompositorScrollOffsetAnimationCurve::ScrollDurationDeltaBased);
 
     m_scrollableArea->registerForAnimation();
     if (!m_scrollableArea->scheduleAnimation()) {
@@ -116,13 +116,13 @@ void ProgrammaticScrollAnimator::updateCompositorAnimations()
     }
 
     if (m_runState == RunState::WaitingToSendToCompositor) {
-        if (!m_compositorAnimationAttachedToLayerId)
+        if (!m_compositorAnimationAttachedToElementId)
             reattachCompositorPlayerIfNeeded(getScrollableArea()->compositorAnimationTimeline());
 
         bool sentToCompositor = false;
 
         if (!m_scrollableArea->shouldScrollOnMainThread()) {
-            OwnPtr<CompositorAnimation> animation = adoptPtr(CompositorFactory::current().createAnimation(*m_animationCurve, CompositorTargetProperty::SCROLL_OFFSET));
+            std::unique_ptr<CompositorAnimation> animation = CompositorAnimation::create(*m_animationCurve, CompositorTargetProperty::SCROLL_OFFSET, 0, 0);
 
             int animationId = animation->id();
             int animationGroupId = animation->group();

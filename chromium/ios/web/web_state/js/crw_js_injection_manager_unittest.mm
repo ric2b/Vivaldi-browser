@@ -2,13 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#import "ios/web/public/web_state/js/crw_js_injection_manager.h"
+
 #include <stddef.h>
 #import <Foundation/Foundation.h>
 
-#import "ios/web/public/web_state/js/crw_js_injection_manager.h"
+#import "ios/web/public/test/web_test_with_web_state.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
-#import "ios/web/test/web_test.h"
-#import "testing/gtest_mac.h"
+#import "ios/web/public/web_state/web_state.h"
+#include "testing/gtest_mac.h"
 
 // Testing class of JsInjectioManager that has no dependencies.
 @interface TestingCRWJSBaseManager : CRWJSInjectionManager
@@ -156,10 +158,10 @@
 namespace web {
 
 // Test fixture to test web controller injection.
-class JsInjectionManagerTest : public web::WebTestWithWebController {
+class JsInjectionManagerTest : public web::WebTestWithWebState {
  protected:
   void SetUp() override {
-    web::WebTestWithWebController::SetUp();
+    web::WebTestWithWebState::SetUp();
     // Loads a dummy page to prepare JavaScript evaluation.
     NSString* const kPageContent = @"<html><body><div></div></body></html>";
     LoadHtml(kPageContent);
@@ -175,7 +177,7 @@ class JsInjectionManagerTest : public web::WebTestWithWebController {
 
 bool JsInjectionManagerTest::HasReceiverManagers(NSArray* manager_classes) {
   NSDictionary* receiver_managers =
-      [[webController_ jsInjectionReceiver] managers];
+      [web_state()->GetJSInjectionReceiver() managers];
   for (Class manager_class in manager_classes) {
     if (![receiver_managers objectForKey:manager_class])
       return false;
@@ -204,18 +206,18 @@ void JsInjectionManagerTest::TestAllDependencies(NSArray* expected_classes,
 
 CRWJSInjectionManager* JsInjectionManagerTest::GetInstanceOfClass(
     Class jsInjectionManagerClass) {
-  return [[webController_ jsInjectionReceiver]
+  return [web_state()->GetJSInjectionReceiver()
       instanceOfClass:jsInjectionManagerClass];
 }
 
 TEST_F(JsInjectionManagerTest, NoDependencies) {
   NSUInteger originalCount =
-      [[[webController_ jsInjectionReceiver] managers] count];
+      [[web_state()->GetJSInjectionReceiver() managers] count];
   CRWJSInjectionManager* manager =
       GetInstanceOfClass([TestingCRWJSBaseManager class]);
   EXPECT_TRUE(manager);
   EXPECT_EQ(originalCount + 1U,
-            [[[webController_ jsInjectionReceiver] managers] count]);
+            [[web_state()->GetJSInjectionReceiver() managers] count]);
   EXPECT_TRUE(HasReceiverManagers(@[ [TestingCRWJSBaseManager class] ]));
   EXPECT_FALSE([manager hasBeenInjected]);
 
@@ -225,11 +227,11 @@ TEST_F(JsInjectionManagerTest, NoDependencies) {
 
 TEST_F(JsInjectionManagerTest, HasDependencies) {
   NSUInteger originalCount =
-      [[[webController_ jsInjectionReceiver] managers] count];
+      [[web_state()->GetJSInjectionReceiver() managers] count];
   CRWJSInjectionManager* manager = GetInstanceOfClass([TestingJsManager class]);
   EXPECT_TRUE(manager);
   EXPECT_EQ(originalCount + 2U,
-            [[[webController_ jsInjectionReceiver] managers] count])
+            [[web_state()->GetJSInjectionReceiver() managers] count])
       << "Two more CRWJSInjectionManagers should be created.";
   EXPECT_TRUE(HasReceiverManagers(
       @[ [TestingCRWJSBaseManager class], [TestingCRWJSBaseManager class] ]));
@@ -256,12 +258,12 @@ TEST_F(JsInjectionManagerTest, Dynamic) {
 
 TEST_F(JsInjectionManagerTest, HasNestedDependencies) {
   NSUInteger originalCount =
-      [[[webController_ jsInjectionReceiver] managers] count];
+      [[web_state()->GetJSInjectionReceiver() managers] count];
   CRWJSInjectionManager* manager =
       GetInstanceOfClass([TestingJsManagerWithNestedDependencies class]);
   EXPECT_TRUE(manager);
   EXPECT_EQ(originalCount + 3U,
-            [[[webController_ jsInjectionReceiver] managers] count])
+            [[web_state()->GetJSInjectionReceiver() managers] count])
       << "Three more CRWJSInjectionManagers should be created.";
   EXPECT_TRUE(HasReceiverManagers(@[
     [TestingJsManagerWithNestedDependencies class],
@@ -287,7 +289,7 @@ TEST_F(JsInjectionManagerTest, HasNestedDependencies) {
 
 // Tests that checking for an uninjected presence beacon returns false.
 TEST_F(JsInjectionManagerTest, WebControllerCheckForUninjectedScript) {
-  EXPECT_FALSE([webController_
+  EXPECT_FALSE([web_state()->GetJSInjectionReceiver()
       scriptHasBeenInjectedForClass:Nil
                      presenceBeacon:@"__gCrWeb.dummyBeacon"]);
 }

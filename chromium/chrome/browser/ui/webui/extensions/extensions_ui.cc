@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/webui/metrics_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/google/core/browser/google_util.h"
 #include "content/public/browser/web_ui.h"
@@ -98,6 +99,29 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
       l10n_util::GetStringFUTF16(
           IDS_EXTENSIONS_ADDED_WITHOUT_KNOWLEDGE,
           l10n_util::GetStringUTF16(IDS_EXTENSION_WEB_STORE_TITLE)));
+  source->AddLocalizedString("packDialogTitle",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_TITLE);
+  source->AddLocalizedString("packDialogBrowse",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_BROWSE_BUTTON);
+  source->AddLocalizedString(
+      "packDialogExtensionRoot",
+      IDS_MD_EXTENSIONS_PACK_DIALOG_EXTENSION_ROOT_LABEL);
+  source->AddLocalizedString("packDialogKeyFile",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_KEY_FILE_LABEL);
+  source->AddLocalizedString("packDialogContent",
+                             IDS_EXTENSION_PACK_DIALOG_HEADING);
+  source->AddLocalizedString("packDialogCancel",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_CANCEL_BUTTON);
+  source->AddLocalizedString("packDialogConfirm",
+                             IDS_MD_EXTENSIONS_PACK_DIALOG_CONFIRM_BUTTON);
+  source->AddLocalizedString("shortcutNotSet",
+                             IDS_MD_EXTENSIONS_SHORTCUT_NOT_SET);
+  source->AddLocalizedString("shortcutScopeGlobal",
+                             IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_GLOBAL);
+  source->AddLocalizedString("shortcutScopeLabel",
+                             IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_LABEL);
+  source->AddLocalizedString("shortcutScopeInChrome",
+                             IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_IN_CHROME);
   source->AddLocalizedString("viewBackgroundPage",
                              IDS_EXTENSIONS_BACKGROUND_PAGE);
   source->AddLocalizedString("viewIncognito",
@@ -113,10 +137,18 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
               GURL(extension_urls::GetWebstoreExtensionsCategoryURL()),
               g_browser_process->GetApplicationLocale()).spec()));
 
+  source->AddResourcePath("animation_helper.html",
+                          IDR_MD_EXTENSIONS_ANIMATION_HELPER_HTML);
+  source->AddResourcePath("animation_helper.js",
+                          IDR_MD_EXTENSIONS_ANIMATION_HELPER_JS);
   source->AddResourcePath("extensions.js", IDR_MD_EXTENSIONS_EXTENSIONS_JS);
   source->AddResourcePath("detail_view.html",
                           IDR_MD_EXTENSIONS_DETAIL_VIEW_HTML);
   source->AddResourcePath("detail_view.js", IDR_MD_EXTENSIONS_DETAIL_VIEW_JS);
+  source->AddResourcePath("keyboard_shortcuts.html",
+                          IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_HTML);
+  source->AddResourcePath("keyboard_shortcuts.js",
+                          IDR_MD_EXTENSIONS_KEYBOARD_SHORTCUTS_JS);
   source->AddResourcePath("manager.css", IDR_MD_EXTENSIONS_MANAGER_CSS);
   source->AddResourcePath("manager.html", IDR_MD_EXTENSIONS_MANAGER_HTML);
   source->AddResourcePath("manager.js", IDR_MD_EXTENSIONS_MANAGER_JS);
@@ -127,14 +159,17 @@ content::WebUIDataSource* CreateMdExtensionsSource() {
   source->AddResourcePath("item_list.css", IDR_MD_EXTENSIONS_ITEM_LIST_CSS);
   source->AddResourcePath("item_list.html", IDR_MD_EXTENSIONS_ITEM_LIST_HTML);
   source->AddResourcePath("item_list.js", IDR_MD_EXTENSIONS_ITEM_LIST_JS);
+  source->AddResourcePath("pack_dialog.html",
+                          IDR_MD_EXTENSIONS_PACK_DIALOG_HTML);
+  source->AddResourcePath("pack_dialog.js", IDR_MD_EXTENSIONS_PACK_DIALOG_JS);
   source->AddResourcePath("service.html", IDR_MD_EXTENSIONS_SERVICE_HTML);
   source->AddResourcePath("service.js", IDR_MD_EXTENSIONS_SERVICE_JS);
+  source->AddResourcePath("shortcut_util.html",
+                          IDR_EXTENSIONS_SHORTCUT_UTIL_HTML);
+  source->AddResourcePath("shortcut_util.js", IDR_EXTENSIONS_SHORTCUT_UTIL_JS);
   source->AddResourcePath("sidebar.css", IDR_MD_EXTENSIONS_SIDEBAR_CSS);
   source->AddResourcePath("sidebar.html", IDR_MD_EXTENSIONS_SIDEBAR_HTML);
   source->AddResourcePath("sidebar.js", IDR_MD_EXTENSIONS_SIDEBAR_JS);
-  source->AddResourcePath("toolbar.css", IDR_MD_EXTENSIONS_TOOLBAR_CSS);
-  source->AddResourcePath("toolbar.html", IDR_MD_EXTENSIONS_TOOLBAR_HTML);
-  source->AddResourcePath("toolbar.js", IDR_MD_EXTENSIONS_TOOLBAR_JS);
   source->AddResourcePath("strings.html", IDR_MD_EXTENSIONS_STRINGS_HTML);
   source->SetDefaultResource(IDR_MD_EXTENSIONS_EXTENSIONS_HTML);
 

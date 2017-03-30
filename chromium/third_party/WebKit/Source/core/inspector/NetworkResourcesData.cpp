@@ -32,6 +32,7 @@
 #include "core/fetch/Resource.h"
 #include "platform/SharedBuffer.h"
 #include "platform/network/ResourceResponse.h"
+#include <memory>
 
 namespace blink {
 
@@ -163,10 +164,11 @@ void NetworkResourcesData::ResourceData::appendData(const char* data, size_t dat
 
 size_t NetworkResourcesData::ResourceData::decodeDataToContent()
 {
-    ASSERT(!hasContent());
+    DCHECK(!hasContent());
+    DCHECK(hasData());
     size_t dataLength = m_dataBuffer->size();
-    m_content = m_decoder->decode(m_dataBuffer->data(), m_dataBuffer->size());
-    m_content = m_content + m_decoder->flush();
+    bool success = InspectorPageAgent::sharedBufferContent(m_dataBuffer, m_mimeType, m_textEncodingName, &m_content, &m_base64Encoded);
+    DCHECK(success);
     m_dataBuffer = nullptr;
     return contentSizeInBytes(m_content) - dataLength;
 }
@@ -202,12 +204,11 @@ void NetworkResourcesData::responseReceived(const String& requestId, const Strin
     resourceData->setFrameId(frameId);
     resourceData->setMimeType(response.mimeType());
     resourceData->setTextEncodingName(response.textEncodingName());
-    resourceData->setDecoder(InspectorPageAgent::createResourceTextDecoder(response.mimeType(), response.textEncodingName()));
     resourceData->setHTTPStatusCode(response.httpStatusCode());
 
     String filePath = response.downloadedFilePath();
     if (!filePath.isEmpty()) {
-        OwnPtr<BlobData> blobData = BlobData::create();
+        std::unique_ptr<BlobData> blobData = BlobData::create();
         blobData->appendFile(filePath);
         AtomicString mimeType;
         if (response.isHTTP())
@@ -261,8 +262,6 @@ void NetworkResourcesData::maybeAddResourceData(const String& requestId, const c
 {
     ResourceData* resourceData = resourceDataForRequestId(requestId);
     if (!resourceData)
-        return;
-    if (!resourceData->decoder())
         return;
     if (resourceData->dataLength() + dataLength > m_maximumSingleResourceContentSize)
         m_contentSize -= resourceData->evictContent();

@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/test/base/test_launcher_utils.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest-spi.h"
@@ -24,6 +25,7 @@
 #endif
 
 #if defined(ENABLE_PEPPER_CDMS)
+#include "chrome/browser/media/pepper_cdm_test_constants.h"
 #include "chrome/browser/media/pepper_cdm_test_helper.h"
 #endif
 
@@ -98,8 +100,6 @@ static bool IsMSESupported() {
 // Base class for encrypted media tests.
 class EncryptedMediaTestBase : public MediaBrowserTest {
  public:
-  EncryptedMediaTestBase() {}
-
   bool IsExternalClearKey(const std::string& key_system) {
     if (key_system == kExternalClearKeyKeySystem)
       return true;
@@ -241,6 +241,15 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
         switches::kDisableGestureRequirementForMediaPlayback);
   }
 
+#if defined(ENABLE_PEPPER_CDMS)
+  void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
+    base::CommandLine default_command_line(base::CommandLine::NO_PROGRAM);
+    InProcessBrowserTest::SetUpDefaultCommandLine(&default_command_line);
+    test_launcher_utils::RemoveCommandLineSwitch(
+        default_command_line, switches::kDisableComponentUpdate, command_line);
+  }
+#endif  // defined(ENABLE_PEPPER_CDMS)
+
   void SetUpCommandLineForKeySystem(const std::string& key_system,
                                     base::CommandLine* command_line) {
     if (GetServerConfig(key_system))
@@ -251,15 +260,10 @@ class EncryptedMediaTestBase : public MediaBrowserTest {
 
 #if defined(ENABLE_PEPPER_CDMS)
     if (IsExternalClearKey(key_system)) {
-      RegisterPepperCdm(command_line, kClearKeyCdmAdapterFileName,
-                        kClearKeyCdmDisplayName, kClearKeyCdmPepperMimeType);
+      RegisterPepperCdm(command_line, kClearKeyCdmBaseDirectory,
+                        kClearKeyCdmAdapterFileName, kClearKeyCdmDisplayName,
+                        kClearKeyCdmPepperMimeType);
     }
-#if 0 && defined(WIDEVINE_CDM_AVAILABLE) && defined(WIDEVINE_CDM_IS_COMPONENT)
-    else if (IsWidevine(key_system)) {  // NOLINT
-      RegisterPepperCdm(command_line, kWidevineCdmAdapterFileName,
-                        kWidevineCdmDisplayName, kWidevineCdmPluginMimeType);
-    }
-#endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(WIDEVINE_CDM_IS_COMPONENT)
 #endif  // defined(ENABLE_PEPPER_CDMS)
   }
 };
@@ -519,7 +523,13 @@ IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, FrameSizeChangeVideo) {
 }
 
 #if defined(USE_PROPRIETARY_CODECS)
-IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, Playback_VideoOnly_MP4) {
+// Crashes on Mac only.  http://crbug.com/621857
+#if defined(OS_MACOSX)
+#define MAYBE_Playback_VideoOnly_MP4 DISABLED_Playback_VideoOnly_MP4
+#else
+#define MAYBE_Playback_VideoOnly_MP4 Playback_VideoOnly_MP4
+#endif
+IN_PROC_BROWSER_TEST_P(EncryptedMediaTest, MAYBE_Playback_VideoOnly_MP4) {
   // MP4 without MSE is not support yet, http://crbug.com/170793.
   if (CurrentSourceType() != MSE) {
     DVLOG(0) << "Skipping test; Can only play MP4 encrypted streams by MSE.";

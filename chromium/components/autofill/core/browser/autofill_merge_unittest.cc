@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -15,6 +16,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/country_names.h"
@@ -36,9 +38,8 @@ namespace {
 const base::FilePath::CharType kTestName[] = FILE_PATH_LITERAL("merge");
 const base::FilePath::CharType kFileNamePattern[] = FILE_PATH_LITERAL("*.in");
 
-const char kFieldSeparator[] = ": ";
+const char kFieldSeparator[] = ":";
 const char kProfileSeparator[] = "---";
-const size_t kFieldOffset = arraysize(kFieldSeparator) - 1;
 
 const ServerFieldType kProfileFieldTypes[] = {NAME_FIRST,
                                               NAME_MIDDLE,
@@ -94,9 +95,12 @@ std::string SerializeProfiles(const std::vector<AutofillProfile*>& profiles) {
       base::string16 value = profiles[i]->GetRawInfo(type);
       result += AutofillType(type).ToString();
       result += kFieldSeparator;
-      base::ReplaceFirstSubstringAfterOffset(
-          &value, 0, base::ASCIIToUTF16("\\n"), base::ASCIIToUTF16("\n"));
-      result += base::UTF16ToUTF8(value);
+      if (!value.empty()) {
+        base::ReplaceFirstSubstringAfterOffset(
+            &value, 0, base::ASCIIToUTF16("\\n"), base::ASCIIToUTF16("\n"));
+        result += " ";
+        result += base::UTF16ToUTF8(value);
+      }
       result += "\n";
     }
   }
@@ -164,6 +168,8 @@ class AutofillMergeTest : public DataDrivenTest,
   // testing::Test:
   void SetUp() override;
 
+  void TearDown() override;
+
   // DataDrivenTest:
   void GenerateResults(const std::string& input, std::string* output) override;
 
@@ -194,7 +200,17 @@ AutofillMergeTest::~AutofillMergeTest() {
 }
 
 void AutofillMergeTest::SetUp() {
-  test::DisableSystemServices(NULL);
+  test::DisableSystemServices(nullptr);
+
+  base::FeatureList::ClearInstanceForTesting();
+  std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+  feature_list->InitializeFromCommandLine(kAutofillProfileCleanup.name,
+                                          std::string());
+  base::FeatureList::SetInstance(std::move(feature_list));
+}
+
+void AutofillMergeTest::TearDown() {
+  test::ReenableSystemServices();
 }
 
 void AutofillMergeTest::GenerateResults(const std::string& input,
@@ -225,8 +241,11 @@ void AutofillMergeTest::MergeProfiles(const std::string& profiles,
           << "Wrong format for separator on line " << i;
       base::string16 field_type =
           base::UTF8ToUTF16(line.substr(0, separator_pos));
+      do {
+        ++separator_pos;
+      } while (separator_pos < line.size() && line[separator_pos] == ' ');
       base::string16 value =
-          base::UTF8ToUTF16(line.substr(separator_pos + kFieldOffset));
+          base::UTF8ToUTF16(line.substr(separator_pos));
       base::ReplaceFirstSubstringAfterOffset(
           &value, 0, base::ASCIIToUTF16("\\n"), base::ASCIIToUTF16("\n"));
 

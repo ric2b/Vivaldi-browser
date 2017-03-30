@@ -7,18 +7,19 @@
 
 #include "core/workers/InProcessWorkerMessagingProxy.h"
 #include "wtf/Allocator.h"
+#include <memory>
 
 namespace blink {
 
 class CompositorWorkerMessagingProxy final : public InProcessWorkerMessagingProxy {
     USING_FAST_MALLOC(CompositorWorkerMessagingProxy);
 public:
-    explicit CompositorWorkerMessagingProxy(InProcessWorkerBase*);
+    CompositorWorkerMessagingProxy(InProcessWorkerBase*, WorkerClients*);
 
 protected:
     ~CompositorWorkerMessagingProxy() override;
 
-    PassOwnPtr<WorkerThread> createWorkerThread(double originTime) override;
+    std::unique_ptr<WorkerThread> createWorkerThread(double originTime) override;
 };
 
 } // namespace blink

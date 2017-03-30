@@ -378,13 +378,19 @@ bool URLDatabase::GetMatchesWStatement(const char* sql_statement,
 
 bool URLDatabase::GetTextMatches(const base::string16& query,
                                  URLRows* results) {
+  return GetTextMatchesWithAlgorithm(
+      query, query_parser::MatchingAlgorithm::DEFAULT, results);
+}
+
+bool URLDatabase::GetTextMatchesWithAlgorithm(
+    const base::string16& query,
+    query_parser::MatchingAlgorithm algorithm,
+    URLRows* results) {
   ScopedVector<query_parser::QueryNode> query_nodes;
   // Vivaldi specific; we want all matches. See VB-5754.
-  query_parser::MatchingAlgorithm matching_algorithm =
-      vivaldi::IsVivaldiRunning()
-          ? query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH
-          : query_parser::MatchingAlgorithm::DEFAULT;
-  query_parser_.ParseQueryNodes(query, matching_algorithm, &query_nodes.get());
+  if(vivaldi::IsVivaldiRunning())
+    algorithm =query_parser::MatchingAlgorithm::ALWAYS_PREFIX_SEARCH;
+  query_parser_.ParseQueryNodes(query, algorithm, &query_nodes.get());
 
   results->clear();
   sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,

@@ -8,6 +8,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <vector>
 
 #include "cc/base/cc_export.h"
 #include "cc/playback/display_item.h"
@@ -18,23 +19,21 @@ class SkCanvas;
 class SkPicture;
 
 namespace cc {
-class ImageSerializationProcessor;
+class ClientPictureCache;
 
 class CC_EXPORT DrawingDisplayItem : public DisplayItem {
  public:
   DrawingDisplayItem();
   explicit DrawingDisplayItem(sk_sp<const SkPicture> picture);
-  explicit DrawingDisplayItem(
-      const proto::DisplayItem& proto,
-      ImageSerializationProcessor* image_serialization_processor);
+  explicit DrawingDisplayItem(const proto::DisplayItem& proto,
+                              ClientPictureCache* client_picture_cache,
+                              std::vector<uint32_t>* used_engine_picture_ids);
   explicit DrawingDisplayItem(const DrawingDisplayItem& item);
   ~DrawingDisplayItem() override;
 
-  void ToProtobuf(proto::DisplayItem* proto,
-                  ImageSerializationProcessor* image_serialization_processor)
-      const override;
+  void ToProtobuf(proto::DisplayItem* proto) const override;
+  sk_sp<const SkPicture> GetPicture() const override;
   void Raster(SkCanvas* canvas,
-              const gfx::Rect& canvas_playback_rect,
               SkPicture::AbortCallback* callback) const override;
   void AsValueInto(const gfx::Rect& visual_rect,
                    base::trace_event::TracedValue* array) const override;

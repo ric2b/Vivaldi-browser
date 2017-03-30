@@ -5,14 +5,15 @@
 #ifndef CSSKeywordValue_h
 #define CSSKeywordValue_h
 
+#include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
-#include "core/css/cssom/StyleValue.h"
+#include "core/css/cssom/CSSStyleValue.h"
 
 namespace blink {
 
 class ExceptionState;
 
-class CORE_EXPORT CSSKeywordValue final : public StyleValue {
+class CORE_EXPORT CSSKeywordValue final : public CSSStyleValue {
     WTF_MAKE_NONCOPYABLE(CSSKeywordValue);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -31,9 +32,9 @@ private:
     String m_keywordValue;
 };
 
-DEFINE_TYPE_CASTS(CSSKeywordValue, StyleValue, value,
-    value->type() == StyleValue::StyleValueType::KeywordType,
-    value.type() == StyleValue::StyleValueType::KeywordType);
+DEFINE_TYPE_CASTS(CSSKeywordValue, CSSStyleValue, value,
+    value->type() == CSSStyleValue::StyleValueType::KeywordType,
+    value.type() == CSSStyleValue::StyleValueType::KeywordType);
 
 } // namespace blink
 

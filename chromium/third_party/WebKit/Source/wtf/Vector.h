@@ -271,6 +271,26 @@ struct VectorComparer<true, T> {
 };
 
 template <typename T>
+struct VectorElementComparer {
+    STATIC_ONLY(VectorElementComparer);
+    template <typename U>
+    static bool compareElement(const T& left, const U& right)
+    {
+        return left == right;
+    }
+};
+
+template <typename T>
+struct VectorElementComparer<std::unique_ptr<T>> {
+    STATIC_ONLY(VectorElementComparer);
+    template <typename U>
+    static bool compareElement(const std::unique_ptr<T>& left, const U& right)
+    {
+        return left.get() == right;
+    }
+};
+
+template <typename T>
 struct VectorTypeOperations {
     STATIC_ONLY(VectorTypeOperations);
     static void destruct(T* begin, T* end)
@@ -311,6 +331,12 @@ struct VectorTypeOperations {
     static bool compare(const T* a, const T* b, size_t size)
     {
         return VectorComparer<VectorTraits<T>::canCompareWithMemcmp, T>::compare(a, b, size);
+    }
+
+    template <typename U>
+    static bool compareElement(const T& left, U&& right)
+    {
+        return VectorElementComparer<T>::compareElement(left, std::forward<U>(right));
     }
 };
 
@@ -355,13 +381,13 @@ public:
         // If the vector backing is garbage-collected and needs tracing or
         // finalizing, we clear out the unused slots so that the visitor or the
         // finalizer does not cause a problem when visiting the unused slots.
-        VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || NeedsTracingTrait<VectorTraits<T>>::value), T>::clear(from, to);
+        VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || IsTraceableInCollectionTrait<VectorTraits<T>>::value), T>::clear(from, to);
     }
 
     void checkUnusedSlots(const T* from, const T* to)
     {
 #if ENABLE(ASSERT) && !defined(ANNOTATE_CONTIGUOUS_CONTAINER)
-        VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || NeedsTracingTrait<VectorTraits<T>>::value), T>::checkCleared(from, to);
+        VectorUnusedSlotClearer<Allocator::isGarbageCollected && (VectorTraits<T>::needsDestruction || IsTraceableInCollectionTrait<VectorTraits<T>>::value), T>::checkCleared(from, to);
 #endif
     }
 
@@ -778,7 +804,7 @@ public:
     Vector()
     {
         static_assert(!std::is_polymorphic<T>::value || !VectorTraits<T>::canInitializeWithMemset, "Cannot initialize with memset if there is a vtable");
-        static_assert(Allocator::isGarbageCollected || !AllowsOnlyPlacementNew<T>::value || !NeedsTracing<T>::value, "Cannot put DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects that have trace methods into an off-heap Vector");
+        static_assert(Allocator::isGarbageCollected || !AllowsOnlyPlacementNew<T>::value || !IsTraceable<T>::value, "Cannot put DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects that have trace methods into an off-heap Vector");
         static_assert(Allocator::isGarbageCollected || !IsPointerToGarbageCollectedType<T>::value, "Cannot put raw pointers to garbage-collected classes into an off-heap Vector.  Use HeapVector<Member<T>> instead.");
 
         ANNOTATE_NEW_BUFFER(begin(), capacity(), 0);
@@ -789,7 +815,7 @@ public:
         : Base(size)
     {
         static_assert(!std::is_polymorphic<T>::value || !VectorTraits<T>::canInitializeWithMemset, "Cannot initialize with memset if there is a vtable");
-        static_assert(Allocator::isGarbageCollected || !AllowsOnlyPlacementNew<T>::value || !NeedsTracing<T>::value, "Cannot put DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects that have trace methods into an off-heap Vector");
+        static_assert(Allocator::isGarbageCollected || !AllowsOnlyPlacementNew<T>::value || !IsTraceable<T>::value, "Cannot put DISALLOW_NEW_EXCEPT_PLACEMENT_NEW objects that have trace methods into an off-heap Vector");
         static_assert(Allocator::isGarbageCollected || !IsPointerToGarbageCollectedType<T>::value, "Cannot put raw pointers to garbage-collected classes into an off-heap Vector.  Use HeapVector<Member<T>> instead.");
 
         ANNOTATE_NEW_BUFFER(begin(), capacity(), size);
@@ -1095,7 +1121,7 @@ size_t Vector<T, inlineCapacity, Allocator>::find(const U& value) const
     const T* b = begin();
     const T* e = end();
     for (const T* iter = b; iter < e; ++iter) {
-        if (*iter == value)
+        if (TypeOperations::compareElement(*iter, value))
             return iter - b;
     }
     return kNotFound;
@@ -1109,7 +1135,7 @@ size_t Vector<T, inlineCapacity, Allocator>::reverseFind(const U& value) const
     const T* iter = end();
     while (iter > b) {
         --iter;
-        if (*iter == value)
+        if (TypeOperations::compareElement(*iter, value))
             return iter - b;
     }
     return kNotFound;
@@ -1523,7 +1549,7 @@ void Vector<T, inlineCapacity, Allocator>::trace(VisitorDispatcher visitor)
     }
     const T* bufferBegin = buffer();
     const T* bufferEnd = buffer() + size();
-    if (NeedsTracingTrait<VectorTraits<T>>::value) {
+    if (IsTraceableInCollectionTrait<VectorTraits<T>>::value) {
         for (const T* bufferEntry = bufferBegin; bufferEntry != bufferEnd; bufferEntry++)
             Allocator::template trace<VisitorDispatcher, T, VectorTraits<T>>(visitor, *const_cast<T*>(bufferEntry));
         checkUnusedSlots(buffer() + size(), buffer() + capacity());

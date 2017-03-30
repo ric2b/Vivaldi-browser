@@ -13,6 +13,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -426,9 +428,7 @@ class SyncInvalidationListenerTest : public testing::Test {
     FlushPendingWrites();
   }
 
-  void FlushPendingWrites() {
-    message_loop_.RunUntilIdle();
-  }
+  void FlushPendingWrites() { base::RunLoop().RunUntilIdle(); }
 
   void EnableNotifications() {
     fake_push_client_->EnableNotifications();

@@ -8,9 +8,12 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "content/public/common/service_registry.h"
+#include "base/files/scoped_temp_dir.h"
+#include "base/process/process.h"
 #include "content/public/test/test_mojo_app.h"
+#include "content/public/test/test_mojo_service.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "services/shell/public/cpp/interface_registry.h"
 
 namespace content {
 
@@ -25,6 +28,16 @@ class TestMojoServiceImpl : public mojom::TestMojoService {
   // mojom::TestMojoService implementation:
   void DoSomething(const DoSomethingCallback& callback) override {
     callback.Run();
+  }
+
+  void DoTerminateProcess(const DoTerminateProcessCallback& callback) override {
+    base::Process::Current().Terminate(0, false);
+  }
+
+  void CreateFolder(const CreateFolderCallback& callback) override {
+    // Note: This is used to check if the sandbox is disabled or not since
+    //       creating a folder is forbidden when it is enabled.
+    callback.Run(base::ScopedTempDir().CreateUniqueTempDir());
   }
 
   void GetRequestorName(const GetRequestorNameCallback& callback) override {
@@ -58,9 +71,9 @@ void ShellContentUtilityClient::RegisterMojoApplications(
   apps->insert(std::make_pair(kTestMojoAppUrl, app_info));
 }
 
-void ShellContentUtilityClient::RegisterMojoServices(
-    ServiceRegistry* registry) {
-  registry->AddService(base::Bind(&TestMojoServiceImpl::Create));
+void ShellContentUtilityClient::ExposeInterfacesToBrowser(
+    shell::InterfaceRegistry* registry) {
+  registry->AddInterface(base::Bind(&TestMojoServiceImpl::Create));
 }
 
 }  // namespace content

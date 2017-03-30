@@ -14,6 +14,7 @@
 #include "ios/web/navigation/navigation_item_impl.h"
 #include "ios/web/net/request_group_util.h"
 #include "ios/web/public/browser_state.h"
+#import "ios/web/public/java_script_dialog_presenter.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/url_util.h"
 #include "ios/web/public/web_client.h"
@@ -429,6 +430,32 @@ bool WebStateImpl::HandleContextMenu(const web::ContextMenuParams& params) {
   return false;
 }
 
+void WebStateImpl::RunJavaScriptDialog(
+    const GURL& origin_url,
+    JavaScriptDialogType javascript_dialog_type,
+    NSString* message_text,
+    NSString* default_prompt_text,
+    const DialogClosedCallback& callback) {
+  JavaScriptDialogPresenter* presenter =
+      delegate_ ? delegate_->GetJavaScriptDialogPresenter(this) : nullptr;
+  if (!presenter) {
+    callback.Run(false, nil);
+    return;
+  }
+  presenter->RunJavaScriptDialog(this, origin_url, javascript_dialog_type,
+                                 message_text, default_prompt_text, callback);
+}
+
+void WebStateImpl::CancelActiveAndPendingDialogs() {
+  if (delegate_) {
+    JavaScriptDialogPresenter* presenter =
+        delegate_->GetJavaScriptDialogPresenter(this);
+    if (presenter) {
+      presenter->CancelActiveAndPendingDialogs(this);
+    }
+  }
+}
+
 WebUIIOS* WebStateImpl::CreateWebUIIOS(const GURL& url) {
   WebUIIOSControllerFactory* factory =
       WebUIIOSControllerFactoryRegistry::GetInstance();
@@ -448,12 +475,6 @@ WebUIIOS* WebStateImpl::CreateWebUIIOS(const GURL& url) {
 
 void WebStateImpl::SetContentsMimeType(const std::string& mime_type) {
   mime_type_ = mime_type;
-}
-
-void WebStateImpl::ExecuteJavaScriptAsync(const base::string16& javascript) {
-  DCHECK(Configured());
-  [web_controller_ evaluateJavaScript:base::SysUTF16ToNSString(javascript)
-                  stringResultHandler:nil];
 }
 
 bool WebStateImpl::ShouldAllowRequest(NSURLRequest* request) {
@@ -539,6 +560,14 @@ void WebStateImpl::SetWebUsageEnabled(bool enabled) {
   [web_controller_ setWebUsageEnabled:enabled];
 }
 
+bool WebStateImpl::ShouldSuppressDialogs() const {
+  return [web_controller_ shouldSuppressDialogs];
+}
+
+void WebStateImpl::SetShouldSuppressDialogs(bool should_suppress) {
+  [web_controller_ setShouldSuppressDialogs:should_suppress];
+}
+
 UIView* WebStateImpl::GetView() {
   return [web_controller_ view];
 }
@@ -551,6 +580,10 @@ void WebStateImpl::OpenURL(const WebState::OpenURLParams& params) {
   DCHECK(Configured());
   ClearTransientContentView();
   [[web_controller_ delegate] openURLWithParams:params];
+}
+
+const NavigationManager* WebStateImpl::GetNavigationManager() const {
+  return &GetNavigationManagerImpl();
 }
 
 NavigationManager* WebStateImpl::GetNavigationManager() {

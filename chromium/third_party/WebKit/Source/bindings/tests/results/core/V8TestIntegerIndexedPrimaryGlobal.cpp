@@ -173,7 +173,7 @@ v8::Local<v8::FunctionTemplate> V8TestIntegerIndexedPrimaryGlobal::domTemplateFo
 {
     v8::Local<v8::FunctionTemplate> parentTemplate = V8None::domTemplate(isolate, world);
 
-    v8::Local<v8::FunctionTemplate> namedPropertiesObjectFunctionTemplate = v8::FunctionTemplate::New(isolate);
+    v8::Local<v8::FunctionTemplate> namedPropertiesObjectFunctionTemplate = v8::FunctionTemplate::New(isolate, V8ObjectConstructor::isValidConstructorMode);
     namedPropertiesObjectFunctionTemplate->SetClassName(v8AtomicString(isolate, "TestIntegerIndexedPrimaryGlobalProperties"));
     namedPropertiesObjectFunctionTemplate->Inherit(parentTemplate);
 
@@ -185,6 +185,7 @@ v8::Local<v8::FunctionTemplate> V8TestIntegerIndexedPrimaryGlobal::domTemplateFo
 
     return namedPropertiesObjectFunctionTemplate;
 }
+
 
 bool V8TestIntegerIndexedPrimaryGlobal::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
@@ -198,7 +199,7 @@ v8::Local<v8::Object> V8TestIntegerIndexedPrimaryGlobal::findInstanceInPrototype
 
 TestIntegerIndexedPrimaryGlobal* V8TestIntegerIndexedPrimaryGlobal::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
 }
 
 } // namespace blink

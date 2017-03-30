@@ -42,9 +42,11 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/ime/input_method.h"
+#include "ui/base/ime/text_edit_commands.h"
 #include "ui/base/ime/text_input_client.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
@@ -55,7 +57,6 @@
 #include "ui/views/border.h"
 #include "ui/views/button_drag_utils.h"
 #include "ui/views/controls/textfield/textfield.h"
-#include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
@@ -279,13 +280,12 @@ void OmniboxViewViews::SetUserText(const base::string16& text,
   OmniboxView::SetUserText(text, update_popup);
 }
 
-void OmniboxViewViews::SetForcedQuery() {
-  const base::string16 current_text(text());
-  const size_t start = current_text.find_first_not_of(base::kWhitespaceUTF16);
-  if (start == base::string16::npos || (current_text[start] != '?'))
-    OmniboxView::SetUserText(base::ASCIIToUTF16("?"));
-  else
-    SelectRange(gfx::Range(current_text.size(), start + 1));
+void OmniboxViewViews::EnterKeywordModeForDefaultSearchProvider() {
+  // Transition the user into keyword mode using their default search provider.
+  // Select their query if they typed one.
+  model()->EnterKeywordModeForDefaultSearchProvider(
+      KeywordModeEntryMethod::KEYBOARD_SHORTCUT);
+  SelectRange(gfx::Range(text().size(), 0));
 }
 
 void OmniboxViewViews::GetSelectionBounds(
@@ -366,14 +366,10 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
     case IDC_EDIT_SEARCH_ENGINES:
       location_bar_view_->command_updater()->ExecuteCommand(command_id);
       return;
-    case IDS_MOVE_DOWN:
-    case IDS_MOVE_UP:
-      model()->OnUpOrDownKeyPressed(command_id == IDS_MOVE_DOWN ? 1 : -1);
-      return;
 
     // These commands do invoke the popup.
     case IDS_APP_PASTE:
-      OnPaste();
+      ExecuteTextEditCommand(ui::TextEditCommand::PASTE);
       return;
     default:
       if (Textfield::IsCommandIdEnabled(command_id)) {
@@ -408,7 +404,7 @@ void OmniboxViewViews::OnPaste() {
     model()->OnPaste();
     // Force a Paste operation to trigger the text_changed code in
     // OnAfterPossibleChange(), even if identical contents are pasted.
-    text_before_change_.clear();
+    state_before_change_.text.clear();
     InsertOrReplaceText(text);
     OnAfterPossibleChange(true);
   }
@@ -421,7 +417,7 @@ bool OmniboxViewViews::HandleEarlyTabActions(const ui::KeyEvent& event) {
     return false;
 
   if (model()->is_keyword_hint() && !event.IsShiftDown())
-    return model()->AcceptKeyword(ENTERED_KEYWORD_MODE_VIA_TAB);
+    return model()->AcceptKeyword(KeywordModeEntryMethod::TAB);
 
   if (!model()->popup_model()->IsOpen())
     return false;
@@ -526,42 +522,32 @@ void OmniboxViewViews::OnRevertTemporaryText() {
 
 void OmniboxViewViews::OnBeforePossibleChange() {
   // Record our state.
-  text_before_change_ = text();
-  sel_before_change_ = GetSelectedRange();
+  GetState(&state_before_change_);
   ime_composing_before_change_ = IsIMEComposing();
 }
 
 bool OmniboxViewViews::OnAfterPossibleChange(bool allow_keyword_ui_change) {
   // See if the text or selection have changed since OnBeforePossibleChange().
-  const base::string16 new_text = text();
-  const gfx::Range new_sel = GetSelectedRange();
-  const bool text_changed = (new_text != text_before_change_) ||
-      (ime_composing_before_change_ != IsIMEComposing());
-  const bool selection_differs =
-      !((sel_before_change_.is_empty() && new_sel.is_empty()) ||
-        sel_before_change_.EqualsIgnoringDirection(new_sel));
+  State new_state;
+  GetState(&new_state);
+  OmniboxView::StateChanges state_changes =
+      GetStateChanges(state_before_change_, new_state);
 
-  // When the user has deleted text, we don't allow inline autocomplete.  Make
-  // sure to not flag cases like selecting part of the text and then pasting
-  // (or typing) the prefix of that selection.  (We detect these by making
-  // sure the caret, which should be after any insertion, hasn't moved
-  // forward of the old selection start.)
-  const bool just_deleted_text =
-      (text_before_change_.length() > new_text.length()) &&
-      (new_sel.start() <= sel_before_change_.GetMin());
+  state_changes.text_differs =
+      state_changes.text_differs ||
+      (ime_composing_before_change_ != IsIMEComposing());
 
   const bool something_changed = model()->OnAfterPossibleChange(
-      text_before_change_, new_text, new_sel.start(), new_sel.end(),
-      selection_differs, text_changed, just_deleted_text,
-      allow_keyword_ui_change && !IsIMEComposing());
+      state_changes, allow_keyword_ui_change && !IsIMEComposing());
 
   // If only selection was changed, we don't need to call model()'s
   // OnChanged() method, which is called in TextChanged().
   // But we still need to call EmphasizeURLComponents() to make sure the text
   // attributes are updated correctly.
-  if (something_changed && text_changed)
+  if (something_changed &&
+      (state_changes.text_differs || state_changes.keyword_differs))
     TextChanged();
-  else if (selection_differs)
+  else if (state_changes.selection_differs)
     EmphasizeURLComponents();
   else if (delete_at_end_pressed_)
     model()->OnChanged();
@@ -758,14 +744,14 @@ bool OmniboxViewViews::OnKeyPressed(const ui::KeyEvent& event) {
         model()->popup_model()->TryDeletingCurrentItem();
       break;
     case ui::VKEY_UP:
-      if (!read_only()) {
-        model()->OnUpOrDownKeyPressed(-1);
+      if (IsTextEditCommandEnabled(ui::TextEditCommand::MOVE_UP)) {
+        ExecuteTextEditCommand(ui::TextEditCommand::MOVE_UP);
         return true;
       }
       break;
     case ui::VKEY_DOWN:
-      if (!read_only()) {
-        model()->OnUpOrDownKeyPressed(1);
+      if (IsTextEditCommandEnabled(ui::TextEditCommand::MOVE_DOWN)) {
+        ExecuteTextEditCommand(ui::TextEditCommand::MOVE_DOWN);
         return true;
       }
       break;
@@ -780,14 +766,16 @@ bool OmniboxViewViews::OnKeyPressed(const ui::KeyEvent& event) {
       model()->OnUpOrDownKeyPressed(model()->result().size());
       return true;
     case ui::VKEY_V:
-      if (control && !alt && !read_only()) {
-        ExecuteCommand(IDS_APP_PASTE, 0);
+      if (control && !alt &&
+          IsTextEditCommandEnabled(ui::TextEditCommand::PASTE)) {
+        ExecuteTextEditCommand(ui::TextEditCommand::PASTE);
         return true;
       }
       break;
     case ui::VKEY_INSERT:
-      if (shift && !control && !read_only()) {
-        ExecuteCommand(IDS_APP_PASTE, 0);
+      if (shift && !control &&
+          IsTextEditCommandEnabled(ui::TextEditCommand::PASTE)) {
+        ExecuteTextEditCommand(ui::TextEditCommand::PASTE);
         return true;
       }
       break;
@@ -895,6 +883,10 @@ void OmniboxViewViews::OnBlur() {
 
   // Make sure the beginning of the text is visible.
   SelectRange(gfx::Range(0));
+
+  // The location bar needs to repaint without a focus ring.
+  if (ui::MaterialDesignController::IsModeMaterial())
+    location_bar_view_->SchedulePaint();
 }
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
@@ -904,8 +896,7 @@ bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
     return !read_only() && model()->CanPasteAndGo(GetClipboardText());
   if (command_id == IDS_SHOW_URL)
     return controller()->GetToolbarModel()->WouldReplaceURL();
-  return command_id == IDS_MOVE_DOWN || command_id == IDS_MOVE_UP ||
-         Textfield::IsCommandIdEnabled(command_id) ||
+  return Textfield::IsCommandIdEnabled(command_id) ||
          location_bar_view_->command_updater()->IsCommandEnabled(command_id);
 }
 
@@ -919,6 +910,44 @@ void OmniboxViewViews::DoInsertChar(base::char16 ch) {
   if (insert_char_time_.is_null())
     insert_char_time_ = base::TimeTicks::Now();
   Textfield::DoInsertChar(ch);
+}
+
+bool OmniboxViewViews::IsTextEditCommandEnabled(
+    ui::TextEditCommand command) const {
+  switch (command) {
+    case ui::TextEditCommand::MOVE_UP:
+    case ui::TextEditCommand::MOVE_DOWN:
+      return !read_only();
+    case ui::TextEditCommand::PASTE:
+      return !read_only() && !GetClipboardText().empty();
+    default:
+      return Textfield::IsTextEditCommandEnabled(command);
+  }
+}
+
+void OmniboxViewViews::ExecuteTextEditCommand(ui::TextEditCommand command) {
+  // In the base class, touch text selection is deactivated when a command is
+  // executed. Since we are not always calling the base class implementation
+  // here, we need to deactivate touch text selection here, too.
+  DestroyTouchSelection();
+
+  if (!IsTextEditCommandEnabled(command))
+    return;
+
+  switch (command) {
+    case ui::TextEditCommand::MOVE_UP:
+      model()->OnUpOrDownKeyPressed(-1);
+      break;
+    case ui::TextEditCommand::MOVE_DOWN:
+      model()->OnUpOrDownKeyPressed(1);
+      break;
+    case ui::TextEditCommand::PASTE:
+      OnPaste();
+      break;
+    default:
+      Textfield::ExecuteTextEditCommand(command);
+      break;
+  }
 }
 
 #if defined(OS_CHROMEOS)
@@ -939,6 +968,9 @@ void OmniboxViewViews::ContentsChanged(views::Textfield* sender,
 
 bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
                                       const ui::KeyEvent& event) {
+  if (event.type() != ui::ET_KEY_PRESSED)
+    return false;
+
   delete_at_end_pressed_ = false;
 
   if (event.key_code() == ui::VKEY_BACK) {

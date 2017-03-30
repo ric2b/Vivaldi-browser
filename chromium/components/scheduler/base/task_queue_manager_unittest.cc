@@ -115,7 +115,7 @@ void PostFromNestedRunloop(base::MessageLoop* message_loop,
       runner->PostNonNestableTask(FROM_HERE, pair.first);
     }
   }
-  message_loop->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 void NopTask() {}
@@ -391,7 +391,8 @@ TEST_F(TaskQueueManagerTest, ManualPumping) {
   EXPECT_TRUE(runners_[0]->HasPendingImmediateWork());
 
   // After pumping the task runs normally.
-  runners_[0]->PumpQueue(true);
+  LazyNow lazy_now(now_src_.get());
+  runners_[0]->PumpQueue(&lazy_now, true);
   EXPECT_TRUE(test_task_runner_->HasPendingTasks());
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1));
@@ -473,13 +474,15 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithDelayedTask) {
                                delay);
 
   // After pumping but before the delay period has expired, task does not run.
-  runners_[0]->PumpQueue(true);
+  LazyNow lazy_now1(now_src_.get());
+  runners_[0]->PumpQueue(&lazy_now1, true);
   test_task_runner_->RunForPeriod(base::TimeDelta::FromMilliseconds(5));
   EXPECT_TRUE(run_order.empty());
 
   // Once the delay has expired, pumping causes the task to run.
   now_src_->Advance(base::TimeDelta::FromMilliseconds(5));
-  runners_[0]->PumpQueue(true);
+  LazyNow lazy_now2(now_src_.get());
+  runners_[0]->PumpQueue(&lazy_now2, true);
   EXPECT_TRUE(test_task_runner_->HasPendingTasks());
   test_task_runner_->RunPendingTasks();
   EXPECT_THAT(run_order, ElementsAre(1));
@@ -507,7 +510,8 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithMultipleDelayedTasks) {
   EXPECT_TRUE(run_order.empty());
 
   // Once the delay has expired, pumping causes the task to run.
-  runners_[0]->PumpQueue(true);
+  LazyNow lazy_now(now_src_.get());
+  runners_[0]->PumpQueue(&lazy_now, true);
   test_task_runner_->RunUntilIdle();
   EXPECT_THAT(run_order, ElementsAre(1, 2));
 }
@@ -532,10 +536,11 @@ TEST_F(TaskQueueManagerTest, ManualPumpingWithNonEmptyWorkQueue) {
   std::vector<EnqueueOrder> run_order;
   // Posting two tasks and pumping twice should result in two tasks in the work
   // queue.
+  LazyNow lazy_now(now_src_.get());
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 1, &run_order));
-  runners_[0]->PumpQueue(true);
+  runners_[0]->PumpQueue(&lazy_now, true);
   runners_[0]->PostTask(FROM_HERE, base::Bind(&TestTask, 2, &run_order));
-  runners_[0]->PumpQueue(true);
+  runners_[0]->PumpQueue(&lazy_now, true);
 
   EXPECT_EQ(2u, runners_[0]->immediate_work_queue()->Size());
 }
@@ -702,7 +707,8 @@ TEST_F(TaskQueueManagerTest,
   // This still shouldn't wake TQM as manual queue was not pumped.
   EXPECT_TRUE(run_order.empty());
 
-  runners_[1]->PumpQueue(true);
+  LazyNow lazy_now(now_src_.get());
+  runners_[1]->PumpQueue(&lazy_now, true);
   test_task_runner_->RunUntilIdle();
   // Executing a task on an auto pumped queue should wake the TQM.
   EXPECT_THAT(run_order, ElementsAre(2, 1));
@@ -1035,7 +1041,8 @@ TEST_F(TaskQueueManagerTest, HasPendingImmediateWork) {
   EXPECT_FALSE(queue0->HasPendingImmediateWork());
   EXPECT_TRUE(queue1->HasPendingImmediateWork());
 
-  queue1->PumpQueue(true);
+  LazyNow lazy_now(now_src_.get());
+  queue1->PumpQueue(&lazy_now, true);
   EXPECT_FALSE(queue0->HasPendingImmediateWork());
   EXPECT_TRUE(queue1->HasPendingImmediateWork());
 
@@ -1078,7 +1085,8 @@ TEST_F(TaskQueueManagerTest, HasPendingImmediateWorkAndNeedsPumping) {
   EXPECT_TRUE(queue1->HasPendingImmediateWork());
   EXPECT_TRUE(queue1->NeedsPumping());
 
-  queue1->PumpQueue(true);
+  LazyNow lazy_now(now_src_.get());
+  queue1->PumpQueue(&lazy_now, true);
   EXPECT_FALSE(queue0->HasPendingImmediateWork());
   EXPECT_FALSE(queue0->NeedsPumping());
   EXPECT_TRUE(queue1->HasPendingImmediateWork());
@@ -1352,7 +1360,7 @@ void PostTestTasksFromNestedMessageLoop(
                                    base::Bind(&TestTask, 1, run_order));
   // The following should never get executed.
   wake_up_runner->PostTask(FROM_HERE, base::Bind(&TestTask, 2, run_order));
-  message_loop->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 TEST_F(TaskQueueManagerTest, DeferredNonNestableTaskDoesNotTriggerWakeUp) {
@@ -1814,7 +1822,7 @@ void RunloopCurrentlyExecutingTaskQueueTestTask(
     pair.second->PostTask(FROM_HERE, pair.first);
   }
 
-  message_loop->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   task_sources->push_back(task_queue_manager->currently_executing_task_queue());
 }
 }

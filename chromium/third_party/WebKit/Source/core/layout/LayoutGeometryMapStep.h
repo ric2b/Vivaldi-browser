@@ -30,7 +30,7 @@
 #include "platform/geometry/LayoutSize.h"
 #include "platform/transforms/TransformationMatrix.h"
 #include "wtf/Allocator.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -40,7 +40,7 @@ enum GeometryInfoFlag {
     AccumulatingTransform = 1 << 0,
     IsNonUniform = 1 << 1, // Mapping depends on the input point, e.g. because of CSS columns.
     IsFixedPosition = 1 << 2,
-    HasTransform = 1 << 3,
+    ContainsFixedPosition = 1 << 3,
 };
 typedef unsigned GeometryInfoFlags;
 
@@ -63,7 +63,7 @@ struct LayoutGeometryMapStep {
     }
     const LayoutObject* m_layoutObject;
     LayoutSize m_offset;
-    OwnPtr<TransformationMatrix> m_transform; // Includes offset if non-null.
+    std::unique_ptr<TransformationMatrix> m_transform; // Includes offset if non-null.
     // If m_offsetForFixedPosition could only apply to the fixed position steps, we may be able to merge
     // with m_offsetForStickyPosition and simplify mapping.
     LayoutSize m_offsetForFixedPosition;

@@ -37,9 +37,11 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/genius_app/app_id.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_item.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_model_builder.h"
 #endif
 
@@ -64,8 +66,12 @@ void UpdateSyncItemFromSync(const sync_pb::AppListSpecifics& specifics,
   item->item_type = specifics.item_type();
   item->item_name = specifics.item_name();
   item->parent_id = specifics.parent_id();
-  if (!specifics.item_ordinal().empty())
+  if (specifics.has_item_ordinal())
     item->item_ordinal = syncer::StringOrdinal(specifics.item_ordinal());
+  if (specifics.has_item_pin_ordinal()) {
+    item->item_pin_ordinal =
+        syncer::StringOrdinal(specifics.item_pin_ordinal());
+  }
 }
 
 bool UpdateSyncItemFromAppItem(const AppListItem* app_item,
@@ -96,8 +102,10 @@ void GetSyncSpecificsFromSyncItem(const AppListSyncableService::SyncItem* item,
   specifics->set_item_type(item->item_type);
   specifics->set_item_name(item->item_name);
   specifics->set_parent_id(item->parent_id);
-  if (item->item_ordinal.IsValid())
-    specifics->set_item_ordinal(item->item_ordinal.ToInternalValue());
+  specifics->set_item_ordinal(item->item_ordinal.IsValid() ?
+      item->item_ordinal.ToInternalValue() : std::string());
+  specifics->set_item_pin_ordinal(item->item_pin_ordinal.IsValid() ?
+      item->item_pin_ordinal.ToInternalValue() : std::string());
 }
 
 syncer::SyncData GetSyncDataFromSyncItem(
@@ -213,6 +221,17 @@ class AppListSyncableService::ModelObserver : public AppListModelObserver {
     // deleted when the last item is removed (in PruneEmptySyncFolders()).
     if (item->GetItemType() == AppListFolderItem::kItemType)
       return;
+
+#if defined(OS_CHROMEOS)
+    if (item->GetItemType() == ArcAppItem::kItemType) {
+      // Don't sync remove changes coming as result of disabling Arc.
+      const arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
+      DCHECK(auth_service);
+      if (!auth_service->IsArcEnabled())
+        return;
+    }
+#endif
+
     owner_->RemoveSyncItem(item->id());
   }
 
@@ -270,7 +289,8 @@ void AppListSyncableService::BuildModel() {
     controller = service->GetControllerDelegate();
   apps_builder_.reset(new ExtensionAppModelBuilder(controller));
 #if defined(OS_CHROMEOS)
-  arc_apps_builder_.reset(new ArcAppModelBuilder(controller));
+  if (arc::ArcAuthService::IsAllowedForProfile(profile_))
+    arc_apps_builder_.reset(new ArcAppModelBuilder(controller));
 #endif
   DCHECK(profile_);
   if (app_list::switches::IsAppListSyncEnabled()) {
@@ -278,13 +298,15 @@ void AppListSyncableService::BuildModel() {
     SyncStarted();
     apps_builder_->InitializeWithService(this, model_.get());
 #if defined(OS_CHROMEOS)
-    arc_apps_builder_->InitializeWithService(this, model_.get());
+    if (arc_apps_builder_.get())
+      arc_apps_builder_->InitializeWithService(this, model_.get());
 #endif
   } else {
     VLOG(1) << this << ": AppListSyncableService: InitializeWithProfile.";
     apps_builder_->InitializeWithProfile(profile_, model_.get());
 #if defined(OS_CHROMEOS)
-    arc_apps_builder_->InitializeWithProfile(profile_, model_.get());
+    if (arc_apps_builder_.get())
+      arc_apps_builder_->InitializeWithProfile(profile_, model_.get());
 #endif
   }
 
@@ -293,6 +315,19 @@ void AppListSyncableService::BuildModel() {
 
   if (app_list::switches::IsDriveAppsInAppListEnabled())
     drive_app_provider_.reset(new DriveAppProvider(profile_, this));
+}
+
+void AppListSyncableService::AddObserverAndStart(Observer* observer) {
+  observer_list_.AddObserver(observer);
+  SyncStarted();
+}
+
+void AppListSyncableService::RemoveObserver(Observer* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
+void AppListSyncableService::NotifyObserversSyncUpdated() {
+  FOR_EACH_OBSERVER(Observer, observer_list_, OnSyncModelUpdated());
 }
 
 size_t AppListSyncableService::GetNumSyncItemsForTest() {
@@ -417,6 +452,30 @@ AppListSyncableService::CreateSyncItemFromAppItem(AppListItem* app_item) {
   UpdateSyncItemFromAppItem(app_item, sync_item);
   SendSyncChange(sync_item, SyncChange::ACTION_ADD);
   return sync_item;
+}
+
+syncer::StringOrdinal AppListSyncableService::GetPinPosition(
+    const std::string& app_id) {
+  SyncItem* sync_item = FindSyncItem(app_id);
+  if (!sync_item)
+    return syncer::StringOrdinal();
+  return sync_item->item_pin_ordinal;
+}
+
+void AppListSyncableService::SetPinPosition(
+    const std::string& app_id,
+    const syncer::StringOrdinal& item_pin_ordinal) {
+  SyncItem* sync_item = FindSyncItem(app_id);
+  SyncChange::SyncChangeType sync_change_type;
+  if (sync_item) {
+    sync_change_type = SyncChange::ACTION_UPDATE;
+  } else {
+    sync_item = CreateSyncItem(app_id, sync_pb::AppListSpecifics::TYPE_APP);
+    sync_change_type = SyncChange::ACTION_ADD;
+  }
+
+  sync_item->item_pin_ordinal = item_pin_ordinal;
+  SendSyncChange(sync_item, sync_change_type);
 }
 
 void AppListSyncableService::AddOrUpdateFromSyncItem(AppListItem* app_item) {
@@ -665,6 +724,8 @@ syncer::SyncMergeResult AppListSyncableService::MergeDataAndStartSyncing(
   // Start observing app list model changes.
   model_observer_.reset(new ModelObserver(this));
 
+  NotifyObserversSyncUpdated();
+
   return result;
 }
 
@@ -722,6 +783,8 @@ syncer::SyncError AppListSyncableService::ProcessSyncChanges(
 
   // Continue observing app list model changes.
   model_observer_.reset(new ModelObserver(this));
+
+  NotifyObserversSyncUpdated();
 
   return syncer::SyncError();
 }
@@ -831,8 +894,10 @@ void AppListSyncableService::UpdateAppItemFromSyncItem(
     const AppListSyncableService::SyncItem* sync_item,
     AppListItem* app_item) {
   VLOG(2) << this << " UpdateAppItemFromSyncItem: " << sync_item->ToString();
-  if (!app_item->position().Equals(sync_item->item_ordinal))
+  if (sync_item->item_ordinal.IsValid() &&
+      !app_item->position().Equals(sync_item->item_ordinal)) {
     model_->SetItemPosition(app_item, sync_item->item_ordinal);
+  }
   // Only update the item name if it is a Folder or the name is empty.
   if (sync_item->item_name != app_item->name() &&
       sync_item->item_id != kOemFolderId &&
@@ -994,6 +1059,12 @@ syncer::StringOrdinal AppListSyncableService::GetOemFolderPos() {
 }
 
 bool AppListSyncableService::AppIsOem(const std::string& id) {
+#if defined(OS_CHROMEOS)
+  const ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile_);
+  if (arc_prefs && arc_prefs->IsOem(id))
+    return true;
+#endif
+
   if (!extension_system_->extension_service())
     return false;
   const extensions::Extension* extension =
@@ -1010,6 +1081,7 @@ std::string AppListSyncableService::SyncItem::ToString() const {
     res += " [" + item_ordinal.ToDebugString() + "]";
     if (!parent_id.empty())
       res += " <" + parent_id.substr(0, 8) + ">";
+    res += " [" + item_pin_ordinal.ToDebugString() + "]";
   }
   return res;
 }

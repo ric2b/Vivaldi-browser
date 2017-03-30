@@ -20,7 +20,12 @@
       "extensions": [
         ".png",
         ".gif"
-      ]
+      ],
+      "verb": "add_to"
+    },
+    "directories": {
+      "extensions": ["*/*"],
+      "include_directories": true
     }
   }
 }

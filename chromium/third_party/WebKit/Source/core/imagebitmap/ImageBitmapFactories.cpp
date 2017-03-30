@@ -43,13 +43,14 @@
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/SharedBuffer.h"
-#include "platform/ThreadSafeFunctional.h"
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/threading/BackgroundTaskRunner.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
+#include <memory>
 #include <v8.h>
 
 namespace blink {
@@ -220,27 +221,27 @@ void ImageBitmapFactories::ImageBitmapLoader::scheduleAsyncImageBitmapDecoding(D
     if (arrayBuffer->byteLength() >= longTaskByteLengthThreshold)
         taskSize = BackgroundTaskRunner::TaskSizeLongRunningTask;
     WebTaskRunner* taskRunner = Platform::current()->currentThread()->getWebTaskRunner();
-    BackgroundTaskRunner::postOnBackgroundThread(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread, wrapCrossThreadPersistent(this), AllowCrossThreadAccess(taskRunner), wrapCrossThreadPersistent(arrayBuffer)), taskSize);
+    BackgroundTaskRunner::postOnBackgroundThread(BLINK_FROM_HERE, crossThreadBind(&ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread, wrapCrossThreadPersistent(this), crossThreadUnretained(taskRunner), wrapCrossThreadPersistent(arrayBuffer), m_options.premultiplyAlpha(), m_options.colorSpaceConversion()), taskSize);
 }
 
-void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(WebTaskRunner* taskRunner, DOMArrayBuffer* arrayBuffer)
+void ImageBitmapFactories::ImageBitmapLoader::decodeImageOnDecoderThread(WebTaskRunner* taskRunner, DOMArrayBuffer* arrayBuffer, const String& premultiplyAlphaOption, const String& colorSpaceConversionOption)
 {
     ASSERT(!isMainThread());
     RefPtr<SharedBuffer> sharedBuffer = SharedBuffer::create(static_cast<char*>(arrayBuffer->data()), static_cast<size_t>(arrayBuffer->byteLength()));
 
     ImageDecoder::AlphaOption alphaOp = ImageDecoder::AlphaPremultiplied;
-    if (m_options.premultiplyAlpha() == "none")
+    if (premultiplyAlphaOption == "none")
         alphaOp = ImageDecoder::AlphaNotPremultiplied;
     ImageDecoder::GammaAndColorProfileOption colorSpaceOp = ImageDecoder::GammaAndColorProfileApplied;
-    if (m_options.colorSpaceConversion() == "none")
+    if (colorSpaceConversionOption == "none")
         colorSpaceOp = ImageDecoder::GammaAndColorProfileIgnored;
-    OwnPtr<ImageDecoder> decoder(ImageDecoder::create(*sharedBuffer, alphaOp, colorSpaceOp));
+    std::unique_ptr<ImageDecoder> decoder(ImageDecoder::create(*sharedBuffer, alphaOp, colorSpaceOp));
     RefPtr<SkImage> frame;
     if (decoder) {
         decoder->setData(sharedBuffer.get(), true);
         frame = ImageBitmap::getSkImageFromDecoder(std::move(decoder));
     }
-    taskRunner->postTask(BLINK_FROM_HERE, threadSafeBind(&ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread, wrapCrossThreadPersistent(this), frame.release()));
+    taskRunner->postTask(BLINK_FROM_HERE, crossThreadBind(&ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread, wrapCrossThreadPersistent(this), frame.release()));
 }
 
 void ImageBitmapFactories::ImageBitmapLoader::resolvePromiseOnOriginalThread(PassRefPtr<SkImage> frame)

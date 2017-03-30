@@ -23,8 +23,8 @@ RequestExtraData::RequestExtraData()
       transferred_request_child_id_(-1),
       transferred_request_request_id_(-1),
       service_worker_provider_id_(kInvalidServiceWorkerProviderId),
-      originated_from_service_worker_(false) {
-}
+      originated_from_service_worker_(false),
+      initiated_in_secure_context_(false) {}
 
 RequestExtraData::~RequestExtraData() {
 }

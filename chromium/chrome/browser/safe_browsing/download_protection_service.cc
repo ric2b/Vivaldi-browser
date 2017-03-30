@@ -20,6 +20,7 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner_helpers.h"
+#include "base/sha1.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -72,15 +73,32 @@
 using content::BrowserThread;
 
 namespace {
-static const int64_t kDownloadRequestTimeoutMs = 7000;
+
+const int64_t kDownloadRequestTimeoutMs = 7000;
 // We sample 1% of whitelisted downloads to still send out download pings.
-static const double kWhitelistDownloadSampleRate = 0.01;
+const double kWhitelistDownloadSampleRate = 0.01;
+
+enum WhitelistType {
+  NO_WHITELIST_MATCH,
+  URL_WHITELIST,
+  SIGNATURE_WHITELIST,
+  WHITELIST_TYPE_MAX
+};
+
+void RecordCountOfWhitelistedDownload(WhitelistType type) {
+  UMA_HISTOGRAM_ENUMERATION("SBClientDownload.CheckWhitelistResult", type,
+                            WHITELIST_TYPE_MAX);
+}
+
 }  // namespace
 
 namespace safe_browsing {
 
 const char DownloadProtectionService::kDownloadRequestUrl[] =
     "https://sb-ssl.google.com/safebrowsing/clientreport/download";
+
+const void* const DownloadProtectionService::kDownloadPingTokenKey
+    = &kDownloadPingTokenKey;
 
 namespace {
 void RecordFileExtensionType(const base::FilePath& file) {
@@ -110,21 +128,6 @@ enum SBStatsType {
   // ALWAYS ADD NEW VALUES BEFORE THIS ONE.
   DOWNLOAD_CHECKS_MAX
 };
-
-// Prepares URLs to be put into a ping message. Currently this just shortens
-// data: URIs, other URLs are included verbatim.
-std::string SanitizeUrl(const GURL& url) {
-  std::string spec = url.spec();
-  if (url.SchemeIs(url::kDataScheme)) {
-    size_t comma_pos = spec.find(',');
-    if (comma_pos != std::string::npos && comma_pos != spec.size() - 1) {
-      std::string hash_value = crypto::SHA256HashString(spec);
-      spec.erase(comma_pos + 1);
-      spec += base::HexEncode(hash_value.data(), hash_value.size());
-    }
-  }
-  return spec;
-}
 
 }  // namespace
 
@@ -307,6 +310,18 @@ class DownloadProtectionService::CheckClientDownloadRequest
     item_->AddObserver(this);
   }
 
+  bool ShouldSampleUnsupportedFile(const base::FilePath& filename) {
+    // If this extension is specifically marked as SAMPLED_PING (as are
+    // all "unknown" extensions), we may want to sample it. Sampling it means
+    // we'll send a "light ping" with private info removed, and we won't
+    // use the verdict.
+    const FileTypePolicies* policies = FileTypePolicies::GetInstance();
+    return service_ && is_extended_reporting_ && !is_incognito_ &&
+           base::RandDouble() < policies->SampledPingProbability() &&
+           policies->PingSettingForFile(filename) ==
+               DownloadFileType::SAMPLED_PING;
+  }
+
   void Start() {
     DVLOG(2) << "Starting SafeBrowsing download check for: "
              << item_->DebugString(true);
@@ -319,9 +334,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
                  prefs::kSafeBrowsingExtendedReportingEnabled);
       is_incognito_ = item_->GetBrowserContext()->IsOffTheRecord();
     }
-    // TODO(noelutz): implement some cache to make sure we don't issue the same
-    // request over and over again if a user downloads the same binary multiple
-    // times.
+
     DownloadCheckResultReason reason = REASON_MAX;
     if (!IsSupportedDownload(
         *item_, item_->GetTargetFilePath(), &reason, &type_)) {
@@ -329,10 +342,17 @@ class DownloadProtectionService::CheckClientDownloadRequest
         case REASON_EMPTY_URL_CHAIN:
         case REASON_INVALID_URL:
         case REASON_UNSUPPORTED_URL_SCHEME:
+        case REASON_LOCAL_FILE:
+        case REASON_REMOTE_FILE:
           PostFinishTask(UNKNOWN, reason);
           return;
 
         case REASON_NOT_BINARY_FILE:
+          if (ShouldSampleUnsupportedFile(item_->GetTargetFilePath())) {
+            // Send a "light ping" and don't use the verdict.
+            type_ = ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE;
+            break;
+          }
           RecordFileExtensionType(item_->GetTargetFilePath());
           PostFinishTask(UNKNOWN, reason);
           return;
@@ -451,6 +471,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
         -source->GetStatus().error());
     DownloadCheckResultReason reason = REASON_SERVER_PING_FAILED;
     DownloadCheckResult result = UNKNOWN;
+    std::string token;
     if (source->GetStatus().is_success() &&
         net::HTTP_OK == source->GetResponseCode()) {
       ClientDownloadResponse response;
@@ -460,37 +481,51 @@ class DownloadProtectionService::CheckClientDownloadRequest
       if (!response.ParseFromString(data)) {
         reason = REASON_INVALID_RESPONSE_PROTO;
         result = UNKNOWN;
-      } else if (response.verdict() == ClientDownloadResponse::SAFE) {
-        reason = REASON_DOWNLOAD_SAFE;
-        result = SAFE;
-      } else if (service_ && !service_->IsSupportedDownload(
-          *item_, item_->GetTargetFilePath())) {
-        // The client of the download protection service assumes that we don't
-        // support this download so we cannot return any other verdict than
-        // UNKNOWN even if the server says it's dangerous to download this file.
-        // Note: if service_ is NULL we already cancelled the request and
-        // returned UNKNOWN.
-        reason = REASON_DOWNLOAD_NOT_SUPPORTED;
+      } else if (type_ == ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE) {
+        // Ignore the verdict because we were just reporting a sampled file.
+        reason = REASON_SAMPLED_UNSUPPORTED_FILE;
         result = UNKNOWN;
-      } else if (response.verdict() == ClientDownloadResponse::DANGEROUS) {
-        reason = REASON_DOWNLOAD_DANGEROUS;
-        result = DANGEROUS;
-      } else if (response.verdict() == ClientDownloadResponse::UNCOMMON) {
-        reason = REASON_DOWNLOAD_UNCOMMON;
-        result = UNCOMMON;
-      } else if (response.verdict() == ClientDownloadResponse::DANGEROUS_HOST) {
-        reason = REASON_DOWNLOAD_DANGEROUS_HOST;
-        result = DANGEROUS_HOST;
-      } else if (
-          response.verdict() == ClientDownloadResponse::POTENTIALLY_UNWANTED) {
-        reason = REASON_DOWNLOAD_POTENTIALLY_UNWANTED;
-        result = POTENTIALLY_UNWANTED;
       } else {
-        LOG(DFATAL) << "Unknown download response verdict: "
-                    << response.verdict();
-        reason = REASON_INVALID_RESPONSE_VERDICT;
-        result = UNKNOWN;
+        switch (response.verdict()) {
+          case ClientDownloadResponse::SAFE:
+            reason = REASON_DOWNLOAD_SAFE;
+            result = SAFE;
+            break;
+          case ClientDownloadResponse::DANGEROUS:
+            reason = REASON_DOWNLOAD_DANGEROUS;
+            result = DANGEROUS;
+            token = response.token();
+            break;
+          case ClientDownloadResponse::UNCOMMON:
+            reason = REASON_DOWNLOAD_UNCOMMON;
+            result = UNCOMMON;
+            token = response.token();
+            break;
+          case ClientDownloadResponse::DANGEROUS_HOST:
+            reason = REASON_DOWNLOAD_DANGEROUS_HOST;
+            result = DANGEROUS_HOST;
+            token = response.token();
+            break;
+          case ClientDownloadResponse::POTENTIALLY_UNWANTED:
+            reason = REASON_DOWNLOAD_POTENTIALLY_UNWANTED;
+            result = POTENTIALLY_UNWANTED;
+            token = response.token();
+            break;
+          case ClientDownloadResponse::UNKNOWN:
+            reason = REASON_VERDICT_UNKNOWN;
+            result = UNKNOWN;
+            break;
+          default:
+            LOG(DFATAL) << "Unknown download response verdict: "
+                        << response.verdict();
+            reason = REASON_INVALID_RESPONSE_VERDICT;
+            result = UNKNOWN;
+        }
       }
+
+      if (!token.empty())
+        SetDownloadPingToken(item_, token);
+
       DownloadFeedbackService::MaybeStorePingsForDownload(
           result, item_, client_download_request_data_, data);
     }
@@ -517,14 +552,18 @@ class DownloadProtectionService::CheckClientDownloadRequest
       *reason = REASON_INVALID_URL;
       return false;
     }
-    if (!FileTypePolicies::GetInstance()->IsCheckedBinaryFile(target_path)) {
-      *reason = REASON_NOT_BINARY_FILE;
+    if (!final_url.IsStandard() && !final_url.SchemeIsBlob() &&
+        !final_url.SchemeIs(url::kDataScheme)) {
+      *reason = REASON_UNSUPPORTED_URL_SCHEME;
       return false;
     }
-    if ((!final_url.IsStandard() && !final_url.SchemeIsBlob() &&
-         !final_url.SchemeIs(url::kDataScheme)) ||
-        final_url.SchemeIsFile()) {
-      *reason = REASON_UNSUPPORTED_URL_SCHEME;
+    if (final_url.SchemeIsFile()) {
+      *reason = final_url.has_host() ? REASON_REMOTE_FILE : REASON_LOCAL_FILE;
+      return false;
+    }
+    // This check should be last, so we know the earlier checks passed.
+    if (!FileTypePolicies::GetInstance()->IsCheckedBinaryFile(target_path)) {
+      *reason = REASON_NOT_BINARY_FILE;
       return false;
     }
     *type = download_protection_util::GetDownloadType(target_path);
@@ -723,10 +762,10 @@ class DownloadProtectionService::CheckClientDownloadRequest
                         base::TimeTicks::Now() - dmg_analysis_start_time_);
 
     if (!archived_executable_) {
-      if (!results.success && CanReportInvalidArchives()) {
+      if (!results.success) {
         type_ = ClientDownloadRequest::INVALID_MAC_ARCHIVE;
       } else {
-        PostFinishTask(UNKNOWN, REASON_ARCHIVE_WITHOUT_BINARIES);
+        PostFinishTask(SAFE, REASON_ARCHIVE_WITHOUT_BINARIES);
         return;
       }
     }
@@ -735,20 +774,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
   }
 #endif  // defined(OS_MACOSX)
 
-  enum WhitelistType {
-    NO_WHITELIST_MATCH,
-    URL_WHITELIST,
-    SIGNATURE_WHITELIST,
-    WHITELIST_TYPE_MAX
-  };
-
-  static void RecordCountOfWhitelistedDownload(WhitelistType type) {
-    UMA_HISTOGRAM_ENUMERATION("SBClientDownload.CheckWhitelistResult",
-                              type,
-                              WHITELIST_TYPE_MAX);
-  }
-
-  virtual bool ShouldSampleWhitelistedDownload() {
+  bool ShouldSampleWhitelistedDownload() {
     // We currently sample 1% whitelisted downloads from users who opted
     // in extended reporting and are not in incognito mode.
     return service_ && is_extended_reporting_ && !is_incognito_ &&
@@ -779,13 +805,12 @@ class DownloadProtectionService::CheckClientDownloadRequest
       }
     }
 
-    bool should_sample_for_certificate = ShouldSampleWhitelistedDownload();
-    if (signature_info_.trusted()) {
+    if (!skipped_url_whitelist_ && signature_info_.trusted()) {
       for (int i = 0; i < signature_info_.certificate_chain_size(); ++i) {
         if (CertificateChainIsWhitelisted(
                 signature_info_.certificate_chain(i))) {
           RecordCountOfWhitelistedDownload(SIGNATURE_WHITELIST);
-          if (should_sample_for_certificate) {
+          if (ShouldSampleWhitelistedDownload()) {
             skipped_certificate_whitelist_ = true;
             break;
           } else {
@@ -868,6 +893,25 @@ class DownloadProtectionService::CheckClientDownloadRequest
     return false;
   }
 
+  // Prepares URLs to be put into a ping message. Currently this just shortens
+  // data: URIs, other URLs are included verbatim. If this is a sampled binary,
+  // we'll send a lite-ping which strips all PII.
+  std::string SanitizeUrl(const GURL& url) const {
+    if (type_ == ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE)
+      return url.GetOrigin().spec();
+
+    std::string spec = url.spec();
+    if (url.SchemeIs(url::kDataScheme)) {
+      size_t comma_pos = spec.find(',');
+      if (comma_pos != std::string::npos && comma_pos != spec.size() - 1) {
+        std::string hash_value = crypto::SHA256HashString(spec);
+        spec.erase(comma_pos + 1);
+        spec += base::HexEncode(hash_value.data(), hash_value.size());
+      }
+    }
+    return spec;
+  }
+
   void SendRequest() {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -877,13 +921,11 @@ class DownloadProtectionService::CheckClientDownloadRequest
       return;
 
     ClientDownloadRequest request;
-    if (is_extended_reporting_) {
-      request.mutable_population()->set_user_population(
-          ChromeUserPopulation::EXTENDED_REPORTING);
-    } else {
-      request.mutable_population()->set_user_population(
-          ChromeUserPopulation::SAFE_BROWSING);
-    }
+    auto population = is_extended_reporting_
+        ? ChromeUserPopulation::EXTENDED_REPORTING
+        : ChromeUserPopulation::SAFE_BROWSING;
+    request.mutable_population()->set_user_population(population);
+
     request.set_url(SanitizeUrl(item_->GetUrlChain().back()));
     request.mutable_digests()->set_sha256(item_->GetHash());
     request.set_length(item_->GetReceivedBytes());
@@ -927,8 +969,14 @@ class DownloadProtectionService::CheckClientDownloadRequest
     }
 
     request.set_user_initiated(item_->HasUserGesture());
-    request.set_file_basename(
+    if (type_ == ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE) {
+      request.set_file_basename(
+          base::FilePath(item_->GetTargetFilePath().Extension())
+              .AsUTF8Unsafe());
+    } else {
+      request.set_file_basename(
         item_->GetTargetFilePath().BaseName().AsUTF8Unsafe());
+    }
     request.set_download_type(type_);
     if (archive_is_valid_ != ArchiveValid::UNSET)
       request.set_archive_valid(archive_is_valid_ == ArchiveValid::VALID);
@@ -1009,8 +1057,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
       DVLOG(2) << "SafeBrowsing download verdict for: "
                << item_->DebugString(true) << " verdict:" << reason
                << " result:" << result;
-      UMA_HISTOGRAM_ENUMERATION("SBClientDownload.CheckDownloadStats",
-                                reason,
+      UMA_HISTOGRAM_ENUMERATION("SBClientDownload.CheckDownloadStats", reason,
                                 REASON_MAX);
       callback_.Run(result);
       item_->RemoveObserver(this);
@@ -1150,6 +1197,7 @@ class DownloadProtectionService::PPAPIDownloadRequest
       const GURL& requestor_url,
       const base::FilePath& default_file_path,
       const std::vector<base::FilePath::StringType>& alternate_extensions,
+      Profile* profile,
       const CheckDownloadCallback& callback,
       DownloadProtectionService* service,
       scoped_refptr<SafeBrowsingDatabaseManager> database_manager)
@@ -1162,7 +1210,11 @@ class DownloadProtectionService::PPAPIDownloadRequest
         start_time_(base::TimeTicks::Now()),
         supported_path_(
             GetSupportedFilePath(default_file_path, alternate_extensions)),
-        weakptr_factory_(this) {}
+        weakptr_factory_(this) {
+    DCHECK(profile);
+    is_extended_reporting_ = profile->GetPrefs()->GetBoolean(
+        prefs::kSafeBrowsingExtendedReportingEnabled);
+  }
 
   ~PPAPIDownloadRequest() override {
     if (fetcher_ && !callback_.is_null())
@@ -1232,6 +1284,7 @@ class DownloadProtectionService::PPAPIDownloadRequest
   void WhitelistCheckComplete(bool was_on_whitelist) {
     DVLOG(2) << __FUNCTION__ << " was_on_whitelist:" << was_on_whitelist;
     if (was_on_whitelist) {
+      RecordCountOfWhitelistedDownload(URL_WHITELIST);
       // TODO(asanka): Should sample whitelisted downloads based on
       // service_->whitelist_sample_rate(). http://crbug.com/610924
       Finish(RequestOutcome::WHITELIST_HIT, SAFE);
@@ -1248,6 +1301,10 @@ class DownloadProtectionService::PPAPIDownloadRequest
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
     ClientDownloadRequest request;
+    auto population = is_extended_reporting_
+        ? ChromeUserPopulation::EXTENDED_REPORTING
+        : ChromeUserPopulation::SAFE_BROWSING;
+    request.mutable_population()->set_user_population(population);
     request.set_download_type(ClientDownloadRequest::PPAPI_SAVE_REQUEST);
     ClientDownloadRequest::Resource* resource = request.add_resources();
     resource->set_type(ClientDownloadRequest::PPAPI_DOCUMENT);
@@ -1274,6 +1331,9 @@ class DownloadProtectionService::PPAPIDownloadRequest
       Finish(RequestOutcome::REQUEST_MALFORMED, UNKNOWN);
       return;
     }
+
+    service_->ppapi_download_request_callbacks_.Notify(&request);
+    DVLOG(2) << "Sending a PPAPI download request for URL: " << request.url();
 
     fetcher_ = net::URLFetcher::Create(0, GetDownloadRequestUrl(),
                                        net::URLFetcher::POST, this);
@@ -1328,6 +1388,12 @@ class DownloadProtectionService::PPAPIDownloadRequest
       base::ResetAndReturn(&callback_).Run(response);
     fetcher_.reset();
     weakptr_factory_.InvalidateWeakPtrs();
+
+    // If the request is being destroyed, don't notify the service_. It already
+    // knows.
+    if (reason == RequestOutcome::REQUEST_DESTROYED)
+      return;
+
     service_->PPAPIDownloadCheckRequestFinished(this);
     // |this| is deleted.
   }
@@ -1345,14 +1411,16 @@ class DownloadProtectionService::PPAPIDownloadRequest
         return DANGEROUS;
       case ClientDownloadResponse::DANGEROUS_HOST:
         return DANGEROUS_HOST;
+      case ClientDownloadResponse::UNKNOWN:
+        return UNKNOWN;
     }
     return UNKNOWN;
   }
 
   // Given a |default_file_path| and a list of |alternate_extensions|,
   // constructs a FilePath with each possible extension and returns one that
-  // satisfies download_protection_util::IsSupportedBinaryFile(). If none are
-  // supported, returns an empty FilePath.
+  // satisfies IsCheckedBinaryFile(). If none are supported, returns an
+  // empty FilePath.
   static base::FilePath GetSupportedFilePath(
       const base::FilePath& default_file_path,
       const std::vector<base::FilePath::StringType>& alternate_extensions) {
@@ -1395,10 +1463,12 @@ class DownloadProtectionService::PPAPIDownloadRequest
 
   // A download path that is supported by SafeBrowsing. This is determined by
   // invoking GetSupportedFilePath(). If non-empty,
-  // safe_browsing::IsSupportedBinaryFile(supported_path_) is always true. This
+  // IsCheckedBinaryFile(supported_path_) is always true. This
   // path is therefore used as the download target when sending the SafeBrowsing
   // ping.
   const base::FilePath supported_path_;
+
+  bool is_extended_reporting_;
 
   base::WeakPtrFactory<PPAPIDownloadRequest> weakptr_factory_;
 
@@ -1494,6 +1564,8 @@ bool DownloadProtectionService::IsSupportedDownload(
   DownloadCheckResultReason reason = REASON_MAX;
   ClientDownloadRequest::DownloadType type =
       ClientDownloadRequest::WIN_EXECUTABLE;
+  // TODO(nparker): Remove the CRX check here once can support
+  // UNKNOWN types properly.  http://crbug.com/581044
   return (CheckClientDownloadRequest::IsSupportedDownload(
               item, target_path, &reason, &type) &&
           (ClientDownloadRequest::CHROME_EXTENSION != type));
@@ -1503,12 +1575,13 @@ void DownloadProtectionService::CheckPPAPIDownloadRequest(
     const GURL& requestor_url,
     const base::FilePath& default_file_path,
     const std::vector<base::FilePath::StringType>& alternate_extensions,
+    Profile* profile,
     const CheckDownloadCallback& callback) {
   DVLOG(1) << __FUNCTION__ << " url:" << requestor_url
            << " default_file_path:" << default_file_path.value();
   std::unique_ptr<PPAPIDownloadRequest> request(new PPAPIDownloadRequest(
-      requestor_url, default_file_path, alternate_extensions, callback, this,
-      database_manager_));
+      requestor_url, default_file_path, alternate_extensions, profile, callback,
+      this, database_manager_));
   PPAPIDownloadRequest* request_copy = request.get();
   auto insertion_result = ppapi_download_requests_.insert(
       std::make_pair(request_copy, std::move(request)));
@@ -1521,6 +1594,13 @@ DownloadProtectionService::RegisterClientDownloadRequestCallback(
     const ClientDownloadRequestCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   return client_download_request_callbacks_.Add(callback);
+}
+
+DownloadProtectionService::PPAPIDownloadRequestSubscription
+DownloadProtectionService::RegisterPPAPIDownloadRequestCallback(
+    const PPAPIDownloadRequestCallback& callback) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  return ppapi_download_request_callbacks_.Add(callback);
 }
 
 void DownloadProtectionService::CancelPendingRequests() {
@@ -1568,6 +1648,22 @@ void DownloadProtectionService::ShowDetailsForDownload(
                              NEW_FOREGROUND_TAB,
                              ui::PAGE_TRANSITION_LINK,
                              false));
+}
+
+void DownloadProtectionService::SetDownloadPingToken(
+    content::DownloadItem* item, const std::string& token) {
+  if (item)
+    item->SetUserData(kDownloadPingTokenKey, new DownloadPingToken(token));
+}
+
+std::string DownloadProtectionService::GetDownloadPingToken(
+    const content::DownloadItem* item) {
+  base::SupportsUserData::Data* token_data =
+      item->GetUserData(kDownloadPingTokenKey);
+  if (token_data)
+    return static_cast<DownloadPingToken*>(token_data)->token_string();
+  else
+    return std::string();
 }
 
 namespace {
@@ -1637,8 +1733,10 @@ void DownloadProtectionService::GetCertificateWhitelistStrings(
     paths_to_check.insert(ou_tokens[i]);
   }
 
-  std::string issuer_fp = base::HexEncode(issuer.fingerprint().data,
-                                          sizeof(issuer.fingerprint().data));
+  std::string issuer_der;
+  net::X509Certificate::GetDEREncoded(issuer.os_cert_handle(), &issuer_der);
+  std::string hashed = base::SHA1HashString(issuer_der);
+  std::string issuer_fp = base::HexEncode(hashed.data(), hashed.size());
   for (std::set<std::string>::iterator it = paths_to_check.begin();
        it != paths_to_check.end(); ++it) {
     whitelist_strings->push_back("cert/" + issuer_fp + *it);

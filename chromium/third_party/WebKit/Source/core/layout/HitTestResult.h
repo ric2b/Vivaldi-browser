@@ -32,7 +32,6 @@
 #include "platform/text/TextDirection.h"
 #include "wtf/Forward.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/VectorTraits.h"
 
@@ -126,7 +125,6 @@ public:
     void setIsOverWidget(bool b) { m_isOverWidget = b; }
 
     bool isSelected() const;
-    String spellingToolTip(TextDirection&) const;
     String title(TextDirection&) const;
     const AtomicString& altDisplayString() const;
     Image* image() const;

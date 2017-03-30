@@ -9,14 +9,18 @@ import("//mojo/public/mojo_application_manifest.gni")
 import("//testing/test.gni")
 import("//tools/grit/repack.gni")
 
+gypi = exec_script("//build/gypi_to_gn.py",
+                   [ rebase_path("../views.gyp") ],
+                   "scope",
+                   [ "../views.gyp" ])
 component("mus") {
   output_name = "ui_views_mus_lib"
 
   sources = [
     "aura_init.cc",
     "aura_init.h",
-    "display_converter.cc",
-    "display_converter.h",
+    "clipboard_mus.cc",
+    "clipboard_mus.h",
     "display_list.cc",
     "display_list.h",
     "input_method_mus.cc",
@@ -24,8 +28,6 @@ component("mus") {
     "mus_export.h",
     "native_widget_mus.cc",
     "native_widget_mus.h",
-    "platform_window_mus.cc",
-    "platform_window_mus.h",
     "screen_mus.cc",
     "screen_mus.h",
     "screen_mus_delegate.h",
@@ -57,15 +59,11 @@ component("mus") {
     "//cc",
     "//cc/surfaces",
     "//components/bitmap_uploader",
+    "//components/mus/common:mus_common",
     "//components/mus/gles2:lib",
     "//components/mus/public/cpp",
     "//components/mus/public/interfaces",
-    "//mojo/converters/geometry",
-    "//mojo/converters/ime",
-    "//mojo/converters/input_events",
-    "//mojo/converters/surfaces",
-    "//mojo/platform_handle:for_component",
-    "//mojo/public/c/system:for_component",
+    "//mojo/common",
     "//mojo/public/cpp/bindings",
     "//services/catalog/public/cpp",
     "//services/shell/public/cpp",
@@ -75,16 +73,18 @@ component("mus") {
     "//ui/aura",
     "//ui/compositor",
     "//ui/display",
+    "//ui/display/mojo",
     "//ui/events",
     "//ui/events:events_base",
-    "//ui/events/devices",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
     "//ui/gl",
-    "//ui/mojo/display",
-    "//ui/mojo/ime:interfaces_cpp_sources",
     "//ui/native_theme",
     "//ui/platform_window",
+    "//ui/platform_window/mojo",
+    "//ui/platform_window/mojo:interfaces_cpp_sources",
+    "//ui/platform_window/stub",
     "//ui/views",
     "//ui/wm",
   ]
@@ -118,24 +118,11 @@ group("for_mojo_application") {
   ]
 }
 
-group("for_shared_library") {
-  public_deps = [
-    ":mus",
-  ]
-  if (!is_component_build) {
-    deps = [
-      "//mojo/gles2",
-    ]
-  }
-}
-
 source_set("test_support") {
   testonly = true
 
   sources = [
     "../test/native_widget_factory_mus.cc",
-    "../views_test_suite.cc",
-    "../views_test_suite.h",
     "views_mus_test_suite.cc",
     "views_mus_test_suite.h",
   ]
@@ -167,11 +154,7 @@ test("views_mus_unittests") {
 
   configs += [ "//build/config:precompiled_headers" ]
 
-  # TODO(sky): add more files.
   sources = [
-    "../view_targeter_unittest.cc",
-    "../widget/native_widget_unittest.cc",
-    "../widget/widget_unittest.cc",
     "display_list_unittest.cc",
     "native_widget_mus_unittest.cc",
     "run_all_unittests_mus.cc",
@@ -179,11 +162,30 @@ test("views_mus_unittests") {
     "window_manager_connection_unittest.cc",
   ]
 
+  sources += rebase_path(gypi.views_unittests_sources, ".", "//ui/views")
+  sources += rebase_path(gypi.views_unittests_aura_sources, ".", "//ui/views")
+
+  sources -= [
+    # Mus has its own runner.
+    "../run_all_unittests_main.cc",
+
+    # EventGenerator doesn't work well with IME in mus.
+    # crbug.com/615033 crbug.com/548407
+    "../controls/textfield/textfield_unittest.cc",
+
+    # Tooltips. crbug.com/599558
+    "../corewm/tooltip_controller_unittest.cc",
+
+    # Some of the tests need drag-drop support. crbug.com/614037
+    "../touchui/touch_selection_controller_impl_unittest.cc",
+  ]
+
   deps = [
     ":mus",
     ":test_support",
     "//base",
     "//base:i18n",
+    "//base/test:test_support",
     "//cc",
     "//components/mus/public/cpp",
     "//components/mus/public/cpp/tests:unittest_support",
@@ -205,7 +207,9 @@ test("views_mus_unittests") {
     "//ui/events/platform",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
+    "//ui/native_theme",
     "//ui/strings",
+    "//ui/touch_selection",
     "//ui/views",
     "//ui/views:test_support_internal",
     "//ui/wm",
@@ -214,7 +218,7 @@ test("views_mus_unittests") {
 
   data_deps = [
     ":unittests_manifest",
-    "//mash/wm",
+    "//components/mus/test_wm",
   ]
 
   if (is_win) {
@@ -252,6 +256,7 @@ test("views_mus_interactive_ui_tests") {
 
   sources = [
     "../widget/widget_interactive_uitest.cc",
+    "clipboard_unittest.cc",
     "interactive_ui_tests_mus.cc",
   ]
 
@@ -260,6 +265,8 @@ test("views_mus_interactive_ui_tests") {
     ":test_support",
     "//base",
     "//services/shell/background:main",  # Provides main().
+    "//testing/gmock",
+    "//testing/gtest",
     "//ui/aura",
     "//ui/base",
     "//ui/base/ime",
@@ -274,7 +281,7 @@ test("views_mus_interactive_ui_tests") {
 
   data_deps = [
     ":interactive_ui_tests_manifest",
-    "//mash/wm",
+    "//components/mus/test_wm",
   ]
 
   if (is_win) {
@@ -301,13 +308,4 @@ mojo_application_manifest("interactive_ui_tests_manifest") {
   type = "exe"
   application_name = "views_mus_interactive_ui_tests"
   source = "interactive_ui_tests_manifest.json"
-}
-
-group("for_component") {
-  public_deps = [
-    ":mus",
-  ]
-  deps = [
-    "//mojo/gles2",
-  ]
 }

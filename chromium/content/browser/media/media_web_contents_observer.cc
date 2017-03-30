@@ -10,11 +10,11 @@
 #include "build/build_config.h"
 #include "content/browser/media/audible_metrics.h"
 #include "content/browser/media/audio_stream_monitor.h"
-#include "content/browser/power_save_blocker_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/media/media_player_delegate_messages.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "device/power_save_blocker/power_save_blocker.h"
 #include "ipc/ipc_message_macros.h"
 
 namespace content {
@@ -34,6 +34,9 @@ MediaWebContentsObserver::~MediaWebContentsObserver() {}
 
 void MediaWebContentsObserver::WebContentsDestroyed() {
   g_audible_metrics.Get().UpdateAudibleWebContentsState(web_contents(), false);
+#if defined(OS_ANDROID)
+  view_weak_factory_.reset();
+#endif
 }
 
 void MediaWebContentsObserver::RenderFrameDeleted(
@@ -180,20 +183,28 @@ void MediaWebContentsObserver::ClearPowerSaveBlockers(
 
 void MediaWebContentsObserver::CreateAudioPowerSaveBlocker() {
   DCHECK(!audio_power_save_blocker_);
-  audio_power_save_blocker_ = PowerSaveBlocker::Create(
-      PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
-      PowerSaveBlocker::kReasonAudioPlayback, "Playing audio");
+  audio_power_save_blocker_.reset(new device::PowerSaveBlocker(
+      device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
+      device::PowerSaveBlocker::kReasonAudioPlayback, "Playing audio",
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
 }
 
 void MediaWebContentsObserver::CreateVideoPowerSaveBlocker() {
   DCHECK(!video_power_save_blocker_);
   DCHECK(!active_video_players_.empty());
-  video_power_save_blocker_ = PowerSaveBlocker::Create(
-      PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
-      PowerSaveBlocker::kReasonVideoPlayback, "Playing video");
+  video_power_save_blocker_.reset(new device::PowerSaveBlocker(
+      device::PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
+      device::PowerSaveBlocker::kReasonVideoPlayback, "Playing video",
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
 #if defined(OS_ANDROID)
-  static_cast<PowerSaveBlockerImpl*>(video_power_save_blocker_.get())
-      ->InitDisplaySleepBlocker(web_contents());
+  if (web_contents()->GetNativeView()) {
+    view_weak_factory_.reset(new base::WeakPtrFactory<ui::ViewAndroid>(
+        web_contents()->GetNativeView()));
+    video_power_save_blocker_.get()->InitDisplaySleepBlocker(
+        view_weak_factory_->GetWeakPtr());
+  }
 #endif
 }
 

@@ -34,12 +34,13 @@ AudioOutputDevices status=stable
 AudioVideoTracks status=experimental
 BackgroundSync status=stable
 BackspaceDefaultHandler status=test
+BroadcastChannel status=experimental
 CacheIgnoreSearchOption status=experimental
 Canvas2dImageChromium status=experimental
 ClientHints status=stable
 CompositedSelectionUpdate
 CompositorWorker status=experimental
-ContextMenu status=experimental
+ContextMenu status=test
 CorsRFC1918 status=test
 CredentialManager status=stable
 CSS3Text status=experimental
@@ -47,7 +48,7 @@ CSS3TextDecorations status=experimental
 CSSApplyAtRules status=experimental, depends_on=CSSVariables
 CSSAdditiveAnimations status=experimental, depends_on=StackedCSSPropertyAnimations
 CSSBackdropFilter status=experimental
-CSSBoxReflectFilter
+CSSBoxReflectFilter status=stable
 CSSHexAlphaColor status=experimental
 CSSContainment status=stable
 CSSFontDisplay status=experimental
@@ -58,7 +59,7 @@ CSSInBodyDoesNotBlockPaint status=experimental
 CSSIndependentTransformProperties status=experimental
 CSSMaskSourceType status=experimental
 CSSOMSmoothScroll status=experimental
-CSSPaintAPI status=test, depends_on=Worklet
+CSSPaintAPI status=experimental, depends_on=CSSTypedOM, depends_on=Worklet
 CSSPropertyD status=stable
 CSSSnapSize status=experimental
 CSSStickyPosition status=experimental
@@ -72,11 +73,12 @@ CustomSchemeHandler depends_on=NavigatorContentUtils, status=experimental
 Database status=stable
 DecodeToYUV status=experimental
 DeviceLight status=experimental
-DisableBlockingMethodsDuringMicrotasks status=test
+DisableBlockingMethodsDuringMicrotasks status=experimental
 DisplayList2dCanvas status=stable
 DocumentWriteEvaluator
 DOMConvenienceAPI status=experimental
 DurableStorage status=experimental, origin_trial_feature_name=DurableStorage
+FontCacheScaling status=test
 ForceDisplayList2dCanvas
 // See crbug.com/585250.
 ForceDisable2dCanvasCopyOnWrite
@@ -93,9 +95,10 @@ FormDataNewMethods status=stable
 FullscreenUnprefixed status=test
 FrameTimingSupport status=experimental
 GeometryInterfaces status=test
-GetUserMedia depends_on=MediaDevices, status=experimental
+GetUserMedia depends_on=MediaDevices, status=stable
 GlobalCacheStorage status=stable
 HiResEventTimeStamp status=stable
+IDBObserver status=experimental
 ImageCapture status=experimental
 ImageColorProfiles
 ImageOrientation status=test
@@ -113,16 +116,18 @@ LinkPreconnect status=stable
 LinkPreload status=stable
 LinkHeader status=stable
 LinkServiceWorker status=experimental
-FractionalScrollOffsets status=experimental
+FractionalScrollOffsets
 MediaCapture
 MediaCaptureFromCanvas status=stable
-MediaCaptureFromVideo status=test
-MediaConstraints status=experimental
+MediaCaptureFromVideo status=experimental
+MediaConstraints status=stable
 MediaDevices status=stable
 MediaDocumentDownloadButton
+MediaGetSettings status=test
 MediaRecorder status=stable
 MediaSession
 MediaSourceExperimental status=experimental
+MediaSourceNewAbortAndDuration status=experimental
 MediaStreamSpeech status=experimental
 MemoryInfoInWorkers status=experimental
 MobileLayoutTheme
@@ -133,8 +138,7 @@ NetworkInformation status=stable
 NetInfoDownlinkMax status=stable
 NewMediaPlaybackUi
 NotificationConstructor status=stable
-NotificationExperimental status=test
-NotificationBadge status=experimental
+NotificationBadge status=stable
 NotificationInlineReplies status=experimental
 Notifications status=stable
 OnDeviceChange status=experimental
@@ -155,19 +159,20 @@ PassPaintVisualRectToCompositor
 PathOpsSVGClipping status=stable
 PaymentRequest status=experimental
 PerformanceObserver status=stable
+PermissionDelegation status=test
 Permissions status=stable
 PermissionsRequestRevoke status=experimental
-PointerEvent
+PointerEvent status=experimental
 PreciseMemoryInfo
 // This feature is deprecated and we are evangelizing affected sites.
 // See https://crbug.com/346236 for current status.
 PrefixedVideoFullscreen status=stable
 Presentation status=stable
 PresentationReceiver status=test
-PromiseRejectionEvent status=stable
 PushMessaging status=stable
 QuotaPromise status=experimental
 ReducedReferrerGranularity
+ReferrerPolicyHeader status=experimental
 RemotePlayback status=experimental
 RenderingPipelineThrottling status=stable
 RequestIdleCallback status=stable
@@ -181,17 +186,18 @@ ScrollAnchoring settable_from_internals=True
 // Implements documentElement.scrollTop/Left and bodyElement.scrollTop/Left
 // as per the spec, matching other Web engines.
 ScrollTopLeftInterop status=experimental
+Sensor status=experimental
 ServiceWorkerClientAttributes status=stable
 ServiceWorkerClientsGetID status=stable
 ServiceWorkerWindowClientNavigate status=stable
 SetRootScroller status=experimental
-ShadowDOMV1 status=experimental
+ShadowDOMV1 status=stable
 SharedArrayBuffer
 SharedWorker status=stable
-SlimmingPaintInvalidation
+SlimmingPaintInvalidation implied_by=SlimmingPaintV2
 SlimmingPaintV2
 SlimmingPaintStrictCullRectClipping
-SlimmingPaintUnderInvalidationChecking
+SlimmingPaintUnderInvalidationChecking settable_from_internals=True
 // Used as argument in attribute of stable-release functions/interfaces where
 // a runtime-enabled feature name is required for correct IDL syntax.
 // This is a global flag; do not change its status.
@@ -211,17 +217,17 @@ Suborigins status=test
 // touchscreen) in ApplyWebPreferences.
 Touch status=stable
 TraceWrappables
-TrustedEventsDefaultAction
+TrustedEventsDefaultAction status=stable
 UnsafeES3APIs
 UnsandboxedAuxiliary status=stable
-UserSelectAll status=experimental
+UserSelectAll status=stable
 WebAnimationsAPI status=experimental
 WebAnimationsSVG status=experimental
-WebBluetooth
+WebBluetooth origin_trial_feature_name=WebBluetooth
 WebGLDraftExtensions status=experimental
 WebGLImageChromium
 WebUSB status=experimental
-WebVR depends_on=GeometryInterfaces, status=test
+WebVR
 WebVTTRegions status=experimental
 V8IdleTasks
 VisibilityChangeOnUnload status=experimental
@@ -229,8 +235,13 @@ XSLT status=stable
 smil status=stable
 ScrollCustomization
 ScrollRestoration status=stable
+AutoplayMutedVideos settable_from_internals=True
 VisualViewportAPI status=experimental
 WakeLock status=experimental
-WebFontsInterventionV2
+WebFontsInterventionV2With2G
+WebFontsInterventionV2WithSlow2G
 WebFontsInterventionTrigger
-Worklet status=test
+Worklet status=experimental
+WeakMemoryCache
+DoNotUnlockSharedBuffer
+ParseHTMLOnMainThread status=test

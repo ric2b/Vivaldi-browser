@@ -194,11 +194,11 @@ class Printer(object):
             if test_name in run_results.failures_by_name:
                 result = run_results.results_by_name[test_name].type
                 if (result == test_expectations.TIMEOUT or
-                    result == test_expectations.CRASH):
+                        result == test_expectations.CRASH):
                     is_timeout_crash_or_slow = True
                     timeout_or_crash_tests.append(test_tuple)
 
-            if (not is_timeout_crash_or_slow and num_printed < NUM_SLOW_TESTS_TO_LOG):
+            if not is_timeout_crash_or_slow and num_printed < NUM_SLOW_TESTS_TO_LOG:
                 num_printed = num_printed + 1
                 unexpected_slow_tests.append(test_tuple)
 

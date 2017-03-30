@@ -80,7 +80,7 @@ DownloadStartedAnimationViews::DownloadStartedAnimationViews(
   params.accept_events = false;
   params.parent = web_contents->GetNativeView();
   popup_->Init(params);
-  popup_->SetOpacity(0x00);
+  popup_->SetOpacity(0.f);
   popup_->SetContentsView(this);
   Reposition();
   popup_->Show();
@@ -113,10 +113,8 @@ void DownloadStartedAnimationViews::AnimateToState(double state) {
     Reposition();
 
     // Start at zero, peak halfway and end at zero.
-    double opacity = std::min(1.0 - pow(GetCurrentValue() - 0.5, 2) * 4.0,
-                              static_cast<double>(1.0));
-
-    popup_->SetOpacity(static_cast<unsigned char>(opacity * 255.0));
+    popup_->SetOpacity(static_cast<float>(
+        std::min(1.0 - pow(GetCurrentValue() - 0.5, 2) * 4.0, 1.0)));
   }
 }
 

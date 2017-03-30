@@ -23,6 +23,7 @@ bool PageLoadTiming::operator==(const PageLoadTiming& other) const {
          first_paint == other.first_paint &&
          first_text_paint == other.first_text_paint &&
          first_image_paint == other.first_image_paint &&
+         first_contentful_paint == other.first_contentful_paint &&
          parse_start == other.parse_start && parse_stop == other.parse_stop &&
          parse_blocked_on_script_load_duration ==
              other.parse_blocked_on_script_load_duration &&
@@ -35,8 +36,8 @@ bool PageLoadTiming::IsEmpty() const {
          dom_loading.is_zero() && dom_content_loaded_event_start.is_zero() &&
          load_event_start.is_zero() && first_layout.is_zero() &&
          first_paint.is_zero() && first_text_paint.is_zero() &&
-         first_image_paint.is_zero() && parse_start.is_zero() &&
-         parse_stop.is_zero() &&
+         first_image_paint.is_zero() && first_contentful_paint.is_zero() &&
+         parse_start.is_zero() && parse_stop.is_zero() &&
          parse_blocked_on_script_load_duration.is_zero() &&
          parse_blocked_on_script_load_from_document_write_duration.is_zero();
 }

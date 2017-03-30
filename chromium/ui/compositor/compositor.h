@@ -25,6 +25,7 @@
 #include "ui/compositor/compositor_export.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/layer_animator_collection.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/gpu_memory_buffer.h"
@@ -68,6 +69,20 @@ class Reflector;
 class Texture;
 
 const int kCompositorLockTimeoutMs = 67;
+
+class COMPOSITOR_EXPORT ContextFactoryObserver {
+ public:
+  virtual ~ContextFactoryObserver() {}
+
+  // Notifies that the ContextProvider returned from
+  // ui::ContextFactory::SharedMainThreadContextProvider was lost.  When this
+  // is called, the old resources (e.g. shared context, GL helper) still
+  // exist, but are about to be destroyed. Getting a reference to those
+  // resources from the ContextFactory (e.g. through
+  // SharedMainThreadContextProvider()) will return newly recreated, valid
+  // resources.
+  virtual void OnLostResources() = 0;
+};
 
 // This class abstracts the creation of the 3D context for the compositor. It is
 // a global object.
@@ -124,10 +139,18 @@ class COMPOSITOR_EXPORT ContextFactory {
   virtual void ResizeDisplay(ui::Compositor* compositor,
                              const gfx::Size& size) = 0;
 
+  // Set the output color profile into which this compositor should render.
+  virtual void SetDisplayColorSpace(ui::Compositor* compositor,
+                                    const gfx::ColorSpace& color_space) = 0;
+
   virtual void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                              base::TimeDelta interval) = 0;
 
   virtual void SetOutputIsSecure(Compositor* compositor, bool secure) = 0;
+
+  virtual void AddObserver(ContextFactoryObserver* observer) = 0;
+
+  virtual void RemoveObserver(ContextFactoryObserver* observer) = 0;
 };
 
 // This class represents a lock on the compositor, that can be used to prevent
@@ -216,6 +239,9 @@ class COMPOSITOR_EXPORT Compositor
 
   // Sets the compositor's device scale factor and size.
   void SetScaleAndSize(float scale, const gfx::Size& size_in_pixel);
+
+  // Set the output color profile into which this compositor should render.
+  void SetDisplayColorSpace(const gfx::ColorSpace& color_space);
 
   // Returns the size of the widget that is being drawn to in pixel coordinates.
   const gfx::Size& size() const { return size_; }
@@ -307,9 +333,6 @@ class COMPOSITOR_EXPORT Compositor
   void DidCommitAndDrawFrame() override;
   void DidCompleteSwapBuffers() override;
   void DidCompletePageScaleAnimation() override {}
-  void ReportFixedRasterScaleUseCounters(
-      bool has_blurry_content,
-      bool has_potential_performance_regression) override {}
 
   // cc::LayerTreeHostSingleThreadClient implementation.
   void DidPostSwapBuffers() override;
@@ -365,9 +388,6 @@ class COMPOSITOR_EXPORT Compositor
   // The device scale factor of the monitor that this compositor is compositing
   // layers on.
   float device_scale_factor_;
-
-  int last_started_frame_;
-  int last_ended_frame_;
 
   bool locks_will_time_out_;
   CompositorLock* compositor_lock_;

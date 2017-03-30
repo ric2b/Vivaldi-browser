@@ -8,34 +8,38 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/utility_process_host.h"
 #include "content/public/browser/utility_process_host_client.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_mojo_service.mojom.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 
 namespace content {
 
 class UtilityProcessHostImplBrowserTest : public ContentBrowserTest {
  public:
-  void RunUtilityProcess() {
+  void RunUtilityProcess(bool elevated) {
     base::RunLoop run_loop;
     done_closure_ = run_loop.QuitClosure();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(
             &UtilityProcessHostImplBrowserTest::RunUtilityProcessOnIOThread,
-            base::Unretained(this)));
+            base::Unretained(this), elevated));
     run_loop.Run();
   }
 
  protected:
-  void RunUtilityProcessOnIOThread() {
+  void RunUtilityProcessOnIOThread(bool elevated) {
     UtilityProcessHost* host = UtilityProcessHost::Create(nullptr, nullptr);
     host->SetName(base::ASCIIToUTF16("TestProcess"));
+#if defined(OS_WIN)
+    if (elevated)
+      host->ElevatePrivileges();
+#endif
     EXPECT_TRUE(host->Start());
 
-    ServiceRegistry* service_registry = host->GetServiceRegistry();
-    service_registry->ConnectToRemoteService(mojo::GetProxy(&service_));
+    host->GetRemoteInterfaces()->GetInterface(&service_);
     service_->DoSomething(base::Bind(
         &UtilityProcessHostImplBrowserTest::OnSomething,
         base::Unretained(this)));
@@ -51,7 +55,14 @@ class UtilityProcessHostImplBrowserTest : public ContentBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(UtilityProcessHostImplBrowserTest, LaunchProcess) {
-  RunUtilityProcess();
+  RunUtilityProcess(false);
 }
+
+#if defined(OS_WIN)
+IN_PROC_BROWSER_TEST_F(UtilityProcessHostImplBrowserTest,
+                       LaunchElevatedProcess) {
+  RunUtilityProcess(true);
+}
+#endif
 
 }  // namespace content

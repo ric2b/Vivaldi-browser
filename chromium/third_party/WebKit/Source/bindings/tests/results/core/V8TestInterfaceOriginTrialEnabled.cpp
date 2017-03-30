@@ -7,11 +7,9 @@
 #include "V8TestInterfaceOriginTrialEnabled.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/V8DOMConfiguration.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "core/dom/Document.h"
-#include "core/origin_trials/OriginTrials.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "wtf/GetPtr.h"
 #include "wtf/RefPtr.h"
@@ -266,6 +264,7 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceOriginTrialEnabled::domTemplate(v
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceOriginTrialEnabledTemplate);
 }
 
+
 bool V8TestInterfaceOriginTrialEnabled::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
@@ -278,7 +277,7 @@ v8::Local<v8::Object> V8TestInterfaceOriginTrialEnabled::findInstanceInPrototype
 
 TestInterfaceOriginTrialEnabled* V8TestInterfaceOriginTrialEnabled::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
 }
 
 } // namespace blink

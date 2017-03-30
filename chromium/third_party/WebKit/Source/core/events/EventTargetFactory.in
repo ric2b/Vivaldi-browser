@@ -4,6 +4,7 @@ export="CORE_EXPORT"
 core/animation/AnimationPlayer
 core/css/FontFaceSet
 core/css/MediaQueryList
+core/dom/BroadcastChannel
 core/dom/MessagePort
 core/dom/Node
 core/fileapi/FileReader
@@ -16,6 +17,7 @@ core/html/track/VideoTrackList
 core/loader/appcache/ApplicationCache
 core/page/EventSource
 core/timing/Performance
+core/frame/VisualViewport ImplementedAs=DOMVisualViewport
 core/frame/Window ImplementedAs=DOMWindow
 core/workers/DedicatedWorkerGlobalScope
 core/workers/SharedWorker

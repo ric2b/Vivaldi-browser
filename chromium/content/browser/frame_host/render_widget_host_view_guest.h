@@ -95,9 +95,8 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
                         const gfx::Range& range) override;
   void SelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params) override;
-  void OnSwapCompositorFrame(
-      uint32_t output_surface_id,
-      std::unique_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
+                             cc::CompositorFrame frame) override;
 #if defined(USE_AURA)
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
@@ -108,7 +107,6 @@ class CONTENT_EXPORT RenderWidgetHostViewGuest
   bool LockMouse() override;
   void UnlockMouse() override;
   void GetScreenInfo(blink::WebScreenInfo* results) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
 
 #if defined(OS_MACOSX)
   // RenderWidgetHostView implementation.

@@ -46,6 +46,8 @@ class NetworkTransaction(object):
         self._grown_factor = grown_factor
         self._timeout_seconds = timeout_seconds
         self._convert_404_to_None = convert_404_to_None
+        self._total_sleep = 0
+        self._backoff_seconds = 0
 
     def run(self, request):
         self._total_sleep = 0
@@ -53,7 +55,7 @@ class NetworkTransaction(object):
         while True:
             try:
                 return request()
-            except urllib2.HTTPError, e:
+            except urllib2.HTTPError as e:
                 if self._convert_404_to_None and e.code == 404:
                     return None
                 self._check_for_timeout()

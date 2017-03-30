@@ -4,18 +4,20 @@
 
 #include "ash/desktop_background/desktop_background_controller.h"
 
-#include "ash/ash_switches.h"
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/root_window_layout_manager.h"
+#include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_controller_observer.h"
 #include "ash/desktop_background/desktop_background_view.h"
 #include "ash/desktop_background/desktop_background_widget_controller.h"
 #include "ash/desktop_background/user_wallpaper_delegate.h"
-#include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_factory.h"
-#include "ash/shell_window_ids.h"
-#include "ash/wm/root_window_layout_manager.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
@@ -55,12 +57,12 @@ DesktopBackgroundController::DesktopBackgroundController(
       wallpaper_reload_delay_(kWallpaperReloadDelayMs),
       blocking_pool_(blocking_pool) {
   Shell::GetInstance()->window_tree_host_manager()->AddObserver(this);
-  Shell::GetInstance()->AddShellObserver(this);
+  WmShell::Get()->AddShellObserver(this);
 }
 
 DesktopBackgroundController::~DesktopBackgroundController() {
   Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
-  Shell::GetInstance()->RemoveShellObserver(this);
+  WmShell::Get()->RemoveShellObserver(this);
 }
 
 gfx::ImageSkia DesktopBackgroundController::GetWallpaper() const {
@@ -99,8 +101,7 @@ bool DesktopBackgroundController::SetWallpaperImage(const gfx::ImageSkia& image,
       image, GetMaxDisplaySizeInNative(), layout, blocking_pool_));
   current_wallpaper_->StartResize();
 
-  FOR_EACH_OBSERVER(DesktopBackgroundControllerObserver,
-                    observers_,
+  FOR_EACH_OBSERVER(DesktopBackgroundControllerObserver, observers_,
                     OnWallpaperDataChanged());
   SetDesktopBackgroundImageMode();
   return true;
@@ -142,7 +143,7 @@ void DesktopBackgroundController::OnDisplayConfigurationChanged() {
   }
 }
 
-void DesktopBackgroundController::OnRootWindowAdded(aura::Window* root_window) {
+void DesktopBackgroundController::OnRootWindowAdded(WmWindow* root_window) {
   // The background hasn't been set yet.
   if (desktop_background_mode_ == BACKGROUND_NONE)
     return;
@@ -156,24 +157,30 @@ void DesktopBackgroundController::OnRootWindowAdded(aura::Window* root_window) {
       UpdateWallpaper(true /* clear cache */);
   }
 
-  InstallDesktopController(root_window);
+  InstallDesktopController(WmWindowAura::GetAuraWindow(root_window));
 }
 
 // static
 gfx::Size DesktopBackgroundController::GetMaxDisplaySizeInNative() {
+  // Return an empty size for test environments where the screen is null.
+  if (!display::Screen::GetScreen())
+    return gfx::Size();
+
   int width = 0;
   int height = 0;
-  std::vector<display::Display> displays =
-      display::Screen::GetScreen()->GetAllDisplays();
-  DisplayManager* display_manager = Shell::GetInstance()->display_manager();
-
-  for (std::vector<display::Display>::iterator iter = displays.begin();
-       iter != displays.end(); ++iter) {
+  DisplayManager* display_manager =
+      Shell::HasInstance() ? Shell::GetInstance()->display_manager() : nullptr;
+  for (const auto& display : display::Screen::GetScreen()->GetAllDisplays()) {
     // Don't use size_in_pixel because we want to use the native pixel size.
+    // TODO(msw): Fix this for Mash/Mus; see http://crbug.com/613657.
     gfx::Size size_in_pixel =
-        display_manager->GetDisplayInfo(iter->id()).bounds_in_native().size();
-    if (iter->rotation() == display::Display::ROTATE_90 ||
-        iter->rotation() == display::Display::ROTATE_270) {
+        display_manager
+            ? display_manager->GetDisplayInfo(display.id())
+                  .bounds_in_native()
+                  .size()
+            : display.size();
+    if (display.rotation() == display::Display::ROTATE_90 ||
+        display.rotation() == display::Display::ROTATE_270) {
       size_in_pixel = gfx::Size(size_in_pixel.height(), size_in_pixel.width());
     }
     width = std::max(size_in_pixel.width(), width);
@@ -218,8 +225,9 @@ void DesktopBackgroundController::InstallDesktopController(
       NOTREACHED();
       return;
   }
-  GetRootWindowController(root_window)->SetAnimatingWallpaperController(
-      new AnimatingDesktopController(component));
+  GetRootWindowController(root_window)
+      ->SetAnimatingWallpaperController(
+          new AnimatingDesktopController(component));
 
   component->StartAnimating(GetRootWindowController(root_window));
 }
@@ -239,7 +247,7 @@ bool DesktopBackgroundController::ReparentBackgroundWidgets(int src_container,
   Shell::RootWindowControllerList controllers =
       Shell::GetAllRootWindowControllers();
   for (Shell::RootWindowControllerList::iterator iter = controllers.begin();
-    iter != controllers.end(); ++iter) {
+       iter != controllers.end(); ++iter) {
     RootWindowController* root_window_controller = *iter;
     // In the steady state (no animation playing) the background widget
     // controller exists in the RootWindowController.
@@ -248,8 +256,7 @@ bool DesktopBackgroundController::ReparentBackgroundWidgets(int src_container,
     if (desktop_controller) {
       moved |=
           desktop_controller->Reparent(root_window_controller->GetRootWindow(),
-                                       src_container,
-                                       dst_container);
+                                       src_container, dst_container);
     }
     // During desktop show animations the controller lives in
     // AnimatingDesktopController owned by RootWindowController.
@@ -257,14 +264,13 @@ bool DesktopBackgroundController::ReparentBackgroundWidgets(int src_container,
     // can temporarily be two desktop background widgets.  We must reparent
     // both of them - one above and one here.
     DesktopBackgroundWidgetController* animating_controller =
-        root_window_controller->animating_wallpaper_controller() ?
-        root_window_controller->animating_wallpaper_controller()->
-            GetController(false) :
-        NULL;
+        root_window_controller->animating_wallpaper_controller()
+            ? root_window_controller->animating_wallpaper_controller()
+                  ->GetController(false)
+            : NULL;
     if (animating_controller) {
       moved |= animating_controller->Reparent(
-          root_window_controller->GetRootWindow(),
-          src_container,
+          root_window_controller->GetRootWindow(), src_container,
           dst_container);
     }
   }

@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/printing/cloud_print/privet_http_asynchronous_factory.h"
 #include "chrome/browser/printing/cloud_print/privet_http_impl.h"
@@ -68,17 +69,15 @@ class MockPrivetHttpFactory : public PrivetHTTPAsynchronousFactory {
   };
 
   explicit MockPrivetHttpFactory(net::URLRequestContextGetter* request_context)
-      : request_context_(request_context) {
-  }
+      : request_context_(request_context) {}
 
   std::unique_ptr<PrivetHTTPResolution> CreatePrivetHTTP(
       const std::string& name) override {
-    return std::unique_ptr<PrivetHTTPResolution>(
-        new MockResolution(name, request_context_.get()));
+    return base::WrapUnique(new MockResolution(name, request_context_.get()));
   }
 
  private:
-    scoped_refptr<net::URLRequestContextGetter> request_context_;
+  scoped_refptr<net::URLRequestContextGetter> request_context_;
 };
 
 class PrivetNotificationsListenerTest : public ::testing::Test {
@@ -95,20 +94,16 @@ class PrivetNotificationsListenerTest : public ::testing::Test {
     description_.description = kExampleDeviceDescription;
   }
 
-  virtual ~PrivetNotificationsListenerTest() {
-  }
+  virtual ~PrivetNotificationsListenerTest() {}
 
   bool SuccessfulResponseToInfo(const std::string& response) {
     net::TestURLFetcher* fetcher = fetcher_factory_.GetFetcherByID(0);
-    EXPECT_TRUE(fetcher);
-    EXPECT_EQ(GURL(kDeviceInfoURL), fetcher->GetOriginalURL());
-
     if (!fetcher || GURL(kDeviceInfoURL) != fetcher->GetOriginalURL())
       return false;
 
     fetcher->SetResponseString(response);
-    fetcher->set_status(net::URLRequestStatus(net::URLRequestStatus::SUCCESS,
-                                              net::OK));
+    fetcher->set_status(
+        net::URLRequestStatus(net::URLRequestStatus::SUCCESS, net::OK));
     fetcher->set_response_code(200);
     fetcher->delegate()->OnURLFetchComplete(fetcher);
     return true;
@@ -124,94 +119,63 @@ class PrivetNotificationsListenerTest : public ::testing::Test {
 };
 
 TEST_F(PrivetNotificationsListenerTest, DisappearReappearTest) {
-
-  EXPECT_CALL(mock_delegate_, PrivetNotify(
-      1,
-      true));
-
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
-
-  SuccessfulResponseToInfo(kInfoResponseUptime20);
+  EXPECT_CALL(mock_delegate_, PrivetNotify(1, true));
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
+  EXPECT_TRUE(SuccessfulResponseToInfo(kInfoResponseUptime20));
 
   EXPECT_CALL(mock_delegate_, PrivetRemoveNotification());
-
-  notification_listener_->DeviceRemoved(
-      kExampleDeviceName);
-
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
-
+  notification_listener_->DeviceRemoved(kExampleDeviceName);
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
   description_.id = kExampleDeviceID;
-
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
 }
 
 TEST_F(PrivetNotificationsListenerTest, RegisterTest) {
-  EXPECT_CALL(mock_delegate_, PrivetNotify(
-      1,
-      true));
-
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
-
-  SuccessfulResponseToInfo(kInfoResponseUptime20);
+  EXPECT_CALL(mock_delegate_, PrivetNotify(1, true));
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
+  EXPECT_TRUE(SuccessfulResponseToInfo(kInfoResponseUptime20));
 
   EXPECT_CALL(mock_delegate_, PrivetRemoveNotification());
-
   description_.id = kExampleDeviceID;
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
+}
 
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
+TEST_F(PrivetNotificationsListenerTest, RepeatedNotification) {
+  EXPECT_CALL(mock_delegate_, PrivetNotify(1, true));
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
+  EXPECT_TRUE(SuccessfulResponseToInfo(kInfoResponseUptime20));
+
+  EXPECT_CALL(mock_delegate_, PrivetNotify(_, _)).Times(0);
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
+
+  EXPECT_CALL(mock_delegate_, PrivetRemoveNotification());
+  notification_listener_->DeviceRemoved(kExampleDeviceName);
+
+  EXPECT_CALL(mock_delegate_, PrivetNotify(_, _)).Times(0);
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
+
+  EXPECT_CALL(mock_delegate_, PrivetRemoveNotification()).Times(0);
+  notification_listener_->DeviceRemoved(kExampleDeviceName);
 }
 
 TEST_F(PrivetNotificationsListenerTest, HighUptimeTest) {
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
-
-  SuccessfulResponseToInfo(kInfoResponseUptime3600);
-
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
+  EXPECT_TRUE(SuccessfulResponseToInfo(kInfoResponseUptime3600));
   description_.id = kExampleDeviceID;
-
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
 }
 
 TEST_F(PrivetNotificationsListenerTest, HTTPErrorTest) {
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
-
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
   net::TestURLFetcher* fetcher = fetcher_factory_.GetFetcherByID(0);
-
-  fetcher->set_status(net::URLRequestStatus(net::URLRequestStatus::SUCCESS,
-                                            net::OK));
+  fetcher->set_status(
+      net::URLRequestStatus(net::URLRequestStatus::SUCCESS, net::OK));
   fetcher->set_response_code(200);
   fetcher->delegate()->OnURLFetchComplete(fetcher);
 }
 
 TEST_F(PrivetNotificationsListenerTest, DictionaryErrorTest) {
-  notification_listener_->DeviceChanged(
-      true,
-      kExampleDeviceName,
-      description_);
-
+  notification_listener_->DeviceChanged(kExampleDeviceName, description_);
   SuccessfulResponseToInfo(kInfoResponseNoUptime);
 }
 

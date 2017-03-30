@@ -11,16 +11,19 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/task_runner_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/cdm_context.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_log.h"
 #include "media/base/media_switches.h"
 #include "media/base/pipeline_status.h"
 #include "media/base/surface_manager.h"
@@ -75,17 +78,21 @@ GpuVideoDecoder::BufferData::BufferData(int32_t bbid,
 GpuVideoDecoder::BufferData::~BufferData() {}
 
 GpuVideoDecoder::GpuVideoDecoder(GpuVideoAcceleratorFactories* factories,
-                                 const RequestSurfaceCB& request_surface_cb)
+                                 const RequestSurfaceCB& request_surface_cb,
+                                 scoped_refptr<MediaLog> media_log)
     : needs_bitstream_conversion_(false),
       factories_(factories),
-      state_(kNormal),
       request_surface_cb_(request_surface_cb),
+      media_log_(media_log),
+      state_(kNormal),
       decoder_texture_target_(0),
+      pixel_format_(PIXEL_FORMAT_UNKNOWN),
       next_picture_buffer_id_(0),
       next_bitstream_buffer_id_(0),
       available_pictures_(0),
       needs_all_picture_buffers_to_decode_(false),
       supports_deferred_initialization_(false),
+      requires_texture_copy_(false),
       weak_factory_(this) {
   DCHECK(factories_);
 }
@@ -95,15 +102,14 @@ void GpuVideoDecoder::Reset(const base::Closure& closure)  {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
   if (state_ == kDrainingDecoder) {
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(
-            &GpuVideoDecoder::Reset, weak_factory_.GetWeakPtr(), closure));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&GpuVideoDecoder::Reset,
+                              weak_factory_.GetWeakPtr(), closure));
     return;
   }
 
   if (!vda_) {
-    base::MessageLoop::current()->PostTask(FROM_HERE, closure);
+    base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, closure);
     return;
   }
 
@@ -127,11 +133,18 @@ static bool IsCodedSizeSupported(const gfx::Size& coded_size,
 // callsite to always be called with the same stat name (can't parameterize it).
 static void ReportGpuVideoDecoderInitializeStatusToUMAAndRunCB(
     const VideoDecoder::InitCB& cb,
+    scoped_refptr<MediaLog> media_log,
     bool success) {
   // TODO(xhwang): Report |success| directly.
   PipelineStatus status = success ? PIPELINE_OK : DECODER_ERROR_NOT_SUPPORTED;
   UMA_HISTOGRAM_ENUMERATION(
       "Media.GpuVideoDecoderInitializeStatus", status, PIPELINE_STATUS_MAX + 1);
+
+  if (!success) {
+    media_log->RecordRapporWithSecurityOrigin(
+        "Media.OriginUrl.GpuVideoDecoderInitFailure");
+  }
+
   cb.Run(success);
 }
 
@@ -168,7 +181,7 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   InitCB bound_init_cb =
       base::Bind(&ReportGpuVideoDecoderInitializeStatusToUMAAndRunCB,
-                 BindToCurrentLoop(init_cb));
+                 BindToCurrentLoop(init_cb), media_log_);
 
 #if !defined(OS_ANDROID)
   if (config.is_encrypted()) {
@@ -180,7 +193,7 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
 
   bool previously_initialized = config_.IsValidConfig();
   DVLOG(1) << (previously_initialized ? "Reinitializing" : "Initializing")
-           << "GVD with config: " << config.AsHumanReadableString();
+           << " GVD with config: " << config.AsHumanReadableString();
 
   // TODO(posciak): destroy and create a new VDA on codec/profile change
   // (http://crbug.com/260224).
@@ -215,6 +228,9 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
       capabilities.flags &
       VideoDecodeAccelerator::Capabilities::NEEDS_ALL_PICTURE_BUFFERS_TO_DECODE;
   needs_bitstream_conversion_ = (config.codec() == kCodecH264);
+  requires_texture_copy_ =
+      !!(capabilities.flags &
+         VideoDecodeAccelerator::Capabilities::REQUIRES_TEXTURE_COPY);
   supports_deferred_initialization_ = !!(
       capabilities.flags &
       VideoDecodeAccelerator::Capabilities::SUPPORTS_DEFERRED_INITIALIZATION);
@@ -463,6 +479,7 @@ int GpuVideoDecoder::GetMaxDecodeRequests() const {
 }
 
 void GpuVideoDecoder::ProvidePictureBuffers(uint32_t count,
+                                            VideoPixelFormat format,
                                             uint32_t textures_per_buffer,
                                             const gfx::Size& size,
                                             uint32_t texture_target) {
@@ -473,6 +490,19 @@ void GpuVideoDecoder::ProvidePictureBuffers(uint32_t count,
   std::vector<uint32_t> texture_ids;
   std::vector<gpu::Mailbox> texture_mailboxes;
   decoder_texture_target_ = texture_target;
+
+  if (format == PIXEL_FORMAT_UNKNOWN) {
+    format = IsOpaque(config_.format()) ? PIXEL_FORMAT_XRGB : PIXEL_FORMAT_ARGB;
+  }
+
+  // TODO(jbauman): Move decoder_texture_target_ and pixel_format_ to the
+  // picture buffer. http://crbug.com/614789
+  if ((pixel_format_ != PIXEL_FORMAT_UNKNOWN) && (pixel_format_ != format)) {
+    NotifyError(VideoDecodeAccelerator::PLATFORM_FAILURE);
+    return;
+  }
+
+  pixel_format_ = format;
   if (!factories_->CreateTextures(count * textures_per_buffer, size,
                                   &texture_ids, &texture_mailboxes,
                                   decoder_texture_target_)) {
@@ -577,12 +607,6 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
 
   DCHECK(decoder_texture_target_);
 
-  VideoPixelFormat pixel_format = vda_->GetOutputFormat();
-  if (pixel_format == PIXEL_FORMAT_UNKNOWN) {
-    pixel_format =
-        IsOpaque(config_.format()) ? PIXEL_FORMAT_XRGB : PIXEL_FORMAT_ARGB;
-  }
-
   gpu::MailboxHolder mailbox_holders[VideoFrame::kMaxPlanes];
   for (size_t i = 0; i < pb.texture_ids().size(); ++i) {
     mailbox_holders[i] = gpu::MailboxHolder(
@@ -590,7 +614,7 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
   }
 
   scoped_refptr<VideoFrame> frame(VideoFrame::WrapNativeTextures(
-      pixel_format, mailbox_holders,
+      pixel_format_, mailbox_holders,
       base::Bind(&ReleaseMailboxTrampoline, factories_->GetTaskRunner(),
                  base::Bind(&GpuVideoDecoder::ReleaseMailbox,
                             weak_factory_.GetWeakPtr(), factories_,
@@ -606,6 +630,10 @@ void GpuVideoDecoder::PictureReady(const media::Picture& picture) {
 #if defined(OS_MACOSX) || defined(OS_WIN)
   frame->metadata()->SetBoolean(VideoFrameMetadata::DECODER_OWNS_FRAME, true);
 #endif
+
+  if (requires_texture_copy_)
+    frame->metadata()->SetBoolean(VideoFrameMetadata::COPY_REQUIRED, true);
+
   CHECK_GT(available_pictures_, 0);
   --available_pictures_;
 

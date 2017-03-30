@@ -41,15 +41,15 @@ namespace content {
 namespace {
 
 void SatisfyCallback(cc::SurfaceManager* manager,
-                     cc::SurfaceSequence sequence) {
+                     const cc::SurfaceSequence& sequence) {
   std::vector<uint32_t> sequences;
   sequences.push_back(sequence.sequence);
   manager->DidSatisfySequences(sequence.id_namespace, &sequences);
 }
 
 void RequireCallback(cc::SurfaceManager* manager,
-                     cc::SurfaceId id,
-                     cc::SurfaceSequence sequence) {
+                     const cc::SurfaceId& id,
+                     const cc::SurfaceSequence& sequence) {
   cc::Surface* surface = manager->GetSurfaceForId(id);
   if (!surface) {
     LOG(ERROR) << "Attempting to require callback on nonexistent surface";
@@ -75,7 +75,7 @@ DelegatedFrameHost::DelegatedFrameHost(DelegatedFrameHostClient* client)
       can_lock_compositor_(YES_CAN_LOCK),
       delegated_frame_evictor_(new DelegatedFrameEvictor(this)) {
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  factory->AddObserver(this);
+  factory->GetContextFactory()->AddObserver(this);
   id_allocator_ = factory->GetContextFactory()->CreateSurfaceIdAllocator();
   factory->GetSurfaceManager()->RegisterSurfaceFactoryClient(
       id_allocator_->id_namespace(), this);
@@ -381,15 +381,14 @@ void DelegatedFrameHost::AttemptFrameSubscriberCapture(
   }
 }
 
-void DelegatedFrameHost::SwapDelegatedFrame(
-    uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
-  DCHECK(frame->delegated_frame_data.get());
+void DelegatedFrameHost::SwapDelegatedFrame(uint32_t output_surface_id,
+                                            cc::CompositorFrame frame) {
+  DCHECK(frame.delegated_frame_data.get());
 #if defined(OS_CHROMEOS)
   DCHECK(!resize_lock_ || !client_->IsAutoResizeEnabled());
 #endif
-  cc::DelegatedFrameData* frame_data = frame->delegated_frame_data.get();
-  float frame_device_scale_factor = frame->metadata.device_scale_factor;
+  cc::DelegatedFrameData* frame_data = frame.delegated_frame_data.get();
+  float frame_device_scale_factor = frame.metadata.device_scale_factor;
 
   DCHECK(!frame_data->render_pass_list.empty());
 
@@ -410,8 +409,8 @@ void DelegatedFrameHost::SwapDelegatedFrame(
                                               &ack.resources);
 
     skipped_latency_info_list_.insert(skipped_latency_info_list_.end(),
-                                      frame->metadata.latency_info.begin(),
-                                      frame->metadata.latency_info.end());
+                                      frame.metadata.latency_info.begin(),
+                                      frame.metadata.latency_info.end());
 
     client_->DelegatedFrameHostSendCompositorSwapAck(output_surface_id, ack);
     skipped_frames_ = true;
@@ -447,7 +446,7 @@ void DelegatedFrameHost::SwapDelegatedFrame(
   bool skip_frame = false;
   pending_delegated_ack_count_++;
 
-  background_color_ = frame->metadata.root_background_color;
+  background_color_ = frame.metadata.root_background_color;
 
   if (frame_size.IsEmpty()) {
     DCHECK(frame_data->resource_list.empty());
@@ -474,9 +473,9 @@ void DelegatedFrameHost::SwapDelegatedFrame(
       current_scale_factor_ = frame_device_scale_factor;
     }
 
-    frame->metadata.latency_info.insert(frame->metadata.latency_info.end(),
-                                        skipped_latency_info_list_.begin(),
-                                        skipped_latency_info_list_.end());
+    frame.metadata.latency_info.insert(frame.metadata.latency_info.end(),
+                                       skipped_latency_info_list_.begin(),
+                                       skipped_latency_info_list_.end());
     skipped_latency_info_list_.clear();
 
     gfx::Size desired_size = client_->DelegatedFrameHostDesiredSizeInDIP();
@@ -553,7 +552,7 @@ void DelegatedFrameHost::ReturnResources(
     SendReturnedDelegatedResources(last_output_surface_id_);
 }
 
-void DelegatedFrameHost::WillDrawSurface(cc::SurfaceId id,
+void DelegatedFrameHost::WillDrawSurface(const cc::SurfaceId& id,
                                          const gfx::Rect& damage_rect) {
   // Frame subscribers are only interested in changes to the target surface, so
   // do not attempt capture if |damage_rect| is empty.  This prevents the draws
@@ -810,7 +809,7 @@ void DelegatedFrameHost::OnLostResources() {
 DelegatedFrameHost::~DelegatedFrameHost() {
   DCHECK(!compositor_);
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  factory->RemoveObserver(this);
+  factory->GetContextFactory()->RemoveObserver(this);
 
   if (!surface_id_.is_null())
     surface_factory_->Destroy(surface_id_);

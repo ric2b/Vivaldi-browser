@@ -21,10 +21,8 @@ crash_service.exe: %(ChromeDir)s\
 #
 vivaldi.dll: %(VersionDir)s\
 vivaldi_100_percent.pak: %(VersionDir)s\
-vivaldi_material_100_percent.pak: %(VersionDir)s\
 vivaldi_child.dll: %(VersionDir)s\
 vivaldi_elf.dll: %(VersionDir)s\
-d3dcompiler_46.dll: %(VersionDir)s\
 chrome_watcher.dll: %(VersionDir)s\
 d3dcompiler_47.dll: %(VersionDir)s\
 ffmpeg.dll: %(VersionDir)s\
@@ -80,6 +78,7 @@ resources\vivaldi\_locales\fa\messages.json: %(VersionDir)s\resources\vivaldi\_l
 resources\vivaldi\_locales\fi\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fi
 resources\vivaldi\_locales\fr\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fr
 resources\vivaldi\_locales\fy\messages.json: %(VersionDir)s\resources\vivaldi\_locales\fy
+resources\vivaldi\_locales\gd\messages.json: %(VersionDir)s\resources\vivaldi\_locales\gd
 resources\vivaldi\_locales\gl\messages.json: %(VersionDir)s\resources\vivaldi\_locales\gl
 resources\vivaldi\_locales\hu\messages.json: %(VersionDir)s\resources\vivaldi\_locales\hu
 resources\vivaldi\_locales\hr\messages.json: %(VersionDir)s\resources\vivaldi\_locales\hr
@@ -121,13 +120,19 @@ resources\vivaldi\user_files\*: %(VersionDir)s\resources\vivaldi\user_files
 
 [HIDPI]
 vivaldi_200_percent.pak: %(VersionDir)s\
-vialdi_material_200_percent.pak: %(VersionDir)s\
 
 [TOUCH]
 
 [VIVALDI]
 SecondaryTile.png: %(VersionDir)s\
-widevinecdmadapter.dll: %(VersionDir)s\
+#
+# Widevine CDM sub-dir
+#
+WidevineCdm\manifest.json: %(VersionDir)s\WidevineCdm\
+WidevineCdm\_platform_specific\win_x86\widevinecdm.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x86\
+WidevineCdm\_platform_specific\win_x86\widevinecdmadapter.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x86\
+WidevineCdm\_platform_specific\win_x64\widevinecdm.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x64\
+WidevineCdm\_platform_specific\win_x64\widevinecdmadapter.dll: %(VersionDir)s\WidevineCdm\_platform_specific\win_x64\
 #
 # Pepper Flash sub-dir.
 #

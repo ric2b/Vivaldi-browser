@@ -8,11 +8,15 @@ LauncherArcAppUpdater::LauncherArcAppUpdater(
     Delegate* delegate,
     content::BrowserContext* browser_context)
     : LauncherAppUpdater(delegate, browser_context) {
-  ArcAppListPrefs::Get(browser_context)->AddObserver(this);
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(browser_context);
+  DCHECK(prefs);
+  prefs->AddObserver(this);
 }
 
 LauncherArcAppUpdater::~LauncherArcAppUpdater() {
-  ArcAppListPrefs::Get(browser_context())->RemoveObserver(this);
+  ArcAppListPrefs* prefs = ArcAppListPrefs::Get(browser_context());
+  DCHECK(prefs);
+  prefs->RemoveObserver(this);
 }
 
 void LauncherArcAppUpdater::OnAppRegistered(
@@ -22,5 +26,6 @@ void LauncherArcAppUpdater::OnAppRegistered(
 }
 
 void LauncherArcAppUpdater::OnAppRemoved(const std::string& app_id) {
+  delegate()->OnAppUninstalledPrepared(browser_context(), app_id);
   delegate()->OnAppUninstalled(browser_context(), app_id);
 }

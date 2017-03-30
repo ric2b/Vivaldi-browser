@@ -130,6 +130,7 @@
 <translation id="4156740505453712750">Чтобы защитить компьютер от несанкционированного доступа, выберите PIN-код, содержащий <ph name="BOLD_START" />не менее шести цифр<ph name="BOLD_END" />. Его необходимо будет ввести при удаленном подключении.</translation>
 <translation id="4176825807642096119">Код доступа</translation>
 <translation id="4207623512727273241">Прежде чем продолжить, запустите программу установки.</translation>
+<translation id="4227991223508142681">Инструмент для подготовки хоста</translation>
 <translation id="4240294130679914010">Приложение Chromoting Host Uninstaller</translation>
 <translation id="4277463233460010382">Некоторые клиенты могут подключаться к этому компьютеру без PIN-кода.</translation>
 <translation id="4277736576214464567">Код доступа недействителен. Повторите попытку.</translation>
@@ -229,7 +230,7 @@
 <translation id="6668065415969892472">PIN-код обновлен.</translation>
 <translation id="6681800064886881394">© Google Inc., 2013. Все права защищены.</translation>
 <translation id="6746493157771801606">Удалить историю</translation>
-<translation id="6748108480210050150">Клиент</translation>
+<translation id="6748108480210050150">От</translation>
 <translation id="677755392401385740">Запущен хост для пользователя: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Просмотр/изменение</translation>
 <translation id="6930242544192836755">Продолжительность</translation>
@@ -237,7 +238,7 @@
 <translation id="6944854424004126054">Восстановить окно</translation>
 <translation id="6965382102122355670">ОК</translation>
 <translation id="6985691951107243942">Заблокировать подключения к <ph name="HOSTNAME" />? Восстановить их можно будет только на соответствующем компьютере.</translation>
-<translation id="6998989275928107238">Хост</translation>
+<translation id="6998989275928107238">Кому</translation>
 <translation id="7019153418965365059">Неизвестная ошибка хоста: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Удаленная поддержка</translation>
 <translation id="7038683108611689168">Разрешить Google собирать данные статистики использования и отчеты о сбоях для улучшения работы Пульта Chrome</translation>
@@ -261,6 +262,7 @@
 <translation id="7836926030608666805">Отсутствуют некоторые необходимые компоненты. Установите последнюю версию браузера Chrome и повторите попытку.</translation>
 <translation id="7868137160098754906">Введите PIN-код для доступа к удаленному компьютеру.</translation>
 <translation id="7869445566579231750">У вас нет разрешения на запуск этого приложения.</translation>
+<translation id="7895403300744144251">Правила безопасности на удаленном компьютере запрещают подключение из вашего аккаунта.</translation>
 <translation id="7948001860594368197">Параметры экрана</translation>
 <translation id="7970576581263377361">Ошибка аутентификации. Войдите в Chromium ещё раз.</translation>
 <translation id="7981525049612125370">Время сеанса удаленного доступа истекло.</translation>

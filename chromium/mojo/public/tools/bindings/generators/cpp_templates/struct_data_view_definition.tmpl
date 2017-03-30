@@ -8,19 +8,17 @@
 {%- for pf in struct.packed.packed_fields_in_ordinal_order %}
 {%-   set kind = pf.field.kind -%}
 {%-   set name = pf.field.name -%}
-{%-   if kind|is_struct_kind or kind|is_array_kind or kind|is_string_kind %}
+{%-   if kind|is_struct_kind or kind|is_array_kind or kind|is_string_kind or
+         kind|is_map_kind %}
 {#-     Does nothing. They are already defined in the class declaration. #}
-{%-   elif kind|is_map_kind %}
-bool {{struct.name}}DataView::Read{{name|under_to_camel}}(
-    {{kind|cpp_wrapper_type}}* value) {
+
+{%-   elif kind|is_enum_kind %}
+{{kind|get_qualified_name_for_kind}} {{struct.name}}DataView::{{name}}() const {
 {%-     if pf.min_version != 0 %}
-    auto pointer = data_->header_.version >= {{pf.min_version}}
-                   ? data_->{{name}}.ptr : nullptr;
-{%-     else %}
-    auto pointer = data_->{{name}}.ptr;
+  if (data_->header_.version < {{pf.min_version}})
+    return {{kind|get_qualified_name_for_kind}}{};
 {%-     endif %}
-  return mojo::internal::Deserialize<{{kind|unmapped_type_for_serializer}}>(
-      pointer, value, context_);
+  return static_cast<{{kind|get_qualified_name_for_kind}}>(data_->{{name}});
 }
 
 {%-   elif kind|is_union_kind %}
@@ -36,61 +34,16 @@ bool {{struct.name}}DataView::Read{{name|under_to_camel}}(
       pointer, value, context_);
 }
 
-{%-   elif kind|is_interface_kind %}
+{%-   elif kind|is_any_handle_or_interface_kind %}
 {{kind|cpp_wrapper_type}} {{struct.name}}DataView::Take{{name|under_to_camel}}() {
   {{kind|cpp_wrapper_type}} result;
 {%-     if pf.min_version != 0 %}
   if (data_->header_.version < {{pf.min_version}})
     return result;
 {%-     endif %}
-  mojo::internal::InterfaceDataToPointer(&data_->{{name}}, &result, context_);
-  return result;
-}
-
-{%-   elif kind|is_interface_request_kind %}
-{{kind|cpp_wrapper_type}} {{struct.name}}DataView::Take{{name|under_to_camel}}() {
-  {{kind|cpp_wrapper_type}} result;
-{%-     if pf.min_version != 0 %}
-  if (data_->header_.version < {{pf.min_version}})
-    return result;
-{%-     endif %}
-  result.Bind(context_->handles.TakeHandleAs<mojo::MessagePipeHandle>(
-      data_->{{name}}));
-  return result;
-}
-
-{%-   elif kind|is_any_handle_kind %}
-{{kind|cpp_wrapper_type}} {{struct.name}}DataView::Take{{name|under_to_camel}}() {
-{%-     if pf.min_version != 0 %}
-  if (data_->header_.version < {{pf.min_version}})
-    return {{kind|cpp_wrapper_type}}();
-{%-     endif %}
-
-  return context_->handles.TakeHandleAs<
-      {{kind|cpp_wrapper_type}}::RawHandleType>(data_->{{name}});
-}
-
-{%-   elif kind|is_associated_interface_kind %}
-{{kind|cpp_wrapper_type}} {{struct.name}}DataView::Take{{name|under_to_camel}}() {
-  {{kind|cpp_wrapper_type}} result;
-{%-     if pf.min_version != 0 %}
-  if (data_->header_.version < {{pf.min_version}})
-    return result;
-{%-     endif %}
-  mojo::internal::AssociatedInterfaceDataToPtrInfo(&data_->{{name}}, &result,
-                                                   context_->router.get());
-  return result;
-}
-
-{%-   elif kind|is_associated_interface_request_kind %}
-{{kind|cpp_wrapper_type}} {{struct.name}}DataView::Take{{name|under_to_camel}}() {
-  {{kind|cpp_wrapper_type}} result;
-{%-     if pf.min_version != 0 %}
-  if (data_->header_.version < {{pf.min_version}})
-    return result;
-{%-     endif %}
-  result.Bind(context_->router->CreateLocalEndpointHandle(
-      mojo::internal::FetchAndReset(&data_->{{name}})));
+  bool ret = mojo::internal::Deserialize<{{kind|unmapped_type_for_serializer}}>(
+      &data_->{{name}}, &result, context_);
+  DCHECK(ret);
   return result;
 }
 
@@ -100,7 +53,7 @@ bool {{struct.name}}DataView::Read{{name|under_to_camel}}(
   if (data_->header_.version < {{pf.min_version}})
     return {{kind|cpp_wrapper_type}}{};
 {%-     endif %}
-  return static_cast<{{kind|cpp_wrapper_type}}>(data_->{{name}});
+  return data_->{{name}};
 }
 {%-   endif %}
 {%- endfor %}

@@ -245,7 +245,8 @@ public:
     unsigned numberOfLiveNodes() const;
     unsigned numberOfLiveDocuments() const;
     String dumpRefCountedInstanceCounts() const;
-    Vector<String> consoleMessageArgumentCounts(Document*) const;
+    unsigned numberOfConsoleMessages(Document*) const;
+    unsigned numberOfConsoleMessagesWithArguments(Document*) const;
     LocalDOMWindow* openDummyInspectorFrontend(const String& url);
     void closeDummyInspectorFrontend();
     Vector<unsigned long> setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes);
@@ -289,10 +290,6 @@ public:
     void stopTrackingRepaints(Document*, ExceptionState&);
     void updateLayoutIgnorePendingStylesheetsAndRunPostLayoutTasks(Node*, ExceptionState&);
     void forceFullRepaint(Document*, ExceptionState&);
-
-    void startTrackingPaintInvalidationObjects();
-    void stopTrackingPaintInvalidationObjects();
-    Vector<String> trackedPaintInvalidationObjects();
 
     ClientRectList* draggableRegions(Document*, ExceptionState&);
     ClientRectList* nonDraggableRegions(Document*, ExceptionState&);
@@ -347,10 +344,8 @@ public:
 
     bool ignoreLayoutWithPendingStylesheets(Document*);
 
-    // Test must call setNetworkStateNotifierTestOnly(true) before calling setNetworkConnectionInfo or
-    // setNetworkStateMaxBandwidth.
-    void setNetworkStateNotifierTestOnly(bool);
-    void setNetworkConnectionInfo(const String&, double downlinkMaxMbps, ExceptionState&);
+    void setNetworkConnectionInfoOverride(bool, const String&, double downlinkMaxMbps, ExceptionState&);
+    void clearNetworkConnectionInfoOverride();
 
     unsigned countHitRegions(CanvasRenderingContext*);
 

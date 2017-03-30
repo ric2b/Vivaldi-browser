@@ -26,8 +26,6 @@
 #include "core/dom/NodeListsNodeData.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashSet.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -46,6 +44,16 @@ public:
     {
         visitor->trace(registry);
         visitor->trace(transientRegistry);
+    }
+
+    DECLARE_TRACE_WRAPPERS()
+    {
+        for (auto registration : registry) {
+            visitor->traceWrappers(registration);
+        }
+        for (auto registration : transientRegistry) {
+            visitor->traceWrappers(registration);
+        }
     }
 
 private:

@@ -10,8 +10,8 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "mojo/platform_handle/platform_handle_private_thunks.h"
-#include "mojo/public/platform/native/system_thunks.h"
+#include "mojo/edk/embedder/entrypoints.h"
+#include "mojo/public/c/system/thunks.h"
 
 namespace shell {
 
@@ -57,7 +57,8 @@ bool RunNativeApplication(base::NativeLibrary app_library,
 // Thunks aren't needed/used in component build, since the thunked methods
 // just live in their own dynamically loaded library.
 #if !defined(COMPONENT_BUILD)
-  if (!SetThunks(&MojoMakeSystemThunks, "MojoSetSystemThunks", app_library)) {
+  if (!SetThunks(&mojo::edk::MakeSystemThunks, "MojoSetSystemThunks",
+                 app_library)) {
     LOG(ERROR) << "MojoSetSystemThunks not found";
     return false;
   }
@@ -82,10 +83,7 @@ bool RunNativeApplication(base::NativeLibrary app_library,
   }
 #endif
 
-  // Apps need not include platform handle thunks.
-  SetThunks(&MojoMakePlatformHandlePrivateThunks,
-            "MojoSetPlatformHandlePrivateThunks", app_library);
-#endif
+#endif  // !defined(COMPONENT_BUILD)
 
   typedef MojoResult (*MojoMainFunction)(MojoHandle);
   MojoMainFunction main_function = reinterpret_cast<MojoMainFunction>(

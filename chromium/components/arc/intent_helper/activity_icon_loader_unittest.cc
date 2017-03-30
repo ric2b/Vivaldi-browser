@@ -51,8 +51,7 @@ void OnIconsReady3(
 
 // Tests if InvalidateIcons properly cleans up the cache.
 TEST(ActivityIconLoaderTest, TestInvalidateIcons) {
-  scoped_refptr<ActivityIconLoader> loader(
-      new ActivityIconLoader(ui::SCALE_FACTOR_100P));
+  scoped_refptr<ActivityIconLoader> loader(new ActivityIconLoader);
   loader->AddIconToCacheForTesting(ActivityIconLoader::ActivityName("p0", "a0"),
                                    gfx::Image());
   loader->AddIconToCacheForTesting(ActivityIconLoader::ActivityName("p0", "a1"),
@@ -76,8 +75,7 @@ TEST(ActivityIconLoaderTest, TestInvalidateIcons) {
 
 // Tests if GetActivityIcons immediately returns cached icons.
 TEST(ActivityIconLoaderTest, TestGetActivityIcons) {
-  scoped_refptr<ActivityIconLoader> loader(
-      new ActivityIconLoader(ui::SCALE_FACTOR_100P));
+  scoped_refptr<ActivityIconLoader> loader(new ActivityIconLoader);
   loader->AddIconToCacheForTesting(ActivityIconLoader::ActivityName("p0", "a0"),
                                    gfx::Image());
   loader->AddIconToCacheForTesting(ActivityIconLoader::ActivityName("p1", "a1"),
@@ -91,23 +89,25 @@ TEST(ActivityIconLoaderTest, TestGetActivityIcons) {
   activities.emplace_back("p0", "a0");
   activities.emplace_back("p1", "a1");
   activities.emplace_back("p1", "a0");
-  EXPECT_TRUE(loader->GetActivityIcons(activities, base::Bind(&OnIconsReady0)));
+  EXPECT_EQ(ActivityIconLoader::GetResult::SUCCEEDED_SYNC,
+            loader->GetActivityIcons(activities, base::Bind(&OnIconsReady0)));
 
   // Test with different |activities|.
   activities.clear();
   activities.emplace_back("p1", "a1");
-  EXPECT_TRUE(loader->GetActivityIcons(activities, base::Bind(&OnIconsReady1)));
+  EXPECT_EQ(ActivityIconLoader::GetResult::SUCCEEDED_SYNC,
+            loader->GetActivityIcons(activities, base::Bind(&OnIconsReady1)));
   activities.clear();
+  EXPECT_EQ(ActivityIconLoader::GetResult::SUCCEEDED_SYNC,
+            loader->GetActivityIcons(activities, base::Bind(&OnIconsReady2)));
   activities.emplace_back("p1", "a_unknown");
-  EXPECT_TRUE(loader->GetActivityIcons(activities, base::Bind(&OnIconsReady2)));
-  activities.clear();
-  EXPECT_TRUE(loader->GetActivityIcons(activities, base::Bind(&OnIconsReady2)));
+  EXPECT_EQ(ActivityIconLoader::GetResult::FAILED_ARC_NOT_SUPPORTED,
+            loader->GetActivityIcons(activities, base::Bind(&OnIconsReady2)));
 }
 
 // Tests if OnIconsResized updates the cache.
 TEST(ActivityIconLoaderTest, TestOnIconsResized) {
-  scoped_refptr<ActivityIconLoader> loader(
-      new ActivityIconLoader(ui::SCALE_FACTOR_100P));
+  scoped_refptr<ActivityIconLoader> loader(new ActivityIconLoader);
   std::unique_ptr<ActivityIconLoader::ActivityToIconsMap> activity_to_icons(
       new ActivityIconLoader::ActivityToIconsMap);
   activity_to_icons->insert(

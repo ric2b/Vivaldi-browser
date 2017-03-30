@@ -31,6 +31,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/renderer_host/chrome_navigation_data.h"
+#include "chrome/browser/renderer_host/predictor_resource_throttle.h"
 #include "chrome/browser/renderer_host/safe_browsing_resource_throttle.h"
 #include "chrome/browser/renderer_host/thread_hop_resource_throttle.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -47,7 +48,6 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/policy/core/common/cloud/policy_header_io_helper.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "content/public/browser/browser_thread.h"
@@ -69,6 +69,7 @@
 #include "net/base/load_timing_info.h"
 #include "net/base/request_priority.h"
 #include "net/http/http_response_headers.h"
+#include "net/ssl/client_cert_store.h"
 #include "net/url_request/url_request.h"
 
 #if !defined(DISABLE_NACL)
@@ -220,7 +221,8 @@ void LaunchURL(
     int render_process_id,
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     ui::PageTransition page_transition,
-    bool has_user_gesture) {
+    bool has_user_gesture,
+    bool is_whitelisted) {
   // If there is no longer a WebContents, the request may have raced with tab
   // closing. Don't fire the external request. (It may have been a prerender.)
   content::WebContents* web_contents = web_contents_getter.Run();
@@ -236,9 +238,17 @@ void LaunchURL(
     return;
   }
 
-  ExternalProtocolHandler::LaunchUrlWithDelegate(
-      url, render_process_id, web_contents->GetRoutingID(), page_transition,
-      has_user_gesture, g_external_protocol_handler_delegate);
+  // If the URL is in whitelist, we launch it without asking the user and
+  // without any additional security checks. Since the URL is whitelisted,
+  // we assume it can be executed.
+  if (is_whitelisted) {
+    ExternalProtocolHandler::LaunchUrlWithoutSecurityCheck(
+        url, render_process_id, web_contents->GetRoutingID());
+  } else {
+    ExternalProtocolHandler::LaunchUrlWithDelegate(
+        url, render_process_id, web_contents->GetRoutingID(), page_transition,
+        has_user_gesture, g_external_protocol_handler_delegate);
+  }
 }
 
 #if !defined(DISABLE_NACL)
@@ -304,8 +314,8 @@ void LogMainFrameMetricsOnUIThread(
         template_url_service->GetDefaultSearchProvider();
     if (!default_provider)
       return;
-    if (TemplateURLPrepopulateData::GetEngineType(
-            *default_provider, template_url_service->search_terms_data()) ==
+    if (default_provider->GetEngineType(
+            template_url_service->search_terms_data()) ==
         SearchEngineType::SEARCH_ENGINE_GOOGLE) {
       if (net_error == net::OK) {
         UMA_HISTOGRAM_LONG_TIMES("Net.NTP.Google.RequestTime2.Success",
@@ -470,7 +480,6 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
     content::ResourceContext* resource_context,
     int child_id,
     int route_id,
-    int request_id,
     bool is_content_initiated,
     bool must_download,
     ScopedVector<content::ResourceThrottle>* throttles) {
@@ -501,7 +510,7 @@ void ChromeResourceDispatcherHostDelegate::DownloadStarting(
 #if BUILDFLAG(ANDROID_JAVA_UI)
     throttles->push_back(
         new chrome::InterceptDownloadResourceThrottle(
-            request, child_id, route_id, request_id, must_download));
+            request, child_id, route_id, must_download));
 #endif
   }
 
@@ -527,7 +536,19 @@ bool ChromeResourceDispatcherHostDelegate::HandleExternalProtocol(
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     bool is_main_frame,
     ui::PageTransition page_transition,
-    bool has_user_gesture) {
+    bool has_user_gesture,
+    content::ResourceContext* resource_context) {
+  // Get the state, if |url| is in blacklist, whitelist or in none of those.
+  ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
+  const policy::URLBlacklist::URLBlacklistState url_state =
+      io_data->GetURLBlacklistState(url);
+  if (url_state == policy::URLBlacklist::URLBlacklistState::URL_IN_BLACKLIST) {
+    // It's a link with custom scheme and it's blacklisted. We return false here
+    // and let it process as a normal URL. Eventually chrome_network_delegate
+    // will see it's in the blacklist and the user will be shown the blocked
+    // content page.
+    return false;
+  }
 #if defined(ENABLE_EXTENSIONS)
   // External protocols are disabled for guests. An exception is made for the
   // "mailto" protocol, so that pages that utilize it work properly in a
@@ -545,10 +566,12 @@ bool ChromeResourceDispatcherHostDelegate::HandleExternalProtocol(
     return false;
 #endif  // defined(ANDROID)
 
+  const bool is_whitelisted =
+      url_state == policy::URLBlacklist::URLBlacklistState::URL_IN_WHITELIST;
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
       base::Bind(&LaunchURL, url, child_id, web_contents_getter,
-                 page_transition, has_user_gesture));
+                 page_transition, has_user_gesture, is_whitelisted));
   return true;
 }
 
@@ -609,6 +632,11 @@ void ChromeResourceDispatcherHostDelegate::AppendStandardResourceThrottles(
 
   if (ThreadHopResourceThrottle::IsEnabled())
     throttles->push_back(new ThreadHopResourceThrottle);
+
+  std::unique_ptr<PredictorResourceThrottle> predictor_throttle =
+      PredictorResourceThrottle::MaybeCreate(request, io_data);
+  if (predictor_throttle)
+    throttles->push_back(predictor_throttle.release());
 }
 
 bool ChromeResourceDispatcherHostDelegate::ShouldForceDownloadResource(
@@ -834,4 +862,11 @@ ChromeResourceDispatcherHostDelegate::GetNavigationData(
   if (data_reduction_proxy_data)
     data->SetDataReductionProxyData(data_reduction_proxy_data->DeepCopy());
   return data;
+}
+
+std::unique_ptr<net::ClientCertStore>
+ChromeResourceDispatcherHostDelegate::CreateClientCertStore(
+    content::ResourceContext* resource_context) {
+  return ProfileIOData::FromResourceContext(resource_context)->
+      CreateClientCertStore();
 }

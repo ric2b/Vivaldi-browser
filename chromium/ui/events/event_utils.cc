@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "base/metrics/histogram.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 
@@ -60,9 +61,27 @@ int RegisterCustomEventType() {
   return ++g_custom_event_types;
 }
 
-base::TimeDelta EventTimeForNow() {
-  return base::TimeDelta::FromInternalValue(
-      base::TimeTicks::Now().ToInternalValue());
+void ValidateEventTimeClock(base::TimeTicks* timestamp) {
+// Restrict this validation to DCHECK builds except when using X11 which is
+// known to provide bogus timestamps that require correction (crbug.com/611950).
+#if defined(USE_X11) || DCHECK_IS_ON()
+  if (base::debug::BeingDebugged())
+    return;
+
+  base::TimeTicks now = EventTimeForNow();
+  int64_t delta = (now - *timestamp).InMilliseconds();
+  if (delta < 0 || delta > 60 * 1000) {
+    UMA_HISTOGRAM_BOOLEAN("Event.TimestampHasValidTimebase", false);
+#if defined(USE_X11)
+    *timestamp = now;
+#else
+    NOTREACHED() << "Unexpected event timestamp, now:" << now
+                 << " event timestamp:" << *timestamp;
+#endif
+  }
+
+  UMA_HISTOGRAM_BOOLEAN("Event.TimestampHasValidTimebase", true);
+#endif
 }
 
 bool ShouldDefaultToNaturalScroll() {
@@ -82,6 +101,34 @@ display::Display::TouchSupport GetInternalDisplayTouchSupport() {
       return it->touch_support();
   }
   return display::Display::TOUCH_SUPPORT_UNAVAILABLE;
+}
+
+void ComputeEventLatencyOS(const base::NativeEvent& native_event) {
+  base::TimeTicks current_time = EventTimeForNow();
+  base::TimeTicks time_stamp = EventTimeFromNative(native_event);
+  base::TimeDelta delta = current_time - time_stamp;
+
+  EventType type = EventTypeFromNative(native_event);
+  switch (type) {
+    case ET_MOUSEWHEEL:
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.OS.MOUSE_WHEEL",
+                                  delta.InMicroseconds(), 1, 1000000, 50);
+      return;
+    case ET_TOUCH_MOVED:
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.OS.TOUCH_MOVED",
+                                  delta.InMicroseconds(), 1, 1000000, 50);
+      return;
+    case ET_TOUCH_PRESSED:
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.OS.TOUCH_PRESSED",
+                                  delta.InMicroseconds(), 1, 1000000, 50);
+      return;
+    case ET_TOUCH_RELEASED:
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.OS.TOUCH_RELEASED",
+                                  delta.InMicroseconds(), 1, 1000000, 50);
+      return;
+    default:
+      return;
+  }
 }
 
 }  // namespace ui

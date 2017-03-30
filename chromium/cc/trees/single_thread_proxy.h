@@ -56,6 +56,7 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
   void Start(
       std::unique_ptr<BeginFrameSource> external_begin_frame_source) override;
   void Stop() override;
+  void SetMutator(std::unique_ptr<LayerTreeMutator> mutator) override;
   bool SupportsImplScrolling() const override;
   bool MainFrameWillHappenForTesting() override;
   void UpdateTopControlsState(TopControlsState constraints,
@@ -174,13 +175,16 @@ class CC_EXPORT SingleThreadProxy : public Proxy,
 // code is running on the impl thread to satisfy assertion checks.
 class DebugScopedSetImplThread {
  public:
+#if DCHECK_IS_ON()
   explicit DebugScopedSetImplThread(TaskRunnerProvider* task_runner_provider)
       : task_runner_provider_(task_runner_provider) {
-#if DCHECK_IS_ON()
     previous_value_ = task_runner_provider_->impl_thread_is_overridden_;
     task_runner_provider_->SetCurrentThreadIsImplThread(true);
-#endif
   }
+#else
+  explicit DebugScopedSetImplThread(TaskRunnerProvider* task_runner_provider) {}
+#endif
+
   ~DebugScopedSetImplThread() {
 #if DCHECK_IS_ON()
     task_runner_provider_->SetCurrentThreadIsImplThread(previous_value_);
@@ -188,8 +192,10 @@ class DebugScopedSetImplThread {
   }
 
  private:
+#if DCHECK_IS_ON()
   bool previous_value_;
   TaskRunnerProvider* task_runner_provider_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(DebugScopedSetImplThread);
 };
@@ -198,13 +204,16 @@ class DebugScopedSetImplThread {
 // code is running on the main thread to satisfy assertion checks.
 class DebugScopedSetMainThread {
  public:
+#if DCHECK_IS_ON()
   explicit DebugScopedSetMainThread(TaskRunnerProvider* task_runner_provider)
       : task_runner_provider_(task_runner_provider) {
-#if DCHECK_IS_ON()
     previous_value_ = task_runner_provider_->impl_thread_is_overridden_;
     task_runner_provider_->SetCurrentThreadIsImplThread(false);
-#endif
   }
+#else
+  explicit DebugScopedSetMainThread(TaskRunnerProvider* task_runner_provider) {}
+#endif
+
   ~DebugScopedSetMainThread() {
 #if DCHECK_IS_ON()
     task_runner_provider_->SetCurrentThreadIsImplThread(previous_value_);
@@ -212,8 +221,10 @@ class DebugScopedSetMainThread {
   }
 
  private:
+#if DCHECK_IS_ON()
   bool previous_value_;
   TaskRunnerProvider* task_runner_provider_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(DebugScopedSetMainThread);
 };

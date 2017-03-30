@@ -21,10 +21,12 @@ if (is_android) {
 } else if (is_mac) {
   import("//build/compiled_action.gni")
   import("//build/config/mac/rules.gni")
+  import("//build/config/mac/symbols.gni")
   import("//build/mac/tweak_info_plist.gni")
   import("//build/util/branding.gni")
   import("//build/util/version.gni")
   import("//build_overrides/v8.gni")
+  import("//media/cdm/ppapi/cdm_paths.gni")
 }
 
 if (is_win) {
@@ -46,7 +48,7 @@ if (is_win) {
       "-o",
       rebase_path("$root_out_dir", root_build_dir),
       "-a",
-      target_cpu,
+      current_cpu,
     ]
     deps = [
       ":chrome_initial",
@@ -59,8 +61,14 @@ if (!is_android && !is_mac) {
     public_deps = [
       ":chrome_initial",
     ]
+    data_deps = [
+      ":chrome_initial",
+    ]
     if (is_win) {
       public_deps += [ ":reorder_imports" ]
+    }
+    if (use_aura && (is_win || is_linux)) {
+      data_deps += [ "//chrome/app:mojo_manifests" ]
     }
   }
 
@@ -119,6 +127,7 @@ if (!is_android && !is_mac) {
         ":chrome_dll",
         ":chrome_exe_version",
         ":file_pre_reader",
+        ":visual_elements_resources",
         "//base",
         "//breakpad:breakpad_handler",
         "//breakpad:breakpad_sender",
@@ -141,7 +150,6 @@ if (!is_android && !is_mac) {
         "//crypto",
         "//sandbox",
         "//ui/gfx",
-        "//win8:visual_elements_resources",
       ]
       data_deps = [
         "//chrome/app/version_assembly:version_assembly_manifest",
@@ -155,6 +163,14 @@ if (!is_android && !is_mac) {
         configs -= [ "//build/config/win:console" ]
         configs += [ "//build/config/win:windowed" ]
       }
+
+      ldflags = [
+        "/DELAYLOAD:dbghelp.dll",
+        "/DELAYLOAD:dwmapi.dll",
+        "/DELAYLOAD:uxtheme.dll",
+        "/DELAYLOAD:ole32.dll",
+        "/DELAYLOAD:oleaut32.dll",
+      ]
     } else if (use_aura) {
       # Non-Windows aura entrypoint.
       sources += [ "app/chrome_exe_main_aura.cc" ]
@@ -222,8 +238,9 @@ if (!is_android && !is_mac) {
       # On Mac, internal plugins go inside the framework, so these
       # dependencies are on chrome.dll.
       "//third_party/adobe/flash:flapper_binaries",
-      "//third_party/widevine/cdm:widevinecdmadapter",
     ]
+
+    data_deps += [ "//third_party/widevine/cdm:widevinecdmadapter" ]
 
     if (is_multi_dll_chrome) {
       defines += [ "CHROME_MULTIPLE_DLL" ]
@@ -262,8 +279,6 @@ if (is_win) {
       "app/chrome_main_delegate.h",
       "app/chrome_main_mac.h",
       "app/chrome_main_mac.mm",
-      "app/delay_load_hook_win.cc",
-      "app/delay_load_hook_win.h",
     ]
 
     deps = [
@@ -290,10 +305,24 @@ if (is_win) {
         "//third_party/wtl",
         "//ui/views",
       ]
-      if (current_cpu == "x86") {
-        # TODO(GYP) bug 512861: Lots of VCLinkerTool stuff on Windows.
-        #deps += [ 'chrome_user32_delay_imports' ]  TODO(GYP)
-      }
+
+      ldflags += [
+        "/DELAYLOAD:comdlg32.dll",
+        "/DELAYLOAD:crypt32.dll",
+        "/DELAYLOAD:cryptui.dll",
+        "/DELAYLOAD:dhcpcsvc.dll",
+        "/DELAYLOAD:dwmapi.dll",
+        "/DELAYLOAD:imagehlp.dll",
+        "/DELAYLOAD:imm32.dll",
+        "/DELAYLOAD:iphlpapi.dll",
+        "/DELAYLOAD:setupapi.dll",
+        "/DELAYLOAD:urlmon.dll",
+        "/DELAYLOAD:winhttp.dll",
+        "/DELAYLOAD:wininet.dll",
+        "/DELAYLOAD:winspool.drv",
+        "/DELAYLOAD:ws2_32.dll",
+        "/DELAYLOAD:wsock32.dll",
+      ]
 
       # This is a large module that can't do incremental linking in some cases.
       configs -= [ "//build/config/win:default_incremental_linking" ]
@@ -357,6 +386,15 @@ if (is_win) {
       if (is_win) {
         deps += [ "//chrome/install_static:install_static_util" ]
 
+        ldflags = [
+          "/DELAYLOAD:d3d11.dll",
+          "/DELAYLOAD:d3d9.dll",
+          "/DELAYLOAD:dwmapi.dll",
+          "/DELAYLOAD:dxva2.dll",
+          "/DELAYLOAD:esent.dll",
+          "/DELAYLOAD:wininet.dll",
+        ]
+
         if (symbol_level == 2) {
           # Incremental linking doesn't work on this target in debug mode with
           # full symbols, but does work in other cases, including minimal
@@ -365,12 +403,12 @@ if (is_win) {
           configs += [ "//build/config/win:no_incremental_linking" ]
         }
         if (chrome_pgo_phase == 1) {
-          ldflags = [
+          ldflags += [
             "/LTCG:PGINSTRUMENT",
             "/PogoSafeMode",
           ]
         } else if (chrome_pgo_phase == 2) {
-          ldflags = [ "/LTCG:PGOPTIMIZE" ]
+          ldflags += [ "/LTCG:PGOPTIMIZE" ]
         }
       }
 
@@ -389,6 +427,21 @@ if (is_win) {
     deps = [
       ":chrome_app",
     ]
+
+    data_deps = [
+      ":chrome_app",
+    ]
+
+    if (debug_devtools) {
+      deps += [ ":devtools_debug_resources" ]
+    }
+
+    if (is_chrome_branded && is_official_build) {
+      deps += [
+        ":chrome_dsym_archive",
+        ":chrome_dump_syms",
+      ]
+    }
   }
 
   tweak_info_plist("chrome_app_plist") {
@@ -419,12 +472,23 @@ if (is_win) {
       "app/chrome_exe_main_mac.c",
     ]
 
+    extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
+
     deps = [
       ":chrome_app_strings_bundle_data",
       ":chrome_resources",
       ":chrome_versioned_bundle_data",
       "//chrome/common:version_header",
     ]
+
+    # Remove the default strip configuration (which strips all symbols) so that
+    # a saves file can be specified.
+    if (enable_stripping) {
+      remove_configs = [ "//build/config/mac:strip_all" ]
+
+      ldflags =
+          [ "-Wcrl,strip,-s," + rebase_path("app/app.saves", root_build_dir) ]
+    }
   }
 
   compiled_action("chrome_app_strings") {
@@ -555,6 +619,8 @@ if (is_win) {
       "app/chrome_exe_main_mac.c",
     ]
 
+    extra_configs = [ "//build/config/compiler:wexit_time_destructors" ]
+
     defines = [ "HELPER_EXECUTABLE" ]
 
     deps = [
@@ -567,6 +633,15 @@ if (is_win) {
       "-rpath",
       "@loader_path/../../../../../../..",
     ]
+
+    # Remove the default strip configuration (which strips all symbols) so that
+    # a saves file can be specified.
+    if (enable_stripping) {
+      remove_configs = [ "//build/config/mac:strip_all" ]
+
+      ldflags +=
+          [ "-Wcrl,strip,-s," + rebase_path("app/app.saves", root_build_dir) ]
+    }
   }
 
   bundle_data("chrome_framework_locales") {
@@ -630,7 +705,9 @@ if (is_win) {
       sources += [ "$root_out_dir/chrome_200_percent.pak" ]
     }
 
-    if (enable_topchrome_md) {
+    # TODO(estade): remove material design specific resources.
+    # See crbug.com/613593
+    if (is_mac) {
       sources += [ "$root_out_dir/chrome_material_100_percent.pak" ]
 
       if (enable_hidpi) {
@@ -652,6 +729,39 @@ if (is_win) {
       ]
       public_deps += [ "//v8" ]
     }
+  }
+
+  # When debug_devtools is enabled, symlink the inspector resources into the
+  # framework bundle. The resources go into the final output directory for the
+  # framework in the app bundle, rather than the framework bundle in
+  # root_out_dir, since copy_bundle_data copies the contents of the link
+  # rather than the link itself.
+  action("devtools_debug_resources") {
+    _stamp = "$target_out_dir/run_${target_name}.stamp"
+
+    outputs = [
+      _stamp,
+    ]
+
+    script = "//build/symlink.py"
+    args = [
+      "-f",
+      "--touch",
+      rebase_path(_stamp, root_out_dir),
+
+      # Convert the symlink source and destination to an absolute paths, which
+      # makes symlinking easier (now pwd manipulation).
+      rebase_path("$root_out_dir/resources/inspector"),
+      rebase_path(
+          "$root_out_dir/$chrome_product_full_name.app/Contents/Versions/$chrome_version_full/$chrome_framework_name.framework/Resources/inspector"),
+    ]
+
+    deps = [
+      # Depend on :chrome_app to ensure that the bundle is produced before
+      # creating or destroying the symlink.
+      ":chrome_app",
+      "//third_party/WebKit/public:blink_devtools_frontend_resources",
+    ]
   }
 
   if (enable_nacl) {
@@ -676,18 +786,52 @@ if (is_win) {
     bundle_data("flash_player_plugin") {
       sources = [
         "$root_out_dir/PepperFlash/PepperFlashPlayer.plugin",
+        "$root_out_dir/PepperFlash/manifest.json",
       ]
-
       outputs = [
         "{{bundle_root_dir}}/Internet Plug-Ins/PepperFlash/{{source_file_part}}",
       ]
-
       public_deps = [
         "//third_party/adobe/flash:flapper_binaries",
       ]
     }
+
+    bundle_data("widevine_cdm_library_binaries") {
+      sources = [
+        "$root_out_dir/$widevine_cdm_path/libwidevinecdm.dylib",
+        "$root_out_dir/$widevine_cdm_path/widevinecdmadapter.plugin",
+      ]
+      outputs = [
+        "{{bundle_root_dir}}/Libraries/$widevine_cdm_path/{{source_file_part}}",
+      ]
+      public_deps = [
+        "//third_party/widevine/cdm:widevinecdm",
+        "//third_party/widevine/cdm:widevinecdmadapter",
+      ]
+    }
+
+    bundle_data("widevine_cdm_library_manifest") {
+      sources = [
+        "$root_out_dir/WidevineCdm/manifest.json",
+      ]
+      outputs = [
+        "{{bundle_root_dir}}/Libraries/WidevineCdm/{{source_file_part}}",
+      ]
+      public_deps = [
+        "//third_party/widevine/cdm:widevine_cdm_manifest",
+      ]
+    }
   } else {
     group("flash_player_plugin") {
+    }
+  }
+
+  group("widevine_cdm_library") {
+    if (is_chrome_branded) {
+      deps = [
+        ":widevine_cdm_library_binaries",
+        ":widevine_cdm_library_manifest",
+      ]
     }
   }
 
@@ -788,6 +932,8 @@ if (is_win) {
     if (enable_package_mash_services) {
       deps += [ "//chrome/app/mash" ]
     }
+
+    configs += [ "//build/config/compiler:wexit_time_destructors" ]
   }
 
   mac_framework_bundle("chrome_framework") {
@@ -811,6 +957,7 @@ if (is_win) {
       ":chrome_framework_plugins",
       ":chrome_framework_resources",
       ":flash_player_plugin",
+      ":widevine_cdm_library",
       "//build/config/sanitizers:deps",
       "//chrome/app/nibs:chrome_xibs",
     ]
@@ -833,6 +980,10 @@ if (is_win) {
         "-rpath",
         "@loader_path/../../../../..",
         "-Wl,-reexport_library,libchrome_dll.dylib",
+      ]
+
+      data_deps = [
+        ":chrome_dll",
       ]
     }
   }
@@ -865,6 +1016,85 @@ if (is_win) {
       public_deps = [
         ":chrome_framework",
       ]
+    }
+  }
+
+  if (enable_dsyms) {
+    # This list must be updated with the two targets' deps list below, and
+    # the list of _dsyms in :chrome_dsym_archive.
+    _chrome_symbols_sources = [
+      "$root_out_dir/$chrome_framework_name.framework/$chrome_framework_name",
+      "$root_out_dir/$chrome_helper_name.app/Contents/MacOS/$chrome_helper_name",
+      "$root_out_dir/$chrome_product_full_name.app/Contents/MacOS/$chrome_product_full_name",
+      "$root_out_dir/crashpad_handler",
+    ]
+
+    # It is possible to run dump_syms on unstripped products without dSYMs,
+    # but doing so isn't logical and won't happen in practice.
+    action_foreach("chrome_dump_syms") {
+      script = "//build/redirect_stdout.py"
+
+      sources = _chrome_symbols_sources
+
+      outputs = [
+        "$root_out_dir/{{source_file_part}}-$chrome_version_full.breakpad",
+      ]
+
+      # Use an aboslute path to dump_syms in case a user has it in their path.
+      args = rebase_path(outputs, root_out_dir) + [
+               rebase_path("$root_out_dir/dump_syms"),
+               "-g",
+               rebase_path(
+                   "$root_out_dir/{{source_name_part}}.dSYM/Contents/Resources/DWARF/{{source_name_part}}",
+                   root_out_dir),
+               "{{source}}",
+             ]
+
+      deps = [
+        ":chrome_app",
+        ":chrome_framework",
+        ":chrome_helper_app",
+        "//breakpad:dump_syms",
+        "//third_party/crashpad/crashpad/handler:crashpad_handler",
+      ]
+    }
+
+    action("chrome_dsym_archive") {
+      script = "//chrome/tools/build/mac/archive_symbols.py"
+
+      # These are the dSYMs that will be archived. The sources list must be
+      # are the target outputs that correspond to the dSYMs (since a dSYM is
+      # a directory it cannot be listed as a source file). The targets that
+      # generate both the dSYM and binary image are listed in deps.
+      _dsyms = [
+        "$root_out_dir/$chrome_framework_name.dSYM",
+        "$root_out_dir/$chrome_helper_name.dSYM",
+        "$root_out_dir/$chrome_product_full_name.dSYM",
+        "$root_out_dir/crashpad_handler.dSYM",
+      ]
+
+      sources = _chrome_symbols_sources
+
+      _output = "$root_out_dir/$chrome_product_full_name.dSYM.tar.bz2"
+
+      outputs = [
+        _output,
+      ]
+
+      args = [ rebase_path(_output, root_out_dir) ] +
+             rebase_path(_dsyms, root_out_dir)
+
+      deps = [
+        ":chrome_app",
+        ":chrome_framework",
+        ":chrome_helper_app",
+        "//third_party/crashpad/crashpad/handler:crashpad_handler",
+      ]
+    }
+  } else {
+    group("chrome_dump_syms") {
+    }
+    group("chrome_symbol_archive") {
     }
   }
 }
@@ -906,7 +1136,6 @@ group("child_dependencies") {
   public_deps = [
     "//chrome/common",
     "//sync",
-    "//third_party/cld_2:cld2_platform_impl",
   ]
   if (!is_ios) {
     public_deps += [
@@ -977,6 +1206,20 @@ if (is_win) {
       "//components/startup_metric_utils/common",
     ]
   }
+}
+
+# GYP version: chrome/chrome_exe.gypi:visual_elements_resources
+copy("visual_elements_resources") {
+  sources = [
+    "app/visual_elements_resources/Logo.png",
+    "app/visual_elements_resources/SecondaryTile.png",
+    "app/visual_elements_resources/SmallLogo.png",
+    "app/visual_elements_resources/chrome.VisualElementsManifest.xml",
+  ]
+
+  outputs = [
+    "$root_out_dir/{{source_file_part}}",
+  ]
 }
 
 # GYP version: chrome/chrome_resources.gyp:chrome_resources
@@ -1054,7 +1297,7 @@ if (is_chrome_branded) {
       ]
     } else {
       outputs = [
-        "{{bundle_root_dir}}/Deafult Apps/{{source_file_part}}",
+        "{{bundle_root_dir}}/Default Apps/{{source_file_part}}",
       ]
     }
 
@@ -1078,7 +1321,7 @@ group("packed_resources") {
     public_deps += [ ":repack_chrome_200_percent" ]
   }
 
-  if (enable_topchrome_md) {
+  if (is_mac) {
     public_deps += [ ":repack_chrome_material_100_percent" ]
 
     if (enable_hidpi) {
@@ -1263,14 +1506,9 @@ template("chrome_repack_percent") {
       ]
     }
     if (use_ash) {
-      sources += [
-        "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak",
-        "$root_gen_dir/ash/wm/common/resources/ash_wm_common_resources_${percent}_percent.pak",
-      ]
-      deps += [
-        "//ash/resources",
-        "//ash/wm/common/resources",
-      ]
+      sources +=
+          [ "$root_gen_dir/ash/resources/ash_resources_${percent}_percent.pak" ]
+      deps += [ "//ash/resources" ]
     }
     if (toolkit_views) {
       sources += [ "$root_gen_dir/ui/views/resources/views_resources_${percent}_percent.pak" ]
@@ -1334,7 +1572,6 @@ template("chrome_repack_material_percent") {
     # All sources should also have deps for completeness.
     sources = [
       "$root_gen_dir/chrome/theme_resources_material_${percent}_percent.pak",
-      "$root_gen_dir/components/components_resources_material_${percent}_percent.pak",
     ]
 
     deps = [
@@ -1359,7 +1596,7 @@ template("chrome_repack_material_percent") {
   }
 }
 
-if (enable_topchrome_md) {
+if (is_mac) {
   chrome_repack_material_percent("repack_chrome_material_100_percent") {
     percent = "100"
   }

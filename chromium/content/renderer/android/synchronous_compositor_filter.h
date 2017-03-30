@@ -29,7 +29,6 @@ class SynchronousCompositorFilter
     : public IPC::MessageFilter,
       public IPC::Sender,
       public SynchronousCompositorRegistry,
-      public InputHandlerManagerClient,
       public SynchronousInputHandlerProxyClient {
  public:
   SynchronousCompositorFilter(const scoped_refptr<base::SingleThreadTaskRunner>&
@@ -53,24 +52,6 @@ class SynchronousCompositorFilter
   void UnregisterOutputSurface(
       int routing_id,
       SynchronousCompositorOutputSurface* output_surface) override;
-  void RegisterBeginFrameSource(int routing_id,
-                                SynchronousCompositorExternalBeginFrameSource*
-                                    begin_frame_source) override;
-  void UnregisterBeginFrameSource(int routing_id,
-                                  SynchronousCompositorExternalBeginFrameSource*
-                                      begin_frame_source) override;
-
-  // InputHandlerManagerClient overrides.
-  void SetBoundHandler(const Handler& handler) override;
-  void RegisterRoutingID(int routing_id) override;
-  void UnregisterRoutingID(int routing_id) override;
-  void DidOverscroll(int routing_id,
-                     const DidOverscrollParams& params) override;
-  void DidStartFlinging(int routing_id) override;
-  void DidStopFlinging(int routing_id) override;
-  void NotifyInputEventHandled(int routing_id,
-                               blink::WebInputEvent::Type type,
-                               InputEventAckState ack_result) override;
 
   // SynchronousInputHandlerProxyClient overrides.
   void DidAddSynchronousHandlerProxy(
@@ -88,7 +69,6 @@ class SynchronousCompositorFilter
   // Compositor thread methods.
   void FilterReadyyOnCompositorThread();
   void OnMessageReceivedOnCompositorThread(const IPC::Message& message);
-  void SetBoundHandlerOnCompositorThread(const Handler& handler);
   void CheckIsReady(int routing_id);
   void UnregisterObjects(int routing_id);
   void RemoveEntryIfNeeded(int routing_id);
@@ -105,11 +85,9 @@ class SynchronousCompositorFilter
       base::ScopedPtrHashMap<int /* routing_id */,
                              std::unique_ptr<SynchronousCompositorProxy>>;
   SyncCompositorMap sync_compositor_map_;
-  Handler input_handler_;
 
   bool filter_ready_;
   struct Entry {
-    SynchronousCompositorExternalBeginFrameSource* begin_frame_source;
     SynchronousCompositorOutputSurface* output_surface;
     ui::SynchronousInputHandlerProxy* synchronous_input_handler_proxy;
 

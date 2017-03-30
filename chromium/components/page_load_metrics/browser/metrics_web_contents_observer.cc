@@ -46,6 +46,8 @@ const char kAbortChainSizeSameURL[] =
     "PageLoad.Internal.ProvisionalAbortChainSize.SameURL";
 const char kAbortChainSizeNoCommit[] =
     "PageLoad.Internal.ProvisionalAbortChainSize.NoCommit";
+const char kClientRedirectDelayAfterPaint[] =
+    "PageLoad.Internal.ClientRedirectDelayAfterPaint";
 
 }  // namespace internal
 
@@ -207,6 +209,7 @@ void LogAbortChainSameURLHistogram(int aborted_chain_size_same_url) {
 void DispatchObserverTimingCallbacks(PageLoadMetricsObserver* observer,
                                      const PageLoadTiming& last_timing,
                                      const PageLoadTiming& new_timing,
+                                     const PageLoadMetadata& last_metadata,
                                      const PageLoadExtraInfo& extra_info) {
   observer->OnTimingUpdate(new_timing, extra_info);
   if (!new_timing.dom_content_loaded_event_start.is_zero() &&
@@ -232,6 +235,8 @@ void DispatchObserverTimingCallbacks(PageLoadMetricsObserver* observer,
     observer->OnParseStart(new_timing, extra_info);
   if (!new_timing.parse_stop.is_zero() && last_timing.parse_stop.is_zero())
     observer->OnParseStop(new_timing, extra_info);
+  if (extra_info.metadata.behavior_flags != last_metadata.behavior_flags)
+    observer->OnLoadingBehaviorObserved(extra_info);
 }
 
 }  // namespace
@@ -260,9 +265,9 @@ PageLoadTracker::PageLoadTracker(
 }
 
 PageLoadTracker::~PageLoadTracker() {
-  const PageLoadExtraInfo info = GetPageLoadMetricsInfo();
-  if (!info.time_to_commit.is_zero() && renderer_tracked() &&
-      timing_.IsEmpty()) {
+  const PageLoadExtraInfo info = ComputePageLoadExtraInfo();
+
+  if (info.time_to_commit && renderer_tracked() && timing_.IsEmpty()) {
     RecordInternalError(ERR_NO_IPCS_RECEIVED);
   }
   // Recall that trackers that are given ABORT_UNKNOWN_NAVIGATION have their
@@ -329,6 +334,7 @@ void PageLoadTracker::WebContentsHidden() {
     // foregrounded.
     DCHECK_EQ(started_in_foreground_, foreground_time_.is_null());
     background_time_ = base::TimeTicks::Now();
+    ClampBrowserTimestampIfInterProcessTimeTickSkew(&background_time_);
   }
 
   for (const auto& observer : observers_)
@@ -343,6 +349,7 @@ void PageLoadTracker::WebContentsShown() {
     // backgrounded.
     DCHECK_NE(started_in_foreground_, background_time_.is_null());
     foreground_time_ = base::TimeTicks::Now();
+    ClampBrowserTimestampIfInterProcessTimeTickSkew(&foreground_time_);
   }
 
   for (const auto& observer : observers_)
@@ -353,6 +360,7 @@ void PageLoadTracker::Commit(content::NavigationHandle* navigation_handle) {
   // TODO(bmcquade): To improve accuracy, consider adding commit time to
   // NavigationHandle. Taking a timestamp here should be close enough for now.
   commit_time_ = base::TimeTicks::Now();
+  ClampBrowserTimestampIfInterProcessTimeTickSkew(&commit_time_);
   url_ = navigation_handle->GetURL();
   for (const auto& observer : observers_) {
     observer->OnCommit(navigation_handle);
@@ -379,6 +387,19 @@ void PageLoadTracker::OnInputEvent(const blink::WebInputEvent& event) {
   }
 }
 
+void PageLoadTracker::NotifyClientRedirectTo(
+    const PageLoadTracker& destination) {
+  base::TimeDelta redirect_delay_after_paint;
+  if (!timing_.first_paint.is_zero()) {
+    base::TimeTicks first_paint_time = navigation_start() + timing_.first_paint;
+    if (destination.navigation_start() > first_paint_time)
+      redirect_delay_after_paint =
+          destination.navigation_start() - first_paint_time;
+  }
+  PAGE_LOAD_HISTOGRAM(internal::kClientRedirectDelayAfterPaint,
+                      redirect_delay_after_paint);
+}
+
 bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
                                    const PageLoadMetadata& new_metadata) {
   // Throw away IPCs that are not relevant to the current navigation.
@@ -402,11 +423,13 @@ bool PageLoadTracker::UpdateTiming(const PageLoadTiming& new_timing,
     // the observer timing callbacks.
     const PageLoadTiming last_timing = timing_;
     timing_ = new_timing;
+
+    const PageLoadMetadata last_metadata = metadata_;
     metadata_ = new_metadata;
-    const PageLoadExtraInfo info = GetPageLoadMetricsInfo();
+    const PageLoadExtraInfo info = ComputePageLoadExtraInfo();
     for (const auto& observer : observers_) {
       DispatchObserverTimingCallbacks(observer.get(), last_timing, new_timing,
-                                      info);
+                                      last_metadata, info);
     }
     return true;
   }
@@ -422,28 +445,61 @@ void PageLoadTracker::AddObserver(
   observers_.push_back(std::move(observer));
 }
 
-PageLoadExtraInfo PageLoadTracker::GetPageLoadMetricsInfo() {
-  base::TimeDelta first_background_time;
-  base::TimeDelta first_foreground_time;
-  base::TimeDelta time_to_abort;
-  base::TimeDelta time_to_commit;
-  if (!background_time_.is_null())
+void PageLoadTracker::ClampBrowserTimestampIfInterProcessTimeTickSkew(
+    base::TimeTicks* event_time) {
+  DCHECK(event_time != nullptr);
+  // Windows 10 GCE bot non-deterministically failed because TimeTicks::Now()
+  // called in the browser process e.g. commit_time was less than
+  // navigation_start_ that was populated in the renderer process because the
+  // clock was not system-wide monotonic.
+  // Note that navigation_start_ can also be set in the browser process in
+  // some cases and in those cases event_time should never be <
+  // navigation_start_. If it is due to a code error and it gets clamped in this
+  // function, on high resolution systems it should lead to a dcheck failure.
+
+  // TODO (shivanisha) Currently IsHighResolution is the best way to check
+  // if the clock is system-wide monotonic. However IsHighResolution
+  // does a broader check to see if the clock in use is high resolution
+  // which also implies it is system-wide monotonic (on Windows).
+  if (base::TimeTicks::IsHighResolution()) {
+    DCHECK(event_time->is_null() || *event_time >= navigation_start_);
+    return;
+  }
+
+  if (!event_time->is_null() && *event_time < navigation_start_) {
+    RecordInternalError(ERR_INTER_PROCESS_TIME_TICK_SKEW);
+    *event_time = navigation_start_;
+  }
+}
+
+PageLoadExtraInfo PageLoadTracker::ComputePageLoadExtraInfo() {
+  base::Optional<base::TimeDelta> first_background_time;
+  base::Optional<base::TimeDelta> first_foreground_time;
+  base::Optional<base::TimeDelta> time_to_abort;
+  base::Optional<base::TimeDelta> time_to_commit;
+
+  if (!background_time_.is_null()) {
+    DCHECK_GE(background_time_, navigation_start_);
     first_background_time = background_time_ - navigation_start_;
-  if (!foreground_time_.is_null())
+  }
+
+  if (!foreground_time_.is_null()) {
+    DCHECK_GE(foreground_time_, navigation_start_);
     first_foreground_time = foreground_time_ - navigation_start_;
+  }
+
   if (abort_type_ != ABORT_NONE) {
-    DCHECK_GT(abort_time_, navigation_start_);
+    DCHECK_GE(abort_time_, navigation_start_);
     time_to_abort = abort_time_ - navigation_start_;
   } else {
     DCHECK(abort_time_.is_null());
   }
 
   if (!commit_time_.is_null()) {
-    DCHECK_GT(commit_time_, navigation_start_);
+    DCHECK_GE(commit_time_, navigation_start_);
     time_to_commit = commit_time_ - navigation_start_;
-  } else {
-    DCHECK(commit_time_.is_null());
   }
+
   return PageLoadExtraInfo(
       first_background_time, first_foreground_time, started_in_foreground_,
       commit_time_.is_null() ? GURL() : url_, time_to_commit, abort_type_,
@@ -451,17 +507,19 @@ PageLoadExtraInfo PageLoadTracker::GetPageLoadMetricsInfo() {
 }
 
 void PageLoadTracker::NotifyAbort(UserAbortType abort_type,
-                                  base::TimeTicks timestamp) {
+                                  base::TimeTicks timestamp,
+                                  bool is_certainly_browser_timestamp) {
   DCHECK_NE(abort_type, ABORT_NONE);
   // Use UpdateAbort to update an already notified PageLoadTracker.
   if (abort_type_ != ABORT_NONE)
     return;
 
-  UpdateAbortInternal(abort_type, timestamp);
+  UpdateAbortInternal(abort_type, timestamp, is_certainly_browser_timestamp);
 }
 
 void PageLoadTracker::UpdateAbort(UserAbortType abort_type,
-                                  base::TimeTicks timestamp) {
+                                  base::TimeTicks timestamp,
+                                  bool is_certainly_browser_timestamp) {
   DCHECK_NE(abort_type, ABORT_NONE);
   DCHECK_NE(abort_type, ABORT_OTHER);
   DCHECK_EQ(abort_type_, ABORT_OTHER);
@@ -469,7 +527,8 @@ void PageLoadTracker::UpdateAbort(UserAbortType abort_type,
   // For some aborts (e.g. navigations), the initiated timestamp can be earlier
   // than the timestamp that aborted the load. Taking the minimum gives the
   // closest user initiated time known.
-  UpdateAbortInternal(abort_type, std::min(abort_time_, timestamp));
+  UpdateAbortInternal(abort_type, std::min(abort_time_, timestamp),
+                      is_certainly_browser_timestamp);
 }
 
 bool PageLoadTracker::IsLikelyProvisionalAbort(
@@ -488,7 +547,8 @@ bool PageLoadTracker::MatchesOriginalNavigation(
 }
 
 void PageLoadTracker::UpdateAbortInternal(UserAbortType abort_type,
-                                          base::TimeTicks timestamp) {
+                                          base::TimeTicks timestamp,
+                                          bool is_certainly_browser_timestamp) {
   // When a provisional navigation commits, that navigation's start time is
   // interpreted as the abort time for other provisional loads in the tab.
   // However, this only makes sense if the committed load started after the
@@ -498,7 +558,7 @@ void PageLoadTracker::UpdateAbortInternal(UserAbortType abort_type,
   // infer the cause of aborts. It would be better if the navigation code could
   // instead report the actual cause of an aborted navigation. See crbug/571647
   // for details.
-  if (timestamp <= navigation_start_) {
+  if (timestamp < navigation_start_) {
     RecordInternalError(ERR_ABORT_BEFORE_NAVIGATION_START);
     abort_type_ = ABORT_NONE;
     abort_time_ = base::TimeTicks();
@@ -506,6 +566,10 @@ void PageLoadTracker::UpdateAbortInternal(UserAbortType abort_type,
   }
   abort_type_ = abort_type;
   abort_time_ = timestamp;
+
+  if (is_certainly_browser_timestamp) {
+    ClampBrowserTimestampIfInterProcessTimeTickSkew(&abort_time_);
+  }
 }
 
 // static
@@ -622,6 +686,12 @@ void MetricsWebContentsObserver::DidStartNavigation(
           navigation_handle, chain_size, chain_size_same_url))));
 }
 
+const PageLoadExtraInfo
+MetricsWebContentsObserver::GetPageLoadExtraInfoForCommittedLoad() {
+  DCHECK(committed_load_);
+  return committed_load_->ComputePageLoadExtraInfo();
+}
+
 void MetricsWebContentsObserver::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame())
@@ -654,7 +724,7 @@ void MetricsWebContentsObserver::DidFinishNavigation(
     // Note that this can come from some non user-initiated errors, such as
     // downloads, or 204 responses. See crbug.com/542369.
     if ((error == net::OK) || (error == net::ERR_ABORTED)) {
-      finished_nav->NotifyAbort(ABORT_OTHER, base::TimeTicks::Now());
+      finished_nav->NotifyAbort(ABORT_OTHER, base::TimeTicks::Now(), true);
       aborted_provisional_loads_.push_back(std::move(finished_nav));
     }
 
@@ -665,14 +735,22 @@ void MetricsWebContentsObserver::DidFinishNavigation(
   if (navigation_handle->IsSamePage())
     return;
 
+  if (!navigation_handle->HasUserGesture() &&
+      (navigation_handle->GetPageTransition() &
+       ui::PAGE_TRANSITION_CLIENT_REDIRECT) != 0 &&
+      committed_load_)
+    committed_load_->NotifyClientRedirectTo(*finished_nav);
+
   // Notify other loads that they may have been aborted by this committed load.
   // Note that by using the committed navigation start as the abort cause, we
   // lose data on provisional loads that were aborted by other provisional
   // loads. Those will either be listed as ABORT_OTHER or as being aborted by
   // this load.
+  // is_certainly_browser_timestamp is set to false because NavigationStart()
+  // could be set in either the renderer or browser process.
   NotifyAbortAllLoadsWithTimestamp(
       AbortTypeForPageTransition(navigation_handle->GetPageTransition()),
-      navigation_handle->NavigationStart());
+      navigation_handle->NavigationStart(), false);
 
   committed_load_ = std::move(finished_nav);
   aborted_provisional_loads_.clear();
@@ -759,20 +837,24 @@ void MetricsWebContentsObserver::RenderProcessGone(
 }
 
 void MetricsWebContentsObserver::NotifyAbortAllLoads(UserAbortType abort_type) {
-  NotifyAbortAllLoadsWithTimestamp(abort_type, base::TimeTicks::Now());
+  NotifyAbortAllLoadsWithTimestamp(abort_type, base::TimeTicks::Now(), true);
 }
 
 void MetricsWebContentsObserver::NotifyAbortAllLoadsWithTimestamp(
     UserAbortType abort_type,
-    base::TimeTicks timestamp) {
+    base::TimeTicks timestamp,
+    bool is_certainly_browser_timestamp) {
   if (committed_load_)
-    committed_load_->NotifyAbort(abort_type, timestamp);
+    committed_load_->NotifyAbort(abort_type, timestamp,
+                                 is_certainly_browser_timestamp);
   for (const auto& kv : provisional_loads_) {
-    kv.second->NotifyAbort(abort_type, timestamp);
+    kv.second->NotifyAbort(abort_type, timestamp,
+                           is_certainly_browser_timestamp);
   }
   for (const auto& tracker : aborted_provisional_loads_) {
     if (tracker->IsLikelyProvisionalAbort(timestamp))
-      tracker->UpdateAbort(abort_type, timestamp);
+      tracker->UpdateAbort(abort_type, timestamp,
+                           is_certainly_browser_timestamp);
   }
   aborted_provisional_loads_.clear();
 }
@@ -794,7 +876,7 @@ MetricsWebContentsObserver::NotifyAbortedProvisionalLoadsNewNavigation(
 
   base::TimeTicks timestamp = new_navigation->NavigationStart();
   if (last_aborted_load->IsLikelyProvisionalAbort(timestamp))
-    last_aborted_load->UpdateAbort(ABORT_UNKNOWN_NAVIGATION, timestamp);
+    last_aborted_load->UpdateAbort(ABORT_UNKNOWN_NAVIGATION, timestamp, false);
 
   aborted_provisional_loads_.clear();
   return last_aborted_load;

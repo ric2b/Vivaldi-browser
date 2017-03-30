@@ -7,16 +7,21 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <string>
 #include <vector>
 
 #include "base/strings/string_piece.h"
+#include "mojo/public/cpp/system/handle.h"
 
 namespace mojo {
 namespace test {
 
 struct NestedStructWithTraitsImpl {
  public:
+  NestedStructWithTraitsImpl();
+  explicit NestedStructWithTraitsImpl(int32_t in_value);
+
   bool operator==(const NestedStructWithTraitsImpl& other) const {
     return value == other.value;
   }
@@ -24,12 +29,19 @@ struct NestedStructWithTraitsImpl {
   int32_t value = 0;
 };
 
+enum class EnumWithTraitsImpl { CUSTOM_VALUE_0 = 10, CUSTOM_VALUE_1 = 11 };
+
 // A type which knows how to look like a mojo::test::StructWithTraits mojom type
 // by way of mojo::StructTraits.
 class StructWithTraitsImpl {
  public:
   StructWithTraitsImpl();
   ~StructWithTraitsImpl();
+
+  StructWithTraitsImpl(const StructWithTraitsImpl& other);
+
+  void set_enum(EnumWithTraitsImpl value) { enum_ = value; }
+  EnumWithTraitsImpl get_enum() const { return enum_; }
 
   void set_bool(bool value) { bool_ = value; }
   bool get_bool() const { return bool_; }
@@ -59,7 +71,16 @@ class StructWithTraitsImpl {
     return struct_array_;
   }
 
+  const std::map<std::string, NestedStructWithTraitsImpl>& get_struct_map()
+      const {
+    return struct_map_;
+  }
+  std::map<std::string, NestedStructWithTraitsImpl>& get_mutable_struct_map() {
+    return struct_map_;
+  }
+
  private:
+  EnumWithTraitsImpl enum_ = EnumWithTraitsImpl::CUSTOM_VALUE_0;
   bool bool_ = false;
   uint32_t uint32_ = 0;
   uint64_t uint64_ = 0;
@@ -67,6 +88,22 @@ class StructWithTraitsImpl {
   std::vector<std::string> string_array_;
   NestedStructWithTraitsImpl struct_;
   std::vector<NestedStructWithTraitsImpl> struct_array_;
+  std::map<std::string, NestedStructWithTraitsImpl> struct_map_;
+};
+
+// A type which knows how to look like a mojo::test::PassByValueStructWithTraits
+// mojom type by way of mojo::StructTraits.
+class PassByValueStructWithTraitsImpl {
+ public:
+  PassByValueStructWithTraitsImpl();
+  PassByValueStructWithTraitsImpl(PassByValueStructWithTraitsImpl&& other);
+  ~PassByValueStructWithTraitsImpl();
+
+  ScopedHandle& get_mutable_handle() { return handle_; }
+
+ private:
+  ScopedHandle handle_;
+  DISALLOW_COPY_AND_ASSIGN(PassByValueStructWithTraitsImpl);
 };
 
 }  // namespace test

@@ -8,7 +8,7 @@
   # TODO(jrg): when doing the above, make sure we support multiple
   # output directories (e.g. browser/jni and common/jni if needed).
   'sources': [
-    'public/android/java/src/org/chromium/content/app/ChildProcessService.java',
+    'public/android/java/src/org/chromium/content/app/ChildProcessServiceImpl.java',
     'public/android/java/src/org/chromium/content/app/ContentMain.java',
     'public/android/java/src/org/chromium/content/browser/accessibility/BrowserAccessibilityManager.java',
     'public/android/java/src/org/chromium/content/browser/BackgroundSyncNetworkObserver.java',
@@ -19,8 +19,6 @@
     'public/android/java/src/org/chromium/content/browser/ContentViewRenderView.java',
     'public/android/java/src/org/chromium/content/browser/ContentViewStatics.java',
     'public/android/java/src/org/chromium/content/browser/DeviceSensors.java',
-    'public/android/java/src/org/chromium/content/browser/DownloadController.java',
-    'public/android/java/src/org/chromium/content/browser/input/GamepadList.java',
     'public/android/java/src/org/chromium/content/browser/input/HandleViewResources.java',
     'public/android/java/src/org/chromium/content/browser/input/ImeAdapter.java',
     'public/android/java/src/org/chromium/content/browser/input/DateTimeChooserAndroid.java',
@@ -31,7 +29,6 @@
     'public/android/java/src/org/chromium/content/browser/MediaResourceGetter.java',
     'public/android/java/src/org/chromium/content/browser/MediaThrottler.java',
     'public/android/java/src/org/chromium/content/browser/MotionEventSynthesizer.java',
-    'public/android/java/src/org/chromium/content/browser/PowerSaveBlocker.java',
     'public/android/java/src/org/chromium/content/browser/ServiceRegistrar.java',
     'public/android/java/src/org/chromium/content/browser/ServiceRegistry.java',
     'public/android/java/src/org/chromium/content/browser/ScreenOrientationProvider.java',
@@ -43,6 +40,7 @@
     'public/android/java/src/org/chromium/content/browser/webcontents/WebContentsObserverProxy.java',
     'public/android/java/src/org/chromium/content_public/browser/LoadUrlParams.java',
     'public/android/java/src/org/chromium/content_public/common/MediaMetadata.java',
+    'public/android/java/src/org/chromium/content_public/common/ResourceRequestBody.java',
    ],
   'variables': {
     'jni_gen_package': 'content',

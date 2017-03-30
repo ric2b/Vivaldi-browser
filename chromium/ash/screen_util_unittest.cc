@@ -5,11 +5,8 @@
 #include "ash/screen_util.h"
 
 #include "ash/display/display_manager.h"
-#include "ash/root_window_controller.h"
-#include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/test/ash_test_base.h"
+#include "ash/test/ash_md_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/env.h"
@@ -21,16 +18,21 @@
 namespace ash {
 namespace test {
 
-typedef test::AshTestBase ScreenUtilTest;
+using ScreenUtilTest = AshMDTestBase;
 
-TEST_F(ScreenUtilTest, Bounds) {
+INSTANTIATE_TEST_CASE_P(
+    /* prefix intentionally left blank due to only one parameterization */,
+    ScreenUtilTest,
+    testing::Values(MaterialDesignController::NON_MATERIAL,
+                    MaterialDesignController::MATERIAL_NORMAL,
+                    MaterialDesignController::MATERIAL_EXPERIMENTAL));
+
+TEST_P(ScreenUtilTest, Bounds) {
   if (!SupportsMultipleDisplays())
     return;
+  const int height_offset = GetMdMaximizedWindowHeightOffset();
 
   UpdateDisplay("600x600,500x500");
-  Shell::GetPrimaryRootWindowController()->GetShelfLayoutManager()->
-      SetAutoHideBehavior(ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
-
   views::Widget* primary = views::Widget::CreateWindowWithContextAndBounds(
       NULL, CurrentContext(), gfx::Rect(10, 10, 100, 100));
   primary->Show();
@@ -38,34 +40,38 @@ TEST_F(ScreenUtilTest, Bounds) {
       NULL, CurrentContext(), gfx::Rect(610, 10, 100, 100));
   secondary->Show();
 
-  // Maximized bounds
-  EXPECT_EQ("0,0 600x597",
-            ScreenUtil::GetMaximizedWindowBoundsInParent(
-                primary->GetNativeView()).ToString());
-  EXPECT_EQ("0,0 500x453",
-            ScreenUtil::GetMaximizedWindowBoundsInParent(
-                secondary->GetNativeView()).ToString());
+  // Maximized bounds. By default the shelf is 47px tall (ash::kShelfSize).
+  EXPECT_EQ(
+      gfx::Rect(0, 0, 600, 553 + height_offset).ToString(),
+      ScreenUtil::GetMaximizedWindowBoundsInParent(primary->GetNativeView())
+          .ToString());
+  EXPECT_EQ(
+      gfx::Rect(0, 0, 500, 453 + height_offset).ToString(),
+      ScreenUtil::GetMaximizedWindowBoundsInParent(secondary->GetNativeView())
+          .ToString());
 
   // Display bounds
   EXPECT_EQ("0,0 600x600",
-            ScreenUtil::GetDisplayBoundsInParent(
-                primary->GetNativeView()).ToString());
+            ScreenUtil::GetDisplayBoundsInParent(primary->GetNativeView())
+                .ToString());
   EXPECT_EQ("0,0 500x500",
-            ScreenUtil::GetDisplayBoundsInParent(
-                secondary->GetNativeView()).ToString());
+            ScreenUtil::GetDisplayBoundsInParent(secondary->GetNativeView())
+                .ToString());
 
   // Work area bounds
-  EXPECT_EQ("0,0 600x597",
-            ScreenUtil::GetDisplayWorkAreaBoundsInParent(
-                primary->GetNativeView()).ToString());
-  EXPECT_EQ("0,0 500x453",
-            ScreenUtil::GetDisplayWorkAreaBoundsInParent(
-                secondary->GetNativeView()).ToString());
+  EXPECT_EQ(
+      gfx::Rect(0, 0, 600, 553 + height_offset).ToString(),
+      ScreenUtil::GetDisplayWorkAreaBoundsInParent(primary->GetNativeView())
+          .ToString());
+  EXPECT_EQ(
+      gfx::Rect(0, 0, 500, 453 + height_offset).ToString(),
+      ScreenUtil::GetDisplayWorkAreaBoundsInParent(secondary->GetNativeView())
+          .ToString());
 }
 
 // Test verifies a stable handling of secondary screen widget changes
 // (crbug.com/226132).
-TEST_F(ScreenUtilTest, StabilityTest) {
+TEST_P(ScreenUtilTest, StabilityTest) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -73,7 +79,7 @@ TEST_F(ScreenUtilTest, StabilityTest) {
   views::Widget* secondary = views::Widget::CreateWindowWithContextAndBounds(
       NULL, CurrentContext(), gfx::Rect(610, 10, 100, 100));
   EXPECT_EQ(Shell::GetAllRootWindows()[1],
-      secondary->GetNativeView()->GetRootWindow());
+            secondary->GetNativeView()->GetRootWindow());
   secondary->Show();
   secondary->Maximize();
   secondary->Show();
@@ -82,7 +88,7 @@ TEST_F(ScreenUtilTest, StabilityTest) {
   secondary->Close();
 }
 
-TEST_F(ScreenUtilTest, ConvertRect) {
+TEST_P(ScreenUtilTest, ConvertRect) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -95,26 +101,26 @@ TEST_F(ScreenUtilTest, ConvertRect) {
       NULL, CurrentContext(), gfx::Rect(610, 10, 100, 100));
   secondary->Show();
 
-  EXPECT_EQ(
-      "0,0 100x100",
-      ScreenUtil::ConvertRectFromScreen(
-          primary->GetNativeView(), gfx::Rect(10, 10, 100, 100)).ToString());
-  EXPECT_EQ(
-      "10,10 100x100",
-      ScreenUtil::ConvertRectFromScreen(
-          secondary->GetNativeView(), gfx::Rect(620, 20, 100, 100)).ToString());
+  EXPECT_EQ("0,0 100x100",
+            ScreenUtil::ConvertRectFromScreen(primary->GetNativeView(),
+                                              gfx::Rect(10, 10, 100, 100))
+                .ToString());
+  EXPECT_EQ("10,10 100x100",
+            ScreenUtil::ConvertRectFromScreen(secondary->GetNativeView(),
+                                              gfx::Rect(620, 20, 100, 100))
+                .ToString());
 
-  EXPECT_EQ(
-      "40,40 100x100",
-      ScreenUtil::ConvertRectToScreen(
-          primary->GetNativeView(), gfx::Rect(30, 30, 100, 100)).ToString());
-  EXPECT_EQ(
-      "650,50 100x100",
-      ScreenUtil::ConvertRectToScreen(
-          secondary->GetNativeView(), gfx::Rect(40, 40, 100, 100)).ToString());
+  EXPECT_EQ("40,40 100x100",
+            ScreenUtil::ConvertRectToScreen(primary->GetNativeView(),
+                                            gfx::Rect(30, 30, 100, 100))
+                .ToString());
+  EXPECT_EQ("650,50 100x100",
+            ScreenUtil::ConvertRectToScreen(secondary->GetNativeView(),
+                                            gfx::Rect(40, 40, 100, 100))
+                .ToString());
 }
 
-TEST_F(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktop) {
+TEST_P(ScreenUtilTest, ShelfDisplayBoundsInUnifiedDesktop) {
   if (!SupportsMultipleDisplays())
     return;
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();

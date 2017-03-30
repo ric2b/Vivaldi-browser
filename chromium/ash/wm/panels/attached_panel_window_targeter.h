@@ -5,7 +5,7 @@
 #ifndef ASH_WM_PANELS_ATTACHED_PANEL_WINDOW_TARGETER_H_
 #define ASH_WM_PANELS_ATTACHED_PANEL_WINDOW_TARGETER_H_
 
-#include "ash/shell_observer.h"
+#include "ash/common/shell_observer.h"
 #include "base/macros.h"
 #include "ui/wm/core/easy_resize_window_targeter.h"
 
@@ -26,8 +26,8 @@ class AttachedPanelWindowTargeter : public ::wm::EasyResizeWindowTargeter,
   ~AttachedPanelWindowTargeter() override;
 
   // ShellObserver:
-  void OnShelfCreatedForRootWindow(aura::Window* root_window) override;
-  void OnShelfAlignmentChanged(aura::Window* root_window) override;
+  void OnShelfCreatedForRootWindow(WmWindow* root_window) override;
+  void OnShelfAlignmentChanged(WmWindow* root_window) override;
 
  private:
   void UpdateTouchExtend(aura::Window* root_window);

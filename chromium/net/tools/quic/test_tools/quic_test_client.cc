@@ -5,6 +5,7 @@
 #include "net/tools/quic/test_tools/quic_test_client.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/time/time.h"
 #include "net/base/completion_callback.h"
@@ -247,7 +248,7 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
       return 1;
     if (rv == QUIC_PENDING) {
       // May need to retry request if asynchronous rendezvous fails.
-      auto new_headers = new BalsaHeaders;
+      auto* new_headers = new BalsaHeaders;
       new_headers->CopyFrom(*headers);
       push_promise_data_to_resend_.reset(
           new TestClientDataToResend(new_headers, body, fin, this, delegate));
@@ -278,7 +279,7 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
       // HTTP/2 requests should include the :authority pseudo hader.
       spdy_headers[":authority"] = client_->server_id().host();
     }
-    ret = stream->SendRequest(spdy_headers, body, fin);
+    ret = stream->SendRequest(std::move(spdy_headers), body, fin);
     ++num_requests_;
   } else {
     stream->WriteOrBufferBody(body.as_string(), fin, delegate);
@@ -290,7 +291,7 @@ ssize_t QuicTestClient::GetOrCreateStreamAndSendRequest(
       new_headers = new BalsaHeaders;
       new_headers->CopyFrom(*headers);
     }
-    auto data_to_resend =
+    auto* data_to_resend =
         new TestClientDataToResend(new_headers, body, fin, this, delegate);
     client()->MaybeAddQuicDataToResend(data_to_resend);
   }
@@ -303,9 +304,14 @@ ssize_t QuicTestClient::SendMessage(const HTTPMessage& message) {
   // If we're not connected, try to find an sni hostname.
   if (!connected()) {
     GURL url(message.headers()->request_uri().as_string());
-    if (!url.host().empty()) {
-      client_->set_server_id(QuicServerId(url.host(), url.EffectiveIntPort(),
+    if (override_sni_set_) {
+      client_->set_server_id(QuicServerId(override_sni_, url.EffectiveIntPort(),
                                           PRIVACY_MODE_DISABLED));
+    } else {
+      if (!url.host().empty()) {
+        client_->set_server_id(QuicServerId(url.host(), url.EffectiveIntPort(),
+                                            PRIVACY_MODE_DISABLED));
+      }
     }
   }
 
@@ -576,7 +582,7 @@ void QuicTestClient::OnClose(QuicSpdyStream* stream) {
   response_headers_complete_ = stream_->headers_decompressed();
   SpdyBalsaUtils::SpdyHeadersToResponseHeaders(stream_->response_headers(),
                                                &response_headers_);
-  response_trailers_ = stream_->received_trailers();
+  response_trailers_ = stream_->received_trailers().Clone();
   stream_error_ = stream_->stream_error();
   bytes_read_ = stream_->stream_bytes_read() + stream_->header_bytes_read();
   bytes_written_ =

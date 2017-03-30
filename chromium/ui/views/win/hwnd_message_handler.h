@@ -211,6 +211,7 @@ class VIEWS_EXPORT HWNDMessageHandler :
 
  private:
   typedef std::set<DWORD> TouchIDs;
+  enum class DwmFrameState { OFF, ON };
 
   // Overridden from WindowImpl:
   HICON GetDefaultWindowIcon() const override;
@@ -314,6 +315,10 @@ class VIEWS_EXPORT HWNDMessageHandler :
 
   bool HasSystemFrame() const;
 
+  // Adds or removes the frame extension into client area with
+  // DwmExtendFrameIntoClientArea.
+  void SetDwmFrameExtension(DwmFrameState state);
+
   // Message Handlers ----------------------------------------------------------
 
   BEGIN_SAFE_MSG_MAP_EX(weak_factory_)
@@ -329,6 +334,9 @@ class VIEWS_EXPORT HWNDMessageHandler :
 
     // Vista and newer
     CR_MESSAGE_HANDLER_EX(WM_DWMCOMPOSITIONCHANGED, OnDwmCompositionChanged)
+
+    // Win 8.1 and newer
+    CR_MESSAGE_HANDLER_EX(WM_DPICHANGED, OnDpiChanged)
 
     // Non-atlcrack.h handlers
     CR_MESSAGE_HANDLER_EX(WM_GETOBJECT, OnGetObject)
@@ -422,6 +430,7 @@ class VIEWS_EXPORT HWNDMessageHandler :
   LRESULT OnCreate(CREATESTRUCT* create_struct);
   void OnDestroy();
   void OnDisplayChange(UINT bits_per_pixel, const gfx::Size& screen_size);
+  LRESULT OnDpiChanged(UINT msg, WPARAM w_param, LPARAM l_param);
   LRESULT OnDwmCompositionChanged(UINT msg, WPARAM w_param, LPARAM l_param);
   void OnEnterMenuLoop(BOOL from_track_popup_menu);
   void OnEnterSizeMove();
@@ -499,13 +508,11 @@ class VIEWS_EXPORT HWNDMessageHandler :
   // Generates a touch event and adds it to the |touch_events| parameter.
   // |point| is the point where the touch was initiated.
   // |id| is the event id associated with the touch event.
-  // |event_time| is the current time used for latency calculation.
-  // |time_stamp| is the time delta associated with the message.
+  // |time_stamp| is the time stamp associated with the message.
   void GenerateTouchEvent(ui::EventType event_type,
                           const gfx::Point& point,
                           unsigned int id,
-                          base::TimeTicks event_time,
-                          base::TimeDelta time_stamp,
+                          base::TimeTicks time_stamp,
                           TouchEvents* touch_events);
 
   // Handles WM_NCLBUTTONDOWN and WM_NCMOUSEMOVE messages on the caption.

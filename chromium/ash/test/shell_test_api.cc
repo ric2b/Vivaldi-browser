@@ -4,9 +4,9 @@
 
 #include "ash/test/shell_test_api.h"
 
+#include "ash/common/session/session_state_delegate.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/root_window_controller.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf_delegate.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
@@ -15,10 +15,6 @@ namespace ash {
 namespace test {
 
 ShellTestApi::ShellTestApi(Shell* shell) : shell_(shell) {}
-
-RootWindowLayoutManager* ShellTestApi::root_window_layout() {
-  return shell_->GetPrimaryRootWindowController()->root_window_layout();
-}
 
 SystemGestureEventFilter* ShellTestApi::system_gesture_event_filter() {
   return shell_->system_gesture_filter_.get();

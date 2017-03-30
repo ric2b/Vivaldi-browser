@@ -29,6 +29,8 @@ source_set("android") {
     "media_codec_bridge.h",
     "media_codec_decoder.cc",
     "media_codec_decoder.h",
+    "media_codec_loop.cc",
+    "media_codec_loop.h",
     "media_codec_player.cc",
     "media_codec_player.h",
     "media_codec_util.cc",
@@ -58,6 +60,8 @@ source_set("android") {
     "media_statistics.h",
     "media_task_runner.cc",
     "media_task_runner.h",
+    "media_url_demuxer.cc",
+    "media_url_demuxer.h",
     "media_url_interceptor.h",
     "provision_fetcher.h",
     "sdk_media_codec_bridge.cc",
@@ -73,6 +77,7 @@ source_set("android") {
   ]
   deps = [
     ":media_jni_headers",
+    "//media:media_features",
     "//media:shared_memory_support",
     "//third_party/widevine/cdm:version_h",
     "//ui/gl",
@@ -85,9 +90,11 @@ source_set("unittests") {
   sources = [
     "access_unit_queue_unittest.cc",
     "media_codec_decoder_unittest.cc",
+    "media_codec_loop_unittest.cc",
     "media_drm_bridge_unittest.cc",
     "media_player_bridge_unittest.cc",
     "media_source_player_unittest.cc",
+    "media_url_demuxer_unittest.cc",
     "sdk_media_codec_bridge_unittest.cc",
     "test_data_factory.cc",
     "test_data_factory.h",

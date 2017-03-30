@@ -164,6 +164,14 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="AboutFlags_enable-experimental-web-platform-features">
+  <owner>rbyers@chromium.org</owner>
+  <description>
+    User flag to enable web APIs marked as status=experimental
+    RuntimeEnabledFeatures.
+  </description>
+</action>
+
 <action name="AboutFlags_enable-nacl">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -201,6 +209,13 @@ should be able to be added at any place in this file.
 <action name="AboutFlags_enable-smooth-scrolling">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="AboutFlags_enable-web-bluetooth">
+  <owner>jyasskin@chromium.org</owner>
+  <owner>ortuno@chromium.org</owner>
+  <owner>scheib@chromium.org</owner>
+  <description>User enabled Web Bluetooth via chrome://flags.</description>
 </action>
 
 <action name="AboutFlags_enable-website-settings">
@@ -287,6 +302,14 @@ should be able to be added at any place in this file.
 <action name="AboutFlags_nacl-gdb-script">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="AboutFlags_new-audio-rendering-mixing-strategy">
+  <owner>grunell@chromium.org</owner>
+  <owner>olka@chromium.org</owner>
+  <description>
+    User enabled flag to control new audio rendering mixing strategy.
+  </description>
 </action>
 
 <action name="AboutFlags_page-prerender">
@@ -884,6 +907,28 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Android.LauncherShortcut.NewIncognitoTab">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User tapped on the 'New Incognito Tab' launcher shortcut option.
+  </description>
+</action>
+
+<action name="Android.LauncherShortcut.NewTab">
+  <owner>twellington@chromium.org</owner>
+  <description>
+    User tapped on the 'New Tab' launcher shortcut option.
+  </description>
+</action>
+
+<action name="Android.ManageSpace">
+  <owner>dmurph@chromium.org</owner>
+  <description>
+    User navigated to 'Manage Space' for Chrome from the 'Apps' category in
+    Android settings.
+  </description>
+</action>
+
 <action name="Android.MultiWindowMode.Enter">
   <owner>twellington@chromium.org</owner>
   <description>The activity entered Android N multi-window mode.</description>
@@ -977,54 +1022,122 @@ should be able to be added at any place in this file.
 
 <action name="Autofill_FilledCreditCardSuggestion">
   <owner>sebsg@chromium.org</owner>
-  <description>A credit card suggestion was filled in a form.</description>
+  <description>
+    This user action is logged when the form is filled with the credit card
+    suggestion selected by the user. This should always happen after a
+    Autofill_SelectedSuggestion.
+  </description>
 </action>
 
 <action name="Autofill_FilledProfileSuggestion">
   <owner>sebsg@chromium.org</owner>
-  <description>A profile suggestion was filled in a form.</description>
+  <description>
+    This user action is logged when the form is filled with the profile
+    suggestion selected by the user. This should always happen after a
+    Autofill_SelectedSuggestion.
+  </description>
 </action>
 
 <action name="Autofill_FormSubmitted">
   <owner>sebsg@chromium.org</owner>
-  <description>An autofillable form was submitted by the user.</description>
+  <description>
+    This user action is logged when Autofill detects a form submission.
+  </description>
+  <obsolete>
+    Deprecated 6/2016. Replaced by the versions with a suffix, which are more
+    descriptive.
+  </obsolete>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledAll">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where all the fields were autofilled.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledNone_SuggestionsNotShown">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where Autofill suggestions were not shown.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledNone_SuggestionsShown">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where an Autofill suggestion was shown but no fields were filled.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_FilledSome">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form where some field were filled.
+  </description>
+</action>
+
+<action name="Autofill_FormSubmitted_NonFillable">
+  <owner>sebsg@chromium.org</owner>
+  <description>
+    This user action is logged when Autofill detects a form submission for a
+    form that is not Autofillable or for a form that was filled with new
+    information that Autofill could not predict.
+  </description>
 </action>
 
 <action name="Autofill_OnWillSubmitForm">
   <owner>sebsg@chromium.org</owner>
-  <description>An autofillable form will be submitted by the user.</description>
+  <description>
+    This user action is logged when Autofill thinks a form is about to be
+    submitted. The reason behind this is that some sites do not use the
+    traditional submit flow and we miss some actual submissions because of that.
+  </description>
 </action>
 
 <action name="Autofill_PolledCreditCardSuggestions">
   <owner>sebsg@chromium.org</owner>
   <description>
-    The user focused on an autofillable credit card field.
+    This user action is logged when the user interacts with an autofillable
+    credit card field, either by clicking or by typing.
   </description>
 </action>
 
 <action name="Autofill_PolledProfileSuggestions">
   <owner>sebsg@chromium.org</owner>
-  <description>The user focused on an autofillable profile field.</description>
+  <description>
+    This user action is logged when the user interacts with an autofillable
+    profile field, either by clicking or by typing.
+  </description>
 </action>
 
 <action name="Autofill_SelectedSuggestion">
   <owner>sebsg@chromium.org</owner>
   <description>
-    The user selected one of the proposed Autofill suggestions.
+    This user action is logged when a user has selected (clicked on) an Autofill
+    suggestion. This should always happen after
+    Autofill_Showed(CreditCard|Profile)Suggestion.
   </description>
 </action>
 
 <action name="Autofill_ShowedCreditCardSuggestions">
   <owner>sebsg@chromium.org</owner>
   <description>
-    The autofill credit card suggestions popup was shown to the user.
+    This user action is logged when the user is shown some credit card
+    suggestions. This should always happen after a
+    Autofill_PolledCreditCardSuggestion.
   </description>
 </action>
 
 <action name="Autofill_ShowedProfileSuggestions">
   <owner>sebsg@chromium.org</owner>
   <description>
-    The autofill profile suggestions popup was shown to the user.
+    This user action is logged when the user is shown some profile suggestions.
+    This should always happen after a Autofill_PolledProfileSuggestion.
   </description>
 </action>
 
@@ -2272,6 +2385,24 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="ChromeGeneratedCustomTab.StartedInitially">
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A Chrome generated CustomTabActivity (instead of a client app) was stared
+    for the first time.
+  </description>
+</action>
+
+<action name="ChromeGeneratedCustomTab.StartedReopened">
+  <owner>tedchoc@chromium.org</owner>
+  <description>
+    A Chrome generated CustomTabActivity (instead of a client app) was started
+    by reopening a previously created instance. This can happen if you send a
+    CCT to the background via the home button and reselect it from Android
+    Overview.
+  </description>
+</action>
+
 <action name="ClearAuthenticationCache">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -2294,12 +2425,21 @@ should be able to be added at any place in this file.
 
 <action name="ClearBrowsingData_ContentLicenses">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <description>
+    Content licenses for Flash were deauthorized as the user selected
+    &quot;Media Licenses&quot; when clearing browsing data and Flash was
+    enabled.
+  </description>
 </action>
 
 <action name="ClearBrowsingData_Cookies">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="ClearBrowsingData_DialogCreated">
+  <owner>dmurph@chromium.org</owner>
+  <description>Clear browsing data screen is shown to the user.</description>
 </action>
 
 <action name="ClearBrowsingData_Downloads">
@@ -2732,6 +2872,15 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="ContextualSearch.TapSuppressed.TapThresholdExceeded">
+  <owner>donnd@chromium.org</owner>
+  <description>
+    A tap that typically would have triggered Contextual Search was suppressed
+    because the number of taps since last opening has exceeded the suppression
+    threshold.
+  </description>
+</action>
+
 <action name="ContextualSearch.UncommonClose">
   <owner>donnd@chromium.org</owner>
   <description>
@@ -2868,6 +3017,11 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="CustomTabs.TapUrlBar">
+  <owner>tedchoc@chromium.org</owner>
+  <description>User tapped the URL bar in the CustomTabActivity.</description>
+</action>
+
 <action name="CustomTabsCustomActionButtonClick">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of the metric.</description>
@@ -2884,8 +3038,20 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="CustomTabsMenuOpenInChrome">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of the metric.</description>
+  <owner>yusufo@chromium.org</owner>
+  <description>User hit &quot;open in browser&quot; menu item.</description>
+</action>
+
+<action name="CustomTabsMenuOpenSameUrl">
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    User opens the same url again after closing the previous custom tab.
+  </description>
+</action>
+
+<action name="CustomTabsMenuReadItLater">
+  <owner>ianwen@chromium.org</owner>
+  <description>User hit &quot;read it later&quot; menu item.</description>
 </action>
 
 <action name="CustomTabsRemoteViewsShown">
@@ -3034,6 +3200,10 @@ should be able to be added at any place in this file.
     Recorded when a desktop search is opened in Chrome. This is currently
     Windows-specific.
   </description>
+  <obsolete>
+    Deprecated 05/2016 because desktop searches are no longer opened in the
+    default browser.
+  </obsolete>
 </action>
 
 <action name="DesktopSearchRedirectionInfoBar_Dismiss">
@@ -3043,6 +3213,10 @@ should be able to be added at any place in this file.
     explaining that a desktop search has been redirected to the default search
     engine.
   </description>
+  <obsolete>
+    Deprecated 05/2016 because desktop searches are no longer opened in the
+    default browser.
+  </obsolete>
 </action>
 
 <action name="DesktopSearchRedirectionInfoBar_Ignore">
@@ -3051,6 +3225,10 @@ should be able to be added at any place in this file.
     Recorded when the infobar explaining that a desktop search has been
     redirected to the default search engine is closed without user interaction.
   </description>
+  <obsolete>
+    Deprecated 05/2016 because desktop searches are no longer opened in the
+    default browser.
+  </obsolete>
 </action>
 
 <action name="DesktopSearchRedirectionInfoBar_ManageSearchSettings">
@@ -3060,6 +3238,10 @@ should be able to be added at any place in this file.
     infobar explaining that a desktop search has been redirected to the default
     search engine.
   </description>
+  <obsolete>
+    Deprecated 05/2016 because desktop searches are no longer opened in the
+    default browser.
+  </obsolete>
 </action>
 
 <action name="DesktopSearchRedirectionInfoBar_Shown">
@@ -3068,6 +3250,10 @@ should be able to be added at any place in this file.
     Recorded when the infobar explaining that a desktop search has been
     redirected to the default search engine is shown.
   </description>
+  <obsolete>
+    Deprecated 05/2016 because desktop searches are no longer opened in the
+    default browser.
+  </obsolete>
 </action>
 
 <action name="Desktop_SwitchTask">
@@ -8522,6 +8708,23 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="MobileBookmarkManagerOpen">
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    Action indictating the bookmark manager is created, either by menu or NTP
+    button, or by navigation.
+  </description>
+</action>
+
+<action name="MobileBookmarkManagerPageOpen">
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    Action indictating the bookmark manager is created as a Native Page. The
+    porpuse of this action is to tell how many users on phones are able to get
+    access to bookmark manager inside of a tab.
+  </description>
+</action>
+
 <action name="MobileBreakpadUploadAttempt" not_user_triggered="true">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -8681,6 +8884,24 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of 8/2015</obsolete>
 </action>
 
+<action name="MobileExternalNavigationDispatched">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    Records when the system started a VIEW intent on a navigation click. This
+    happens when there is another application in the system that's not a browser
+    and that can handle this URL (e.g. Maps app for  http://maps.google.com/
+    url).
+  </description>
+</action>
+
+<action name="MobileExternalNavigationReceived">
+  <owner>mariakhomenko@chromium.org</owner>
+  <description>
+    Records when a user was given a choice between using Chrome and an installed
+    app and chose Chrome.
+  </description>
+</action>
+
 <action name="MobileFirstEditInOmnibox">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -8774,7 +8995,7 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileMenuAllBookmarks">
-  <owner>aurimas@chromium.org</owner>
+  <owner>ianwen@chromium.org</owner>
   <description>User pressed 'Bookmarks' in the app menu.</description>
 </action>
 
@@ -8923,6 +9144,7 @@ should be able to be added at any place in this file.
   <description>
     Android: User scrolled above the fold (not reading snippets cards).
   </description>
+  <obsolete>Deprecated as of 5/2016</obsolete>
 </action>
 
 <action name="MobileNTP.Snippets.ScrolledBelowTheFold">
@@ -8930,6 +9152,7 @@ should be able to be added at any place in this file.
   <description>
     Android: User scrolled to the snippet cards below the fold.
   </description>
+  <obsolete>Deprecated as of 5/2016</obsolete>
 </action>
 
 <action name="MobileNTP.Snippets.ShowLess">
@@ -8948,9 +9171,27 @@ should be able to be added at any place in this file.
   <obsolete>Deprecated as of 4/2016</obsolete>
 </action>
 
+<action name="MobileNTP.Snippets.VisitEnd">
+  <owner>mastiz@chromium.org</owner>
+  <description>
+    Android: User stopped reading the article linked by an opened (clicked)
+    snippet card.
+  </description>
+</action>
+
+<action name="MobileNTP.Snippets.VisitEndBackInNTP">
+  <owner>mastiz@chromium.org</owner>
+  <description>
+    Android: User navigated back to the NTP after reading an opened (clicked)
+    snippet card.
+  </description>
+</action>
+
 <action name="MobileNTPBookmark">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    Action indicating the user has opened a bookmark from the bookmark manager.
+  </description>
 </action>
 
 <action name="MobileNTPForeignSession">
@@ -8976,8 +9217,11 @@ should be able to be added at any place in this file.
 </action>
 
 <action name="MobileNTPSwitchToBookmarks">
-  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
-  <description>Please enter the description of this user action.</description>
+  <owner>ianwen@chromium.org</owner>
+  <description>
+    Action indicating the user has clicked the boomkark button on NTP to swith
+    to the bookmark manager.
+  </description>
 </action>
 
 <action name="MobileNTPSwitchToIncognito">
@@ -9100,6 +9344,14 @@ should be able to be added at any place in this file.
 <action name="MobileRendererCrashed">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="MobileSettingsStorageClearAll">
+  <owner>dmurph@chromium.org</owner>
+  <description>
+    User clicked on the 'Clear All' button in the Storage section of sites
+    settings.
+  </description>
 </action>
 
 <action name="MobileShortcutAllBookmarks">
@@ -11352,6 +11604,11 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="Options_ShowStorageManager">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management</description>
+</action>
+
 <action name="Options_ShowSyncAdvanced">
   <owner>stevenjb@chromium.org</owner>
   <description>Settings: Show advanced sync settings</description>
@@ -11415,6 +11672,31 @@ should be able to be added at any place in this file.
 <action name="Options_Startup_NewTab">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="Options_StorageOpenAccounts">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Other users</description>
+</action>
+
+<action name="Options_StorageOpenAndroidStorage">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Android storage</description>
+</action>
+
+<action name="Options_StorageOpenClearBrowsingData">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Browsing data</description>
+</action>
+
+<action name="Options_StorageOpenClearDriveCache">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Offline files</description>
+</action>
+
+<action name="Options_StorageOpenDownloads">
+  <owner>fukino@chromium.org</owner>
+  <description>Settings: Storage management: Downloads</description>
 </action>
 
 <action name="Options_SupervisedUsers_Disable">
@@ -13174,6 +13456,20 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="Signin_Impression_FromNTPContentSuggestions">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in card in the snippets new tab page.
+  </description>
+</action>
+
+<action name="Signin_Impression_FromPasswordBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded when showing sign in entry in the saving password bubble.
+  </description>
+</action>
+
 <action name="Signin_Impression_FromRecentTabs">
   <owner>gogerald@chromium.org</owner>
   <description>
@@ -13233,6 +13529,11 @@ should be able to be added at any place in this file.
     Recorded on sign in start from access point
     signin_metrics::AccessPoint::ACCESS_POINT_APPS_PAGE_LINK.
   </description>
+</action>
+
+<action name="Signin_Signin_FromAutofillDropdown">
+  <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
+  <description>Please enter the description of the metric.</description>
 </action>
 
 <action name="Signin_Signin_FromAvatarBubbleSignin">
@@ -13312,6 +13613,22 @@ should be able to be added at any place in this file.
   <description>
     Recorded on sign in start from access point
     signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromNTPContentSuggestions">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS.
+  </description>
+</action>
+
+<action name="Signin_Signin_FromPasswordBubble">
+  <owner>gogerald@chromium.org</owner>
+  <description>
+    Recorded on sign in start from access point
+    signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE.
   </description>
 </action>
 
@@ -13610,6 +13927,59 @@ should be able to be added at any place in this file.
   </description>
 </action>
 
+<action name="StatusArea_Display_Default_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the display row in the system
+    menu. This action does not always open the display settings, e.g. if the row
+    is slected from the lock screen. Use the
+    StatusArea_Display_Default_ShowSettings metric to see how often the settings
+    are actually launched.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Default_ShowSettings">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the display settings are opened as a result of
+    the user selecting the display row in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Notification_Created">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times a new display notification is added to the
+    notification center.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Notification_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the display notification. This
+    action does not always open the display settings, e.g. if the notification
+    is selected from the lock screen. Use the
+    StatusArea_Display_Notification_Show_Settings metric to see how often the
+    settings are actually launched. Note these notifications are managed by the
+    notification center.
+  </description>
+</action>
+
+<action name="StatusArea_Display_Notification_Show_Settings">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the display settings are opened as a result of
+    the user selecting the display notification. Note these notifications are
+    managed by the notification center.
+  </description>
+</action>
+
 <action name="StatusArea_Drive_CancelOperation">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -13715,6 +14085,62 @@ should be able to be added at any place in this file.
   <description>Please enter the description of this user action.</description>
 </action>
 
+<action name="StatusArea_OS_Update_Default_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the update row in the system
+    menu.
+  </description>
+</action>
+
+<action name="StatusArea_SMS_Detailed">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>bruthig@chromium.org</owner>
+  <description>
+    Counts the number of times the user has opened the &quot;SMS messages &quot;
+    detailed view in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_SMS_Detailed_DismissMsg">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>bruthig@chromium.org</owner>
+  <description>
+    Counts the number of times the user has dismissed an SMS message from the
+    SMS message detailed view in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_SMS_Notification_DismissMsg">
+  <owner>tbuckley@chromium.org</owner>
+  <owner>bruthig@chromium.org</owner>
+  <description>
+    Counts the number of times the user has dismissed an SMS message
+    notification. Note these notifications are managed by the system menu and
+    not the general notification center.
+  </description>
+</action>
+
+<action name="StatusArea_ScreenCapture_Default_Stop">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user stops screen capturing via the screen
+    capture row in the system menu.
+  </description>
+</action>
+
+<action name="StatusArea_ScreenCapture_Notification_Stop">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user stops screen capturing via the Screen
+    Capture notification. Note these notifications are managed by the system
+    menu and not the general notification center.
+  </description>
+</action>
+
 <action name="StatusArea_SignOut">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
@@ -13728,6 +14154,15 @@ should be able to be added at any place in this file.
 <action name="StatusArea_SpokenFeedbackEnabled">
   <owner>Please list the metric's owners. Add more owner tags as needed.</owner>
   <description>Please enter the description of this user action.</description>
+</action>
+
+<action name="StatusArea_Tracing_Default_Selected">
+  <owner>bruthig@chromium.org</owner>
+  <owner>tbuckley@chromium.org</owner>
+  <description>
+    Counts the number of times the user selects the tracing row in the system
+    menu.
+  </description>
 </action>
 
 <action name="StatusArea_VPN_AddBuiltIn">
@@ -14011,6 +14446,7 @@ should be able to be added at any place in this file.
   <description>
     User hit the &quot;Open in Chrome&quot; action button.
   </description>
+  <obsolete>The button option was removed and code deleted.</obsolete>
 </action>
 
 <action name="TaskManagement.ReturnButtonClicked">

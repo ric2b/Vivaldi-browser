@@ -7,6 +7,7 @@ import("//build/config/ui.gni")
 import("//content/renderer/renderer.gni")
 import("//media/media_options.gni")
 import("//third_party/webrtc/build/webrtc.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 source_set("renderer") {
   # Only the public target should depend on this. All other targets (even
@@ -51,19 +52,19 @@ source_set("renderer") {
     "//device/bluetooth",
     "//device/usb/public/interfaces",
     "//device/vibration:mojo_bindings",
+    "//device/vr:mojo_bindings",
     "//gin",
     "//gpu",
     "//gpu/command_buffer/client:gles2_interface",
-    "//ipc/mojo",
     "//jingle:jingle_glue",
     "//media",
     "//media/blink",
+    "//media/capture",
     "//media/gpu",
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
     "//mojo/common",
-    "//mojo/converters/geometry",
     "//mojo/edk/js",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
@@ -72,7 +73,6 @@ source_set("renderer") {
     "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
     "//skia",
-    "//skia/public",
     "//storage/common",
     "//third_party/WebKit/public:blink",
     "//third_party/WebKit/public:mojo_bindings",
@@ -89,6 +89,7 @@ source_set("renderer") {
     "//ui/events:dom_keycode_converter",
     "//ui/events:events_base",
     "//ui/events/blink",
+    "//ui/gfx/geometry/mojo",
     "//ui/gl",
     "//ui/native_theme",
     "//ui/surface",
@@ -99,6 +100,14 @@ source_set("renderer") {
   if (use_aura) {
     public_deps += [ "//content/renderer/mus" ]
     allow_circular_includes_from += [ "//content/renderer/mus" ]
+    deps += [ "//components/mus/common:mus_common" ]
+  }
+
+  if (use_external_popup_menu) {
+    sources += [
+      "external_popup_menu.cc",
+      "external_popup_menu.h",
+    ]
   }
 
   if (is_mac) {
@@ -106,18 +115,9 @@ source_set("renderer") {
       "webscrollbarbehavior_impl_gtkoraura.cc",
       "webscrollbarbehavior_impl_gtkoraura.h",
     ]
-    sources += [
-      "external_popup_menu.cc",
-      "external_popup_menu.h",
-    ]
   }
 
   if (is_android) {
-    sources += [
-      "external_popup_menu.cc",
-      "external_popup_menu.h",
-    ]
-
     # Add back the Linux file which Android shares.
     set_sources_assignment_filter([])
     sources += [ "render_view_linux.cc" ]
@@ -240,7 +240,7 @@ source_set("renderer") {
       "//media/mojo/interfaces",
 
       # Defines in mojo_media_config are also pulled in here.
-      "//media/mojo/services:proxy",
+      "//media/mojo/clients",
     ]
   }
 
@@ -250,6 +250,10 @@ source_set("renderer") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
+  }
+
+  if (enable_ipc_fuzzer) {
+    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
   }
 }
 

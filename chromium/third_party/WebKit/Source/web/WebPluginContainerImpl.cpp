@@ -38,6 +38,7 @@
 #include "core/clipboard/DataObject.h"
 #include "core/clipboard/DataTransfer.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/Fullscreen.h"
 #include "core/events/DragEvent.h"
 #include "core/events/EventQueue.h"
 #include "core/events/GestureEvent.h"
@@ -56,7 +57,6 @@
 #include "core/input/EventHandler.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutBox.h"
-#include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutView.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/FocusController.h"
@@ -264,20 +264,6 @@ void WebPluginContainerImpl::setParentVisible(bool parentVisible)
         m_webPlugin->updateVisibility(isVisible());
 }
 
-void WebPluginContainerImpl::setParent(Widget* widget)
-{
-    // We override this function so that if the plugin is windowed, we can call
-    // NPP_SetWindow at the first possible moment.  This ensures that
-    // NPP_SetWindow is called before the manual load data is sent to a plugin.
-    // If this order is reversed, Flash won't load videos.
-
-    Widget::setParent(widget);
-    if (widget)
-        reportGeometry();
-    else if (m_webPlugin)
-        m_webPlugin->containerDidDetachFromParent();
-}
-
 void WebPluginContainerImpl::setPlugin(WebPlugin* plugin)
 {
     if (plugin == m_webPlugin)
@@ -326,6 +312,23 @@ void WebPluginContainerImpl::setWebLayer(WebLayer* layer)
 
     if (m_element)
         m_element->setNeedsCompositingUpdate();
+}
+
+void WebPluginContainerImpl::requestFullscreen()
+{
+    Fullscreen::from(m_element->document()).requestFullscreen(*m_element, Fullscreen::PrefixedRequest);
+}
+
+bool WebPluginContainerImpl::isFullscreenElement() const
+{
+    if (Fullscreen* fullscreen = Fullscreen::fromIfExists(m_element->document()))
+        return m_element == fullscreen->webkitCurrentFullScreenElement();
+    return false;
+}
+
+void WebPluginContainerImpl::cancelFullscreen()
+{
+    Fullscreen::fullyExitFullscreen(m_element->document());
 }
 
 bool WebPluginContainerImpl::supportsPaginatedPrint() const

@@ -74,6 +74,8 @@ Biquad::~Biquad()
 
 void Biquad::process(const float* sourceP, float* destP, size_t framesToProcess)
 {
+    // WARNING: sourceP and destP may be pointing to the same area of memory!
+    // Be sure to read from sourceP before writing to destP!
     if (hasSampleAccurateValues()) {
         int n = framesToProcess;
 
@@ -120,14 +122,28 @@ void Biquad::process(const float* sourceP, float* destP, size_t framesToProcess)
         // how to update them anyway.
     } else {
 #if OS(MACOSX)
+        double* inputP = m_inputBuffer.data();
+        double* outputP = m_outputBuffer.data();
+
+        // Set up filter state.  This is needed in case we're switching from
+        // filtering with variable coefficients (i.e., with automations) to
+        // fixed coefficients (without automations).
+        inputP[0] = m_x2;
+        inputP[1] = m_x1;
+        outputP[0] = m_y2;
+        outputP[1] = m_y1;
+
         // Use vecLib if available
         processFast(sourceP, destP, framesToProcess);
 
-        // Copy the last inputs and outputs to the filter memory variables.  This is needed because
-        // the next rendering quantum might be an automation which needs the history to continue
-        // correctly.
-        m_x1 = sourceP[framesToProcess - 1];
-        m_x2 = sourceP[framesToProcess - 2];
+        // Copy the last inputs and outputs to the filter memory variables.
+        // This is needed because the next rendering quantum might be an
+        // automation which needs the history to continue correctly.  Because
+        // sourceP and destP can be the same block of memory, we can't read from
+        // sourceP to get the last inputs.  Fortunately, processFast has put the
+        // last inputs in input[0] and input[1].
+        m_x1 = inputP[1];
+        m_x2 = inputP[0];
         m_y1 = destP[framesToProcess - 1];
         m_y2 = destP[framesToProcess - 2];
 
@@ -255,23 +271,22 @@ void Biquad::setLowpassParams(int index, double cutoff, double resonance)
             1, 0, 0);
     } else if (cutoff > 0) {
         // Compute biquad coefficients for lowpass filter
-        resonance = std::max(0.0, resonance); // can't go negative
-        double g = pow(10.0, 0.05 * resonance);
-        double d = sqrt((4 - sqrt(16 - 16 / (g * g))) / 2);
 
+        resonance = pow(10, resonance / 20);
         double theta = piDouble * cutoff;
-        double sn = 0.5 * d * sin(theta);
-        double beta = 0.5 * (1 - sn) / (1 + sn);
-        double gamma = (0.5 + beta) * cos(theta);
-        double alpha = 0.25 * (0.5 + beta - gamma);
+        double alpha = sin(theta) / (2 * resonance);
+        double cosw = cos(theta);
+        double beta = (1 - cosw) / 2;
 
-        double b0 = 2 * alpha;
-        double b1 = 2 * 2 * alpha;
-        double b2 = 2 * alpha;
-        double a1 = 2 * -gamma;
-        double a2 = 2 * beta;
+        double b0 = beta;
+        double b1 = 2 * beta;
+        double b2 = beta;
 
-        setNormalizedCoefficients(index, b0, b1, b2, 1, a1, a2);
+        double a0 = 1 + alpha;
+        double a1 = -2 * cosw;
+        double a2 = 1 - alpha;
+
+        setNormalizedCoefficients(index, b0, b1, b2, a0, a1, a2);
     } else {
         // When cutoff is zero, nothing gets through the filter, so set
         // coefficients up correctly.
@@ -293,23 +308,22 @@ void Biquad::setHighpassParams(int index, double cutoff, double resonance)
             1, 0, 0);
     } else if (cutoff > 0) {
         // Compute biquad coefficients for highpass filter
-        resonance = std::max(0.0, resonance); // can't go negative
-        double g = pow(10.0, 0.05 * resonance);
-        double d = sqrt((4 - sqrt(16 - 16 / (g * g))) / 2);
 
+        resonance = pow(10, resonance / 20);
         double theta = piDouble * cutoff;
-        double sn = 0.5 * d * sin(theta);
-        double beta = 0.5 * (1 - sn) / (1 + sn);
-        double gamma = (0.5 + beta) * cos(theta);
-        double alpha = 0.25 * (0.5 + beta + gamma);
+        double alpha = sin(theta) / (2 * resonance);
+        double cosw = cos(theta);
+        double beta = (1 + cosw) / 2;
 
-        double b0 = 2 * alpha;
-        double b1 = 2 * -2 * alpha;
-        double b2 = 2 * alpha;
-        double a1 = 2 * -gamma;
-        double a2 = 2 * beta;
+        double b0 = beta;
+        double b1 = -2 * beta;
+        double b2 = beta;
 
-        setNormalizedCoefficients(index, b0, b1, b2, 1, a1, a2);
+        double a0 = 1 + alpha;
+        double a1 = -2 * cosw;
+        double a2 = 1 - alpha;
+
+        setNormalizedCoefficients(index, b0, b1, b2, a0, a1, a2);
     } else {
         // When cutoff is zero, we need to be careful because the above
         // gives a quadratic divided by the same quadratic, with poles

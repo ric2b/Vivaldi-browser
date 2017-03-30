@@ -8,7 +8,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/ServiceRegistry.h"
 #include "wtf/Assertions.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -25,14 +24,14 @@ BatteryDispatcher::BatteryDispatcher()
 
 void BatteryDispatcher::queryNextStatus()
 {
-    m_monitor->QueryNextStatus(createBaseCallback(bind<device::blink::BatteryStatusPtr>(&BatteryDispatcher::onDidChange, this)));
+    m_monitor->QueryNextStatus(createBaseCallback(WTF::bind(&BatteryDispatcher::onDidChange, wrapPersistent(this))));
 }
 
 void BatteryDispatcher::onDidChange(device::blink::BatteryStatusPtr batteryStatus)
 {
     queryNextStatus();
 
-    ASSERT(batteryStatus);
+    DCHECK(batteryStatus);
 
     updateBatteryStatus(BatteryStatus(
         batteryStatus->charging,
@@ -50,7 +49,7 @@ void BatteryDispatcher::updateBatteryStatus(const BatteryStatus& batteryStatus)
 
 void BatteryDispatcher::startListening()
 {
-    ASSERT(!m_monitor.is_bound());
+    DCHECK(!m_monitor.is_bound());
     Platform::current()->serviceRegistry()->connectToRemoteService(
         mojo::GetProxy(&m_monitor));
     queryNextStatus();

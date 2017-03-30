@@ -41,9 +41,8 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "wtf/Deque.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefCounted.h"
+#include <memory>
 
 namespace gpu {
 namespace gles2 {
@@ -75,7 +74,7 @@ public:
     };
 
     static PassRefPtr<DrawingBuffer> create(
-        PassOwnPtr<WebGraphicsContext3DProvider>,
+        std::unique_ptr<WebGraphicsContext3DProvider>,
         const IntSize&,
         bool premultipliedAlpha,
         bool wantAlphaChannel,
@@ -188,6 +187,10 @@ public:
     // operations must use a color mask with alpha=GL_FALSE.
     bool requiresAlphaChannelToBePreserved();
 
+    // Similar to requiresAlphaChannelToBePreserved(), but always targets the
+    // default framebuffer.
+    bool defaultBufferRequiresAlphaChannelToBePreserved();
+
     WebLayer* platformLayer();
 
     gpu::gles2::GLES2Interface* contextGL();
@@ -214,12 +217,12 @@ public:
 
     void restoreTextureBindings();
 
-    void addNewMailboxCallback(std::unique_ptr<SameThreadClosure> closure) { m_newMailboxCallback = std::move(closure); }
+    void addNewMailboxCallback(std::unique_ptr<WTF::Closure> closure) { m_newMailboxCallback = std::move(closure); }
 
 protected: // For unittests
     DrawingBuffer(
-        PassOwnPtr<WebGraphicsContext3DProvider>,
-        PassOwnPtr<Extensions3DUtil>,
+        std::unique_ptr<WebGraphicsContext3DProvider>,
+        std::unique_ptr<Extensions3DUtil>,
         bool discardFramebufferSupported,
         bool wantAlphaChannel,
         bool premultipliedAlpha,
@@ -250,6 +253,11 @@ private:
         DISALLOW_NEW();
         GLuint textureId = 0;
         GLuint imageId = 0;
+
+        // A GpuMemoryBuffer is a concept that the compositor understands. and
+        // is able to operate on. The id is scoped to renderer process.
+        GLint gpuMemoryBufferId = -1;
+
         TextureParameters parameters;
     };
 
@@ -349,10 +357,6 @@ private:
     // The format to use when creating a multisampled renderbuffer.
     GLenum getMultisampledRenderbufferFormat();
 
-    // Similar to requiresAlphaChannelToBePreserved(), but always targets the
-    // default framebuffer.
-    bool defaultBufferRequiresAlphaChannelToBePreserved();
-
     const PreserveDrawingBuffer m_preserveDrawingBuffer;
     bool m_scissorEnabled = false;
     GLuint m_texture2DBinding = 0;
@@ -363,10 +367,10 @@ private:
     GLfloat m_clearColor[4];
     GLboolean m_colorMask[4];
 
-    OwnPtr<WebGraphicsContext3DProvider> m_contextProvider;
+    std::unique_ptr<WebGraphicsContext3DProvider> m_contextProvider;
     // Lifetime is tied to the m_contextProvider.
     gpu::gles2::GLES2Interface* m_gl;
-    OwnPtr<Extensions3DUtil> m_extensionsUtil;
+    std::unique_ptr<Extensions3DUtil> m_extensionsUtil;
     IntSize m_size = { -1, -1 };
     const bool m_discardFramebufferSupported;
     const bool m_wantAlphaChannel;
@@ -378,7 +382,7 @@ private:
     };
     FrontBufferInfo m_frontColorBuffer;
 
-    std::unique_ptr<SameThreadClosure> m_newMailboxCallback;
+    std::unique_ptr<WTF::Closure> m_newMailboxCallback;
 
     // This is used when the user requests either a depth or stencil buffer.
     GLuint m_depthStencilBuffer = 0;
@@ -426,7 +430,7 @@ private:
     bool m_isHidden = false;
     SkFilterQuality m_filterQuality = kLow_SkFilterQuality;
 
-    OwnPtr<WebExternalTextureLayer> m_layer;
+    std::unique_ptr<WebExternalTextureLayer> m_layer;
 
     // All of the mailboxes that this DrawingBuffer has ever created.
     Vector<RefPtr<MailboxInfo>> m_textureMailboxes;

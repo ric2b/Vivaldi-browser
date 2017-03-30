@@ -89,6 +89,7 @@ v8::Local<v8::FunctionTemplate> V8TestInterfaceConstructor3::domTemplate(v8::Iso
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterfaceConstructor3Template);
 }
 
+
 bool V8TestInterfaceConstructor3::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
@@ -101,7 +102,7 @@ v8::Local<v8::Object> V8TestInterfaceConstructor3::findInstanceInPrototypeChain(
 
 TestInterfaceConstructor3* V8TestInterfaceConstructor3::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
 }
 
 } // namespace blink

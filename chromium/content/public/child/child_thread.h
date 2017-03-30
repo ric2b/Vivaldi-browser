@@ -20,7 +20,14 @@ namespace base {
 struct UserMetricsAction;
 }
 
+namespace shell {
+class InterfaceProvider;
+class InterfaceRegistry;
+}
+
 namespace content {
+
+  class MojoShellConnection;
 
 // An abstract base class that contains logic shared between most child
 // processes of the embedder.
@@ -59,6 +66,18 @@ class CONTENT_EXPORT ChildThread : public IPC::Sender {
   // When you use this you need to also update the rules for extracting known
   // actions in chrome/tools/extract_actions.py.
   virtual void RecordComputedAction(const std::string& action) = 0;
+
+  // Returns the MojoShellConnection for the thread (from which a
+  // shell::Connector can be obtained).
+  virtual MojoShellConnection* GetMojoShellConnection() = 0;
+
+  // Returns the InterfaceRegistry that this process uses to expose interfaces
+  // to the browser.
+  virtual shell::InterfaceRegistry* GetInterfaceRegistry() = 0;
+
+  // Returns the InterfaceProvider that this process can use to bind
+  // interfaces exposed to it by the browser.
+  virtual shell::InterfaceProvider* GetRemoteInterfaces() = 0;
 };
 
 }  // namespace content

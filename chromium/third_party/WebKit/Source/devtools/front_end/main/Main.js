@@ -76,18 +76,6 @@ WebInspector.Main.prototype = {
      */
     _createSettings: function(prefs)
     {
-        // Patch settings from the URL param (for tests).
-        var settingsParam = Runtime.queryParam("settings");
-        if (settingsParam) {
-            try {
-                var settings = JSON.parse(window.decodeURI(settingsParam));
-                for (var key in settings)
-                    prefs[key] = settings[key];
-            } catch (e) {
-                // Ignore malformed settings.
-            }
-        }
-
         this._initializeExperiments(prefs);
         WebInspector.settings = new WebInspector.Settings(new WebInspector.SettingsStorage(prefs,
             InspectorFrontendHost.setPreference, InspectorFrontendHost.removePreference, InspectorFrontendHost.clearPreferences));
@@ -112,7 +100,7 @@ WebInspector.Main.prototype = {
         Runtime.experiments.register("layersPanel", "Layers panel");
         Runtime.experiments.register("layoutEditor", "Layout editor", true);
         Runtime.experiments.register("inspectTooltip", "Dark inspect element tooltip");
-        Runtime.experiments.register("liveSASS", "Live SASS", true);
+        Runtime.experiments.register("liveSASS", "Live SASS");
         Runtime.experiments.register("privateScriptInspection", "Private script inspection");
         Runtime.experiments.register("requestBlocking", "Request blocking", true);
         Runtime.experiments.register("resolveVariableNames", "Resolve variable names");

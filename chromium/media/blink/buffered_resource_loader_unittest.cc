@@ -11,6 +11,7 @@
 #include "base/format_macros.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/media_log.h"
 #include "media/base/seekable_buffer.h"
@@ -67,7 +68,7 @@ static bool CorrectAcceptEncoding(const blink::WebURLRequest &request) {
 class BufferedResourceLoaderTest : public testing::Test {
  public:
   BufferedResourceLoaderTest()
-      : view_(WebView::create(NULL)),
+      : view_(WebView::create(nullptr, blink::WebPageVisibilityStateVisible)),
         frame_(WebLocalFrame::create(blink::WebTreeScopeType::Document,
                                      &client_)) {
     view_->setMainFrame(frame_);
@@ -203,7 +204,7 @@ class BufferedResourceLoaderTest : public testing::Test {
 
     loader_->willFollowRedirect(url_loader_, newRequest, redirectResponse);
 
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void StopWhenLoad() {

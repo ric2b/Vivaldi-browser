@@ -38,6 +38,10 @@
 #include "extensions/grit/extensions_browser_resources.h"
 #include "ui/base/resource/resource_bundle.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/file_manager/app_id.h"
+#endif
+
 namespace extensions {
 namespace util {
 
@@ -54,6 +58,10 @@ const char kExtensionAllowedOnAllUrlsPrefName[] =
 // The entry into the prefs for when a user has explicitly set the "extension
 // allowed on all urls" pref.
 const char kHasSetScriptOnAllUrlsPrefName[] = "has_set_script_all_urls";
+
+// The entry into the prefs used to flag an extension as installed by custodian.
+// It is relevant only for supervised users.
+const char kWasInstalledByCustodianPrefName[] = "was_installed_by_custodian";
 
 // Returns true if |extension| should always be enabled in incognito mode.
 bool IsWhitelistedForIncognito(const Extension* extension) {
@@ -156,7 +164,14 @@ void SetIsIncognitoEnabled(const std::string& extension_id,
       // This shouldn't be called for component extensions unless it is called
       // by sync, for syncable component extensions.
       // See http://crbug.com/112290 and associated CLs for the sordid history.
-      DCHECK(sync_helper::IsSyncableComponentExtension(extension));
+      bool syncable = sync_helper::IsSyncableComponentExtension(extension);
+#if defined(OS_CHROMEOS)
+      // For some users, the file manager app somehow ended up being synced even
+      // though it's supposed to be unsyncable; see crbug.com/576964. If the bad
+      // data ever gets cleaned up, this hack should be removed.
+      syncable = syncable || extension->id() == file_manager::kFileManagerAppId;
+#endif
+      DCHECK(syncable);
 
       // If we are here, make sure the we aren't trying to change the value.
       DCHECK_EQ(enabled, IsIncognitoEnabled(extension_id, context));
@@ -223,6 +238,47 @@ void SetAllowFileAccess(const std::string& extension_id,
   ExtensionPrefs::Get(context)->SetAllowFileAccess(extension_id, allow);
 
   ReloadExtensionIfEnabled(extension_id, context);
+}
+
+void SetWasInstalledByCustodian(const std::string& extension_id,
+                                content::BrowserContext* context,
+                                bool installed_by_custodian) {
+  if (installed_by_custodian == WasInstalledByCustodian(extension_id, context))
+    return;
+
+  ExtensionPrefs::Get(context)->UpdateExtensionPref(
+      extension_id, kWasInstalledByCustodianPrefName,
+      installed_by_custodian ? new base::FundamentalValue(true) : nullptr);
+  ExtensionService* service =
+      ExtensionSystem::Get(context)->extension_service();
+
+  if (!installed_by_custodian) {
+    // If installed_by_custodian changes to false, the extension may need to
+    // be unloaded now.
+    service->ReloadExtension(extension_id);
+    return;
+  }
+
+  ExtensionRegistry* registry = ExtensionRegistry::Get(context);
+  // If it is already enabled, do nothing.
+  if (registry->enabled_extensions().Contains(extension_id))
+    return;
+
+  // If the extension is not loaded, it may need to be reloaded.
+  // Example is a pre-installed extension that was unloaded when a
+  // supervised user flag has been received.
+  if (!registry->GetInstalledExtension(extension_id)) {
+    service->ReloadExtension(extension_id);
+  }
+}
+
+bool WasInstalledByCustodian(const std::string& extension_id,
+                             content::BrowserContext* context) {
+  bool installed_by_custodian = false;
+  ExtensionPrefs* prefs = ExtensionPrefs::Get(context);
+  prefs->ReadPrefAsBoolean(extension_id, kWasInstalledByCustodianPrefName,
+                           &installed_by_custodian);
+  return installed_by_custodian;
 }
 
 bool AllowedScriptingOnAllUrls(const std::string& extension_id,
@@ -383,8 +439,9 @@ bool CanHostedAppsOpenInWindows() {
 #endif
 }
 
-bool IsExtensionSupervised(const Extension* extension, const Profile* profile) {
-  return extension->was_installed_by_custodian() && profile->IsSupervised();
+bool IsExtensionSupervised(const Extension* extension, Profile* profile) {
+  return WasInstalledByCustodian(extension->id(), profile) &&
+         profile->IsSupervised();
 }
 
 bool NeedCustodianApprovalForPermissionIncrease(const Profile* profile) {

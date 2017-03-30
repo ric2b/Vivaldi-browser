@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ui/base/material_design/material_design_controller.h"
+
 #include <string>
 
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/trace_event/trace_event.h"
-#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/ui_base_switches.h"
 
 #if defined(OS_CHROMEOS)
@@ -37,9 +38,6 @@ bool MaterialDesignController::include_secondary_ui_ = false;
 void MaterialDesignController::Initialize() {
   TRACE_EVENT0("startup", "MaterialDesignController::InitializeMode");
   CHECK(!is_mode_initialized_);
-#if !defined(ENABLE_TOPCHROME_MD)
-  SetMode(NON_MATERIAL);
-#else
   const std::string switch_value =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           switches::kTopChromeMD);
@@ -61,7 +59,6 @@ void MaterialDesignController::Initialize() {
 
   include_secondary_ui_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kExtendMdToSecondaryUi);
-#endif  // !defined(ENABLE_TOPCHROME_MD)
 }
 
 // static
@@ -86,7 +83,7 @@ MaterialDesignController::Mode MaterialDesignController::DefaultMode() {
   // If a scan of available devices has already completed, use material-hybrid
   // if a touchscreen is present.
   if (DeviceDataManager::HasInstance() &&
-      DeviceDataManager::GetInstance()->device_lists_complete()) {
+      DeviceDataManager::GetInstance()->AreDeviceListsComplete()) {
     return GetTouchScreensAvailability() == TouchScreensAvailability::ENABLED
                ? MATERIAL_HYBRID
                : MATERIAL_NORMAL;
@@ -112,12 +109,9 @@ MaterialDesignController::Mode MaterialDesignController::DefaultMode() {
     }
   }
 #endif  // defined(USE_OZONE)
-  return MATERIAL_NORMAL;
-#elif defined(OS_LINUX) || defined(OS_MACOSX)
-  return MATERIAL_NORMAL;
-#else
-  return NON_MATERIAL;
 #endif  // defined(OS_CHROMEOS)
+
+  return MATERIAL_NORMAL;
 }
 
 // static

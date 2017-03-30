@@ -32,8 +32,10 @@
 
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Settings.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -91,14 +93,14 @@ ImageQualityController::~ImageQualityController()
 }
 
 ImageQualityController::ImageQualityController()
-    : m_timer(adoptPtr(new Timer<ImageQualityController>(this, &ImageQualityController::highQualityRepaintTimerFired)))
+    : m_timer(wrapUnique(new Timer<ImageQualityController>(this, &ImageQualityController::highQualityRepaintTimerFired)))
     , m_frameTimeWhenTimerStarted(0.0)
 {
 }
 
 void ImageQualityController::setTimer(Timer<ImageQualityController>* newTimer)
 {
-    m_timer = adoptPtr(newTimer);
+    m_timer = wrapUnique(newTimer);
 }
 
 void ImageQualityController::removeLayer(const LayoutObject& object, LayerSizeMap* innerMap, const void* layer)
@@ -165,6 +167,11 @@ bool ImageQualityController::shouldPaintAtLowQuality(const LayoutObject& object,
 
     if (object.style()->imageRendering() == ImageRenderingOptimizeContrast)
         return true;
+
+    if (LocalFrame* frame = object.frame()) {
+        if (frame->settings() && frame->settings()->useDefaultImageInterpolationQuality())
+            return false;
+    }
 
     // Look ourselves up in the hashtables.
     ObjectLayerSizeMap::iterator i = m_objectLayerSizeMap.find(&object);

@@ -4,15 +4,21 @@
 
 #include "chrome/browser/android/offline_pages/offline_page_utils.h"
 
+#include "base/bind.h"
+#include "base/location.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
 #include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
+#include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
+#include "chrome/browser/android/tab_android.h"
 #include "components/offline_pages/offline_page_feature.h"
 #include "components/offline_pages/offline_page_item.h"
 #include "components/offline_pages/offline_page_model.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
 namespace offline_pages {
@@ -58,6 +64,24 @@ const OfflinePageItem* GetOfflinePageForOfflineURL(
   return offline_page_model->MaybeGetPageByOfflineURL(offline_url);
 }
 
+void OnGetPageByOfflineURLDone(
+    const base::Callback<void(const GURL&)>& callback,
+    const OfflinePageItem* item) {
+  GURL result_url;
+  if (item)
+    result_url = item->url;
+  callback.Run(result_url);
+}
+
+void OnGetBestPageForOnlineURLDone(
+    const base::Callback<void(const GURL&)>& callback,
+    const OfflinePageItem* item) {
+  GURL result_url;
+  if (item)
+    result_url = item->GetOfflineURL();
+  callback.Run(result_url);
+}
+
 }  // namespace
 
 // static
@@ -70,19 +94,24 @@ bool OfflinePageUtils::MightBeOfflineURL(const GURL& url) {
 }
 
 // static
-GURL OfflinePageUtils::GetOfflineURLForOnlineURL(
+void OfflinePageUtils::GetOfflineURLForOnlineURL(
     content::BrowserContext* browser_context,
-    const GURL& online_url) {
-  const OfflinePageItem* offline_page =
-      MaybeGetBestOfflinePageForOnlineURL(browser_context, online_url);
-  if (!offline_page)
-    return GURL();
+    const GURL& online_url,
+    const base::Callback<void(const GURL&)>& callback) {
+  OfflinePageModel* offline_page_model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context);
+  if (!offline_page_model) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&OnGetPageByOfflineURLDone, callback, nullptr));
+    return;
+  }
 
-  return offline_page->GetOfflineURL();
+  offline_page_model->GetBestPageForOnlineURL(
+      online_url, base::Bind(&OnGetBestPageForOnlineURLDone, callback));
 }
 
 // static
-GURL OfflinePageUtils::GetOnlineURLForOfflineURL(
+GURL OfflinePageUtils::MaybeGetOnlineURLForOfflineURL(
     content::BrowserContext* browser_context,
     const GURL& offline_url) {
   const OfflinePageItem* offline_page =
@@ -91,6 +120,23 @@ GURL OfflinePageUtils::GetOnlineURLForOfflineURL(
     return GURL();
 
   return offline_page->url;
+}
+
+// static
+void OfflinePageUtils::GetOnlineURLForOfflineURL(
+    content::BrowserContext* browser_context,
+    const GURL& offline_url,
+    const base::Callback<void(const GURL&)>& callback) {
+  OfflinePageModel* offline_page_model =
+      OfflinePageModelFactory::GetForBrowserContext(browser_context);
+  if (!offline_page_model) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&OnGetPageByOfflineURLDone, callback, nullptr));
+    return;
+  }
+
+  offline_page_model->GetPageByOfflineURL(
+      offline_url, base::Bind(&OnGetPageByOfflineURLDone, callback));
 }
 
 // static
@@ -122,6 +168,23 @@ void OfflinePageUtils::MarkPageAccessed(
       OfflinePageModelFactory::GetForBrowserContext(browser_context);
   DCHECK(offline_page_model);
   offline_page_model->MarkPageAccessed(offline_page->offline_id);
+}
+
+const OfflinePageItem* OfflinePageUtils::GetOfflinePageFromWebContents(
+    content::WebContents* web_contents) {
+  OfflinePageTabHelper* tab_helper =
+      OfflinePageTabHelper::FromWebContents(web_contents);
+  return tab_helper ? tab_helper->offline_page() : nullptr;
+}
+
+// static
+bool OfflinePageUtils::GetTabId(content::WebContents* web_contents,
+                                int* tab_id) {
+  TabAndroid* tab_android = TabAndroid::FromWebContents(web_contents);
+  if (!tab_android)
+    return false;
+  *tab_id = tab_android->GetAndroidId();
+  return true;
 }
 
 }  // namespace offline_pages

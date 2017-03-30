@@ -28,7 +28,7 @@ Widget* CreateDragWidget(gfx::NativeView context) {
   params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.opacity = Widget::InitParams::TRANSLUCENT_WINDOW;
   drag_widget->Init(params);
-  drag_widget->SetOpacity(0xFF);
+  drag_widget->SetOpacity(1.f);
   drag_widget->GetNativeWindow()->set_owned_by_parent(false);
   drag_widget->GetNativeWindow()->SetName("DragWidget");
   SetShadowType(drag_widget->GetNativeView(), wm::SHADOW_TYPE_NONE);
@@ -99,7 +99,7 @@ void DragImageView::SetTouchDragOperationHintPosition(
 void DragImageView::SetOpacity(float visibility) {
   DCHECK_GE(visibility, 0.0f);
   DCHECK_LE(visibility, 1.0f);
-  widget_->SetOpacity(static_cast<int>(0xff * visibility));
+  widget_->SetOpacity(visibility);
 }
 
 void DragImageView::OnPaint(gfx::Canvas* canvas) {
@@ -112,8 +112,8 @@ void DragImageView::OnPaint(gfx::Canvas* canvas) {
   } else {
     float device_scale = 1;
     if (widget_->GetNativeView() && widget_->GetNativeView()->layer()) {
-      device_scale = ui::GetDeviceScaleFactor(
-          widget_->GetNativeView()->layer());
+      device_scale =
+          ui::GetDeviceScaleFactor(widget_->GetNativeView()->layer());
     }
     // The drag image already has device scale factor applied. But
     // |widget_size_| is in DIP units.
@@ -152,7 +152,7 @@ gfx::Image* DragImageView::DragHint() const {
   // Select appropriate drag hint.
   gfx::Image* drag_hint =
       &ui::ResourceBundle::GetSharedInstance().GetImageNamed(
-      IDR_TOUCH_DRAG_TIP_NODROP);
+          IDR_TOUCH_DRAG_TIP_NODROP);
   if (touch_drag_operation_ & ui::DragDropTypes::DRAG_COPY) {
     drag_hint = &ui::ResourceBundle::GetSharedInstance().GetImageNamed(
         IDR_TOUCH_DRAG_TIP_COPY);

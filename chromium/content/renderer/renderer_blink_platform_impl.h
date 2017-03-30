@@ -48,6 +48,10 @@ class RendererScheduler;
 class WebThreadImplForRendererScheduler;
 }
 
+namespace shell {
+class InterfaceProvider;
+}
+
 namespace content {
 class BlinkServiceRegistryImpl;
 class DeviceLightEventPump;
@@ -58,7 +62,6 @@ class PlatformEventObserverBase;
 class QuotaMessageFilter;
 class RendererClipboardDelegate;
 class RenderView;
-class ServiceRegistry;
 class ThreadSafeSender;
 class WebClipboardImpl;
 class WebDatabaseObserverImpl;
@@ -66,8 +69,9 @@ class WebFileSystemImpl;
 
 class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
  public:
-  RendererBlinkPlatformImpl(scheduler::RendererScheduler* renderer_scheduler,
-                            base::WeakPtr<ServiceRegistry> service_registry);
+  RendererBlinkPlatformImpl(
+      scheduler::RendererScheduler* renderer_scheduler,
+      base::WeakPtr<shell::InterfaceProvider> remote_interfaces);
   ~RendererBlinkPlatformImpl() override;
 
   // Shutdown must be called just prior to shutting down blink.
@@ -129,7 +133,6 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   void getPluginList(bool refresh,
                      blink::WebPluginListBuilder* builder) override;
   blink::WebPublicSuffixList* publicSuffixList() override;
-  void screenColorProfile(blink::WebVector<char>* to_profile) override;
   blink::WebScrollbarBehavior* scrollbarBehavior() override;
   blink::WebIDBFactory* idbFactory() override;
   blink::WebServiceWorkerCacheStorage* cacheStorage(
@@ -175,6 +178,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       double frame_rate,
       blink::WebMediaStreamTrack* track) override;
   void createHTMLVideoElementCapturer(
+      blink::WebMediaStream* web_media_stream,
+      blink::WebMediaPlayer* web_media_player) override;
+  void createHTMLAudioElementCapturer(
       blink::WebMediaStream* web_media_stream,
       blink::WebMediaPlayer* web_media_player) override;
   blink::WebImageCaptureFrameGrabber* createImageCaptureFrameGrabber() override;

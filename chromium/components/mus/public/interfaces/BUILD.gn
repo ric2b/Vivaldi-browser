@@ -7,28 +7,26 @@ import("//mojo/public/tools/bindings/mojom.gni")
 mojom("interfaces") {
   sources = [
     "accelerator_registrar.mojom",
+    "animations.mojom",
     "channel_handle.mojom",
     "clipboard.mojom",
     "command_buffer.mojom",
-    "compositor_frame.mojom",
     "cursor.mojom",
     "display.mojom",
     "event_matcher.mojom",
     "gpu.mojom",
     "gpu_memory_buffer.mojom",
     "gpu_service.mojom",
-    "input_event_constants.mojom",
-    "input_events.mojom",
-    "input_key_codes.mojom",
     "mus_constants.mojom",
-    "quads.mojom",
-    "surface_id.mojom",
+    "surface.mojom",
     "user_access_manager.mojom",
+    "user_activity_monitor.mojom",
     "window_manager.mojom",
     "window_manager_constants.mojom",
-    "window_manager_factory.mojom",
+    "window_manager_window_tree_factory.mojom",
     "window_server_test.mojom",
     "window_tree.mojom",
+    "window_tree_constants.mojom",
     "window_tree_host.mojom",
   ]
 
@@ -37,9 +35,12 @@ mojom("interfaces") {
     "//mojo/services",
   ]
 
-  deps = [
+  public_deps = [
+    "//cc/ipc:interfaces",
     "//gpu/ipc/common:interfaces",
-    "//ui/mojo/geometry:interfaces",
-    "//ui/mojo/ime:interfaces",
+    "//ui/events/mojo:interfaces",
+    "//ui/gfx/geometry/mojo",
+    "//ui/gfx/mojo",
+    "//ui/platform_window/mojo:interfaces",
   ]
 }

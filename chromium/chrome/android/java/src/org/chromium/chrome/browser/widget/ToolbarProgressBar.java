@@ -8,6 +8,7 @@ import android.animation.TimeAnimator;
 import android.animation.TimeAnimator.TimeListener;
 import android.content.Context;
 import android.graphics.Color;
+import android.os.Build;
 import android.support.v4.view.ViewCompat;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -44,8 +45,10 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
     interface AnimationLogic {
         /**
          * Resets internal data. It must be called on every loading start.
+         * @param startProgress The progress for the animation to start at. This is used when the
+         *                      animation logic switches.
          */
-        void reset();
+        void reset(float startProgress);
 
         /**
          * Returns interpolated progress for animation.
@@ -59,7 +62,7 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
 
     // The amount of time in ms that the progress bar has to be stopped before the indeterminate
     // animation starts.
-    private static final long ANIMATION_START_THRESHOLD = 3000;
+    private static final long ANIMATION_START_THRESHOLD = 5000;
 
     private static final float THEMED_BACKGROUND_WHITE_FRACTION = 0.2f;
     private static final float THEMED_FOREGROUND_BLACK_FRACTION = 0.64f;
@@ -79,19 +82,33 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
     private int mProgressStartCount;
     private int mThemeColor;
 
+    /** Whether the smooth-indeterminate animation is running. */
+    private boolean mIsRunningSmoothIndeterminate;
+
+    /** If the animation logic being used for the progress bar is smooth-indeterminate. */
+    private boolean mIsUsingSmoothIndeterminate;
+
     private ToolbarProgressBarAnimatingView mAnimatingView;
 
     private final Runnable mHideRunnable = new Runnable() {
         @Override
         public void run() {
             animateAlphaTo(0.0f);
+            mIsRunningSmoothIndeterminate = false;
         }
     };
 
-    private final Runnable mStartIndeterminate = new Runnable() {
+    private final Runnable mStartSmoothIndeterminate = new Runnable() {
         @Override
         public void run() {
-            if (mIsStarted) mAnimatingView.startAnimation();
+            if (!mIsStarted) return;
+            mIsRunningSmoothIndeterminate = true;
+            mAnimationLogic.reset(getProgress());
+            mProgressAnimator.start();
+
+            int width = Math.abs(getDrawable().getBounds().right - getDrawable().getBounds().left);
+            mAnimatingView.update(getProgress() * width);
+            mAnimatingView.startAnimation();
         }
     };
 
@@ -104,20 +121,13 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
                 // the animation is janky.
                 float progress = mAnimationLogic.updateProgress(mTargetProgress,
                         Math.min(deltaTimeMs, PROGRESS_FRAME_TIME_CAP_MS) * 0.001f, getWidth());
+                progress = Math.max(progress, 0);
                 ToolbarProgressBar.super.setProgress(progress);
 
                 if (mAnimatingView != null) {
-                    int width = getDrawable().getBounds().right - getDrawable().getBounds().left;
+                    int width = Math.abs(
+                            getDrawable().getBounds().right - getDrawable().getBounds().left);
                     mAnimatingView.update(progress * width);
-
-                    // If the progress bar was updated, reset the callback that triggers the
-                    // indeterminate animation.
-                    removeCallbacks(mStartIndeterminate);
-                    if (progress == 1.0) {
-                        mAnimatingView.cancelAnimation();
-                    } else if (!mAnimatingView.isRunning()) {
-                        postDelayed(mStartIndeterminate, ANIMATION_START_THRESHOLD);
-                    }
                 }
 
                 if (getProgress() == mTargetProgress) {
@@ -194,8 +204,13 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
 
         if (TextUtils.equals(animation, "smooth")) {
             mAnimationLogic = new ProgressAnimationSmooth();
-        } else if (TextUtils.equals(animation, "smooth-indeterminate")) {
+        } else if (TextUtils.equals(animation, "smooth-indeterminate")
+                && Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN_MR2) {
             mAnimationLogic = new ProgressAnimationSmooth();
+
+            // The smooth-indeterminate will start running only after 5 seconds has passed with no
+            // progress update. Until then, the default behavior will be used.
+            mIsUsingSmoothIndeterminate = true;
 
             LayoutParams animationParams = new LayoutParams(getLayoutParams());
             animationParams.width = 1;
@@ -226,15 +241,16 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
         mIsStarted = true;
         mProgressStartCount++;
 
-        if (mAnimatingView != null) {
-            removeCallbacks(mStartIndeterminate);
-            postDelayed(mStartIndeterminate, ANIMATION_START_THRESHOLD);
+        if (mIsUsingSmoothIndeterminate) {
+            removeCallbacks(mStartSmoothIndeterminate);
+            postDelayed(mStartSmoothIndeterminate, ANIMATION_START_THRESHOLD);
         }
 
+        mIsRunningSmoothIndeterminate = false;
         mTargetProgressUpdateCount = 0;
         resetProgressUpdateCount();
         super.setProgress(0.0f);
-        if (mAnimationLogic != null) mAnimationLogic.reset();
+        if (mAnimationLogic != null) mAnimationLogic.reset(0.0f);
         removeCallbacks(mHideRunnable);
         animateAlphaTo(1.0f);
     }
@@ -264,10 +280,11 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
             removeCallbacks(mHideRunnable);
             animate().cancel();
             if (mAnimatingView != null) {
-                removeCallbacks(mStartIndeterminate);
+                removeCallbacks(mStartSmoothIndeterminate);
                 mAnimatingView.cancelAnimation();
                 mTargetProgress = 0;
             }
+            mIsRunningSmoothIndeterminate = false;
             setAlpha(0.0f);
         }
     }
@@ -327,11 +344,12 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
     }
 
     private void updateVisibleProgress() {
-        if (mAnimationLogic == null) {
+        if (mAnimationLogic == null
+                || (mIsUsingSmoothIndeterminate && !mIsRunningSmoothIndeterminate)) {
             super.setProgress(mTargetProgress);
             if (!mIsStarted) postOnAnimationDelayed(mHideRunnable, mHidingDelayMs);
-        } else {
-            if (!mProgressAnimator.isStarted()) mProgressAnimator.start();
+        } else if (!mProgressAnimator.isStarted()) {
+            mProgressAnimator.start();
         }
         sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
     }
@@ -341,6 +359,17 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
     @Override
     public void setProgress(float progress) {
         if (!mIsStarted || mTargetProgress == progress) return;
+
+        if (mIsUsingSmoothIndeterminate) {
+            // If the progress bar was updated, reset the callback that triggers the
+            // smooth-indeterminate animation.
+            removeCallbacks(mStartSmoothIndeterminate);
+            if (progress == 1.0) {
+                if (mAnimatingView != null) mAnimatingView.cancelAnimation();
+            } else if (mAnimatingView != null && !mAnimatingView.isRunning()) {
+                postDelayed(mStartSmoothIndeterminate, ANIMATION_START_THRESHOLD);
+            }
+        }
 
         mTargetProgressUpdateCount += 1;
         mTargetProgress = progress;
@@ -371,9 +400,9 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
         }
 
         // All other theme colors are computed.
-        if (!ColorUtils.shoudUseLightForegroundOnBackground(color) && !isIncognito) {
+        if (!ColorUtils.shouldUseLightForegroundOnBackground(color) && !isIncognito) {
             // Light theme.
-            setForegroundColor(ColorUtils.getColorWithOverlay(Color.BLACK, color,
+            setForegroundColor(ColorUtils.getColorWithOverlay(color, Color.BLACK,
                     THEMED_FOREGROUND_BLACK_FRACTION));
         } else {
             // Dark theme.
@@ -384,7 +413,7 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
             }
         }
 
-        setBackgroundColor(ColorUtils.getColorWithOverlay(Color.WHITE, color,
+        setBackgroundColor(ColorUtils.getColorWithOverlay(color, Color.WHITE,
                 THEMED_BACKGROUND_WHITE_FRACTION));
     }
 
@@ -392,7 +421,7 @@ public class ToolbarProgressBar extends ClipDrawableProgressBar {
     public void setForegroundColor(int color) {
         super.setForegroundColor(color);
         if (mAnimatingView != null) {
-            mAnimatingView.setColor(ColorUtils.getColorWithOverlay(Color.WHITE, color,
+            mAnimatingView.setColor(ColorUtils.getColorWithOverlay(color, Color.WHITE,
                     ANIMATION_WHITE_FRACTION));
         }
     }

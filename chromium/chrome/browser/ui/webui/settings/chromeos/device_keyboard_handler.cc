@@ -12,14 +12,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/chromeos_switches.h"
 #include "content/public/browser/web_ui.h"
-#include "ui/events/devices/device_data_manager.h"
-#include "ui/events/devices/keyboard_device.h"
+#include "ui/events/devices/input_device_manager.h"
 
 namespace {
 
 bool HasExternalKeyboard() {
-  for (const ui::KeyboardDevice& keyboard :
-       ui::DeviceDataManager::GetInstance()->keyboard_devices()) {
+  for (const ui::InputDevice& keyboard :
+       ui::InputDeviceManager::GetInstance()->GetKeyboardDevices()) {
     if (keyboard.type == ui::InputDeviceType::INPUT_DEVICE_EXTERNAL)
       return true;
   }
@@ -50,7 +49,7 @@ void KeyboardHandler::RegisterMessages() {
 }
 
 void KeyboardHandler::OnJavascriptAllowed() {
-  observer_.Add(ui::DeviceDataManager::GetInstance());
+  observer_.Add(ui::InputDeviceManager::GetInstance());
 }
 
 void KeyboardHandler::OnJavascriptDisallowed() {

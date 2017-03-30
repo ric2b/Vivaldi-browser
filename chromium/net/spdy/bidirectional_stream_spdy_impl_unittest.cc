@@ -15,7 +15,6 @@
 #include "base/time/time.h"
 #include "base/timer/mock_timer.h"
 #include "net/base/net_errors.h"
-#include "net/base/test_data_directory.h"
 #include "net/http/http_request_info.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
@@ -25,6 +24,7 @@
 #include "net/spdy/spdy_session.h"
 #include "net/spdy/spdy_test_util_common.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -63,7 +63,7 @@ class TestDelegateBase : public BidirectionalStreamImpl::Delegate {
   void OnHeadersReceived(const SpdyHeaderBlock& response_headers) override {
     CHECK(!on_failed_called_);
     CHECK(!not_expect_callback_);
-    response_headers_ = response_headers;
+    response_headers_ = response_headers.Clone();
     if (!do_not_start_read_)
       StartOrContinueReading();
   }
@@ -87,7 +87,7 @@ class TestDelegateBase : public BidirectionalStreamImpl::Delegate {
 
   void OnTrailersReceived(const SpdyHeaderBlock& trailers) override {
     CHECK(!on_failed_called_);
-    trailers_ = trailers;
+    trailers_ = trailers.Clone();
     if (run_until_completion_)
       loop_->Quit();
   }
@@ -163,8 +163,8 @@ class TestDelegateBase : public BidirectionalStreamImpl::Delegate {
   const std::string& data_received() const { return data_received_; }
   int bytes_read() const { return bytes_read_; }
   int error() const { return error_; }
-  const SpdyHeaderBlock response_headers() const { return response_headers_; }
-  const SpdyHeaderBlock trailers() const { return trailers_; }
+  const SpdyHeaderBlock& response_headers() const { return response_headers_; }
+  const SpdyHeaderBlock& trailers() const { return trailers_; }
   int on_data_read_count() const { return on_data_read_count_; }
   int on_data_sent_count() const { return on_data_sent_count_; }
   bool on_failed_called() const { return on_failed_called_; }
@@ -204,6 +204,9 @@ class BidirectionalStreamSpdyImplTest : public testing::Test {
   BidirectionalStreamSpdyImplTest()
       : spdy_util_(kProtoHTTP2, true),
         session_deps_(kProtoHTTP2),
+        default_url_(kDefaultUrl),
+        host_port_pair_(HostPortPair::FromURL(default_url_)),
+        key_(host_port_pair_, ProxyServer::Direct(), PRIVACY_MODE_DISABLED),
         ssl_data_(SSLSocketDataProvider(ASYNC, OK)) {
     ssl_data_.SetNextProto(kProtoHTTP2);
     ssl_data_.cert = ImportCertFromFile(GetTestCertsDirectory(), "ok_cert.pem");
@@ -221,8 +224,7 @@ class BidirectionalStreamSpdyImplTest : public testing::Test {
   void InitSession(MockRead* reads,
                    size_t reads_count,
                    MockWrite* writes,
-                   size_t writes_count,
-                   const SpdySessionKey& key) {
+                   size_t writes_count) {
     ASSERT_TRUE(ssl_data_.cert.get());
     session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_data_);
     sequenced_data_.reset(
@@ -231,12 +233,15 @@ class BidirectionalStreamSpdyImplTest : public testing::Test {
     session_deps_.net_log = net_log_.bound().net_log();
     http_session_ = SpdySessionDependencies::SpdyCreateSession(&session_deps_);
     session_ =
-        CreateSecureSpdySession(http_session_.get(), key, net_log_.bound());
+        CreateSecureSpdySession(http_session_.get(), key_, net_log_.bound());
   }
 
   BoundTestNetLog net_log_;
   SpdyTestUtil spdy_util_;
   SpdySessionDependencies session_deps_;
+  const GURL default_url_;
+  const HostPortPair host_port_pair_;
+  const SpdySessionKey key_;
   std::unique_ptr<SequencedSocketData> sequenced_data_;
   std::unique_ptr<HttpNetworkSession> http_session_;
   base::WeakPtr<SpdySession> session_;
@@ -247,7 +252,7 @@ class BidirectionalStreamSpdyImplTest : public testing::Test {
 
 TEST_F(BidirectionalStreamSpdyImplTest, SendDataAfterStreamFailed) {
   std::unique_ptr<SpdySerializedFrame> req(spdy_util_.ConstructSpdyPost(
-      "https://www.example.org", 1, kBodyDataSize * 3, LOW, nullptr, 0));
+      kDefaultUrl, 1, kBodyDataSize * 3, LOW, nullptr, 0));
   std::unique_ptr<SpdySerializedFrame> rst(
       spdy_util_.ConstructSpdyRstStream(1, RST_STREAM_PROTOCOL_ERROR));
 
@@ -263,14 +268,11 @@ TEST_F(BidirectionalStreamSpdyImplTest, SendDataAfterStreamFailed) {
       CreateMockRead(*resp, 1), MockRead(ASYNC, 0, 3),
   };
 
-  HostPortPair host_port_pair("www.example.org", 443);
-  SpdySessionKey key(host_port_pair, ProxyServer::Direct(),
-                     PRIVACY_MODE_DISABLED);
-  InitSession(reads, arraysize(reads), writes, arraysize(writes), key);
+  InitSession(reads, arraysize(reads), writes, arraysize(writes));
 
   BidirectionalStreamRequestInfo request_info;
   request_info.method = "POST";
-  request_info.url = GURL("https://www.example.org/");
+  request_info.url = default_url_;
   request_info.extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
                                        base::SizeTToString(kBodyDataSize * 3));
 
@@ -303,7 +305,7 @@ TEST_F(BidirectionalStreamSpdyImplTest, SendDataAfterCancelStream) {
   BufferedSpdyFramer framer(spdy_util_.spdy_version());
 
   std::unique_ptr<SpdySerializedFrame> req(spdy_util_.ConstructSpdyPost(
-      "https://www.example.org", 1, kBodyDataSize * 3, LOWEST, nullptr, 0));
+      kDefaultUrl, 1, kBodyDataSize * 3, LOWEST, nullptr, 0));
   std::unique_ptr<SpdySerializedFrame> data_frame(
       framer.CreateDataFrame(1, kBodyData, kBodyDataSize, DATA_FLAG_NONE));
   std::unique_ptr<SpdySerializedFrame> rst(
@@ -326,14 +328,11 @@ TEST_F(BidirectionalStreamSpdyImplTest, SendDataAfterCancelStream) {
       MockRead(ASYNC, 0, 6),
   };
 
-  HostPortPair host_port_pair("www.example.org", 443);
-  SpdySessionKey key(host_port_pair, ProxyServer::Direct(),
-                     PRIVACY_MODE_DISABLED);
-  InitSession(reads, arraysize(reads), writes, arraysize(writes), key);
+  InitSession(reads, arraysize(reads), writes, arraysize(writes));
 
   BidirectionalStreamRequestInfo request_info;
   request_info.method = "POST";
-  request_info.url = GURL("https://www.example.org/");
+  request_info.url = default_url_;
   request_info.priority = LOWEST;
   request_info.extra_headers.SetHeader(net::HttpRequestHeaders::kContentLength,
                                        base::SizeTToString(kBodyDataSize * 3));
@@ -360,7 +359,7 @@ TEST_F(BidirectionalStreamSpdyImplTest, SendDataAfterCancelStream) {
 
   // Try to send data after Cancel(), should not get called back.
   delegate->SendData(buf.get(), buf->size(), false);
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(delegate->on_failed_called());
 
   EXPECT_EQ("200", delegate->response_headers().find(":status")->second);

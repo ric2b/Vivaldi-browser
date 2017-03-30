@@ -2,7 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/search_engines/template_url_prepopulate_data.h"
+
 #include <stddef.h>
+
+#include <memory>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
@@ -15,7 +20,6 @@
 #include "components/search_engines/search_engines_pref_names.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -26,8 +30,7 @@ namespace {
 SearchEngineType GetEngineType(const std::string& url) {
   TemplateURLData data;
   data.SetURL(url);
-  return TemplateURLPrepopulateData::GetEngineType(TemplateURL(data),
-                                                   SearchTermsData());
+  return TemplateURL(data).GetEngineType(SearchTermsData());
 }
 
 std::string GetHostFromTemplateURLData(const TemplateURLData& data) {
@@ -207,7 +210,7 @@ TEST_F(TemplateURLPrepopulateDataTest, ClearProvidersFromPrefs) {
   prefs_.SetUserPref(prefs::kSearchProviderOverridesVersion,
                      new base::FundamentalValue(1));
   base::ListValue* overrides = new base::ListValue;
-  base::DictionaryValue* entry(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
   // Set only the minimal required settings for a search provider configuration.
   entry->SetString("name", "foo");
   entry->SetString("keyword", "fook");
@@ -215,7 +218,7 @@ TEST_F(TemplateURLPrepopulateDataTest, ClearProvidersFromPrefs) {
   entry->SetString("favicon_url", "http://foi.com/favicon.ico");
   entry->SetString("encoding", "UTF-8");
   entry->SetInteger("id", 1001);
-  overrides->Append(entry);
+  overrides->Append(std::move(entry));
   prefs_.SetUserPref(prefs::kSearchProviderOverrides, overrides);
 
   int version = TemplateURLPrepopulateData::GetDataVersion(&prefs_);
@@ -248,8 +251,7 @@ TEST_F(TemplateURLPrepopulateDataTest, ClearProvidersFromPrefs) {
   EXPECT_FALSE(t_urls[default_index]->contextual_search_url.empty());
   EXPECT_FALSE(t_urls[default_index]->image_url_post_params.empty());
   EXPECT_EQ(SEARCH_ENGINE_GOOGLE,
-            TemplateURLPrepopulateData::GetEngineType(
-                TemplateURL(*t_urls[default_index]),
+            TemplateURL(*t_urls[default_index]).GetEngineType(
                 SearchTermsData()));
 }
 
@@ -287,8 +289,7 @@ TEST_F(TemplateURLPrepopulateDataTest, ProvidersFromPrepopulated) {
   for (size_t i = 0; i < t_urls[default_index]->alternate_urls.size(); ++i)
     EXPECT_FALSE(t_urls[default_index]->alternate_urls[i].empty());
   EXPECT_EQ(SEARCH_ENGINE_GOOGLE,
-            TemplateURLPrepopulateData::GetEngineType(
-                TemplateURL(*t_urls[default_index]),
+            TemplateURL(*t_urls[default_index]).GetEngineType(
                 SearchTermsData()));
   EXPECT_FALSE(t_urls[default_index]->search_terms_replacement_key.empty());
 }
@@ -349,4 +350,17 @@ TEST_F(TemplateURLPrepopulateDataTest, GetEngineTypeAdvanced) {
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kGoogleBaseURL, "http://www.foo.com/");
   EXPECT_EQ(SEARCH_ENGINE_GOOGLE, GetEngineType(foo_url));
+}
+
+TEST_F(TemplateURLPrepopulateDataTest, GetEngineTypeForAllPrepopulatedEngines) {
+  using PrepopulatedEngine = TemplateURLPrepopulateData::PrepopulatedEngine;
+  const std::vector<const PrepopulatedEngine*> all_engines =
+      TemplateURLPrepopulateData::GetAllPrepopulatedEngines();
+  for (const PrepopulatedEngine* engine : all_engines) {
+    std::unique_ptr<TemplateURLData> data =
+        TemplateURLPrepopulateData::MakeTemplateURLDataFromPrepopulatedEngine(
+            *engine);
+    EXPECT_EQ(engine->type,
+              TemplateURL(*data).GetEngineType(SearchTermsData()));
+  }
 }

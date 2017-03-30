@@ -8,12 +8,16 @@
 #include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8BindingMacros.h"
 #include "bindings/core/v8/V8ObjectConstructor.h"
+#include "core/css/CSSComputedStyleDeclaration.h"
+#include "core/css/cssom/FilteredComputedStylePropertyMap.h"
 #include "core/dom/ExecutionContext.h"
-#include "modules/csspaint/Geometry.h"
+#include "core/layout/LayoutObject.h"
 #include "modules/csspaint/PaintRenderingContext2D.h"
+#include "modules/csspaint/PaintSize.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/PaintGeneratedImage.h"
 #include "platform/graphics/RecordingImageBufferSurface.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -35,7 +39,7 @@ CSSPaintDefinition::~CSSPaintDefinition()
 {
 }
 
-PassRefPtr<Image> CSSPaintDefinition::paint(const IntSize& size)
+PassRefPtr<Image> CSSPaintDefinition::paint(const LayoutObject& layoutObject, const IntSize& size)
 {
     ScriptState::Scope scope(m_scriptState.get());
 
@@ -49,13 +53,19 @@ PassRefPtr<Image> CSSPaintDefinition::paint(const IntSize& size)
     if (isUndefinedOrNull(instance))
         return nullptr;
 
+    DCHECK(layoutObject.node());
+
     PaintRenderingContext2D* renderingContext = PaintRenderingContext2D::create(
-        ImageBuffer::create(adoptPtr(new RecordingImageBufferSurface(size))));
-    Geometry* geometry = Geometry::create(size);
+        ImageBuffer::create(wrapUnique(new RecordingImageBufferSurface(size))));
+    PaintSize* paintSize = PaintSize::create(size);
+    StylePropertyMap* styleMap = FilteredComputedStylePropertyMap::create(
+        CSSComputedStyleDeclaration::create(layoutObject.node()),
+        m_nativeInvalidationProperties, m_customInvalidationProperties);
 
     v8::Local<v8::Value> argv[] = {
         toV8(renderingContext, m_scriptState->context()->Global(), isolate),
-        toV8(geometry, m_scriptState->context()->Global(), isolate)
+        toV8(paintSize, m_scriptState->context()->Global(), isolate),
+        toV8(styleMap, m_scriptState->context()->Global(), isolate)
     };
 
     v8::Local<v8::Function> paint = m_paint.newLocal(isolate);
@@ -63,7 +73,7 @@ PassRefPtr<Image> CSSPaintDefinition::paint(const IntSize& size)
     v8::TryCatch block(isolate);
     block.SetVerbose(true);
 
-    V8ScriptRunner::callFunction(paint, m_scriptState->getExecutionContext(), instance, 2, argv, isolate);
+    V8ScriptRunner::callFunction(paint, m_scriptState->getExecutionContext(), instance, 3, argv, isolate);
 
     // The paint function may have produced an error, in which case produce an
     // invalid image.

@@ -73,6 +73,7 @@ class SavePackage;
 class ScreenOrientationDispatcherHost;
 class SiteInstance;
 class TestWebContents;
+class TextInputManager;
 class WakeLockServiceContext;
 class WebContentsAudioMuter;
 class WebContentsDelegate;
@@ -294,8 +295,6 @@ class CONTENT_EXPORT WebContentsImpl
   int GetCapturerCount() const override;
   bool IsAudioMuted() const override;
   void SetAudioMuted(bool mute) override;
-  void IncrementBluetoothConnectedDeviceCount();
-  void DecrementBluetoothConnectedDeviceCount();
   bool IsConnectedToBluetoothDevice() const override;
   bool IsCrashed() const override;
   void SetIsCrashed(base::TerminationStatus status, int error_code) override;
@@ -432,6 +431,8 @@ class CONTENT_EXPORT WebContentsImpl
   void RunBeforeUnloadConfirm(RenderFrameHost* render_frame_host,
                               bool is_reload,
                               IPC::Message* reply_msg) override;
+  void RunFileChooser(RenderFrameHost* render_frame_host,
+                      const FileChooserParams& params) override;
   void DidAccessInitialDocument() override;
   void DidChangeName(RenderFrameHost* render_frame_host,
                      const std::string& name) override;
@@ -500,8 +501,6 @@ class CONTENT_EXPORT WebContentsImpl
                         uint64_t upload_position,
                         uint64_t upload_size) override;
   void Activate() override;
-  void RunFileChooser(RenderViewHost* render_view_host,
-                      const FileChooserParams& params) override;
   void UpdatePreferredSize(const gfx::Size& pref_size) override;
   void CreateNewWindow(
       SiteInstance* source_site_instance,
@@ -515,12 +514,15 @@ class CONTENT_EXPORT WebContentsImpl
                        blink::WebPopupType popup_type) override;
   void CreateNewFullscreenWidget(int32_t render_process_id,
                                  int32_t route_id) override;
-  void ShowCreatedWindow(int route_id,
+  void ShowCreatedWindow(int process_id,
+                         int route_id,
                          WindowOpenDisposition disposition,
                          const gfx::Rect& initial_rect,
                          bool user_gesture) override;
-  void ShowCreatedWidget(int route_id, const gfx::Rect& initial_rect) override;
-  void ShowCreatedFullscreenWidget(int route_id) override;
+  void ShowCreatedWidget(int process_id,
+                         int route_id,
+                         const gfx::Rect& initial_rect) override;
+  void ShowCreatedFullscreenWidget(int process_id, int route_id) override;
   void RequestMediaAccessPermission(
       const MediaStreamRequest& request,
       const MediaResponseCallback& callback) override;
@@ -612,23 +614,28 @@ class CONTENT_EXPORT WebContentsImpl
   void ReplicatePageFocus(bool is_focused) override;
   RenderWidgetHostImpl* GetFocusedRenderWidgetHost(
       RenderWidgetHostImpl* receiving_widget) override;
-  void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host) override;
+  void RendererUnresponsive(
+      RenderWidgetHostImpl* render_widget_host,
+      RenderWidgetHostDelegate::RendererUnresponsiveType type) override;
   void RendererResponsive(RenderWidgetHostImpl* render_widget_host) override;
   void RequestToLockMouse(RenderWidgetHostImpl* render_widget_host,
                           bool user_gesture,
-                          bool last_unlocked_by_target) override;
+                          bool last_unlocked_by_target,
+                          bool privileged) override;
   gfx::Rect GetRootWindowResizerRect(
       RenderWidgetHostImpl* render_widget_host) const override;
-  bool IsFullscreenForCurrentTab(
-      RenderWidgetHostImpl* render_widget_host) const override;
+  bool IsFullscreenForCurrentTab() const override;
   blink::WebDisplayMode GetDisplayMode(
       RenderWidgetHostImpl* render_widget_host) const override;
   void LostCapture(RenderWidgetHostImpl* render_widget_host) override;
   void LostMouseLock(RenderWidgetHostImpl* render_widget_host) override;
+  bool HasMouseLock(RenderWidgetHostImpl* render_widget_host) override;
   void ForwardCompositorProto(RenderWidgetHostImpl* render_widget_host,
                               const std::vector<uint8_t>& proto) override;
   void OnRenderFrameProxyVisibilityChanged(bool visible) override;
   void SendScreenRects() override;
+  void OnFirstPaintAfterLoad(RenderWidgetHostImpl* render_widget_host) override;
+  TextInputManager* GetTextInputManager() override;
 
   // RenderFrameHostManager::Delegate ------------------------------------------
 
@@ -758,6 +765,10 @@ class CONTENT_EXPORT WebContentsImpl
                        int active_match_ordinal,
                        bool final_update);
 
+  // Modify the counter of connected devices for this WebContents.
+  void IncrementBluetoothConnectedDeviceCount();
+  void DecrementBluetoothConnectedDeviceCount();
+
 #if defined(OS_ANDROID)
   // Called by FindRequestManager when all of the find match rects are in.
   void NotifyFindMatchRectsReply(int version,
@@ -770,7 +781,7 @@ class CONTENT_EXPORT WebContentsImpl
 
   void set_delayed_open_url(std::string* url) override;
 
-private:
+ private:
   friend class WebContentsObserver;
   friend class WebContents;  // To implement factory methods.
 
@@ -792,6 +803,10 @@ private:
   FRIEND_TEST_ALL_PREFIXES(NavigationControllerTest, HistoryNavigate);
   FRIEND_TEST_ALL_PREFIXES(RenderFrameHostManagerTest, PageDoesBackAndReload);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest, CrossSiteIframe);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           TwoSubframesCreatePopupsSimultaneously);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           TwoSubframesCreatePopupMenuWidgetsSimultaneously);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessAccessibilityBrowserTest,
                            CrossSiteIframeAccessibility);
   FRIEND_TEST_ALL_PREFIXES(WebContentsImplBrowserTest,
@@ -870,8 +885,8 @@ private:
                           int id,
                           const GURL& image_url,
                           int32_t http_status_code,
-                          mojo::Array<skia::mojom::BitmapPtr> images,
-                          mojo::Array<mojo::SizePtr> original_image_sizes);
+                          mojo::Array<SkBitmap> images,
+                          mojo::Array<gfx::Size> original_image_sizes);
 
   // Callback function when showing JavaScript dialogs.  Takes in a routing ID
   // pair to identify the RenderFrameHost that opened the dialog, because it's
@@ -1010,18 +1025,19 @@ private:
                        blink::WebPopupType popup_type);
 
   // Helper for ShowCreatedWidget/ShowCreatedFullscreenWidget.
-  void ShowCreatedWidget(int route_id,
+  void ShowCreatedWidget(int process_id,
+                         int route_id,
                          bool is_fullscreen,
                          const gfx::Rect& initial_rect);
 
   // Finds the new RenderWidgetHost and returns it. Note that this can only be
   // called once as this call also removes it from the internal map.
-  RenderWidgetHostView* GetCreatedWidget(int route_id);
+  RenderWidgetHostView* GetCreatedWidget(int process_id, int route_id);
 
   // Finds the new WebContentsImpl by route_id, initializes it for
   // renderer-initiated creation, and returns it. Note that this can only be
   // called once as this call also removes it from the internal map.
-  WebContentsImpl* GetCreatedWindow(int route_id);
+  WebContentsImpl* GetCreatedWindow(int process_id, int route_id);
 
   // Sends a Page message IPC.
   void SendPageMessage(IPC::Message* msg);
@@ -1084,6 +1100,9 @@ private:
   void SetJavaScriptDialogManagerForTesting(
       JavaScriptDialogManager* dialog_manager);
 
+  // Returns the outermost WebContents in this WebContents's tree.
+  WebContentsImpl* GetOutermostWebContents();
+
   // Returns the FindRequestManager, or creates one if it doesn't already exist.
   FindRequestManager* GetOrCreateFindRequestManager();
 
@@ -1104,14 +1123,13 @@ private:
   RenderViewHostDelegateView* render_view_host_delegate_view_;
 
   // Tracks created WebContentsImpl objects that have not been shown yet. They
-  // are identified by the route ID passed to CreateNewWindow.
-  typedef std::map<int, WebContentsImpl*> PendingContents;
-  PendingContents pending_contents_;
+  // are identified by the process ID and routing ID passed to CreateNewWindow.
+  typedef std::pair<int, int> ProcessRoutingIdPair;
+  std::map<ProcessRoutingIdPair, WebContentsImpl*> pending_contents_;
 
-  // These maps hold on to the widgets that we created on behalf of the renderer
-  // that haven't shown yet.
-  typedef std::map<int, RenderWidgetHostView*> PendingWidgetViews;
-  PendingWidgetViews pending_widget_views_;
+  // This map holds widgets that were created on behalf of the renderer but
+  // haven't been shown yet.
+  std::map<ProcessRoutingIdPair, RenderWidgetHostView*> pending_widget_views_;
 
   typedef std::map<WebContentsImpl*, DestructionObserver*> DestructionObservers;
   DestructionObservers destruction_observers_;
@@ -1148,7 +1166,7 @@ private:
   // SavePackage, lazily created.
   scoped_refptr<SavePackage> save_package_;
 
-  // Manages/coordinates find-in-page requests. Created lazily.
+  // Manages/coordinates multi-process find-in-page requests. Created lazily.
   std::unique_ptr<FindRequestManager> find_request_manager_;
 
   // Data for loading state ----------------------------------------------------
@@ -1400,6 +1418,18 @@ private:
   PageImportanceSignals page_importance_signals_;
 
   bool page_scale_factor_is_one_;
+
+  // TextInputManager tracks the IME-related state for all the
+  // RenderWidgetHostViews on this WebContents. Only exists on the outermost
+  // WebContents and is automatically destroyed when a WebContents becomes an
+  // inner WebContents by attaching to an outer WebContents. Then the
+  // IME-related state for RenderWidgetHosts on the inner WebContents is tracked
+  // by the TextInputManager in the outer WebContents.
+  std::unique_ptr<TextInputManager> text_input_manager_;
+
+  // Stores the RenderWidgetHost that currently holds a mouse lock or nullptr if
+  // there's no RenderWidgetHost holding a lock.
+  RenderWidgetHostImpl* mouse_lock_widget_;
 
   // These are kept here to make sure they overwrite the site specific settings.
   std::unique_ptr<bool> show_images_;

@@ -368,7 +368,14 @@ void TestRunnerForSpecificView::SetBackingScaleFactor(
     double value,
     v8::Local<v8::Function> callback) {
   delegate()->SetDeviceScaleFactor(value);
-  PostV8Callback(callback);
+
+  // TODO(oshima): remove this callback argument when all platforms are migrated
+  // to use-zoom-for-dsf by default
+  v8::UniquePersistent<v8::Function> global_callback(blink::mainThreadIsolate(),
+                                                     callback);
+  v8::Local<v8::Value> arg = v8::Boolean::New(
+      blink::mainThreadIsolate(), delegate()->IsUseZoomForDSFEnabled());
+  PostV8CallbackWithArgs(std::move(global_callback), 1, &arg);
 }
 
 void TestRunnerForSpecificView::EnableUseZoomForDSF(
@@ -566,7 +573,13 @@ void TestRunnerForSpecificView::DidLosePointerLockInternal() {
 }
 
 bool TestRunnerForSpecificView::CallShouldCloseOnWebView() {
-  return web_view()->mainFrame()->dispatchBeforeUnloadEvent();
+  if (!web_view()->mainFrame()->toWebLocalFrame()) {
+    CHECK(false) << "This function cannot be called if the main frame is not a "
+                    "local frame.";
+  }
+
+  return web_view()->mainFrame()->toWebLocalFrame()->dispatchBeforeUnloadEvent(
+      false);
 }
 
 void TestRunnerForSpecificView::SetDomainRelaxationForbiddenForURLScheme(
@@ -653,7 +666,7 @@ bool TestRunnerForSpecificView::FindString(
   WebLocalFrame* frame = web_view()->mainFrame()->toWebLocalFrame();
   const bool find_result = frame->find(0, WebString::fromUTF8(search_text),
                                        find_options, wrap_around, 0);
-  frame->stopFinding(false);
+  frame->stopFinding(WebLocalFrame::StopFindActionKeepSelection);
   return find_result;
 }
 

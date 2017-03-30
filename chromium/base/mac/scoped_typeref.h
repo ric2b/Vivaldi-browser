@@ -53,8 +53,8 @@ class ScopedTypeRef {
  public:
   typedef T element_type;
 
-  ScopedTypeRef(
-      T object = Traits::InvalidValue(),
+  explicit ScopedTypeRef(
+      __unsafe_unretained T object = Traits::InvalidValue(),
       base::scoped_policy::OwnershipPolicy policy = base::scoped_policy::ASSUME)
       : object_(object) {
     if (object_ && policy == base::scoped_policy::RETAIN)
@@ -67,12 +67,10 @@ class ScopedTypeRef {
       object_ = Traits::Retain(object_);
   }
 
-  // Without this, passing a ScopedTypeRef<A,TraitsX> to construct a
-  // ScopedTypeRef<A,TraitsY> would automatically cast down to an A, and then
-  // ASSUME ownership of A, when a retain is what was needed.
-  template<typename OtherTraits>
-  ScopedTypeRef(const ScopedTypeRef<T, OtherTraits>& that_with_other_traits)
-      : object_(that_with_other_traits.get()) {
+  // This allows passing an object to a function that takes its superclass.
+  template <typename R, typename RTraits>
+  explicit ScopedTypeRef(const ScopedTypeRef<R, RTraits>& that_as_subclass)
+      : object_(that_as_subclass.get()) {
     if (object_)
       object_ = Traits::Retain(object_);
   }
@@ -99,9 +97,9 @@ class ScopedTypeRef {
     return &object_;
   }
 
-  void reset(T object = Traits::InvalidValue(),
+  void reset(__unsafe_unretained T object = Traits::InvalidValue(),
              base::scoped_policy::OwnershipPolicy policy =
-                base::scoped_policy::ASSUME) {
+                 base::scoped_policy::ASSUME) {
     if (object && policy == base::scoped_policy::RETAIN)
       object = Traits::Retain(object);
     if (object_)
@@ -109,24 +107,16 @@ class ScopedTypeRef {
     object_ = object;
   }
 
-  bool operator==(T that) const {
-    return object_ == that;
-  }
+  bool operator==(__unsafe_unretained T that) const { return object_ == that; }
 
-  bool operator!=(T that) const {
-    return object_ != that;
-  }
+  bool operator!=(__unsafe_unretained T that) const { return object_ != that; }
 
-  operator T() const {
-    return object_;
-  }
+  operator T() const __attribute((ns_returns_not_retained)) { return object_; }
 
-  T get() const {
-    return object_;
-  }
+  T get() const __attribute((ns_returns_not_retained)) { return object_; }
 
   void swap(ScopedTypeRef& that) {
-    T temp = that.object_;
+    __unsafe_unretained T temp = that.object_;
     that.object_ = object_;
     object_ = temp;
   }
@@ -134,14 +124,14 @@ class ScopedTypeRef {
   // ScopedTypeRef<>::release() is like std::unique_ptr<>::release.  It is NOT
   // a wrapper for Release().  To force a ScopedTypeRef<> object to call
   // Release(), use ScopedTypeRef<>::reset().
-  T release() WARN_UNUSED_RESULT {
-    T temp = object_;
+  T release() __attribute((ns_returns_not_retained)) WARN_UNUSED_RESULT {
+    __unsafe_unretained T temp = object_;
     object_ = Traits::InvalidValue();
     return temp;
   }
 
  private:
-  T object_;
+  __unsafe_unretained T object_;
 };
 
 }  // namespace base

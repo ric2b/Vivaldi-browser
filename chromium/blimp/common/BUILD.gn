@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chrome/version.gni")
 import("//testing/test.gni")
 
 component("common") {
@@ -15,13 +16,14 @@ component("common") {
     "blob_cache/in_memory_blob_cache.h",
     "compositor/blimp_task_graph_runner.cc",
     "compositor/blimp_task_graph_runner.h",
+    "compositor/reference_tracker.cc",
+    "compositor/reference_tracker.h",
     "create_blimp_message.cc",
     "create_blimp_message.h",
     "get_client_token.cc",
     "get_client_token.h",
     "logging.cc",
     "logging.h",
-    "protocol_version.h",
     "switches.cc",
     "switches.h",
   ]
@@ -33,6 +35,10 @@ component("common") {
     "//blimp/common/proto",
     "//cc",
     "//crypto",
+  ]
+
+  public_deps = [
+    ":protocol_version",
   ]
 }
 
@@ -60,12 +66,14 @@ source_set("unit_tests") {
   sources = [
     "blob_cache/id_util_unittest.cc",
     "blob_cache/in_memory_blob_cache_unittest.cc",
+    "compositor/reference_tracker_unittest.cc",
     "create_blimp_message_unittest.cc",
     "logging_unittest.cc",
   ]
 
   deps = [
     ":common",
+    ":test_support",
     "//base",
     "//blimp/common/proto",
     "//blimp/net:test_support",
@@ -73,4 +81,9 @@ source_set("unit_tests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
+}
+
+process_version("protocol_version") {
+  template_file = "protocol_version.h.version"
+  output = "$target_gen_dir/protocol_version.h"
 }

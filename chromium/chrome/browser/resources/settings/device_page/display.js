@@ -5,8 +5,6 @@
 /**
  * @fileoverview
  * 'settings-display' is the settings subpage for display settings.
- *
- * @group Chrome Settings Elements
  */
 
 cr.define('settings.display', function() {
@@ -31,14 +29,29 @@ Polymer({
      */
     displays: Array,
 
+    /**
+     * Array of display layouts.
+     * @type {!Array<!chrome.system.display.DisplayLayout>}
+     */
+    layouts: Array,
+
+    /**
+     * String listing the ids in displays. Used to observe changes to the
+     * display configuration (i.e. when a display is added or removed).
+     */
+    displayIds: {type: String, observer: 'onDisplayIdsChanged_'},
+
     /** Primary display id */
     primaryDisplayId: String,
 
-    /**
-     * Selected display
-     * @type {!chrome.system.display.DisplayUnitInfo|undefined}
-     */
+    /** @type {!chrome.system.display.DisplayUnitInfo|undefined} */
     selectedDisplay: {type: Object, observer: 'selectedDisplayChanged_'},
+
+    /** Id passed to the overscan dialog. */
+    overscanDisplayId: {
+      type: String,
+      notify: true,
+    },
 
     /** Maximum mode index value for slider. */
     maxModeIndex_: {type: Number, value: 0},
@@ -73,10 +86,53 @@ Polymer({
     }
   },
 
+  /**
+   * Shows or hides the overscan dialog.
+   * @param {boolean} showOverscan
+   * @private
+   */
+  showOverscanDialog_: function(showOverscan) {
+    if (showOverscan) {
+      this.$.displayOverscan.open();
+      this.$.displayOverscan.focus();
+    } else {
+      this.$.displayOverscan.close();
+    }
+  },
+
+  /** @private */
+  onDisplayIdsChanged_: function() {
+    // Close any overscan dialog (which will cancel any overscan operation)
+    // if displayIds changes.
+    this.showOverscanDialog_(false);
+  },
+
   /** @private */
   getDisplayInfo_: function() {
     settings.display.systemDisplayApi.getInfo(
-        this.updateDisplayInfo_.bind(this));
+        this.displayInfoFetched_.bind(this));
+  },
+
+  /**
+   * @param {!Array<!chrome.system.display.DisplayUnitInfo>} displays
+   * @private
+   */
+  displayInfoFetched_(displays) {
+    if (!displays.length)
+      return;
+    settings.display.systemDisplayApi.getDisplayLayout(
+        this.displayLayoutFetched_.bind(this, displays));
+  },
+
+  /**
+   * @param {!Array<!chrome.system.display.DisplayUnitInfo>} displays
+   * @param {!Array<!chrome.system.display.DisplayLayout>} layouts
+   * @private
+   */
+  displayLayoutFetched_(displays, layouts) {
+    this.layouts = layouts;
+    this.displays = displays;
+    this.updateDisplayInfo_();
   },
 
   /**
@@ -177,11 +233,15 @@ Polymer({
   },
 
   /**
-   * @param {!{model: !{index: number}, target: !PaperButtonElement}} e
+   * @param {!{detail: number}} e
    * @private
    */
-  onSelectDisplayTap_: function(e) {
-    this.selectedDisplay = this.displays[e.model.index];
+  onSelectDisplay_: function(e) {
+    var index = e.detail;
+    assert(index >= 0);
+    if (index >= this.displays.length)
+      return;
+    this.selectedDisplay = this.displays[e.detail];
     // Force active in case selected display was clicked.
     e.target.active = true;
   },
@@ -253,23 +313,31 @@ Polymer({
         id, properties, this.setPropertiesCallback_.bind(this));
   },
 
-  /**
-   * @param {!Array<!chrome.system.display.DisplayUnitInfo>} displays
-   * @private
-   */
-  updateDisplayInfo_(displays) {
-    this.displays = displays;
+  /** @private */
+  onOverscanTap_: function() {
+    this.overscanDisplayId = this.selectedDisplay.id;
+    this.showOverscanDialog_(true);
+  },
+
+  /** @private */
+  updateDisplayInfo_() {
+    var displayIds = '';
     var primaryDisplay = undefined;
     var selectedDisplay = undefined;
     for (var display of this.displays) {
+      if (displayIds)
+        displayIds += ',';
+      displayIds += display.id;
       if (display.isPrimary && !primaryDisplay)
         primaryDisplay = display;
       if (this.selectedDisplay && display.id == this.selectedDisplay.id)
         selectedDisplay = display;
     }
+    this.displayIds = displayIds;
     this.primaryDisplayId = (primaryDisplay && primaryDisplay.id) || '';
     this.selectedDisplay = selectedDisplay || primaryDisplay ||
         (this.displays && this.displays[0]);
+    this.$.displayLayout.updateDisplays(this.displays, this.layouts);
   },
 
   /** @private */

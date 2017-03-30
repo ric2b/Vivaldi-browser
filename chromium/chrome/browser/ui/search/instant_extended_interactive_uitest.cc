@@ -55,8 +55,8 @@
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "components/omnibox/browser/search_provider.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
@@ -228,7 +228,7 @@ class InstantExtendedTest : public InProcessBrowserTest,
     history->ScheduleDBTask(
         std::unique_ptr<history::HistoryDBTask>(new QuittingHistoryDBTask()),
         &tracker);
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
   }
 
   int CountSearchProviderSuggestions() {

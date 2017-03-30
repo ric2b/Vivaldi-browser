@@ -438,7 +438,7 @@ bool SVGLayoutSupport::willIsolateBlendingDescendantsForStyle(const ComputedStyl
     const SVGComputedStyle& svgStyle = style.svgStyle();
 
     return style.hasIsolation() || style.opacity() < 1 || style.hasBlendMode()
-        || svgStyle.hasFilter() || svgStyle.hasMasker() || svgStyle.hasClipper();
+        || style.hasFilter() || svgStyle.hasMasker() || svgStyle.hasClipper();
 }
 
 bool SVGLayoutSupport::willIsolateBlendingDescendantsForObject(const LayoutObject* object)
@@ -508,9 +508,9 @@ float SVGLayoutSupport::calculateScreenFontSizeScalingFactor(const LayoutObject*
     // FIXME: trying to compute a device space transform at record time is wrong. All clients
     // should be updated to avoid relying on this information, and the method should be removed.
     AffineTransform ctm = deprecatedCalculateTransformToLayer(layoutObject) * SubtreeContentTransformScope::currentContentTransformation();
-    ctm.scale(layoutObject->document().frameHost()->deviceScaleFactor());
+    ctm.scale(layoutObject->document().frameHost()->deviceScaleFactorDeprecated());
 
-    return narrowPrecisionToFloat(sqrt((pow(ctm.xScale(), 2) + pow(ctm.yScale(), 2)) / 2));
+    return narrowPrecisionToFloat(sqrt((ctm.xScaleSquared() + ctm.yScaleSquared()) / 2));
 }
 
 static inline bool compareCandidateDistance(const SearchCandidate& r1, const SearchCandidate& r2)

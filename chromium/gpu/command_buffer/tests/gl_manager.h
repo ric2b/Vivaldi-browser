@@ -23,7 +23,7 @@ namespace base {
 class CommandLine;
 }
 
-namespace gfx {
+namespace gl {
 
 class GLContext;
 class GLShareGroup;
@@ -35,6 +35,7 @@ namespace gpu {
 
 class CommandBufferService;
 class CommandExecutor;
+class ImageFactory;
 class SyncPointClient;
 class SyncPointOrderData;
 class SyncPointManager;
@@ -75,6 +76,14 @@ class GLManager : private GpuControl {
     gles2::ContextType context_type;
     // Force shader name hashing for all context types.
     bool force_shader_name_hashing;
+    // Whether the buffer is multisampled.
+    bool multisampled;
+    // Whether the backbuffer has an alpha channel.
+    bool backbuffer_alpha;
+    // The ImageFactory to use to generate images for the backbuffer.
+    gpu::ImageFactory* image_factory;
+    // Enable the feature |arb_texture_rectangle|.
+    bool enable_arb_texture_rectangle;
   };
   GLManager();
   ~GLManager() override;
@@ -92,7 +101,7 @@ class GLManager : private GpuControl {
 
   void MakeCurrent();
 
-  void SetSurface(gfx::GLSurface* surface);
+  void SetSurface(gl::GLSurface* surface);
 
   void set_use_iosurface_memory_buffers(bool use_iosurface_memory_buffers) {
     use_iosurface_memory_buffers_ = use_iosurface_memory_buffers;
@@ -108,17 +117,13 @@ class GLManager : private GpuControl {
     return mailbox_manager_.get();
   }
 
-  gfx::GLShareGroup* share_group() const {
-    return share_group_.get();
-  }
+  gl::GLShareGroup* share_group() const { return share_group_.get(); }
 
   gles2::GLES2Implementation* gles2_implementation() const {
     return gles2_implementation_.get();
   }
 
-  gfx::GLContext* context() {
-    return context_.get();
-  }
+  gl::GLContext* context() { return context_.get(); }
 
   const GpuDriverBugWorkarounds& workarounds() const;
 
@@ -134,6 +139,7 @@ class GLManager : private GpuControl {
                                      size_t height,
                                      unsigned internalformat,
                                      unsigned usage) override;
+  int32_t GetImageGpuMemoryBufferId(unsigned image_id) override;
   void SignalQuery(uint32_t query, const base::Closure& callback) override;
   void SetLock(base::Lock*) override;
   void EnsureWorkVisible() override;
@@ -164,12 +170,12 @@ class GLManager : private GpuControl {
   scoped_refptr<SyncPointOrderData> sync_point_order_data_;
   std::unique_ptr<SyncPointClient> sync_point_client_;
   scoped_refptr<gles2::MailboxManager> mailbox_manager_;
-  scoped_refptr<gfx::GLShareGroup> share_group_;
+  scoped_refptr<gl::GLShareGroup> share_group_;
   std::unique_ptr<CommandBufferService> command_buffer_;
   std::unique_ptr<gles2::GLES2Decoder> decoder_;
   std::unique_ptr<CommandExecutor> executor_;
-  scoped_refptr<gfx::GLSurface> surface_;
-  scoped_refptr<gfx::GLContext> context_;
+  scoped_refptr<gl::GLSurface> surface_;
+  scoped_refptr<gl::GLContext> context_;
   std::unique_ptr<gles2::GLES2CmdHelper> gles2_helper_;
   std::unique_ptr<TransferBuffer> transfer_buffer_;
   std::unique_ptr<gles2::GLES2Implementation> gles2_implementation_;
@@ -182,11 +188,14 @@ class GLManager : private GpuControl {
 
   bool use_iosurface_memory_buffers_ = false;
 
+  // A map from image id to GpuMemoryBuffer id.
+  std::map<int32_t, int32_t> image_gmb_ids_map_;
+
   // Used on Android to virtualize GL for all contexts.
   static int use_count_;
-  static scoped_refptr<gfx::GLShareGroup>* base_share_group_;
-  static scoped_refptr<gfx::GLSurface>* base_surface_;
-  static scoped_refptr<gfx::GLContext>* base_context_;
+  static scoped_refptr<gl::GLShareGroup>* base_share_group_;
+  static scoped_refptr<gl::GLSurface>* base_surface_;
+  static scoped_refptr<gl::GLContext>* base_context_;
 };
 
 }  // namespace gpu

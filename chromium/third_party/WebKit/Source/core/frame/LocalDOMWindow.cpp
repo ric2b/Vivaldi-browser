@@ -26,8 +26,8 @@
 
 #include "core/frame/LocalDOMWindow.h"
 
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/css/CSSRuleList.h"
 #include "core/css/DOMWindowCSS.h"
@@ -48,18 +48,21 @@
 #include "core/events/PopStateEvent.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/frame/BarProp.h"
+#include "core/frame/DOMVisualViewport.h"
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/History.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Navigator.h"
 #include "core/frame/Screen.h"
 #include "core/frame/ScrollToOptions.h"
 #include "core/frame/Settings.h"
 #include "core/frame/SuspendableTimer.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/input/EventHandler.h"
-#include "core/inspector/ConsoleMessageStorage.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -76,6 +79,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebFrameScheduler.h"
 #include "public/platform/WebScreenInfo.h"
+#include <memory>
 
 namespace blink {
 
@@ -124,12 +128,12 @@ private:
 class PostMessageTimer final : public GarbageCollectedFinalized<PostMessageTimer>, public SuspendableTimer {
     USING_GARBAGE_COLLECTED_MIXIN(PostMessageTimer);
 public:
-    PostMessageTimer(LocalDOMWindow& window, MessageEvent* event, PassRefPtr<SecurityOrigin> targetOrigin, PassRefPtr<ScriptCallStack> stackTrace, UserGestureToken* userGestureToken)
+    PostMessageTimer(LocalDOMWindow& window, MessageEvent* event, PassRefPtr<SecurityOrigin> targetOrigin, std::unique_ptr<SourceLocation> location, UserGestureToken* userGestureToken)
         : SuspendableTimer(window.document())
         , m_event(event)
         , m_window(&window)
         , m_targetOrigin(targetOrigin)
-        , m_stackTrace(stackTrace)
+        , m_location(std::move(location))
         , m_userGestureToken(userGestureToken)
         , m_disposalAllowed(true)
     {
@@ -138,7 +142,7 @@ public:
 
     MessageEvent* event() const { return m_event; }
     SecurityOrigin* targetOrigin() const { return m_targetOrigin.get(); }
-    ScriptCallStack* stackTrace() const { return m_stackTrace.get(); }
+    std::unique_ptr<SourceLocation> takeLocation() { return std::move(m_location); }
     UserGestureToken* userGestureToken() const { return m_userGestureToken.get(); }
     void stop() override
     {
@@ -167,21 +171,19 @@ private:
         m_disposalAllowed = false;
         m_window->postMessageTimerFired(this);
         dispose();
+        // Oilpan optimization: unregister as an observer right away.
+        clearContext();
     }
 
     void dispose()
     {
-        // Oilpan optimization: unregister as an observer right away.
-        clearContext();
-        // Will destroy this object, now or after the next GC depending
-        // on whether Oilpan is disabled or not.
         m_window->removePostMessageTimer(this);
     }
 
     Member<MessageEvent> m_event;
     Member<LocalDOMWindow> m_window;
     RefPtr<SecurityOrigin> m_targetOrigin;
-    RefPtr<ScriptCallStack> m_stackTrace;
+    std::unique_ptr<SourceLocation> m_location;
     RefPtr<UserGestureToken> m_userGestureToken;
     bool m_disposalAllowed;
 };
@@ -299,6 +301,7 @@ bool LocalDOMWindow::allowPopUp()
 
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     : m_frameObserver(WindowFrameObserver::create(this, frame))
+    , m_visualViewport(DOMVisualViewport::create(this))
     , m_shouldPrintWhenFinishedLoading(false)
 {
     ThreadState::current()->registerPreFinalizer(this);
@@ -405,7 +408,7 @@ void LocalDOMWindow::dispatchWindowLoadEvent()
     // workaround to avoid Editing code crashes.  We should always dispatch
     // 'load' event asynchronously.  crbug.com/569511.
     if (ScopedEventQueue::instance()->shouldQueueEvents() && m_document) {
-        m_document->postTask(BLINK_FROM_HERE, createSameThreadTask(&LocalDOMWindow::dispatchLoadEvent, this));
+        m_document->postTask(BLINK_FROM_HERE, createSameThreadTask(&LocalDOMWindow::dispatchLoadEvent, wrapPersistent(this)));
         return;
     }
     dispatchLoadEvent();
@@ -495,7 +498,6 @@ MediaQueryList* LocalDOMWindow::matchMedia(const String& media)
 void LocalDOMWindow::willDetachFrameHost()
 {
     frame()->host()->eventHandlerRegistry().didRemoveAllEventHandlers(*this);
-    frame()->host()->consoleMessageStorage().frameWindowDiscarded(this);
     LocalDOMWindow::notifyContextDestroyed();
 }
 
@@ -668,14 +670,7 @@ void LocalDOMWindow::schedulePostMessage(MessageEvent* event, PassRefPtr<Securit
     // Allowing unbounded amounts of messages to build up for a suspended context
     // is problematic; consider imposing a limit or other restriction if this
     // surfaces often as a problem (see crbug.com/587012).
-
-    // Capture stack trace only when inspector front-end is loaded as it may be time consuming.
-    RefPtr<ScriptCallStack> stackTrace;
-    if (InspectorInstrumentation::consoleAgentEnabled(source))
-        stackTrace = ScriptCallStack::capture();
-
-    // Schedule the message.
-    PostMessageTimer* timer = new PostMessageTimer(*this, event, target, stackTrace.release(), UserGestureIndicator::currentToken());
+    PostMessageTimer* timer = new PostMessageTimer(*this, event, target, SourceLocation::capture(source), UserGestureIndicator::currentToken());
     timer->startOneShot(0, BLINK_FROM_HERE);
     timer->suspendIfNeeded();
     m_postMessageTimers.add(timer);
@@ -691,7 +686,8 @@ void LocalDOMWindow::postMessageTimerFired(PostMessageTimer* timer)
     UserGestureIndicator gestureIndicator(timer->userGestureToken());
 
     event->entangleMessagePorts(document());
-    dispatchMessageEventWithOriginCheck(timer->targetOrigin(), event, timer->stackTrace());
+
+    dispatchMessageEventWithOriginCheck(timer->targetOrigin(), event, timer->takeLocation());
 }
 
 void LocalDOMWindow::removePostMessageTimer(PostMessageTimer* timer)
@@ -699,7 +695,7 @@ void LocalDOMWindow::removePostMessageTimer(PostMessageTimer* timer)
     m_postMessageTimers.remove(timer);
 }
 
-void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, Event* event, PassRefPtr<ScriptCallStack> stackTrace)
+void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, Event* event, std::unique_ptr<SourceLocation> location)
 {
     if (intendedTargetOrigin) {
         // Check target origin now since the target document may have changed since the timer was scheduled.
@@ -710,8 +706,7 @@ void LocalDOMWindow::dispatchMessageEventWithOriginCheck(SecurityOrigin* intende
 
         if (!validTarget) {
             String message = ExceptionMessages::failedToExecute("postMessage", "DOMWindow", "The target origin provided ('" + intendedTargetOrigin->toString() + "') does not match the recipient window's origin ('" + document()->getSecurityOrigin()->toString() + "').");
-            ConsoleMessage* consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message);
-            consoleMessage->setCallStack(stackTrace);
+            ConsoleMessage* consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message, std::move(location));
             frameConsole()->addMessage(consoleMessage);
             return;
         }
@@ -758,17 +753,17 @@ void LocalDOMWindow::print(ScriptState* scriptState)
     }
 
     if (scriptState && v8::MicrotasksScope::IsRunningMicrotasks(scriptState->isolate())) {
-        Deprecation::countDeprecation(frame()->document(), UseCounter::During_Microtask_Print);
-        if (RuntimeEnabledFeatures::disableBlockingMethodsDuringMicrotasksEnabled()) {
-            frameConsole()->addMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Ignored call to 'print()' during microtask execution."));
-            return;
-        }
+        UseCounter::count(frame()->document(), UseCounter::During_Microtask_Print);
     }
 
     if (frame()->isLoading()) {
         m_shouldPrintWhenFinishedLoading = true;
         return;
     }
+
+    if (frame()->isCrossOrigin())
+        UseCounter::count(frame()->document(), UseCounter::CrossOriginWindowPrint);
+
     m_shouldPrintWhenFinishedLoading = false;
     host->chromeClient().print(frame());
 }
@@ -794,11 +789,7 @@ void LocalDOMWindow::alert(ScriptState* scriptState, const String& message)
     }
 
     if (v8::MicrotasksScope::IsRunningMicrotasks(scriptState->isolate())) {
-        Deprecation::countDeprecation(frame()->document(), UseCounter::During_Microtask_Alert);
-        if (RuntimeEnabledFeatures::disableBlockingMethodsDuringMicrotasksEnabled()) {
-            frameConsole()->addMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Ignored call to 'alert()' during microtask execution."));
-            return;
-        }
+        UseCounter::count(frame()->document(), UseCounter::During_Microtask_Alert);
     }
 
     frame()->document()->updateStyleAndLayoutTree();
@@ -806,6 +797,9 @@ void LocalDOMWindow::alert(ScriptState* scriptState, const String& message)
     FrameHost* host = frame()->host();
     if (!host)
         return;
+
+    if (frame()->isCrossOrigin())
+        UseCounter::count(frame()->document(), UseCounter::CrossOriginWindowAlert);
 
     host->chromeClient().openJavaScriptAlert(frame(), message);
 }
@@ -824,11 +818,7 @@ bool LocalDOMWindow::confirm(ScriptState* scriptState, const String& message)
     }
 
     if (v8::MicrotasksScope::IsRunningMicrotasks(scriptState->isolate())) {
-        Deprecation::countDeprecation(frame()->document(), UseCounter::During_Microtask_Confirm);
-        if (RuntimeEnabledFeatures::disableBlockingMethodsDuringMicrotasksEnabled()) {
-            frameConsole()->addMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Ignored call to 'confirm()' during microtask execution."));
-            return false;
-        }
+        UseCounter::count(frame()->document(), UseCounter::During_Microtask_Confirm);
     }
 
     frame()->document()->updateStyleAndLayoutTree();
@@ -836,6 +826,9 @@ bool LocalDOMWindow::confirm(ScriptState* scriptState, const String& message)
     FrameHost* host = frame()->host();
     if (!host)
         return false;
+
+    if (frame()->isCrossOrigin())
+        UseCounter::count(frame()->document(), UseCounter::CrossOriginWindowConfirm);
 
     return host->chromeClient().openJavaScriptConfirm(frame(), message);
 }
@@ -854,11 +847,7 @@ String LocalDOMWindow::prompt(ScriptState* scriptState, const String& message, c
     }
 
     if (v8::MicrotasksScope::IsRunningMicrotasks(scriptState->isolate())) {
-        Deprecation::countDeprecation(frame()->document(), UseCounter::During_Microtask_Prompt);
-        if (RuntimeEnabledFeatures::disableBlockingMethodsDuringMicrotasksEnabled()) {
-            frameConsole()->addMessage(ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, "Ignored call to 'prompt()' during microtask execution."));
-            return String();
-        }
+        UseCounter::count(frame()->document(), UseCounter::During_Microtask_Prompt);
     }
 
     frame()->document()->updateStyleAndLayoutTree();
@@ -870,6 +859,9 @@ String LocalDOMWindow::prompt(ScriptState* scriptState, const String& message, c
     String returnValue;
     if (host->chromeClient().openJavaScriptPrompt(frame(), message, defaultValue, returnValue))
         return returnValue;
+
+    if (frame()->isCrossOrigin())
+        UseCounter::count(frame()->document(), UseCounter::CrossOriginWindowPrompt);
 
     return String();
 }
@@ -898,9 +890,10 @@ int LocalDOMWindow::outerHeight() const
     if (!host)
         return 0;
 
+    ChromeClient& chromeClient = host->chromeClient();
     if (host->settings().reportScreenSizeInPhysicalPixelsQuirk())
-        return lroundf(host->chromeClient().windowRect().height() * host->deviceScaleFactor());
-    return host->chromeClient().windowRect().height();
+        return lroundf(chromeClient.windowRect().height() * chromeClient.screenInfo().deviceScaleFactor);
+    return chromeClient.windowRect().height();
 }
 
 int LocalDOMWindow::outerWidth() const
@@ -912,18 +905,23 @@ int LocalDOMWindow::outerWidth() const
     if (!host)
         return 0;
 
+    ChromeClient& chromeClient = host->chromeClient();
     if (host->settings().reportScreenSizeInPhysicalPixelsQuirk())
-        return lroundf(host->chromeClient().windowRect().width() * host->deviceScaleFactor());
-    return host->chromeClient().windowRect().width();
+        return lroundf(chromeClient.windowRect().width() * chromeClient.screenInfo().deviceScaleFactor);
+
+    return chromeClient.windowRect().width();
 }
 
-static FloatSize getViewportSize(LocalFrame* frame)
+FloatSize LocalDOMWindow::getViewportSize(IncludeScrollbarsInRect scrollbarInclusion) const
 {
-    FrameView* view = frame->view();
+    if (!frame())
+        return FloatSize();
+
+    FrameView* view = frame()->view();
     if (!view)
         return FloatSize();
 
-    FrameHost* host = frame->host();
+    FrameHost* host = frame()->host();
     if (!host)
         return FloatSize();
 
@@ -931,18 +929,18 @@ static FloatSize getViewportSize(LocalFrame* frame)
     // initial page scale depends on the content width and is set after a
     // layout, perform one now so queries during page load will use the up to
     // date viewport.
-    if (host->settings().viewportEnabled() && frame->isMainFrame())
-        frame->document()->updateStyleAndLayoutIgnorePendingStylesheets();
+    if (host->settings().viewportEnabled() && frame()->isMainFrame())
+        frame()->document()->updateStyleAndLayoutIgnorePendingStylesheets();
 
     // FIXME: This is potentially too much work. We really only need to know the dimensions of the parent frame's layoutObject.
-    if (Frame* parent = frame->tree().parent()) {
+    if (Frame* parent = frame()->tree().parent()) {
         if (parent && parent->isLocalFrame())
             toLocalFrame(parent)->document()->updateStyleAndLayoutIgnorePendingStylesheets();
     }
 
-    return frame->isMainFrame() && !host->settings().inertVisualViewport()
+    return frame()->isMainFrame() && !host->settings().inertVisualViewport()
         ? FloatSize(host->visualViewport().visibleRect().size())
-        : FloatSize(view->visibleContentRect(IncludeScrollbars).size());
+        : FloatSize(view->visibleContentRect(scrollbarInclusion).size());
 }
 
 int LocalDOMWindow::innerHeight() const
@@ -950,7 +948,7 @@ int LocalDOMWindow::innerHeight() const
     if (!frame())
         return 0;
 
-    FloatSize viewportSize = getViewportSize(frame());
+    FloatSize viewportSize = getViewportSize(IncludeScrollbars);
     return adjustForAbsoluteZoom(expandedIntSize(viewportSize).height(), frame()->pageZoomFactor());
 }
 
@@ -959,7 +957,7 @@ int LocalDOMWindow::innerWidth() const
     if (!frame())
         return 0;
 
-    FloatSize viewportSize = getViewportSize(frame());
+    FloatSize viewportSize = getViewportSize(IncludeScrollbars);
     return adjustForAbsoluteZoom(expandedIntSize(viewportSize).width(), frame()->pageZoomFactor());
 }
 
@@ -972,9 +970,10 @@ int LocalDOMWindow::screenX() const
     if (!host)
         return 0;
 
+    ChromeClient& chromeClient = host->chromeClient();
     if (host->settings().reportScreenSizeInPhysicalPixelsQuirk())
-        return lroundf(host->chromeClient().windowRect().x() * host->deviceScaleFactor());
-    return host->chromeClient().windowRect().x();
+        return lroundf(chromeClient.windowRect().x() * chromeClient.screenInfo().deviceScaleFactor);
+    return chromeClient.windowRect().x();
 }
 
 int LocalDOMWindow::screenY() const
@@ -986,9 +985,10 @@ int LocalDOMWindow::screenY() const
     if (!host)
         return 0;
 
+    ChromeClient& chromeClient = host->chromeClient();
     if (host->settings().reportScreenSizeInPhysicalPixelsQuirk())
-        return lroundf(host->chromeClient().windowRect().y() * host->deviceScaleFactor());
-    return host->chromeClient().windowRect().y();
+        return lroundf(chromeClient.windowRect().y() * chromeClient.screenInfo().deviceScaleFactor);
+    return chromeClient.windowRect().y();
 }
 
 double LocalDOMWindow::scrollX() const
@@ -1031,6 +1031,14 @@ double LocalDOMWindow::scrollY() const
     return adjustScrollForAbsoluteZoom(viewportY, frame()->pageZoomFactor());
 }
 
+DOMVisualViewport* LocalDOMWindow::visualViewport()
+{
+    if (!frame())
+        return nullptr;
+
+    return m_visualViewport;
+}
+
 const AtomicString& LocalDOMWindow::name() const
 {
     if (!isCurrentlyDisplayedInFrame())
@@ -1042,6 +1050,9 @@ const AtomicString& LocalDOMWindow::name() const
 void LocalDOMWindow::setName(const AtomicString& name)
 {
     if (!isCurrentlyDisplayedInFrame())
+        return;
+
+    if (name == frame()->tree().name())
         return;
 
     frame()->tree().setName(name);
@@ -1331,9 +1342,14 @@ CustomElementsRegistry* LocalDOMWindow::customElements(ScriptState* scriptState)
 {
     if (!scriptState->world().isMainWorld())
         return nullptr;
-    if (!m_customElements)
-        m_customElements = CustomElementsRegistry::create(scriptState, document()->registrationContext());
-    return m_customElements.get();
+    return customElements();
+}
+
+CustomElementsRegistry* LocalDOMWindow::customElements() const
+{
+    if (!m_customElements && m_document)
+        m_customElements = CustomElementsRegistry::create(document());
+    return m_customElements;
 }
 
 void LocalDOMWindow::addedEventListener(const AtomicString& eventType, RegisteredEventListener& registeredListener)
@@ -1383,8 +1399,6 @@ void LocalDOMWindow::dispatchLoadEvent()
 {
     Event* loadEvent(Event::create(EventTypeNames::load));
     if (frame() && frame()->loader().documentLoader() && !frame()->loader().documentLoader()->timing().loadEventStart()) {
-        // The DocumentLoader (and thus its DocumentLoadTiming) might get destroyed while dispatching
-        // the event, so protect it to prevent writing the end time into freed memory.
         DocumentLoader* documentLoader = frame()->loader().documentLoader();
         DocumentLoadTiming& timing = documentLoader->timing();
         timing.markLoadEventStart();
@@ -1526,6 +1540,7 @@ DEFINE_TRACE(LocalDOMWindow)
     visitor->trace(m_applicationCache);
     visitor->trace(m_eventQueue);
     visitor->trace(m_postMessageTimers);
+    visitor->trace(m_visualViewport);
     DOMWindow::trace(visitor);
     Supplementable<LocalDOMWindow>::trace(visitor);
     DOMWindowLifecycleNotifier::trace(visitor);

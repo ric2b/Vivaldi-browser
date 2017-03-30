@@ -132,10 +132,8 @@ public:
         Vector<LayoutTableCell*, 1> cells;
         bool inColSpan; // true for columns after the first in a colspan
 
-        CellStruct()
-            : inColSpan(false)
-        {
-        }
+        CellStruct();
+        ~CellStruct();
 
         // This is the cell in the grid "slot" that is on top of the others
         // (aka the last cell in DOM order for this slot).
@@ -301,6 +299,13 @@ public:
 
     int paginationStrutForRow(LayoutTableRow*, LayoutUnit logicalOffset) const;
 
+    void setOffsetForRepeatingHeader(LayoutUnit offset) { m_offsetForRepeatingHeader = offset; }
+    LayoutUnit offsetForRepeatingHeader() const { return m_offsetForRepeatingHeader; }
+
+    bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect&, VisualRectFlags = DefaultVisualRectFlags) const override;
+
+    bool hasRepeatingHeaderGroup() const;
+
 protected:
     void styleDidChange(StyleDifference, const ComputedStyle* oldStyle) override;
     bool nodeAtPoint(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
@@ -392,6 +397,8 @@ private:
     // The use is to disable a painting optimization where we just paint the
     // invalidated cells.
     bool m_hasMultipleCellLevels;
+
+    LayoutUnit m_offsetForRepeatingHeader;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutTableSection, isTableSection());

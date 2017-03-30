@@ -27,7 +27,6 @@
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
@@ -56,6 +55,7 @@
 #include "net/ssl/test_ssl_private_key.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
@@ -708,15 +708,34 @@ class MockCTPolicyEnforcer : public CTPolicyEnforcer {
                                       const BoundNetLog&));
 };
 
+class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
+ public:
+  MOCK_METHOD1(IsCTRequiredForHost,
+               CTRequirementLevel(const std::string& host));
+};
+
 class SSLClientSocketTest : public PlatformTest {
  public:
   SSLClientSocketTest()
       : socket_factory_(ClientSocketFactory::GetDefaultFactory()),
         cert_verifier_(new MockCertVerifier),
-        transport_security_state_(new TransportSecurityState) {
+        transport_security_state_(new TransportSecurityState),
+        ct_verifier_(new MockCTVerifier),
+        ct_policy_enforcer_(new MockCTPolicyEnforcer) {
     cert_verifier_->set_default_result(OK);
     context_.cert_verifier = cert_verifier_.get();
     context_.transport_security_state = transport_security_state_.get();
+    context_.cert_transparency_verifier = ct_verifier_.get();
+    context_.ct_policy_enforcer = ct_policy_enforcer_.get();
+
+    EXPECT_CALL(*ct_verifier_, Verify(_, _, _, _, _))
+        .WillRepeatedly(Return(OK));
+    EXPECT_CALL(*ct_policy_enforcer_, DoesConformToCertPolicy(_, _, _))
+        .WillRepeatedly(
+            Return(ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS));
+    EXPECT_CALL(*ct_policy_enforcer_, DoesConformToCTEVPolicy(_, _, _, _))
+        .WillRepeatedly(
+            Return(ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS));
   }
 
  protected:
@@ -808,6 +827,8 @@ class SSLClientSocketTest : public PlatformTest {
   ClientSocketFactory* socket_factory_;
   std::unique_ptr<MockCertVerifier> cert_verifier_;
   std::unique_ptr<TransportSecurityState> transport_security_state_;
+  std::unique_ptr<MockCTVerifier> ct_verifier_;
+  std::unique_ptr<MockCTPolicyEnforcer> ct_policy_enforcer_;
   SSLClientSocketContext context_;
   std::unique_ptr<SSLClientSocket> sock_;
   TestNetLog log_;
@@ -2625,51 +2646,32 @@ TEST_F(SSLClientSocketTest, FallbackShardSessionCache) {
             SSLConnectionStatusToVersion(ssl_info.connection_status));
 }
 
-// Test that RC4 is only enabled if rc4_enabled and
-// deprecated_cipher_suites_enabled are both set.
-TEST_F(SSLClientSocketTest, RC4Enabled) {
-  SpawnedTestServer::SSLOptions ssl_options;
-  ssl_options.bulk_ciphers = SpawnedTestServer::SSLOptions::BULK_CIPHER_RC4;
-  ASSERT_TRUE(StartTestServer(ssl_options));
-
-  // Normal handshakes with RC4 do not work.
-  SSLConfig ssl_config;
-  int rv;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_EQ(ERR_SSL_VERSION_OR_CIPHER_MISMATCH, rv);
-
-  // RC4 is also not enabled in the fallback handshake.
-  ssl_config.deprecated_cipher_suites_enabled = true;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_EQ(ERR_SSL_VERSION_OR_CIPHER_MISMATCH, rv);
-
-  // Even if RC4 is enabled, it is not sent in the initial handshake.
-  ssl_config.deprecated_cipher_suites_enabled = false;
-  ssl_config.rc4_enabled = true;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_EQ(ERR_SSL_VERSION_OR_CIPHER_MISMATCH, rv);
-
-  // If enabled, RC4 works in the fallback handshake.
-  ssl_config.deprecated_cipher_suites_enabled = true;
-  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
-  EXPECT_EQ(OK, rv);
-}
-
-// Test that DHE is only enabled if deprecated_cipher_suites_enabled is set.
-TEST_F(SSLClientSocketTest, DHEDeprecated) {
+// Test that DHE is removed but gives a dedicated error. Also test that the
+// dhe_enabled option can restore it.
+TEST_F(SSLClientSocketTest, DHE) {
   SpawnedTestServer::SSLOptions ssl_options;
   ssl_options.key_exchanges =
       SpawnedTestServer::SSLOptions::KEY_EXCHANGE_DHE_RSA;
   ASSERT_TRUE(StartTestServer(ssl_options));
 
-  // Normal handshakes with DHE do not work.
+  // Normal handshakes with DHE do not work, with or without DHE enabled.
   SSLConfig ssl_config;
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   EXPECT_EQ(ERR_SSL_VERSION_OR_CIPHER_MISMATCH, rv);
 
-  // Enabling deprecated ciphers works fine.
+  ssl_config.dhe_enabled = true;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  EXPECT_EQ(ERR_SSL_VERSION_OR_CIPHER_MISMATCH, rv);
+
+  // Enabling deprecated ciphers gives DHE a dedicated error code.
+  ssl_config.dhe_enabled = false;
   ssl_config.deprecated_cipher_suites_enabled = true;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  EXPECT_EQ(ERR_SSL_OBSOLETE_CIPHER, rv);
+
+  // Enabling both deprecated ciphers and DHE restores it.
+  ssl_config.dhe_enabled = true;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
   EXPECT_EQ(OK, rv);
 }
@@ -3288,6 +3290,179 @@ TEST_F(SSLClientSocketTest, SendGoodCert) {
 
   sock_->Disconnect();
   EXPECT_FALSE(sock_->IsConnected());
+}
+
+HashValueVector MakeHashValueVector(uint8_t value) {
+  HashValueVector out;
+  HashValue hash(HASH_VALUE_SHA256);
+  memset(hash.data(), value, hash.size());
+  out.push_back(hash);
+  return out;
+}
+
+// Test that |ssl_info.pkp_bypassed| is set when a local trust anchor causes
+// pinning to be bypassed.
+TEST_F(SSLClientSocketTest, PKPBypassedSet) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // The certificate needs to be trusted, but chain to a local root with
+  // different public key hashes than specified in the pin.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = false;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up HPKP
+  HashValueVector expected_hashes = MakeHashValueVector(1);
+  context_.transport_security_state->AddHPKP(
+      spawned_test_server()->host_port_pair().host(),
+      base::Time::Now() + base::TimeDelta::FromSeconds(10000), true,
+      expected_hashes, GURL());
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  EXPECT_EQ(OK, rv);
+  EXPECT_TRUE(sock_->IsConnected());
+
+  EXPECT_TRUE(ssl_info.pkp_bypassed);
+  EXPECT_FALSE(ssl_info.cert_status & CERT_STATUS_PINNED_KEY_MISSING);
+}
+
+TEST_F(SSLClientSocketTest, PKPEnforced) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted, but chains to a public root that doesn't match the
+  // pin hashes.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up HPKP
+  HashValueVector expected_hashes = MakeHashValueVector(1);
+  context_.transport_security_state->AddHPKP(
+      spawned_test_server()->host_port_pair().host(),
+      base::Time::Now() + base::TimeDelta::FromSeconds(10000), true,
+      expected_hashes, GURL());
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  EXPECT_EQ(ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN, rv);
+  EXPECT_TRUE(ssl_info.cert_status & CERT_STATUS_PINNED_KEY_MISSING);
+  EXPECT_TRUE(sock_->IsConnected());
+
+  EXPECT_FALSE(ssl_info.pkp_bypassed);
+}
+
+// Test that when CT is required (in this case, by the delegate), the
+// absence of CT information is a socket error.
+TEST_F(SSLClientSocketTest, CTIsRequired) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted and chains to a public root.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up CT
+  MockRequireCTDelegate require_ct_delegate;
+  transport_security_state_->SetRequireCTDelegate(&require_ct_delegate);
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_))
+      .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
+                                 CTRequirementLevel::NOT_REQUIRED));
+  EXPECT_CALL(
+      require_ct_delegate,
+      IsCTRequiredForHost(spawned_test_server()->host_port_pair().host()))
+      .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
+                                 CTRequirementLevel::REQUIRED));
+  EXPECT_CALL(*ct_policy_enforcer_,
+              DoesConformToCertPolicy(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  EXPECT_EQ(ERR_CERTIFICATE_TRANSPARENCY_REQUIRED, rv);
+  EXPECT_TRUE(ssl_info.cert_status &
+              CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
+  EXPECT_TRUE(sock_->IsConnected());
+}
+
+// When both HPKP and CT are required for a host, and both fail, the more
+// serious error is that the HPKP pin validation failed.
+TEST_F(SSLClientSocketTest, PKPMoreImportantThanCT) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ASSERT_TRUE(StartTestServer(ssl_options));
+  scoped_refptr<X509Certificate> server_cert =
+      spawned_test_server()->GetCertificate();
+
+  // Certificate is trusted, but chains to a public root that doesn't match the
+  // pin hashes.
+  CertVerifyResult verify_result;
+  verify_result.is_issued_by_known_root = true;
+  verify_result.verified_cert = server_cert;
+  verify_result.public_key_hashes = MakeHashValueVector(0);
+  cert_verifier_->AddResultForCert(server_cert.get(), verify_result, OK);
+
+  // Set up HPKP.
+  HashValueVector expected_hashes = MakeHashValueVector(1);
+  context_.transport_security_state->AddHPKP(
+      spawned_test_server()->host_port_pair().host(),
+      base::Time::Now() + base::TimeDelta::FromSeconds(10000), true,
+      expected_hashes, GURL());
+
+  // Set up CT.
+  MockRequireCTDelegate require_ct_delegate;
+  transport_security_state_->SetRequireCTDelegate(&require_ct_delegate);
+  EXPECT_CALL(require_ct_delegate, IsCTRequiredForHost(_))
+      .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
+                                 CTRequirementLevel::NOT_REQUIRED));
+  EXPECT_CALL(
+      require_ct_delegate,
+      IsCTRequiredForHost(spawned_test_server()->host_port_pair().host()))
+      .WillRepeatedly(Return(TransportSecurityState::RequireCTDelegate::
+                                 CTRequirementLevel::REQUIRED));
+  EXPECT_CALL(*ct_policy_enforcer_,
+              DoesConformToCertPolicy(server_cert.get(), _, _))
+      .WillRepeatedly(
+          Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS));
+
+  SSLConfig ssl_config;
+  int rv;
+  ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
+  SSLInfo ssl_info;
+  ASSERT_TRUE(sock_->GetSSLInfo(&ssl_info));
+
+  EXPECT_EQ(ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN, rv);
+  EXPECT_TRUE(ssl_info.cert_status & CERT_STATUS_PINNED_KEY_MISSING);
+  EXPECT_TRUE(ssl_info.cert_status &
+              CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED);
+  EXPECT_TRUE(sock_->IsConnected());
 }
 
 }  // namespace net

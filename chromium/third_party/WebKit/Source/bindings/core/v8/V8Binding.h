@@ -83,7 +83,7 @@ struct V8TypeOf {
 // Helpers for throwing JavaScript TypeErrors for arity mismatches.
 CORE_EXPORT void setArityTypeError(ExceptionState&, const char* valid, unsigned provided);
 CORE_EXPORT v8::Local<v8::Value> createMinimumArityTypeErrorForMethod(v8::Isolate*, const char* method, const char* type, unsigned expected, unsigned provided);
-v8::Local<v8::Value> createMinimumArityTypeErrorForConstructor(v8::Isolate*, const char* type, unsigned expected, unsigned provided);
+CORE_EXPORT v8::Local<v8::Value> createMinimumArityTypeErrorForConstructor(v8::Isolate*, const char* type, unsigned expected, unsigned provided);
 CORE_EXPORT void setMinimumArityTypeError(ExceptionState&, unsigned expected, unsigned provided);
 
 template<typename CallbackInfo, typename S>
@@ -404,6 +404,13 @@ inline v8::Local<v8::String> v8String(v8::Isolate* isolate, const String& string
 {
     if (string.isNull())
         return v8::String::Empty(isolate);
+    return V8PerIsolateData::from(isolate)->getStringCache()->v8ExternalString(isolate, string.impl());
+}
+
+inline v8::Local<v8::Value> v8StringOrNull(v8::Isolate* isolate, const AtomicString& string)
+{
+    if (string.isNull())
+        return v8::Null(isolate);
     return V8PerIsolateData::from(isolate)->getStringCache()->v8ExternalString(isolate, string.impl());
 }
 
@@ -775,6 +782,17 @@ struct NativeValueTraits<String> {
 };
 
 template<>
+struct NativeValueTraits<AtomicString> {
+    static inline AtomicString nativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState)
+    {
+        V8StringResource<> stringValue(value);
+        if (!stringValue.prepare(exceptionState))
+            return AtomicString();
+        return stringValue;
+    }
+};
+
+template<>
 struct NativeValueTraits<int> {
     static inline int nativeValue(v8::Isolate* isolate, v8::Local<v8::Value> value, ExceptionState& exceptionState)
     {
@@ -837,7 +855,6 @@ DOMWindow* toDOMWindow(v8::Isolate*, v8::Local<v8::Value>);
 DOMWindow* toDOMWindow(v8::Local<v8::Context>);
 LocalDOMWindow* enteredDOMWindow(v8::Isolate*);
 CORE_EXPORT LocalDOMWindow* currentDOMWindow(v8::Isolate*);
-CORE_EXPORT LocalDOMWindow* callingDOMWindow(v8::Isolate*);
 CORE_EXPORT ExecutionContext* toExecutionContext(v8::Local<v8::Context>);
 CORE_EXPORT void registerToExecutionContextForModules(ExecutionContext* (*toExecutionContextForModules)(v8::Local<v8::Context>));
 CORE_EXPORT ExecutionContext* currentExecutionContext(v8::Isolate*);
@@ -955,7 +972,7 @@ typedef void (*InstallTemplateFunction)(v8::Isolate*, const DOMWrapperWorld&, v8
 // Freeze a V8 object. The type of the first parameter and the return value is
 // intentionally v8::Value so that this function can wrap toV8().
 // If the argument isn't an object, this will crash.
-v8::Local<v8::Value> freezeV8Object(v8::Local<v8::Value>, v8::Isolate*);
+CORE_EXPORT v8::Local<v8::Value> freezeV8Object(v8::Local<v8::Value>, v8::Isolate*);
 
 } // namespace blink
 

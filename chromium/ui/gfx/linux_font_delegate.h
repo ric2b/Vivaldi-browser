@@ -39,6 +39,7 @@ class GFX_EXPORT LinuxFontDelegate {
       std::string* family_out,
       int* size_pixels_out,
       int* style_out,
+      Font::Weight* weight_out,
       FontRenderParams* params_out) const = 0;
 };
 

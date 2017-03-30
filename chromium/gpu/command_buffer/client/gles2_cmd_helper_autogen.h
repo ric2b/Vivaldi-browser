@@ -2472,6 +2472,14 @@ void GetUniformsES3CHROMIUM(GLuint program, uint32_t bucket_id) {
   }
 }
 
+void DescheduleUntilFinishedCHROMIUM() {
+  gles2::cmds::DescheduleUntilFinishedCHROMIUM* c =
+      GetCmdSpace<gles2::cmds::DescheduleUntilFinishedCHROMIUM>();
+  if (c) {
+    c->Init();
+  }
+}
+
 void GetTranslatedShaderSourceANGLE(GLuint shader, uint32_t bucket_id) {
   gles2::cmds::GetTranslatedShaderSourceANGLE* c =
       GetCmdSpace<gles2::cmds::GetTranslatedShaderSourceANGLE>();
@@ -2485,18 +2493,6 @@ void PostSubBufferCHROMIUM(GLint x, GLint y, GLint width, GLint height) {
       GetCmdSpace<gles2::cmds::PostSubBufferCHROMIUM>();
   if (c) {
     c->Init(x, y, width, height);
-  }
-}
-
-void TexImageIOSurface2DCHROMIUM(GLenum target,
-                                 GLsizei width,
-                                 GLsizei height,
-                                 GLuint ioSurfaceId,
-                                 GLuint plane) {
-  gles2::cmds::TexImageIOSurface2DCHROMIUM* c =
-      GetCmdSpace<gles2::cmds::TexImageIOSurface2DCHROMIUM>();
-  if (c) {
-    c->Init(target, width, height, ioSurfaceId, plane);
   }
 }
 
@@ -2771,6 +2767,19 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
   if (c) {
     c->Init(contents_texture_id, opacity, background_color, edge_aa_mask,
             is_clipped, sorting_context_id, filter, shm_id, shm_offset);
+  }
+}
+
+void ScheduleCALayerInUseQueryCHROMIUMImmediate(GLsizei count,
+                                                const GLuint* textures) {
+  const uint32_t size =
+      gles2::cmds::ScheduleCALayerInUseQueryCHROMIUMImmediate::ComputeSize(
+          count);
+  gles2::cmds::ScheduleCALayerInUseQueryCHROMIUMImmediate* c =
+      GetImmediateCmdSpaceTotalSize<
+          gles2::cmds::ScheduleCALayerInUseQueryCHROMIUMImmediate>(size);
+  if (c) {
+    c->Init(count, textures);
   }
 }
 

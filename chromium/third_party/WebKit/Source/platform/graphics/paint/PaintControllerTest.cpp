@@ -7,6 +7,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/CachedDisplayItem.h"
+#include "platform/graphics/paint/ClipPathDisplayItem.h"
 #include "platform/graphics/paint/ClipPathRecorder.h"
 #include "platform/graphics/paint/ClipRecorder.h"
 #include "platform/graphics/paint/DrawingDisplayItem.h"
@@ -14,6 +15,7 @@
 #include "platform/graphics/paint/SubsequenceRecorder.h"
 #include "platform/testing/FakeDisplayItemClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -37,7 +39,7 @@ private:
         RuntimeEnabledFeatures::setSlimmingPaintV2Enabled(m_originalSlimmingPaintV2Enabled);
     }
 
-    OwnPtr<PaintController> m_paintController;
+    std::unique_ptr<PaintController> m_paintController;
     bool m_originalSlimmingPaintV2Enabled;
 };
 
@@ -85,7 +87,7 @@ void drawRect(GraphicsContext& context, const FakeDisplayItemClient& client, Dis
 
 void drawClippedRect(GraphicsContext& context, const FakeDisplayItemClient& client, DisplayItem::Type clipType, DisplayItem::Type drawingType, const FloatRect& bound)
 {
-    ClipRecorder clipRecorder(context, client, clipType, LayoutRect(1, 1, 9, 9));
+    ClipRecorder clipRecorder(context, client, clipType, IntRect(1, 1, 9, 9));
     drawRect(context, client, drawingType, bound);
 }
 
@@ -120,7 +122,7 @@ TEST_F(PaintControllerTest, UpdateBasic)
         TestDisplayItem(second, backgroundDrawingType),
         TestDisplayItem(first, foregroundDrawingType));
 
-    getPaintController().invalidate(second);
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 300, 300));
     drawRect(context, first, foregroundDrawingType, FloatRect(100, 100, 300, 300));
     getPaintController().commitNewDisplayItems();
@@ -147,7 +149,7 @@ TEST_F(PaintControllerTest, UpdateSwapOrder)
         TestDisplayItem(second, backgroundDrawingType),
         TestDisplayItem(unaffected, backgroundDrawingType));
 
-    getPaintController().invalidate(second);
+    second.setDisplayItemsUncached();
     drawRect(context, second, backgroundDrawingType, FloatRect(100, 100, 50, 200));
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 100, 100));
     drawRect(context, unaffected, backgroundDrawingType, FloatRect(300, 300, 10, 10));
@@ -208,7 +210,7 @@ TEST_F(PaintControllerTest, UpdateInvalidationWithPhases)
         TestDisplayItem(second, foregroundDrawingType),
         TestDisplayItem(third, foregroundDrawingType));
 
-    getPaintController().invalidate(second);
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 100, 100));
     drawRect(context, second, backgroundDrawingType, FloatRect(100, 100, 50, 200));
     drawRect(context, third, backgroundDrawingType, FloatRect(300, 100, 50, 50));
@@ -240,8 +242,8 @@ TEST_F(PaintControllerTest, UpdateAddFirstOverlap)
         TestDisplayItem(second, backgroundDrawingType),
         TestDisplayItem(second, foregroundDrawingType));
 
-    getPaintController().invalidate(first);
-    getPaintController().invalidate(second);
+    first.setDisplayItemsUncached();
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     drawRect(context, first, foregroundDrawingType, FloatRect(100, 100, 150, 150));
     drawRect(context, second, backgroundDrawingType, FloatRect(200, 200, 50, 50));
@@ -254,7 +256,7 @@ TEST_F(PaintControllerTest, UpdateAddFirstOverlap)
         TestDisplayItem(second, backgroundDrawingType),
         TestDisplayItem(second, foregroundDrawingType));
 
-    getPaintController().invalidate(first);
+    first.setDisplayItemsUncached();
     drawRect(context, second, backgroundDrawingType, FloatRect(200, 200, 50, 50));
     drawRect(context, second, foregroundDrawingType, FloatRect(200, 200, 50, 50));
     getPaintController().commitNewDisplayItems();
@@ -278,8 +280,8 @@ TEST_F(PaintControllerTest, UpdateAddLastOverlap)
         TestDisplayItem(first, backgroundDrawingType),
         TestDisplayItem(first, foregroundDrawingType));
 
-    getPaintController().invalidate(first);
-    getPaintController().invalidate(second);
+    first.setDisplayItemsUncached();
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     drawRect(context, first, foregroundDrawingType, FloatRect(100, 100, 150, 150));
     drawRect(context, second, backgroundDrawingType, FloatRect(200, 200, 50, 50));
@@ -292,8 +294,8 @@ TEST_F(PaintControllerTest, UpdateAddLastOverlap)
         TestDisplayItem(second, backgroundDrawingType),
         TestDisplayItem(second, foregroundDrawingType));
 
-    getPaintController().invalidate(first);
-    getPaintController().invalidate(second);
+    first.setDisplayItemsUncached();
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     drawRect(context, first, foregroundDrawingType, FloatRect(100, 100, 150, 150));
     getPaintController().commitNewDisplayItems();
@@ -310,7 +312,7 @@ TEST_F(PaintControllerTest, UpdateClip)
     GraphicsContext context(getPaintController());
 
     {
-        ClipRecorder clipRecorder(context, first, clipType, LayoutRect(1, 1, 2, 2));
+        ClipRecorder clipRecorder(context, first, clipType, IntRect(1, 1, 2, 2));
         drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 150, 150));
         drawRect(context, second, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     }
@@ -322,7 +324,7 @@ TEST_F(PaintControllerTest, UpdateClip)
         TestDisplayItem(second, backgroundDrawingType),
         TestDisplayItem(first, DisplayItem::clipTypeToEndClipType(clipType)));
 
-    getPaintController().invalidate(first);
+    first.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     drawRect(context, second, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     getPaintController().commitNewDisplayItems();
@@ -331,10 +333,10 @@ TEST_F(PaintControllerTest, UpdateClip)
         TestDisplayItem(first, backgroundDrawingType),
         TestDisplayItem(second, backgroundDrawingType));
 
-    getPaintController().invalidate(second);
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     {
-        ClipRecorder clipRecorder(context, second, clipType, LayoutRect(1, 1, 2, 2));
+        ClipRecorder clipRecorder(context, second, clipType, IntRect(1, 1, 2, 2));
         drawRect(context, second, backgroundDrawingType, FloatRect(100, 100, 150, 150));
     }
     getPaintController().commitNewDisplayItems();
@@ -364,7 +366,7 @@ TEST_F(PaintControllerTest, CachedDisplayItems)
     const SkPicture* firstPicture = static_cast<const DrawingDisplayItem&>(getPaintController().getDisplayItemList()[0]).picture();
     const SkPicture* secondPicture = static_cast<const DrawingDisplayItem&>(getPaintController().getDisplayItemList()[1]).picture();
 
-    getPaintController().invalidate(first);
+    first.setDisplayItemsUncached();
     EXPECT_FALSE(getPaintController().clientCacheIsValid(first));
     EXPECT_TRUE(getPaintController().clientCacheIsValid(second));
 
@@ -416,7 +418,7 @@ TEST_F(PaintControllerTest, ComplexUpdateSwapOrder)
         TestDisplayItem(container2, foregroundDrawingType));
 
     // Simulate the situation when container1 e.g. gets a z-index that is now greater than container2.
-    getPaintController().invalidate(container1);
+    container1.setDisplayItemsUncached();
     drawRect(context, container2, backgroundDrawingType, FloatRect(100, 200, 100, 100));
     drawRect(context, content2, backgroundDrawingType, FloatRect(100, 200, 50, 200));
     drawRect(context, content2, foregroundDrawingType, FloatRect(100, 200, 50, 200));
@@ -501,6 +503,10 @@ TEST_F(PaintControllerTest, CachedSubsequenceSwapOrder)
         TestDisplayItem(content1, foregroundDrawingType),
         TestDisplayItem(container1, foregroundDrawingType),
         TestDisplayItem(container1, DisplayItem::EndSubsequence));
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
 }
 
 TEST_F(PaintControllerTest, OutOfOrderNoCrash)
@@ -574,13 +580,13 @@ TEST_F(PaintControllerTest, CachedNestedSubsequenceUpdate)
         TestDisplayItem(container2, DisplayItem::EndSubsequence));
 
     // Invalidate container1 but not content1.
-    getPaintController().invalidate(container1);
+    container1.setDisplayItemsUncached();
 
     // Container2 itself now becomes empty (but still has the 'content2' child),
     // and chooses not to output subsequence info.
 
-    getPaintController().invalidate(container2);
-    getPaintController().invalidate(content2);
+    container2.setDisplayItemsUncached();
+    content2.setDisplayItemsUncached();
     EXPECT_FALSE(SubsequenceRecorder::useCachedSubsequenceIfPossible(context, container2));
     EXPECT_FALSE(SubsequenceRecorder::useCachedSubsequenceIfPossible(context, content2));
     // Content2 now outputs foreground only.
@@ -619,9 +625,13 @@ TEST_F(PaintControllerTest, CachedNestedSubsequenceUpdate)
         TestDisplayItem(content1, DisplayItem::EndSubsequence),
         TestDisplayItem(container1, foregroundDrawingType),
         TestDisplayItem(container1, DisplayItem::EndSubsequence));
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
 }
 
-TEST_F(PaintControllerTest, Scope)
+TEST_F(PaintControllerTest, SkipCache)
 {
     FakeDisplayItemClient multicol("multicol");
     FakeDisplayItemClient content("content");
@@ -633,13 +643,11 @@ TEST_F(PaintControllerTest, Scope)
 
     drawRect(context, multicol, backgroundDrawingType, FloatRect(100, 200, 100, 100));
 
-    getPaintController().beginScope();
+    getPaintController().beginSkippingCache();
     drawRect(context, content, foregroundDrawingType, rect1);
-    getPaintController().endScope();
-
-    getPaintController().beginScope();
     drawRect(context, content, foregroundDrawingType, rect2);
-    getPaintController().endScope();
+    getPaintController().endSkippingCache();
+
     getPaintController().commitNewDisplayItems();
 
     EXPECT_DISPLAY_LIST(getPaintController().getDisplayItemList(), 3,
@@ -653,13 +661,11 @@ TEST_F(PaintControllerTest, Scope)
     // Draw again with nothing invalidated.
     EXPECT_TRUE(getPaintController().clientCacheIsValid(multicol));
     drawRect(context, multicol, backgroundDrawingType, FloatRect(100, 200, 100, 100));
-    getPaintController().beginScope();
-    drawRect(context, content, foregroundDrawingType, rect1);
-    getPaintController().endScope();
 
-    getPaintController().beginScope();
+    getPaintController().beginSkippingCache();
+    drawRect(context, content, foregroundDrawingType, rect1);
     drawRect(context, content, foregroundDrawingType, rect2);
-    getPaintController().endScope();
+    getPaintController().endSkippingCache();
 
     EXPECT_DISPLAY_LIST(getPaintController().newDisplayItemList(), 3,
         TestDisplayItem(multicol, DisplayItem::drawingTypeToCachedDrawingType(backgroundDrawingType)),
@@ -676,20 +682,14 @@ TEST_F(PaintControllerTest, Scope)
     EXPECT_NE(picture2, static_cast<const DrawingDisplayItem&>(getPaintController().getDisplayItemList()[2]).picture());
 
     // Now the multicol becomes 3 columns and repaints.
-    getPaintController().invalidate(multicol);
+    multicol.setDisplayItemsUncached();
     drawRect(context, multicol, backgroundDrawingType, FloatRect(100, 100, 100, 100));
 
-    getPaintController().beginScope();
+    getPaintController().beginSkippingCache();
     drawRect(context, content, foregroundDrawingType, rect1);
-    getPaintController().endScope();
-
-    getPaintController().beginScope();
     drawRect(context, content, foregroundDrawingType, rect2);
-    getPaintController().endScope();
-
-    getPaintController().beginScope();
     drawRect(context, content, foregroundDrawingType, rect3);
-    getPaintController().endScope();
+    getPaintController().endSkippingCache();
 
     // We should repaint everything on invalidation of the scope container.
     EXPECT_DISPLAY_LIST(getPaintController().newDisplayItemList(), 4,
@@ -725,10 +725,10 @@ TEST_F(PaintControllerTest, OptimizeNoopPairs)
         TestDisplayItem(second, DisplayItem::EndClipPath),
         TestDisplayItem(third, backgroundDrawingType));
 
-    getPaintController().invalidate(second);
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(0, 0, 100, 100));
     {
-        ClipRecorder clipRecorder(context, second, clipType, LayoutRect(1, 1, 2, 2));
+        ClipRecorder clipRecorder(context, second, clipType, IntRect(1, 1, 2, 2));
         // Do not draw anything for second.
     }
     drawRect(context, third, backgroundDrawingType, FloatRect(0, 0, 100, 100));
@@ -739,10 +739,10 @@ TEST_F(PaintControllerTest, OptimizeNoopPairs)
         TestDisplayItem(first, backgroundDrawingType),
         TestDisplayItem(third, backgroundDrawingType));
 
-    getPaintController().invalidate(second);
+    second.setDisplayItemsUncached();
     drawRect(context, first, backgroundDrawingType, FloatRect(0, 0, 100, 100));
     {
-        ClipRecorder clipRecorder(context, second, clipType, LayoutRect(1, 1, 2, 2));
+        ClipRecorder clipRecorder(context, second, clipType, IntRect(1, 1, 2, 2));
         {
             ClipPathRecorder clipPathRecorder(context, second, Path());
             // Do not draw anything for second.
@@ -836,13 +836,12 @@ TEST_F(PaintControllerTest, IsNotSuitableForGpuRasterizationMultiplePicturesSing
 {
     FakeDisplayItemClient client("test client", LayoutRect(0, 0, 200, 100));
     GraphicsContext context(getPaintController());
+    getPaintController().beginSkippingCache();
 
-    for (int i = 0; i < 50; ++i) {
-        getPaintController().beginScope();
+    for (int i = 0; i < 50; ++i)
         drawPath(context, client, backgroundDrawingType, 50);
-        getPaintController().endScope();
-    }
 
+    getPaintController().endSkippingCache();
     getPaintController().commitNewDisplayItems(LayoutSize());
     EXPECT_FALSE(getPaintController().paintArtifact().isSuitableForGpuRasterization());
 }
@@ -858,7 +857,7 @@ TEST_F(PaintControllerTest, IsNotSuitableForGpuRasterizationSinglePictureManyPat
         EXPECT_FALSE(getPaintController().paintArtifact().isSuitableForGpuRasterization());
     }
 
-    getPaintController().invalidate(client);
+    client.setDisplayItemsUncached();
 
     {
         GraphicsContext context(getPaintController());
@@ -903,6 +902,34 @@ TEST_F(PaintControllerTest, IsNotSuitableForGpuRasterizationSinglePictureManyPat
     EXPECT_TRUE(SubsequenceRecorder::useCachedSubsequenceIfPossible(context, container));
     getPaintController().commitNewDisplayItems(LayoutSize());
     EXPECT_FALSE(getPaintController().paintArtifact().isSuitableForGpuRasterization());
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    DisplayItemClient::endShouldKeepAliveAllClients();
+#endif
+}
+
+// Temporarily disabled (pref regressions due to GPU veto stickiness: http://crbug.com/603969).
+TEST_F(PaintControllerTest, DISABLED_IsNotSuitableForGpuRasterizationConcaveClipPath)
+{
+    Path path;
+    path.addLineTo(FloatPoint(50, 50));
+    path.addLineTo(FloatPoint(100, 0));
+    path.addLineTo(FloatPoint(50, 100));
+    path.closeSubpath();
+
+    FakeDisplayItemClient client("test client", LayoutRect(0, 0, 200, 100));
+    GraphicsContext context(getPaintController());
+
+    // Run twice for empty/non-empty m_currentPaintArtifact coverage.
+    for (int i = 0; i < 2; ++i) {
+        for (int j = 0; j < 50; ++j)
+            getPaintController().createAndAppend<BeginClipPathDisplayItem>(client, path);
+        drawRect(context, client, backgroundDrawingType, FloatRect(0, 0, 100, 100));
+        for (int j = 0; j < 50; ++j)
+            getPaintController().createAndAppend<EndClipPathDisplayItem>(client);
+        getPaintController().commitNewDisplayItems(LayoutSize());
+        EXPECT_FALSE(getPaintController().paintArtifact().isSuitableForGpuRasterization());
+    }
 }
 
 } // namespace blink

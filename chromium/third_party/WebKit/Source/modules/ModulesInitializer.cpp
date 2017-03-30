@@ -16,6 +16,7 @@
 #include "modules/IndexedDBNames.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "modules/canvas2d/CanvasRenderingContext2D.h"
+#include "modules/compositorworker/CompositorWorkerThread.h"
 #include "modules/csspaint/CSSPaintImageGeneratorImpl.h"
 #include "modules/filesystem/DraggedIsolatedFileSystemImpl.h"
 #include "modules/imagebitmap/ImageBitmapRenderingContext.h"
@@ -23,6 +24,7 @@
 #include "modules/webdatabase/DatabaseManager.h"
 #include "modules/webgl/WebGL2RenderingContext.h"
 #include "modules/webgl/WebGLRenderingContext.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -48,14 +50,14 @@ void ModulesInitializer::initialize()
     CoreInitializer::initialize();
 
     // Canvas context types must be registered with the HTMLCanvasElement.
-    HTMLCanvasElement::registerRenderingContextFactory(adoptPtr(new CanvasRenderingContext2D::Factory()));
-    HTMLCanvasElement::registerRenderingContextFactory(adoptPtr(new WebGLRenderingContext::Factory()));
-    HTMLCanvasElement::registerRenderingContextFactory(adoptPtr(new WebGL2RenderingContext::Factory()));
-    HTMLCanvasElement::registerRenderingContextFactory(adoptPtr(new ImageBitmapRenderingContext::Factory()));
+    HTMLCanvasElement::registerRenderingContextFactory(wrapUnique(new CanvasRenderingContext2D::Factory()));
+    HTMLCanvasElement::registerRenderingContextFactory(wrapUnique(new WebGLRenderingContext::Factory()));
+    HTMLCanvasElement::registerRenderingContextFactory(wrapUnique(new WebGL2RenderingContext::Factory()));
+    HTMLCanvasElement::registerRenderingContextFactory(wrapUnique(new ImageBitmapRenderingContext::Factory()));
 
     // OffscreenCanvas context types must be registered with the OffscreenCanvas.
-    OffscreenCanvas::registerRenderingContextFactory(adoptPtr(new OffscreenCanvasRenderingContext2D::Factory()));
-    OffscreenCanvas::registerRenderingContextFactory(adoptPtr(new WebGLRenderingContext::Factory()));
+    OffscreenCanvas::registerRenderingContextFactory(wrapUnique(new OffscreenCanvasRenderingContext2D::Factory()));
+    OffscreenCanvas::registerRenderingContextFactory(wrapUnique(new WebGLRenderingContext::Factory()));
 
     ASSERT(isInitialized());
 }
@@ -65,6 +67,7 @@ void ModulesInitializer::shutdown()
     ASSERT(isInitialized());
     DatabaseManager::terminateDatabaseThread();
     CoreInitializer::shutdown();
+    CompositorWorkerThread::clearSharedBackingThread();
 }
 
 } // namespace blink

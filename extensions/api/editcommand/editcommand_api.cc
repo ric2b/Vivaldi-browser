@@ -57,6 +57,7 @@ bool EditcommandExecuteFunction::RunAsync() {
       web_contents->SelectAll();
   }
 
+  SendResponse(true);
   return true;
 }
 

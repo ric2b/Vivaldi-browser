@@ -10,6 +10,7 @@
 #include "core/svg/SVGElement.h"
 #include "core/svg/SVGLength.h"
 #include "core/svg/SVGLengthContext.h"
+#include <memory>
 
 namespace blink {
 
@@ -40,7 +41,7 @@ LengthInterpolatedUnit convertToInterpolatedUnit(CSSPrimitiveValue::UnitType uni
     switch (unitType) {
     case CSSPrimitiveValue::UnitType::Unknown:
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     case CSSPrimitiveValue::UnitType::Pixels:
     case CSSPrimitiveValue::UnitType::Number:
     case CSSPrimitiveValue::UnitType::UserUnits:
@@ -75,9 +76,9 @@ LengthInterpolatedUnit convertToInterpolatedUnit(CSSPrimitiveValue::UnitType uni
 
 } // namespace
 
-PassOwnPtr<InterpolableValue> SVGLengthInterpolationType::neutralInterpolableValue()
+std::unique_ptr<InterpolableValue> SVGLengthInterpolationType::neutralInterpolableValue()
 {
-    OwnPtr<InterpolableList> listOfValues = InterpolableList::create(numLengthInterpolatedUnits);
+    std::unique_ptr<InterpolableList> listOfValues = InterpolableList::create(numLengthInterpolatedUnits);
     for (size_t i = 0; i < numLengthInterpolatedUnits; ++i)
         listOfValues->set(i, InterpolableNumber::create(0));
 
@@ -92,7 +93,7 @@ InterpolationValue SVGLengthInterpolationType::convertSVGLength(const SVGLength&
     double values[numLengthInterpolatedUnits] = { };
     values[unitType] = value;
 
-    OwnPtr<InterpolableList> listOfValues = InterpolableList::create(numLengthInterpolatedUnits);
+    std::unique_ptr<InterpolableList> listOfValues = InterpolableList::create(numLengthInterpolatedUnits);
     for (size_t i = 0; i < numLengthInterpolatedUnits; ++i)
         listOfValues->set(i, InterpolableNumber::create(values[i]));
 
@@ -154,7 +155,7 @@ InterpolationValue SVGLengthInterpolationType::maybeConvertSVGValue(const SVGPro
 
 SVGPropertyBase* SVGLengthInterpolationType::appliedSVGValue(const InterpolableValue& interpolableValue, const NonInterpolableValue*) const
 {
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     // This function is no longer called, because apply has been overridden.
     return nullptr;
 }

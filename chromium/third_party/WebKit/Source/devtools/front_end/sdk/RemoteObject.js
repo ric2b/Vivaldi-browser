@@ -253,10 +253,10 @@ WebInspector.RemoteObject.prototype = {
         /**
          * @this {WebInspector.RemoteObject}
          */
-         function promiseConstructor(success)
-         {
+        function promiseConstructor(success)
+        {
             this.callFunctionJSON(functionDeclaration, args, success);
-         }
+        }
     },
 
     /**
@@ -312,14 +312,6 @@ WebInspector.RemoteObject.prototype = {
      * @param {function(?WebInspector.DebuggerModel.GeneratorObjectDetails)} callback
      */
     generatorObjectDetails: function(callback)
-    {
-        callback(null);
-    },
-
-    /**
-     * @param {function(?Array<!DebuggerAgent.CollectionEntry>)} callback
-     */
-    collectionEntries: function(callback)
     {
         callback(null);
     }
@@ -559,21 +551,7 @@ WebInspector.RemoteObjectImpl.prototype = {
                 return;
             }
 
-            /** @type {?WebInspector.RemoteObject} */
-            var removeFunction = null;
-
-            this.callFunctionPromise(nodeRemoveEventListener).then(storeRemoveFunction.bind(this));
-
-            /**
-             * @param {!WebInspector.CallFunctionResult} result
-             * @this {WebInspector.RemoteObject}
-             */
-            function storeRemoveFunction(result)
-            {
-                if (!result.wasThrown && result.object)
-                    removeFunction = result.object;
-                this.target().domdebuggerAgent().getEventListeners(this._objectId, mycallback.bind(this));
-            }
+            this.target().domdebuggerAgent().getEventListeners(this._objectId, mycallback.bind(this));
 
             /**
              * @this {!WebInspector.RemoteObject}
@@ -590,57 +568,20 @@ WebInspector.RemoteObjectImpl.prototype = {
             }
 
             /**
-             * @suppressReceiverCheck
-             * @this {Node}
-             * @return {function(this:Node, string, function(), boolean=, boolean=): undefined}
-             */
-            function nodeRemoveEventListener()
-            {
-                return removeEventListenerWrapper.bind(this);
-                /**
-                 * @param {string} type
-                 * @param {function()} handler
-                 * @param {boolean=} useCapture
-                 * @param {boolean=} passive
-                 * @this {Node}
-                 */
-                function removeEventListenerWrapper(type, handler, useCapture, passive)
-                {
-                    // TODO(dtapuska): Remove this one closure compiler is updated
-                    // to handle EventListenerOptions and passive event listeners
-                    // has shipped. Don't JSDoc these otherwise it will fail.
-                    // @return {boolean|undefined|{capture: (boolean|undefined), passive: boolean}}
-                    function eventListenerOptions()
-                    {
-                        if (passive && useCapture)
-                            return {"capture": useCapture, "passive": passive};
-                        else if (passive)
-                            return {"passive": passive};
-                        else if (useCapture)
-                            return {"capture": useCapture};
-                        else
-                            return {};
-                    }
-                    this.removeEventListener(type, handler, eventListenerOptions());
-                    if (this["on" + type])
-                        this["on" + type] = null;
-                }
-            }
-
-            /**
              * @this {!WebInspector.RemoteObject}
              * @param {!DOMDebuggerAgent.EventListener} payload
              */
             function createEventListener(payload)
             {
                 return new WebInspector.EventListener(this._target,
+                                                      this,
                                                       payload.type,
                                                       payload.useCapture,
                                                       payload.passive,
                                                       payload.handler ? this.target().runtimeModel.createRemoteObject(payload.handler) : null,
                                                       payload.originalHandler ? this.target().runtimeModel.createRemoteObject(payload.originalHandler) : null,
                                                       WebInspector.DebuggerModel.Location.fromPayload(this._debuggerModel, payload.location),
-                                                      removeFunction);
+                                                      payload.removeFunction ? this.target().runtimeModel.createRemoteObject(payload.removeFunction) : null);
             }
         }
     },
@@ -943,19 +884,6 @@ WebInspector.RemoteObjectImpl.prototype = {
     generatorObjectDetails: function(callback)
     {
         this._debuggerModel.generatorObjectDetails(this, callback);
-    },
-
-    /**
-     * @override
-     * @param {function(?Array.<!DebuggerAgent.CollectionEntry>)} callback
-     */
-    collectionEntries: function(callback)
-    {
-        if (!this._objectId) {
-            callback(null);
-            return;
-        }
-        this._debuggerModel.getCollectionEntries(this._objectId, callback);
     },
 
     __proto__: WebInspector.RemoteObject.prototype
@@ -1638,31 +1566,4 @@ WebInspector.RemoteFunction.prototype = {
     {
         return this._object;
     }
-}
-
-/**
- * @constructor
- * @extends {WebInspector.LocalJSONObject}
- * @param {*} value
- */
-WebInspector.MapEntryLocalJSONObject = function(value)
-{
-    WebInspector.LocalJSONObject.call(this, value);
-}
-
-WebInspector.MapEntryLocalJSONObject.prototype = {
-    /**
-     * @override
-     * @return {string}
-     */
-    get description()
-    {
-        if (!this._cachedDescription) {
-            var children = this._children();
-            this._cachedDescription = "{" + this._formatValue(children[0].value) + " => " + this._formatValue(children[1].value) + "}";
-        }
-        return this._cachedDescription;
-    },
-
-    __proto__: WebInspector.LocalJSONObject.prototype
 }

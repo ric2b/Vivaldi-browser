@@ -7,18 +7,18 @@
 #include <vector>
 
 #include "ash/accelerators/accelerator_controller.h"
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shelf/shelf_model.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/wm/window_positioning_utils.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/display/display_manager.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_model.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/shell_test_api.h"
 #include "ash/test/test_shelf_delegate.h"
-#include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/window_positioning_utils.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -63,6 +63,7 @@ class ResizableWidgetDelegate : public views::WidgetDelegateView {
 class MaxSizeNCFV : public views::NonClientFrameView {
  public:
   MaxSizeNCFV() {}
+
  private:
   gfx::Size GetMaximumSize() const override { return gfx::Size(200, 200); }
   gfx::Rect GetBoundsForClientView() const override { return gfx::Rect(); };
@@ -104,7 +105,7 @@ class MaxSizeWidgetDelegate : public views::WidgetDelegateView {
   DISALLOW_COPY_AND_ASSIGN(MaxSizeWidgetDelegate);
 };
 
-} // namespace
+}  // namespace
 
 class SystemGestureEventFilterTest : public AshTestBase {
  public:
@@ -124,8 +125,8 @@ class SystemGestureEventFilterTest : public AshTestBase {
     trailing.push_back(views::FRAME_BUTTON_MINIMIZE);
     trailing.push_back(views::FRAME_BUTTON_MAXIMIZE);
     trailing.push_back(views::FRAME_BUTTON_CLOSE);
-    views::WindowButtonOrderProvider::GetInstance()->
-        SetWindowButtonOrder(leading, trailing);
+    views::WindowButtonOrderProvider::GetInstance()->SetWindowButtonOrder(
+        leading, trailing);
 
     test::AshTestBase::SetUp();
     // Enable brightness key.
@@ -142,11 +143,8 @@ ui::GestureEvent* CreateGesture(ui::EventType type,
                                 float delta_x,
                                 float delta_y,
                                 int touch_id) {
-  ui::GestureEventDetails details =
-      ui::GestureEventDetails(type, delta_x, delta_y);
-  return new ui::GestureEvent(x, y, 0,
-      base::TimeDelta::FromMilliseconds(base::Time::Now().ToDoubleT() * 1000),
-      ui::GestureEventDetails(type, delta_x, delta_y));
+  return new ui::GestureEvent(x, y, 0, base::TimeTicks::Now(),
+                              ui::GestureEventDetails(type, delta_x, delta_y));
 }
 
 TEST_F(SystemGestureEventFilterTest, TwoFingerDrag) {
@@ -159,8 +157,7 @@ TEST_F(SystemGestureEventFilterTest, TwoFingerDrag) {
   const int kSteps = 15;
   const int kTouchPoints = 2;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(250, 250),
-    gfx::Point(350, 350),
+      gfx::Point(250, 250), gfx::Point(350, 350),
   };
 
   ui::test::EventGenerator generator(root_window, toplevel->GetNativeWindow());
@@ -194,7 +191,7 @@ TEST_F(SystemGestureEventFilterTest, TwoFingerDrag) {
     left_points[i].Offset(right_tile_bounds.x(), right_tile_bounds.y());
   }
   generator.GestureMultiFingerScroll(kTouchPoints, left_points, 15, kSteps,
-      -150, 0);
+                                     -150, 0);
   gfx::Rect left_tile_bounds = toplevel->GetWindowBoundsInScreen();
   EXPECT_NE(normal_bounds.ToString(), left_tile_bounds.ToString());
   EXPECT_NE(right_tile_bounds.ToString(), left_tile_bounds.ToString());
@@ -216,8 +213,8 @@ TEST_F(SystemGestureEventFilterTest, WindowsWithMaxSizeDontSnap) {
   const int kSteps = 15;
   const int kTouchPoints = 2;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(bounds.x() + 10, bounds.y() + 30),
-    gfx::Point(bounds.x() + 30, bounds.y() + 20),
+      gfx::Point(bounds.x() + 10, bounds.y() + 30),
+      gfx::Point(bounds.x() + 30, bounds.y() + 20),
   };
 
   ui::test::EventGenerator generator(root_window, toplevel->GetNativeWindow());
@@ -243,7 +240,7 @@ TEST_F(SystemGestureEventFilterTest, WindowsWithMaxSizeDontSnap) {
   generator.GestureMultiFingerScroll(kTouchPoints, points, 15, kSteps, 150, 0);
   normal_bounds.set_x(normal_bounds.x() + 150);
   EXPECT_EQ(normal_bounds.ToString(),
-      toplevel->GetWindowBoundsInScreen().ToString());
+            toplevel->GetWindowBoundsInScreen().ToString());
 
   toplevel->GetNativeWindow()->SetBounds(bounds);
 
@@ -252,7 +249,7 @@ TEST_F(SystemGestureEventFilterTest, WindowsWithMaxSizeDontSnap) {
   generator.GestureMultiFingerScroll(kTouchPoints, points, 15, kSteps, -150, 0);
   normal_bounds.set_x(normal_bounds.x() - 150);
   EXPECT_EQ(normal_bounds.ToString(),
-      toplevel->GetWindowBoundsInScreen().ToString());
+            toplevel->GetWindowBoundsInScreen().ToString());
 
   toplevel->GetNativeWindow()->SetBounds(bounds);
 
@@ -261,7 +258,7 @@ TEST_F(SystemGestureEventFilterTest, WindowsWithMaxSizeDontSnap) {
   normal_bounds.set_x(normal_bounds.x() + 150);
   generator.GestureMultiFingerScroll(kTouchPoints, points, 15, kSteps, 150, 0);
   EXPECT_EQ(normal_bounds.ToString(),
-      toplevel->GetWindowBoundsInScreen().ToString());
+            toplevel->GetWindowBoundsInScreen().ToString());
 }
 
 TEST_F(SystemGestureEventFilterTest, DISABLED_TwoFingerDragEdge) {
@@ -274,14 +271,16 @@ TEST_F(SystemGestureEventFilterTest, DISABLED_TwoFingerDragEdge) {
   const int kSteps = 15;
   const int kTouchPoints = 2;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(30, 20),  // Caption
-    gfx::Point(0, 40),   // Left edge
+      gfx::Point(30, 20),  // Caption
+      gfx::Point(0, 40),   // Left edge
   };
 
-  EXPECT_EQ(HTCAPTION, toplevel->GetNativeWindow()->delegate()->
-                      GetNonClientComponent(points[0]));
-  EXPECT_EQ(HTLEFT, toplevel->GetNativeWindow()->delegate()->
-        GetNonClientComponent(points[1]));
+  EXPECT_EQ(HTCAPTION,
+            toplevel->GetNativeWindow()->delegate()->GetNonClientComponent(
+                points[0]));
+  EXPECT_EQ(HTLEFT,
+            toplevel->GetNativeWindow()->delegate()->GetNonClientComponent(
+                points[1]));
 
   ui::test::EventGenerator generator(root_window, toplevel->GetNativeWindow());
 
@@ -298,16 +297,15 @@ TEST_F(SystemGestureEventFilterTest, DISABLED_TwoFingerDragEdge) {
 TEST_F(SystemGestureEventFilterTest,
        TwoFingerAttemptResizeLeftAndRightEdgesSimultaneously) {
   gfx::Rect initial_bounds(0, 0, 400, 400);
-  views::Widget* toplevel =
-      views::Widget::CreateWindowWithContextAndBounds(
-          new ResizableWidgetDelegate, CurrentContext(), initial_bounds);
+  views::Widget* toplevel = views::Widget::CreateWindowWithContextAndBounds(
+      new ResizableWidgetDelegate, CurrentContext(), initial_bounds);
   toplevel->Show();
 
   const int kSteps = 15;
   const int kTouchPoints = 2;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(0, 40),    // Left edge
-    gfx::Point(399, 40),  // Right edge
+      gfx::Point(0, 40),    // Left edge
+      gfx::Point(399, 40),  // Right edge
   };
   int delays[kTouchPoints] = {0, 120};
 
@@ -333,15 +331,17 @@ TEST_F(SystemGestureEventFilterTest, TwoFingerDragDelayed) {
   const int kSteps = 15;
   const int kTouchPoints = 2;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(30, 20),  // Caption
-    gfx::Point(34, 20),  // Caption
+      gfx::Point(30, 20),  // Caption
+      gfx::Point(34, 20),  // Caption
   };
   int delays[kTouchPoints] = {0, 120};
 
-  EXPECT_EQ(HTCAPTION, toplevel->GetNativeWindow()->delegate()->
-        GetNonClientComponent(points[0]));
-  EXPECT_EQ(HTCAPTION, toplevel->GetNativeWindow()->delegate()->
-        GetNonClientComponent(points[1]));
+  EXPECT_EQ(HTCAPTION,
+            toplevel->GetNativeWindow()->delegate()->GetNonClientComponent(
+                points[0]));
+  EXPECT_EQ(HTCAPTION,
+            toplevel->GetNativeWindow()->delegate()->GetNonClientComponent(
+                points[1]));
 
   ui::test::EventGenerator generator(root_window, toplevel->GetNativeWindow());
 
@@ -350,8 +350,8 @@ TEST_F(SystemGestureEventFilterTest, TwoFingerDragDelayed) {
   // Add another finger after 120ms and continue dragging.
   // The window should move and the drag should be determined by the center
   // point between the fingers.
-  generator.GestureMultiFingerScrollWithDelays(
-      kTouchPoints, points, delays, 15, kSteps, 150, 150);
+  generator.GestureMultiFingerScrollWithDelays(kTouchPoints, points, delays, 15,
+                                               kSteps, 150, 150);
   bounds += gfx::Vector2d(150 + (points[1].x() - points[0].x()) / 2, 150);
   EXPECT_EQ(bounds.ToString(),
             toplevel->GetNativeWindow()->bounds().ToString());
@@ -367,16 +367,18 @@ TEST_F(SystemGestureEventFilterTest, ThreeFingerGestureStopsDrag) {
   const int kSteps = 10;
   const int kTouchPoints = 3;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(30, 20),  // Caption
-    gfx::Point(34, 20),  // Caption
-    gfx::Point(38, 20),  // Caption
+      gfx::Point(30, 20),  // Caption
+      gfx::Point(34, 20),  // Caption
+      gfx::Point(38, 20),  // Caption
   };
   int delays[kTouchPoints] = {0, 0, 120};
 
-  EXPECT_EQ(HTCAPTION, toplevel->GetNativeWindow()->delegate()->
-        GetNonClientComponent(points[0]));
-  EXPECT_EQ(HTCAPTION, toplevel->GetNativeWindow()->delegate()->
-        GetNonClientComponent(points[1]));
+  EXPECT_EQ(HTCAPTION,
+            toplevel->GetNativeWindow()->delegate()->GetNonClientComponent(
+                points[0]));
+  EXPECT_EQ(HTCAPTION,
+            toplevel->GetNativeWindow()->delegate()->GetNonClientComponent(
+                points[1]));
 
   ui::test::EventGenerator generator(root_window, toplevel->GetNativeWindow());
 
@@ -403,8 +405,8 @@ TEST_F(SystemGestureEventFilterTest, DragLeftNearEdgeSnaps) {
   const int kSteps = 15;
   const int kTouchPoints = 2;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
-    gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
+      gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
+      gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
   };
   aura::Window* toplevel_window = toplevel->GetNativeWindow();
   ui::test::EventGenerator generator(root_window, toplevel_window);
@@ -414,11 +416,11 @@ TEST_F(SystemGestureEventFilterTest, DragLeftNearEdgeSnaps) {
                             ->GetDisplayNearestWindow(root_window)
                             .work_area();
   int drag_x = work_area.x() + 20 - points[0].x();
-  generator.GestureMultiFingerScroll(
-      kTouchPoints, points, 120, kSteps, drag_x, 0);
+  generator.GestureMultiFingerScroll(kTouchPoints, points, 120, kSteps, drag_x,
+                                     0);
 
   EXPECT_EQ(ash::wm::GetDefaultLeftSnappedWindowBoundsInParent(
-                ash::wm::WmWindowAura::Get(toplevel_window))
+                ash::WmWindowAura::Get(toplevel_window))
                 .ToString(),
             toplevel_window->bounds().ToString());
 }
@@ -433,8 +435,8 @@ TEST_F(SystemGestureEventFilterTest, DragRightNearEdgeSnaps) {
   const int kSteps = 15;
   const int kTouchPoints = 2;
   gfx::Point points[kTouchPoints] = {
-    gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
-    gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
+      gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
+      gfx::Point(bounds.x() + bounds.width() / 2, bounds.y() + 5),
   };
   aura::Window* toplevel_window = toplevel->GetNativeWindow();
   ui::test::EventGenerator generator(root_window, toplevel_window);
@@ -444,10 +446,10 @@ TEST_F(SystemGestureEventFilterTest, DragRightNearEdgeSnaps) {
                             ->GetDisplayNearestWindow(root_window)
                             .work_area();
   int drag_x = work_area.right() - 20 - points[0].x();
-  generator.GestureMultiFingerScroll(
-      kTouchPoints, points, 120, kSteps, drag_x, 0);
+  generator.GestureMultiFingerScroll(kTouchPoints, points, 120, kSteps, drag_x,
+                                     0);
   EXPECT_EQ(wm::GetDefaultRightSnappedWindowBoundsInParent(
-                wm::WmWindowAura::Get(toplevel_window))
+                WmWindowAura::Get(toplevel_window))
                 .ToString(),
             toplevel_window->bounds().ToString());
 }

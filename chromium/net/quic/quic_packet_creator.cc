@@ -8,6 +8,7 @@
 
 #include "base/logging.h"
 #include "base/macros.h"
+#include "net/quic/crypto/crypto_protocol.h"
 #include "net/quic/crypto/quic_random.h"
 #include "net/quic/quic_bug_tracker.h"
 #include "net/quic/quic_data_writer.h"
@@ -24,39 +25,6 @@ using std::vector;
 
 namespace net {
 
-// A QuicRandom wrapper that gets a bucket of entropy and distributes it
-// bit-by-bit. Replenishes the bucket as needed. Not thread-safe. Expose this
-// class if single bit randomness is needed elsewhere.
-class QuicRandomBoolSource {
- public:
-  // random: Source of entropy. Not owned.
-  explicit QuicRandomBoolSource(QuicRandom* random)
-      : random_(random), bit_bucket_(0), bit_mask_(0) {}
-
-  ~QuicRandomBoolSource() {}
-
-  // Returns the next random bit from the bucket.
-  bool RandBool() {
-    if (bit_mask_ == 0) {
-      bit_bucket_ = random_->RandUint64();
-      bit_mask_ = 1;
-    }
-    bool result = ((bit_bucket_ & bit_mask_) != 0);
-    bit_mask_ <<= 1;
-    return result;
-  }
-
- private:
-  // Source of entropy.
-  QuicRandom* random_;
-  // Stored random bits.
-  uint64_t bit_bucket_;
-  // The next available bit has "1" in the mask. Zero means empty bucket.
-  uint64_t bit_mask_;
-
-  DISALLOW_COPY_AND_ASSIGN(QuicRandomBoolSource);
-};
-
 QuicPacketCreator::QuicPacketCreator(QuicConnectionId connection_id,
                                      QuicFramer* framer,
                                      QuicRandom* random_generator,
@@ -65,7 +33,7 @@ QuicPacketCreator::QuicPacketCreator(QuicConnectionId connection_id,
     : delegate_(delegate),
       debug_delegate_(nullptr),
       framer_(framer),
-      random_bool_source_(new QuicRandomBoolSource(random_generator)),
+      random_bool_source_(random_generator),
       buffer_allocator_(buffer_allocator),
       send_version_in_packet_(framer->perspective() == Perspective::IS_CLIENT),
       send_path_id_in_packet_(false),
@@ -77,7 +45,7 @@ QuicPacketCreator::QuicPacketCreator(QuicConnectionId connection_id,
       connection_id_(connection_id),
       packet_(kDefaultPathId,
               0,
-              next_packet_number_length_,
+              PACKET_1BYTE_PACKET_NUMBER,
               nullptr,
               0,
               0,
@@ -115,6 +83,7 @@ void QuicPacketCreator::SetMaxPacketLength(QuicByteCount length) {
 }
 
 void QuicPacketCreator::MaybeUpdatePacketNumberLength() {
+  DCHECK(!FLAGS_quic_simple_packet_number_length);
   if (!queued_frames_.empty()) {
     // Don't change creator state if there are frames queued.
     return;
@@ -146,12 +115,24 @@ void QuicPacketCreator::SetDiversificationNonce(
 void QuicPacketCreator::UpdatePacketNumberLength(
     QuicPacketNumber least_packet_awaited_by_peer,
     QuicPacketCount max_packets_in_flight) {
+  if (FLAGS_quic_simple_packet_number_length && !queued_frames_.empty()) {
+    // Don't change creator state if there are frames queued.
+    QUIC_BUG << "Called UpdatePacketNumberLength with " << queued_frames_.size()
+             << " queued_frames.";
+    return;
+  }
+
   DCHECK_LE(least_packet_awaited_by_peer, packet_.packet_number + 1);
   const QuicPacketNumber current_delta =
       packet_.packet_number + 1 - least_packet_awaited_by_peer;
   const uint64_t delta = max(current_delta, max_packets_in_flight);
-  next_packet_number_length_ =
-      QuicFramer::GetMinSequenceNumberLength(delta * 4);
+  if (FLAGS_quic_simple_packet_number_length) {
+    packet_.packet_number_length =
+        QuicFramer::GetMinSequenceNumberLength(delta * 4);
+  } else {
+    next_packet_number_length_ =
+        QuicFramer::GetMinSequenceNumberLength(delta * 4);
+  }
 }
 
 bool QuicPacketCreator::ConsumeData(QuicStreamId id,
@@ -165,6 +146,23 @@ bool QuicPacketCreator::ConsumeData(QuicStreamId id,
     return false;
   }
   CreateStreamFrame(id, iov, iov_offset, offset, fin, frame);
+  // Explicitly disallow multi-packet CHLOs.
+  if (id == kCryptoStreamId &&
+      frame->stream_frame->data_length >= sizeof(kCHLO) &&
+      strncmp(frame->stream_frame->data_buffer,
+              reinterpret_cast<const char*>(&kCHLO), sizeof(kCHLO)) == 0) {
+    DCHECK_EQ(static_cast<size_t>(0), iov_offset);
+    if (frame->stream_frame->data_length < iov.iov->iov_len) {
+      const string error_details = "Client hello won't fit in a single packet.";
+      QUIC_BUG << error_details << " Constructed stream frame length: "
+               << frame->stream_frame->data_length
+               << " CHLO length: " << iov.iov->iov_len;
+      delegate_->OnUnrecoverableError(QUIC_CRYPTO_CHLO_TOO_LARGE, error_details,
+                                      ConnectionCloseSource::FROM_SELF);
+      delete frame->stream_frame;
+      return false;
+    }
+  }
   if (!AddFrame(*frame, /*save_retransmittable_frames=*/true)) {
     // Fails if we try to write unencrypted stream data.
     delete frame->stream_frame;
@@ -209,9 +207,10 @@ void QuicPacketCreator::CreateStreamFrame(QuicStreamId id,
                                       IncludeNonceInPublicHeader(),
                                       PACKET_6BYTE_PACKET_NUMBER, offset));
 
-  MaybeUpdatePacketNumberLength();
-
-  LOG_IF(DFATAL, !HasRoomForStreamFrame(id, offset))
+  if (!FLAGS_quic_simple_packet_number_length) {
+    MaybeUpdatePacketNumberLength();
+  }
+  QUIC_BUG_IF(!HasRoomForStreamFrame(id, offset))
       << "No room for Stream frame, BytesFree: " << BytesFree()
       << " MinStreamFrameSize: "
       << QuicFramer::GetMinStreamFrameSize(id, offset, true);
@@ -303,7 +302,9 @@ void QuicPacketCreator::ReserializeAllFrames(
 
   // Temporarily set the packet number length and change the encryption level.
   packet_.packet_number_length = retransmission.packet_number_length;
-  next_packet_number_length_ = retransmission.packet_number_length;
+  if (!FLAGS_quic_simple_packet_number_length) {
+    next_packet_number_length_ = retransmission.packet_number_length;
+  }
   packet_.num_padding_bytes = retransmission.num_padding_bytes;
   // Only preserve the original encryption level if it's a handshake packet or
   // if we haven't gone forward secure.
@@ -315,7 +316,12 @@ void QuicPacketCreator::ReserializeAllFrames(
   // Serialize the packet and restore packet number length state.
   for (const QuicFrame& frame : retransmission.retransmittable_frames) {
     bool success = AddFrame(frame, false);
-    DCHECK(success);
+    LOG_IF(DFATAL, !success)
+        << " Failed to add frame of type:" << frame.type
+        << " num_frames:" << retransmission.retransmittable_frames.size()
+        << " retransmission.packet_number_length:"
+        << retransmission.packet_number_length
+        << " packet_.packet_number_length:" << packet_.packet_number_length;
   }
   SerializePacket(buffer, buffer_len);
   packet_.original_path_id = retransmission.path_id;
@@ -323,8 +329,12 @@ void QuicPacketCreator::ReserializeAllFrames(
   packet_.transmission_type = retransmission.transmission_type;
   OnSerializedPacket();
   // Restore old values.
-  packet_.packet_number_length = saved_length;
-  next_packet_number_length_ = saved_next_length;
+  if (!FLAGS_quic_simple_packet_number_length) {
+    // OnSerializedPacket updates the packet_number_length, so it's incorrect to
+    // restore it here.
+    packet_.packet_number_length = saved_length;
+    next_packet_number_length_ = saved_next_length;
+  }
   packet_.encryption_level = default_encryption_level;
 }
 
@@ -373,6 +383,79 @@ void QuicPacketCreator::ClearPacket() {
   packet_.listeners.clear();
 }
 
+void QuicPacketCreator::CreateAndSerializeStreamFrame(
+    QuicStreamId id,
+    const QuicIOVector& iov,
+    QuicStreamOffset iov_offset,
+    QuicStreamOffset stream_offset,
+    bool fin,
+    QuicAckListenerInterface* listener,
+    char* encrypted_buffer,
+    size_t encrypted_buffer_len,
+    size_t* num_bytes_consumed) {
+  DCHECK(queued_frames_.empty());
+  // Write out the packet header
+  QuicPacketHeader header;
+  FillPacketHeader(&header);
+  QuicDataWriter writer(kMaxPacketSize, encrypted_buffer);
+  if (!framer_->AppendPacketHeader(header, &writer)) {
+    QUIC_BUG << "AppendPacketHeader failed";
+    return;
+  }
+
+  // Create a Stream frame with the remaining space.
+  QUIC_BUG_IF(iov_offset == iov.total_length && !fin)
+      << "Creating a stream frame with no data or fin.";
+  const size_t remaining_data_size = iov.total_length - iov_offset;
+  const size_t min_frame_size = QuicFramer::GetMinStreamFrameSize(
+      id, stream_offset, /* last_frame_in_packet= */ true);
+  const size_t available_size =
+      max_plaintext_size_ - writer.length() - min_frame_size;
+  const size_t bytes_consumed =
+      min<size_t>(available_size, remaining_data_size);
+
+  const bool set_fin = fin && (bytes_consumed == remaining_data_size);
+  UniqueStreamBuffer stream_buffer =
+      NewStreamBuffer(buffer_allocator_, bytes_consumed);
+  CopyToBuffer(iov, iov_offset, bytes_consumed, stream_buffer.get());
+  std::unique_ptr<QuicStreamFrame> frame(new QuicStreamFrame(
+      id, set_fin, stream_offset, bytes_consumed, std::move(stream_buffer)));
+
+  // TODO(ianswett): AppendTypeByte and AppendStreamFrame could be optimized
+  // into one method that takes a QuicStreamFrame, if warranted.
+  if (!framer_->AppendTypeByte(QuicFrame(frame.get()),
+                               /* no stream frame length */ true, &writer)) {
+    QUIC_BUG << "AppendTypeByte failed";
+    return;
+  }
+  if (!framer_->AppendStreamFrame(*frame, /* no stream frame length */ true,
+                                  &writer)) {
+    QUIC_BUG << "AppendStreamFrame failed";
+    return;
+  }
+
+  size_t encrypted_length = framer_->EncryptInPlace(
+      packet_.encryption_level, packet_.path_id, packet_.packet_number,
+      GetStartOfEncryptedData(framer_->version(), header), writer.length(),
+      encrypted_buffer_len, encrypted_buffer);
+  if (encrypted_length == 0) {
+    QUIC_BUG << "Failed to encrypt packet number " << header.packet_number;
+    return;
+  }
+  // TODO(ianswett): Optimize the storage so RetransmitableFrames can be
+  // unioned with a QuicStreamFrame and a UniqueStreamBuffer.
+  *num_bytes_consumed = bytes_consumed;
+  packet_size_ = 0;
+  packet_.entropy_hash = QuicFramer::GetPacketEntropyHash(header);
+  packet_.encrypted_buffer = encrypted_buffer;
+  packet_.encrypted_length = encrypted_length;
+  if (listener != nullptr) {
+    packet_.listeners.emplace_back(listener, bytes_consumed);
+  }
+  packet_.retransmittable_frames.push_back(QuicFrame(frame.release()));
+  OnSerializedPacket();
+}
+
 bool QuicPacketCreator::HasPendingFrames() const {
   return !queued_frames_.empty();
 }
@@ -400,7 +483,9 @@ size_t QuicPacketCreator::PacketSize() {
     return packet_size_;
   }
   // Update packet number length on packet boundary.
-  packet_.packet_number_length = next_packet_number_length_;
+  if (!FLAGS_quic_simple_packet_number_length) {
+    packet_.packet_number_length = next_packet_number_length_;
+  }
   packet_size_ = GetPacketHeaderSize(
       framer_->version(), connection_id_length_, send_version_in_packet_,
       send_path_id_in_packet_, IncludeNonceInPublicHeader(),
@@ -505,9 +590,7 @@ void QuicPacketCreator::FillPacketHeader(QuicPacketHeader* header) {
   header->path_id = packet_.path_id;
   header->packet_number = ++packet_.packet_number;
   header->public_header.packet_number_length = packet_.packet_number_length;
-  header->entropy_flag = random_bool_source_->RandBool();
-  header->is_in_fec_group = NOT_IN_FEC_GROUP;
-  header->fec_group = 0;
+  header->entropy_flag = random_bool_source_.RandBool();
 }
 
 bool QuicPacketCreator::ShouldRetransmit(const QuicFrame& frame) {
@@ -535,8 +618,9 @@ bool QuicPacketCreator::AddFrame(const QuicFrame& frame,
         ConnectionCloseSource::FROM_SELF);
     return false;
   }
-  MaybeUpdatePacketNumberLength();
-
+  if (!FLAGS_quic_simple_packet_number_length) {
+    MaybeUpdatePacketNumberLength();
+  }
   size_t frame_len = framer_->GetSerializedFrameLength(
       frame, BytesFree(), queued_frames_.empty(), true,
       packet_.packet_number_length);
@@ -619,6 +703,22 @@ void QuicPacketCreator::SetCurrentPath(
 bool QuicPacketCreator::IncludeNonceInPublicHeader() {
   return have_diversification_nonce_ &&
          packet_.encryption_level == ENCRYPTION_INITIAL;
+}
+
+QuicPacketCreator::QuicRandomBoolSource::QuicRandomBoolSource(
+    QuicRandom* random)
+    : random_(random), bit_bucket_(0), bit_mask_(0) {}
+
+QuicPacketCreator::QuicRandomBoolSource::~QuicRandomBoolSource() {}
+
+bool QuicPacketCreator::QuicRandomBoolSource::RandBool() {
+  if (bit_mask_ == 0) {
+    bit_bucket_ = random_->RandUint64();
+    bit_mask_ = 1;
+  }
+  bool result = ((bit_bucket_ & bit_mask_) != 0);
+  bit_mask_ <<= 1;
+  return result;
 }
 
 }  // namespace net

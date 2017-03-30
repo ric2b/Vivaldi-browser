@@ -39,6 +39,9 @@ config("client_config") {
   if (is_android) {
     include_dirs += [ "src/common/android/include" ]
   }
+  if (is_chromeos) {
+    defines = [ "__CHROMEOS__" ]
+  }
 }
 
 config("handler_config") {
@@ -807,8 +810,6 @@ if (is_ios) {
       "src/client/minidump_file_writer.h",
       "src/common/convert_UTF.c",
       "src/common/convert_UTF.h",
-      "src/common/mac/GTMLogger.h",
-      "src/common/mac/GTMLogger.m",
       "src/common/mac/HTTPMultipartUpload.m",
       "src/common/mac/file_id.cc",
       "src/common/mac/file_id.h",

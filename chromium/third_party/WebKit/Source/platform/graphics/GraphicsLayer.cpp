@@ -34,8 +34,8 @@
 #include "platform/TraceEvent.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/LayoutRect.h"
+#include "platform/geometry/Region.h"
 #include "platform/graphics/BitmapImage.h"
-#include "platform/graphics/CompositorFactory.h"
 #include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/graphics/FirstPaintInvalidationTracking.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -57,10 +57,12 @@
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
 #include "wtf/MathExtras.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/StringUTF8Adaptor.h"
 #include "wtf/text/WTFString.h"
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <utility>
 
 #ifndef NDEBUG
@@ -76,20 +78,40 @@ struct PaintInvalidationInfo {
     // This is for comparison only. Don't dereference because the client may have died.
     const DisplayItemClient* client;
     String clientDebugName;
-    FloatRect rect;
+    IntRect rect;
     PaintInvalidationReason reason;
 };
 
-typedef HashMap<const GraphicsLayer*, Vector<PaintInvalidationInfo>> PaintInvalidationTrackingMap;
+#if DCHECK_IS_ON()
+struct UnderPaintInvalidation {
+    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    int x;
+    int y;
+    SkColor oldPixel;
+    SkColor newPixel;
+};
+#endif
+
+struct PaintInvalidationTracking {
+    DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
+    Vector<PaintInvalidationInfo> trackedPaintInvalidations;
+#if DCHECK_IS_ON()
+    RefPtr<SkPicture> lastPaintedPicture;
+    Region paintInvalidationRegionSinceLastPaint;
+    Vector<UnderPaintInvalidation> underPaintInvalidations;
+#endif
+};
+
+typedef HashMap<const GraphicsLayer*, PaintInvalidationTracking> PaintInvalidationTrackingMap;
 static PaintInvalidationTrackingMap& paintInvalidationTrackingMap()
 {
     DEFINE_STATIC_LOCAL(PaintInvalidationTrackingMap, map, ());
     return map;
 }
 
-PassOwnPtr<GraphicsLayer> GraphicsLayer::create(GraphicsLayerClient* client)
+std::unique_ptr<GraphicsLayer> GraphicsLayer::create(GraphicsLayerClient* client)
 {
-    return adoptPtr(new GraphicsLayer(client));
+    return wrapUnique(new GraphicsLayer(client));
 }
 
 GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
@@ -110,6 +132,7 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
     , m_painted(false)
     , m_textPainted(false)
     , m_imagePainted(false)
+    , m_isTrackingPaintInvalidations(client && client->isTrackingPaintInvalidations())
     , m_paintingPhase(GraphicsLayerPaintAllWithOverflowClip)
     , m_parent(0)
     , m_maskLayer(0)
@@ -127,8 +150,8 @@ GraphicsLayer::GraphicsLayer(GraphicsLayerClient* client)
         m_client->verifyNotPainting();
 #endif
 
-    m_contentLayerDelegate = adoptPtr(new ContentLayerDelegate(this));
-    m_layer = adoptPtr(Platform::current()->compositorSupport()->createContentLayer(m_contentLayerDelegate.get()));
+    m_contentLayerDelegate = wrapUnique(new ContentLayerDelegate(this));
+    m_layer = wrapUnique(Platform::current()->compositorSupport()->createContentLayer(m_contentLayerDelegate.get()));
     m_layer->layer()->setDrawsContent(m_drawsContent && m_contentsVisible);
     m_layer->layer()->setLayerClient(this);
 }
@@ -153,7 +176,7 @@ GraphicsLayer::~GraphicsLayer()
     removeAllChildren();
     removeFromParent();
 
-    resetTrackedPaintInvalidations();
+    paintInvalidationTrackingMap().remove(this);
     ASSERT(!m_parent);
 }
 
@@ -319,8 +342,18 @@ IntRect GraphicsLayer::interestRect()
 
 void GraphicsLayer::paint(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
 {
-    if (paintWithoutCommit(interestRect, disabledMode))
+    if (paintWithoutCommit(interestRect, disabledMode)) {
         getPaintController().commitNewDisplayItems(offsetFromLayoutObjectWithSubpixelAccumulation());
+#if DCHECK_IS_ON()
+        if (RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled()) {
+            RefPtr<SkPicture> newPicture = capturePicture();
+            checkPaintUnderInvalidations(*newPicture);
+            PaintInvalidationTracking& tracking = paintInvalidationTrackingMap().add(this, PaintInvalidationTracking()).storedValue->value;
+            tracking.lastPaintedPicture = newPicture;
+            tracking.paintInvalidationRegionSinceLastPaint = Region();
+        }
+#endif
+    }
 }
 
 bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsContext::DisabledMode disabledMode)
@@ -343,7 +376,6 @@ bool GraphicsLayer::paintWithoutCommit(const IntRect* interestRect, GraphicsCont
         && !m_client->needsRepaint(*this)
         && !getPaintController().cacheIsEmpty()
         && m_previousInterestRect == *interestRect) {
-        ASSERT(!getPaintController().hasInvalidations());
         return false;
     }
 
@@ -534,33 +566,52 @@ WebLayer* GraphicsLayer::contentsLayerIfRegistered()
     return m_contentsLayer;
 }
 
+void GraphicsLayer::setTracksPaintInvalidations(bool tracksPaintInvalidations)
+{
+    resetTrackedPaintInvalidations();
+    m_isTrackingPaintInvalidations = tracksPaintInvalidations;
+}
+
 void GraphicsLayer::resetTrackedPaintInvalidations()
 {
-    paintInvalidationTrackingMap().remove(this);
+    auto it = paintInvalidationTrackingMap().find(this);
+    if (it == paintInvalidationTrackingMap().end())
+        return;
+
+    if (RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled())
+        it->value.trackedPaintInvalidations.clear();
+    else
+        paintInvalidationTrackingMap().remove(it);
 }
 
 bool GraphicsLayer::hasTrackedPaintInvalidations() const
 {
     PaintInvalidationTrackingMap::iterator it = paintInvalidationTrackingMap().find(this);
     if (it != paintInvalidationTrackingMap().end())
-        return !it->value.isEmpty();
+        return !it->value.trackedPaintInvalidations.isEmpty();
     return false;
 }
 
-void GraphicsLayer::trackPaintInvalidation(const DisplayItemClient& client, const FloatRect& rect, PaintInvalidationReason reason)
+void GraphicsLayer::trackPaintInvalidation(const DisplayItemClient& client, const IntRect& rect, PaintInvalidationReason reason)
 {
-    // The caller must check isTrackingPaintInvalidations() before calling this method
-    // to avoid constructing the rect unnecessarily.
-    ASSERT(isTrackingPaintInvalidations());
-
-    Vector<PaintInvalidationInfo>& infos = paintInvalidationTrackingMap().add(this, Vector<PaintInvalidationInfo>()).storedValue->value;
-    // Omit the entry for invalidateDisplayItemClient() if the last entry is for the same client.
-    // This is to avoid duplicated entries for setNeedsDisplayInRect() and invalidateDisplayItemClient().
-    if (rect.isEmpty() && !infos.isEmpty() && infos.last().client == &client)
+    if (!isTrackingOrCheckingPaintInvalidations() || rect.isEmpty())
         return;
 
-    PaintInvalidationInfo info = { &client, client.debugName(), rect, reason };
-    infos.append(info);
+    PaintInvalidationTracking& tracking = paintInvalidationTrackingMap().add(this, PaintInvalidationTracking()).storedValue->value;
+
+    if (m_isTrackingPaintInvalidations) {
+        PaintInvalidationInfo info = { &client, client.debugName(), rect, reason };
+        tracking.trackedPaintInvalidations.append(info);
+    }
+
+#if DCHECK_IS_ON()
+    if (RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled()) {
+        // TODO(crbug.com/496260): Some antialiasing effects overflows the paint invalidation rect.
+        IntRect r = rect;
+        r.inflate(1);
+        tracking.paintInvalidationRegionSinceLastPaint.unite(r);
+    }
+#endif
 }
 
 static bool comparePaintInvalidationInfo(const PaintInvalidationInfo& a, const PaintInvalidationInfo& b)
@@ -662,14 +713,20 @@ static String pointerAsString(const void* ptr)
     return ts.release();
 }
 
-PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, RenderingContextMap& renderingContextMap) const
+PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags) const
+{
+    RenderingContextMap renderingContextMap;
+    return layerTreeAsJSONInternal(flags, renderingContextMap);
+}
+
+PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSONInternal(LayerTreeFlags flags, RenderingContextMap& renderingContextMap) const
 {
     RefPtr<JSONObject> json = JSONObject::create();
 
-    if (flags & LayerTreeIncludesDebugInfo) {
+    if (flags & LayerTreeIncludesDebugInfo)
         json->setString("this", pointerAsString(this));
-        json->setString("debugName", m_client->debugName(this));
-    }
+
+    json->setString("name", debugName());
 
     if (m_position != FloatPoint())
         json->setArray("position", pointAsJSONArray(m_position));
@@ -725,7 +782,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
         json->setArray("transform", transformAsJSONArray(m_transform));
 
     if (m_replicaLayer)
-        json->setObject("replicaLayer", m_replicaLayer->layerTreeAsJSON(flags, renderingContextMap));
+        json->setObject("replicaLayer", m_replicaLayer->layerTreeAsJSONInternal(flags, renderingContextMap));
 
     if (m_replicatedLayer)
         json->setString("replicatedLayer", flags & LayerTreeIncludesDebugInfo ? pointerAsString(m_replicatedLayer) : "");
@@ -733,7 +790,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
     PaintInvalidationTrackingMap::iterator it = paintInvalidationTrackingMap().find(this);
     if (it != paintInvalidationTrackingMap().end()) {
         if (flags & LayerTreeIncludesPaintInvalidations) {
-            Vector<PaintInvalidationInfo>& infos = it->value;
+            Vector<PaintInvalidationInfo>& infos = it->value.trackedPaintInvalidations;
             if (!infos.isEmpty()) {
                 std::sort(infos.begin(), infos.end(), &comparePaintInvalidationInfo);
                 RefPtr<JSONArray> paintInvalidationsJSON = JSONArray::create();
@@ -747,6 +804,21 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
                 }
                 json->setArray("paintInvalidations", paintInvalidationsJSON);
             }
+#if DCHECK_IS_ON()
+            Vector<UnderPaintInvalidation>& underPaintInvalidations = it->value.underPaintInvalidations;
+            if (!underPaintInvalidations.isEmpty()) {
+                RefPtr<JSONArray> underPaintInvalidationsJSON = JSONArray::create();
+                for (auto& underPaintInvalidation : underPaintInvalidations) {
+                    RefPtr<JSONObject> underPaintInvalidationJSON = JSONObject::create();
+                    underPaintInvalidationJSON->setNumber("x", underPaintInvalidation.x);
+                    underPaintInvalidationJSON->setNumber("y", underPaintInvalidation.x);
+                    underPaintInvalidationJSON->setString("oldPixel", Color(underPaintInvalidation.oldPixel).nameForLayoutTreeAsText());
+                    underPaintInvalidationJSON->setString("newPixel", Color(underPaintInvalidation.newPixel).nameForLayoutTreeAsText());
+                    underPaintInvalidationsJSON->pushObject(underPaintInvalidationJSON);
+                }
+                json->setArray("underPaintInvalidations", underPaintInvalidationsJSON);
+            }
+#endif
         }
     }
 
@@ -794,7 +866,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
     if (m_children.size()) {
         RefPtr<JSONArray> childrenJSON = JSONArray::create();
         for (size_t i = 0; i < m_children.size(); i++)
-            childrenJSON->pushObject(m_children[i]->layerTreeAsJSON(flags, renderingContextMap));
+            childrenJSON->pushObject(m_children[i]->layerTreeAsJSONInternal(flags, renderingContextMap));
         json->setArray("children", childrenJSON);
     }
 
@@ -803,9 +875,7 @@ PassRefPtr<JSONObject> GraphicsLayer::layerTreeAsJSON(LayerTreeFlags flags, Rend
 
 String GraphicsLayer::layerTreeAsText(LayerTreeFlags flags) const
 {
-    RenderingContextMap renderingContextMap;
-    RefPtr<JSONObject> json = layerTreeAsJSON(flags, renderingContextMap);
-    return json->toPrettyJSONString();
+    return layerTreeAsJSON(flags)->toPrettyJSONString();
 }
 
 static const cc::Layer* ccLayerForWebLayer(const WebLayer* webLayer)
@@ -878,9 +948,8 @@ void GraphicsLayer::setSize(const FloatSize& size)
     // Note that we don't resize m_contentsLayer. It's up the caller to do that.
 
 #ifndef NDEBUG
-    // The red debug fill needs to be invalidated if the layer resizes.
-    if (m_paintController)
-        m_paintController->invalidateUntracked(*this);
+    // The red debug fill and needs to be invalidated if the layer resizes.
+    setDisplayItemsUncached();
 #endif
 }
 
@@ -936,7 +1005,7 @@ void GraphicsLayer::setDrawsContent(bool drawsContent)
     updateLayerIsDrawable();
 
     if (!drawsContent && m_paintController)
-        m_paintController.clear();
+        m_paintController.reset();
 }
 
 void GraphicsLayer::setContentsVisible(bool contentsVisible)
@@ -1037,8 +1106,7 @@ void GraphicsLayer::setContentsNeedsDisplay()
 {
     if (WebLayer* contentsLayer = contentsLayerIfRegistered()) {
         contentsLayer->invalidate();
-        if (isTrackingPaintInvalidations())
-            trackPaintInvalidation(*this, m_contentsRect, PaintInvalidationFull);
+        trackPaintInvalidation(*this, m_contentsRect, PaintInvalidationFull);
     }
 }
 
@@ -1053,8 +1121,7 @@ void GraphicsLayer::setNeedsDisplay()
         m_linkHighlights[i]->invalidate();
     getPaintController().invalidateAll();
 
-    if (isTrackingPaintInvalidations())
-        trackPaintInvalidation(*this, FloatRect(FloatPoint(), m_size), PaintInvalidationFull);
+    trackPaintInvalidation(*this, IntRect(IntPoint(), expandedIntSize(m_size)), PaintInvalidationFull);
 }
 
 void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidationReason invalidationReason, const DisplayItemClient& client)
@@ -1068,19 +1135,7 @@ void GraphicsLayer::setNeedsDisplayInRect(const IntRect& rect, PaintInvalidation
     for (size_t i = 0; i < m_linkHighlights.size(); ++i)
         m_linkHighlights[i]->invalidate();
 
-    if (isTrackingPaintInvalidations())
-        trackPaintInvalidation(client, rect, invalidationReason);
-}
-
-void GraphicsLayer::invalidateDisplayItemClient(const DisplayItemClient& displayItemClient, PaintInvalidationReason invalidationReason)
-{
-    if (!drawsContent())
-        return;
-
-    getPaintController().invalidate(displayItemClient);
-
-    if (isTrackingPaintInvalidations())
-        trackPaintInvalidation(displayItemClient, FloatRect(), invalidationReason);
+    trackPaintInvalidation(client, rect, invalidationReason);
 }
 
 void GraphicsLayer::setContentsRect(const IntRect& rect)
@@ -1105,7 +1160,7 @@ void GraphicsLayer::setContentsToImage(Image* image, RespectImageOrientationEnum
 
     if (image && skImage) {
         if (!m_imageLayer) {
-            m_imageLayer = adoptPtr(Platform::current()->compositorSupport()->createImageLayer());
+            m_imageLayer = wrapUnique(Platform::current()->compositorSupport()->createImageLayer());
             registerContentsLayer(m_imageLayer->layer());
         }
         m_imageLayer->setImage(skImage.get());
@@ -1114,7 +1169,7 @@ void GraphicsLayer::setContentsToImage(Image* image, RespectImageOrientationEnum
     } else {
         if (m_imageLayer) {
             unregisterContentsLayer(m_imageLayer->layer());
-            m_imageLayer.clear();
+            m_imageLayer.reset();
         }
     }
 
@@ -1128,16 +1183,16 @@ WebLayer* GraphicsLayer::platformLayer() const
 
 void GraphicsLayer::setFilters(const FilterOperations& filters)
 {
-    OwnPtr<CompositorFilterOperations> webFilters = adoptPtr(CompositorFactory::current().createFilterOperations());
-    SkiaImageFilterBuilder::buildFilterOperations(filters, webFilters.get());
-    m_layer->layer()->setFilters(webFilters->asFilterOperations());
+    std::unique_ptr<CompositorFilterOperations> compositorFilters = CompositorFilterOperations::create();
+    SkiaImageFilterBuilder::buildFilterOperations(filters, compositorFilters.get());
+    m_layer->layer()->setFilters(compositorFilters->asFilterOperations());
 }
 
 void GraphicsLayer::setBackdropFilters(const FilterOperations& filters)
 {
-    OwnPtr<CompositorFilterOperations> webFilters = adoptPtr(CompositorFactory::current().createFilterOperations());
-    SkiaImageFilterBuilder::buildFilterOperations(filters, webFilters.get());
-    m_layer->layer()->setBackgroundFilters(webFilters->asFilterOperations());
+    std::unique_ptr<CompositorFilterOperations> compositorFilters = CompositorFilterOperations::create();
+    SkiaImageFilterBuilder::buildFilterOperations(filters, compositorFilters.get());
+    m_layer->layer()->setBackgroundFilters(compositorFilters->asFilterOperations());
 }
 
 void GraphicsLayer::setFilterQuality(SkFilterQuality filterQuality)
@@ -1209,7 +1264,7 @@ PaintController& GraphicsLayer::getPaintController()
     return *m_paintController;
 }
 
-void GraphicsLayer::setElementId(uint64_t id)
+void GraphicsLayer::setElementId(const CompositorElementId& id)
 {
     if (WebLayer* layer = platformLayer())
         layer->setElementId(id);
@@ -1220,6 +1275,97 @@ void GraphicsLayer::setCompositorMutableProperties(uint32_t properties)
     if (WebLayer* layer = platformLayer())
         layer->setCompositorMutableProperties(properties);
 }
+
+#if DCHECK_IS_ON()
+
+PassRefPtr<SkPicture> GraphicsLayer::capturePicture()
+{
+    if (!drawsContent())
+        return nullptr;
+
+    IntSize intSize = expandedIntSize(size());
+    GraphicsContext graphicsContext(getPaintController());
+    graphicsContext.beginRecording(IntRect(IntPoint(0, 0), intSize));
+    getPaintController().paintArtifact().replay(graphicsContext);
+    return graphicsContext.endRecording();
+}
+
+static bool pixelComponentsDiffer(int c1, int c2)
+{
+    // Compare strictly for saturated values.
+    if (c1 == 0 || c1 == 255 || c2 == 0 || c2 == 255)
+        return c1 != c2;
+    // Tolerate invisible differences that may occur in gradients etc.
+    return abs(c1 - c2) > 2;
+}
+
+static bool pixelsDiffer(SkColor p1, SkColor p2)
+{
+    return pixelComponentsDiffer(SkColorGetA(p1), SkColorGetA(p2))
+        || pixelComponentsDiffer(SkColorGetR(p1), SkColorGetR(p2))
+        || pixelComponentsDiffer(SkColorGetG(p1), SkColorGetG(p2))
+        || pixelComponentsDiffer(SkColorGetB(p1), SkColorGetB(p2));
+}
+
+void GraphicsLayer::checkPaintUnderInvalidations(const SkPicture& newPicture)
+{
+    if (!drawsContent())
+        return;
+
+    auto it = paintInvalidationTrackingMap().find(this);
+    if (it == paintInvalidationTrackingMap().end())
+        return;
+    PaintInvalidationTracking& tracking = it->value;
+    if (!tracking.lastPaintedPicture)
+        return;
+
+    SkBitmap oldBitmap;
+    int width = static_cast<int>(ceilf(std::min(tracking.lastPaintedPicture->cullRect().width(), newPicture.cullRect().width())));
+    int height = static_cast<int>(ceilf(std::min(tracking.lastPaintedPicture->cullRect().height(), newPicture.cullRect().height())));
+    oldBitmap.allocPixels(SkImageInfo::MakeN32Premul(width, height));
+    SkCanvas(oldBitmap).drawPicture(tracking.lastPaintedPicture.get());
+
+    SkBitmap newBitmap;
+    newBitmap.allocPixels(SkImageInfo::MakeN32Premul(width, height));
+    SkCanvas(newBitmap).drawPicture(&newPicture);
+
+    oldBitmap.lockPixels();
+    newBitmap.lockPixels();
+    int mismatchingPixels = 0;
+    static const int maxMismatchesToReport = 50;
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            SkColor oldPixel = oldBitmap.getColor(x, y);
+            SkColor newPixel = newBitmap.getColor(x, y);
+            if (pixelsDiffer(oldPixel, newPixel) && !tracking.paintInvalidationRegionSinceLastPaint.contains(IntPoint(x, y))) {
+                if (mismatchingPixels < maxMismatchesToReport) {
+                    UnderPaintInvalidation underPaintInvalidation = { x, y, oldPixel, newPixel };
+                    tracking.underPaintInvalidations.append(underPaintInvalidation);
+                    LOG(ERROR) << debugName() << " Uninvalidated old/new pixels mismatch at " << x << "," << y << " old:" << std::hex << oldPixel << " new:" << newPixel;
+                } else if (mismatchingPixels == maxMismatchesToReport) {
+                    LOG(ERROR) << "and more...";
+                }
+                ++mismatchingPixels;
+                *newBitmap.getAddr32(x, y) = SK_ColorRED;
+            } else {
+                *newBitmap.getAddr32(x, y) = SK_ColorTRANSPARENT;
+            }
+        }
+    }
+
+    oldBitmap.unlockPixels();
+    newBitmap.unlockPixels();
+
+    // Visualize under-invalidations by overlaying the new bitmap (containing red pixels indicating under-invalidations,
+    // and transparent pixels otherwise) onto the painting.
+    SkPictureRecorder recorder;
+    recorder.beginRecording(width, height);
+    recorder.getRecordingCanvas()->drawBitmap(newBitmap, 0, 0);
+    RefPtr<SkPicture> picture = fromSkSp(recorder.finishRecordingAsPicture());
+    getPaintController().appendDebugDrawingAfterCommit(*this, picture, offsetFromLayoutObjectWithSubpixelAccumulation());
+}
+
+#endif // DCHECK_IS_ON()
 
 } // namespace blink
 

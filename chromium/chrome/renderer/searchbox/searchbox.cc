@@ -330,12 +330,6 @@ void SearchBox::Focus() {
       render_view()->GetRoutingID(), page_seq_no_, OMNIBOX_FOCUS_VISIBLE));
 }
 
-void SearchBox::NavigateToURL(const GURL& url,
-                              WindowOpenDisposition disposition) {
-  render_view()->Send(new ChromeViewHostMsg_SearchBoxNavigate(
-      render_view()->GetRoutingID(), page_seq_no_, url, disposition));
-}
-
 void SearchBox::Paste(const base::string16& text) {
   render_view()->Send(new ChromeViewHostMsg_PasteAndOpenDropdown(
       render_view()->GetRoutingID(), page_seq_no_, text));
@@ -542,4 +536,8 @@ void SearchBox::Reset() {
   is_focused_ = false;
   is_key_capture_enabled_ = false;
   theme_info_ = ThemeBackgroundInfo();
+}
+
+void SearchBox::OnDestruct() {
+  delete this;
 }

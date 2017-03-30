@@ -6,3 +6,18 @@ module mojo.common.mojom;
 
 [Native]
 struct FilePath;
+
+[Native]
+struct ListValue;
+
+[Native]
+struct DictionaryValue;
+
+[Native]
+struct Time;
+
+[Native]
+struct TimeDelta;
+
+[Native]
+struct TimeTicks;

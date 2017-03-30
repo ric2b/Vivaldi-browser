@@ -77,6 +77,7 @@
 #include "modules/accessibility/AXTableHeaderContainer.h"
 #include "modules/accessibility/AXTableRow.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -736,7 +737,7 @@ void AXObjectCacheImpl::updateAriaOwns(const AXObject* owner, const Vector<Strin
             HashSet<AXID>* owners = m_idToAriaOwnersMapping.get(id);
             if (!owners) {
                 owners = new HashSet<AXID>();
-                m_idToAriaOwnersMapping.set(id, adoptPtr(owners));
+                m_idToAriaOwnersMapping.set(id, wrapUnique(owners));
             }
             owners->add(owner->axObjectID());
         }
@@ -1252,8 +1253,15 @@ String AXObjectCacheImpl::computedNameForNode(Node* node)
 void AXObjectCacheImpl::onTouchAccessibilityHover(const IntPoint& location)
 {
     AXObject* hit = root()->accessibilityHitTest(location);
-    if (hit)
+    if (hit) {
+        // Ignore events on a frame or plug-in, because the touch events
+        // will be re-targeted there and we don't want to fire duplicate
+        // accessibility events.
+        if (hit->getLayoutObject() && hit->getLayoutObject()->isLayoutPart())
+            return;
+
         postPlatformNotification(hit, AXHover);
+    }
 }
 
 void AXObjectCacheImpl::setCanvasObjectBounds(Element* element, const LayoutRect& rect)

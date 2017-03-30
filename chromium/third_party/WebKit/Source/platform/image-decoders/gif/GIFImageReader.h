@@ -44,9 +44,8 @@
 #include "platform/image-decoders/gif/GIFImageDecoder.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 #define MAX_DICTIONARY_ENTRY_BITS 12
 #define MAX_DICTIONARY_ENTRIES    4096 // 2^MAX_DICTIONARY_ENTRY_BITS
@@ -248,7 +247,7 @@ public:
     bool interlaced() const { return m_interlaced; }
     void setInterlaced(bool interlaced) { m_interlaced = interlaced; }
 
-    void clearDecodeState() { m_lzwContext.clear(); }
+    void clearDecodeState() { m_lzwContext.reset(); }
     const GIFColorMap& localColorMap() const { return m_localColorMap; }
     GIFColorMap& localColorMap() { return m_localColorMap; }
 
@@ -267,7 +266,7 @@ private:
 
     unsigned m_delayTime; // Display time, in milliseconds, for this image in a multi-image GIF.
 
-    OwnPtr<GIFLZWContext> m_lzwContext;
+    std::unique_ptr<GIFLZWContext> m_lzwContext;
     Vector<GIFLZWBlock> m_lzwBlocks; // LZW blocks for this frame.
     GIFColorMap m_localColorMap;
 
@@ -353,7 +352,7 @@ private:
     GIFColorMap m_globalColorMap;
     int m_loopCount; // Netscape specific extension block to control the number of animation loops a GIF renders.
 
-    Vector<OwnPtr<GIFFrameContext>> m_frames;
+    Vector<std::unique_ptr<GIFFrameContext>> m_frames;
 
     RefPtr<blink::SegmentReader> m_data;
     bool m_parseCompleted;

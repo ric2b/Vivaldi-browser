@@ -10,25 +10,22 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Build;
-import android.util.Log;
+import android.os.StrictMode;
 
 import org.chromium.base.annotations.CalledByNative;
 
 /**
- * BuildInfo is a utility class providing easy access to {@link PackageInfo}
- * information. This is primarly of use for accessesing package information
- * from native code.
+ * BuildInfo is a utility class providing easy access to {@link PackageInfo} information. This is
+ * primarily of use for accessing package information from native code.
  */
 public class BuildInfo {
     private static final String TAG = "BuildInfo";
     private static final int MAX_FINGERPRINT_LENGTH = 128;
 
     /**
-     * BuildInfo is a static utility class and therefore shouldn't be
-     * instantiated.
+     * BuildInfo is a static utility class and therefore shouldn't be instantiated.
      */
-    private BuildInfo() {
-    }
+    private BuildInfo() {}
 
     @CalledByNative
     public static String getDevice() {
@@ -67,6 +64,19 @@ public class BuildInfo {
     }
 
     @CalledByNative
+    public static String getGMSVersionCode(Context context) {
+        String msg = "gms versionCode not available.";
+        try {
+            PackageManager packageManager = context.getPackageManager();
+            PackageInfo packageInfo = packageManager.getPackageInfo("com.google.android.gms", 0);
+            msg = Integer.toString(packageInfo.versionCode);
+        } catch (NameNotFoundException e) {
+            Log.d(TAG, "GMS package is not found: %s", e);
+        }
+        return msg;
+    }
+
+    @CalledByNative
     public static String getPackageVersionCode(Context context) {
         String msg = "versionCode not available.";
         try {
@@ -80,7 +90,6 @@ public class BuildInfo {
             Log.d(TAG, msg);
         }
         return msg;
-
     }
 
     @CalledByNative
@@ -101,6 +110,8 @@ public class BuildInfo {
 
     @CalledByNative
     public static String getPackageLabel(Context context) {
+        // Third-party code does disk read on the getApplicationInfo call. http://crbug.com/614343
+        StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
         try {
             PackageManager packageManager = context.getPackageManager();
             ApplicationInfo appInfo = packageManager.getApplicationInfo(context.getPackageName(),
@@ -109,6 +120,8 @@ public class BuildInfo {
             return  label != null ? label.toString() : "";
         } catch (NameNotFoundException e) {
             return "";
+        } finally {
+            StrictMode.setThreadPolicy(oldPolicy);
         }
     }
 
@@ -128,8 +141,10 @@ public class BuildInfo {
         return Build.VERSION.SDK_INT;
     }
 
-    private static boolean isLanguageSplit(String splitName) {
-        // Names look like "config.XX".
-        return splitName.length() == 9 && splitName.startsWith("config.");
+    /**
+     * @return Whether the current build version is greater than Android N.
+     */
+    public static boolean isGreaterThanN() {
+        return Build.VERSION.SDK_INT > 24 || Build.VERSION.CODENAME.equals("NMR1");
     }
 }

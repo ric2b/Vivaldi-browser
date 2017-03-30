@@ -31,4 +31,10 @@ void FakeArcBridgeInstance::WaitForInitCall() {
   binding_.WaitForIncomingMethodCall();
 }
 
+void FakeArcBridgeInstance::Stop(ArcBridgeService::StopReason reason) {
+  if (!delegate_)
+    return;
+  delegate_->OnStopped(reason);
+}
+
 }  // namespace arc

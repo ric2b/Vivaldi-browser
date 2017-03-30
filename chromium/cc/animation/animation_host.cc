@@ -17,15 +17,26 @@
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/element_animations.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
+#include "cc/animation/scroll_offset_animations.h"
+#include "cc/animation/scroll_offset_animations_impl.h"
 #include "cc/animation/timing_function.h"
 #include "ui/gfx/geometry/box_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 
 namespace cc {
 
-std::unique_ptr<AnimationHost> AnimationHost::Create(
+std::unique_ptr<AnimationHost> AnimationHost::CreateMainInstance() {
+  return base::WrapUnique(new AnimationHost(ThreadInstance::MAIN));
+}
+
+std::unique_ptr<AnimationHost> AnimationHost::CreateForTesting(
     ThreadInstance thread_instance) {
-  return base::WrapUnique(new AnimationHost(thread_instance));
+  auto animation_host = base::WrapUnique(new AnimationHost(thread_instance));
+
+  if (thread_instance == ThreadInstance::IMPL)
+    animation_host->SetSupportsScrollAnimations(true);
+
+  return animation_host;
 }
 
 AnimationHost::AnimationHost(ThreadInstance thread_instance)
@@ -33,9 +44,13 @@ AnimationHost::AnimationHost(ThreadInstance thread_instance)
       thread_instance_(thread_instance),
       supports_scroll_animations_(false),
       animation_waiting_for_deletion_(false) {
-  if (thread_instance_ == ThreadInstance::IMPL)
+  if (thread_instance_ == ThreadInstance::IMPL) {
     scroll_offset_animations_impl_ =
         base::WrapUnique(new ScrollOffsetAnimationsImpl(this));
+  } else {
+    scroll_offset_animations_ =
+        base::WrapUnique(new ScrollOffsetAnimations(this));
+  }
 }
 
 AnimationHost::~AnimationHost() {
@@ -44,6 +59,15 @@ AnimationHost::~AnimationHost() {
   ClearTimelines();
   DCHECK(!mutator_host_client());
   DCHECK(element_to_animations_map_.empty());
+}
+
+std::unique_ptr<AnimationHost> AnimationHost::CreateImplInstance(
+    bool supports_impl_scrolling) const {
+  DCHECK_EQ(thread_instance_, ThreadInstance::MAIN);
+  auto animation_host_impl =
+      base::WrapUnique(new AnimationHost(ThreadInstance::IMPL));
+  animation_host_impl->SetSupportsScrollAnimations(supports_impl_scrolling);
+  return animation_host_impl;
 }
 
 AnimationTimeline* AnimationHost::GetTimelineById(int timeline_id) const {
@@ -185,7 +209,8 @@ void AnimationHost::RemoveTimelinesFromImplThread(
 }
 
 void AnimationHost::PushPropertiesToImplThread(AnimationHost* host_impl) {
-  // Firstly, sync all players with impl thread to create ElementAnimations.
+  // Sync all players with impl thread to create ElementAnimations. This needs
+  // to happen before the element animations are synced below.
   for (auto& kv : id_to_timeline_map_) {
     AnimationTimeline* timeline = kv.second.get();
     AnimationTimeline* timeline_impl =
@@ -194,7 +219,7 @@ void AnimationHost::PushPropertiesToImplThread(AnimationHost* host_impl) {
       timeline->PushPropertiesTo(timeline_impl);
   }
 
-  // Secondly, sync properties for created ElementAnimations.
+  // Sync properties for created ElementAnimations.
   for (auto& kv : element_to_animations_map_) {
     const auto& element_animations = kv.second;
     auto element_animations_impl =
@@ -202,11 +227,16 @@ void AnimationHost::PushPropertiesToImplThread(AnimationHost* host_impl) {
     if (element_animations_impl)
       element_animations->PushPropertiesTo(std::move(element_animations_impl));
   }
+
+  // Update the impl-only scroll offset animations.
+  scroll_offset_animations_->PushPropertiesTo(
+      host_impl->scroll_offset_animations_impl_.get());
 }
 
 scoped_refptr<ElementAnimations>
 AnimationHost::GetElementAnimationsForElementId(ElementId element_id) const {
-  DCHECK(element_id);
+  if (!element_id)
+    return nullptr;
   auto iter = element_to_animations_map_.find(element_id);
   return iter == element_to_animations_map_.end() ? nullptr : iter->second;
 }
@@ -272,14 +302,14 @@ void AnimationHost::SetAnimationEvents(
     std::unique_ptr<AnimationEvents> events) {
   for (size_t event_index = 0; event_index < events->events_.size();
        ++event_index) {
-    int event_layer_id = events->events_[event_index].element_id;
+    ElementId element_id = events->events_[event_index].element_id;
 
     // Use the map of all ElementAnimations, not just active ones, since
     // non-active ElementAnimations may still receive events for impl-only
     // animations.
     const ElementToAnimationsMap& all_element_animations =
         element_to_animations_map_;
-    auto iter = all_element_animations.find(event_layer_id);
+    auto iter = all_element_animations.find(element_id);
     if (iter != all_element_animations.end()) {
       switch (events->events_[event_index].type) {
         case AnimationEvent::STARTED:
@@ -382,17 +412,6 @@ bool AnimationHost::HasAnyAnimationTargetingProperty(
     return false;
 
   return !!element_animations->GetAnimation(property);
-}
-
-bool AnimationHost::ScrollOffsetIsAnimatingOnImplOnly(
-    ElementId element_id) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  if (!element_animations)
-    return false;
-
-  Animation* animation =
-      element_animations->GetAnimation(TargetProperty::SCROLL_OFFSET);
-  return animation && animation->is_impl_only();
 }
 
 bool AnimationHost::HasFilterAnimationThatInflatesBounds(
@@ -501,6 +520,11 @@ bool AnimationHost::ImplOnlyScrollAnimationUpdateTarget(
   DCHECK(scroll_offset_animations_impl_);
   return scroll_offset_animations_impl_->ScrollAnimationUpdateTarget(
       element_id, scroll_delta, max_scroll_offset, frame_monotonic_time);
+}
+
+ScrollOffsetAnimations& AnimationHost::scroll_offset_animations() const {
+  DCHECK(scroll_offset_animations_);
+  return *scroll_offset_animations_.get();
 }
 
 void AnimationHost::ScrollAnimationAbort(bool needs_completion) {

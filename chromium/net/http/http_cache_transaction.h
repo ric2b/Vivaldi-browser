@@ -161,8 +161,8 @@ class HttpCache::Transaction : public HttpTransaction {
       WebSocketHandshakeStreamBase::CreateHelper* create_helper) override;
   void SetBeforeNetworkStartCallback(
       const BeforeNetworkStartCallback& callback) override;
-  void SetBeforeProxyHeadersSentCallback(
-      const BeforeProxyHeadersSentCallback& callback) override;
+  void SetBeforeHeadersSentCallback(
+      const BeforeHeadersSentCallback& callback) override;
   int ResumeNetworkStart() override;
   void GetConnectionAttempts(ConnectionAttempts* out) const override;
 
@@ -227,23 +227,6 @@ class HttpCache::Transaction : public HttpTransaction {
     STATE_CACHE_WRITE_DATA_COMPLETE,
     STATE_CACHE_WRITE_TRUNCATED_RESPONSE,
     STATE_CACHE_WRITE_TRUNCATED_RESPONSE_COMPLETE
-  };
-
-  // Used for categorizing transactions for reporting in histograms. Patterns
-  // cover relatively common use cases being measured and considered for
-  // optimization. Many use cases that are more complex or uncommon are binned
-  // as PATTERN_NOT_COVERED, and details are not reported.
-  // NOTE: This enumeration is used in histograms, so please do not add entries
-  // in the middle.
-  enum TransactionPattern {
-    PATTERN_UNDEFINED,
-    PATTERN_NOT_COVERED,
-    PATTERN_ENTRY_NOT_CACHED,
-    PATTERN_ENTRY_USED,
-    PATTERN_ENTRY_VALIDATED,
-    PATTERN_ENTRY_UPDATED,
-    PATTERN_ENTRY_CANT_CONDITIONALIZE,
-    PATTERN_MAX,
   };
 
   // Used for categorizing validation triggers in histograms.
@@ -427,12 +410,21 @@ class HttpCache::Transaction : public HttpTransaction {
   // |old_network_trans_load_timing_|, which must be NULL when this is called.
   void ResetNetworkTransaction();
 
-  // Returns true if we should bother attempting to resume this request if it
-  // is aborted while in progress. If |has_data| is true, the size of the stored
+  // Returns true if we should bother attempting to resume this request if it is
+  // aborted while in progress. If |has_data| is true, the size of the stored
   // data is considered for the result.
   bool CanResume(bool has_data);
 
-  void UpdateTransactionPattern(TransactionPattern new_transaction_pattern);
+  // Setter for response_ and auth_response_. It updates its cache entry status,
+  // if needed.
+  void SetResponse(const HttpResponseInfo& new_response);
+  void SetAuthResponse(const HttpResponseInfo& new_response);
+
+  void UpdateCacheEntryStatus(
+      HttpResponseInfo::CacheEntryStatus new_cache_entry_status);
+
+  // Sets the response.cache_entry_status to the current cache_entry_status_.
+  void SyncCacheEntryStatusToResponse();
   void RecordHistograms();
 
   // Called to signal completion of asynchronous IO.
@@ -479,11 +471,18 @@ class HttpCache::Transaction : public HttpTransaction {
   CompletionCallback io_callback_;
 
   // Members used to track data for histograms.
-  TransactionPattern transaction_pattern_;
+  // This cache_entry_status_ takes precedence over
+  // response_.cache_entry_status. In fact, response_.cache_entry_status must be
+  // kept in sync with cache_entry_status_ (via SetResponse and
+  // UpdateCacheEntryStatus).
+  HttpResponseInfo::CacheEntryStatus cache_entry_status_;
   ValidationCause validation_cause_;
   base::TimeTicks entry_lock_waiting_since_;
   base::TimeTicks first_cache_access_since_;
   base::TimeTicks send_request_since_;
+  base::Time open_entry_last_used_;
+  base::TimeDelta stale_entry_freshness_;
+  base::TimeDelta stale_entry_age_;
 
   int64_t total_received_bytes_;
   int64_t total_sent_bytes_;
@@ -504,7 +503,7 @@ class HttpCache::Transaction : public HttpTransaction {
       websocket_handshake_stream_base_create_helper_;
 
   BeforeNetworkStartCallback before_network_start_callback_;
-  BeforeProxyHeadersSentCallback before_proxy_headers_sent_callback_;
+  BeforeHeadersSentCallback before_headers_sent_callback_;
 
   base::WeakPtrFactory<Transaction> weak_factory_;
 

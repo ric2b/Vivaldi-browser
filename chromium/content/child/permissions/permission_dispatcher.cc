@@ -7,11 +7,13 @@
 #include <stddef.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "content/public/child/worker_thread.h"
-#include "content/public/common/service_registry.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/modules/permissions/WebPermissionObserver.h"
+#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 
 using blink::WebPermissionObserver;
 using blink::mojom::PermissionName;
@@ -87,8 +89,9 @@ bool PermissionDispatcher::IsObservable(blink::WebPermissionType type) {
          type == blink::WebPermissionTypeBackgroundSync;
 }
 
-PermissionDispatcher::PermissionDispatcher(ServiceRegistry* service_registry)
-    : service_registry_(service_registry) {
+PermissionDispatcher::PermissionDispatcher(
+    shell::InterfaceProvider* remote_interfaces)
+    : remote_interfaces_(remote_interfaces) {
 }
 
 PermissionDispatcher::~PermissionDispatcher() {
@@ -229,8 +232,7 @@ void PermissionDispatcher::RunPermissionsCallbackOnWorkerThread(
 blink::mojom::PermissionService*
 PermissionDispatcher::GetPermissionServicePtr() {
   if (!permission_service_.get()) {
-    service_registry_->ConnectToRemoteService(
-        mojo::GetProxy(&permission_service_));
+    remote_interfaces_->GetInterface(mojo::GetProxy(&permission_service_));
   }
   return permission_service_.get();
 }
@@ -273,6 +275,7 @@ void PermissionDispatcher::RequestPermissionInternal(
   GetPermissionServicePtr()->RequestPermission(
       GetPermissionName(type),
       origin,
+      blink::WebUserGestureIndicator::isProcessingUserGesture(),
       base::Bind(&PermissionDispatcher::OnPermissionResponse,
                  base::Unretained(this),
                  worker_thread_id,
@@ -298,6 +301,7 @@ void PermissionDispatcher::RequestPermissionsInternal(
 
   GetPermissionServicePtr()->RequestPermissions(
       std::move(names), origin,
+      blink::WebUserGestureIndicator::isProcessingUserGesture(),
       base::Bind(&PermissionDispatcher::OnRequestPermissionsResponse,
                  base::Unretained(this), worker_thread_id, callback_key));
 }
@@ -347,7 +351,7 @@ void PermissionDispatcher::OnPermissionResponse(int worker_thread_id,
 void PermissionDispatcher::OnRequestPermissionsResponse(
     int worker_thread_id,
     uintptr_t callback_key,
-    const mojo::Array<PermissionStatus>& result) {
+    mojo::Array<PermissionStatus> result) {
   std::unique_ptr<blink::WebPermissionsCallback> callback =
       permissions_callbacks_.take_and_erase(callback_key);
   std::unique_ptr<blink::WebVector<blink::WebPermissionStatus>> statuses(

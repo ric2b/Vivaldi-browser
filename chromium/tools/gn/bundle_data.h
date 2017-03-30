@@ -8,27 +8,16 @@
 #include <string>
 #include <vector>
 
+#include "tools/gn/action_values.h"
 #include "tools/gn/bundle_file_rule.h"
 #include "tools/gn/source_dir.h"
+#include "tools/gn/source_file.h"
+#include "tools/gn/substitution_list.h"
 #include "tools/gn/unique_vector.h"
 
 class OutputFile;
-class SourceFile;
 class Settings;
 class Target;
-
-// Returns true if |source| correspond to the path of a file in an asset
-// catalog. If defined |asset_catalog| is set to its path.
-//
-// An asset catalog is an OS X bundle with the ".xcassets" extension. It
-// contains one directory per assets each of them with the ".imageset"
-// extension.
-//
-// All asset catalogs are compiled by Xcode into single Assets.car file as
-// part of the creation of an application or framework bundle. BundleData
-// emulates this with the "compile_xcassets" tool.
-bool IsSourceFileFromAssetCatalog(const SourceFile& source,
-                                  SourceFile* asset_catalog);
 
 // BundleData holds the information required by "create_bundle" target.
 class BundleData {
@@ -62,7 +51,7 @@ class BundleData {
       SourceFiles* outputs_as_source) const;
 
   // Returns the path to the compiled asset catalog. Only valid if
-  // asset_catalog_sources() is not empty.
+  // assets_catalog_sources() is not empty.
   SourceFile GetCompiledAssetCatalogPath() const;
 
   // Returns the path to the top-level directory of the bundle. This is
@@ -81,9 +70,14 @@ class BundleData {
   SourceDir GetBundleRootDirOutputAsDir(const Settings* settings) const;
 
   // Returns the list of inputs for the compilation of the asset catalog.
-  SourceFiles& asset_catalog_sources() { return asset_catalog_sources_; }
-  const SourceFiles& asset_catalog_sources() const {
-    return asset_catalog_sources_;
+  SourceFiles& assets_catalog_sources() { return assets_catalog_sources_; }
+  const SourceFiles& assets_catalog_sources() const {
+    return assets_catalog_sources_;
+  }
+
+  // Returns the list of dependencies for the compilation of the asset catalog.
+  std::vector<const Target*> assets_catalog_deps() const {
+    return assets_catalog_deps_;
   }
 
   BundleFileRules& file_rules() { return file_rules_; }
@@ -104,11 +98,34 @@ class BundleData {
   std::string& product_type() { return product_type_; }
   const std::string& product_type() const { return product_type_; }
 
+  void set_code_signing_script(const SourceFile& script_file) {
+    code_signing_script_ = script_file;
+  }
+  const SourceFile& code_signing_script() const { return code_signing_script_; }
+
+  std::vector<SourceFile>& code_signing_sources() {
+    return code_signing_sources_;
+  }
+  const std::vector<SourceFile>& code_signing_sources() const {
+    return code_signing_sources_;
+  }
+
+  SubstitutionList& code_signing_outputs() { return code_signing_outputs_; }
+  const SubstitutionList& code_signing_outputs() const {
+    return code_signing_outputs_;
+  }
+
+  SubstitutionList& code_signing_args() { return code_signing_args_; }
+  const SubstitutionList& code_signing_args() const {
+    return code_signing_args_;
+  }
+
   // Recursive collection of all bundle_data that the target depends on.
   const UniqueTargets& bundle_deps() const { return bundle_deps_; }
 
  private:
-  SourceFiles asset_catalog_sources_;
+  SourceFiles assets_catalog_sources_;
+  std::vector<const Target*> assets_catalog_deps_;
   BundleFileRules file_rules_;
   UniqueTargets bundle_deps_;
 
@@ -122,6 +139,13 @@ class BundleData {
   // This is the target type as known to Xcode. This is only used to generate
   // the Xcode project file when using --ide=xcode.
   std::string product_type_;
+
+  // Holds the values (script name, sources, outputs, script arguments) for the
+  // code signing step if defined.
+  SourceFile code_signing_script_;
+  std::vector<SourceFile> code_signing_sources_;
+  SubstitutionList code_signing_outputs_;
+  SubstitutionList code_signing_args_;
 
   DISALLOW_COPY_AND_ASSIGN(BundleData);
 };

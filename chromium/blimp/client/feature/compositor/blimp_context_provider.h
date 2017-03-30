@@ -14,7 +14,6 @@
 #include "base/threading/thread_checker.h"
 #include "cc/output/context_provider.h"
 #include "gpu/command_buffer/client/gl_in_process_context.h"
-#include "skia/ext/refptr.h"
 #include "ui/gl/gl_surface.h"
 
 namespace skia_bindings {
@@ -43,6 +42,10 @@ class BlimpContextProvider : public cc::ContextProvider {
   void DeleteCachedResources() override;
   void SetLostContextCallback(
       const LostContextCallback& lost_context_callback) override;
+
+  // Gives the GL internal format that should be used for calling CopyTexImage2D
+  // on the default framebuffer.
+  uint32_t GetCopyTextureInternalFormat();
 
  protected:
   BlimpContextProvider(

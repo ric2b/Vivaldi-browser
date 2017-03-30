@@ -17,6 +17,7 @@ const char *vivaldi_extra_locales_array[] = {
   "es-PE",
   "eu",
   "fy",
+  "gd",
   "gl",
   "hy",
   "io",

@@ -20,6 +20,12 @@ const base::Feature kAutomaticTabDiscarding{"AutomaticTabDiscarding",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
+// Enables the Backspace key to navigate back in the browser, as well as
+// Shift+Backspace to navigate forward.
+const base::Feature kBackspaceGoesBackFeature {
+  "BackspaceGoesBack", base::FEATURE_DISABLED_BY_DEFAULT
+};
+
 // Experiment to disable small cross-origin content. (http://crbug.com/608886)
 const base::Feature kBlockSmallContent{"BlockSmallPluginContent",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -39,6 +45,12 @@ const base::Feature kExpectCTReporting{"ExpectCTReporting",
 const base::Feature kExperimentalKeyboardLockUI{
     "ExperimentalKeyboardLockUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined (OS_CHROMEOS)
+// Enables or disables the Happininess Tracking System for the device.
+const base::Feature kHappininessTrackingSystem {
+    "HappininessTrackingSystem", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
 // Enables showing the "This computer will no longer receive Google Chrome
 // updates" infobar instead of the "will soon stop receiving" infobar on
@@ -52,6 +64,11 @@ const base::Feature kMaterialDesignHistoryFeature {
   "MaterialDesignHistory", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
+// Enables or disables the Material Design version of chrome://settings.
+// Also affects chrome://help.
+const base::Feature kMaterialDesignSettingsFeature{
+    "MaterialDesignSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_CHROMEOS)
 // Runtime flag that indicates whether this leak detector should be enabled in
 // the current instance of Chrome.
@@ -63,8 +80,7 @@ const base::Feature kSafeSearchUrlReporting{"SafeSearchUrlReporting",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // A new user experience for transitioning into fullscreen and mouse pointer
-// lock states. The name is a misnomer (for historical reasons); affects both
-// Views and Android builds.
+// lock states.
 const base::Feature kSimplifiedFullscreenUI{"ViewsSimplifiedFullscreenUI",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 

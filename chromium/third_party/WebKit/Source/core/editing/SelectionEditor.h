@@ -34,9 +34,8 @@ namespace blink {
 // TODO(yosin): We will rename |SelectionEditor| to appropriate name since
 // it is no longer have a changing selection functionality, it was moved to
 // |SelectionModifier| class.
-class SelectionEditor final : public GarbageCollectedFinalized<SelectionEditor>, public VisibleSelectionChangeObserver {
+class SelectionEditor final : public GarbageCollectedFinalized<SelectionEditor> {
     WTF_MAKE_NONCOPYABLE(SelectionEditor);
-    USING_GARBAGE_COLLECTED_MIXIN(SelectionEditor);
 public:
     static SelectionEditor* create(FrameSelection& frameSelection)
     {
@@ -56,8 +55,10 @@ public:
     void setVisibleSelection(const VisibleSelection&, FrameSelection::SetSelectionOptions);
     void setVisibleSelection(const VisibleSelectionInFlatTree&, FrameSelection::SetSelectionOptions);
 
-    void setIsDirectional(bool);
     void setWithoutValidation(const Position& base, const Position& extent);
+
+    void documentAttached(Document*);
+    void documentDetached(const Document&);
 
     // If this FrameSelection has a logical range which is still valid, this
     // function return its clone. Otherwise, the return value from underlying
@@ -68,9 +69,6 @@ public:
     void resetLogicalRange();
     void setLogicalRange(Range*);
 
-    // VisibleSelectionChangeObserver interface.
-    void didChangeVisibleSelection() override;
-
     // Updates |m_selection| and |m_selectionInFlatTree| with up-to-date
     // layout if needed.
     void updateIfNeeded();
@@ -80,10 +78,13 @@ public:
 private:
     explicit SelectionEditor(FrameSelection&);
 
+    const Document& document() const;
     LocalFrame* frame() const;
-    void startObservingVisibleSelectionChange();
-    void stopObservingVisibleSelectionChangeIfNecessary();
 
+    void clearVisibleSelection();
+    bool shouldAlwaysUseDirectionalSelection() const;
+
+    Member<Document> m_document;
     Member<FrameSelection> m_frameSelection;
 
     VisibleSelection m_selection;

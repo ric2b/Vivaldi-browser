@@ -6,6 +6,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//content/browser/browser.gni")
 import("//media/media_options.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
 source_set("browser") {
   # Only the public target should depend on this. All other targets (even
@@ -41,6 +42,7 @@ source_set("browser") {
     "//components/tracing",
     "//components/tracing:startup_tracing",
     "//components/url_formatter",
+    "//components/webmessaging",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -56,19 +58,21 @@ source_set("browser") {
     "//crypto",
     "//device/battery",
     "//device/bluetooth",
+    "//device/gamepad",
+    "//device/power_save_blocker",
     "//device/vibration",
     "//gin",
     "//google_apis",
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/client:gles2_interface",
-    "//ipc/mojo",
     "//media",
+    "//media/capture",
     "//media/gpu/ipc/client",
     "//media/midi",
+    "//media/mojo/interfaces:image_capture",
     "//mojo/common",
-    "//mojo/common:url_type_converters",
-    "//mojo/converters/geometry",
+    "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
     "//net",
@@ -82,7 +86,6 @@ source_set("browser") {
     "//services/user/public/cpp",
     "//services/user/public/interfaces",
     "//skia",
-    "//skia/public",
     "//sql",
     "//storage/browser",
     "//storage/common",
@@ -107,6 +110,7 @@ source_set("browser") {
     "//ui/events/blink",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
     "//ui/gl",
     "//ui/native_theme",
     "//ui/resources",
@@ -152,10 +156,6 @@ source_set("browser") {
       "file_descriptor_info_impl.h",
     ]
     sources -= [ "renderer_host/web_input_event_aurawin.cc" ]
-  }
-
-  if (!is_win && !is_mac && !is_android && (!is_linux || !use_udev)) {
-    sources += [ "gamepad/gamepad_platform_data_fetcher.cc" ]
   }
 
   if (enable_basic_printing || enable_print_preview) {
@@ -245,10 +245,6 @@ source_set("browser") {
       "//device/udev_linux",
       "//media/capture",
     ]
-  } else {
-    if (is_linux) {
-      sources -= [ "gamepad/gamepad_platform_data_fetcher_linux.cc" ]
-    }
   }
 
   if (enable_plugins) {
@@ -289,20 +285,7 @@ source_set("browser") {
 
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
-    if (!is_chromeos) {
-      configs += [ "//build/config/linux:xscrnsaver" ]
-    }
     deps += [ "//ui/gfx/x" ]
-  }
-
-  # Dealing with power_save_blocker_{x11,ozone}.cc is a little complicated
-  # given the interaction between os_chromeos and the feature flags for X11 and
-  # ozone, so do it all in one spot.
-  if (is_chromeos || !use_ozone) {
-    sources -= [ "power_save_blocker_ozone.cc" ]
-  }
-  if (is_chromeos || !use_x11) {
-    sources -= [ "power_save_blocker_x11.cc" ]
   }
 
   # Dealing with *wifi_data_provider_*.cc is also a bit complicated given
@@ -360,6 +343,7 @@ source_set("browser") {
     deps += [
       "//content/public/android:jni",
       "//media",
+      "//media/capture/video/android",
       "//media/mojo/interfaces",
       "//mojo/android:libsystem_java",
       "//ui/android",
@@ -399,12 +383,12 @@ source_set("browser") {
   if (use_aura) {
     deps += [
       "//components/bitmap_uploader",
+      "//components/mus/common:mus_common",
       "//components/mus/public/cpp",
       "//components/mus/public/interfaces",
       "//ui/aura",
       "//ui/aura_extra",
       "//ui/strings",
-      "//ui/views/mus:for_component",
       "//ui/wm",
     ]
     sources += [
@@ -502,25 +486,6 @@ source_set("browser") {
     configs += [ "//media/mojo/services:mojo_media_config" ]
   }
 
-  if (enable_webvr) {
-    sources += [
-      "vr/vr_device.cc",
-      "vr/vr_device.h",
-      "vr/vr_device_manager.cc",
-      "vr/vr_device_manager.h",
-      "vr/vr_device_provider.h",
-    ]
-  }
-
-  if (enable_webvr && is_android) {
-    sources += [
-      "vr/android/cardboard/cardboard_vr_device.cc",
-      "vr/android/cardboard/cardboard_vr_device.h",
-      "vr/android/cardboard/cardboard_vr_device_provider.cc",
-      "vr/android/cardboard/cardboard_vr_device_provider.h",
-    ]
-  }
-
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
   }
@@ -530,6 +495,14 @@ source_set("browser") {
       "gpu/gpu_surface_tracker.cc",
       "gpu/gpu_surface_tracker.h",
     ]
+  }
+
+  if (enable_webvr) {
+    deps += [ "//device/vr" ]
+  }
+
+  if (enable_ipc_fuzzer) {
+    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
   }
 }
 

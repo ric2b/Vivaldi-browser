@@ -10,15 +10,13 @@
 #include "base/callback.h"
 #include "base/threading/thread_checker.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_info.h"
 #include "media/gpu/media_gpu_export.h"
 #include "media/video/video_decode_accelerator.h"
 
-namespace gfx {
-class GLContext;
-}
-
 namespace gl {
+class GLContext;
 class GLImage;
 }
 
@@ -40,7 +38,7 @@ class MEDIA_GPU_EXPORT GpuVideoDecodeAcceleratorFactoryImpl {
   ~GpuVideoDecodeAcceleratorFactoryImpl();
 
   // Return current GLContext.
-  using GetGLContextCallback = base::Callback<gfx::GLContext*(void)>;
+  using GetGLContextCallback = base::Callback<gl::GLContext*(void)>;
 
   // Make the applicable GL context current. To be called by VDAs before
   // executing any GL calls. Return true on success, false otherwise.
@@ -77,9 +75,10 @@ class MEDIA_GPU_EXPORT GpuVideoDecodeAcceleratorFactoryImpl {
   static gpu::VideoDecodeAcceleratorCapabilities GetDecoderCapabilities(
       const gpu::GpuPreferences& gpu_preferences);
 
-  std::unique_ptr<media::VideoDecodeAccelerator> CreateVDA(
-      media::VideoDecodeAccelerator::Client* client,
-      const media::VideoDecodeAccelerator::Config& config,
+  std::unique_ptr<VideoDecodeAccelerator> CreateVDA(
+      VideoDecodeAccelerator::Client* client,
+      const VideoDecodeAccelerator::Config& config,
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences);
 
  private:
@@ -90,25 +89,31 @@ class MEDIA_GPU_EXPORT GpuVideoDecodeAcceleratorFactoryImpl {
       const GetGLES2DecoderCallback& get_gles2_decoder_cb);
 
 #if defined(OS_WIN)
-  std::unique_ptr<media::VideoDecodeAccelerator> CreateDXVAVDA(
+  std::unique_ptr<VideoDecodeAccelerator> CreateDXVAVDA(
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences) const;
 #endif
 #if defined(OS_CHROMEOS) && defined(USE_V4L2_CODEC)
-  std::unique_ptr<media::VideoDecodeAccelerator> CreateV4L2VDA(
+  std::unique_ptr<VideoDecodeAccelerator> CreateV4L2VDA(
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences) const;
-  std::unique_ptr<media::VideoDecodeAccelerator> CreateV4L2SVDA(
+  std::unique_ptr<VideoDecodeAccelerator> CreateV4L2SVDA(
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences) const;
 #endif
 #if defined(OS_CHROMEOS) && defined(ARCH_CPU_X86_FAMILY)
-  std::unique_ptr<media::VideoDecodeAccelerator> CreateVaapiVDA(
+  std::unique_ptr<VideoDecodeAccelerator> CreateVaapiVDA(
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences) const;
 #endif
 #if defined(OS_MACOSX)
-  std::unique_ptr<media::VideoDecodeAccelerator> CreateVTVDA(
+  std::unique_ptr<VideoDecodeAccelerator> CreateVTVDA(
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences) const;
 #endif
 #if defined(OS_ANDROID)
-  std::unique_ptr<media::VideoDecodeAccelerator> CreateAndroidVDA(
+  std::unique_ptr<VideoDecodeAccelerator> CreateAndroidVDA(
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences) const;
 #endif
 

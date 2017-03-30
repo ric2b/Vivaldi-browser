@@ -5,14 +5,9 @@
 #ifndef REMOTING_HOST_HOST_EXTENSION_SESSION_H_
 #define REMOTING_HOST_HOST_EXTENSION_SESSION_H_
 
-namespace webrtc {
-class DesktopCapturer;
-}
-
 namespace remoting {
 
-class ClientSessionControl;
-class VideoEncoder;
+class ClientSessionDetails;
 
 namespace protocol {
 class ExtensionMessage;
@@ -29,7 +24,7 @@ class HostExtensionSession {
   // associated with this |HostExtensionSession|.
   // It returns |true| if the message was handled, and |false| otherwise.
   virtual bool OnExtensionMessage(
-      ClientSessionControl* client_session_control,
+      ClientSessionDetails* client_session_details,
       protocol::ClientStub* client_stub,
       const protocol::ExtensionMessage& message) = 0;
 };

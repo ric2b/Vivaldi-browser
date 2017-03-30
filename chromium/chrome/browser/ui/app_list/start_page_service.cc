@@ -36,9 +36,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/ui/zoom/zoom_controller.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_observer.h"
@@ -339,8 +338,8 @@ StartPageService::StartPageService(Profile* profile)
     const TemplateURL* default_provider =
         template_url_service->GetDefaultSearchProvider();
     search_engine_is_google_ =
-        TemplateURLPrepopulateData::GetEngineType(
-            *default_provider, template_url_service->search_terms_data()) ==
+        default_provider->GetEngineType(
+            template_url_service->search_terms_data()) ==
         SEARCH_ENGINE_GOOGLE;
   }
 
@@ -408,7 +407,7 @@ void StartPageService::AppListShown() {
   } else if (contents_->IsCrashed()) {
     LoadStartPageURL();
   } else if (contents_->GetWebUI()) {
-    contents_->GetWebUI()->CallJavascriptFunction(
+    contents_->GetWebUI()->CallJavascriptFunctionUnsafe(
         "appList.startPage.onAppListShown");
   }
 
@@ -581,11 +580,11 @@ void StartPageService::DidNavigateMainFrame(
   //
   // Use a temporary zoom level for this web contents (aka isolated zoom
   // mode) so changes to its zoom aren't reflected in any preferences.
-  ui_zoom::ZoomController::FromWebContents(contents_.get())
-      ->SetZoomMode(ui_zoom::ZoomController::ZOOM_MODE_ISOLATED);
+  zoom::ZoomController::FromWebContents(contents_.get())
+      ->SetZoomMode(zoom::ZoomController::ZOOM_MODE_ISOLATED);
   // Set to have a zoom level of 0, which corresponds to 100%, so the
   // contents aren't affected by the browser's default zoom level.
-  ui_zoom::ZoomController::FromWebContents(contents_.get())->SetZoomLevel(0);
+  zoom::ZoomController::FromWebContents(contents_.get())->SetZoomLevel(0);
 }
 
 void StartPageService::DidFailProvisionalLoad(
@@ -624,7 +623,7 @@ void StartPageService::LoadContents() {
   // The ZoomController needs to be created before the web contents is observed
   // by this object. Otherwise it will react to DidNavigateMainFrame after this
   // object does, resetting the zoom mode in the process.
-  ui_zoom::ZoomController::CreateForWebContents(contents_.get());
+  zoom::ZoomController::CreateForWebContents(contents_.get());
   Observe(contents_.get());
 
   LoadStartPageURL();
@@ -690,7 +689,7 @@ void StartPageService::OnURLFetchComplete(const net::URLFetcher* source) {
     recheck_delay = base::TimeDelta::FromMilliseconds(kMaximumRecheckDelayMs);
 
     if (contents_ && contents_->GetWebUI()) {
-      contents_->GetWebUI()->CallJavascriptFunction(
+      contents_->GetWebUI()->CallJavascriptFunctionUnsafe(
           "appList.startPage.onAppListDoodleUpdated", *doodle_json,
           base::StringValue(
               UIThreadSearchTermsData(profile_).GoogleBaseURLValue()));

@@ -5,7 +5,7 @@
 #include "modules/fetch/CompositeDataConsumerHandle.h"
 
 #include "modules/fetch/DataConsumerHandleTestUtil.h"
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/heap/Handle.h"
 #include "public/platform/Platform.h"
@@ -14,6 +14,8 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/Locker.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -30,7 +32,7 @@ const WebDataConsumerHandle::Flags kNone = WebDataConsumerHandle::FlagNone;
 
 class MockReader : public WebDataConsumerHandle::Reader {
 public:
-    static PassOwnPtr<StrictMock<MockReader>> create() { return adoptPtr(new StrictMock<MockReader>); }
+    static std::unique_ptr<StrictMock<MockReader>> create() { return wrapUnique(new StrictMock<MockReader>); }
 
     using Result = WebDataConsumerHandle::Result;
     using Flags = WebDataConsumerHandle::Flags;
@@ -41,7 +43,7 @@ public:
 
 class MockHandle : public WebDataConsumerHandle {
 public:
-    static PassOwnPtr<StrictMock<MockHandle>> create() { return adoptPtr(new StrictMock<MockHandle>); }
+    static std::unique_ptr<StrictMock<MockHandle>> create() { return wrapUnique(new StrictMock<MockHandle>); }
 
     MOCK_METHOD1(obtainReaderInternal, Reader*(Client*));
 
@@ -57,10 +59,10 @@ public:
     void run()
     {
         ThreadHolder holder(this);
-        m_waitableEvent = adoptPtr(new WaitableEvent());
+        m_waitableEvent = wrapUnique(new WaitableEvent());
 
-        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::createHandle, this));
-        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::obtainReader, this));
+        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::createHandle, wrapPassRefPtr(this)));
+        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::obtainReader, wrapPassRefPtr(this)));
     }
 
 private:
@@ -74,17 +76,17 @@ private:
     void obtainReader()
     {
         m_reader = m_handle->obtainReader(&m_client);
-        postTaskToUpdatingThread(BLINK_FROM_HERE, threadSafeBind(&Self::update, this));
+        postTaskToUpdatingThread(BLINK_FROM_HERE, crossThreadBind(&Self::update, wrapPassRefPtr(this)));
     }
     void update()
     {
         m_updater->update(DataConsumerHandle::create("handle2", m_context));
         m_updater.clear();
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::resetReader, this));
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::signalDone, this));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::resetReader, wrapPassRefPtr(this)));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::signalDone, wrapPassRefPtr(this)));
     }
 
-    OwnPtr<WebDataConsumerHandle> m_handle;
+    std::unique_ptr<WebDataConsumerHandle> m_handle;
     CrossThreadPersistent<CompositeDataConsumerHandle::Updater> m_updater;
 };
 
@@ -96,10 +98,10 @@ public:
     void run()
     {
         ThreadHolder holder(this);
-        m_waitableEvent = adoptPtr(new WaitableEvent());
+        m_waitableEvent = wrapUnique(new WaitableEvent());
 
-        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::createHandle, this));
-        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::obtainReader, this));
+        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::createHandle, wrapPassRefPtr(this)));
+        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::obtainReader, wrapPassRefPtr(this)));
     }
 
 private:
@@ -114,18 +116,18 @@ private:
     void obtainReader()
     {
         m_reader = m_handle->obtainReader(&m_client);
-        postTaskToUpdatingThread(BLINK_FROM_HERE, threadSafeBind(&Self::update, this));
+        postTaskToUpdatingThread(BLINK_FROM_HERE, crossThreadBind(&Self::update, wrapPassRefPtr(this)));
     }
     void update()
     {
         m_updater->update(DataConsumerHandle::create("handle2", m_context));
         m_updater.clear();
         m_handle = nullptr;
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::resetReader, this));
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::signalDone, this));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::resetReader, wrapPassRefPtr(this)));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::signalDone, wrapPassRefPtr(this)));
     }
 
-    OwnPtr<WebDataConsumerHandle> m_handle;
+    std::unique_ptr<WebDataConsumerHandle> m_handle;
     CrossThreadPersistent<CompositeDataConsumerHandle::Updater> m_updater;
 };
 
@@ -137,10 +139,10 @@ public:
     void run()
     {
         ThreadHolder holder(this);
-        m_waitableEvent = adoptPtr(new WaitableEvent());
+        m_waitableEvent = wrapUnique(new WaitableEvent());
 
-        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::createHandle, this));
-        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::obtainReader, this));
+        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::createHandle, wrapPassRefPtr(this)));
+        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::obtainReader, wrapPassRefPtr(this)));
     }
 
 private:
@@ -155,18 +157,18 @@ private:
     void obtainReader()
     {
         m_reader = m_handle->obtainReader(&m_client);
-        postTaskToUpdatingThread(BLINK_FROM_HERE, threadSafeBind(&Self::update, this));
+        postTaskToUpdatingThread(BLINK_FROM_HERE, crossThreadBind(&Self::update, wrapPassRefPtr(this)));
     }
     void update()
     {
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::resetReader, this));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::resetReader, wrapPassRefPtr(this)));
         m_updater->update(DataConsumerHandle::create("handle2", m_context));
         m_updater.clear();
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::resetReader, this));
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::signalDone, this));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::resetReader, wrapPassRefPtr(this)));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::signalDone, wrapPassRefPtr(this)));
     }
 
-    OwnPtr<WebDataConsumerHandle> m_handle;
+    std::unique_ptr<WebDataConsumerHandle> m_handle;
     CrossThreadPersistent<CompositeDataConsumerHandle::Updater> m_updater;
 };
 
@@ -178,11 +180,11 @@ public:
     void run()
     {
         ThreadHolder holder(this);
-        m_waitableEvent = adoptPtr(new WaitableEvent());
-        m_updateEvent = adoptPtr(new WaitableEvent());
+        m_waitableEvent = wrapUnique(new WaitableEvent());
+        m_updateEvent = wrapUnique(new WaitableEvent());
 
-        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::createHandle, this));
-        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::obtainReader, this));
+        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::createHandle, wrapPassRefPtr(this)));
+        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::obtainReader, wrapPassRefPtr(this)));
     }
 
 private:
@@ -197,17 +199,17 @@ private:
     void obtainReader()
     {
         m_reader = m_handle->obtainReader(&m_client);
-        postTaskToUpdatingThread(BLINK_FROM_HERE, threadSafeBind(&Self::update, this));
+        postTaskToUpdatingThread(BLINK_FROM_HERE, crossThreadBind(&Self::update, wrapPassRefPtr(this)));
         m_updateEvent->wait();
     }
 
     void update()
     {
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::reobtainReader, this));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::reobtainReader, wrapPassRefPtr(this)));
         m_updater->update(DataConsumerHandle::create("handle2", m_context));
         m_updater.clear();
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::resetReader, this));
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::signalDone, this));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::resetReader, wrapPassRefPtr(this)));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::signalDone, wrapPassRefPtr(this)));
         m_updateEvent->signal();
     }
 
@@ -217,9 +219,9 @@ private:
         m_reader = m_handle->obtainReader(&m_client);
     }
 
-    OwnPtr<WebDataConsumerHandle> m_handle;
+    std::unique_ptr<WebDataConsumerHandle> m_handle;
     CrossThreadPersistent<CompositeDataConsumerHandle::Updater> m_updater;
-    OwnPtr<WaitableEvent> m_updateEvent;
+    std::unique_ptr<WaitableEvent> m_updateEvent;
 };
 
 class ThreadingRegistrationUpdateTwiceAtOneTimeTest : public DataConsumerHandleTestUtil::ThreadingTestBase {
@@ -230,11 +232,11 @@ public:
     void run()
     {
         ThreadHolder holder(this);
-        m_waitableEvent = adoptPtr(new WaitableEvent());
-        m_updateEvent = adoptPtr(new WaitableEvent());
+        m_waitableEvent = wrapUnique(new WaitableEvent());
+        m_updateEvent = wrapUnique(new WaitableEvent());
 
-        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::createHandle, this));
-        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, threadSafeBind(&Self::obtainReader, this));
+        postTaskToUpdatingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::createHandle, wrapPassRefPtr(this)));
+        postTaskToReadingThreadAndWait(BLINK_FROM_HERE, crossThreadBind(&Self::obtainReader, wrapPassRefPtr(this)));
     }
 
 private:
@@ -249,7 +251,7 @@ private:
     void obtainReader()
     {
         m_reader = m_handle->obtainReader(&m_client);
-        postTaskToUpdatingThread(BLINK_FROM_HERE, threadSafeBind(&Self::update, this));
+        postTaskToUpdatingThread(BLINK_FROM_HERE, crossThreadBind(&Self::update, wrapPassRefPtr(this)));
         // Stalls this thread while updating handles.
         m_updateEvent->wait();
     }
@@ -259,13 +261,13 @@ private:
         m_updater->update(DataConsumerHandle::create("handle3", m_context));
         m_updateEvent->signal();
         m_updater.clear();
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::resetReader, this));
-        postTaskToReadingThread(BLINK_FROM_HERE, threadSafeBind(&Self::signalDone, this));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::resetReader, wrapPassRefPtr(this)));
+        postTaskToReadingThread(BLINK_FROM_HERE, crossThreadBind(&Self::signalDone, wrapPassRefPtr(this)));
     }
 
-    OwnPtr<WebDataConsumerHandle> m_handle;
+    std::unique_ptr<WebDataConsumerHandle> m_handle;
     CrossThreadPersistent<CompositeDataConsumerHandle::Updater> m_updater;
-    OwnPtr<WaitableEvent> m_updateEvent;
+    std::unique_ptr<WaitableEvent> m_updateEvent;
 };
 
 TEST(CompositeDataConsumerHandleTest, Read)
@@ -275,10 +277,10 @@ TEST(CompositeDataConsumerHandleTest, Read)
     DataConsumerHandleTestUtil::NoopClient client;
     Checkpoint checkpoint;
 
-    OwnPtr<MockHandle> handle1 = MockHandle::create();
-    OwnPtr<MockHandle> handle2 = MockHandle::create();
-    OwnPtr<MockReader> reader1 = MockReader::create();
-    OwnPtr<MockReader> reader2 = MockReader::create();
+    std::unique_ptr<MockHandle> handle1 = MockHandle::create();
+    std::unique_ptr<MockHandle> handle2 = MockHandle::create();
+    std::unique_ptr<MockReader> reader1 = MockReader::create();
+    std::unique_ptr<MockReader> reader2 = MockReader::create();
 
     InSequence s;
     EXPECT_CALL(checkpoint, Call(0));
@@ -292,13 +294,13 @@ TEST(CompositeDataConsumerHandleTest, Read)
     EXPECT_CALL(checkpoint, Call(4));
 
     // They are adopted by |obtainReader|.
-    ASSERT_TRUE(reader1.leakPtr());
-    ASSERT_TRUE(reader2.leakPtr());
+    ASSERT_TRUE(reader1.release());
+    ASSERT_TRUE(reader2.release());
 
     CompositeDataConsumerHandle::Updater* updater = nullptr;
-    OwnPtr<WebDataConsumerHandle> handle = CompositeDataConsumerHandle::create(std::move(handle1), &updater);
+    std::unique_ptr<WebDataConsumerHandle> handle = CompositeDataConsumerHandle::create(std::move(handle1), &updater);
     checkpoint.Call(0);
-    OwnPtr<WebDataConsumerHandle::Reader> reader = handle->obtainReader(&client);
+    std::unique_ptr<WebDataConsumerHandle::Reader> reader = handle->obtainReader(&client);
     checkpoint.Call(1);
     EXPECT_EQ(kOk, reader->read(buffer, sizeof(buffer), kNone, &size));
     checkpoint.Call(2);
@@ -314,10 +316,10 @@ TEST(CompositeDataConsumerHandleTest, TwoPhaseRead)
     size_t size = 0;
     Checkpoint checkpoint;
 
-    OwnPtr<MockHandle> handle1 = MockHandle::create();
-    OwnPtr<MockHandle> handle2 = MockHandle::create();
-    OwnPtr<MockReader> reader1 = MockReader::create();
-    OwnPtr<MockReader> reader2 = MockReader::create();
+    std::unique_ptr<MockHandle> handle1 = MockHandle::create();
+    std::unique_ptr<MockHandle> handle2 = MockHandle::create();
+    std::unique_ptr<MockReader> reader1 = MockReader::create();
+    std::unique_ptr<MockReader> reader2 = MockReader::create();
 
     InSequence s;
     EXPECT_CALL(checkpoint, Call(0));
@@ -335,13 +337,13 @@ TEST(CompositeDataConsumerHandleTest, TwoPhaseRead)
     EXPECT_CALL(checkpoint, Call(6));
 
     // They are adopted by |obtainReader|.
-    ASSERT_TRUE(reader1.leakPtr());
-    ASSERT_TRUE(reader2.leakPtr());
+    ASSERT_TRUE(reader1.release());
+    ASSERT_TRUE(reader2.release());
 
     CompositeDataConsumerHandle::Updater* updater = nullptr;
-    OwnPtr<WebDataConsumerHandle> handle = CompositeDataConsumerHandle::create(std::move(handle1), &updater);
+    std::unique_ptr<WebDataConsumerHandle> handle = CompositeDataConsumerHandle::create(std::move(handle1), &updater);
     checkpoint.Call(0);
-    OwnPtr<WebDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
+    std::unique_ptr<WebDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     checkpoint.Call(1);
     EXPECT_EQ(kOk, reader->beginRead(&p, kNone, &size));
     checkpoint.Call(2);
@@ -361,12 +363,12 @@ TEST(CompositeDataConsumerHandleTest, HangingTwoPhaseRead)
     size_t size = 0;
     Checkpoint checkpoint;
 
-    OwnPtr<MockHandle> handle1 = MockHandle::create();
-    OwnPtr<MockHandle> handle2 = MockHandle::create();
-    OwnPtr<MockHandle> handle3 = MockHandle::create();
-    OwnPtr<MockReader> reader1 = MockReader::create();
-    OwnPtr<MockReader> reader2 = MockReader::create();
-    OwnPtr<MockReader> reader3 = MockReader::create();
+    std::unique_ptr<MockHandle> handle1 = MockHandle::create();
+    std::unique_ptr<MockHandle> handle2 = MockHandle::create();
+    std::unique_ptr<MockHandle> handle3 = MockHandle::create();
+    std::unique_ptr<MockReader> reader1 = MockReader::create();
+    std::unique_ptr<MockReader> reader2 = MockReader::create();
+    std::unique_ptr<MockReader> reader3 = MockReader::create();
 
     InSequence s;
     EXPECT_CALL(checkpoint, Call(0));
@@ -388,14 +390,14 @@ TEST(CompositeDataConsumerHandleTest, HangingTwoPhaseRead)
     EXPECT_CALL(checkpoint, Call(8));
 
     // They are adopted by |obtainReader|.
-    ASSERT_TRUE(reader1.leakPtr());
-    ASSERT_TRUE(reader2.leakPtr());
-    ASSERT_TRUE(reader3.leakPtr());
+    ASSERT_TRUE(reader1.release());
+    ASSERT_TRUE(reader2.release());
+    ASSERT_TRUE(reader3.release());
 
     CompositeDataConsumerHandle::Updater* updater = nullptr;
-    OwnPtr<WebDataConsumerHandle> handle = CompositeDataConsumerHandle::create(std::move(handle1), &updater);
+    std::unique_ptr<WebDataConsumerHandle> handle = CompositeDataConsumerHandle::create(std::move(handle1), &updater);
     checkpoint.Call(0);
-    OwnPtr<WebDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
+    std::unique_ptr<WebDataConsumerHandle::Reader> reader = handle->obtainReader(nullptr);
     checkpoint.Call(1);
     EXPECT_EQ(kOk, reader->beginRead(&p, kNone, &size));
     checkpoint.Call(2);

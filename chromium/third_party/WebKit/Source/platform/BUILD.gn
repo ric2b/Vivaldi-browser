@@ -188,43 +188,44 @@ executable("character_data_generator") {
 
 # Inspector protocol
 
-protocol_file = "../devtools/protocol.json"
-
 action("inspector_protocol_sources") {
   script = "inspector_protocol/CodeGenerator.py"
-
+  deps = [
+    ":inspector_protocol_version",
+  ]
   sources = [
     "inspector_protocol/CodeGenerator.py",
+    "inspector_protocol/TypeBuilder_cpp.template",
+    "inspector_protocol/TypeBuilder_h.template",
   ]
   inputs = [
-    protocol_file,
-    "inspector_protocol/Backend_h.template",
-    "inspector_protocol/Dispatcher_h.template",
-    "inspector_protocol/Dispatcher_cpp.template",
-    "inspector_protocol/Frontend_h.template",
-    "inspector_protocol/Frontend_cpp.template",
-    "inspector_protocol/TypeBuilder_h.template",
-    "inspector_protocol/TypeBuilder_cpp.template",
+    "v8_inspector/js_protocol.json",
   ]
   outputs = [
-    "$blink_platform_output_dir/inspector_protocol/Backend.h",
-    "$blink_platform_output_dir/inspector_protocol/Dispatcher.cpp",
-    "$blink_platform_output_dir/inspector_protocol/Dispatcher.h",
-    "$blink_platform_output_dir/inspector_protocol/Frontend.cpp",
-    "$blink_platform_output_dir/inspector_protocol/Frontend.h",
-    "$blink_platform_output_dir/inspector_protocol/TypeBuilder.cpp",
-    "$blink_platform_output_dir/inspector_protocol/TypeBuilder.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Console.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Console.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Debugger.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Debugger.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/HeapProfiler.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/HeapProfiler.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Profiler.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Profiler.h",
+    "$blink_platform_output_dir/v8_inspector/protocol/Runtime.cpp",
+    "$blink_platform_output_dir/v8_inspector/protocol/Runtime.h",
   ]
 
   args = [
-    rebase_path(protocol_file, root_build_dir),
+    "--protocol",
+    rebase_path("v8_inspector/js_protocol.json", root_build_dir),
+    "--string_type",
+    "String16",
+    "--export_macro",
+    "PLATFORM_EXPORT",
     "--output_dir",
-    rebase_path(blink_platform_output_dir + "/inspector_protocol/",
+    rebase_path(blink_platform_output_dir + "/v8_inspector/protocol",
                 root_build_dir),
-  ]
-
-  deps = [
-    ":inspector_protocol_version",
+    "--output_package",
+    "platform/v8_inspector/protocol",
   ]
 }
 
@@ -232,18 +233,18 @@ action("inspector_protocol_version") {
   script = "inspector_protocol/generate-inspector-protocol-version"
 
   inputs = [
-    protocol_file,
+    "v8_inspector/js_protocol.json",
   ]
   output_file =
-      "$blink_platform_output_dir/inspector_protocol/InspectorProtocolVersion.h"
+      "$blink_platform_output_dir/v8_inspector/protocol/v8inspector.json"
   outputs = [
     output_file,
   ]
 
   args = [
-    "-o",
+    "--o",
     rebase_path(output_file, root_build_dir),
-    rebase_path(protocol_file, root_build_dir),
+    rebase_path("v8_inspector/js_protocol.json", root_build_dir),
   ]
 }
 
@@ -302,7 +303,11 @@ group("make_platform_generated") {
 # blink_platform target in blink_platform.gyp
 component("platform") {
   visibility = []  # Allow re-assignment of list.
-  visibility = [ "//third_party/WebKit/*" ]
+  visibility = [
+    "//third_party/WebKit/*",
+    "//url/mojo:url_mojom_origin_blink_cpp_sources",
+    "//url/mojo:url_mojom_gurl_blink_cpp_sources",
+  ]
   output_name = "blink_platform"
 
   sources = platform_files
@@ -358,10 +363,10 @@ component("platform") {
   deps = [
     ":blink_common",
     "//components/link_header_util:link_header_util",
-    "//mojo/public/c/system:for_component",
-    "//mojo/public/cpp/bindings:callback",
+    "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/bindings:wtf_support",
     "//third_party/WebKit/Source/platform/heap",
+    "//third_party/WebKit/public:mojo_bindings_blink",
     "//third_party/harfbuzz-ng",
     "//third_party/icu",
     "//ui/gfx",
@@ -575,6 +580,7 @@ test("blink_platform_unittests") {
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//url",
+    "//url/mojo:test_url_mojom_gurl_blink",
   ]
 
   data_deps = [

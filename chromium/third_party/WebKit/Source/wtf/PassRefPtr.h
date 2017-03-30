@@ -82,11 +82,7 @@ public:
     T* operator->() const { return m_ptr; }
 
     bool operator!() const { return !m_ptr; }
-
-    // This conversion operator allows implicit conversion to bool but not to
-    // other integer types.
-    typedef T* (PassRefPtr::*UnspecifiedBoolType);
-    operator UnspecifiedBoolType() const { return m_ptr ? &PassRefPtr::m_ptr : 0; }
+    explicit operator bool() const { return m_ptr != nullptr; }
 
     friend PassRefPtr adoptRef<T>(T*);
 
@@ -102,6 +98,12 @@ private:
 
     mutable T* m_ptr;
 };
+
+template <typename T>
+PassRefPtr<T> wrapPassRefPtr(T* ptr)
+{
+    return PassRefPtr<T>(ptr);
+}
 
 template <typename T>
 template <typename U> inline PassRefPtr<T>::PassRefPtr(const RefPtr<U>& o, EnsurePtrConvertibleArgDefn(U, T))
@@ -149,6 +151,16 @@ template <typename T, typename U> inline bool operator==(T* a, const PassRefPtr<
     return a == b.get();
 }
 
+template <typename T> inline bool operator==(const PassRefPtr<T>& a, std::nullptr_t)
+{
+    return !a.get();
+}
+
+template <typename T> inline bool operator==(std::nullptr_t, const PassRefPtr<T>& b)
+{
+    return !b.get();
+}
+
 template <typename T, typename U> inline bool operator!=(const PassRefPtr<T>& a, const PassRefPtr<U>& b)
 {
     return a.get() != b.get();
@@ -172,6 +184,16 @@ template <typename T, typename U> inline bool operator!=(const PassRefPtr<T>& a,
 template <typename T, typename U> inline bool operator!=(T* a, const PassRefPtr<U>& b)
 {
     return a != b.get();
+}
+
+template <typename T> inline bool operator!=(const PassRefPtr<T>& a, std::nullptr_t)
+{
+    return a.get();
+}
+
+template <typename T> inline bool operator!=(std::nullptr_t, const PassRefPtr<T>& b)
+{
+    return b.get();
 }
 
 template <typename T> PassRefPtr<T> adoptRef(T* p)

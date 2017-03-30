@@ -4,7 +4,11 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/json/json_writer.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -55,7 +59,7 @@ class AudioWaitingExtensionTest : public ExtensionApiTest {
     for (size_t remaining_tries = 50; remaining_tries > 0; --remaining_tries) {
       tab->GetRenderProcessHost()->GetAudioOutputControllers(
           base::Bind(OnAudioControllers, &audio_playing));
-      base::MessageLoop::current()->RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
       if (audio_playing)
         break;
 
@@ -78,8 +82,8 @@ class AudioWaitingExtensionTest : public ExtensionApiTest {
 class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
  public:
   WebrtcAudioPrivateTest()
-      : enumeration_event_(false, false) {
-  }
+      : enumeration_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void SetUpOnMainThread() override {
     AudioWaitingExtensionTest::SetUpOnMainThread();
@@ -89,9 +93,10 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
 
  protected:
   void AppendTabIdToRequestInfo(base::ListValue* params, int tab_id) {
-    base::DictionaryValue* request_info = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> request_info(
+        new base::DictionaryValue());
     request_info->SetInteger("tabId", tab_id);
-    params->Append(request_info);
+    params->Append(std::move(request_info));
   }
 
   std::string InvokeGetActiveSink(int tab_id) {
@@ -150,9 +155,9 @@ class WebrtcAudioPrivateTest : public AudioWaitingExtensionTest {
                      GURL origin,
                      const std::string& raw_device_id,
                      std::string* id_in_origin) {
-    if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::IO)) {
+    if (!content::BrowserThread::CurrentlyOn(content::BrowserThread::UI)) {
       content::BrowserThread::PostTask(
-          content::BrowserThread::IO, FROM_HERE,
+          content::BrowserThread::UI, FROM_HERE,
           base::Bind(&WebrtcAudioPrivateTest::GetIDInOrigin,
                      this, resource_context, origin, raw_device_id,
                      id_in_origin));

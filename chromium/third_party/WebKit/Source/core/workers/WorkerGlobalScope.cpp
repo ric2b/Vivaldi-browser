@@ -29,13 +29,12 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScheduledAction.h"
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8AbstractEventListener.h"
 #include "bindings/core/v8/V8CacheOptions.h"
 #include "core/dom/ActiveDOMObject.h"
-#include "core/dom/AddConsoleMessageTask.h"
 #include "core/dom/ContextLifecycleNotifier.h"
 #include "core/dom/CrossThreadTask.h"
 #include "core/dom/DOMURL.h"
@@ -49,11 +48,11 @@
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/inspector/ConsoleMessageStorage.h"
-#include "core/inspector/InspectorConsoleInstrumentation.h"
+#include "core/inspector/IdentifiersFactory.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/WorkerInspectorController.h"
+#include "core/inspector/WorkerThreadDebugger.h"
 #include "core/loader/WorkerThreadableLoader.h"
-#include "core/workers/WorkerNavigator.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerLocation.h"
@@ -67,10 +66,11 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebURLRequest.h"
+#include <memory>
 
 namespace blink {
 
-WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, WorkerThread* thread, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilageData, WorkerClients* workerClients)
+WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, WorkerThread* thread, double timeOrigin, std::unique_ptr<SecurityOrigin::PrivilegeData> starterOriginPrivilageData, WorkerClients* workerClients)
     : m_url(url)
     , m_userAgent(userAgent)
     , m_v8CacheOptions(V8CacheOptionsDefault)
@@ -82,8 +82,6 @@ WorkerGlobalScope::WorkerGlobalScope(const KURL& url, const String& userAgent, W
     , m_workerClients(workerClients)
     , m_timers(Platform::current()->currentThread()->scheduler()->timerTaskRunner()->adoptClone())
     , m_timeOrigin(timeOrigin)
-    , m_messageStorage(ConsoleMessageStorage::create())
-    , m_workerExceptionUniqueIdentifier(0)
 {
     setSecurityOrigin(SecurityOrigin::create(url));
     if (starterOriginPrivilageData)
@@ -171,9 +169,9 @@ WorkerNavigator* WorkerGlobalScope::navigator() const
     return m_navigator.get();
 }
 
-void WorkerGlobalScope::postTask(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task)
+void WorkerGlobalScope::postTask(const WebTraceLocation& location, std::unique_ptr<ExecutionContextTask> task, const String& taskNameForInstrumentation)
 {
-    thread()->postTask(location, std::move(task));
+    thread()->postTask(location, std::move(task), !taskNameForInstrumentation.isEmpty());
 }
 
 void WorkerGlobalScope::clearScript()
@@ -211,16 +209,7 @@ void WorkerGlobalScope::dispose()
     clearScript();
     clearInspector();
     m_eventQueue->close();
-
-    // We do not clear the thread field of the
-    // WorkerGlobalScope. Other objects keep the worker global scope
-    // alive because they need its thread field to check that work is
-    // being carried out on the right thread. We therefore cannot clear
-    // the thread field before all references to the worker global
-    // scope are gone.
-    //
-    // TODO(haraken): It's nasty to keep a raw pointer to WorkerThread
-    // after disposing WorkerGlobalScope. m_thread should be cleared here.
+    m_thread = nullptr;
 }
 
 void WorkerGlobalScope::didEvaluateWorkerScript()
@@ -241,7 +230,7 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls, ExceptionState
             exceptionState.throwDOMException(SyntaxError, "The URL '" + urlString + "' is invalid.");
             return;
         }
-        if (!contentSecurityPolicy()->allowScriptFromSource(url)) {
+        if (!contentSecurityPolicy()->allowScriptFromSource(url, AtomicString())) {
             exceptionState.throwDOMException(NetworkError, "The script at '" + url.elidedString() + "' failed to load.");
             return;
         }
@@ -263,7 +252,7 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls, ExceptionState
         scriptLoaded(scriptLoader->script().length(), scriptLoader->cachedMetadata() ? scriptLoader->cachedMetadata()->size() : 0);
 
         ErrorEvent* errorEvent = nullptr;
-        OwnPtr<Vector<char>> cachedMetaData(scriptLoader->releaseCachedMetadata());
+        std::unique_ptr<Vector<char>> cachedMetaData(scriptLoader->releaseCachedMetadata());
         CachedMetadataHandler* handler(createWorkerScriptCachedMetadataHandler(completeURL, cachedMetaData.get()));
         m_scriptController->evaluate(ScriptSourceCode(scriptLoader->script(), scriptLoader->responseURL()), &errorEvent, handler, m_v8CacheOptions);
         if (errorEvent) {
@@ -278,14 +267,9 @@ EventTarget* WorkerGlobalScope::errorEventTarget()
     return this;
 }
 
-void WorkerGlobalScope::logExceptionToConsole(const String& errorMessage, int, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
+void WorkerGlobalScope::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
-    unsigned long exceptionId = ++m_workerExceptionUniqueIdentifier;
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
-    consoleMessage->setCallStack(callStack);
-    m_pendingMessages.set(exceptionId, consoleMessage);
-
-    thread()->workerReportingProxy().reportException(errorMessage, lineNumber, columnNumber, sourceURL, exceptionId);
+    thread()->workerReportingProxy().reportException(errorMessage, std::move(location));
 }
 
 void WorkerGlobalScope::reportBlockedScriptExecutionToInspector(const String& directiveText)
@@ -303,7 +287,20 @@ void WorkerGlobalScope::addConsoleMessage(ConsoleMessage* consoleMessage)
 void WorkerGlobalScope::addMessageToWorkerConsole(ConsoleMessage* consoleMessage)
 {
     DCHECK(isContextThread());
-    m_messageStorage->reportMessage(this, consoleMessage);
+    WorkerThreadDebugger* debugger = WorkerThreadDebugger::from(thread()->isolate());
+    if (!debugger)
+        return;
+    debugger->debugger()->addConsoleMessage(
+        debugger->contextGroupId(),
+        consoleMessage->source(),
+        consoleMessage->level(),
+        consoleMessage->message(),
+        consoleMessage->location()->url(),
+        consoleMessage->location()->lineNumber(),
+        consoleMessage->location()->columnNumber(),
+        consoleMessage->location()->cloneStackTrace(),
+        consoleMessage->location()->scriptId(),
+        IdentifiersFactory::requestId(consoleMessage->requestIdentifier()));
 }
 
 bool WorkerGlobalScope::isContextThread() const
@@ -356,16 +353,9 @@ void WorkerGlobalScope::countDeprecation(UseCounter::Feature feature) const
     }
 }
 
-ConsoleMessageStorage* WorkerGlobalScope::messageStorage()
+void WorkerGlobalScope::exceptionUnhandled(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
-    return m_messageStorage.get();
-}
-
-void WorkerGlobalScope::exceptionHandled(int exceptionId, bool isHandled)
-{
-    ConsoleMessage* consoleMessage = m_pendingMessages.take(exceptionId);
-    if (!isHandled)
-        addConsoleMessage(consoleMessage);
+    addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location)));
 }
 
 bool WorkerGlobalScope::isSecureContext(String& errorMessage, const SecureContextCheck privilegeContextCheck) const
@@ -415,8 +405,6 @@ DEFINE_TRACE(WorkerGlobalScope)
     visitor->trace(m_eventQueue);
     visitor->trace(m_workerClients);
     visitor->trace(m_timers);
-    visitor->trace(m_messageStorage);
-    visitor->trace(m_pendingMessages);
     visitor->trace(m_eventListeners);
     ExecutionContext::trace(visitor);
     EventTargetWithInlineData::trace(visitor);

@@ -36,6 +36,7 @@ StepRange::StepRange()
     , m_step(1)
     , m_stepBase(0)
     , m_hasStep(false)
+    , m_hasRangeLimitations(false)
 {
 }
 
@@ -46,21 +47,23 @@ StepRange::StepRange(const StepRange& stepRange)
     , m_stepBase(stepRange.m_stepBase)
     , m_stepDescription(stepRange.m_stepDescription)
     , m_hasStep(stepRange.m_hasStep)
+    , m_hasRangeLimitations(stepRange.m_hasRangeLimitations)
 {
 }
 
-StepRange::StepRange(const Decimal& stepBase, const Decimal& minimum, const Decimal& maximum, const Decimal& step, const StepDescription& stepDescription)
+StepRange::StepRange(const Decimal& stepBase, const Decimal& minimum, const Decimal& maximum, bool hasRangeLimitations, const Decimal& step, const StepDescription& stepDescription)
     : m_maximum(maximum)
     , m_minimum(minimum)
     , m_step(step.isFinite() ? step : 1)
     , m_stepBase(stepBase.isFinite() ? stepBase : 1)
     , m_stepDescription(stepDescription)
     , m_hasStep(step.isFinite())
+    , m_hasRangeLimitations(hasRangeLimitations)
 {
-    ASSERT(m_maximum.isFinite());
-    ASSERT(m_minimum.isFinite());
-    ASSERT(m_step.isFinite());
-    ASSERT(m_stepBase.isFinite());
+    DCHECK(m_maximum.isFinite());
+    DCHECK(m_minimum.isFinite());
+    DCHECK(m_step.isFinite());
+    DCHECK(m_stepBase.isFinite());
 }
 
 Decimal StepRange::acceptableError() const
@@ -105,7 +108,7 @@ Decimal StepRange::parseStep(AnyStepHandling anyStepHandling, const StepDescript
         case AnyIsDefaultStep:
             return stepDescription.defaultValue();
         default:
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
         }
     }
 
@@ -128,10 +131,10 @@ Decimal StepRange::parseStep(AnyStepHandling anyStepHandling, const StepDescript
         step = std::max(step.round(), Decimal(1));
         break;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 
-    ASSERT(step > 0);
+    DCHECK_GT(step, 0);
     return step;
 }
 
@@ -163,6 +166,21 @@ bool StepRange::stepMismatch(const Decimal& valueForCheck) const
     // can't represent.
     const Decimal computedAcceptableError = acceptableError();
     return computedAcceptableError < remainder && remainder < (m_step - computedAcceptableError);
+}
+
+Decimal StepRange::stepSnappedMaximum() const
+{
+    Decimal base = stepBase();
+    Decimal step = this->step();
+    if (base - step == base || !(base / step).isFinite())
+        return Decimal::nan();
+    Decimal alignedMaximum = base + ((maximum() - base) / step).floor() * step;
+    if (alignedMaximum > maximum())
+        alignedMaximum -= step;
+    DCHECK_LE(alignedMaximum, maximum());
+    if (alignedMaximum < minimum())
+        return Decimal::nan();
+    return alignedMaximum;
 }
 
 } // namespace blink

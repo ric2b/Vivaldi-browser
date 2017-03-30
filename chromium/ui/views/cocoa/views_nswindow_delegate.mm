@@ -35,16 +35,8 @@
   [parent_->ns_window() resetCursorRects];
 }
 
-- (void)onWindowOrderWillChange:(NSWindowOrderingMode)orderingMode {
-  parent_->OnVisibilityChangedTo(orderingMode != NSWindowOut);
-}
-
 - (void)onWindowOrderChanged:(NSNotification*)notification {
   parent_->OnVisibilityChanged();
-}
-
-- (void)onWindowWillDisplay {
-  parent_->OnVisibilityChangedTo(true);
 }
 
 - (void)sheetDidEnd:(NSWindow*)sheet
@@ -77,6 +69,13 @@
 
 - (void)windowDidResize:(NSNotification*)notification {
   parent_->OnSizeChanged();
+}
+
+- (void)windowDidMove:(NSNotification*)notification {
+  // Note: windowDidMove: is sent only once at the end of a window drag. There
+  // is also windowWillMove: sent at the start, also once. When the window is
+  // being moved by the WindowServer live updates are not provided.
+  parent_->OnPositionChanged();
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification {

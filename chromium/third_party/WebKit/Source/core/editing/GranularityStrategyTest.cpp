@@ -15,10 +15,10 @@
 #include "core/testing/DummyPageHolder.h"
 #include "platform/heap/Handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 namespace blink {
 
@@ -69,7 +69,7 @@ protected:
     Vector<IntPoint> m_wordMiddles;
 
 private:
-    OwnPtr<DummyPageHolder> m_dummyPageHolder;
+    std::unique_ptr<DummyPageHolder> m_dummyPageHolder;
     Persistent<HTMLDocument> m_document;
 };
 
@@ -126,7 +126,7 @@ void GranularityStrategyTest::parseText(const TextNodeVector& textNodes)
         String str = text->wholeText();
         for (size_t i = 0; i < str.length(); i++) {
             m_letterPos.append(visiblePositionToContentsPoint(createVisiblePosition(Position(text, i))));
-            char c = str.characterAt(i);
+            char c = str[i];
             if (isASCIIAlphanumeric(c) && !wordStarted) {
                 wordStartIndex = i + wordStartIndexOffset;
                 wordStarted = true;

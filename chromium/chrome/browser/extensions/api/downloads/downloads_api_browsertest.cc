@@ -316,12 +316,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
 
   // InProcessBrowserTest
   void SetUpOnMainThread() override {
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(
-        features::kDownloadResumption.name, std::string());
-    base::FeatureList::SetInstance(std::move(feature_list));
-
     ExtensionApiTest::SetUpOnMainThread();
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
@@ -714,7 +708,9 @@ class HTML5FileWriter {
     }
     // Invoke the fileapi to copy it into the sandboxed filesystem.
     bool result = false;
-    base::WaitableEvent done_event(true, false);
+    base::WaitableEvent done_event(
+        base::WaitableEvent::ResetPolicy::MANUAL,
+        base::WaitableEvent::InitialState::NOT_SIGNALED);
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&CreateFileForTestingOnIOThread,

@@ -32,11 +32,12 @@
 #include "platform/image-decoders/ImageDecoder.h"
 #include "platform/image-decoders/SegmentReader.h"
 #include "third_party/skia/include/core/SkData.h"
+#include <memory>
 
 namespace blink {
 
-DecodingImageGenerator::DecodingImageGenerator(PassRefPtr<ImageFrameGenerator> frameGenerator, const SkImageInfo& info, PassRefPtr<SegmentReader> data, bool allDataReceived, size_t index)
-    : SkImageGenerator(info)
+DecodingImageGenerator::DecodingImageGenerator(PassRefPtr<ImageFrameGenerator> frameGenerator, const SkImageInfo& info, PassRefPtr<SegmentReader> data, bool allDataReceived, size_t index, uint32_t uniqueID)
+    : SkImageGenerator(info, uniqueID)
     , m_frameGenerator(frameGenerator)
     , m_data(data)
     , m_allDataReceived(allDataReceived)
@@ -53,7 +54,19 @@ SkData* DecodingImageGenerator::onRefEncodedData(GrContext* ctx)
 {
     TRACE_EVENT0("blink", "DecodingImageGenerator::refEncodedData");
 
-    return m_allDataReceived ? m_data->getAsSkData().leakRef() : nullptr;
+    // The GPU only wants the data if it has all been received, since the GPU
+    // only wants a complete texture. getAsSkData() may require copying, so
+    // skip it and just return nullptr to avoid a slowdown. (See
+    // crbug.com/568016 for details about such a slowdown.)
+    // TODO (scroggo): Stop relying on the internal knowledge of how Skia uses
+    // this. skbug.com/5485
+    if (ctx && !m_allDataReceived)
+        return nullptr;
+
+    // Other clients are serializers, which want the data even if it requires
+    // copying, and even if the data is incomplete. (Otherwise they would
+    // potentially need to decode the partial image in order to re-encode it.)
+    return m_data->getAsSkData().leakRef();
 }
 
 bool DecodingImageGenerator::onGetPixels(const SkImageInfo& info, void* pixels, size_t rowBytes, SkPMColor table[], int* tableCount)
@@ -109,11 +122,13 @@ SkImageGenerator* DecodingImageGenerator::create(SkData* data)
 {
     // We just need the size of the image, so we have to temporarily create an ImageDecoder. Since
     // we only need the size, it doesn't really matter about premul or not, or gamma settings.
-    OwnPtr<ImageDecoder> decoder = ImageDecoder::create(static_cast<const char*>(data->data()), data->size(),
+    std::unique_ptr<ImageDecoder> decoder = ImageDecoder::create(static_cast<const char*>(data->data()), data->size(),
         ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileApplied);
     if (!decoder)
         return 0;
 
+    // Blink does not know Skia has already adopted |data|.
+    WTF::adopted(data);
     RefPtr<SegmentReader> segmentReader = SegmentReader::createFromSkData(data);
     decoder->setData(segmentReader.get(), true);
     if (!decoder->isSizeAvailable())

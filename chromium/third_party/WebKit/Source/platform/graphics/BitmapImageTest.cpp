@@ -66,9 +66,6 @@ public:
         int m_lastDecodedSizeChangedDelta;
     };
 
-    BitmapImageTest() : BitmapImageTest(false) { }
-    BitmapImageTest(bool enableDeferredDecoding) : m_enableDeferredDecoding(enableDeferredDecoding) { }
-
     static PassRefPtr<SharedBuffer> readFile(const char* fileName)
     {
         String filePath = testing::blinkRootDir();
@@ -77,11 +74,11 @@ public:
     }
 
     // Accessors to BitmapImage's protected methods.
-    void destroyDecodedData(bool destroyAll) { m_image->destroyDecodedData(destroyAll); }
+    void destroyDecodedData() { m_image->destroyDecodedData(); }
     size_t frameCount() { return m_image->frameCount(); }
-    void frameAtIndex(size_t index)
+    PassRefPtr<SkImage> frameAtIndex(size_t index)
     {
-        m_image->frameAtIndex(index);
+        return m_image->frameAtIndex(index);
     }
     void setCurrentFrame(size_t frame) { m_image->m_currentFrame = frame; }
     size_t frameDecodedSize(size_t frame) { return m_image->m_frames[frame].m_frameBytes; }
@@ -108,7 +105,7 @@ public:
     {
         // In the context of this test, the following loop will give the correct result, but only because the test
         // forces all frames to be decoded in loadImage() above. There is no general guarantee that frameDecodedSize()
-        // is up-to-date. Because of how multi frame images (like GIF) work, requesting one frame to be decoded may
+        // is up to date. Because of how multi frame images (like GIF) work, requesting one frame to be decoded may
         // require other previous frames to be decoded as well. In those cases frameDecodedSize() wouldn't return the
         // correct thing for the previous frame because the decoded size wouldn't have propagated upwards to the
         // BitmapImage frame cache.
@@ -138,40 +135,29 @@ public:
         return m_image->imageForDefaultFrame();
     }
 
+    int lastDecodedSizeChange()
+    {
+        return m_imageObserver->m_lastDecodedSizeChangedDelta;
+    }
+
 protected:
     void SetUp() override
     {
-        DeferredImageDecoder::setEnabled(m_enableDeferredDecoding);
         m_imageObserver = new FakeImageObserver;
         m_image = BitmapImage::create(m_imageObserver.get());
     }
 
     Persistent<FakeImageObserver> m_imageObserver;
     RefPtr<BitmapImage> m_image;
-
-private:
-    bool m_enableDeferredDecoding;
 };
 
-TEST_F(BitmapImageTest, destroyDecodedDataExceptCurrentFrame)
-{
-    loadImage("/LayoutTests/fast/images/resources/animated-10color.gif");
-    size_t totalSize = decodedSize();
-    size_t frame = frameCount() / 2;
-    setCurrentFrame(frame);
-    size_t size = frameDecodedSize(frame);
-    destroyDecodedData(false);
-    EXPECT_LT(m_imageObserver->m_lastDecodedSizeChangedDelta, 0);
-    EXPECT_GE(m_imageObserver->m_lastDecodedSizeChangedDelta, -static_cast<int>(totalSize - size));
-}
-
-TEST_F(BitmapImageTest, destroyAllDecodedData)
+TEST_F(BitmapImageTest, destroyDecodedData)
 {
     loadImage("/LayoutTests/fast/images/resources/animated-10color.gif");
     size_t totalSize = decodedSize();
     EXPECT_GT(totalSize, 0u);
-    destroyDecodedData(true);
-    EXPECT_EQ(-static_cast<int>(totalSize), m_imageObserver->m_lastDecodedSizeChangedDelta);
+    destroyDecodedData();
+    EXPECT_EQ(-static_cast<int>(totalSize), lastDecodedSizeChange());
     EXPECT_EQ(0u, decodedSize());
 }
 
@@ -267,58 +253,27 @@ TEST_F(BitmapImageTest, icoHasWrongFrameDimensions)
 
 TEST_F(BitmapImageTest, correctDecodedDataSize)
 {
-    // When requesting a frame of a multi-frame GIF causes another frame to be
-    // decoded as well, both frames' sizes should be reported by the source and
-    // thus included in the decoded size changed notification.
+    // Requesting any one frame shouldn't result in decoding any other frames.
     loadImage("/LayoutTests/fast/images/resources/anim_none.gif", false);
     frameAtIndex(1);
     int frameSize = static_cast<int>(m_image->size().area() * sizeof(ImageFrame::PixelData));
-    EXPECT_EQ(frameSize * 2, m_imageObserver->m_lastDecodedSizeChangedDelta);
-
-    // Trying to destroy all data except an undecoded frame should cause the
-    // decoder to seek backwards and preserve the most recent previous frame
-    // necessary to decode that undecoded frame, and destroy all other frames.
-    setCurrentFrame(2);
-    destroyDecodedData(false);
-    EXPECT_EQ(-frameSize, m_imageObserver->m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(frameSize, lastDecodedSizeChange());
 }
 
 TEST_F(BitmapImageTest, recachingFrameAfterDataChanged)
 {
     loadImage("/LayoutTests/fast/images/resources/green.jpg");
     setFirstFrameNotComplete();
-    EXPECT_GT(m_imageObserver->m_lastDecodedSizeChangedDelta, 0);
+    EXPECT_GT(lastDecodedSizeChange(), 0);
     m_imageObserver->m_lastDecodedSizeChangedDelta = 0;
 
     // Calling dataChanged causes the cache to flush, but doesn't affect the
     // source's decoded frames. It shouldn't affect decoded size.
     m_image->dataChanged(true);
-    EXPECT_EQ(0, m_imageObserver->m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(0, lastDecodedSizeChange());
     // Recaching the first frame also shouldn't affect decoded size.
     m_image->imageForCurrentFrame();
-    EXPECT_EQ(0, m_imageObserver->m_lastDecodedSizeChangedDelta);
-}
-
-class BitmapImageDeferredDecodingTest : public BitmapImageTest {
-public:
-    BitmapImageDeferredDecodingTest() : BitmapImageTest(true) { }
-};
-
-TEST_F(BitmapImageDeferredDecodingTest, correctDecodedDataSize)
-{
-    // When deferred decoding is enabled, requesting any one frame shouldn't
-    // result in decoding any other frames.
-    loadImage("/LayoutTests/fast/images/resources/anim_none.gif", false);
-    frameAtIndex(1);
-    int frameSize = static_cast<int>(m_image->size().area() * sizeof(ImageFrame::PixelData));
-    EXPECT_EQ(frameSize, m_imageObserver->m_lastDecodedSizeChangedDelta);
-    frameAtIndex(0);
-
-    // Trying to destroy all data except an undecoded frame should go ahead and
-    // destroy all other frames.
-    setCurrentFrame(2);
-    destroyDecodedData(false);
-    EXPECT_EQ(-frameSize * 2, m_imageObserver->m_lastDecodedSizeChangedDelta);
+    EXPECT_EQ(0, lastDecodedSizeChange());
 }
 
 template <typename HistogramEnumType>

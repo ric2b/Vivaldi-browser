@@ -13,6 +13,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task_runner.h"
@@ -23,7 +24,7 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_event.h"
-#include "components/ui/zoom/zoom_controller.h"
+#include "components/zoom/zoom_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/invalidate_type.h"
@@ -301,7 +302,7 @@ void AppWindow::Init(const GURL& url,
       ->SetDelegate(this);
   if (vivaldi::IsVivaldiRunning()) {
     extensions::VivaldiAppHelper::CreateForWebContents(web_contents());
-    ui_zoom::ZoomController::CreateForWebContents(web_contents());
+    zoom::ZoomController::CreateForWebContents(web_contents());
   }
 
   // Initialize the window
@@ -506,6 +507,13 @@ void AppWindow::RequestToLockMouse(WebContents* web_contents,
 bool AppWindow::PreHandleGestureEvent(WebContents* source,
                                       const blink::WebGestureEvent& event) {
   return AppWebContentsHelper::ShouldSuppressGestureEvent(event);
+}
+
+std::unique_ptr<content::BluetoothChooser> AppWindow::RunBluetoothChooser(
+    content::RenderFrameHost* frame,
+    const content::BluetoothChooser::EventHandler& event_handler) {
+  return ExtensionsBrowserClient::Get()->CreateBluetoothChooser(frame,
+                                                                event_handler);
 }
 
 void AppWindow::RenderViewCreated(content::RenderViewHost* render_view_host) {
@@ -997,7 +1005,7 @@ content::ColorChooser* AppWindow::OpenColorChooser(
   return app_delegate_->ShowColorChooser(web_contents, initial_color);
 }
 
-void AppWindow::RunFileChooser(WebContents* tab,
+void AppWindow::RunFileChooser(content::RenderFrameHost* render_frame_host,
                                const content::FileChooserParams& params) {
   if (window_type_is_panel()) {
     // Panels can't host a file dialog, abort. TODO(stevenjb): allow file
@@ -1007,7 +1015,7 @@ void AppWindow::RunFileChooser(WebContents* tab,
     return;
   }
 
-  app_delegate_->RunFileChooser(tab, params);
+  app_delegate_->RunFileChooser(render_frame_host, params);
 }
 
 bool AppWindow::IsPopupOrPanel(const WebContents* source) const { return true; }

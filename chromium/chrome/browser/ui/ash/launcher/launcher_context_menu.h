@@ -5,16 +5,16 @@
 #ifndef CHROME_BROWSER_UI_ASH_LAUNCHER_LAUNCHER_CONTEXT_MENU_H_
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_LAUNCHER_CONTEXT_MENU_H_
 
-#include "ash/shelf/shelf_alignment_menu.h"
-#include "ash/shelf/shelf_item_types.h"
+#include "ash/common/shelf/shelf_alignment_menu.h"
+#include "ash/common/shelf/shelf_item_types.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "ui/base/models/simple_menu_model.h"
 
-class ChromeLauncherController;
+class ChromeLauncherControllerImpl;
 
 namespace ash {
-class Shelf;
+class WmShelf;
 }
 
 // Base class for context menu which is shown for a regular extension item in
@@ -26,9 +26,9 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
   ~LauncherContextMenu() override;
 
   // Static function to create contextmenu instance.
-  static LauncherContextMenu* Create(ChromeLauncherController* controller,
+  static LauncherContextMenu* Create(ChromeLauncherControllerImpl* controller,
                                      const ash::ShelfItem* item,
-                                     ash::Shelf* shelf);
+                                     ash::WmShelf* wm_shelf);
 
   // ui::SimpleMenuModel::Delegate overrides:
   bool IsItemForCommandIdDynamic(int command_id) const override;
@@ -56,14 +56,12 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
     MENU_ITEM_COUNT
   };
 
-  LauncherContextMenu(ChromeLauncherController* controller,
+  LauncherContextMenu(ChromeLauncherControllerImpl* controller,
                       const ash::ShelfItem* item,
-                      ash::Shelf* shelf);
-  ChromeLauncherController* controller() const { return controller_; }
+                      ash::WmShelf* wm_shelf);
+  ChromeLauncherControllerImpl* controller() const { return controller_; }
 
   const ash::ShelfItem& item() const { return item_; }
-
-  ash::Shelf* shelf() const { return shelf_; }
 
   // Add menu item for pin/unpin.
   void AddPinMenu();
@@ -87,14 +85,18 @@ class LauncherContextMenu : public ui::SimpleMenuModel,
                            DesktopShellLauncherContextMenuItemCheck);
   FRIEND_TEST_ALL_PREFIXES(LauncherContextMenuTest,
                            ArcLauncherContextMenuItemCheck);
+  FRIEND_TEST_ALL_PREFIXES(LauncherContextMenuTest,
+                           DesktopShellLauncherContextMenuVerifyCloseItem);
+  FRIEND_TEST_ALL_PREFIXES(ShelfAppBrowserTest,
+                           LauncherContextMenuVerifyCloseItemAppearance);
 
-  ChromeLauncherController* controller_;
+  ChromeLauncherControllerImpl* controller_;
 
   ash::ShelfItem item_;
 
   ash::ShelfAlignmentMenu shelf_alignment_menu_;
 
-  ash::Shelf* shelf_;
+  ash::WmShelf* wm_shelf_;
 
   DISALLOW_COPY_AND_ASSIGN(LauncherContextMenu);
 };

@@ -25,25 +25,21 @@
 
 #include "core/layout/LayoutBoxModelObject.h"
 
-#include "core/dom/NodeComputedStyle.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/layout/ImageQualityController.h"
 #include "core/layout/LayoutBlock.h"
-#include "core/layout/LayoutFlowThread.h"
+#include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutInline.h"
-#include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/paint/PaintLayer.h"
-#include "core/style/BorderEdge.h"
 #include "core/style/ShadowList.h"
 #include "platform/LengthFunctions.h"
-#include "platform/geometry/TransformState.h"
-#include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -257,7 +253,7 @@ void LayoutBoxModelObject::styleDidChange(StyleDifference diff, const ComputedSt
         bool newStyleIsFixedPosition = style()->position() == FixedPosition;
         bool oldStyleIsFixedPosition = oldStyle->position() == FixedPosition;
         if (newStyleIsFixedPosition != oldStyleIsFixedPosition)
-            invalidateDisplayItemClientsIncludingNonCompositingDescendants(nullptr, PaintInvalidationStyleChange);
+            invalidateDisplayItemClientsIncludingNonCompositingDescendants(PaintInvalidationStyleChange);
     }
 
     // The used style for body background may change due to computed style change
@@ -331,7 +327,7 @@ void LayoutBoxModelObject::invalidateStickyConstraints()
 void LayoutBoxModelObject::createLayer()
 {
     ASSERT(!m_layer);
-    m_layer = adoptPtr(new PaintLayer(this));
+    m_layer = wrapUnique(new PaintLayer(this));
     setHasLayer(true);
     m_layer->insertOnlyThisLayerAfterStyleChange();
 }
@@ -434,18 +430,13 @@ void LayoutBoxModelObject::setBackingNeedsPaintInvalidationInRect(const LayoutRe
             // Note: the subpixel accumulation of layer() does not need to be added here. It is already taken into account.
             squashingLayer->setNeedsDisplayInRect(enclosingIntRect(paintInvalidationRect), invalidationReason, object);
         }
+    } else if (object.compositedScrollsWithRespectTo(*this)) {
+        layer()->compositedLayerMapping()->setScrollingContentsNeedDisplayInRect(r, invalidationReason, object);
+    } else if (usesCompositedScrolling()) {
+        layer()->compositedLayerMapping()->setNonScrollingContentsNeedDisplayInRect(r, invalidationReason, object);
     } else {
+        // Otherwise invalidate everything.
         layer()->compositedLayerMapping()->setContentsNeedDisplayInRect(r, invalidationReason, object);
-    }
-}
-
-void LayoutBoxModelObject::invalidateDisplayItemClientOnBacking(const DisplayItemClient& displayItemClient, PaintInvalidationReason invalidationReason) const
-{
-    if (layer()->groupedMapping()) {
-        if (GraphicsLayer* squashingLayer = layer()->groupedMapping()->squashingLayer())
-            squashingLayer->invalidateDisplayItemClient(displayItemClient, invalidationReason);
-    } else if (CompositedLayerMapping* compositedLayerMapping = layer()->compositedLayerMapping()) {
-        compositedLayerMapping->invalidateDisplayItemClient(displayItemClient, invalidationReason);
     }
 }
 
@@ -459,7 +450,7 @@ void LayoutBoxModelObject::addOutlineRectsForNormalChildren(Vector<LayoutRect>& 
         // Outline of an element continuation or anonymous block continuation is added when we iterate the continuation chain.
         // See LayoutBlock::addOutlineRects() and LayoutInline::addOutlineRects().
         if (child->isElementContinuation()
-            || (child->isLayoutBlock() && toLayoutBlock(child)->isAnonymousBlockContinuation()))
+            || (child->isLayoutBlockFlow() && toLayoutBlockFlow(child)->isAnonymousBlockContinuation()))
             continue;
 
         addOutlineRectsForDescendant(*child, rects, additionalOffset, includeBlockOverflows);
@@ -566,7 +557,16 @@ LayoutBlock* LayoutBoxModelObject::containingBlockForAutoHeightDetection(Length 
 
 bool LayoutBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
 {
+    const LayoutBox* thisBox = isBox() ? toLayoutBox(this) : nullptr;
     Length logicalHeightLength = style()->logicalHeight();
+    LayoutBlock* cb = containingBlockForAutoHeightDetection(logicalHeightLength);
+    if (logicalHeightLength.hasPercent() && cb && isBox())
+        cb->addPercentHeightDescendant(const_cast<LayoutBox*>(toLayoutBox(this)));
+    if (thisBox && thisBox->isFlexItem()) {
+        LayoutFlexibleBox& flexBox = toLayoutFlexibleBox(*parent());
+        if (flexBox.childLogicalHeightForPercentageResolution(*thisBox) != LayoutUnit(-1))
+            return false;
+    }
     if (logicalHeightLength.isAuto())
         return true;
 
@@ -574,7 +574,7 @@ bool LayoutBoxModelObject::hasAutoHeightOrContainingBlockWithAutoHeight() const
         return false;
 
     // If the height of the containing block computes to 'auto', then it hasn't been 'specified explicitly'.
-    if (LayoutBlock* cb = containingBlockForAutoHeightDetection(logicalHeightLength))
+    if (cb)
         return cb->hasAutoHeightOrContainingBlockWithAutoHeight();
     return false;
 }
@@ -747,7 +747,7 @@ LayoutSize LayoutBoxModelObject::stickyPositionOffset() const
     return LayoutSize(scrollableArea->stickyConstraintsMap().get(layer()).computeStickyOffset(constrainingRect));
 }
 
-LayoutPoint LayoutBoxModelObject::adjustedPositionRelativeToOffsetParent(const LayoutPoint& startPoint) const
+LayoutPoint LayoutBoxModelObject::adjustedPositionRelativeTo(const LayoutPoint& startPoint, const Element* element) const
 {
     // If the element is the HTML body element or doesn't have a parent
     // return 0 and stop this algorithm.
@@ -757,10 +757,8 @@ LayoutPoint LayoutBoxModelObject::adjustedPositionRelativeToOffsetParent(const L
     LayoutPoint referencePoint = startPoint;
     referencePoint.move(parent()->columnOffset(referencePoint));
 
-    // If the offsetParent of the element is null, or is the HTML body element,
-    // return the distance between the canvas origin and the left border edge
-    // of the element and stop this algorithm.
-    Element* element = offsetParent();
+    // If the base element is null, return the distance between the canvas origin and
+    // the left border edge of the element and stop this algorithm.
     if (!element)
         return referencePoint;
 
@@ -800,28 +798,28 @@ LayoutSize LayoutBoxModelObject::offsetForInFlowPosition() const
     return LayoutSize();
 }
 
-LayoutUnit LayoutBoxModelObject::offsetLeft() const
+LayoutUnit LayoutBoxModelObject::offsetLeft(const Element* parent) const
 {
     // Note that LayoutInline and LayoutBox override this to pass a different
-    // startPoint to adjustedPositionRelativeToOffsetParent.
-    return adjustedPositionRelativeToOffsetParent(LayoutPoint()).x();
+    // startPoint to adjustedPositionRelativeTo.
+    return adjustedPositionRelativeTo(LayoutPoint(), parent).x();
 }
 
-LayoutUnit LayoutBoxModelObject::offsetTop() const
+LayoutUnit LayoutBoxModelObject::offsetTop(const Element* parent) const
 {
     // Note that LayoutInline and LayoutBox override this to pass a different
-    // startPoint to adjustedPositionRelativeToOffsetParent.
-    return adjustedPositionRelativeToOffsetParent(LayoutPoint()).y();
+    // startPoint to adjustedPositionRelativeTo.
+    return adjustedPositionRelativeTo(LayoutPoint(), parent).y();
 }
 
-int LayoutBoxModelObject::pixelSnappedOffsetWidth() const
+int LayoutBoxModelObject::pixelSnappedOffsetWidth(const Element* parent) const
 {
-    return snapSizeToPixel(offsetWidth(), offsetLeft());
+    return snapSizeToPixel(offsetWidth(), offsetLeft(parent));
 }
 
-int LayoutBoxModelObject::pixelSnappedOffsetHeight() const
+int LayoutBoxModelObject::pixelSnappedOffsetHeight(const Element* parent) const
 {
-    return snapSizeToPixel(offsetHeight(), offsetTop());
+    return snapSizeToPixel(offsetHeight(), offsetTop(parent));
 }
 
 LayoutUnit LayoutBoxModelObject::computedCSSPadding(const Length& padding) const
@@ -1005,7 +1003,7 @@ const LayoutObject* LayoutBoxModelObject::pushMappingToContainer(const LayoutBox
 
     bool isInline = isLayoutInline();
     bool isFixedPos = !isInline && style()->position() == FixedPosition;
-    bool hasTransform = !isInline && hasLayer() && layer()->transform();
+    bool containsFixedPosition = canContainFixedPositionObjects();
 
     LayoutSize adjustmentForSkippedAncestor;
     if (ancestorSkipped) {
@@ -1031,8 +1029,8 @@ const LayoutObject* LayoutBoxModelObject::pushMappingToContainer(const LayoutBox
         flags |= IsNonUniform;
     if (isFixedPos)
         flags |= IsFixedPosition;
-    if (hasTransform)
-        flags |= HasTransform;
+    if (containsFixedPosition)
+        flags |= ContainsFixedPosition;
     if (shouldUseTransformFromContainer(container)) {
         TransformationMatrix t;
         getTransformFromContainer(container, containerOffset, t);

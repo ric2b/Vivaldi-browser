@@ -39,7 +39,9 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLLoadTiming.h"
 #include "wtf/Allocator.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -55,11 +57,11 @@ public:
 
 private:
     explicit ExtraDataContainer(WebURLResponse::ExtraData* extraData)
-        : m_extraData(adoptPtr(extraData))
+        : m_extraData(wrapUnique(extraData))
     {
     }
 
-    OwnPtr<WebURLResponse::ExtraData> m_extraData;
+    std::unique_ptr<WebURLResponse::ExtraData> m_extraData;
 };
 
 } // namespace
@@ -323,6 +325,9 @@ void WebURLResponse::setSecurityStyle(SecurityStyle securityStyle)
 
 void WebURLResponse::setSecurityDetails(const WebSecurityDetails& webSecurityDetails)
 {
+    blink::ResourceResponse::SignedCertificateTimestampList sctList;
+    for (const auto& iter : webSecurityDetails.sctList)
+        sctList.append(static_cast<blink::ResourceResponse::SignedCertificateTimestamp>(iter));
     m_private->m_resourceResponse->setSecurityDetails(
         webSecurityDetails.protocol,
         webSecurityDetails.keyExchange,
@@ -331,7 +336,8 @@ void WebURLResponse::setSecurityDetails(const WebSecurityDetails& webSecurityDet
         webSecurityDetails.certId,
         webSecurityDetails.numUnknownScts,
         webSecurityDetails.numInvalidScts,
-        webSecurityDetails.numValidScts);
+        webSecurityDetails.numValidScts,
+        sctList);
 }
 
 ResourceResponse& WebURLResponse::toMutableResourceResponse()
@@ -453,6 +459,13 @@ WebString WebURLResponse::cacheStorageCacheName() const
 void WebURLResponse::setCacheStorageCacheName(const WebString& cacheStorageCacheName)
 {
     m_private->m_resourceResponse->setCacheStorageCacheName(cacheStorageCacheName);
+}
+
+void WebURLResponse::setCorsExposedHeaderNames(const WebVector<WebString>& headerNames)
+{
+    Vector<String> exposedHeaderNames;
+    exposedHeaderNames.append(headerNames.data(), headerNames.size());
+    m_private->m_resourceResponse->setCorsExposedHeaderNames(exposedHeaderNames);
 }
 
 WebString WebURLResponse::downloadFilePath() const

@@ -23,11 +23,11 @@ public:
     {
         switch (property) {
         default:
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
             // Fall through.
         case CSSPropertyBackdropFilter:
             return style.backdropFilter();
-        case CSSPropertyWebkitFilter:
+        case CSSPropertyFilter:
             return style.filter();
         }
     }
@@ -38,11 +38,11 @@ public:
         case CSSPropertyBackdropFilter:
             style.setBackdropFilter(filterOperations);
             break;
-        case CSSPropertyWebkitFilter:
+        case CSSPropertyFilter:
             style.setFilter(filterOperations);
             break;
         default:
-            ASSERT_NOT_REACHED();
+            NOTREACHED();
             break;
         }
     }

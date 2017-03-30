@@ -9,7 +9,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 
 namespace device {
 
@@ -48,7 +50,7 @@ class DataSinkReceiver::Buffer : public ReadOnlyBuffer {
 class DataSinkReceiver::DataFrame {
  public:
   explicit DataFrame(mojo::Array<uint8_t> data,
-                     const mojo::Callback<void(uint32_t, int32_t)>& callback);
+                     const serial::DataSink::OnDataCallback& callback);
 
   // Returns the number of unconsumed bytes remaining of this data frame.
   uint32_t GetRemainingBytes();
@@ -65,7 +67,7 @@ class DataSinkReceiver::DataFrame {
  private:
   mojo::Array<uint8_t> data_;
   uint32_t offset_;
-  const mojo::Callback<void(uint32_t, int32_t)> callback_;
+  const serial::DataSink::OnDataCallback callback_;
 };
 
 DataSinkReceiver::DataSinkReceiver(
@@ -119,7 +121,7 @@ void DataSinkReceiver::Cancel(int32_t error) {
 
 void DataSinkReceiver::OnData(
     mojo::Array<uint8_t> data,
-    const mojo::Callback<void(uint32_t, int32_t)>& callback) {
+    const serial::DataSink::OnDataCallback& callback) {
   if (current_error_) {
     callback.Run(0, current_error_);
     return;
@@ -154,10 +156,9 @@ void DataSinkReceiver::Done(uint32_t bytes_read) {
   if (pending_data_buffers_.front()->GetRemainingBytes() == 0)
     pending_data_buffers_.pop();
   if (!pending_data_buffers_.empty()) {
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(&DataSinkReceiver::RunReadyCallback,
-                   weak_factory_.GetWeakPtr()));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&DataSinkReceiver::RunReadyCallback,
+                              weak_factory_.GetWeakPtr()));
   }
 }
 
@@ -255,7 +256,7 @@ void DataSinkReceiver::Buffer::DoneWithError(uint32_t bytes_read,
 
 DataSinkReceiver::DataFrame::DataFrame(
     mojo::Array<uint8_t> data,
-    const mojo::Callback<void(uint32_t, int32_t)>& callback)
+    const serial::DataSink::OnDataCallback& callback)
     : data_(std::move(data)), offset_(0), callback_(callback) {
   DCHECK_LT(0u, data_.size());
 }

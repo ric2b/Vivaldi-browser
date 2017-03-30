@@ -30,9 +30,10 @@
 
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 
-#include "bindings/core/v8/ScriptCallStack.h"
+#include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/ScriptValue.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8DedicatedWorkerGlobalScope.h"
 #include "bindings/core/v8/V8ErrorHandler.h"
 #include "bindings/core/v8/V8Initializer.h"
@@ -50,6 +51,7 @@
 #include "core/workers/WorkerThread.h"
 #include "platform/heap/ThreadState.h"
 #include "public/platform/Platform.h"
+#include <memory>
 #include <v8.h>
 
 namespace blink {
@@ -59,8 +61,6 @@ class WorkerOrWorkletScriptController::ExecutionState final {
 public:
     explicit ExecutionState(WorkerOrWorkletScriptController* controller)
         : hadException(false)
-        , lineNumber(0)
-        , columnNumber(0)
         , m_controller(controller)
         , m_outerState(controller->m_executionState)
     {
@@ -80,9 +80,7 @@ public:
 
     bool hadException;
     String errorMessage;
-    int lineNumber;
-    int columnNumber;
-    String sourceURL;
+    std::unique_ptr<SourceLocation> m_location;
     ScriptValue exception;
     Member<ErrorEvent> m_errorEventFromImportedScript;
 
@@ -165,8 +163,18 @@ bool WorkerOrWorkletScriptController::initializeContextIfNeeded()
     v8::Local<v8::ObjectTemplate> globalTemplate = globalInterfaceTemplate->InstanceTemplate();
     v8::Local<v8::Context> context;
     {
+        // Initialize V8 extensions before creating the context.
+        Vector<const char*> extensionNames;
+        if (m_globalScope->isServiceWorkerGlobalScope() && Platform::current()->allowScriptExtensionForServiceWorker(toWorkerGlobalScope(m_globalScope.get())->url())) {
+            const V8Extensions& extensions = ScriptController::registeredExtensions();
+            extensionNames.reserveInitialCapacity(extensions.size());
+            for (const auto* extension : extensions)
+                extensionNames.append(extension->name());
+        }
+        v8::ExtensionConfiguration extensionConfiguration(extensionNames.size(), extensionNames.data());
+
         V8PerIsolateData::UseCounterDisabledScope useCounterDisabled(V8PerIsolateData::from(m_isolate));
-        context = v8::Context::New(m_isolate, nullptr, globalTemplate);
+        context = v8::Context::New(m_isolate, &extensionConfiguration, globalTemplate);
     }
     if (context.IsEmpty())
         return false;
@@ -221,16 +229,7 @@ ScriptValue WorkerOrWorkletScriptController::evaluate(const CompressibleString& 
         v8::Local<v8::Message> message = block.Message();
         m_executionState->hadException = true;
         m_executionState->errorMessage = toCoreString(message->Get());
-        if (v8Call(message->GetLineNumber(m_scriptState->context()), m_executionState->lineNumber)
-            && v8Call(message->GetStartColumn(m_scriptState->context()), m_executionState->columnNumber)) {
-            ++m_executionState->columnNumber;
-        } else {
-            m_executionState->lineNumber = 0;
-            m_executionState->columnNumber = 0;
-        }
-
-        TOSTRING_DEFAULT(V8StringResource<>, sourceURL, message->GetScriptOrigin().ResourceName(), ScriptValue());
-        m_executionState->sourceURL = sourceURL;
+        m_executionState->m_location = SourceLocation::fromMessage(m_isolate, message, m_scriptState->getExecutionContext());
         m_executionState->exception = ScriptValue(m_scriptState.get(), block.Exception());
         block.Reset();
     } else {
@@ -260,19 +259,19 @@ bool WorkerOrWorkletScriptController::evaluate(const ScriptSourceCode& sourceCod
                 *errorEvent = state.m_errorEventFromImportedScript.release();
                 return false;
             }
-            if (m_globalScope->shouldSanitizeScriptError(state.sourceURL, NotSharableCrossOrigin))
+            if (m_globalScope->shouldSanitizeScriptError(state.m_location->url(), NotSharableCrossOrigin))
                 *errorEvent = ErrorEvent::createSanitizedError(m_world.get());
             else
-                *errorEvent = ErrorEvent::create(state.errorMessage, state.sourceURL, state.lineNumber, state.columnNumber, m_world.get());
+                *errorEvent = ErrorEvent::create(state.errorMessage, state.m_location->clone(), m_world.get());
             V8ErrorHandler::storeExceptionOnErrorEventWrapper(m_scriptState.get(), *errorEvent, state.exception.v8Value(), m_scriptState->context()->Global());
         } else {
-            ASSERT(!m_globalScope->shouldSanitizeScriptError(state.sourceURL, NotSharableCrossOrigin));
+            DCHECK(!m_globalScope->shouldSanitizeScriptError(state.m_location->url(), NotSharableCrossOrigin));
             ErrorEvent* event = nullptr;
             if (state.m_errorEventFromImportedScript)
                 event = state.m_errorEventFromImportedScript.release();
             else
-                event = ErrorEvent::create(state.errorMessage, state.sourceURL, state.lineNumber, state.columnNumber, m_world.get());
-            m_globalScope->reportException(event, 0, nullptr, NotSharableCrossOrigin);
+                event = ErrorEvent::create(state.errorMessage, state.m_location->clone(), m_world.get());
+            m_globalScope->reportException(event, NotSharableCrossOrigin);
         }
         return false;
     }

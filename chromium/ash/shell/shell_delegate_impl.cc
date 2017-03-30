@@ -4,24 +4,24 @@
 
 #include "ash/shell/shell_delegate_impl.h"
 
-#include "ash/accessibility_delegate.h"
 #include "ash/app_list/app_list_presenter_delegate_factory.h"
-#include "ash/container_delegate_aura.h"
-#include "ash/default_accessibility_delegate.h"
+#include "ash/common/accessibility_delegate.h"
+#include "ash/common/default_accessibility_delegate.h"
+#include "ash/common/media_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/system/tray/default_system_tray_delegate.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/default_user_wallpaper_delegate.h"
 #include "ash/gpu_support_stub.h"
-#include "ash/media_delegate.h"
 #include "ash/new_window_delegate.h"
 #include "ash/pointer_watcher_delegate_aura.h"
-#include "ash/session/session_state_delegate.h"
+#include "ash/shell.h"
 #include "ash/shell/context_menu.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/shelf_delegate_impl.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/shell_window_ids.h"
-#include "ash/system/tray/default_system_tray_delegate.h"
 #include "ash/test/test_keyboard_ui.h"
-#include "ash/wm/common/window_state.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -116,10 +116,10 @@ class SessionStateDelegateImpl : public SessionStateDelegate {
   const user_manager::UserInfo* GetUserInfo(UserIndex index) const override {
     return user_info_.get();
   }
-  bool ShouldShowAvatar(aura::Window* window) const override {
+  bool ShouldShowAvatar(WmWindow* window) const override {
     return !user_info_->GetImage().isNull();
   }
-  gfx::ImageSkia GetAvatarImageForWindow(aura::Window* window) const override {
+  gfx::ImageSkia GetAvatarImageForWindow(WmWindow* window) const override {
     return gfx::ImageSkia();
   }
   void SwitchActiveUser(const AccountId& account_id) override {}
@@ -184,7 +184,7 @@ bool ShellDelegateImpl::IsRunningInForcedAppMode() const {
   return false;
 }
 
-bool ShellDelegateImpl::CanShowWindowForUser(aura::Window* window) const {
+bool ShellDelegateImpl::CanShowWindowForUser(WmWindow* window) const {
   return true;
 }
 
@@ -192,11 +192,9 @@ bool ShellDelegateImpl::IsForceMaximizeOnFirstRun() const {
   return false;
 }
 
-void ShellDelegateImpl::PreInit() {
-}
+void ShellDelegateImpl::PreInit() {}
 
-void ShellDelegateImpl::PreShutdown() {
-}
+void ShellDelegateImpl::PreShutdown() {}
 
 void ShellDelegateImpl::Exit() {
   base::MessageLoop::current()->QuitWhenIdle();
@@ -206,18 +204,15 @@ keyboard::KeyboardUI* ShellDelegateImpl::CreateKeyboardUI() {
   return new TestKeyboardUI;
 }
 
-void ShellDelegateImpl::VirtualKeyboardActivated(bool activated) {
-}
+void ShellDelegateImpl::VirtualKeyboardActivated(bool activated) {}
 
 void ShellDelegateImpl::AddVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {
-}
+    VirtualKeyboardStateObserver* observer) {}
 
 void ShellDelegateImpl::RemoveVirtualKeyboardStateObserver(
-    VirtualKeyboardStateObserver* observer) {
-}
+    VirtualKeyboardStateObserver* observer) {}
 
-void ShellDelegateImpl::OpenUrl(const GURL& url) {}
+void ShellDelegateImpl::OpenUrlFromArc(const GURL& url) {}
 
 app_list::AppListPresenter* ShellDelegateImpl::GetAppListPresenter() {
   if (!app_list_presenter_) {
@@ -256,20 +251,14 @@ ash::MediaDelegate* ShellDelegateImpl::CreateMediaDelegate() {
   return new MediaDelegateImpl;
 }
 
-std::unique_ptr<ash::ContainerDelegate>
-ShellDelegateImpl::CreateContainerDelegate() {
-  return base::WrapUnique(new ContainerDelegateAura);
-}
-
 std::unique_ptr<ash::PointerWatcherDelegate>
 ShellDelegateImpl::CreatePointerWatcherDelegate() {
   return base::WrapUnique(new PointerWatcherDelegateAura);
 }
 
-ui::MenuModel* ShellDelegateImpl::CreateContextMenu(
-    ash::Shelf* shelf,
-    const ash::ShelfItem* item) {
-  return new ContextMenu(shelf);
+ui::MenuModel* ShellDelegateImpl::CreateContextMenu(WmShelf* wm_shelf,
+                                                    const ShelfItem* item) {
+  return new ContextMenu(wm_shelf);
 }
 
 GPUSupport* ShellDelegateImpl::CreateGPUSupport() {

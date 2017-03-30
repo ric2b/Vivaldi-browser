@@ -24,12 +24,15 @@ namespace android {
 namespace {
 
 // Array of features exposed through the Java ChromeFeatureList API. Entries in
-// this array may either refer to features defined in this file (above) or in
-// other locations in the code base (e.g. chrome/, components/, etc).
+// this array may either refer to features defined in the header of this file or
+// in other locations in the code base (e.g. chrome/, components/, etc).
 const base::Feature* kFeaturesExposedToJava[] = {
+    &features::kAutoplayMutedVideos,
     &features::kCredentialManagementAPI,
     &features::kSimplifiedFullscreenUI,
+    &features::kWebPayments,
     &kAllBookmarksFeature,
+    &kAndroidPayIntegrationV1,
     &kImportantSitesInCBD,
     &kMediaStyleNotification,
     &kNTPFakeOmniboxTextFeature,
@@ -38,7 +41,11 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kNTPSnippetsFeature,
     &kNTPToolbarFeature,
     &kPhysicalWebFeature,
+    &kPhysicalWebIgnoreOtherClientsFeature,
+    &kReadItLaterInMenu,
+    &kSystemDownloadManager,
     &offline_pages::kOfflinePagesBackgroundLoadingFeature,
+    &offline_pages::kOfflinePagesCTFeature,  // See crbug.com/620421.
 };
 
 }  // namespace
@@ -72,8 +79,20 @@ const base::Feature kNTPFakeOmniboxTextFeature {
   "NTPFakeOmniboxText", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
+const base::Feature kAndroidPayIntegrationV1 {
+  "AndroidPayIntegrationV1", base::FEATURE_ENABLED_BY_DEFAULT
+};
+
 const base::Feature kPhysicalWebFeature {
   "PhysicalWeb", base::FEATURE_ENABLED_BY_DEFAULT
+};
+
+const base::Feature kPhysicalWebIgnoreOtherClientsFeature {
+  "PhysicalWebIgnoreOtherClients", base::FEATURE_DISABLED_BY_DEFAULT
+};
+
+const base::Feature kReadItLaterInMenu {
+  "ReadItLaterInMenu", base::FEATURE_DISABLED_BY_DEFAULT
 };
 
 const base::Feature kSystemDownloadManager {

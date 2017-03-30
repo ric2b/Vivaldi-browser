@@ -15,57 +15,33 @@ TileTaskManager::~TileTaskManager() {}
 
 // static
 std::unique_ptr<TileTaskManagerImpl> TileTaskManagerImpl::Create(
-    std::unique_ptr<RasterBufferProvider> raster_buffer_provider,
     TaskGraphRunner* task_graph_runner) {
-  return base::WrapUnique<TileTaskManagerImpl>(new TileTaskManagerImpl(
-      std::move(raster_buffer_provider), task_graph_runner));
+  return base::WrapUnique<TileTaskManagerImpl>(
+      new TileTaskManagerImpl(task_graph_runner));
 }
 
-TileTaskManagerImpl::TileTaskManagerImpl(
-    std::unique_ptr<RasterBufferProvider> raster_buffer_provider,
-    TaskGraphRunner* task_graph_runner)
-    : raster_buffer_provider_(std::move(raster_buffer_provider)),
-      task_graph_runner_(task_graph_runner),
+TileTaskManagerImpl::TileTaskManagerImpl(TaskGraphRunner* task_graph_runner)
+    : task_graph_runner_(task_graph_runner),
       namespace_token_(task_graph_runner->GetNamespaceToken()) {}
 
-TileTaskManagerImpl::~TileTaskManagerImpl() {
-  DCHECK_EQ(0u, completed_tasks_.size());
-}
+TileTaskManagerImpl::~TileTaskManagerImpl() {}
 
 void TileTaskManagerImpl::ScheduleTasks(TaskGraph* graph) {
   TRACE_EVENT0("cc", "TileTaskManagerImpl::ScheduleTasks");
-
-  for (TaskGraph::Node::Vector::iterator it = graph->nodes.begin();
-       it != graph->nodes.end(); ++it) {
-    TaskGraph::Node& node = *it;
-    TileTask* task = static_cast<TileTask*>(node.task);
-
-    if (!task->HasBeenScheduled()) {
-      task->WillSchedule();
-      task->ScheduleOnOriginThread(raster_buffer_provider_.get());
-      task->DidSchedule();
-    }
-  }
-
-  raster_buffer_provider_->OrderingBarrier();
-
   task_graph_runner_->ScheduleTasks(namespace_token_, graph);
 }
 
 void TileTaskManagerImpl::CheckForCompletedTasks() {
   TRACE_EVENT0("cc", "TileTaskManagerImpl::CheckForCompletedTasks");
+  Task::Vector completed_tasks;
+  task_graph_runner_->CollectCompletedTasks(namespace_token_, &completed_tasks);
 
-  task_graph_runner_->CollectCompletedTasks(namespace_token_,
-                                            &completed_tasks_);
-  for (Task::Vector::const_iterator it = completed_tasks_.begin();
-       it != completed_tasks_.end(); ++it) {
-    TileTask* task = static_cast<TileTask*>(it->get());
-
-    task->WillComplete();
-    task->CompleteOnOriginThread(raster_buffer_provider_.get());
-    task->DidComplete();
+  for (auto& task : completed_tasks) {
+    DCHECK(task->state().IsFinished() || task->state().IsCanceled());
+    TileTask* tile_task = static_cast<TileTask*>(task.get());
+    tile_task->OnTaskCompleted();
+    tile_task->DidComplete();
   }
-  completed_tasks_.clear();
 }
 
 void TileTaskManagerImpl::Shutdown() {
@@ -75,12 +51,6 @@ void TileTaskManagerImpl::Shutdown() {
   TaskGraph empty;
   task_graph_runner_->ScheduleTasks(namespace_token_, &empty);
   task_graph_runner_->WaitForTasksToFinishRunning(namespace_token_);
-
-  raster_buffer_provider_->Shutdown();
-}
-
-RasterBufferProvider* TileTaskManagerImpl::GetRasterBufferProvider() const {
-  return raster_buffer_provider_.get();
 }
 
 }  // namespace cc

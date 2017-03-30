@@ -7,7 +7,8 @@
 #include <stdint.h>
 
 #include "base/android/context_utils.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
 #include "content/public/browser/browser_thread.h"
 #include "jni/ExternalEstimateProviderAndroid_jni.h"
 
@@ -18,8 +19,8 @@ ExternalEstimateProviderAndroid::ExternalEstimateProviderAndroid()
     : task_runner_(nullptr),
       delegate_(nullptr),
       weak_factory_(this) {
-  if (base::MessageLoop::current())
-    task_runner_ = base::MessageLoop::current()->task_runner();
+  if (base::ThreadTaskRunnerHandle::IsSet())
+    task_runner_ = base::ThreadTaskRunnerHandle::Get();
   JNIEnv* env = base::android::AttachCurrentThread();
   j_external_estimate_provider_.Reset(
       Java_ExternalEstimateProviderAndroid_create(
@@ -27,12 +28,10 @@ ExternalEstimateProviderAndroid::ExternalEstimateProviderAndroid()
           reinterpret_cast<intptr_t>(this)));
   DCHECK(!j_external_estimate_provider_.is_null());
   no_value_ = Java_ExternalEstimateProviderAndroid_getNoValue(env);
-  net::NetworkChangeNotifier::AddConnectionTypeObserver(this);
 }
 
 ExternalEstimateProviderAndroid::~ExternalEstimateProviderAndroid() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  net::NetworkChangeNotifier::RemoveConnectionTypeObserver(this);
   Java_ExternalEstimateProviderAndroid_destroy(
       base::android::AttachCurrentThread(),
       j_external_estimate_provider_.obj());
@@ -106,11 +105,6 @@ void ExternalEstimateProviderAndroid::Update() const {
       env, j_external_estimate_provider_.obj());
 }
 
-void ExternalEstimateProviderAndroid::OnConnectionTypeChanged(
-    net::NetworkChangeNotifier::ConnectionType type) {
-  Update();
-}
-
 void ExternalEstimateProviderAndroid::
     NotifyExternalEstimateProviderAndroidUpdate(
         JNIEnv* env,
@@ -134,8 +128,20 @@ void ExternalEstimateProviderAndroid::
 
 void ExternalEstimateProviderAndroid::NotifyUpdatedEstimateAvailable() const {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (delegate_)
-    delegate_->OnUpdatedEstimateAvailable();
+
+  base::TimeDelta rtt;
+  GetRTT(&rtt);
+
+  int32_t downstream_throughput_kbps = -1;
+  GetDownstreamThroughputKbps(&downstream_throughput_kbps);
+
+  int32_t upstream_throughput_kbps = -1;
+  GetUpstreamThroughputKbps(&upstream_throughput_kbps);
+
+  if (delegate_) {
+    delegate_->OnUpdatedEstimateAvailable(rtt, downstream_throughput_kbps,
+                                          upstream_throughput_kbps);
+  }
 }
 
 bool RegisterExternalEstimateProviderAndroid(JNIEnv* env) {

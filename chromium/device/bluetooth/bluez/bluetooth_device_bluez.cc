@@ -21,6 +21,7 @@
 #include "device/bluetooth/bluez/bluetooth_gatt_connection_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_pairing_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_remote_gatt_service_bluez.h"
+#include "device/bluetooth/bluez/bluetooth_service_record_bluez.h"
 #include "device/bluetooth/bluez/bluetooth_socket_bluez.h"
 #include "device/bluetooth/dbus/bluetooth_adapter_client.h"
 #include "device/bluetooth/dbus/bluetooth_device_client.h"
@@ -185,6 +186,28 @@ uint32_t BluetoothDeviceBlueZ::GetBluetoothClass() const {
   DCHECK(properties);
 
   return properties->bluetooth_class.value();
+}
+
+device::BluetoothTransport BluetoothDeviceBlueZ::GetType() const {
+  bluez::BluetoothDeviceClient::Properties* properties =
+      bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetProperties(
+          object_path_);
+  DCHECK(properties);
+
+  if (!properties->type.is_valid())
+    return device::BLUETOOTH_TRANSPORT_INVALID;
+
+  std::string type = properties->type.value();
+  if (type == bluez::BluetoothDeviceClient::kTypeBredr) {
+    return device::BLUETOOTH_TRANSPORT_CLASSIC;
+  } else if (type == bluez::BluetoothDeviceClient::kTypeLe) {
+    return device::BLUETOOTH_TRANSPORT_LE;
+  } else if (type == bluez::BluetoothDeviceClient::kTypeDual) {
+    return device::BLUETOOTH_TRANSPORT_DUAL;
+  }
+
+  NOTREACHED();
+  return device::BLUETOOTH_TRANSPORT_INVALID;
 }
 
 std::string BluetoothDeviceBlueZ::GetDeviceName() const {
@@ -531,6 +554,15 @@ void BluetoothDeviceBlueZ::CreateGattConnection(
           error_callback);
 }
 
+void BluetoothDeviceBlueZ::GetServiceRecords(
+    const GetServiceRecordsCallback& callback,
+    const GetServiceRecordsErrorCallback& error_callback) {
+  bluez::BluezDBusManager::Get()->GetBluetoothDeviceClient()->GetServiceRecords(
+      object_path_, callback,
+      base::Bind(&BluetoothDeviceBlueZ::OnGetServiceRecordsError,
+                 weak_ptr_factory_.GetWeakPtr(), error_callback));
+}
+
 BluetoothPairingBlueZ* BluetoothDeviceBlueZ::BeginPairing(
     BluetoothDevice::PairingDelegate* pairing_delegate) {
   pairing_.reset(new BluetoothPairingBlueZ(this, pairing_delegate));
@@ -673,6 +705,21 @@ void BluetoothDeviceBlueZ::OnGetConnInfoError(
                << ": Failed to get connection info: " << error_name << ": "
                << error_message;
   callback.Run(ConnectionInfo());
+}
+
+void BluetoothDeviceBlueZ::OnGetServiceRecordsError(
+    const GetServiceRecordsErrorCallback& error_callback,
+    const std::string& error_name,
+    const std::string& error_message) {
+  VLOG(1) << object_path_.value()
+          << ": Failed to get service records: " << error_name << ": "
+          << error_message;
+  BluetoothServiceRecordBlueZ::ErrorCode code =
+      BluetoothServiceRecordBlueZ::ErrorCode::UNKNOWN;
+  if (error_name == bluetooth_device::kErrorNotConnected) {
+    code = BluetoothServiceRecordBlueZ::ErrorCode::ERROR_DEVICE_DISCONNECTED;
+  }
+  error_callback.Run(code);
 }
 
 void BluetoothDeviceBlueZ::ConnectInternal(

@@ -32,7 +32,6 @@
 #define WebDevToolsAgentImpl_h
 
 #include "core/inspector/InspectorPageAgent.h"
-#include "core/inspector/InspectorRuntimeAgent.h"
 #include "core/inspector/InspectorSession.h"
 #include "core/inspector/InspectorTracingAgent.h"
 #include "platform/heap/Handle.h"
@@ -41,8 +40,8 @@
 #include "public/web/WebDevToolsAgent.h"
 #include "web/InspectorEmulationAgent.h"
 #include "wtf/Forward.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -57,7 +56,6 @@ class PlatformGestureEvent;
 class PlatformKeyboardEvent;
 class PlatformMouseEvent;
 class PlatformTouchEvent;
-class V8InspectorSession;
 class WebDevToolsAgentClient;
 class WebFrameWidgetImpl;
 class WebInputEvent;
@@ -86,8 +84,7 @@ public:
     void willBeDestroyed();
     WebDevToolsAgentClient* client() { return m_client; }
     InspectorOverlay* overlay() const { return m_overlay.get(); }
-    void flushPendingProtocolNotifications();
-    void dispatchMessageFromFrontend(int sessionId, const String& message);
+    void flushProtocolNotifications();
     static void webViewImplClosed(WebViewImpl*);
     static void webFrameWidgetImplClosed(WebFrameWidgetImpl*);
 
@@ -128,16 +125,18 @@ private:
     void resumeStartup() override;
     void profilingStarted() override;
     void profilingStopped() override;
+    void consoleCleared() override;
 
     // WebThread::TaskObserver implementation.
     void willProcessTask() override;
     void didProcessTask() override;
 
-    void initializeSession(int sessionId, const String& hostId);
+    void initializeSession(int sessionId, const String& hostId, String* state);
     void destroySession();
+    void dispatchMessageFromFrontend(int sessionId, const String& method, const String& message);
 
     friend class WebDevToolsAgent;
-    static void runDebuggerTask(int sessionId, PassOwnPtr<WebDevToolsAgent::MessageDescriptor>);
+    static void runDebuggerTask(int sessionId, std::unique_ptr<WebDevToolsAgent::MessageDescriptor>);
 
     bool attached() const { return m_session.get(); }
 
@@ -149,11 +148,10 @@ private:
     Member<InspectorOverlay> m_overlay;
     Member<InspectedFrames> m_inspectedFrames;
     Member<InspectorResourceContainer> m_resourceContainer;
-    OwnPtr<V8InspectorSession> m_v8Session;
 
     Member<InspectorDOMAgent> m_domAgent;
     Member<InspectorPageAgent> m_pageAgent;
-    Member<InspectorResourceAgent> m_resourceAgent;
+    Member<InspectorNetworkAgent> m_networkAgent;
     Member<InspectorLayerTreeAgent> m_layerTreeAgent;
     Member<InspectorTracingAgent> m_tracingAgent;
 

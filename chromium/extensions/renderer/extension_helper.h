@@ -24,6 +24,7 @@ class ExtensionHelper : public content::RenderViewObserver {
   // RenderViewObserver implementation.
   bool OnMessageReceived(const IPC::Message& message) override;
   void DraggableRegionsChanged(blink::WebFrame* frame) override;
+  void OnDestruct() override;
 
   void OnZoomVivaldiUI(double zoom_factor);
   void OnUpdateBrowserWindowId(int window_id);

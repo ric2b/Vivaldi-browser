@@ -86,11 +86,15 @@ class ComponentInstallerTraits {
   // Returns the human-readable name of the component.
   virtual std::string GetName() const = 0;
 
-  // Returns the additional parameters to be used in the update checks for
-  // this component. A compatible server may use this attribute to negotiate
-  // special update rules when issuing an update response.
-  // The current implementation restricts ap to ^([-+_=a-zA-Z0-9]{0,256})$
-  virtual std::string GetAp() const = 0;
+  // Returns a container of name-value pairs representing arbitrary,
+  // installer-defined metadata.
+  // The installer metadata may be used in the update checks for this component.
+  // A compatible server may use these attributes to negotiate special update
+  // rules when issuing an update response.
+  // Valid values for the name part of an attribute match
+  // ^[-_a-zA-Z0-9]{1,256}$ and valid values the value part of an attribute
+  // match ^[-.,;+_=a-zA-Z0-9]{0,256}$ .
+  virtual update_client::InstallerAttributes GetInstallerAttributes() const = 0;
 };
 
 // A DefaultComponentInstaller is intended to be final, and not derived from.
@@ -122,7 +126,7 @@ class DefaultComponentInstaller : public update_client::CrxInstaller {
   // files (as opposed to in the user data directory), sets current_* to the
   // values associated with that installation and returns true; otherwise,
   // returns false.
-  bool FindPreinstallation();
+  bool FindPreinstallation(const base::FilePath& root);
   bool InstallHelper(const base::DictionaryValue& manifest,
                      const base::FilePath& unpack_path,
                      const base::FilePath& install_path);

@@ -16,7 +16,7 @@ Polymer({
     /** @type {!CertificateSubnode} */
     model: Object,
 
-    /** @type {!settings.CertificateType} */
+    /** @type {!CertificateType} */
     certificateType: String,
   },
 
@@ -27,7 +27,7 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.$.dialog.open();
+    /** @type {!CrDialogElement} */ (this.$.dialog).open();
   },
 
   /**
@@ -44,13 +44,13 @@ Polymer({
     }.bind(this);
 
     switch (this.certificateType) {
-      case settings.CertificateType.PERSONAL:
+      case CertificateType.PERSONAL:
         return getString('certificateManagerDeleteUserTitle');
-      case settings.CertificateType.SERVER:
+      case CertificateType.SERVER:
         return getString('certificateManagerDeleteServerTitle');
-      case settings.CertificateType.CA:
+      case CertificateType.CA:
         return getString('certificateManagerDeleteCaTitle');
-      case settings.CertificateType.OTHER:
+      case CertificateType.OTHER:
         return getString('certificateManagerDeleteOtherTitle');
     }
     assertNotReached();
@@ -63,13 +63,13 @@ Polymer({
   getDescriptionText_: function() {
     var getString = loadTimeData.getString.bind(loadTimeData);
     switch (this.certificateType) {
-      case settings.CertificateType.PERSONAL:
+      case CertificateType.PERSONAL:
         return getString('certificateManagerDeleteUserDescription');
-      case settings.CertificateType.SERVER:
+      case CertificateType.SERVER:
         return getString('certificateManagerDeleteServerDescription');
-      case settings.CertificateType.CA:
+      case CertificateType.CA:
         return getString('certificateManagerDeleteCaDescription');
-      case settings.CertificateType.OTHER:
+      case CertificateType.OTHER:
         return '';
     }
     assertNotReached();
@@ -77,18 +77,18 @@ Polymer({
 
   /** @private */
   onCancelTap_: function() {
-    this.$.dialog.close();
+    /** @type {!CrDialogElement} */ (this.$.dialog).close();
   },
 
   /** @private */
   onOkTap_: function() {
     this.browserProxy_.deleteCertificate(this.model.id).then(
         function() {
-          this.$.dialog.close();
+          /** @type {!CrDialogElement} */ (this.$.dialog).close();
         }.bind(this),
         /** @param {!CertificatesError} error */
         function(error) {
-          this.$.dialog.close();
+          /** @type {!CrDialogElement} */ (this.$.dialog).close();
           this.fire('certificates-error', error);
         }.bind(this));
   },

@@ -35,6 +35,9 @@
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/settings_strings.h"
+#include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_error_controller.h"
@@ -73,6 +76,7 @@ struct SyncConfigInfo {
   bool encrypt_all;
   bool sync_everything;
   syncer::ModelTypeSet data_types;
+  bool payments_integration_enabled;
   std::string passphrase;
   bool set_new_passphrase;
 };
@@ -80,6 +84,7 @@ struct SyncConfigInfo {
 SyncConfigInfo::SyncConfigInfo()
     : encrypt_all(false),
       sync_everything(false),
+      payments_integration_enabled(false),
       set_new_passphrase(false) {}
 
 SyncConfigInfo::~SyncConfigInfo() {}
@@ -94,6 +99,13 @@ bool GetConfiguration(const std::string& json, SyncConfigInfo* config) {
 
   if (!result->GetBoolean("syncAllDataTypes", &config->sync_everything)) {
     DLOG(ERROR) << "GetConfiguration() not passed a syncAllDataTypes value";
+    return false;
+  }
+
+  if (!result->GetBoolean("paymentsIntegrationEnabled",
+                          &config->payments_integration_enabled)) {
+    DLOG(ERROR) << "GetConfiguration() not passed a paymentsIntegrationEnabled "
+                << "value";
     return false;
   }
 
@@ -162,13 +174,6 @@ PeopleHandler::~PeopleHandler() {
 
   // This case is hit when the user performs a back navigation.
   CloseSyncSetup();
-}
-
-bool PeopleHandler::IsActiveLogin() const {
-  // LoginUIService can be nullptr if page is brought up in incognito mode
-  // (i.e. if the user is running in guest mode in cros and brings up settings).
-  LoginUIService* service = GetLoginUIService();
-  return service && (service->current_login_ui() == this);
 }
 
 void PeopleHandler::RegisterMessages() {
@@ -291,24 +296,6 @@ void PeopleHandler::DisplayGaiaLoginInNewTabOrWindow(
 }
 #endif
 
-bool PeopleHandler::PrepareSyncSetup() {
-  // If the wizard is already visible, just focus that one.
-  if (FocusExistingWizardIfPresent()) {
-    if (!IsActiveLogin())
-      CloseSyncSetup();
-    return false;
-  }
-
-  // Notify services that login UI is now active.
-  GetLoginUIService()->SetLoginUI(this);
-
-  ProfileSyncService* service = GetSyncService();
-  if (service)
-    service->SetSetupInProgress(true);
-
-  return true;
-}
-
 void PeopleHandler::DisplaySpinner() {
   configuring_sync_ = true;
 
@@ -376,6 +363,10 @@ void PeopleHandler::HandleSetDatatypes(const base::ListValue* args) {
   SyncConfigInfo configuration;
   const base::Value* callback_id = nullptr;
   ParseConfigurationArguments(args, &configuration, &callback_id);
+
+  PrefService* pref_service = profile_->GetPrefs();
+  pref_service->SetBoolean(autofill::prefs::kAutofillWalletImportEnabled,
+                           configuration.payments_integration_enabled);
 
   // Start configuring the ProfileSyncService using the configuration passed
   // to us from the JS layer.
@@ -499,18 +490,7 @@ void PeopleHandler::HandleShowSetupUI(const base::ListValue* args) {
     return;
   }
 
-  // If a setup wizard is already present, but not on this page, close the
-  // blank setup overlay on this page by showing the "done" page. This can
-  // happen if the user navigates to chrome://settings/syncSetup in more than
-  // one tab. See crbug.com/261566.
-  // Note: The following block will transfer focus to the existing wizard.
-  if (IsExistingWizardPresent() && !IsActiveLogin())
-    CloseUI();
-
-  // If a setup wizard is present on this page or another, bring it to focus.
-  // Otherwise, display a new one on this page.
-  if (!FocusExistingWizardIfPresent())
-    OpenSyncSetup(false /* creating_supervised_user */);
+  OpenSyncSetup(false /* creating_supervised_user */);
 }
 
 #if defined(OS_CHROMEOS)
@@ -524,6 +504,8 @@ void PeopleHandler::HandleDoSignOutOnAuthError(const base::ListValue* args) {
 
 #if !defined(OS_CHROMEOS)
 void PeopleHandler::HandleStartSignin(const base::ListValue* args) {
+  AllowJavascript();
+
   // Should only be called if the user is not already signed in.
   DCHECK(!SigninManagerFactory::GetForProfile(profile_)->IsAuthenticated());
   bool creating_supervised_user = false;
@@ -532,19 +514,21 @@ void PeopleHandler::HandleStartSignin(const base::ListValue* args) {
 }
 
 void PeopleHandler::HandleStopSyncing(const base::ListValue* args) {
-  if (GetSyncService())
-    ProfileSyncService::SyncEvent(ProfileSyncService::STOP_FROM_OPTIONS);
-
   bool delete_profile = false;
   args->GetBoolean(0, &delete_profile);
-  signin_metrics::SignoutDelete delete_metric =
-      delete_profile ? signin_metrics::SignoutDelete::DELETED
-                     : signin_metrics::SignoutDelete::KEEPING;
-  SigninManagerFactory::GetForProfile(profile_)
-      ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, delete_metric);
+
+  if (!SigninManagerFactory::GetForProfile(profile_)->IsSignoutProhibited()) {
+    if (GetSyncService())
+      ProfileSyncService::SyncEvent(ProfileSyncService::STOP_FROM_OPTIONS);
+
+    signin_metrics::SignoutDelete delete_metric =
+        delete_profile ? signin_metrics::SignoutDelete::DELETED
+                       : signin_metrics::SignoutDelete::KEEPING;
+    SigninManagerFactory::GetForProfile(profile_)
+        ->SignOut(signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS, delete_metric);
+  }
 
   if (delete_profile) {
-    // Do as BrowserOptionsHandler::DeleteProfile().
     webui::DeleteProfileAtPath(profile_->GetPath(),
                                web_ui(),
                                ProfileMetrics::DELETE_PROFILE_SETTINGS);
@@ -575,7 +559,11 @@ void PeopleHandler::CloseSyncSetup() {
   sync_startup_tracker_.reset();
 
   ProfileSyncService* sync_service = GetSyncService();
-  if (IsActiveLogin()) {
+
+  // LoginUIService can be nullptr if page is brought up in incognito mode
+  // (i.e. if the user is running in guest mode in cros and brings up settings).
+  LoginUIService* service = GetLoginUIService();
+  if (service && (service->current_login_ui() == this)) {
     // Don't log a cancel event if the sync setup dialog is being
     // automatically closed due to an auth error.
     if (!sync_service || (!sync_service->IsFirstSetupComplete() &&
@@ -614,15 +602,18 @@ void PeopleHandler::CloseSyncSetup() {
   // Alert the sync service anytime the sync setup dialog is closed. This can
   // happen due to the user clicking the OK or Cancel button, or due to the
   // dialog being closed by virtue of sync being disabled in the background.
-  if (sync_service)
-    sync_service->SetSetupInProgress(false);
+  sync_blocker_.reset();
 
   configuring_sync_ = false;
 }
 
 void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
-  if (!PrepareSyncSetup())
-    return;
+  // Notify services that login UI is now active.
+  GetLoginUIService()->SetLoginUI(this);
+
+  ProfileSyncService* service = GetSyncService();
+  if (service)
+    sync_blocker_ = service->GetSetupInProgressHandle();
 
   // There are several different UI flows that can bring the user here:
   // 1) Signin promo.
@@ -651,7 +642,7 @@ void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
     return;
   }
 #endif
-  if (!GetSyncService()) {
+  if (!service) {
     // This can happen if the user directly navigates to /settings/syncSetup.
     DLOG(WARNING) << "Cannot display sync UI when sync is disabled";
     CloseUI();
@@ -662,11 +653,9 @@ void PeopleHandler::OpenSyncSetup(bool creating_supervised_user) {
   // via the "Advanced..." button or through One-Click signin (cases 4-6), or
   // they are re-enabling sync after having disabled it (case 7).
   PushSyncPrefs();
-  FocusUI();
 }
 
 void PeopleHandler::FocusUI() {
-  DCHECK(IsActiveLogin());
   WebContents* web_contents = web_ui()->GetWebContents();
   web_contents->GetDelegate()->ActivateContents(web_contents);
 }
@@ -713,18 +702,22 @@ PeopleHandler::GetSyncStatusDictionary() {
   sync_status->SetBoolean("supervisedUser", profile_->IsSupervised());
   sync_status->SetBoolean("childUser", profile_->IsChild());
 
-  bool signout_prohibited = false;
+  SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile_);
+  DCHECK(signin);
 #if !defined(OS_CHROMEOS)
   // Signout is not allowed if the user has policy (crbug.com/172204).
-  signout_prohibited =
-      SigninManagerFactory::GetForProfile(profile_)->IsSignoutProhibited();
+  if (SigninManagerFactory::GetForProfile(profile_)->IsSignoutProhibited()) {
+    std::string username = signin->GetAuthenticatedAccountInfo().email;
+
+    // If there is no one logged in or if the profile name is empty then the
+    // domain name is empty. This happens in browser tests.
+    if (!username.empty())
+      sync_status->SetString("domain", gaia::ExtractDomainName(username));
+  }
 #endif
 
   ProfileSyncService* service =
       ProfileSyncServiceFactory::GetInstance()->GetForProfile(profile_);
-  SigninManagerBase* signin = SigninManagerFactory::GetForProfile(profile_);
-  DCHECK(signin);
-  sync_status->SetBoolean("signoutAllowed", !signout_prohibited);
   sync_status->SetBoolean("signinAllowed", signin->IsSigninAllowed());
   sync_status->SetBoolean("syncSystemEnabled", (service != nullptr));
   sync_status->SetBoolean("setupCompleted",
@@ -749,22 +742,6 @@ PeopleHandler::GetSyncStatusDictionary() {
                           service && service->HasUnrecoverableError());
 
   return sync_status;
-}
-
-bool PeopleHandler::IsExistingWizardPresent() {
-  LoginUIService* service = GetLoginUIService();
-  DCHECK(service);
-  return service->current_login_ui() != nullptr;
-}
-
-bool PeopleHandler::FocusExistingWizardIfPresent() {
-  if (!IsExistingWizardPresent())
-    return false;
-
-  LoginUIService* service = GetLoginUIService();
-  DCHECK(service);
-  service->current_login_ui()->FocusUI();
-  return true;
 }
 
 void PeopleHandler::PushSyncPrefs() {
@@ -807,6 +784,7 @@ void PeopleHandler::PushSyncPrefs() {
   //   syncAllDataTypes: true if the user wants to sync everything
   //   <data_type>Registered: true if the associated data type is supported
   //   <data_type>Synced: true if the user wants to sync that specific data type
+  //   paymentsIntegrationEnabled: true if the user wants Payments integration
   //   encryptionEnabled: true if sync supports encryption
   //   encryptAllData: true if user wants to encrypt all data (not just
   //       passwords)
@@ -831,8 +809,12 @@ void PeopleHandler::PushSyncPrefs() {
     // TODO(treib): How do we want to handle pref groups, i.e. when only some of
     // the sync types behind a checkbox are force-enabled? crbug.com/403326
   }
-  sync_driver::SyncPrefs sync_prefs(profile_->GetPrefs());
+  PrefService* pref_service = profile_->GetPrefs();
+  sync_driver::SyncPrefs sync_prefs(pref_service);
   args.SetBoolean("syncAllDataTypes", sync_prefs.HasKeepEverythingSynced());
+  args.SetBoolean(
+      "paymentsIntegrationEnabled",
+      pref_service->GetBoolean(autofill::prefs::kAutofillWalletImportEnabled));
   args.SetBoolean("encryptAllData", service->IsEncryptEverythingEnabled());
   args.SetBoolean("encryptAllDataAllowed",
                   service->IsEncryptEverythingAllowed());
@@ -914,7 +896,7 @@ void PeopleHandler::MarkFirstSetupComplete() {
 
   // We're done configuring, so notify ProfileSyncService that it is OK to
   // start syncing.
-  service->SetSetupInProgress(false);
+  sync_blocker_.reset();
   service->SetFirstSetupComplete();
 }
 

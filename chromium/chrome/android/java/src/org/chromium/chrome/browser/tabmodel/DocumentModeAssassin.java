@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.os.StrictMode;
 import android.util.Pair;
 
 import org.chromium.base.ContextUtils;
@@ -24,7 +25,6 @@ import org.chromium.chrome.browser.document.DocumentActivity;
 import org.chromium.chrome.browser.document.DocumentUtils;
 import org.chromium.chrome.browser.document.IncognitoDocumentActivity;
 import org.chromium.chrome.browser.incognito.IncognitoNotificationManager;
-import org.chromium.chrome.browser.preferences.DocumentModeManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore.TabModelMetadata;
 import org.chromium.chrome.browser.tabmodel.document.ActivityDelegate;
@@ -105,6 +105,18 @@ public class DocumentModeAssassin {
     /** Which TabModelSelectorImpl to copy files into during migration. */
     private static final int TAB_MODEL_INDEX = 0;
 
+    /** SharedPreference values to determine whether user had document mode turned on. */
+    private static final String OPT_OUT_STATE = "opt_out_state";
+    private static final int OPT_IN_TO_DOCUMENT_MODE = 0;
+    private static final int OPT_OUT_STATE_UNSET = -1;
+    private static final int OPTED_OUT_OF_DOCUMENT_MODE = 2;
+
+    /**
+     * Preference that denotes that Chrome has attempted to migrate from tabbed mode to document
+     * mode. Indicates that the user may be in document mode.
+     */
+    public static final String MIGRATION_ON_UPGRADE_ATTEMPTED = "migration_on_upgrade_attempted";
+
     /** Creates and holds the Singleton. */
     private static class LazyHolder {
         private static final DocumentModeAssassin INSTANCE = new DocumentModeAssassin();
@@ -116,11 +128,10 @@ public class DocumentModeAssassin {
     }
 
     /** IDs of Tabs that have had their TabState files copied between directories successfully. */
-    private final Set<Integer> mMigratedTabIds = new HashSet<Integer>();
+    private final Set<Integer> mMigratedTabIds = new HashSet<>();
 
     /** Observers of the migration pipeline. */
-    private final ObserverList<DocumentModeAssassinObserver> mObservers =
-            new ObserverList<DocumentModeAssassinObserver>();
+    private final ObserverList<DocumentModeAssassinObserver> mObservers = new ObserverList<>();
 
     /** Current stage of the migration. */
     private int mStage = STAGE_UNINITIALIZED;
@@ -339,8 +350,16 @@ public class DocumentModeAssassin {
             @Override
             protected Boolean doInBackground(Void... params) {
                 if (mSerializedMetadata != null) {
-                    File tabbedDirectory = getTabbedDataDirectory();
-                    TabPersistentStore.saveListToFile(tabbedDirectory, mSerializedMetadata);
+                    // If an old tab state file still exists when we run migration in TPS, then it
+                    // will overwrite the new tab state file that our document tabs migrated to.
+                    File oldMetadataFile = new File(
+                            getTabbedDataDirectory(), TabPersistentStore.SAVED_STATE_FILE);
+                    if (oldMetadataFile.exists() && !oldMetadataFile.delete()) {
+                        Log.e(TAG, "Failed to delete old tab state file: " + oldMetadataFile);
+                    }
+
+                    TabPersistentStore.saveListToFile(
+                            getTabbedDataDirectory(), TAB_MODEL_INDEX, mSerializedMetadata);
                     return true;
                 } else {
                     return false;
@@ -364,8 +383,7 @@ public class DocumentModeAssassin {
         // Record that the user has opted-out of document mode now that their data has been
         // safely copied to the other directory.
         Log.d(TAG, "Setting tabbed mode preference.");
-        DocumentModeManager.getInstance(getContext()).setOptedOutState(
-                DocumentModeManager.OPTED_OUT_OF_DOCUMENT_MODE);
+        setOptedOutState(OPTED_OUT_OF_DOCUMENT_MODE);
         TabSwitcherCallout.setIsTabSwitcherCalloutNecessary(getContext(), true);
 
         // Remove all the {@link DocumentActivity} tasks from Android's Recents list.  Users
@@ -541,8 +559,58 @@ public class DocumentModeAssassin {
         return new StorageDelegate().getStateDirectory();
     }
 
-    /** @return Where tabbed mode data is stored for the main {@link TabModelImpl}. */
+    /** @return Where tabbed mode data is stored. */
     protected File getTabbedDataDirectory() {
-        return TabPersistentStore.getOrCreateSelectorStateDirectory(TAB_MODEL_INDEX);
+        return TabPersistentStore.getOrCreateStateDirectory();
+    }
+
+    /** @return True if the user is not in document mode. */
+    public static boolean isOptedOutOfDocumentMode() {
+        // The OPT_OUT_STATE preference was introduced sometime after document mode was rolled out.
+        // It may not be set for all users, even if they are in document mode. In order to correctly
+        // detect whether the user is in document mode, if OPT_OUT_STATE is not state we must check
+        // whether MIGRATION_ON_UPGRADE_ATTEMPTED is set.
+        int optOutState = ContextUtils.getAppSharedPreferences().getInt(OPT_OUT_STATE,
+                OPT_OUT_STATE_UNSET);
+        if (optOutState == OPT_OUT_STATE_UNSET) {
+            boolean hasMigratedToDocumentMode = ContextUtils.getAppSharedPreferences().getBoolean(
+                    MIGRATION_ON_UPGRADE_ATTEMPTED, false);
+            if (!hasMigratedToDocumentMode) {
+                optOutState = OPTED_OUT_OF_DOCUMENT_MODE;
+            } else {
+                // Check if a migration has already happened by looking for tab_state0 file.
+                // See crbug.com/646146.
+                boolean newMetadataFileExists = false;
+                StrictMode.ThreadPolicy oldPolicy = StrictMode.allowThreadDiskReads();
+                try {
+                    File newMetadataFile = new File(
+                            TabPersistentStore.getOrCreateStateDirectory(),
+                            TabPersistentStore.getStateFileName(TAB_MODEL_INDEX));
+                    newMetadataFileExists = newMetadataFile.exists();
+                } finally {
+                    StrictMode.setThreadPolicy(oldPolicy);
+                }
+
+                if (newMetadataFileExists) {
+                    optOutState = OPTED_OUT_OF_DOCUMENT_MODE;
+                } else {
+                    optOutState = OPT_IN_TO_DOCUMENT_MODE;
+                }
+            }
+            setOptedOutState(optOutState);
+        }
+        return optOutState == OPTED_OUT_OF_DOCUMENT_MODE;
+    }
+
+    /**
+     * Sets the opt out preference.
+     * @param state One of OPTED_OUT_OF_DOCUMENT_MODE or OPT_IN_TO_DOCUMENT_MODE.
+     */
+    public static void setOptedOutState(int state) {
+        SharedPreferences.Editor sharedPreferencesEditor =
+                ContextUtils.getAppSharedPreferences().edit();
+        sharedPreferencesEditor.putInt(OPT_OUT_STATE, state);
+        sharedPreferencesEditor.apply();
     }
 }
+

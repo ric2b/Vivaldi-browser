@@ -17,7 +17,6 @@ import org.chromium.base.Log;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.ProcessInitException;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeVersionInfo;
@@ -25,11 +24,9 @@ import org.chromium.chrome.browser.EmbedContentViewActivity;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.metrics.UmaUtils;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
-import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoScreen;
+import org.chromium.chrome.browser.preferences.datareduction.DataReductionPromoUtils;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionProxyUma;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.SigninAccessPoint;
-import org.chromium.chrome.browser.signin.SigninManager;
 
 import java.lang.ref.WeakReference;
 import java.lang.reflect.Constructor;
@@ -301,31 +298,21 @@ public class FirstRunActivity extends AppCompatActivity implements FirstRunPageD
         mFreProperties.putBoolean(RESULT_SHOW_SIGNIN_SETTINGS, mResultShowSignInSettings);
         FirstRunFlowSequencer.markFlowAsCompleted(this, mFreProperties);
 
-        if (DataReductionPromoScreen
-                .getDisplayedDataReductionPromo(getApplicationContext())) {
+        if (DataReductionPromoUtils.getDisplayedFreOrSecondRunPromo()) {
             if (DataReductionProxySettings.getInstance().isDataReductionProxyEnabled()) {
                 DataReductionProxyUma
                         .dataReductionProxyUIAction(DataReductionProxyUma.ACTION_FRE_ENABLED);
-                DataReductionPromoScreen
-                        .saveDataReductionFrePromoOptOut(getApplicationContext(), false);
+                DataReductionPromoUtils.saveFrePromoOptOut(false);
             } else {
                 DataReductionProxyUma
                         .dataReductionProxyUIAction(DataReductionProxyUma.ACTION_FRE_DISABLED);
-                DataReductionPromoScreen
-                        .saveDataReductionFrePromoOptOut(getApplicationContext(), true);
+                DataReductionPromoUtils.saveFrePromoOptOut(true);
             }
         }
 
         Intent resultData = new Intent();
         resultData.putExtras(mFreProperties);
         finishAllFREActivities(Activity.RESULT_OK, resultData);
-    }
-
-    @Override
-    public void onSigninDialogShown() {
-        RecordUserAction.record("MobileFre.SignInShown");
-        RecordUserAction.record("Signin_Signin_FromStartPage");
-        SigninManager.logSigninStartAccessPoint(SigninAccessPoint.START_PAGE);
     }
 
     @Override

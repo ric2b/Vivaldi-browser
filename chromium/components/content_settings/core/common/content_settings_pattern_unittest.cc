@@ -720,3 +720,21 @@ TEST(ContentSettingsPatternTest, CanonicalizePattern_Legacy) {
   EXPECT_STREQ("", Pattern("*\xC4\x87ira.com").ToString().c_str());
   EXPECT_STREQ("", Pattern("\xC4\x87ira.*").ToString().c_str());
 }
+
+TEST(ContentSettingsPatternTest, Schemes) {
+  EXPECT_EQ(ContentSettingsPattern::SCHEME_HTTP,
+            Pattern("http://www.example.com").GetScheme());
+  EXPECT_EQ(ContentSettingsPattern::SCHEME_HTTPS,
+            Pattern("https://www.example.com").GetScheme());
+  EXPECT_EQ(ContentSettingsPattern::SCHEME_FILE,
+            Pattern("file:///tmp/file.html").GetScheme());
+  EXPECT_EQ(ContentSettingsPattern::SCHEME_CHROMEEXTENSION,
+            Pattern("chrome-extension://peoadpeiejnhkmpaakpnompolbglelel/")
+                .GetScheme());
+  EXPECT_EQ(ContentSettingsPattern::SCHEME_WILDCARD,
+            Pattern("192.168.0.1").GetScheme());
+  EXPECT_EQ(ContentSettingsPattern::SCHEME_WILDCARD,
+            Pattern("www.example.com").GetScheme());
+  EXPECT_EQ(ContentSettingsPattern::SCHEME_OTHER,
+            Pattern("filesystem:http://www.google.com/temporary/").GetScheme());
+}

@@ -30,27 +30,39 @@ class ClovisTask(object):
       self._backend_params.update({'tag': str(uuid.uuid1())})
 
   @classmethod
-  def FromJsonString(cls, json_dict):
+  def FromJsonDict(cls, json_dict):
+    """Loads a ClovisTask from a JSON dictionary.
+
+    Returns:
+      ClovisTask: The task, or None if the string is invalid.
+    """
+    try:
+      action = json_dict['action']
+      action_params = json_dict['action_params']
+      # Vaidate the format.
+      if action == 'trace':
+        urls = action_params['urls']
+        if (type(urls) is not list) or (len(urls) == 0):
+          return None
+      elif action == 'report':
+        if not action_params.get('trace_bucket'):
+          return None
+      else:
+        # When more actions are supported, check that they are valid here.
+        return None
+      return cls(action, action_params, json_dict.get('backend_params'))
+    except Exception:
+      return None
+
+  @classmethod
+  def FromJsonString(cls, json_string):
     """Loads a ClovisTask from a JSON string.
 
     Returns:
       ClovisTask: The task, or None if the string is invalid.
     """
     try:
-      data = json.loads(json_dict)
-      action = data['action']
-      # Vaidate the format.
-      if action == 'trace':
-        action_params = data['action_params']
-        urls = action_params['urls']
-        if (type(urls) is not list) or (len(urls) == 0):
-          return None
-      elif action == 'report':
-        action_params = data.get('action_params')
-      else:
-        # When more actions are supported, check that they are valid here.
-        return None
-      return cls(action, action_params, data.get('backend_params'))
+      return cls.FromJsonDict(json.loads(json_string))
     except Exception:
       return None
 
@@ -59,11 +71,14 @@ class ClovisTask(object):
     """Loads a ClovisTask from a base 64 string."""
     return ClovisTask.FromJsonString(base64.b64decode(base64_string))
 
+  def ToJsonDict(self):
+    """Returns the JSON representation of the task as a dictionary."""
+    return {'action': self._action, 'action_params': self._action_params,
+            'backend_params': self._backend_params}
+
   def ToJsonString(self):
-    """Returns the JSON representation of the task."""
-    task_dict = {'action': self._action, 'action_params': self._action_params,
-                 'backend_params': self._backend_params}
-    return json.dumps(task_dict)
+    """Returns the JSON representation of the task as a string."""
+    return json.dumps(self.ToJsonDict())
 
   def Action(self):
     return self._action

@@ -31,11 +31,9 @@
 #ifndef FullscreenController_h
 #define FullscreenController_h
 
-#include "core/layout/LayoutFullScreen.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/heap/Handle.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefPtr.h"
 
 namespace blink {

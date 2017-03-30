@@ -36,16 +36,14 @@
 #include "platform/audio/AudioDestinationConsumer.h"
 #include "public/platform/WebMediaConstraints.h"
 #include "wtf/Allocator.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
 class PLATFORM_EXPORT MediaStreamSource final : public GarbageCollectedFinalized<MediaStreamSource> {
-    USING_PRE_FINALIZER(MediaStreamSource, dispose);
 public:
     class PLATFORM_EXPORT Observer : public GarbageCollectedMixin {
     public:
@@ -54,6 +52,7 @@ public:
     };
 
     class ExtraData {
+        USING_FAST_MALLOC(ExtraData);
     public:
         virtual ~ExtraData() { }
     };
@@ -70,7 +69,6 @@ public:
     };
 
     static MediaStreamSource* create(const String& id, StreamType, const String& name, bool remote, ReadyState = ReadyStateLive, bool requiresConsumer = false);
-    void dispose();
 
     const String& id() const { return m_id; }
     StreamType type() const { return m_type; }
@@ -83,7 +81,7 @@ public:
     void addObserver(Observer*);
 
     ExtraData* getExtraData() const { return m_extraData.get(); }
-    void setExtraData(PassOwnPtr<ExtraData> extraData) { m_extraData = std::move(extraData); }
+    void setExtraData(std::unique_ptr<ExtraData> extraData) { m_extraData = std::move(extraData); }
 
     void setConstraints(WebMediaConstraints constraints) { m_constraints = constraints; }
     WebMediaConstraints constraints() { return m_constraints; }
@@ -96,6 +94,9 @@ public:
     bool removeAudioConsumer(AudioDestinationConsumer*);
     const HeapHashSet<Member<AudioDestinationConsumer>>& audioConsumers() { return m_audioConsumers; }
 
+    // |m_extraData| may hold pointers to GC objects, and it may touch them in destruction.
+    // So this class is eagerly finalized to finalize |m_extraData| promptly.
+    EAGERLY_FINALIZE();
     DECLARE_TRACE();
 
 private:
@@ -110,7 +111,7 @@ private:
     HeapHashSet<WeakMember<Observer>> m_observers;
     Mutex m_audioConsumersLock;
     HeapHashSet<Member<AudioDestinationConsumer>> m_audioConsumers;
-    OwnPtr<ExtraData> m_extraData;
+    std::unique_ptr<ExtraData> m_extraData;
     WebMediaConstraints m_constraints;
 };
 

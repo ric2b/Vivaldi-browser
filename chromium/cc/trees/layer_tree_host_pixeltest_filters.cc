@@ -5,9 +5,11 @@
 #include <stddef.h>
 
 #include "build/build_config.h"
+#include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/test/layer_tree_pixel_test.h"
 #include "cc/test/pixel_comparator.h"
+#include "cc/test/solid_color_content_layer_client.h"
 #include "third_party/skia/include/effects/SkColorFilterImageFilter.h"
 #include "third_party/skia/include/effects/SkColorMatrixFilter.h"
 #include "third_party/skia/include/effects/SkOffsetImageFilter.h"
@@ -78,10 +80,10 @@ TEST_F(LayerTreeHostFiltersPixelTest, BackgroundFilterBlurOutsets) {
   blur->SetBackgroundFilters(filters);
 
 #if defined(OS_WIN)
-  // Windows has 7.6975% pixels by at most 2: crbug.com/259922
-  float percentage_pixels_large_error = 7.7f;
+  // Windows has 5.6075% pixels by at most 2: crbug.com/259922
+  float percentage_pixels_large_error = 5.7f;
   float percentage_pixels_small_error = 0.0f;
-  float average_error_allowed_in_bad_pixels = 1.f;
+  float average_error_allowed_in_bad_pixels = 2.f;
   int large_error_allowed = 2;
   int small_error_allowed = 0;
   pixel_comparator_.reset(new FuzzyPixelComparator(
@@ -178,12 +180,8 @@ class LayerTreeHostFiltersScaledPixelTest
                         PixelTestType test_type) {
     int half_content = content_size / 2;
 
-    scoped_refptr<SolidColorLayer> root = CreateSolidColorLayer(
-        gfx::Rect(0, 0, content_size, content_size), SK_ColorWHITE);
-
     scoped_refptr<SolidColorLayer> background = CreateSolidColorLayer(
         gfx::Rect(0, 0, content_size, content_size), SK_ColorGREEN);
-    root->AddChild(background);
 
     // Add a blue layer that completely covers the green layer.
     scoped_refptr<SolidColorLayer> foreground = CreateSolidColorLayer(
@@ -285,12 +283,8 @@ TEST_F(LayerTreeHostCroppedFilterPixelTest, Software) {
 class ImageFilterClippedPixelTest : public LayerTreeHostFiltersPixelTest {
  protected:
   void RunPixelTestType(PixelTestType test_type) {
-    scoped_refptr<SolidColorLayer> root =
-        CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorBLACK);
-
     scoped_refptr<SolidColorLayer> background =
         CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorYELLOW);
-    root->AddChild(background);
 
     scoped_refptr<SolidColorLayer> foreground =
         CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorRED);
@@ -443,10 +437,10 @@ class ImageBackgroundFilter : public LayerTreeHostFiltersPixelTest {
     filter->SetBackgroundFilters(filters);
 
 #if defined(OS_WIN)
-    // Windows has 2.5875% pixels off by at most 2: crbug.com/225027
-    float percentage_pixels_large_error = 2.6f;  // 994px / (200*200)
+    // Windows has 3.065% pixels off by at most 2: crbug.com/225027
+    float percentage_pixels_large_error = 3.1f;
     float percentage_pixels_small_error = 0.0f;
-    float average_error_allowed_in_bad_pixels = 1.f;
+    float average_error_allowed_in_bad_pixels = 2.f;
     int large_error_allowed = 2;
     int small_error_allowed = 0;
     pixel_comparator_.reset(new FuzzyPixelComparator(
@@ -593,8 +587,14 @@ class RotatedDropShadowFilterTest : public LayerTreeHostFiltersPixelTest {
 
     gfx::Rect rect(50, 50, 100, 100);
 
-    scoped_refptr<SolidColorLayer> child =
-        CreateSolidColorLayer(rect, SK_ColorBLUE);
+    // Use a border to defeat solid color detection to force a tile quad.
+    // This is intended to test render pass removal optimizations.
+    SolidColorContentLayerClient blue_client(SK_ColorBLUE, rect.size(), 1,
+                                             SK_ColorBLACK);
+    scoped_refptr<PictureLayer> child = PictureLayer::Create(&blue_client);
+    child->SetBounds(rect.size());
+    child->SetPosition(gfx::PointF(rect.origin()));
+    child->SetIsDrawable(true);
 
     gfx::Transform transform;
     transform.Translate(50.0f, 50.0f);
@@ -609,8 +609,8 @@ class RotatedDropShadowFilterTest : public LayerTreeHostFiltersPixelTest {
     background->AddChild(child);
 
 #if defined(OS_WIN)
-    // Windows has 2 pixels off by 1: crbug.com/259915
-    float percentage_pixels_large_error = 0.00222223f;  // 1px / (300*300)
+    // Windows has 3 pixels off by 1: crbug.com/259915
+    float percentage_pixels_large_error = 0.00333334f;  // 3px / (300*300)
     float percentage_pixels_small_error = 0.0f;
     float average_error_allowed_in_bad_pixels = 1.f;
     int large_error_allowed = 1;
@@ -676,7 +676,7 @@ class EnlargedTextureWithAlphaThresholdFilter
     background->AddChild(filter_layer);
 
     // Force the allocation a larger textures.
-    set_enlarge_texture_amount(gfx::Vector2d(50, 50));
+    set_enlarge_texture_amount(gfx::Size(50, 50));
 
     RunPixelTest(test_type, background, image_name);
   }
@@ -728,7 +728,7 @@ class EnlargedTextureWithCropOffsetFilter
     background->AddChild(filter_layer);
 
     // Force the allocation a larger textures.
-    set_enlarge_texture_amount(gfx::Vector2d(50, 50));
+    set_enlarge_texture_amount(gfx::Size(50, 50));
 
     RunPixelTest(test_type, background, image_name);
   }
@@ -744,6 +744,62 @@ TEST_F(EnlargedTextureWithCropOffsetFilter, Software) {
   RunPixelTestType(
       PIXEL_TEST_SOFTWARE,
       base::FilePath(FILE_PATH_LITERAL("enlarged_texture_on_crop_offset.png")));
+}
+
+class BlurFilterWithClip : public LayerTreeHostFiltersPixelTest {
+ protected:
+  void RunPixelTestType(PixelTestType test_type, base::FilePath image_name) {
+    scoped_refptr<SolidColorLayer> child1 =
+        CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorBLUE);
+    scoped_refptr<SolidColorLayer> child2 =
+        CreateSolidColorLayer(gfx::Rect(20, 20, 160, 160), SK_ColorWHITE);
+    scoped_refptr<SolidColorLayer> child3 =
+        CreateSolidColorLayer(gfx::Rect(40, 40, 20, 30), SK_ColorRED);
+    scoped_refptr<SolidColorLayer> child4 =
+        CreateSolidColorLayer(gfx::Rect(60, 70, 100, 90), SK_ColorGREEN);
+    scoped_refptr<SolidColorLayer> filter_layer =
+        CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorWHITE);
+
+    filter_layer->AddChild(child1);
+    filter_layer->AddChild(child2);
+    filter_layer->AddChild(child3);
+    filter_layer->AddChild(child4);
+
+    FilterOperations filters;
+    filters.Append(FilterOperation::CreateBlurFilter(2.f));
+    filter_layer->SetFilters(filters);
+
+    // Force the allocation a larger textures.
+    set_enlarge_texture_amount(gfx::Size(50, 50));
+
+#if defined(OS_WIN)
+    // Windows has 1880 pixels off by 1: crbug.com/259915
+    float percentage_pixels_large_error = 4.7f;  // 1880px / (200*200)
+    float percentage_pixels_small_error = 0.0f;
+    float average_error_allowed_in_bad_pixels = 1.f;
+    int large_error_allowed = 2;
+    int small_error_allowed = 0;
+    pixel_comparator_.reset(new FuzzyPixelComparator(
+        true,  // discard_alpha
+        percentage_pixels_large_error, percentage_pixels_small_error,
+        average_error_allowed_in_bad_pixels, large_error_allowed,
+        small_error_allowed));
+#endif
+
+    RunPixelTest(test_type, filter_layer, image_name);
+  }
+};
+
+TEST_F(BlurFilterWithClip, GL) {
+  RunPixelTestType(
+      PIXEL_TEST_GL,
+      base::FilePath(FILE_PATH_LITERAL("blur_filter_with_clip_gl.png")));
+}
+
+TEST_F(BlurFilterWithClip, Software) {
+  RunPixelTestType(
+      PIXEL_TEST_SOFTWARE,
+      base::FilePath(FILE_PATH_LITERAL("blur_filter_with_clip_sw.png")));
 }
 
 class FilterWithGiantCropRectPixelTest : public LayerTreeHostFiltersPixelTest {
@@ -804,6 +860,76 @@ TEST_F(FilterWithGiantCropRectNoClip, GL) {
   RunPixelTestType(
       PIXEL_TEST_GL,
       base::FilePath(FILE_PATH_LITERAL("filter_with_giant_crop_rect.png")));
+}
+
+class BackgroundFilterWithDeviceScaleFactorTest
+    : public LayerTreeHostFiltersPixelTest {
+ protected:
+  void RunPixelTestType(float device_scale_factor,
+                        PixelTestType test_type,
+                        const base::FilePath& expected_result) {
+    device_scale_factor_ = device_scale_factor;
+
+    scoped_refptr<Layer> root =
+        CreateSolidColorLayer(gfx::Rect(200, 200), SK_ColorWHITE);
+
+    scoped_refptr<SolidColorLayer> background =
+        CreateSolidColorLayer(gfx::Rect(100, 120), SK_ColorBLACK);
+    root->AddChild(background);
+
+    scoped_refptr<SolidColorLayer> filtered = CreateSolidColorLayer(
+        gfx::Rect(0, 100, 200, 100), SkColorSetA(SK_ColorGREEN, 127));
+    FilterOperations filters;
+    filters.Append(FilterOperation::CreateReferenceFilter(
+        SkOffsetImageFilter::Make(0, 80, nullptr)));
+    filtered->SetBackgroundFilters(filters);
+    root->AddChild(filtered);
+
+    // This should appear as a grid of 4 100x100 squares which are:
+    // BLACK       WHITE
+    // DARK GREEN  LIGHT GREEN
+    RunPixelTest(test_type, std::move(root), expected_result);
+  }
+
+ private:
+  // LayerTreePixelTest overrides
+
+  void InitializeSettings(LayerTreeSettings* settings) override {
+    LayerTreeHostFiltersPixelTest::InitializeSettings(settings);
+    // Required so that device scale is inherited by content scale.
+    settings->layer_transforms_should_scale_layer_contents = true;
+  }
+
+  void SetupTree() override {
+    layer_tree_host()->SetDeviceScaleFactor(device_scale_factor_);
+    LayerTreeHostFiltersPixelTest::SetupTree();
+  }
+
+  float device_scale_factor_ = 1;
+};
+
+TEST_F(BackgroundFilterWithDeviceScaleFactorTest, StandardDpi_GL) {
+  RunPixelTestType(
+      1.f, PIXEL_TEST_GL,
+      base::FilePath(FILE_PATH_LITERAL("offset_background_filter_1x.png")));
+}
+
+TEST_F(BackgroundFilterWithDeviceScaleFactorTest, StandardDpi_Software) {
+  RunPixelTestType(
+      1.f, PIXEL_TEST_SOFTWARE,
+      base::FilePath(FILE_PATH_LITERAL("offset_background_filter_1x.png")));
+}
+
+TEST_F(BackgroundFilterWithDeviceScaleFactorTest, HiDpi_GL) {
+  RunPixelTestType(
+      2.f, PIXEL_TEST_GL,
+      base::FilePath(FILE_PATH_LITERAL("offset_background_filter_2x.png")));
+}
+
+TEST_F(BackgroundFilterWithDeviceScaleFactorTest, HiDpi_Software) {
+  RunPixelTestType(
+      2.f, PIXEL_TEST_SOFTWARE,
+      base::FilePath(FILE_PATH_LITERAL("offset_background_filter_2x.png")));
 }
 
 }  // namespace

@@ -16,6 +16,7 @@
           'inputs': [
             '<@(mojom_bindings_generator_sources)',
             'generators/cpp_templates/enum_macros.tmpl',
+            'generators/cpp_templates/enum_serialization_declaration.tmpl',
             'generators/cpp_templates/interface_declaration.tmpl',
             'generators/cpp_templates/interface_definition.tmpl',
             'generators/cpp_templates/interface_macros.tmpl',
@@ -40,8 +41,10 @@
             'generators/cpp_templates/validation_macros.tmpl',
             'generators/cpp_templates/wrapper_class_declaration.tmpl',
             'generators/cpp_templates/wrapper_class_definition.tmpl',
+            'generators/cpp_templates/wrapper_class_template_definition.tmpl',
             'generators/cpp_templates/wrapper_union_class_declaration.tmpl',
             'generators/cpp_templates/wrapper_union_class_definition.tmpl',
+            'generators/cpp_templates/wrapper_union_class_template_definition.tmpl',
             'generators/java_templates/constant_definition.tmpl',
             'generators/java_templates/constants.java.tmpl',
             'generators/java_templates/data_types_definition.tmpl',

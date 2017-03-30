@@ -30,10 +30,10 @@
 #include "modules/webaudio/AudioScheduledSourceNode.h"
 #include "modules/webaudio/PannerNode.h"
 #include "platform/audio/AudioBus.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Threading.h"
+#include <memory>
 
 namespace blink {
 
@@ -103,8 +103,8 @@ private:
     Persistent<AudioBuffer> m_buffer;
 
     // Pointers for the buffer and destination.
-    OwnPtr<const float*[]> m_sourceChannels;
-    OwnPtr<float*[]> m_destinationChannels;
+    std::unique_ptr<const float*[]> m_sourceChannels;
+    std::unique_ptr<float*[]> m_destinationChannels;
 
     RefPtr<AudioParamHandler> m_playbackRate;
     RefPtr<AudioParamHandler> m_detune;
@@ -141,7 +141,7 @@ private:
 class AudioBufferSourceNode final : public AudioScheduledSourceNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static AudioBufferSourceNode* create(AbstractAudioContext&, float sampleRate);
+    static AudioBufferSourceNode* create(AbstractAudioContext&, ExceptionState&);
     DECLARE_VIRTUAL_TRACE();
     AudioBufferSourceHandler& audioBufferSourceHandler() const;
 
@@ -162,7 +162,7 @@ public:
     void start(double when, double grainOffset, double grainDuration, ExceptionState&);
 
 private:
-    AudioBufferSourceNode(AbstractAudioContext&, float sampleRate);
+    AudioBufferSourceNode(AbstractAudioContext&);
 
     Member<AudioParam> m_playbackRate;
     Member<AudioParam> m_detune;

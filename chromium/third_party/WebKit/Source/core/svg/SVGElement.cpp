@@ -547,7 +547,7 @@ void SVGElement::setCursorElement(SVGCursorElement* cursorElement)
     rareData->setCursorElement(cursorElement);
 }
 
-void SVGElement::setCursorImageValue(CSSCursorImageValue* cursorImageValue)
+void SVGElement::setCursorImageValue(const CSSCursorImageValue* cursorImageValue)
 {
     ensureSVGRareData()->setCursorImageValue(cursorImageValue);
 }
@@ -562,7 +562,7 @@ SVGUseElement* SVGElement::correspondingUseElement() const
 {
     if (ShadowRoot* root = containingShadowRoot()) {
         if (isSVGUseElement(root->host()) && (root->type() == ShadowRootType::UserAgent))
-            return toSVGUseElement(root->host());
+            return &toSVGUseElement(root->host());
     }
     return nullptr;
 }

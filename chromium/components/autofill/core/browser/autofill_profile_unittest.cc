@@ -843,7 +843,7 @@ TEST(AutofillProfileTest, IsSubsetOf) {
   EXPECT_FALSE(a->IsSubsetOf(*b, "en-US"));
 }
 
-TEST(AutofillProfileTest, OverwriteWith_DifferentProfile) {
+TEST(AutofillProfileTest, MergeDataFrom_DifferentProfile) {
   AutofillProfile a;
   SetupTestProfile(a);
 
@@ -856,50 +856,39 @@ TEST(AutofillProfileTest, OverwriteWith_DifferentProfile) {
   AutofillProfile b = a;
   b.set_guid(base::GenerateGUID());
   b.set_origin(kSettingsOrigin);
-  b.SetRawInfo(ADDRESS_HOME_LINE2, ASCIIToUTF16("area 51"));
+  b.SetRawInfo(ADDRESS_HOME_LINE2, ASCIIToUTF16("Unit 5, area 51"));
   b.SetRawInfo(COMPANY_NAME, base::string16());
 
+  b.SetRawInfo(NAME_MIDDLE, ASCIIToUTF16("M."));
   b.SetRawInfo(NAME_FULL, ASCIIToUTF16("Marion M. Morrison"));
   b.set_language_code("en");
 
-  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
+  EXPECT_TRUE(a.MergeDataFrom(b, "en-US"));
   EXPECT_EQ(kSettingsOrigin, a.origin());
-  EXPECT_EQ(ASCIIToUTF16("area 51"), a.GetRawInfo(ADDRESS_HOME_LINE2));
+  EXPECT_EQ(ASCIIToUTF16("Unit 5, area 51"), a.GetRawInfo(ADDRESS_HOME_LINE2));
   EXPECT_EQ(ASCIIToUTF16("Fox"), a.GetRawInfo(COMPANY_NAME));
   base::string16 name = a.GetInfo(AutofillType(NAME_FULL), "en-US");
-  EXPECT_EQ(ASCIIToUTF16("Marion M. Morrison"), name);
+  EXPECT_EQ(ASCIIToUTF16("Marion Mitchell Morrison"), name);
   EXPECT_EQ("en", a.language_code());
 }
 
-TEST(AutofillProfileTest, OverwriteWith_SameProfile) {
+TEST(AutofillProfileTest, MergeDataFrom_SameProfile) {
   AutofillProfile a;
   SetupTestProfile(a);
 
+  // The profile has no full name yet. Merge will add it.
   AutofillProfile b = a;
   b.set_guid(base::GenerateGUID());
-  EXPECT_FALSE(a.OverwriteWith(b, "en-US"));
-}
+  EXPECT_TRUE(a.MergeDataFrom(b, "en-US"));
+  EXPECT_EQ(2u, a.use_count());
 
-TEST(AutofillProfileTest, OverwriteWith_DifferentName) {
-  AutofillProfile a;
-  SetupTestProfile(a);
-
-  AutofillProfile b = a;
-  b.SetRawInfo(NAME_FIRST, ASCIIToUTF16("Mario"));
-  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
-  base::string16 name_full = a.GetInfo(AutofillType(NAME_FULL), "en-US");
-  EXPECT_EQ(ASCIIToUTF16("Mario Mitchell Morrison"), name_full);
-}
-
-TEST(AutofillProfileTest, OverwriteWith_DifferentAddress) {
-  AutofillProfile a;
-  SetupTestProfile(a);
-
-  AutofillProfile b = a;
-  b.SetRawInfo(ADDRESS_HOME_LINE1, ASCIIToUTF16("123 Aquarium St."));
-  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
-  base::string16 address = a.GetRawInfo(ADDRESS_HOME_LINE1);
-  EXPECT_EQ(ASCIIToUTF16("123 Aquarium St."), address);
+  // Now the profile is fully populated. Merging it again has no effect (except
+  // for usage statistics).
+  AutofillProfile c = a;
+  c.set_guid(base::GenerateGUID());
+  c.set_use_count(3);
+  EXPECT_FALSE(a.MergeDataFrom(c, "en-US"));
+  EXPECT_EQ(5u, a.use_count());
 }
 
 TEST(AutofillProfileTest, OverwriteName_AddNameFull) {
@@ -912,7 +901,7 @@ TEST(AutofillProfileTest, OverwriteName_AddNameFull) {
   AutofillProfile b = a;
   b.SetRawInfo(NAME_FULL, base::ASCIIToUTF16("Marion Mitchell Morrison"));
 
-  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
+  EXPECT_TRUE(a.MergeDataFrom(b, "en-US"));
   EXPECT_EQ(base::ASCIIToUTF16("Marion"), a.GetRawInfo(NAME_FIRST));
   EXPECT_EQ(base::ASCIIToUTF16("Mitchell"), a.GetRawInfo(NAME_MIDDLE));
   EXPECT_EQ(base::ASCIIToUTF16("Morrison"), a.GetRawInfo(NAME_LAST));
@@ -934,7 +923,7 @@ TEST(AutofillProfileTest, OverwriteName_DifferentCase) {
   b.SetRawInfo(NAME_MIDDLE, base::ASCIIToUTF16("Mitchell"));
   b.SetRawInfo(NAME_LAST, base::ASCIIToUTF16("Morrison"));
 
-  EXPECT_TRUE(a.OverwriteWith(b, "en-US"));
+  EXPECT_TRUE(a.MergeDataFrom(b, "en-US"));
   EXPECT_EQ(base::ASCIIToUTF16("Marion"), a.GetRawInfo(NAME_FIRST));
   EXPECT_EQ(base::ASCIIToUTF16("Mitchell"), a.GetRawInfo(NAME_MIDDLE));
   EXPECT_EQ(base::ASCIIToUTF16("Morrison"), a.GetRawInfo(NAME_LAST));
@@ -1134,27 +1123,6 @@ TEST(AutofillProfileTest, FullAddress) {
   EXPECT_TRUE(profile.GetInfo(full_address, "en-US").empty());
 }
 
-TEST(AutofillProfileTest, CanonicalizeProfileString) {
-  // NOP.
-  EXPECT_EQ(base::string16(),
-            AutofillProfile::CanonicalizeProfileString(base::string16()));
-
-  // Simple punctuation removed.
-  EXPECT_EQ(ASCIIToUTF16("1600 amphitheatre pkwy"),
-            AutofillProfile::CanonicalizeProfileString(ASCIIToUTF16(
-                "1600 Amphitheatre, Pkwy.")));
-
-  // Unicode punctuation (hyphen and space), multiple spaces collapsed.
-  EXPECT_EQ(ASCIIToUTF16("mid island plaza"),
-            AutofillProfile::CanonicalizeProfileString(base::WideToUTF16(
-                L"Mid\x2013Island\x2003 Plaza")));
-
-  // Newline character removed.
-  EXPECT_EQ(ASCIIToUTF16("1600 amphitheatre pkwy app 2"),
-            AutofillProfile::CanonicalizeProfileString(
-                ASCIIToUTF16("1600 amphitheatre pkwy \n App. 2")));
-}
-
 TEST(AutofillProfileTest, SaveAdditionalInfo_Name_AddingNameFull) {
   AutofillProfile a;
 
@@ -1196,7 +1164,8 @@ TEST(AutofillProfileTest, SaveAdditionalInfo_Name_KeepNameFull) {
 
 // Tests the merging of two similar profiles results in the second profile's
 // non-empty fields overwriting the initial profiles values.
-TEST(AutofillProfileTest, SaveAdditionalInfo_Name_DifferentCaseNoNameFull) {
+TEST(AutofillProfileTest,
+     SaveAdditionalInfo_Name_DifferentCaseAndDiacriticsNoNameFull) {
   AutofillProfile a;
 
   a.SetRawInfo(NAME_FIRST, base::ASCIIToUTF16("marion"));
@@ -1205,19 +1174,19 @@ TEST(AutofillProfileTest, SaveAdditionalInfo_Name_DifferentCaseNoNameFull) {
   a.SetRawInfo(NAME_FULL, base::ASCIIToUTF16("marion mitchell morrison"));
 
   AutofillProfile b = a;
-  b.SetRawInfo(NAME_FIRST, base::ASCIIToUTF16("Marion"));
-  b.SetRawInfo(NAME_MIDDLE, base::ASCIIToUTF16("Mitchell"));
-  b.SetRawInfo(NAME_LAST, base::ASCIIToUTF16("Morrison"));
-  b.SetRawInfo(NAME_FULL, base::ASCIIToUTF16(""));
+  b.SetRawInfo(NAME_FIRST, UTF8ToUTF16("Märion"));
+  b.SetRawInfo(NAME_MIDDLE, UTF8ToUTF16("Mitchéll"));
+  b.SetRawInfo(NAME_LAST,UTF8ToUTF16("Morrison"));
+  b.SetRawInfo(NAME_FULL, UTF8ToUTF16(""));
 
   EXPECT_TRUE(a.SaveAdditionalInfo(b, "en-US"));
 
   // The first, middle and last names should have their first letter in
-  // uppercase.
-  EXPECT_EQ(base::ASCIIToUTF16("Marion"), a.GetRawInfo(NAME_FIRST));
-  EXPECT_EQ(base::ASCIIToUTF16("Mitchell"), a.GetRawInfo(NAME_MIDDLE));
-  EXPECT_EQ(base::ASCIIToUTF16("Morrison"), a.GetRawInfo(NAME_LAST));
-  EXPECT_EQ(base::ASCIIToUTF16("marion mitchell morrison"),
+  // uppercase and have acquired diacritics.
+  EXPECT_EQ(UTF8ToUTF16("Märion"), a.GetRawInfo(NAME_FIRST));
+  EXPECT_EQ(UTF8ToUTF16("Mitchéll"), a.GetRawInfo(NAME_MIDDLE));
+  EXPECT_EQ(UTF8ToUTF16("Morrison"), a.GetRawInfo(NAME_LAST));
+  EXPECT_EQ(UTF8ToUTF16("Märion Mitchéll Morrison"),
             a.GetRawInfo(NAME_FULL));
 }
 

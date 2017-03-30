@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
+#include "content/child/web_url_request_util.h"
 #include "content/child/webmessageportchannel_impl.h"
 #include "content/common/content_security_policy_header.h"
 #include "content/common/frame_messages.h"
@@ -212,8 +213,7 @@ void RenderFrameProxy::SetReplicatedState(const FrameReplicationState& state) {
   web_frame_->setReplicatedSandboxFlags(state.sandbox_flags);
   web_frame_->setReplicatedName(blink::WebString::fromUTF8(state.name),
                                 blink::WebString::fromUTF8(state.unique_name));
-  web_frame_->setReplicatedShouldEnforceStrictMixedContentChecking(
-      state.should_enforce_strict_mixed_content_checking);
+  web_frame_->setReplicatedInsecureRequestPolicy(state.insecure_request_policy);
   web_frame_->setReplicatedPotentiallyTrustworthyUniqueOrigin(
       state.has_potentially_trustworthy_unique_origin);
 
@@ -267,11 +267,14 @@ bool RenderFrameProxy::OnMessageReceived(const IPC::Message& msg) {
                         OnAddContentSecurityPolicy)
     IPC_MESSAGE_HANDLER(FrameMsg_ResetContentSecurityPolicy,
                         OnResetContentSecurityPolicy)
-    IPC_MESSAGE_HANDLER(FrameMsg_EnforceStrictMixedContentChecking,
-                        OnEnforceStrictMixedContentChecking)
+    IPC_MESSAGE_HANDLER(FrameMsg_EnforceInsecureRequestPolicy,
+                        OnEnforceInsecureRequestPolicy)
+    IPC_MESSAGE_HANDLER(FrameMsg_SetFrameOwnerProperties,
+                        OnSetFrameOwnerProperties)
     IPC_MESSAGE_HANDLER(FrameMsg_DidUpdateOrigin, OnDidUpdateOrigin)
     IPC_MESSAGE_HANDLER(InputMsg_SetFocus, OnSetPageFocus)
     IPC_MESSAGE_HANDLER(FrameMsg_SetFocusedFrame, OnSetFocusedFrame)
+    IPC_MESSAGE_HANDLER(FrameMsg_WillEnterFullscreen, OnWillEnterFullscreen)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
 
@@ -348,10 +351,14 @@ void RenderFrameProxy::OnResetContentSecurityPolicy() {
   web_frame_->resetReplicatedContentSecurityPolicy();
 }
 
-void RenderFrameProxy::OnEnforceStrictMixedContentChecking(
-    bool should_enforce) {
-  web_frame_->setReplicatedShouldEnforceStrictMixedContentChecking(
-      should_enforce);
+void RenderFrameProxy::OnEnforceInsecureRequestPolicy(
+    blink::WebInsecureRequestPolicy policy) {
+  web_frame_->setReplicatedInsecureRequestPolicy(policy);
+}
+
+void RenderFrameProxy::OnSetFrameOwnerProperties(
+    const blink::WebFrameOwnerProperties& properties) {
+  web_frame_->setFrameOwnerProperties(properties);
 }
 
 void RenderFrameProxy::OnDidUpdateOrigin(
@@ -370,6 +377,10 @@ void RenderFrameProxy::OnSetFocusedFrame() {
   // This uses focusDocumentView rather than setFocusedFrame so that blur
   // events are properly dispatched on any currently focused elements.
   render_view_->webview()->focusDocumentView(web_frame_);
+}
+
+void RenderFrameProxy::OnWillEnterFullscreen() {
+  web_frame_->willEnterFullScreen();
 }
 
 void RenderFrameProxy::frameDetached(DetachType type) {
@@ -436,6 +447,8 @@ void RenderFrameProxy::navigate(const blink::WebURLRequest& request,
                                 bool should_replace_current_entry) {
   FrameHostMsg_OpenURL_Params params;
   params.url = request.url();
+  params.uses_post = request.httpMethod().utf8() == "POST";
+  params.resource_request_body = GetRequestBodyForWebURLRequest(request);
   params.referrer = Referrer(
       blink::WebStringToGURL(
           request.httpHeaderField(blink::WebString::fromUTF8("Referer"))),

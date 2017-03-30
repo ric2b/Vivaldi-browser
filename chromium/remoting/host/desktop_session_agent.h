@@ -78,7 +78,8 @@ class DesktopSessionAgent
   void OnChannelError() override;
 
   // webrtc::DesktopCapturer::Callback implementation.
-  void OnCaptureCompleted(webrtc::DesktopFrame* frame) override;
+  void OnCaptureResult(webrtc::DesktopCapturer::Result result,
+                       std::unique_ptr<webrtc::DesktopFrame> frame) override;
 
   // webrtc::MouseCursorMonitor::Callback implementation.
   void OnMouseCursor(webrtc::MouseCursor* cursor) override;
@@ -181,9 +182,6 @@ class DesktopSessionAgent
   // The client end of the network-to-desktop pipe. It is kept alive until
   // the network process connects to the pipe.
   base::File desktop_pipe_;
-
-  // Size of the most recent captured video frame.
-  webrtc::DesktopSize current_size_;
 
   // True if the desktop session agent has been started.
   bool started_ = false;

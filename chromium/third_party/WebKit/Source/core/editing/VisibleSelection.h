@@ -44,21 +44,6 @@ class SelectionAdjuster;
 const TextAffinity SelDefaultAffinity = TextAffinity::Downstream;
 enum SelectionDirection { DirectionForward, DirectionBackward, DirectionRight, DirectionLeft };
 
-// Listener of |VisibleSelection| modification. |didChangeVisibleSelection()|
-// will be invoked when base, extent, start or end is moved to a different
-// position.
-//
-// Objects implementing |VisibleSelectionChangeObserver| interface must outlive
-// the |VisibleSelection| object.
-class CORE_EXPORT VisibleSelectionChangeObserver : public GarbageCollectedMixin {
-    WTF_MAKE_NONCOPYABLE(VisibleSelectionChangeObserver);
-public:
-    VisibleSelectionChangeObserver();
-    virtual ~VisibleSelectionChangeObserver();
-    virtual void didChangeVisibleSelection() = 0;
-    DEFINE_INLINE_VIRTUAL_TRACE() { }
-};
-
 template <typename Strategy>
 class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
     DISALLOW_NEW();
@@ -104,9 +89,8 @@ public:
     bool isNone() const { return getSelectionType() == NoSelection; }
     bool isCaret() const { return getSelectionType() == CaretSelection; }
     bool isRange() const { return getSelectionType() == RangeSelection; }
-    bool isCaretOrRange() const { return getSelectionType() != NoSelection; }
     bool isNonOrphanedRange() const { return isRange() && !start().isOrphan() && !end().isOrphan(); }
-    bool isNonOrphanedCaretOrRange() const { return isCaretOrRange() && !start().isOrphan() && !end().isOrphan(); }
+    bool isNonOrphanedCaretOrRange() const { return !isNone() && !start().isOrphan() && !end().isOrphan(); }
 
     bool isBaseFirst() const { return m_baseIsFirst; }
     bool isDirectional() const { return m_isDirectional; }
@@ -114,7 +98,7 @@ public:
 
     void appendTrailingWhitespace();
 
-    bool expandUsingGranularity(TextGranularity);
+    void expandUsingGranularity(TextGranularity);
 
     // TODO(yosin) Most callers probably don't want these functions, but
     // are using them for historical reasons. |toNormalizedEphemeralRange()|
@@ -126,19 +110,9 @@ public:
     bool isContentEditable() const;
     bool hasEditableStyle() const;
     bool isContentRichlyEditable() const;
-    // Returns a shadow tree node for legacy shadow trees, a child of the
-    // ShadowRoot node for new shadow trees, or 0 for non-shadow trees.
-    Node* nonBoundaryShadowTreeRootNode() const;
-
-    VisiblePositionTemplate<Strategy> visiblePositionRespectingEditingBoundary(const LayoutPoint& localPoint, Node* targetNode) const;
-    PositionWithAffinityTemplate<Strategy> positionRespectingEditingBoundary(const LayoutPoint& localPoint, Node* targetNode) const;
 
     bool isValidFor(const Document&) const;
     void setWithoutValidation(const PositionTemplate<Strategy>&, const PositionTemplate<Strategy>&);
-
-    void setChangeObserver(VisibleSelectionChangeObserver&);
-    void clearChangeObserver();
-    void didChange(); // Fire the change observer, if any.
 
     DEFINE_INLINE_TRACE()
     {
@@ -146,7 +120,6 @@ public:
         visitor->trace(m_extent);
         visitor->trace(m_start);
         visitor->trace(m_end);
-        visitor->trace(m_changeObserver);
     }
 
     void updateIfNeeded();
@@ -157,9 +130,7 @@ public:
     void formatForDebugger(char* buffer, unsigned length) const;
     void showTreeForThis() const;
 #endif
-
-    void setStartRespectingGranularity(TextGranularity, EWordSide = RightWordIfOnBoundary);
-    void setEndRespectingGranularity(TextGranularity, EWordSide = RightWordIfOnBoundary);
+    static void PrintTo(const VisibleSelectionTemplate&, std::ostream*);
 
 private:
     friend class SelectionAdjuster;
@@ -170,6 +141,8 @@ private:
     void setBaseAndExtentToDeepEquivalents();
     void adjustSelectionToAvoidCrossingShadowBoundaries();
     void adjustSelectionToAvoidCrossingEditingBoundaries();
+    void setEndRespectingGranularity(TextGranularity);
+    void setStartRespectingGranularity(TextGranularity);
     void updateSelectionType();
 
     // We need to store these as Positions because VisibleSelection is
@@ -187,10 +160,6 @@ private:
     PositionTemplate<Strategy> m_end;
 
     TextAffinity m_affinity; // the upstream/downstream affinity of the caret
-
-    // Oilpan: this reference has a lifetime that is at least as long
-    // as this object.
-    Member<VisibleSelectionChangeObserver> m_changeObserver;
 
     // these are cached, can be recalculated by validate()
     SelectionType m_selectionType; // None, Caret, Range
@@ -211,16 +180,15 @@ extern template class CORE_EXTERN_TEMPLATE_EXPORT VisibleSelectionTemplate<Editi
 using VisibleSelection = VisibleSelectionTemplate<EditingStrategy>;
 using VisibleSelectionInFlatTree = VisibleSelectionTemplate<EditingInFlatTreeStrategy>;
 
-// TODO(yosin): We should use |operator==()| instead of
-// |equalSelectionsInDOMTree()|.
-bool equalSelectionsInDOMTree(const VisibleSelection&, const VisibleSelection&);
-
 // We don't yet support multi-range selections, so we only ever have one range
 // to return.
 CORE_EXPORT EphemeralRange firstEphemeralRangeOf(const VisibleSelection&);
 
 // TODO(sof): move more firstRangeOf() uses to be over EphemeralRange instead.
 CORE_EXPORT Range* firstRangeOf(const VisibleSelection&);
+
+CORE_EXPORT std::ostream& operator<<(std::ostream&, const VisibleSelection&);
+CORE_EXPORT std::ostream& operator<<(std::ostream&, const VisibleSelectionInFlatTree&);
 
 } // namespace blink
 

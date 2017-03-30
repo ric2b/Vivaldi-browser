@@ -13,33 +13,33 @@
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/ui/accessibility_cursor_ring_layer.h"
 #include "chrome/browser/chromeos/ui/accessibility_focus_ring_layer.h"
-#include "ui/compositor/compositor_animation_observer.h"
 #include "ui/gfx/geometry/rect.h"
-
-namespace ui {
-class Compositor;
-}
 
 namespace chromeos {
 
 // AccessibilityFocusRingController handles drawing custom rings around
 // the focused object, cursor, and/or caret for accessibility.
-class AccessibilityFocusRingController
-    : public FocusRingLayerDelegate,
-      public ui::CompositorAnimationObserver {
+class AccessibilityFocusRingController : public FocusRingLayerDelegate {
  public:
   // Get the single instance of this class.
   static AccessibilityFocusRingController* GetInstance();
 
-  // Draw a focus ring around the given set of rects, in global screen
-  // coordinates.
-  void SetFocusRing(const std::vector<gfx::Rect>& rects);
+  enum FocusRingBehavior { FADE_OUT_FOCUS_RING, PERSIST_FOCUS_RING };
 
-  // Draw a ring around the mouse cursor.
+  // Draw a focus ring around the given set of rects, in global screen
+  // coordinates. Use |focus_ring_behavior| to specify whether the focus
+  // ring should persist or fade out.
+  void SetFocusRing(const std::vector<gfx::Rect>& rects,
+                    FocusRingBehavior focus_ring_behavior);
+
+  // Draw a ring around the mouse cursor. It fades out automatically.
   void SetCursorRing(const gfx::Point& location);
 
-  // Draw a ring around the text caret.
+  // Draw a ring around the text caret. It fades out automatically.
   void SetCaretRing(const gfx::Point& location);
+
+  // Don't fade in / out, for testing.
+  void SetNoFadeForTesting();
 
  protected:
   AccessibilityFocusRingController();
@@ -56,17 +56,15 @@ class AccessibilityFocusRingController
   virtual int GetMargin() const;
 
  private:
-  // FocusRingLayerDelegate.
+  // FocusRingLayerDelegate overrides.
   void OnDeviceScaleFactorChanged() override;
-
-  // CompositorAnimationObserver.
   void OnAnimationStep(base::TimeTicks timestamp) override;
-  void OnCompositingShuttingDown(ui::Compositor* compositor) override;
 
-  void Update();
+  void UpdateFocusRingsFromFocusRects();
 
   void AnimateFocusRings(base::TimeTicks timestamp);
   void AnimateCursorRing(base::TimeTicks timestamp);
+  void AnimateCaretRing(base::TimeTicks timestamp);
 
   AccessibilityFocusRing RingFromSortedRects(
       const std::vector<gfx::Rect>& rects) const;
@@ -76,24 +74,31 @@ class AccessibilityFocusRingController
       gfx::Rect* middle,
       gfx::Rect* bottom) const;
   bool Intersects(const gfx::Rect& r1, const gfx::Rect& r2) const;
-  ui::Compositor* CompositorForBounds(const gfx::Rect& bounds);
-  void RemoveAnimationObservers();
-  void AddAnimationObservers();
 
-  std::vector<gfx::Rect> rects_;
-  std::vector<AccessibilityFocusRing> previous_rings_;
-  std::vector<AccessibilityFocusRing> rings_;
-  ScopedVector<AccessibilityFocusRingLayer> layers_;
-  base::TimeTicks focus_change_time_;
-  ui::Compositor* compositor_;
+  struct LayerAnimationInfo {
+    base::TimeTicks start_time;
+    base::TimeTicks change_time;
+    base::TimeDelta fade_in_time;
+    base::TimeDelta fade_out_time;
+    float opacity = 0;
+    bool smooth = false;
+  };
+  void OnLayerChange(LayerAnimationInfo* animation_info);
+  void ComputeOpacity(LayerAnimationInfo* animation_info,
+                      base::TimeTicks timestamp);
 
-  base::TimeTicks cursor_start_time_;
-  base::TimeTicks cursor_change_time_;
+  LayerAnimationInfo focus_animation_info_;
+  std::vector<gfx::Rect> focus_rects_;
+  std::vector<AccessibilityFocusRing> previous_focus_rings_;
+  std::vector<AccessibilityFocusRing> focus_rings_;
+  ScopedVector<AccessibilityFocusRingLayer> focus_layers_;
+  FocusRingBehavior focus_ring_behavior_ = FADE_OUT_FOCUS_RING;
+
+  LayerAnimationInfo cursor_animation_info_;
   gfx::Point cursor_location_;
-  float cursor_opacity_;
   std::unique_ptr<AccessibilityCursorRingLayer> cursor_layer_;
-  ui::Compositor* cursor_compositor_;
 
+  LayerAnimationInfo caret_animation_info_;
   gfx::Point caret_location_;
   std::unique_ptr<AccessibilityCursorRingLayer> caret_layer_;
 

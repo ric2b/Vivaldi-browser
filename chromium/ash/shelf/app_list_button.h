@@ -9,12 +9,14 @@
 #include "ui/views/controls/button/image_button.h"
 
 namespace ash {
+class InkDropButtonListener;
 class ShelfView;
 
 // Button used for the AppList icon on the shelf.
 class AppListButton : public views::ImageButton {
  public:
-  explicit AppListButton(ShelfView* shelf_view);
+  explicit AppListButton(InkDropButtonListener* listener,
+                         ShelfView* shelf_view);
   ~AppListButton() override;
 
   bool draw_background_as_active() { return draw_background_as_active_; }
@@ -27,6 +29,7 @@ class AppListButton : public views::ImageButton {
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnPaint(gfx::Canvas* canvas) override;
   void GetAccessibleState(ui::AXViewState* state) override;
+  void NotifyClick(const ui::Event& event) override;
 
   // ui::EventHandler overrides:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -35,10 +38,21 @@ class AppListButton : public views::ImageButton {
   // Toggles the active state for painting the background and schedules a paint.
   void SetDrawBackgroundAsActive(bool draw_background_as_active);
 
+  // Helper functions to paint the background and foreground of the AppList
+  // button in Chrome OS MD.
+  void PaintBackgroundMD(gfx::Canvas* canvas);
+  void PaintForegroundMD(gfx::Canvas* canvas,
+                         const gfx::ImageSkia& foreground_image);
+
+  // Helper function to paint the AppList button in Chrome OS non-MD.
+  void PaintAppListButton(gfx::Canvas* canvas,
+                          const gfx::ImageSkia& foreground_image);
+
   // True if the background should render as active, regardless of the state of
   // the application list.
   bool draw_background_as_active_;
 
+  InkDropButtonListener* listener_;
   ShelfView* shelf_view_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListButton);

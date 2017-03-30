@@ -64,10 +64,10 @@
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/core/browser/signin_header_helper.h"
 #include "components/translate/core/browser/language_state.h"
-#include "components/ui/zoom/page_zoom.h"
-#include "components/ui/zoom/zoom_controller.h"
 #include "components/version_info/version_info.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
+#include "components/zoom/page_zoom.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -502,8 +502,6 @@ void OpenCurrentURL(Browser* browser) {
   GURL url(location_bar->GetDestinationURL());
 
   ui::PageTransition page_transition = location_bar->GetPageTransition();
-  ui::PageTransition page_transition_without_qualifier(
-      ui::PageTransitionStripQualifier(page_transition));
   WindowOpenDisposition open_disposition =
       location_bar->GetWindowOpenDisposition();
   // A PAGE_TRANSITION_TYPED means the user has typed a URL. We do not want to
@@ -513,8 +511,10 @@ void OpenCurrentURL(Browser* browser) {
   // Instant should also not handle PAGE_TRANSITION_RELOAD because its knowledge
   // of the omnibox text may be stale if the user focuses in the omnibox and
   // presses enter without typing anything.
-  if (page_transition_without_qualifier != ui::PAGE_TRANSITION_TYPED &&
-      page_transition_without_qualifier != ui::PAGE_TRANSITION_RELOAD &&
+  if (!ui::PageTransitionCoreTypeIs(page_transition,
+                                    ui::PAGE_TRANSITION_TYPED) &&
+      !ui::PageTransitionCoreTypeIs(page_transition,
+                                    ui::PAGE_TRANSITION_RELOAD) &&
       browser->instant_controller() &&
       browser->instant_controller()->OpenInstant(open_disposition, url))
     return;
@@ -589,21 +589,20 @@ void CloseTab(Browser* browser) {
 }
 
 bool CanZoomIn(content::WebContents* contents) {
-  ui_zoom::ZoomController* zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(contents);
-  return zoom_controller->GetZoomPercent() != contents->GetMaximumZoomPercent();
+  return contents && !contents->IsCrashed() &&
+         zoom::ZoomController::FromWebContents(contents)->GetZoomPercent() !=
+             contents->GetMaximumZoomPercent();
 }
 
 bool CanZoomOut(content::WebContents* contents) {
-  ui_zoom::ZoomController* zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(contents);
-  return zoom_controller->GetZoomPercent() !=
-      contents->GetMinimumZoomPercent();
+  return contents && !contents->IsCrashed() &&
+         zoom::ZoomController::FromWebContents(contents)->GetZoomPercent() !=
+             contents->GetMinimumZoomPercent();
 }
 
 bool CanResetZoom(content::WebContents* contents) {
-  ui_zoom::ZoomController* zoom_controller =
-      ui_zoom::ZoomController::FromWebContents(contents);
+  zoom::ZoomController* zoom_controller =
+      zoom::ZoomController::FromWebContents(contents);
   return !zoom_controller->IsAtDefaultZoom() ||
          !zoom_controller->PageScaleFactorIsOne();
 }
@@ -1000,8 +999,8 @@ void FindInPage(Browser* browser, bool find_next, bool forward_direction) {
 }
 
 void Zoom(Browser* browser, content::PageZoom zoom) {
-  ui_zoom::PageZoom::Zoom(browser->tab_strip_model()->GetActiveWebContents(),
-                          zoom);
+  zoom::PageZoom::Zoom(browser->tab_strip_model()->GetActiveWebContents(),
+                       zoom);
 }
 
 void FocusToolbar(Browser* browser) {

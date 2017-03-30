@@ -4,37 +4,30 @@
 
 #include "remoting/protocol/webrtc_dummy_video_capturer.h"
 
-#include <vector>
-
 namespace remoting {
 namespace protocol {
 
-WebRtcDummyVideoCapturer::WebRtcDummyVideoCapturer(
-    std::unique_ptr<WebRtcFrameScheduler> frame_scheduler)
-    : frame_scheduler_(std::move(frame_scheduler)) {}
+WebrtcDummyVideoCapturer::WebrtcDummyVideoCapturer() {}
+WebrtcDummyVideoCapturer::~WebrtcDummyVideoCapturer() {}
 
-WebRtcDummyVideoCapturer::~WebRtcDummyVideoCapturer() {}
-
-cricket::CaptureState WebRtcDummyVideoCapturer::Start(
+cricket::CaptureState WebrtcDummyVideoCapturer::Start(
     const cricket::VideoFormat& capture_format) {
-  frame_scheduler_->Start();
   return cricket::CS_RUNNING;
 }
 
-void WebRtcDummyVideoCapturer::Stop() {
-  frame_scheduler_->Stop();
+void WebrtcDummyVideoCapturer::Stop() {
   SetCaptureState(cricket::CS_STOPPED);
 }
 
-bool WebRtcDummyVideoCapturer::IsRunning() {
+bool WebrtcDummyVideoCapturer::IsRunning() {
   return true;
 }
 
-bool WebRtcDummyVideoCapturer::IsScreencast() const {
+bool WebrtcDummyVideoCapturer::IsScreencast() const {
   return true;
 }
 
-bool WebRtcDummyVideoCapturer::GetPreferredFourccs(
+bool WebrtcDummyVideoCapturer::GetPreferredFourccs(
     std::vector<uint32_t>* fourccs) {
   return true;
 }

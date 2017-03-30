@@ -60,13 +60,6 @@ const int kMinCommonNamePrefixLength = 16;
 // Maximum number of characters in the field label to be encoded in a proto.
 const int kMaxFieldLabelNumChars = 200;
 
-// Returns whether sending autofill field metadata to the server is enabled.
-bool IsAutofillFieldMetadataEnabled() {
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("AutofillFieldMetadata");
-  return base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
-}
-
 // Helper for |EncodeUploadRequest()| that creates a bit field corresponding to
 // |available_field_types| and returns the hex representation as a string.
 std::string EncodeFieldTypes(const ServerFieldTypeSet& available_field_types) {
@@ -500,21 +493,16 @@ void FormStructure::ParseQueryResponse(std::string payload,
           static_cast<ServerFieldType>(current_field->autofill_type());
       query_response_has_no_server_data &= field_type == NO_SERVER_DATA;
 
-      // If |form->has_author_specified_types| only password fields should be
-      // updated.
-      if (!form->has_author_specified_types_ ||
-          field->form_control_type == "password") {
-        // UNKNOWN_TYPE is reserved for use by the client.
-        DCHECK_NE(field_type, UNKNOWN_TYPE);
+      // UNKNOWN_TYPE is reserved for use by the client.
+      DCHECK_NE(field_type, UNKNOWN_TYPE);
 
-        ServerFieldType heuristic_type = field->heuristic_type();
-        if (heuristic_type != UNKNOWN_TYPE)
-          heuristics_detected_fillable_field = true;
+      ServerFieldType heuristic_type = field->heuristic_type();
+      if (heuristic_type != UNKNOWN_TYPE)
+        heuristics_detected_fillable_field = true;
 
-        field->set_server_type(field_type);
-        if (heuristic_type != field->Type().GetStorableType())
-          query_response_overrode_heuristics = true;
-      }
+      field->set_server_type(field_type);
+      if (heuristic_type != field->Type().GetStorableType())
+        query_response_overrode_heuristics = true;
 
       ++current_field;
     }
@@ -575,6 +563,13 @@ std::vector<FormDataPredictions> FormStructure::GetFieldTypePredictions(
     forms.push_back(form);
   }
   return forms;
+}
+
+// static
+bool FormStructure::IsAutofillFieldMetadataEnabled() {
+  const std::string group_name =
+      base::FieldTrialList::FindFullName("AutofillFieldMetadata");
+  return base::StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
 }
 
 std::string FormStructure::FormSignature() const {
@@ -734,39 +729,42 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
 
     // Log heuristic, server, and overall type quality metrics, independently of
     // whether the field was autofilled.
+    const AutofillMetrics::QualityMetricType metric_type =
+        observed_submission ? AutofillMetrics::TYPE_SUBMISSION
+                            : AutofillMetrics::TYPE_NO_SUBMISSION;
     if (heuristic_type == UNKNOWN_TYPE) {
-      AutofillMetrics::LogHeuristicTypePrediction(
-          AutofillMetrics::TYPE_UNKNOWN, field_type, observed_submission);
+      AutofillMetrics::LogHeuristicTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
+                                                  field_type, metric_type);
     } else if (field_types.count(heuristic_type)) {
-      AutofillMetrics::LogHeuristicTypePrediction(
-          AutofillMetrics::TYPE_MATCH, field_type, observed_submission);
+      AutofillMetrics::LogHeuristicTypePrediction(AutofillMetrics::TYPE_MATCH,
+                                                  field_type, metric_type);
     } else {
       ++num_heuristic_mismatches;
       AutofillMetrics::LogHeuristicTypePrediction(
-          AutofillMetrics::TYPE_MISMATCH, field_type, observed_submission);
+          AutofillMetrics::TYPE_MISMATCH, field_type, metric_type);
     }
 
     if (server_type == NO_SERVER_DATA) {
       AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
-                                               field_type, observed_submission);
+                                               field_type, metric_type);
     } else if (field_types.count(server_type)) {
       AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_MATCH,
-                                               field_type, observed_submission);
+                                               field_type, metric_type);
     } else {
       ++num_server_mismatches;
       AutofillMetrics::LogServerTypePrediction(AutofillMetrics::TYPE_MISMATCH,
-                                               field_type, observed_submission);
+                                               field_type, metric_type);
     }
 
     if (predicted_type == UNKNOWN_TYPE) {
-      AutofillMetrics::LogOverallTypePrediction(
-          AutofillMetrics::TYPE_UNKNOWN, field_type, observed_submission);
+      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_UNKNOWN,
+                                                field_type, metric_type);
     } else if (field_types.count(predicted_type)) {
-      AutofillMetrics::LogOverallTypePrediction(
-          AutofillMetrics::TYPE_MATCH, field_type, observed_submission);
+      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_MATCH,
+                                                field_type, metric_type);
     } else {
-      AutofillMetrics::LogOverallTypePrediction(
-          AutofillMetrics::TYPE_MISMATCH, field_type, observed_submission);
+      AutofillMetrics::LogOverallTypePrediction(AutofillMetrics::TYPE_MISMATCH,
+                                                field_type, metric_type);
     }
   }
 
@@ -838,6 +836,43 @@ void FormStructure::LogQualityMetrics(const base::TimeTicks& load_time,
           AutofillMetrics::LogFormFillDurationFromInteractionWithoutAutofill(
               elapsed);
         }
+      }
+    }
+  }
+}
+
+void FormStructure::LogQualityMetricsBasedOnAutocomplete() const {
+  for (const AutofillField* field : fields_) {
+    if (field->html_type() != HTML_TYPE_UNSPECIFIED &&
+        field->html_type() != HTML_TYPE_UNRECOGNIZED) {
+      // The type inferred by the autocomplete attribute.
+      AutofillType type(field->html_type(), field->html_mode());
+      ServerFieldType actual_field_type = type.GetStorableType();
+
+      const AutofillMetrics::QualityMetricType metric_type =
+          AutofillMetrics::TYPE_AUTOCOMPLETE_BASED;
+      // Log the quality of our heuristics predictions.
+      if (field->heuristic_type() == UNKNOWN_TYPE) {
+        AutofillMetrics::LogHeuristicTypePrediction(
+            AutofillMetrics::TYPE_UNKNOWN, actual_field_type, metric_type);
+      } else if (field->heuristic_type() == actual_field_type) {
+        AutofillMetrics::LogHeuristicTypePrediction(
+            AutofillMetrics::TYPE_MATCH, actual_field_type, metric_type);
+      } else {
+        AutofillMetrics::LogHeuristicTypePrediction(
+            AutofillMetrics::TYPE_MISMATCH, actual_field_type, metric_type);
+      }
+
+      // Log the quality of our server predictions.
+      if (field->server_type() == NO_SERVER_DATA) {
+        AutofillMetrics::LogServerTypePrediction(
+            AutofillMetrics::TYPE_UNKNOWN, actual_field_type, metric_type);
+      } else if (field->server_type() == actual_field_type) {
+        AutofillMetrics::LogServerTypePrediction(
+            AutofillMetrics::TYPE_MATCH, actual_field_type, metric_type);
+      } else {
+        AutofillMetrics::LogServerTypePrediction(
+            AutofillMetrics::TYPE_MISMATCH, actual_field_type, metric_type);
       }
     }
   }
@@ -1110,7 +1145,7 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
 
   for (const AutofillField* field : fields_) {
     // Don't upload checkable fields.
-    if (field->is_checkable)
+    if (IsCheckable(field->check_status))
       continue;
 
     const ServerFieldTypeSet& types = field->possible_types();
@@ -1146,6 +1181,9 @@ void FormStructure::EncodeFormForUpload(AutofillUploadContents* upload) const {
 
         if (!field->autocomplete_attribute.empty())
           added_field->set_autocomplete(field->autocomplete_attribute);
+
+        if (!field->css_classes.empty())
+          added_field->set_css_classes(base::UTF16ToUTF8(field->css_classes));
       }
     }
   }
@@ -1275,7 +1313,7 @@ void FormStructure::IdentifySections(bool has_author_specified_sections) {
 }
 
 bool FormStructure::ShouldSkipField(const FormFieldData& field) const {
-  return field.is_checkable;
+  return IsCheckable(field.check_status);
 }
 
 void FormStructure::ProcessExtractedFields() {

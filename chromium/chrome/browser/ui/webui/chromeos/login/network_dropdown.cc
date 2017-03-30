@@ -65,7 +65,8 @@ void NetworkMenuWebUI::UpdateMenu() {
   NetworkMenu::UpdateMenu();
   if (web_ui_) {
     std::unique_ptr<base::ListValue> list(ConvertMenuModel(GetMenuModel()));
-    web_ui_->CallJavascriptFunction("cr.ui.DropDown.updateNetworks", *list);
+    web_ui_->CallJavascriptFunctionUnsafe("cr.ui.DropDown.updateNetworks",
+                                          *list);
   }
 }
 
@@ -102,7 +103,8 @@ base::ListValue* NetworkMenuWebUI::ConvertMenuModel(ui::MenuModel* model) {
       item->SetBoolean("enabled", model->IsEnabledAt(i));
       const gfx::FontList* font_list = model->GetLabelFontListAt(i);
       if (font_list)
-        item->SetBoolean("bold", font_list->GetFontStyle() == gfx::Font::BOLD);
+        item->SetBoolean("bold",
+                         font_list->GetFontWeight() == gfx::Font::Weight::BOLD);
     }
     if (type == ui::MenuModel::TYPE_SUBMENU)
       item->Set("sub", ConvertMenuModel(model->GetSubmenuModelAt(i)));
@@ -200,8 +202,8 @@ void NetworkDropdown::SetNetworkIconAndText() {
     icon_str = webui::GetBitmapDataUrl(icon_bitmap);
   base::StringValue title(text);
   base::StringValue icon(icon_str);
-  web_ui_->CallJavascriptFunction("cr.ui.DropDown.updateNetworkTitle",
-                                  title, icon);
+  web_ui_->CallJavascriptFunctionUnsafe("cr.ui.DropDown.updateNetworkTitle",
+                                        title, icon);
 }
 
 void NetworkDropdown::RequestNetworkScan() {

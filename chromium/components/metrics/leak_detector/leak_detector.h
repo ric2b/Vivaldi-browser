@@ -15,10 +15,11 @@
 #include "base/feature_list.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/synchronization/lock.h"
+#include "base/task_runner.h"
 #include "base/threading/thread_checker.h"
-#include "components/metrics/proto/memory_leak_report.pb.h"
 
 namespace base {
 template <typename T>
@@ -26,6 +27,9 @@ struct DefaultLazyInstanceTraits;
 }
 
 namespace metrics {
+
+class MemoryLeakReportProto;
+class MemoryLeakReportProto_Params;
 
 namespace leak_detector {
 class LeakDetectorImpl;
@@ -62,10 +66,17 @@ class LeakDetector {
   // Returns the sole instance, or creates it if it hasn't already been created.
   static LeakDetector* GetInstance();
 
-  // Initializes leak detector with a set of params given by |params|. See the
-  // definition of MemoryLeakReportProto::Params for info about individual
-  // parameters.
-  void Init(const MemoryLeakReportProto::Params& params);
+  // Initializes leak detector. Args:
+  // - |params| is a set of parameters used by the leak detector. See definition
+  //   of MemoryLeakReportProto_Params for info about individual parameters.
+  // - |task_runner| is a TaskRunner to which NotifyObservers() should be
+  //   posted, if it is initally called from a different thread than the one on
+  //   which |task_runner| runs.
+  void Init(const MemoryLeakReportProto_Params& params,
+            scoped_refptr<base::TaskRunner> task_runner);
+
+  // Initializes the thread-local storage slot to be used by LeakDetector.
+  static void InitTLSSlot();
 
   // Add |observer| to the list of stored Observers, i.e. |observers_|, to which
   // the leak detector will report leaks.
@@ -98,7 +109,8 @@ class LeakDetector {
   bool ShouldSample(const void* ptr) const;
 
   // Notifies all Observers in |observers_| with the given vector of leak
-  // report protobufs.
+  // report protobufs. If it is not currently on the thread that corresponds to
+  // |task_runner_|, it will post the call as task to |task_runner_|.
   void NotifyObservers(const std::vector<MemoryLeakReportProto>& reports);
 
   // List of observers to notify when there's a leak report.
@@ -114,6 +126,9 @@ class LeakDetector {
 
   // For thread safety.
   base::ThreadChecker thread_checker_;
+
+  // For posting leak report notifications.
+  scoped_refptr<base::TaskRunner> task_runner_;
 
   // Total number of bytes allocated, computed before sampling.
   size_t total_alloc_size_;

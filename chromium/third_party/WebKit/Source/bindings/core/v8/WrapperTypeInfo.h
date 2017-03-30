@@ -136,13 +136,13 @@ struct WrapperTypeInfo {
 
     void trace(Visitor* visitor, ScriptWrappable* scriptWrappable) const
     {
-        ASSERT(traceFunction);
+        DCHECK(traceFunction);
         return traceFunction(visitor, scriptWrappable);
     }
 
     void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) const
     {
-        ASSERT(traceWrappersFunction);
+        DCHECK(traceWrappersFunction);
         return traceWrappersFunction(visitor, scriptWrappable);
     }
 

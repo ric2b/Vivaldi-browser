@@ -6,7 +6,10 @@
 
 #include <sys/statvfs.h>
 
+#include <algorithm>
 #include <set>
+#include <utility>
+#include <vector>
 
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
@@ -69,27 +72,28 @@ namespace {
 const char kRootPath[] = "/";
 
 // Retrieves total and remaining available size on |mount_path|.
-void GetSizeStatsOnBlockingPool(const std::string& mount_path,
+void GetSizeStatsOnBlockingPool(const base::FilePath& mount_path,
                                 uint64_t* total_size,
                                 uint64_t* remaining_size) {
-  struct statvfs stat = {};  // Zero-clear
-  if (HANDLE_EINTR(statvfs(mount_path.c_str(), &stat)) == 0) {
-    *total_size = static_cast<uint64_t>(stat.f_blocks) * stat.f_frsize;
-    *remaining_size = static_cast<uint64_t>(stat.f_bavail) * stat.f_frsize;
-  }
+  int64_t size = base::SysInfo::AmountOfTotalDiskSpace(mount_path);
+  if (size >= 0)
+    *total_size = size;
+  size = base::SysInfo::AmountOfFreeDiskSpace(mount_path);
+  if (size >= 0)
+    *remaining_size = size;
 }
 
 // Used for OnCalculateEvictableCacheSize.
-typedef base::Callback<void(const uint64_t* total_size,
-                            const uint64_t* remaining_space)>
-    GetSizeStatsCallback;
+using GetSizeStatsCallback =
+    base::Callback<void(const uint64_t* total_size,
+                        const uint64_t* remaining_space)>;
 
 // Calculates the real remaining size of Download volume and pass it to
 // GetSizeStatsCallback.
 void OnCalculateEvictableCacheSize(const GetSizeStatsCallback& callback,
                                    uint64_t total_size,
                                    uint64_t remaining_size,
-                                   uint64_t evictable_cache_size) {
+                                   int64_t evictable_cache_size) {
   // For calculating real remaining size of Download volume
   // - Adds evictable cache size since the space is available if they are
   //   evicted.
@@ -328,7 +332,7 @@ ExtensionFunction::ResponseAction FileManagerPrivateGrantAccessFunction::Run() {
 void FileWatchFunctionBase::Respond(bool success) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  SetResult(new base::FundamentalValue(success));
+  SetResult(base::MakeUnique<base::FundamentalValue>(success));
   SendResponse(success);
 }
 
@@ -466,9 +470,8 @@ bool FileManagerPrivateGetSizeStatsFunction::RunAsync() {
     uint64_t* total_size = new uint64_t(0);
     uint64_t* remaining_size = new uint64_t(0);
     BrowserThread::PostBlockingPoolTaskAndReply(
-        FROM_HERE,
-        base::Bind(&GetSizeStatsOnBlockingPool, volume->mount_path().value(),
-                   total_size, remaining_size),
+        FROM_HERE, base::Bind(&GetSizeStatsOnBlockingPool, volume->mount_path(),
+                              total_size, remaining_size),
         base::Bind(
             &FileManagerPrivateGetSizeStatsFunction::OnGetLocalSpace, this,
             base::Owned(total_size), base::Owned(remaining_size),
@@ -531,12 +534,12 @@ void FileManagerPrivateGetSizeStatsFunction::OnGetMtpAvailableSpace(
 void FileManagerPrivateGetSizeStatsFunction::OnGetSizeStats(
     const uint64_t* total_size,
     const uint64_t* remaining_size) {
-  base::DictionaryValue* sizes = new base::DictionaryValue();
-  SetResult(sizes);
+  std::unique_ptr<base::DictionaryValue> sizes(new base::DictionaryValue());
 
   sizes->SetDouble("totalSize", static_cast<double>(*total_size));
   sizes->SetDouble("remainingSize", static_cast<double>(*remaining_size));
 
+  SetResult(std::move(sizes));
   SendResponse(true);
 }
 
@@ -557,7 +560,7 @@ bool FileManagerPrivateInternalValidatePathNameLengthFunction::RunAsync() {
 
   // No explicit limit on the length of Drive file names.
   if (file_system_url.type() == storage::kFileSystemTypeDrive) {
-    SetResult(new base::FundamentalValue(true));
+    SetResult(base::MakeUnique<base::FundamentalValue>(true));
     SendResponse(true);
     return true;
   }
@@ -574,7 +577,8 @@ bool FileManagerPrivateInternalValidatePathNameLengthFunction::RunAsync() {
 
 void FileManagerPrivateInternalValidatePathNameLengthFunction::
     OnFilePathLimitRetrieved(size_t current_length, size_t max_length) {
-  SetResult(new base::FundamentalValue(current_length <= max_length));
+  SetResult(
+      base::MakeUnique<base::FundamentalValue>(current_length <= max_length));
   SendResponse(true);
 }
 
@@ -734,7 +738,7 @@ void FileManagerPrivateInternalStartCopyFunction::RunAfterStartCopy(
     int operation_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  SetResult(new base::FundamentalValue(operation_id));
+  SetResult(base::MakeUnique<base::FundamentalValue>(operation_id));
   SendResponse(true);
 }
 
@@ -875,7 +879,7 @@ bool FileManagerPrivateInternalComputeChecksumFunction::RunAsync() {
 void FileManagerPrivateInternalComputeChecksumFunction::Respond(
     const std::string& hash) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  SetResult(new base::StringValue(hash));
+  SetResult(base::MakeUnique<base::StringValue>(hash));
   SendResponse(true);
 }
 
@@ -937,13 +941,13 @@ void FileManagerPrivateSearchFilesByHashesFunction::OnSearchByHashes(
         file_manager::util::ConvertDrivePathToFileSystemUrl(
             GetProfile(), hashAndPath.path, extension_id()).spec());
   }
-  SetResult(result.release());
+  SetResult(std::move(result));
   SendResponse(true);
 }
 
 ExtensionFunction::ResponseAction
 FileManagerPrivateIsUMAEnabledFunction::Run() {
-  return RespondNow(OneArgument(new base::FundamentalValue(
+  return RespondNow(OneArgument(base::MakeUnique<base::FundamentalValue>(
       ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())));
 }
 

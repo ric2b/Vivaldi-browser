@@ -8,13 +8,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/threading/thread_checker.h"
 #include "base/values.h"
 #include "mojo/common/common_type_converters.h"
-#include "mojo/common/url_type_converters.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "net/base/load_states.h"
 #include "net/base/net_errors.h"
@@ -199,7 +199,7 @@ ProxyResolverMojo::Job::Job(ProxyResolverMojo* resolver,
       callback_(callback),
       binding_(this) {
   resolver_->mojo_proxy_resolver_ptr_->GetProxyForUrl(
-      mojo::String::From(url_), binding_.CreateInterfacePtrAndBind());
+      url_, binding_.CreateInterfacePtrAndBind());
   binding_.set_connection_error_handler(base::Bind(
       &ProxyResolverMojo::Job::OnConnectionError, base::Unretained(this)));
 }
@@ -353,8 +353,8 @@ class ProxyResolverFactoryMojo::Job
 
  private:
   void ReportResult(int32_t error) override {
-    resolver_ptr_.set_connection_error_handler(mojo::Closure());
-    binding_.set_connection_error_handler(mojo::Closure());
+    resolver_ptr_.set_connection_error_handler(base::Closure());
+    binding_.set_connection_error_handler(base::Closure());
     if (error == OK) {
       resolver_->reset(new ProxyResolverMojo(
           std::move(resolver_ptr_), factory_->host_resolver_,

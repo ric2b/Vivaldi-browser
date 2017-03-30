@@ -646,13 +646,16 @@ static const GLES2Util::EnumToString enum_to_string_table[] = {
         0x78F2, "GL_READ_WRITE_CHROMIUM",
     },
     {
-        0x78FA, "GL_RGB_YUV_420_CHROMIUM",
+        0x78FA, "GL_RGB_YCRCB_420_CHROMIUM",
     },
     {
         0x78FB, "GL_RGB_YCBCR_422_CHROMIUM",
     },
     {
         0x78FC, "GL_RGB_YCBCR_420V_CHROMIUM",
+    },
+    {
+        0x78FD, "GL_GPU_MEMORY_BUFFER_ID",
     },
     {
         0x8, "GL_CA_LAYER_EDGE_TOP_CHROMIUM",
@@ -3681,6 +3684,7 @@ std::string GLES2Util::GetStringDstBlendFactor(uint32_t value) {
       {GL_ONE_MINUS_CONSTANT_COLOR, "GL_ONE_MINUS_CONSTANT_COLOR"},
       {GL_CONSTANT_ALPHA, "GL_CONSTANT_ALPHA"},
       {GL_ONE_MINUS_CONSTANT_ALPHA, "GL_ONE_MINUS_CONSTANT_ALPHA"},
+      {GL_SRC_ALPHA_SATURATE, "GL_SRC_ALPHA_SATURATE"},
   };
   return GLES2Util::GetQualifiedEnumString(string_table,
                                            arraysize(string_table), value);
@@ -3992,7 +3996,7 @@ std::string GLES2Util::GetStringHintTarget(uint32_t value) {
 std::string GLES2Util::GetStringImageInternalFormat(uint32_t value) {
   static const EnumToString string_table[] = {
       {GL_RGB, "GL_RGB"},
-      {GL_RGB_YUV_420_CHROMIUM, "GL_RGB_YUV_420_CHROMIUM"},
+      {GL_RGB_YCRCB_420_CHROMIUM, "GL_RGB_YCRCB_420_CHROMIUM"},
       {GL_RGB_YCBCR_422_CHROMIUM, "GL_RGB_YCBCR_422_CHROMIUM"},
       {GL_RGB_YCBCR_420V_CHROMIUM, "GL_RGB_YCBCR_420V_CHROMIUM"},
       {GL_RGBA, "GL_RGBA"},
@@ -4837,7 +4841,7 @@ std::string GLES2Util::GetStringTextureSizedTextureFilterableInternalFormat(
       {GL_RGBA4, "GL_RGBA4"},
       {GL_RGB10_A2, "GL_RGB10_A2"},
       {GL_RGBA16F, "GL_RGBA16F"},
-      {GL_RGB_YUV_420_CHROMIUM, "GL_RGB_YUV_420_CHROMIUM"},
+      {GL_RGB_YCRCB_420_CHROMIUM, "GL_RGB_YCRCB_420_CHROMIUM"},
       {GL_RGB_YCBCR_422_CHROMIUM, "GL_RGB_YCBCR_422_CHROMIUM"},
       {GL_RGB_YCBCR_420V_CHROMIUM, "GL_RGB_YCBCR_420V_CHROMIUM"},
   };

@@ -7,6 +7,7 @@
 
 #include "modules/webgl/WebGLExtension.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
+#include <memory>
 
 namespace blink {
 
@@ -146,7 +147,7 @@ public:
     WebGLQuery* createQuery();
     void deleteQuery(WebGLQuery*);
     GLboolean isQuery(WebGLQuery*);
-    void beginQuery(GLenum, WebGLQuery*);
+    void beginQuery(ScriptState*, GLenum, WebGLQuery*);
     void endQuery(GLenum);
     WebGLQuery* getQuery(GLenum, GLenum);
     ScriptValue getQueryParameter(ScriptState*, WebGLQuery*, GLenum);
@@ -155,7 +156,7 @@ public:
     WebGLSampler* createSampler();
     void deleteSampler(WebGLSampler*);
     GLboolean isSampler(WebGLSampler*);
-    void bindSampler(GLuint, WebGLSampler*);
+    void bindSampler(ScriptState*, GLuint, WebGLSampler*);
     void samplerParameteri(WebGLSampler*, GLenum, GLint);
     void samplerParameterf(WebGLSampler*, GLenum, GLfloat);
     ScriptValue getSamplerParameter(ScriptState*, WebGLSampler*, GLenum);
@@ -173,7 +174,7 @@ public:
     WebGLTransformFeedback* createTransformFeedback();
     void deleteTransformFeedback(WebGLTransformFeedback*);
     GLboolean isTransformFeedback(WebGLTransformFeedback*);
-    void bindTransformFeedback(GLenum, WebGLTransformFeedback*);
+    void bindTransformFeedback(ScriptState*, GLenum, WebGLTransformFeedback*);
     void beginTransformFeedback(GLenum);
     void endTransformFeedback();
     void transformFeedbackVaryings(WebGLProgram*, const Vector<String>&, GLenum);
@@ -217,7 +218,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    WebGL2RenderingContextBase(HTMLCanvasElement*, PassOwnPtr<WebGraphicsContext3DProvider>, const WebGLContextAttributes& requestedAttributes);
+    WebGL2RenderingContextBase(HTMLCanvasElement*, std::unique_ptr<WebGraphicsContext3DProvider>, const WebGLContextAttributes& requestedAttributes);
 
     // Helper function to validate target and the attachment combination for getFramebufferAttachmentParameters.
     // Generate GL error and return false if parameters are illegal.
@@ -235,7 +236,6 @@ protected:
 
     ScriptValue getInt64Parameter(ScriptState*, GLenum);
 
-    void texSubImage3DImpl(GLenum, GLint, GLint, GLint, GLint, GLenum, GLenum, Image*, WebGLImageConversion::ImageHtmlDomSource, bool, bool);
     void samplerParameter(WebGLSampler*, GLenum, GLfloat, GLint, bool);
 
     bool isBufferBoundToTransformFeedback(WebGLBuffer*);
@@ -263,6 +263,7 @@ protected:
     GLint getMaxTextureLevelForTarget(GLenum target) override;
     void renderbufferStorageImpl(GLenum target, GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height, const char* functionName) override;
 
+    WebGLTexture* validateTexImageBinding(const char*, TexImageFunctionID, GLenum) override;
     // Helper function to check texture 3D target and texture bound to the target.
     // Generate GL errors and return 0 if target is invalid or texture bound is
     // null.  Otherwise, return the texture bound to the target.
@@ -271,15 +272,12 @@ protected:
     WebGLBuffer* validateBufferDataTarget(const char* functionName, GLenum target) override;
     bool validateBufferDataUsage(const char* functionName, GLenum usage) override;
 
+    bool canUseTexImageByGPU(TexImageFunctionID, GLint internalformat, GLenum type) override;
+
     void removeBoundBuffer(WebGLBuffer*) override;
 
     void resetUnpackParameters() override;
     void restoreUnpackParameters() override;
-
-    bool transformFeedbackActive() const override;
-    bool transformFeedbackPaused() const override;
-    void setTransformFeedbackActive(bool);
-    void setTransformFeedbackPaused(bool);
 
     Member<WebGLFramebuffer> m_readFramebufferBinding;
     Member<WebGLTransformFeedback> m_transformFeedbackBinding;
@@ -311,6 +309,9 @@ protected:
     GLint m_unpackSkipPixels;
     GLint m_unpackSkipRows;
     GLint m_unpackSkipImages;
+
+    ScopedPersistent<v8::Array> m_samplerWrappers;
+    ScopedPersistent<v8::Array> m_queryWrappers;
 };
 
 DEFINE_TYPE_CASTS(WebGL2RenderingContextBase, CanvasRenderingContext, context,

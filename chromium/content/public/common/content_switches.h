@@ -99,7 +99,6 @@ extern const char kDisableV8IdleTasks[];
 CONTENT_EXPORT extern const char kDisableWebGLImageChromium[];
 CONTENT_EXPORT extern const char kDisableWebSecurity[];
 extern const char kDisableXSSAuditor[];
-CONTENT_EXPORT extern const char kDisableWheelGestures[];
 CONTENT_EXPORT extern const char kDisableZeroCopy[];
 CONTENT_EXPORT extern const char kDomAutomationController[];
 CONTENT_EXPORT extern const char kDownloadProcess[];
@@ -115,6 +114,13 @@ CONTENT_EXPORT extern const char kEnableExperimentalWebPlatformFeatures[];
 CONTENT_EXPORT extern const char kEnableFeatures[];
 CONTENT_EXPORT extern const char kEnableWasm[];
 CONTENT_EXPORT extern const char kEnableWebBluetooth[];
+CONTENT_EXPORT extern const char kEnableWebFontsInterventionV2[];
+CONTENT_EXPORT extern const char
+    kEnableWebFontsInterventionV2SwitchValueEnabledWith2G[];
+CONTENT_EXPORT extern const char
+    kEnableWebFontsInterventionV2SwitchValueEnabledWithSlow2G[];
+CONTENT_EXPORT extern const char
+    kEnableWebFontsInterventionV2SwitchValueDisabled[];
 CONTENT_EXPORT extern const char kEnableGpuAsyncWorkerContext[];
 CONTENT_EXPORT extern const char kEnableGpuMemoryBufferCompositorResources[];
 CONTENT_EXPORT extern const char kEnableGpuMemoryBufferVideoFrames[];
@@ -126,6 +132,7 @@ CONTENT_EXPORT extern const char kEnableLCDText[];
 CONTENT_EXPORT extern const char kEnableLogging[];
 extern const char kEnableMemoryBenchmarking[];
 CONTENT_EXPORT extern const char kEnableNetworkInformation[];
+CONTENT_EXPORT extern const char kDisableNv12DxgiVideo[];
 CONTENT_EXPORT extern const char kEnablePinch[];
 CONTENT_EXPORT extern const char kEnablePluginPlaceholderTesting[];
 CONTENT_EXPORT extern const char kEnablePreciseMemoryInfo[];
@@ -151,7 +158,6 @@ CONTENT_EXPORT extern const char kEnableWebFontsInterventionTrigger[];
 CONTENT_EXPORT extern const char kEnableWebGLDraftExtensions[];
 CONTENT_EXPORT extern const char kEnableWebGLImageChromium[];
 CONTENT_EXPORT extern const char kEnableWebVR[];
-CONTENT_EXPORT extern const char kEnableWheelGestures[];
 CONTENT_EXPORT extern const char kEnableZeroCopy[];
 CONTENT_EXPORT extern const char kEnableZeroCopyDxgiVideo[];
 CONTENT_EXPORT extern const char kExplicitlyAllowedPorts[];
@@ -172,7 +178,6 @@ CONTENT_EXPORT extern const char kGpuSandboxStartEarly[];
 CONTENT_EXPORT extern const char kGpuStartupDialog[];
 extern const char kGpuVendorID[];
 CONTENT_EXPORT extern const char kHostResolverRules[];
-CONTENT_EXPORT extern const char kIgnoreCertificateErrors[];
 CONTENT_EXPORT extern const char kIgnoreGpuBlacklist[];
 CONTENT_EXPORT extern const char kInertVisualViewport[];
 CONTENT_EXPORT extern const char kInProcessGPU[];
@@ -186,6 +191,9 @@ CONTENT_EXPORT extern const char kMainFrameResizesAreOrientationChanges[];
 extern const char kMaxUntiledLayerHeight[];
 extern const char kMaxUntiledLayerWidth[];
 extern const char kMemoryMetrics[];
+CONTENT_EXPORT extern const char kMHTMLGeneratorOption[];
+CONTENT_EXPORT extern const char kMHTMLSkipNostoreMain[];
+CONTENT_EXPORT extern const char kMHTMLSkipNostoreAll[];
 CONTENT_EXPORT extern const char kMojoLocalStorage[];
 CONTENT_EXPORT extern const char kMuteAudio[];
 CONTENT_EXPORT extern const char kNoReferrers[];
@@ -223,8 +231,6 @@ CONTENT_EXPORT extern const char kSkipGpuDataLoading[];
 extern const char kSkipReencodingOnSKPCapture[];
 CONTENT_EXPORT extern const char kStartFullscreen[];
 CONTENT_EXPORT extern const char kStatsCollectionController[];
-CONTENT_EXPORT extern const char kTestingFixedHttpPort[];
-CONTENT_EXPORT extern const char kTestingFixedHttpsPort[];
 CONTENT_EXPORT extern const char kTestType[];
 CONTENT_EXPORT extern const char kTopDocumentIsolation[];
 CONTENT_EXPORT extern const char kTouchTextSelectionStrategy[];
@@ -270,9 +276,9 @@ CONTENT_EXPORT extern const char kEnableAdaptiveSelectionHandleOrientation[];
 CONTENT_EXPORT extern const char kEnableLongpressDragSelection[];
 CONTENT_EXPORT extern const char kHideScrollbars[];
 extern const char kNetworkCountryIso[];
+CONTENT_EXPORT extern const char kProgressBarCompletion[];
 CONTENT_EXPORT extern const char kRemoteDebuggingSocketName[];
 CONTENT_EXPORT extern const char kRendererWaitForJavaDebugger[];
-CONTENT_EXPORT extern const char kSyncInputForSyncCompositor[];
 CONTENT_EXPORT extern const char kEnableOSKOverscroll[];
 #endif
 
@@ -303,6 +309,11 @@ CONTENT_EXPORT extern const char kEnableWin7WebRtcHWH264Decoding[];
 CONTENT_EXPORT extern const char kFontCacheSharedHandle[];
 CONTENT_EXPORT extern const char kMemoryPressureThresholdsMb[];
 CONTENT_EXPORT extern const char kTraceExportEventsToETW[];
+#endif
+
+#if defined(ENABLE_IPC_FUZZER)
+extern const char kIpcDumpDirectory[];
+extern const char kIpcFuzzerTestcase[];
 #endif
 
 // DON'T ADD RANDOM STUFF HERE. Put it in the main section above in

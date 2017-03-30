@@ -9,6 +9,7 @@
 
 goog.provide('cvox.TabsApiHandler');
 
+goog.require('Stubs');
 goog.require('TabsAutomationHandler');
 goog.require('cvox.AbstractEarcons');
 goog.require('cvox.AbstractTts');
@@ -51,6 +52,11 @@ cvox.TabsApiHandler = function() {
   this.pageLoadTabID_ = null;
 };
 
+/**
+ * @type {boolean}
+ */
+cvox.TabsApiHandler.shouldOutputSpeechAndBraille = true;
+
 cvox.TabsApiHandler.prototype = {
   /**
    * Handles chrome.tabs.onCreated.
@@ -60,13 +66,17 @@ cvox.TabsApiHandler.prototype = {
     if (!cvox.ChromeVox.isActive) {
       return;
     }
-    cvox.ChromeVox.tts.speak(this.msg_('chrome_tab_created'),
-                             cvox.QueueMode.FLUSH,
-                             cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
-    cvox.ChromeVox.braille.write(
-        cvox.NavBraille.fromText(this.msg_('chrome_tab_created')));
+    if (cvox.TabsApiHandler.shouldOutputSpeechAndBraille) {
+      cvox.ChromeVox.tts.speak(this.msg_('chrome_tab_created'),
+                                cvox.QueueMode.FLUSH,
+                                cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
+      cvox.ChromeVox.braille.write(
+          cvox.NavBraille.fromText(this.msg_('chrome_tab_created')));
+    }
     cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.OBJECT_OPEN);
-    this.refreshAutomationHandler_(tab.id);
+    if (tab) {
+      this.refreshAutomationHandler_(tab.id);
+    }
   },
 
   /**
@@ -97,16 +107,18 @@ cvox.TabsApiHandler.prototype = {
     }
     this.updateLoadingSoundsWhenTabFocusChanges_(activeInfo.tabId);
     chrome.tabs.get(activeInfo.tabId, function(tab) {
-      var title = tab.title ? tab.title : tab.url;
-      cvox.ChromeVox.tts.speak(this.msg_('chrome_tab_selected',
-                                         [title]),
-                               cvox.QueueMode.FLUSH,
-                               cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
-      cvox.ChromeVox.braille.write(
-          cvox.NavBraille.fromText(this.msg_('chrome_tab_selected', [title])));
+      if (cvox.TabsApiHandler.shouldOutputSpeechAndBraille) {
+        var title = tab.title ? tab.title : tab.url;
+        cvox.ChromeVox.tts.speak(this.msg_('chrome_tab_selected',
+                                           [title]),
+                                 cvox.QueueMode.FLUSH,
+                                 cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
+        cvox.ChromeVox.braille.write(
+            cvox.NavBraille.fromText(
+                this.msg_('chrome_tab_selected', [title])));
+      }
       cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.OBJECT_SELECT);
       this.refreshAutomationHandler_(tab.id);
-      this.focusTab_(tab.id);
     }.bind(this));
   },
 
@@ -172,18 +184,19 @@ cvox.TabsApiHandler.prototype = {
         if (tabs[0])
           this.updateLoadingSoundsWhenTabFocusChanges_(tabs[0].id);
 
-        var msgId = window.incognito ? 'chrome_incognito_window_selected' :
-            'chrome_normal_window_selected';
         var tab = tabs[0] || {};
-        var title = tab.title ? tab.title : tab.url;
-        cvox.ChromeVox.tts.speak(this.msg_(msgId, [title]),
-                                 cvox.QueueMode.FLUSH,
-                                 cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
-        cvox.ChromeVox.braille.write(
-            cvox.NavBraille.fromText(this.msg_(msgId, [title])));
+        if (cvox.TabsApiHandler.shouldOutputSpeechAndBraille) {
+          var msgId = window.incognito ? 'chrome_incognito_window_selected' :
+              'chrome_normal_window_selected';
+          var title = tab.title ? tab.title : tab.url;
+          cvox.ChromeVox.tts.speak(this.msg_(msgId, [title]),
+                                   cvox.QueueMode.FLUSH,
+                                   cvox.AbstractTts.PERSONALITY_ANNOUNCEMENT);
+          cvox.ChromeVox.braille.write(
+              cvox.NavBraille.fromText(this.msg_(msgId, [title])));
+        }
         cvox.ChromeVox.earcons.playEarcon(cvox.Earcon.OBJECT_SELECT);
         this.refreshAutomationHandler_(tab.id);
-        this.focusTab_(tab.id);
       }.bind(this));
     }.bind(this));
   },
@@ -194,7 +207,8 @@ cvox.TabsApiHandler.prototype = {
    * @private
    */
   refreshAutomationHandler_: function(tabId) {
-    if (!cvox.ChromeVox.isMac)
+    if (!cvox.ChromeVox.isMac ||
+        ChromeVoxState.instance.mode == ChromeVoxMode.CLASSIC)
       return;
 
     chrome.automation.getTree(tabId, function(node) {
@@ -203,19 +217,6 @@ cvox.TabsApiHandler.prototype = {
 
       this.handler_ = new TabsAutomationHandler(node);
     }.bind(this));
-  },
-
-  /**
-   * @param {number} id Tab id to focus.
-   * @private
-   */
-  focusTab_: function(id) {
-    chrome.automation.getTree(id, function(tab) {
-      if (!tab)
-        return;
-
-      global.backgroundObj.refreshMode(tab);
-    });
   },
 
   /**

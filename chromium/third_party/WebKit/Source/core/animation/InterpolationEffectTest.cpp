@@ -5,6 +5,7 @@
 #include "core/animation/InterpolationEffect.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -12,7 +13,7 @@ namespace {
 
 class SampleInterpolation : public Interpolation {
 public:
-    static PassRefPtr<Interpolation> create(PassOwnPtr<InterpolableValue> start, PassOwnPtr<InterpolableValue> end)
+    static PassRefPtr<Interpolation> create(std::unique_ptr<InterpolableValue> start, std::unique_ptr<InterpolableValue> end)
     {
         return adoptRef(new SampleInterpolation(std::move(start), std::move(end)));
     }
@@ -22,7 +23,7 @@ public:
         return PropertyHandle(CSSPropertyBackgroundColor);
     }
 private:
-    SampleInterpolation(PassOwnPtr<InterpolableValue> start, PassOwnPtr<InterpolableValue> end)
+    SampleInterpolation(std::unique_ptr<InterpolableValue> start, std::unique_ptr<InterpolableValue> end)
         : Interpolation(std::move(start), std::move(end))
     {
     }
@@ -79,7 +80,7 @@ TEST_F(AnimationInterpolationEffectTest, MultipleInterpolations)
     interpolationEffect.addInterpolation(SampleInterpolation::create(InterpolableNumber::create(0), InterpolableNumber::create(1)),
         LinearTimingFunction::shared(), 0, 1, 0, 1);
     interpolationEffect.addInterpolation(SampleInterpolation::create(InterpolableNumber::create(1), InterpolableNumber::create(6)),
-        CubicBezierTimingFunction::preset(CubicBezierTimingFunction::Ease), 0.5, 1.5, 0.5, 1.5);
+        CubicBezierTimingFunction::preset(CubicBezierTimingFunction::EaseType::EASE), 0.5, 1.5, 0.5, 1.5);
 
     Vector<RefPtr<Interpolation>> activeInterpolations;
     interpolationEffect.getActiveInterpolations(-0.5, duration, activeInterpolations);

@@ -33,12 +33,10 @@ class QueuedWebMouseWheelEvent : public MouseWheelEventWithLatencyInfo {
 };
 
 MouseWheelEventQueue::MouseWheelEventQueue(MouseWheelEventQueueClient* client,
-                                           bool send_gestures,
                                            int64_t scroll_transaction_ms)
     : client_(client),
       needs_scroll_begin_(true),
       needs_scroll_end_(false),
-      send_gestures_(send_gestures),
       scroll_transaction_ms_(scroll_transaction_ms),
       scrolling_device_(blink::WebGestureDeviceUninitialized) {
   DCHECK(client);
@@ -81,8 +79,8 @@ void MouseWheelEventQueue::ProcessMouseWheelAck(
   client_->OnMouseWheelEventAck(*event_sent_for_gesture_ack_, ack_result);
 
   // If event wasn't consumed then generate a gesture scroll for it.
-  if (send_gestures_ && ack_result != INPUT_EVENT_ACK_STATE_CONSUMED &&
-      event_sent_for_gesture_ack_->event.canScroll &&
+  if (ack_result != INPUT_EVENT_ACK_STATE_CONSUMED &&
+      WebInputEventTraits::CanCauseScroll(event_sent_for_gesture_ack_->event) &&
       event_sent_for_gesture_ack_->event.resendingPluginId == -1 &&
       (scrolling_device_ == blink::WebGestureDeviceUninitialized ||
        scrolling_device_ == blink::WebGestureDeviceTouchpad)) {

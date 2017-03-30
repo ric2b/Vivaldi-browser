@@ -46,8 +46,10 @@
 #include "platform/TracedValue.h"
 #include "platform/heap/Handle.h"
 #include "platform/network/ResourceRequest.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/Forward.h"
 #include "wtf/HashSet.h"
+#include <memory>
 
 namespace blink {
 
@@ -142,9 +144,7 @@ public:
     void forceSandboxFlags(SandboxFlags flags) { m_forcedSandboxFlags |= flags; }
     SandboxFlags effectiveSandboxFlags() const;
 
-    bool shouldEnforceStrictMixedContentChecking() const;
-
-    SecurityContext::InsecureRequestsPolicy getInsecureRequestsPolicy() const;
+    WebInsecureRequestPolicy getInsecureRequestPolicy() const;
     SecurityContext::InsecureNavigationsSet* insecureNavigationsToUpgrade() const;
 
     Frame* opener();
@@ -189,12 +189,13 @@ public:
 
     DECLARE_TRACE();
 
+    static void setReferrerForFrameRequest(FrameLoadRequest&);
+
 private:
     void checkTimerFired(Timer<FrameLoader>*);
     void didAccessInitialDocumentTimerFired(Timer<FrameLoader>*);
 
     bool prepareRequestForThisFrame(FrameLoadRequest&);
-    static void setReferrerForFrameRequest(ResourceRequest&, ShouldSendReferrer, Document*);
     FrameLoadType determineFrameLoadType(const FrameLoadRequest&);
 
     SubstituteData defaultSubstituteDataForURL(const KURL&);
@@ -217,12 +218,12 @@ private:
 
     void detachDocumentLoader(Member<DocumentLoader>&);
 
-    PassOwnPtr<TracedValue> toTracedValue() const;
+    std::unique_ptr<TracedValue> toTracedValue() const;
     void takeObjectSnapshot() const;
 
     Member<LocalFrame> m_frame;
 
-    // FIXME: These should be OwnPtr<T> to reduce build times and simplify
+    // FIXME: These should be std::unique_ptr<T> to reduce build times and simplify
     // header dependencies unless performance testing proves otherwise.
     // Some of these could be lazily created for memory savings on devices.
     mutable FrameLoaderStateMachine m_stateMachine;

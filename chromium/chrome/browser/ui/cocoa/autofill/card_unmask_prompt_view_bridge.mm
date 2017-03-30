@@ -59,12 +59,6 @@ const SkColor kSubtleBorderColor = SkColorSetRGB(0xdf, 0xdf, 0xdf);
 
 namespace autofill {
 
-CardUnmaskPromptView* CreateCardUnmaskPromptView(
-    CardUnmaskPromptController* controller,
-    content::WebContents* web_contents) {
-  return new CardUnmaskPromptViewBridge(controller, web_contents);
-}
-
 #pragma mark CardUnmaskPromptViewBridge
 
 CardUnmaskPromptViewBridge::CardUnmaskPromptViewBridge(
@@ -479,7 +473,7 @@ void CardUnmaskPromptViewBridge::PerformClose() {
   storageView_.reset([[NSView alloc] initWithFrame:NSZeroRect]);
   [storageView_ setAutoresizingMask:NSViewWidthSizable];
 
-  base::scoped_nsobject<NSBox> box = [CardUnmaskPromptViewCocoa createPlainBox];
+  base::scoped_nsobject<NSBox> box([CardUnmaskPromptViewCocoa createPlainBox]);
   [box setAutoresizingMask:NSViewWidthSizable];
   [box setFillColor:skia::SkColorToCalibratedNSColor(kShadingColor)];
   [box setContentViewMargins:NSMakeSize(chrome_style::kHorizontalPadding,
@@ -512,8 +506,8 @@ void CardUnmaskPromptViewBridge::PerformClose() {
       NSMakePoint(NSMaxX([storageCheckbox_ frame]) + kButtonGap, 0)];
 
   // Add horizontal separator.
-  base::scoped_nsobject<NSBox> separator =
-      [CardUnmaskPromptViewCocoa createPlainBox];
+  base::scoped_nsobject<NSBox> separator(
+      [CardUnmaskPromptViewCocoa createPlainBox]);
   [separator setAutoresizingMask:NSViewWidthSizable];
   [separator setFillColor:skia::SkColorToCalibratedNSColor(kSubtleBorderColor)];
   [storageView_ addSubview:separator];

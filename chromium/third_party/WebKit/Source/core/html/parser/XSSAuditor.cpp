@@ -45,6 +45,8 @@
 #include "platform/network/EncodedFormData.h"
 #include "platform/text/DecodeEscapeSequences.h"
 #include "wtf/ASCIICType.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace {
 
@@ -73,8 +75,10 @@ static bool isNonCanonicalCharacter(UChar c)
     // We also remove the questionmark character, since some severs replace invalid high-bytes with a questionmark. We
     // are already stripping the high-bytes so we also strip the questionmark to match.
     //
+    // We also move the percent character, since some servers strip it when there's a malformed sequence.
+    //
     // For instance: new String("http://localhost:8000?x") => new String("http:localhost:8x").
-    return (c == '\\' || c == '0' || c == '\0' || c == '/' || c == '?' || c >= 127);
+    return (c == '\\' || c == '0' || c == '\0' || c == '/' || c == '?' || c == '%' || c >= 127);
 }
 
 static bool isRequiredForInjection(UChar c)
@@ -391,14 +395,14 @@ void XSSAuditor::setEncoding(const WTF::TextEncoding& encoding)
         if (m_decodedHTTPBody.find(isRequiredForInjection) == kNotFound)
             m_decodedHTTPBody = String();
             if (m_decodedHTTPBody.length() >= miniumLengthForSuffixTree)
-                m_decodedHTTPBodySuffixTree = adoptPtr(new SuffixTree<ASCIICodebook>(m_decodedHTTPBody, suffixTreeDepth));
+                m_decodedHTTPBodySuffixTree = wrapUnique(new SuffixTree<ASCIICodebook>(m_decodedHTTPBody, suffixTreeDepth));
     }
 
     if (m_decodedURL.isEmpty() && m_decodedHTTPBody.isEmpty())
         m_isEnabled = false;
 }
 
-PassOwnPtr<XSSInfo> XSSAuditor::filterToken(const FilterTokenRequest& request)
+std::unique_ptr<XSSInfo> XSSAuditor::filterToken(const FilterTokenRequest& request)
 {
     ASSERT(m_state != Uninitialized);
     if (!m_isEnabled || m_xssProtection == AllowReflectedXSS)
@@ -416,7 +420,7 @@ PassOwnPtr<XSSInfo> XSSAuditor::filterToken(const FilterTokenRequest& request)
 
     if (didBlockScript) {
         bool didBlockEntirePage = (m_xssProtection == BlockReflectedXSS);
-        OwnPtr<XSSInfo> xssInfo = XSSInfo::create(m_documentURL, didBlockEntirePage, m_didSendValidXSSProtectionHeader, m_didSendValidCSPHeader);
+        std::unique_ptr<XSSInfo> xssInfo = XSSInfo::create(m_documentURL, didBlockEntirePage, m_didSendValidXSSProtectionHeader, m_didSendValidCSPHeader);
         return xssInfo;
     }
     return nullptr;
@@ -571,7 +575,7 @@ bool XSSAuditor::filterBaseToken(const FilterTokenRequest& request)
     ASSERT(request.token.type() == HTMLToken::StartTag);
     ASSERT(hasName(request.token, baseTag));
 
-    return eraseAttributeIfInjected(request, hrefAttr);
+    return eraseAttributeIfInjected(request, hrefAttr, String(), SrcLikeAttributeTruncation);
 }
 
 bool XSSAuditor::filterFormToken(const FilterTokenRequest& request)

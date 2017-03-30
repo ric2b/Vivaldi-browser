@@ -1,0 +1,21 @@
+{
+  "name": "test",
+  "description": "App with file_handlers manifest.",
+  "version": "1",
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "file_handlers": {
+    "text": {
+      "types": [
+        "text/*"
+      ]
+    },
+    "directories": {
+      "extensions": ["*"],
+      "include_directories": "invalid_value"
+    }
+  }
+}

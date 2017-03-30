@@ -20,8 +20,11 @@
 #include "cc/playback/float_clip_display_item.h"
 #include "cc/playback/transform_display_item.h"
 #include "cc/proto/display_item.pb.h"
+#include "cc/test/fake_client_picture_cache.h"
+#include "cc/test/fake_engine_picture_cache.h"
 #include "cc/test/fake_image_serialization_processor.h"
 #include "cc/test/skia_common.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -83,15 +86,29 @@ void ValidateDisplayItemListSerialization(const gfx::Size& layer_size,
   std::unique_ptr<FakeImageSerializationProcessor>
       fake_image_serialization_processor =
           base::WrapUnique(new FakeImageSerializationProcessor);
+  std::unique_ptr<EnginePictureCache> fake_engine_picture_cache =
+      fake_image_serialization_processor->CreateEnginePictureCache();
+  FakeEnginePictureCache* fake_engine_picture_cache_ptr =
+      static_cast<FakeEnginePictureCache*>(fake_engine_picture_cache.get());
+  std::unique_ptr<ClientPictureCache> fake_client_picture_cache =
+      fake_image_serialization_processor->CreateClientPictureCache();
+
+  fake_engine_picture_cache_ptr->MarkAllSkPicturesAsUsed(list.get());
 
   // Serialize and deserialize the DisplayItemList.
   proto::DisplayItemList proto;
-  list->ToProtobuf(&proto, fake_image_serialization_processor.get());
-  scoped_refptr<DisplayItemList> new_list = DisplayItemList::CreateFromProto(
-      proto, fake_image_serialization_processor.get());
+  list->ToProtobuf(&proto);
 
-  EXPECT_TRUE(
-      AreDisplayListDrawingResultsSame(gfx::Rect(layer_size), list, new_list));
+  std::vector<uint32_t> actual_picture_ids;
+  scoped_refptr<DisplayItemList> new_list = DisplayItemList::CreateFromProto(
+      proto, fake_client_picture_cache.get(), &actual_picture_ids);
+
+  EXPECT_THAT(actual_picture_ids,
+              testing::UnorderedElementsAreArray(
+                  fake_engine_picture_cache_ptr->GetAllUsedPictureIds()));
+
+  EXPECT_TRUE(AreDisplayListDrawingResultsSame(gfx::Rect(layer_size),
+                                               list.get(), new_list.get()));
 }
 
 }  // namespace
@@ -143,7 +160,8 @@ TEST(DisplayItemListTest, SerializeClipItem) {
   gfx::Rect clip_rect(6, 6, 1, 1);
   std::vector<SkRRect> rrects;
   rrects.push_back(SkRRect::MakeOval(SkRect::MakeXYWH(5.f, 5.f, 4.f, 4.f)));
-  list->CreateAndAppendItem<ClipDisplayItem>(kVisualRect, clip_rect, rrects);
+  list->CreateAndAppendItem<ClipDisplayItem>(kVisualRect, clip_rect, rrects,
+                                             true);
 
   // Build the second DrawingDisplayItem.
   AppendSecondSerializationTestPicture(list, layer_size);
@@ -319,7 +337,7 @@ TEST(DisplayItemListTest, ClipItem) {
 
   gfx::Rect clip_rect(60, 60, 10, 10);
   list->CreateAndAppendItem<ClipDisplayItem>(kVisualRect, clip_rect,
-                                             std::vector<SkRRect>());
+                                             std::vector<SkRRect>(), true);
 
   gfx::PointF second_offset(2.f, 3.f);
   gfx::RectF second_recording_rect(second_offset,

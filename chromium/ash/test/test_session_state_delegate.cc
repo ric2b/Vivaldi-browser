@@ -7,8 +7,8 @@
 #include <algorithm>
 #include <string>
 
+#include "ash/common/login_status.h"
 #include "ash/shell.h"
-#include "ash/system/user/login_status.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
@@ -175,8 +175,7 @@ void TestSessionStateDelegate::SetActiveUserSessionStarted(
     user_manager_->SessionStarted();
     session_state_ = SESSION_STATE_ACTIVE;
     Shell::GetInstance()->CreateShelf();
-    Shell::GetInstance()->UpdateAfterLoginStatusChange(
-        user::LOGGED_IN_USER);
+    Shell::GetInstance()->UpdateAfterLoginStatusChange(LoginStatus::USER);
   } else {
     session_state_ = SESSION_STATE_LOGIN_PRIMARY;
     user_manager_.reset(new TestUserManager());
@@ -201,8 +200,7 @@ void TestSessionStateDelegate::SetUserAddingScreenRunning(
     session_state_ = SESSION_STATE_ACTIVE;
 }
 
-void TestSessionStateDelegate::SetUserImage(
-    const gfx::ImageSkia& user_image) {
+void TestSessionStateDelegate::SetUserImage(const gfx::ImageSkia& user_image) {
   user_list_[active_user_index_]->SetUserImage(user_image);
 }
 
@@ -212,12 +210,12 @@ const user_manager::UserInfo* TestSessionStateDelegate::GetUserInfo(
   return user_list_[index < max ? index : max - 1];
 }
 
-bool TestSessionStateDelegate::ShouldShowAvatar(aura::Window* window) const {
+bool TestSessionStateDelegate::ShouldShowAvatar(WmWindow* window) const {
   return !GetActiveUserInfo()->GetImage().isNull();
 }
 
 gfx::ImageSkia TestSessionStateDelegate::GetAvatarImageForWindow(
-    aura::Window* window) const {
+    WmWindow* window) const {
   return gfx::ImageSkia();
 }
 
@@ -227,8 +225,7 @@ void TestSessionStateDelegate::SwitchActiveUser(const AccountId& account_id) {
             GetUserIdFromEmail(account_id.GetUserEmail()));
   active_user_index_ = 0;
   for (std::vector<MockUserInfo*>::iterator iter = user_list_.begin();
-       iter != user_list_.end();
-       ++iter) {
+       iter != user_list_.end(); ++iter) {
     if ((*iter)->GetAccountId() == account_id) {
       active_user_index_ = iter - user_list_.begin();
       return;
@@ -247,12 +244,10 @@ bool TestSessionStateDelegate::IsMultiProfileAllowedByPrimaryUserPolicy()
 }
 
 void TestSessionStateDelegate::AddSessionStateObserver(
-    SessionStateObserver* observer) {
-}
+    SessionStateObserver* observer) {}
 
 void TestSessionStateDelegate::RemoveSessionStateObserver(
-    SessionStateObserver* observer) {
-}
+    SessionStateObserver* observer) {}
 
 }  // namespace test
 }  // namespace ash

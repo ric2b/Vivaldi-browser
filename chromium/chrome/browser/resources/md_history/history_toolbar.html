@@ -1,13 +1,13 @@
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/hardware-icons.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icons/hardware-icons.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tab.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-tabs/paper-tabs.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_search_field/cr_search_field.html">
+<link rel="import" href="chrome://resources/cr_elements/icons.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html">
+<link rel="import" href="chrome://history/icons.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
 <dom-module id="history-toolbar">
@@ -15,14 +15,14 @@
     <style include="shared-style">
       :host {
         color: #fff;
+        display: block;
         transition: background-color 150ms;
         width: 100%;
       }
 
+      cr-toolbar,
       #overlay-buttons,
       #overlay-wrapper,
-      #main-content,
-      #button-container,
       #toolbar-container {
         @apply(--layout-center);
         @apply(--layout-horizontal);
@@ -33,57 +33,14 @@
         background: rgb(68, 136, 255);
       }
 
-      h1 {
-        @apply(--layout-flex);
-        -webkit-padding-start: 24px;
-        font-size: 123%;
-        font-weight: 400;
-      }
-
       #toolbar-container {
-        height: 56px;
-      }
-
-      #right-content {
-        flex: 1 0 0;
-      }
-
-      #left-content {
-        flex: 1 0 var(--side-bar-width);
-      }
-
-      #centered-content {
-        /** Padding-start gives space on one side, flex-basis gives space on the
-          other. */
-        -webkit-padding-start: var(--card-padding-side);
-        display: flex;
-        flex: 1 1 calc(var(--card-max-width) + var(--card-padding-side));
-      }
-
-      #right-content {
-        @apply(--layout-center);
-        @apply(--layout-horizontal);
-        justify-content: flex-end;
-      }
-
-      #search-input {
-        -webkit-padding-end: 20px;
-      }
-
-      #searching-spinner {
-        height: 20px;
-        width: 20px;
-        -webkit-padding-end: 10px;
+        height: var(--toolbar-height);
       }
 
       #overlay-buttons {
         margin: 0 auto;
         max-width: var(--card-max-width);
         padding: 0 var(--card-padding-side);
-      }
-
-      #overlay-wrapper {
-        -webkit-margin-start: var(--side-bar-width);
       }
 
       #number-selected {
@@ -112,14 +69,13 @@
 
       paper-tabs {
         --paper-tabs-selection-bar-color: var(--google-blue-500);
-        height: 45px;
+        height: calc(var(--toolbar-grouped-height) - var(--toolbar-height));
         min-width: 300px;
       }
 
       #grouped-buttons-container {
         @apply(--layout-center);
         @apply(--layout-horizontal);
-        -webkit-margin-start: var(--side-bar-width);
       }
 
       #grouped-range-buttons {
@@ -136,7 +92,7 @@
         transition: opacity 150ms;
       }
 
-      :host([grouped-range=0]) #grouped-nav-container {
+      :host([grouped-range='0']) #grouped-nav-container {
         opacity: 0;
         pointer-events: none;
       }
@@ -155,21 +111,11 @@
       }
     </style>
     <div id="toolbar-container">
-      <div id="main-content" hidden$="[[itemsSelected_]]">
-        <div id="left-content">
-          <h1 id="title">$i18n{title}</h1>
-        </div>
-        <div id="centered-content">
-          <div id="right-content">
-            <paper-spinner id="searching-spinner" active="[[searching]]">
-            </paper-spinner>
-            <cr-search-field id="search-input" label="$i18n{search}"
-                clear-label="$i18n{clearSearch}">
-            </cr-search-field>
-          </div>
-        </div>
-      </div>
-
+      <cr-toolbar id="main-toolbar" page-name="$i18n{title}"
+          clear-label="$i18n{clearSearch}" search-prompt="$i18n{searchPrompt}"
+          hidden$="[[itemsSelected_]]" spinner-active="[[spinnerActive]]"
+          on-search-changed="onSearchChanged_">
+      </cr-toolbar>
       <div id="overlay-wrapper" hidden$="[[!itemsSelected_]]">
         <div id="overlay-buttons">
           <paper-icon-button icon="cr:clear" id="cancel-icon-button"
@@ -196,12 +142,12 @@
           <span id="grouped-date">
             {{getHistoryInterval_(queryStartTime, queryEndTime)}}
           </span>
-          <paper-icon-button icon="today" alt="$i18n{rangeToday}"
+          <paper-icon-button icon="history:today" alt="$i18n{rangeToday}"
               title="$i18n{rangeToday}"></paper-icon-button>
-          <paper-icon-button icon="hardware:keyboard-arrow-left"
+          <paper-icon-button icon="history:chevron-left"
               alt="$i18n{rangePrevious}" title="$i18n{rangePrevious}"
               class="rtl-reversible"></paper-icon-button>
-          <paper-icon-button icon="hardware:keyboard-arrow-right"
+          <paper-icon-button icon="cr:chevron-right"
               alt="$i18n{rangeNext}" title="$i18n{rangeNext}"
               class="rtl-reversible"></paper-icon-button>
         </div>

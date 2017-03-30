@@ -33,6 +33,7 @@ class CursorIPC : public DrmCursorProxy {
                  const gfx::Point& point,
                  int frame_delay_ms) override;
   void Move(gfx::AcceleratedWidget window, const gfx::Point& point) override;
+  void InitializeOnEvdev() override;
 
  private:
   bool IsConnected();
@@ -64,6 +65,8 @@ void CursorIPC::CursorSet(gfx::AcceleratedWidget window,
 void CursorIPC::Move(gfx::AcceleratedWidget window, const gfx::Point& point) {
   Send(new OzoneGpuMsg_CursorMove(window, point));
 }
+
+void CursorIPC::InitializeOnEvdev() {}
 
 void CursorIPC::Send(IPC::Message* message) {
   if (IsConnected() &&
@@ -251,7 +254,8 @@ bool DrmGpuPlatformSupportHost::OnMessageReceivedForDrmOverlayManager(
   IPC_BEGIN_MESSAGE_MAP(DrmGpuPlatformSupportHost, message)
     IPC_MESSAGE_HANDLER(OzoneHostMsg_OverlayCapabilitiesReceived,
                         OnOverlayResult)
-  // TODO(rjk): insert the extra
+    // TODO(rjk): insert the extra
+    IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
 }

@@ -60,6 +60,13 @@ mkdir /opt/app/clovis/binaries
 gsutil cp gs://$DEPLOYMENT_PATH/binaries/* /opt/app/clovis/binaries/
 unzip /opt/app/clovis/binaries/linux.zip -d /opt/app/clovis/binaries/
 
+# Ad and tracking filtering rules.
+# Made by the EasyList authors (https://easylist.github.io/).
+DATA_DIR=/opt/app/clovis/data
+mkdir $DATA_DIR && cd $DATA_DIR
+curl https://easylist.github.io/easylist/easylist.txt > easylist.txt
+curl https://easylist.github.io/easylist/easyprivacy.txt > easyprivacy.txt
+
 # Install the Chrome sandbox
 cp /opt/app/clovis/binaries/chrome_sandbox /usr/local/sbin/chrome-devel-sandbox
 chown root:root /usr/local/sbin/chrome-devel-sandbox
@@ -71,6 +78,8 @@ chown -R pythonapp:pythonapp /opt/app
 # Create the configuration file for this deployment.
 DEPLOYMENT_CONFIG_PATH=/opt/app/clovis/deployment_config.json
 TASKQUEUE_TAG=`get_instance_metadata taskqueue-tag`
+TASK_DIR=`get_instance_metadata task-dir`
+TASK_STORAGE_PATH=$CLOUD_STORAGE_PATH/$TASK_DIR
 if [ "$(get_instance_metadata self-destruct)" == "false" ]; then
   SELF_DESTRUCT="False"
 else
@@ -82,12 +91,14 @@ cat >$DEPLOYMENT_CONFIG_PATH << EOF
 {
   "instance_name" : "$INSTANCE_NAME",
   "project_name" : "$PROJECTID",
-  "cloud_storage_path" : "$CLOUD_STORAGE_PATH",
+  "task_storage_path" : "$TASK_STORAGE_PATH",
   "binaries_path" : "/opt/app/clovis/binaries",
   "src_path" : "/opt/app/clovis/src",
   "taskqueue_tag" : "$TASKQUEUE_TAG",
   "worker_log_path" : "$WORKER_LOG_PATH",
-  "self_destruct" : "$SELF_DESTRUCT"
+  "self_destruct" : "$SELF_DESTRUCT",
+  "ad_rules_filename": "$DATA_DIR/easylist.txt",
+  "tracking_rules_filename": "$DATA_DIR/easyprivacy.txt"
 }
 EOF
 

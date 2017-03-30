@@ -4,13 +4,14 @@
 
 #include "ash/test/shelf_view_test_api.h"
 
+#include "ash/common/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_model.h"
 #include "ash/shelf/overflow_button.h"
 #include "ash/shelf/shelf_button.h"
-#include "ash/shelf/shelf_constants.h"
-#include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_view.h"
 #include "base/message_loop/message_loop.h"
 #include "ui/views/animation/bounds_animator.h"
+#include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/view_model.h"
 
 namespace {
@@ -39,8 +40,7 @@ namespace test {
 ShelfViewTestAPI::ShelfViewTestAPI(ShelfView* shelf_view)
     : shelf_view_(shelf_view) {}
 
-ShelfViewTestAPI::~ShelfViewTestAPI() {
-}
+ShelfViewTestAPI::~ShelfViewTestAPI() {}
 
 int ShelfViewTestAPI::GetButtonCount() {
   return shelf_view_->view_model_->view_size();
@@ -98,6 +98,13 @@ void ShelfViewTestAPI::RunMessageLoopUntilAnimationsDone() {
   shelf_view_->bounds_animator_->RemoveObserver(observer.get());
 }
 
+void ShelfViewTestAPI::CloseMenu() {
+  if (!shelf_view_->launcher_menu_runner_)
+    return;
+
+  shelf_view_->launcher_menu_runner_->Cancel();
+}
+
 OverflowBubble* ShelfViewTestAPI::overflow_bubble() {
   return shelf_view_->overflow_bubble_.get();
 }
@@ -111,16 +118,21 @@ gfx::Size ShelfViewTestAPI::GetPreferredSize() {
 }
 
 int ShelfViewTestAPI::GetButtonSize() {
-  return kShelfButtonSize;
+  return GetShelfConstant(SHELF_BUTTON_SIZE);
 }
 
 int ShelfViewTestAPI::GetButtonSpacing() {
-  return kShelfButtonSpacing;
+  return GetShelfConstant(SHELF_BUTTON_SPACING);
+}
+
+int ShelfViewTestAPI::GetMinimumDragDistance() const {
+  return ShelfView::kMinimumDragDistance;
 }
 
 void ShelfViewTestAPI::ButtonPressed(views::Button* sender,
-                                     const ui::Event& event) {
-  return shelf_view_->ButtonPressed(sender, event);
+                                     const ui::Event& event,
+                                     views::InkDrop* ink_drop) {
+  return shelf_view_->ButtonPressed(sender, event, ink_drop);
 }
 
 bool ShelfViewTestAPI::SameDragType(ShelfItemType typea,
@@ -141,7 +153,7 @@ bool ShelfViewTestAPI::IsRippedOffFromShelf() {
 }
 
 bool ShelfViewTestAPI::DraggedItemFromOverflowToShelf() {
-    return shelf_view_->dragged_off_from_overflow_to_shelf_;
+  return shelf_view_->dragged_off_from_overflow_to_shelf_;
 }
 
 ShelfButtonPressedMetricTracker*

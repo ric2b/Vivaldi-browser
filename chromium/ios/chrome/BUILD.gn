@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/ios/rules.gni")
+import("//ios/build/config.gni")
 import("//testing/test.gni")
 
 bundle_data("ios_chrome_unittests_bundle_data") {
@@ -50,9 +51,10 @@ test("ios_chrome_unittests") {
     "browser/snapshots/lru_cache_unittest.mm",
     "browser/snapshots/snapshot_cache_unittest.mm",
     "browser/snapshots/snapshots_util_unittest.mm",
+    "browser/ssl/ios_ssl_error_handler_unittest.mm",
     "browser/translate/translate_service_ios_unittest.cc",
     "browser/ui/commands/set_up_for_testing_command_unittest.mm",
-    "browser/ui/context_menu/context_menu_controller_unittest.mm",
+    "browser/ui/context_menu/context_menu_coordinator_unittest.mm",
     "browser/ui/keyboard/UIKeyCommand+ChromeTest.mm",
     "browser/ui/keyboard/hardware_keyboard_watcher_unittest.mm",
     "browser/ui/native_content_controller_unittest.mm",
@@ -61,6 +63,7 @@ test("ios_chrome_unittests") {
     "browser/update_client/ios_chrome_update_query_params_delegate_unittest.cc",
     "browser/web_resource/web_resource_util_unittest.cc",
     "common/string_util_unittest.mm",
+    "test/google_toolbox_unittest.mm",
   ]
 
   deps = [
@@ -83,10 +86,12 @@ test("ios_chrome_unittests") {
     "//components/update_client",
     "//components/version_info",
     "//ios/chrome/app",
+    "//ios/chrome/app/resources:packed_resources",
     "//ios/chrome/browser",
     "//ios/chrome/browser:test_support",
     "//ios/chrome/common",
     "//ios/chrome/test",
+    "//ios/chrome/test:run_all_unittests",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser:test_support",
     "//ios/web",
@@ -95,7 +100,10 @@ test("ios_chrome_unittests") {
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/google_toolbox_for_mac",
     "//third_party/ocmock",
     "//ui/gfx:test_support",
   ]
+
+  assert_no_deps = ios_assert_no_deps
 }

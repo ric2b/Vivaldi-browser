@@ -710,6 +710,14 @@
     "extension_types": ["platform_app"],
     "contexts": ["blessed_extension"]
   },
+  "quickUnlockPrivate": {
+    "channel": "stable",
+    "contexts": ["webui"],
+    "matches": [
+      "chrome://md-settings/*"
+    ],
+    "platforms": ["chromeos"]
+  },
   "resourcesPrivate": [{
     "dependencies": ["permission:resourcesPrivate"],
     "contexts": ["blessed_extension"]
@@ -764,10 +772,18 @@
     "dependencies": ["permission:tabCapture"],
     "contexts": ["blessed_extension"]
   },
-  "tabs": {
+  "tabs": [{
     "channel": "stable",
-    "contexts": ["blessed_extension"]
-  },
+    "extension_types": ["extension", "legacy_packaged_app"],
+    "contexts": ["blessed_extension", "extension_service_worker"]
+  }, {
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "contexts": ["blessed_extension"],
+    "whitelist": [
+      "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
+    ]
+  }],
   "terminalPrivate": {
     "dependencies": ["permission:terminalPrivate"],
     "contexts": ["blessed_extension"]

@@ -117,11 +117,10 @@ bool WillDispatchWindowFocusedEvent(
 
   if (cant_cross_incognito || !visible_to_listener) {
     event->event_args->Clear();
-    event->event_args->Append(
-        new base::FundamentalValue(extension_misc::kUnknownWindowId));
+    event->event_args->AppendInteger(extension_misc::kUnknownWindowId);
   } else {
     event->event_args->Clear();
-    event->event_args->Append(new base::FundamentalValue(window_id));
+    event->event_args->AppendInteger(window_id);
   }
   return true;
 }
@@ -196,9 +195,7 @@ void WindowsEventRouter::OnWindowControllerAdded(
     return;
 
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  base::DictionaryValue* window_dictionary =
-      window_controller->CreateWindowValue();
-  args->Append(window_dictionary);
+  args->Append(window_controller->CreateWindowValue());
   DispatchEvent(events::WINDOWS_ON_CREATED, windows::OnCreated::kEventName,
                 window_controller, std::move(args));
 }
@@ -212,7 +209,7 @@ void WindowsEventRouter::OnWindowControllerRemoved(
 
   int window_id = window_controller->GetWindowId();
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(new base::FundamentalValue(window_id));
+  args->AppendInteger(window_id);
   DispatchEvent(events::WINDOWS_ON_REMOVED, windows::OnRemoved::kEventName,
                 window_controller, std::move(args));
 }
@@ -229,10 +226,8 @@ void WindowsEventRouter::Observe(
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
 #if defined(OS_MACOSX)
-  if (chrome::NOTIFICATION_NO_KEY_WINDOW == type) {
-    OnActiveWindowChanged(nullptr);
-    return;
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_NO_KEY_WINDOW, type);
+  OnActiveWindowChanged(nullptr);
 #endif
 }
 

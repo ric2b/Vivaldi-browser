@@ -40,7 +40,6 @@
 #endif
 
 #if defined(OS_MACOSX)
-#include <IOSurface/IOSurface.h>
 #include "content/common/mac/font_loader.h"
 #endif
 
@@ -90,13 +89,12 @@ class Origin;
 namespace content {
 class BrowserContext;
 class CacheStorageContextImpl;
-class CacheStorageCache;
+class CacheStorageCacheHandle;
 class DOMStorageContextWrapper;
 class MediaInternals;
 class RenderWidgetHelper;
 class ResourceContext;
 class ResourceDispatcherHostImpl;
-struct Referrer;
 
 // This class filters out incoming IPC messages for the renderer process on the
 // IPC thread.
@@ -125,14 +123,6 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
  protected:
   ~RenderMessageFilter() override;
 
-  // This method will be overridden by TestSaveImageFromDataURL class for test.
-  virtual void DownloadUrl(int render_view_id,
-                           int render_frame_id,
-                           const GURL& url,
-                           const Referrer& referrer,
-                           const base::string16& suggested_name,
-                           const bool use_prompt) const;
-
  private:
   friend class BrowserThread;
   friend class base::DeleteHelper<RenderMessageFilter>;
@@ -155,22 +145,9 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
 #endif
 
   void OnGenerateRoutingID(int* route_id);
-  void OnDownloadUrl(int render_view_id,
-                     int render_frame_id,
-                     const GURL& url,
-                     const Referrer& referrer,
-                     const base::string16& suggested_name);
-  void OnSaveImageFromDataURL(int render_view_id,
-                              int render_frame_id,
-                              const std::string& url_str);
 
   void OnGetAudioHardwareConfig(media::AudioParameters* input_params,
                                 media::AudioParameters* output_params);
-
-#if defined(OS_WIN)
-  // Used to look up the monitor color profile.
-  void OnGetMonitorColorProfile(std::vector<char>* profile);
-#endif
 
   // Message handlers called on the browser IO thread:
   void OnEstablishGpuChannel(CauseForGpuLaunch, IPC::Message* reply);
@@ -220,12 +197,13 @@ class CONTENT_EXPORT RenderMessageFilter : public BrowserMessageFilter {
       const std::vector<char>& data,
       const url::Origin& cache_storage_origin,
       const std::string& cache_storage_cache_name);
-  void OnCacheStorageOpenCallback(const GURL& url,
-                                  base::Time expected_response_time,
-                                  scoped_refptr<net::IOBuffer> buf,
-                                  int buf_len,
-                                  scoped_refptr<CacheStorageCache> cache,
-                                  CacheStorageError error);
+  void OnCacheStorageOpenCallback(
+      const GURL& url,
+      base::Time expected_response_time,
+      scoped_refptr<net::IOBuffer> buf,
+      int buf_len,
+      std::unique_ptr<CacheStorageCacheHandle> cache_handle,
+      CacheStorageError error);
   void OnKeygen(uint32_t key_size_index,
                 const std::string& challenge_string,
                 const GURL& url,

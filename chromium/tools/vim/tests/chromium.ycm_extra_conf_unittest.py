@@ -53,15 +53,6 @@ def CreateFile(path,
     statinfo = os.stat(path)
     os.chmod(path, statinfo.st_mode | stat.S_IXUSR)
 
-@unittest.skipIf(sys.platform.startswith('linux'),
-                 'Tests are only valid on Linux.')
-class Chromium_ycmExtraConfTest_NotOnLinux(unittest.TestCase):
-  def testAlwaysFailsIfNotRunningOnLinux(self):
-    self.fail('Changes to chromium.ycm_extra_conf.py currently need to be ' \
-              'uploaded from Linux since the tests only run on Linux.')
-
-@unittest.skipUnless(sys.platform.startswith('linux'),
-                     'Tests are only valid on Linux.')
 class Chromium_ycmExtraConfTest(unittest.TestCase):
 
   def SetUpFakeChromeTreeBelowPath(self):
@@ -104,7 +95,7 @@ class Chromium_ycmExtraConfTest(unittest.TestCase):
 
   def NormalizeString(self, string):
     return string.replace(self.out_dir, '[OUT]').\
-        replace(self.chrome_root, '[SRC]')
+        replace(self.chrome_root, '[SRC]').replace('\\', '/')
 
   def NormalizeStringsInList(self, list_of_strings):
     return [self.NormalizeString(s) for s in list_of_strings]
@@ -172,8 +163,10 @@ class Chromium_ycmExtraConfTest(unittest.TestCase):
     clang_options = \
         self.ycm_extra_conf.GetClangOptionsFromNinjaForFilename(
             self.chrome_root, os.path.join(self.chrome_root, 'one.cpp'))
-    self.assertIn('-I%s/a' % out_dir, clang_options)
-    self.assertIn('-I%s/tag-one' % out_dir, clang_options)
+    self.assertIn('-I%s/a' % self.NormalizeString(out_dir),
+        self.NormalizeStringsInList(clang_options))
+    self.assertIn('-I%s/tag-one' % self.NormalizeString(out_dir),
+        self.NormalizeStringsInList(clang_options))
 
   def testGetFlagsForFileForKnownCppFile(self):
     result = self.ycm_extra_conf.FlagsForFile(
@@ -213,6 +206,25 @@ class Chromium_ycmExtraConfTest(unittest.TestCase):
         '-I[OUT]/tag-default'
         ])
 
+  def testGetFlagsForFileForUnknownCppNotTestFile(self):
+    result = self.ycm_extra_conf.FlagsForFile(
+        os.path.join(self.chrome_root, 'test_nonexistent.cpp'))
+    self.assertTrue(result)
+    self.assertTrue('do_cache' in result)
+    self.assertTrue(result['do_cache'])
+    self.assertTrue('flags' in result)
+    self.assertEquals(self.NormalizeStringsInList(result['flags']), [
+        '-DUSE_CLANG_COMPLETER',
+        '-std=c++11',
+        '-x', 'c++',
+        '-I[SRC]',
+        '-Wno-unknown-warning-option',
+        '-I[OUT]/a',
+        '-isysroot',
+        '/mac.sdk',
+        '-I[OUT]/tag-default'
+        ])
+
   def testGetFlagsForFileForUnknownHeaderFile(self):
     result = self.ycm_extra_conf.FlagsForFile(
         os.path.join(self.chrome_root, 'nonexistent.h'))
@@ -230,6 +242,44 @@ class Chromium_ycmExtraConfTest(unittest.TestCase):
         '-isysroot',
         '/mac.sdk',
         '-I[OUT]/tag-default'
+        ])
+
+  def testGetFlagsForFileForUnknownUnittestFile(self):
+    result = self.ycm_extra_conf.FlagsForFile(
+        os.path.join(self.chrome_root, 'nonexistent_unittest.cpp'))
+    self.assertTrue(result)
+    self.assertTrue('do_cache' in result)
+    self.assertTrue(result['do_cache'])
+    self.assertTrue('flags' in result)
+    self.assertEquals(self.NormalizeStringsInList(result['flags']), [
+        '-DUSE_CLANG_COMPLETER',
+        '-std=c++11',
+        '-x', 'c++',
+        '-I[SRC]',
+        '-Wno-unknown-warning-option',
+        '-I[OUT]/a',
+        '-isysroot',
+        '/mac.sdk',
+        '-I[OUT]/tag-default-test'
+        ])
+
+  def testGetFlagsForFileForUnknownBrowsertestFile2(self):
+    result = self.ycm_extra_conf.FlagsForFile(
+        os.path.join(self.chrome_root, 'nonexistent_browsertest.cpp'))
+    self.assertTrue(result)
+    self.assertTrue('do_cache' in result)
+    self.assertTrue(result['do_cache'])
+    self.assertTrue('flags' in result)
+    self.assertEquals(self.NormalizeStringsInList(result['flags']), [
+        '-DUSE_CLANG_COMPLETER',
+        '-std=c++11',
+        '-x', 'c++',
+        '-I[SRC]',
+        '-Wno-unknown-warning-option',
+        '-I[OUT]/a',
+        '-isysroot',
+        '/mac.sdk',
+        '-I[OUT]/tag-default-test'
         ])
 
   def testGetFlagsForFileForKnownHeaderFileWithAssociatedCppFile(self):
@@ -256,7 +306,8 @@ class Chromium_ycmExtraConfTest(unittest.TestCase):
     # output.
     p = subprocess.Popen(['ninja', '-C', self.out_dir, '-t',
                           'query', '../../four.cc'],
-                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                         universal_newlines=True)
     stdout, _ = p.communicate()
     self.assertFalse(p.returncode)
     self.assertEquals(stdout,

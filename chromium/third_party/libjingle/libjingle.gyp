@@ -28,9 +28,7 @@
       'WEBRTC_CHROMIUM_BUILD',
     ],
     'include_dirs': [
-      './overrides',
       '../../third_party/webrtc_overrides',
-      './source',
       '../..',
       '../../testing/gtest/include',
       '../../third_party',
@@ -50,8 +48,6 @@
     'direct_dependent_settings': {
       'include_dirs': [
         '../../third_party/webrtc_overrides',
-        './overrides',
-        './source',
         '../..',
         '../../testing/gtest/include',
         '../../third_party',
@@ -222,7 +218,6 @@
             '<(DEPTH)/third_party/webrtc/api/audiotrack.h',
             '<(DEPTH)/third_party/webrtc/api/datachannel.cc',
             '<(DEPTH)/third_party/webrtc/api/datachannel.h',
-            '<(DEPTH)/third_party/webrtc/api/dtlsidentitystore.cc',
             '<(DEPTH)/third_party/webrtc/api/dtlsidentitystore.h',
             '<(DEPTH)/third_party/webrtc/api/dtmfsender.cc',
             '<(DEPTH)/third_party/webrtc/api/dtmfsender.h',
@@ -239,12 +234,10 @@
             '<(DEPTH)/third_party/webrtc/api/mediacontroller.h',
             '<(DEPTH)/third_party/webrtc/api/mediastream.cc',
             '<(DEPTH)/third_party/webrtc/api/mediastream.h',
-            '<(DEPTH)/third_party/webrtc/api/mediastreamhandler.cc',
-            '<(DEPTH)/third_party/webrtc/api/mediastreamhandler.h',
             '<(DEPTH)/third_party/webrtc/api/mediastreaminterface.h',
             '<(DEPTH)/third_party/webrtc/api/mediastreamobserver.cc',
             '<(DEPTH)/third_party/webrtc/api/mediastreamobserver.h',
-            '<(DEPTH)/third_party/webrtc/api/mediastreamprovider.h',
+            #'<(DEPTH)/third_party/webrtc/api/mediastreamprovider.h',
             '<(DEPTH)/third_party/webrtc/api/mediastreamproxy.h',
             '<(DEPTH)/third_party/webrtc/api/mediastreamtrack.h',
             '<(DEPTH)/third_party/webrtc/api/mediastreamtrackproxy.h',
@@ -254,12 +247,8 @@
             '<(DEPTH)/third_party/webrtc/api/peerconnectionfactory.cc',
             '<(DEPTH)/third_party/webrtc/api/peerconnectionfactory.h',
             '<(DEPTH)/third_party/webrtc/api/peerconnectioninterface.h',
-            '<(DEPTH)/third_party/webrtc/api/portallocatorfactory.cc',
-            '<(DEPTH)/third_party/webrtc/api/portallocatorfactory.h',
             '<(DEPTH)/third_party/webrtc/api/remoteaudiosource.cc',
             '<(DEPTH)/third_party/webrtc/api/remoteaudiosource.h',
-            '<(DEPTH)/third_party/webrtc/api/remoteaudiotrack.cc',
-            '<(DEPTH)/third_party/webrtc/api/remoteaudiotrack.h',
             '<(DEPTH)/third_party/webrtc/api/rtpreceiver.cc',
             '<(DEPTH)/third_party/webrtc/api/rtpreceiver.h',
             '<(DEPTH)/third_party/webrtc/api/rtpreceiverinterface.h',
@@ -287,7 +276,6 @@
             '<(DEPTH)/third_party/webrtc/api/webrtcsession.h',
             '<(DEPTH)/third_party/webrtc/api/webrtcsessiondescriptionfactory.cc',
             '<(DEPTH)/third_party/webrtc/api/webrtcsessiondescriptionfactory.h',
-            '<(DEPTH)/third_party/webrtc/media/base/audiorenderer.h',
             '<(DEPTH)/third_party/webrtc/media/base/codec.cc',
             '<(DEPTH)/third_party/webrtc/media/base/codec.h',
             '<(DEPTH)/third_party/webrtc/media/base/cryptoparams.h',
@@ -371,12 +359,16 @@
           ],
         },  # target libjingle_webrtc_common
         {
+          # TODO(kjellander): Move this target into
+          # //third_party/webrtc_overrides as soon as the work in
+          # bugs.webrtc.org/4256 has gotten rid of the duplicated source
+          # listings above.
           # GN version: //third_party/libjingle:libjingle_webrtc
           'target_name': 'libjingle_webrtc',
           'type': 'static_library',
           'sources': [
-            'overrides/init_webrtc.cc',
-            'overrides/init_webrtc.h',
+            '../webrtc_overrides/init_webrtc.cc',
+            '../webrtc_overrides/init_webrtc.h',
           ],
           'dependencies': [
             '<(DEPTH)/third_party/webrtc/modules/modules.gyp:audio_processing',

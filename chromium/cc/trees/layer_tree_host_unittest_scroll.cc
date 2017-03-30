@@ -8,6 +8,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "cc/animation/animation_host.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/layers/layer.h"
 #include "cc/layers/layer_impl.h"
@@ -109,7 +110,7 @@ class LayerTreeHostScrollTestScrollSimple : public LayerTreeHostScrollTest {
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
-    LayerImpl* root = impl->active_tree()->root_layer();
+    LayerImpl* root = impl->active_tree()->root_layer_for_testing();
     LayerImpl* scroll_layer = impl->OuterViewportScrollLayer();
     EXPECT_VECTOR_EQ(gfx::Vector2d(), ScrollDelta(scroll_layer));
 
@@ -911,7 +912,7 @@ class LayerTreeHostScrollTestSimple : public LayerTreeHostScrollTest {
     if (impl->pending_tree())
       impl->SetNeedsRedraw();
 
-    LayerImpl* root = impl->active_tree()->root_layer();
+    LayerImpl* root = impl->active_tree()->root_layer_for_testing();
     LayerImpl* scroll_layer = impl->OuterViewportScrollLayer();
     LayerImpl* pending_root =
         impl->active_tree()->FindPendingTreeLayerById(root->id());
@@ -1030,7 +1031,7 @@ class LayerTreeHostScrollTestImplOnlyScroll : public LayerTreeHostScrollTest {
   void BeginCommitOnThread(LayerTreeHostImpl* impl) override {
     // Scroll after the 2nd commit has started.
     if (impl->active_tree()->source_frame_number() == 0) {
-      LayerImpl* active_root = impl->active_tree()->root_layer();
+      LayerImpl* active_root = impl->active_tree()->root_layer_for_testing();
       LayerImpl* active_scroll_layer = impl->OuterViewportScrollLayer();
       ASSERT_TRUE(active_root);
       ASSERT_TRUE(active_scroll_layer);
@@ -1042,10 +1043,10 @@ class LayerTreeHostScrollTestImplOnlyScroll : public LayerTreeHostScrollTest {
   void CommitCompleteOnThread(LayerTreeHostImpl* impl) override {
     // We force a second draw here of the first commit before activating
     // the second commit.
-    LayerImpl* active_root = impl->active_tree()->root_layer();
+    LayerImpl* active_root = impl->active_tree()->root_layer_for_testing();
     LayerImpl* active_scroll_layer =
         active_root ? impl->OuterViewportScrollLayer() : NULL;
-    LayerImpl* pending_root = impl->pending_tree()->root_layer();
+    LayerImpl* pending_root = impl->pending_tree()->root_layer_for_testing();
     LayerImpl* pending_scroll_layer =
         impl->pending_tree()->OuterViewportScrollLayer();
 
@@ -1146,55 +1147,57 @@ class LayerTreeHostScrollTestScrollZeroMaxScrollOffset
     PostSetNeedsCommitToMainThread();
   }
 
-  void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
-    LayerImpl* root = impl->active_tree()->root_layer();
-    LayerImpl* scroll_layer = impl->OuterViewportScrollLayer();
-    scroll_layer->SetScrollClipLayer(outer_viewport_container_layer_id_);
+  void UpdateLayerTreeHost() override {
+    Layer* root = layer_tree_host()->root_layer();
+    Layer* scroll_layer = layer_tree_host()->outer_viewport_scroll_layer();
+    switch (layer_tree_host()->source_frame_number()) {
+      case 0:
+        scroll_layer->SetScrollClipLayerId(outer_viewport_container_layer_id_);
+        // Set max_scroll_offset = (100, 100).
+        scroll_layer->SetBounds(gfx::Size(root->bounds().width() + 100,
+                                          root->bounds().height() + 100));
+        break;
+      case 1:
+        // Set max_scroll_offset = (0, 0).
+        scroll_layer->SetBounds(root->bounds());
+        break;
+      case 2:
+        // Set max_scroll_offset = (-100, -100).
+        scroll_layer->SetBounds(gfx::Size());
+        break;
+    }
+  }
 
-    // Set max_scroll_offset = (100, 100).
-    scroll_layer->SetBounds(
-        gfx::Size(root->bounds().width() + 100, root->bounds().height() + 100));
-    impl->active_tree()->property_trees()->needs_rebuild = true;
-    impl->active_tree()->BuildPropertyTreesForTesting();
+  void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
+    LayerImpl* scroll_layer = impl->OuterViewportScrollLayer();
 
     ScrollTree& scroll_tree =
         impl->active_tree()->property_trees()->scroll_tree;
     ScrollNode* scroll_node =
         scroll_tree.Node(scroll_layer->scroll_tree_index());
-
     InputHandler::ScrollStatus status =
         impl->TryScroll(gfx::PointF(0.0f, 1.0f), InputHandler::TOUCHSCREEN,
                         scroll_tree, scroll_node);
-
-    EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD, status.thread);
-    EXPECT_EQ(MainThreadScrollingReason::kNotScrollingOnMain,
-              status.main_thread_scrolling_reasons);
-
-    // Set max_scroll_offset = (0, 0).
-    scroll_layer->SetBounds(root->bounds());
-    impl->active_tree()->property_trees()->needs_rebuild = true;
-    impl->active_tree()->BuildPropertyTreesForTesting();
-    scroll_tree = impl->active_tree()->property_trees()->scroll_tree;
-    scroll_node = scroll_tree.Node(scroll_layer->scroll_tree_index());
-    status = impl->TryScroll(gfx::PointF(0.0f, 1.0f), InputHandler::TOUCHSCREEN,
-                             scroll_tree, scroll_node);
-    EXPECT_EQ(InputHandler::SCROLL_IGNORED, status.thread);
-    EXPECT_EQ(MainThreadScrollingReason::kNotScrollable,
-              status.main_thread_scrolling_reasons);
-
-    // Set max_scroll_offset = (-100, -100).
-    scroll_layer->SetBounds(gfx::Size());
-    impl->active_tree()->property_trees()->needs_rebuild = true;
-    impl->active_tree()->BuildPropertyTreesForTesting();
-    scroll_tree = impl->active_tree()->property_trees()->scroll_tree;
-    scroll_node = scroll_tree.Node(scroll_layer->scroll_tree_index());
-    status = impl->TryScroll(gfx::PointF(0.0f, 1.0f), InputHandler::TOUCHSCREEN,
-                             scroll_tree, scroll_node);
-    EXPECT_EQ(InputHandler::SCROLL_IGNORED, status.thread);
-    EXPECT_EQ(MainThreadScrollingReason::kNotScrollable,
-              status.main_thread_scrolling_reasons);
-
-    EndTest();
+    switch (impl->active_tree()->source_frame_number()) {
+      case 0:
+        EXPECT_EQ(InputHandler::SCROLL_ON_IMPL_THREAD, status.thread);
+        EXPECT_EQ(MainThreadScrollingReason::kNotScrollingOnMain,
+                  status.main_thread_scrolling_reasons);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 1:
+        EXPECT_EQ(InputHandler::SCROLL_IGNORED, status.thread);
+        EXPECT_EQ(MainThreadScrollingReason::kNotScrollable,
+                  status.main_thread_scrolling_reasons);
+        PostSetNeedsCommitToMainThread();
+        break;
+      case 2:
+        EXPECT_EQ(InputHandler::SCROLL_IGNORED, status.thread);
+        EXPECT_EQ(MainThreadScrollingReason::kNotScrollable,
+                  status.main_thread_scrolling_reasons);
+        EndTest();
+        break;
+    }
   }
 
   void AfterTest() override {}
@@ -1377,6 +1380,7 @@ TEST(LayerTreeHostFlingTest, DidStopFlingingThread) {
   params.task_graph_runner = &task_graph_runner;
   params.settings = &settings;
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
+  params.animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<LayerTreeHost> layer_tree_host =
       LayerTreeHost::CreateThreaded(impl_thread.task_runner(), &params);
 
@@ -1623,7 +1627,7 @@ class LayerTreeHostScrollTestScrollMFBA : public LayerTreeHostScrollTest {
 
  private:
   void Scroll(LayerTreeHostImpl* impl) {
-    LayerImpl* root = impl->active_tree()->root_layer();
+    LayerImpl* root = impl->active_tree()->root_layer_for_testing();
     LayerImpl* scroll_layer = impl->OuterViewportScrollLayer();
 
     scroll_layer->SetScrollClipLayer(outer_viewport_container_layer_id_);

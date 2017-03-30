@@ -6,11 +6,11 @@
 #define InspectorHighlight_h
 
 #include "core/CoreExport.h"
+#include "core/inspector/protocol/DOM.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/graphics/Color.h"
 #include "platform/heap/Handle.h"
-#include "platform/inspector_protocol/TypeBuilder.h"
 
 namespace blink {
 
@@ -46,27 +46,28 @@ class CORE_EXPORT InspectorHighlight {
     STACK_ALLOCATED();
 public:
     InspectorHighlight(Node*, const InspectorHighlightConfig&, bool appendElementInfo);
-    InspectorHighlight();
+    explicit InspectorHighlight(float scale);
     ~InspectorHighlight();
 
-    static bool getBoxModel(Node*, OwnPtr<protocol::DOM::BoxModel>*);
+    static bool getBoxModel(Node*, std::unique_ptr<protocol::DOM::BoxModel>*);
     static InspectorHighlightConfig defaultConfig();
     static bool buildNodeQuads(Node*, FloatQuad* content, FloatQuad* padding, FloatQuad* border, FloatQuad* margin);
 
-    void appendPath(PassOwnPtr<protocol::ListValue> path, const Color& fillColor, const Color& outlineColor, const String& name = String());
+    void appendPath(std::unique_ptr<protocol::ListValue> path, const Color& fillColor, const Color& outlineColor, const String& name = String());
     void appendQuad(const FloatQuad&, const Color& fillColor, const Color& outlineColor = Color::transparent, const String& name = String());
     void appendEventTargetQuads(Node* eventTargetNode, const InspectorHighlightConfig&);
-    PassOwnPtr<protocol::DictionaryValue> asProtocolValue() const;
+    std::unique_ptr<protocol::DictionaryValue> asProtocolValue() const;
 
 private:
     void appendNodeHighlight(Node*, const InspectorHighlightConfig&);
     void appendPathsForShapeOutside(Node*, const InspectorHighlightConfig&);
 
-    OwnPtr<protocol::DictionaryValue> m_elementInfo;
-    OwnPtr<protocol::ListValue> m_highlightPaths;
+    std::unique_ptr<protocol::DictionaryValue> m_elementInfo;
+    std::unique_ptr<protocol::ListValue> m_highlightPaths;
     bool m_showRulers;
     bool m_showExtensionLines;
     bool m_displayAsMaterial;
+    float m_scale;
 };
 
 } // namespace blink

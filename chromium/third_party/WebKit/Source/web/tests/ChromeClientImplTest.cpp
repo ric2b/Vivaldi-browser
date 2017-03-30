@@ -76,7 +76,7 @@ public:
 protected:
     void SetUp() override
     {
-        m_webView = toWebViewImpl(WebView::create(&m_webViewClient));
+        m_webView = toWebViewImpl(WebView::create(&m_webViewClient, WebPageVisibilityStateVisible));
         m_mainFrame = WebLocalFrame::create(WebTreeScopeType::Document, &m_webFrameClient);
         m_webView->setMainFrame(m_mainFrame);
         m_chromeClientImpl = toChromeClientImpl(&m_webView->page()->chromeClient());
@@ -272,7 +272,7 @@ class CreateWindowTest : public testing::Test {
 protected:
     void SetUp() override
     {
-        m_webView = toWebViewImpl(WebView::create(&m_webViewClient));
+        m_webView = toWebViewImpl(WebView::create(&m_webViewClient, WebPageVisibilityStateVisible));
         m_mainFrame = WebLocalFrame::create(WebTreeScopeType::Document, &m_webFrameClient);
         m_webView->setMainFrame(m_mainFrame);
         m_chromeClientImpl = toChromeClientImpl(&m_webView->page()->chromeClient());
@@ -297,7 +297,7 @@ TEST_F(CreateWindowTest, CreateWindowFromDeferredPage)
     LocalFrame* frame = toWebLocalFrameImpl(m_mainFrame)->frame();
     FrameLoadRequest request(frame->document());
     WindowFeatures features;
-    EXPECT_EQ(nullptr, m_chromeClientImpl->createWindow(frame, request, features, NavigationPolicyNewForegroundTab, MaybeSetOpener));
+    EXPECT_EQ(nullptr, m_chromeClientImpl->createWindow(frame, request, features, NavigationPolicyNewForegroundTab));
     m_webView->page()->setDefersLoading(false);
 }
 

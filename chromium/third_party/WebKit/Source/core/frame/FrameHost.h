@@ -35,21 +35,19 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/AtomicString.h"
+#include <memory>
 
 namespace blink {
 
 class ChromeClient;
-class ConsoleMessageStorage;
+class CustomElementReactionStack;
 class Deprecation;
 class EventHandlerRegistry;
 class OverscrollController;
 class Page;
 struct PageScaleConstraints;
 class PageScaleConstraintsSet;
-class RootScroller;
 class Settings;
 class TopControls;
 class UseCounter;
@@ -90,10 +88,12 @@ public:
     // Corresponds to pixel density of the device where this Page is
     // being displayed. In multi-monitor setups this can vary between pages.
     // This value does not account for Page zoom, use LocalFrame::devicePixelRatio instead.
-    float deviceScaleFactor() const;
-
-    RootScroller* rootScroller();
-    const RootScroller* rootScroller() const;
+    // This is to be deprecated. Use this with caution.
+    // 1) If you need to scale the content per device scale factor, this is still valid.
+    //    In use-zoom-for-dsf mode, this is always 1, and will be remove when transition is complete.
+    // 2) If you want to compute the device related measure (such as device pixel height, or the scale factor for drag image),
+    //    use ChromeClient::screenInfo() instead.
+    float deviceScaleFactorDeprecated() const;
 
     TopControls& topControls();
     const TopControls& topControls() const;
@@ -113,8 +113,8 @@ public:
     const AtomicString& overrideEncoding() const { return m_overrideEncoding; }
     void setOverrideEncoding(const AtomicString& encoding) { m_overrideEncoding = encoding; }
 
-    ConsoleMessageStorage& consoleMessageStorage();
-    const ConsoleMessageStorage& consoleMessageStorage() const;
+    CustomElementReactionStack& customElementReactionStack();
+    const CustomElementReactionStack& customElementReactionStack() const;
 
     DECLARE_TRACE();
 
@@ -134,13 +134,12 @@ private:
     explicit FrameHost(Page&);
 
     const Member<Page> m_page;
-    const Member<RootScroller> m_rootScroller;
     const Member<TopControls> m_topControls;
-    const OwnPtr<PageScaleConstraintsSet> m_pageScaleConstraintsSet;
+    const std::unique_ptr<PageScaleConstraintsSet> m_pageScaleConstraintsSet;
     const Member<VisualViewport> m_visualViewport;
     const Member<OverscrollController> m_overscrollController;
     const Member<EventHandlerRegistry> m_eventHandlerRegistry;
-    const Member<ConsoleMessageStorage> m_consoleMessageStorage;
+    const Member<CustomElementReactionStack> m_customElementReactionStack;
 
     AtomicString m_overrideEncoding;
     int m_subframeCount;

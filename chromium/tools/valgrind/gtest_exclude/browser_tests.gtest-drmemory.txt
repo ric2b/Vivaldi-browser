@@ -113,6 +113,7 @@ ZoomControllerBrowserTest.SettingsZoomAfterSigninWorks
 
 # https://crbug.com/581368
 TracingBrowserTest.TestMemoryInfra
+TracingBrowserTest.TestBackgroundMemoryInfra
 
 # https://crbug.com/581575
 PredictorBrowserTest.PreconnectCORSAndFetchNonCORS
@@ -129,6 +130,7 @@ BasicExtensionSettingsWebUITest.testNonEmptyExtensionList
 BookmarkBubbleSignInDelegateTest.OnSignInLinkClickedReusesBlank
 BrowserOptionsOverlayWebUITest.testNavigationInBackground
 ChromeSitePerProcessTest*
+ChromeUIOverridesBrowserTest.BookmarkShortcutOverrides
 CrashRecoveryBrowserTest*
 CrExtensions*
 CrSettings*
@@ -161,3 +163,6 @@ ZoomControllerBrowserTest.NavigationResetsManualMode
 
 # https://crbug.com/603334
 AppViewTests/AppViewTest.KillGuestCommunicatingWithWrongAppView/*
+
+# https://crbug.com/620370
+MdSettingsUITest.BackForwardDoesntCrash

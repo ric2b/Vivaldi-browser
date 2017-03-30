@@ -32,13 +32,13 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "platform/scheduler/CancellableTaskFactory.h"
+#include "platform/web_process_memory_dump.h"
 #include "public/platform/WebDataConsumerHandle.h"
-#include "public/platform/WebMemoryDumpProvider.h"
 #include "wtf/Allocator.h"
 #include "wtf/HashCountedSet.h"
 #include "wtf/HashSet.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -46,7 +46,6 @@ struct FetchInitiatorInfo;
 class CachedMetadata;
 class FetchRequest;
 class ResourceClient;
-class ResourceFetcher;
 class ResourceTimingInfo;
 class ResourceLoader;
 class SecurityOrigin;
@@ -92,8 +91,6 @@ public:
 
     DECLARE_VIRTUAL_TRACE();
 
-    void load(ResourceFetcher*);
-
     virtual void setEncoding(const String&) { }
     virtual String encoding() const { return String(); }
     virtual void appendData(const char*, size_t);
@@ -104,6 +101,8 @@ public:
 
     void setLinkPreload(bool isLinkPreload) { m_linkPreload = isLinkPreload; }
     bool isLinkPreload() const { return m_linkPreload; }
+
+    void setPreloadDiscoveryTime(double preloadDiscoveryTime) { m_preloadDiscoveryTime = preloadDiscoveryTime; }
 
     const ResourceError& resourceError() const { return m_error; }
 
@@ -116,6 +115,8 @@ public:
     const ResourceRequest& lastResourceRequest() const;
 
     virtual void setRevalidatingRequest(const ResourceRequest&);
+
+    void setFetcherSecurityOrigin(SecurityOrigin* origin) { m_fetcherSecurityOrigin = origin; }
 
     // This url can have a fragment, but it can match resources that differ by the fragment only.
     const KURL& url() const { return m_resourceRequest.url();}
@@ -153,6 +154,7 @@ public:
     bool isLoading() const { return m_status == Pending; }
     bool stillNeedsLoad() const { return m_status < Pending; }
 
+    void setLoader(ResourceLoader*);
     ResourceLoader* loader() const { return m_loader.get(); }
 
     virtual bool isImage() const { return false; }
@@ -179,7 +181,7 @@ public:
     // already been made to not follow it.
     virtual void willNotFollowRedirect() {}
 
-    virtual void responseReceived(const ResourceResponse&, PassOwnPtr<WebDataConsumerHandle>);
+    virtual void responseReceived(const ResourceResponse&, std::unique_ptr<WebDataConsumerHandle>);
     void setResponse(const ResourceResponse&);
     const ResourceResponse& response() const { return m_response; }
 
@@ -210,8 +212,8 @@ public:
     bool canReuseRedirectChain();
     bool mustRevalidateDueToCacheHeaders();
     bool canUseCacheValidator();
-    bool isCacheValidator() const { return !m_revalidatingRequest.isNull(); }
-    bool hasCacheControlNoStoreHeader();
+    bool isCacheValidator() const { return m_isRevalidating; }
+    bool hasCacheControlNoStoreHeader() const;
     bool hasVaryHeader() const;
     virtual bool mustRefetchDueToIntegrityMetadata(const FetchRequest& request) const { return false; }
 
@@ -244,6 +246,13 @@ protected:
     Resource(const ResourceRequest&, Type, const ResourceLoaderOptions&);
 
     virtual void checkNotify();
+
+    enum class MarkFinishedOption {
+        ShouldMarkFinished,
+        DoNotMarkFinished
+    };
+    void notifyClientsInternal(MarkFinishedOption);
+    void markClientFinished(ResourceClient*);
 
     virtual void destroyDecodedDataForFailedRevalidation() { }
 
@@ -283,13 +292,10 @@ protected:
     virtual bool isSafeToUnlock() const { return false; }
     virtual void destroyDecodedDataIfPossible() { }
 
-    virtual void markClientsAndObserversFinished();
-
     // Returns the memory dump name used for tracing. See Resource::onMemoryDump.
     String getMemoryDumpName() const;
 
     ResourceRequest m_resourceRequest;
-    ResourceRequest m_revalidatingRequest;
     Member<ResourceLoader> m_loader;
     ResourceLoaderOptions m_options;
 
@@ -333,6 +339,8 @@ private:
 
     unsigned m_preloadCount;
 
+    double m_preloadDiscoveryTime;
+
     String m_cacheIdentifier;
 
     unsigned m_preloadResult : 2; // PreloadResult
@@ -341,6 +349,7 @@ private:
 
     unsigned m_needsSynchronousCacheHit : 1;
     unsigned m_linkPreload : 1;
+    bool m_isRevalidating : 1;
 
     // Ordered list of all redirects followed while fetching this resource.
     Vector<RedirectPair> m_redirectChain;

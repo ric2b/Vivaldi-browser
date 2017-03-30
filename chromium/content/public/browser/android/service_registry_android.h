@@ -11,9 +11,12 @@
 #include "base/android/scoped_java_ref.h"
 #include "content/common/content_export.h"
 
-namespace content {
+namespace shell {
+class InterfaceRegistry;
+class InterfaceProvider;
+}
 
-class ServiceRegistry;
+namespace content {
 
 // Android wrapper over ServiceRegistry, allowing the browser services in Java
 // to register with ServiceRegistry.java (and abstracting away the JNI calls).
@@ -23,7 +26,8 @@ class CONTENT_EXPORT ServiceRegistryAndroid {
 
   // The |registry| parameter must outlive |ServiceRegistryAndroid|.
   static std::unique_ptr<ServiceRegistryAndroid> Create(
-      ServiceRegistry* registry);
+      shell::InterfaceRegistry* interface_registry,
+      shell::InterfaceProvider* remote_interfaces);
 
   // Called from Java.
   virtual void AddService(

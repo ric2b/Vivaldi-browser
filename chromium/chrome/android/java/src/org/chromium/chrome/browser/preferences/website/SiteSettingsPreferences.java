@@ -12,7 +12,9 @@ import android.preference.PreferenceFragment;
 
 import org.chromium.base.FieldTrialList;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ContentSettingsType;
+import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.preferences.LocationSettings;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 
@@ -49,6 +51,8 @@ public class SiteSettingsPreferences extends PreferenceFragment
     static final String PROTECTED_CONTENT_KEY = "protected_content";
     static final String STORAGE_KEY = "use_storage";
 
+    static final String AUTOPLAY_MUTED_VIDEOS = "AutoplayMutedVideos";
+
     // Whether the Autoplay menu is available for display.
     boolean mAutoplayMenuAvailable = false;
 
@@ -68,13 +72,15 @@ public class SiteSettingsPreferences extends PreferenceFragment
 
         String autoplayTrialGroupName =
                 FieldTrialList.findFullName("MediaElementGestureOverrideExperiment");
-        mAutoplayMenuAvailable = autoplayTrialGroupName.startsWith("Enabled");
+        mAutoplayMenuAvailable = autoplayTrialGroupName.startsWith("Enabled")
+                || ChromeFeatureList.isEnabled(AUTOPLAY_MUTED_VIDEOS);
 
         String category = "";
         if (getArguments() != null) {
             category = getArguments().getString(SingleCategoryPreferences.EXTRA_CATEGORY, "");
             if (MEDIA_KEY.equals(category)) {
                 mMediaSubMenu = true;
+                getActivity().setTitle(findPreference(MEDIA_KEY).getTitle().toString());
             }
         }
 
@@ -203,7 +209,14 @@ public class SiteSettingsPreferences extends PreferenceFragment
 
             int contentType = keyToContentSettingsType(prefName);
             p.setTitle(ContentSettingsResources.getTitle(contentType));
-            if (COOKIES_KEY.equals(prefName) && checked
+            p.setOnPreferenceClickListener(this);
+
+            // Disable autoplay preference if Data Saver is ON.
+            if (AUTOPLAY_KEY.equals(prefName)
+                    && DataReductionProxySettings.getInstance().isDataReductionProxyEnabled()) {
+                p.setSummary(ContentSettingsResources.getAutoplayDisabledByDataSaverSummary());
+                p.setEnabled(false);
+            } else if (COOKIES_KEY.equals(prefName) && checked
                     && prefServiceBridge.isBlockThirdPartyCookiesEnabled()) {
                 p.setSummary(ContentSettingsResources.getCookieAllowedExceptThirdPartySummary());
             } else if (LOCATION_KEY.equals(prefName) && checked
@@ -212,8 +225,12 @@ public class SiteSettingsPreferences extends PreferenceFragment
             } else {
                 p.setSummary(ContentSettingsResources.getCategorySummary(contentType, checked));
             }
-            p.setIcon(ContentSettingsResources.getIcon(contentType));
-            p.setOnPreferenceClickListener(this);
+
+            if (p.isEnabled()) {
+                p.setIcon(ContentSettingsResources.getIcon(contentType));
+            } else {
+                p.setIcon(ContentSettingsResources.getDisabledIcon(contentType, getResources()));
+            }
         }
 
         Preference p = findPreference(ALL_SITES_KEY);

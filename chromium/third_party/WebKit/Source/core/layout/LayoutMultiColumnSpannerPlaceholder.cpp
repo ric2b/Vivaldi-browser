@@ -4,6 +4,8 @@
 
 #include "core/layout/LayoutMultiColumnSpannerPlaceholder.h"
 
+#include "core/layout/LayoutMultiColumnFlowThread.h"
+
 namespace blink {
 
 static void copyMarginProperties(ComputedStyle& placeholderStyle, const ComputedStyle& spannerStyle)
@@ -112,7 +114,7 @@ void LayoutMultiColumnSpannerPlaceholder::layout()
 
     // Take the overflow from the spanner, so that it gets
     // propagated to the multicol container and beyond.
-    m_overflow.clear();
+    m_overflow.reset();
     addContentsVisualOverflow(m_layoutObjectInFlowThread->visualOverflowRect());
     addLayoutOverflow(m_layoutObjectInFlowThread->layoutOverflowRect());
 

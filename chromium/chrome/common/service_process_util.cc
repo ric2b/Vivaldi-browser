@@ -26,15 +26,12 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/cloud_devices/common/cloud_devices_switches.h"
+#include "components/network_session_configurator/switches.h"
 #include "components/version_info/version_info.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "google_apis/gaia/gaia_switches.h"
 #include "ui/base/ui_base_switches.h"
-
-#if defined(OS_WIN)
-#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
-#endif  // defined(OS_WIN)
 
 #include "app/vivaldi_apptools.h"
 
@@ -170,8 +167,7 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
                                   switches::kServiceProcess);
 
 #if defined(OS_WIN)
-  if (startup_metric_utils::GetPreReadOptions().use_prefetch_argument)
-    command_line->AppendArg(switches::kPrefetchArgumentOther);
+  command_line->AppendArg(switches::kPrefetchArgumentOther);
 #endif  // defined(OS_WIN)
 
   if (vivaldi::IsVivaldiRunning())
@@ -196,7 +192,7 @@ std::unique_ptr<base::CommandLine> CreateServiceProcessCommandLine() {
     switches::kV,
     switches::kVModule,
     switches::kWaitForDebugger,
-	switches::kDebugVivaldi,
+    switches::kDebugVivaldi,
   };
 
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),

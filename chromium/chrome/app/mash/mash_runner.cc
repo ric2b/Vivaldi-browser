@@ -4,7 +4,8 @@
 
 #include "chrome/app/mash/mash_runner.h"
 
-#include "ash/mus/sysui_application.h"
+#include "ash/mus/window_manager_application.h"
+#include "ash/sysui/sysui_application.h"
 #include "base/at_exit.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -20,7 +21,6 @@
 #include "mash/quick_launch/quick_launch_application.h"
 #include "mash/session/session.h"
 #include "mash/task_viewer/task_viewer.h"
-#include "mash/wm/window_manager_application.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/background/background_shell.h"
 #include "services/shell/native_runner_delegate.h"
@@ -86,8 +86,8 @@ class DefaultShellClient : public shell::ShellClient,
       const std::string& name) {
     if (name == "mojo:ash_sysui")
       return base::WrapUnique(new ash::sysui::SysUIApplication);
-    if (name == "mojo:desktop_wm")
-      return base::WrapUnique(new mash::wm::WindowManagerApplication);
+    if (name == "mojo:ash")
+      return base::WrapUnique(new ash::mus::WindowManagerApplication);
     if (name == "mojo:mash_session")
       return base::WrapUnique(new mash::session::Session);
     if (name == "mojo:mus")
@@ -196,7 +196,7 @@ void MashRunner::RunMain() {
 
 void MashRunner::RunChild() {
   base::i18n::InitializeICU();
-  shell::ChildProcessMain(
+  shell::ChildProcessMainWithCallback(
       base::Bind(&MashRunner::StartChildApp, base::Unretained(this)));
 }
 

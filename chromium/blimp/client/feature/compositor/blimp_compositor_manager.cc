@@ -7,7 +7,7 @@
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "blimp/client/feature/compositor/blimp_layer_tree_settings.h"
-#include "blimp/client/feature/compositor/client_image_serialization_processor.h"
+#include "blimp/client/feature/compositor/blob_image_serialization_processor.h"
 #include "blimp/common/compositor/blimp_task_graph_runner.h"
 #include "cc/proto/compositor_message.pb.h"
 
@@ -27,7 +27,6 @@ BlimpCompositorManager::BlimpCompositorManager(
     : visible_(false),
       window_(gfx::kNullAcceleratedWidget),
       gpu_memory_buffer_manager_(new BlimpGpuMemoryBufferManager),
-      image_serialization_processor_(new ClientImageSerializationProcessor),
       active_compositor_(nullptr),
       render_widget_feature_(render_widget_feature),
       client_(client) {
@@ -78,7 +77,7 @@ std::unique_ptr<BlimpCompositor> BlimpCompositorManager::CreateBlimpCompositor(
 }
 
 void BlimpCompositorManager::OnRenderWidgetCreated(int render_widget_id) {
-  DCHECK(!GetCompositor(render_widget_id));
+  CHECK(!GetCompositor(render_widget_id));
 
   compositors_[render_widget_id] = CreateBlimpCompositor(render_widget_id,
                                                          this);
@@ -97,7 +96,7 @@ void BlimpCompositorManager::OnRenderWidgetInitialized(int render_widget_id) {
   }
 
   active_compositor_ = GetCompositor(render_widget_id);
-  DCHECK(active_compositor_);
+  CHECK(active_compositor_);
 
   active_compositor_->SetVisible(visible_);
   active_compositor_->SetAcceleratedWidget(window_);
@@ -105,7 +104,7 @@ void BlimpCompositorManager::OnRenderWidgetInitialized(int render_widget_id) {
 
 void BlimpCompositorManager::OnRenderWidgetDeleted(int render_widget_id) {
   CompositorMap::const_iterator it = compositors_.find(render_widget_id);
-  DCHECK(it != compositors_.end());
+  CHECK(it != compositors_.end());
 
   // Reset the |active_compositor_| if that is what we're destroying right now.
   if (active_compositor_ == it->second.get())
@@ -118,7 +117,7 @@ void BlimpCompositorManager::OnCompositorMessageReceived(
     int render_widget_id,
     std::unique_ptr<cc::proto::CompositorMessage> message) {
   BlimpCompositor* compositor = GetCompositor(render_widget_id);
-  DCHECK(compositor);
+  CHECK(compositor);
 
   compositor->OnCompositorMessageReceived(std::move(message));
 }
@@ -142,6 +141,11 @@ cc::LayerTreeSettings* BlimpCompositorManager::GetLayerTreeSettings() {
 void BlimpCompositorManager::DidCompleteSwapBuffers() {
   DCHECK(client_);
   client_->OnSwapBuffersCompleted();
+}
+
+void BlimpCompositorManager::DidCommitAndDrawFrame() {
+  DCHECK(client_);
+  client_->DidCommitAndDrawFrame();
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -178,7 +182,7 @@ BlimpCompositorManager::GetGpuMemoryBufferManager() {
 
 cc::ImageSerializationProcessor*
 BlimpCompositorManager::GetImageSerializationProcessor() {
-  return image_serialization_processor_.get();
+  return BlobImageSerializationProcessor::current();
 }
 
 void BlimpCompositorManager::SendWebGestureEvent(

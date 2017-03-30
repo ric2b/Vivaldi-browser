@@ -178,6 +178,26 @@ TEST(HttpUtilTest, HeadersIterator_MalformedLine) {
   EXPECT_FALSE(it.GetNext());
 }
 
+TEST(HttpUtilTest, HeadersIterator_MalformedName) {
+  std::string headers = "[ignore me] /: 3\r\n";
+
+  HttpUtil::HeadersIterator it(headers.begin(), headers.end(), "\r\n");
+
+  EXPECT_FALSE(it.GetNext());
+}
+
+TEST(HttpUtilTest, HeadersIterator_MalformedNameFollowedByValidLine) {
+  std::string headers = "[ignore me] /: 3\r\nbar: 4\n";
+
+  HttpUtil::HeadersIterator it(headers.begin(), headers.end(), "\r\n");
+
+  ASSERT_TRUE(it.GetNext());
+  EXPECT_EQ(std::string("bar"), it.name());
+  EXPECT_EQ(std::string("4"), it.values());
+
+  EXPECT_FALSE(it.GetNext());
+}
+
 TEST(HttpUtilTest, HeadersIterator_AdvanceTo) {
   std::string headers = "foo: 1\r\n: 2\r\n3\r\nbar: 4";
 
@@ -1286,29 +1306,6 @@ TEST(HttpUtilTest, NameValuePairsIteratorStrictQuotesSingleQuotes) {
       CheckNextNameValuePair(&parser, true, true, "name", "'value"));
   ASSERT_NO_FATAL_FAILURE(
       CheckNextNameValuePair(&parser, true, true, "ok", "it'"));
-}
-
-TEST(HttpUtilTest, IsValidHeaderValueRFC7230) {
-  EXPECT_TRUE(HttpUtil::IsValidHeaderValueRFC7230(""));
-
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230(" "));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230(" q"));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("q "));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("\t"));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("\tq"));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("q\t"));
-
-  EXPECT_TRUE(HttpUtil::IsValidHeaderValueRFC7230("q q"));
-  EXPECT_TRUE(HttpUtil::IsValidHeaderValueRFC7230("q\tq"));
-
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230(std::string("\0", 1)));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230(std::string("q\0q", 3)));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("q\rq"));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("q\nq"));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("q\x01q"));
-  EXPECT_FALSE(HttpUtil::IsValidHeaderValueRFC7230("q\x7fq"));
-
-  EXPECT_TRUE(HttpUtil::IsValidHeaderValueRFC7230("q\x80q"));
 }
 
 TEST(HttpUtilTest, HasValidators) {

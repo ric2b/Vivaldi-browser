@@ -11,6 +11,7 @@
 #include <set>
 
 #include "android_webview/browser/compositor_frame_producer.h"
+#include "android_webview/browser/compositor_id.h"
 #include "android_webview/browser/parent_compositor_draw_constraints.h"
 #include "base/callback.h"
 #include "base/cancelable_callback.h"
@@ -27,6 +28,7 @@ class SkCanvas;
 class SkPicture;
 
 namespace content {
+class RenderViewHost;
 class WebContents;
 }
 
@@ -108,20 +110,23 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
   void TrimMemory();
 
   // SynchronousCompositorClient overrides.
-  void DidInitializeCompositor(
-      content::SynchronousCompositor* compositor) override;
-  void DidDestroyCompositor(
-      content::SynchronousCompositor* compositor) override;
-  void DidBecomeCurrent(content::SynchronousCompositor* compositor) override;
-  void PostInvalidate() override;
-  void DidUpdateContent() override;
-  void UpdateRootLayerState(const gfx::Vector2dF& total_scroll_offset_dip,
+  void DidInitializeCompositor(content::SynchronousCompositor* compositor,
+                               int process_id,
+                               int routing_id) override;
+  void DidDestroyCompositor(content::SynchronousCompositor* compositor,
+                            int process_id,
+                            int routing_id) override;
+  void PostInvalidate(content::SynchronousCompositor* compositor) override;
+  void DidUpdateContent(content::SynchronousCompositor* compositor) override;
+  void UpdateRootLayerState(content::SynchronousCompositor* compositor,
+                            const gfx::Vector2dF& total_scroll_offset_dip,
                             const gfx::Vector2dF& max_scroll_offset_dip,
                             const gfx::SizeF& scrollable_size_dip,
                             float page_scale_factor,
                             float min_page_scale_factor,
                             float max_page_scale_factor) override;
-  void DidOverscroll(const gfx::Vector2dF& accumulated_overscroll,
+  void DidOverscroll(content::SynchronousCompositor* compositor,
+                     const gfx::Vector2dF& accumulated_overscroll,
                      const gfx::Vector2dF& latest_overscroll_delta,
                      const gfx::Vector2dF& current_fling_velocity) override;
 
@@ -131,10 +136,16 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
   void RemoveCompositorFrameConsumer(
       CompositorFrameConsumer* compositor_frame_consumer) override;
 
+  void SetActiveCompositorID(const CompositorID& compositor_id);
+
+  // Visible for testing.
+  content::SynchronousCompositor* GetActiveCompositorForTesting() const {
+    return compositor_;
+  }
+
  private:
   void SetTotalRootLayerScrollOffset(const gfx::Vector2dF& new_value_dip);
   bool CanOnDraw();
-  void UpdateCompositorIsActive();
   bool CompositeSW(SkCanvas* canvas);
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   RootLayerStateAsValue(const gfx::Vector2dF& total_scroll_offset_dip,
@@ -149,7 +160,8 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
 
   void UpdateMemoryPolicy();
 
-  uint32_t GetCompositorID(content::SynchronousCompositor* compositor);
+  content::SynchronousCompositor* FindCompositor(
+      const CompositorID& compositor_id) const;
   // For debug tracing or logging. Return the string representation of this
   // view renderer's state.
   std::string ToString() const;
@@ -161,10 +173,16 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
 
   // The current compositor that's owned by the current RVH.
   content::SynchronousCompositor* compositor_;
+  // The process id and routing id of the most recent RVH according to
+  // RVHChanged.
+  CompositorID compositor_id_;
   // A map from compositor's per-WebView unique ID to the compositor's raw
   // pointer. A raw pointer here is fine because the entry will be erased when
   // a compositor is destroyed.
-  std::map<size_t, content::SynchronousCompositor*> compositor_map_;
+  std::map<CompositorID,
+           content::SynchronousCompositor*,
+           CompositorIDComparator>
+      compositor_map_;
 
   bool is_paused_;
   bool view_visible_;
@@ -200,8 +218,6 @@ class BrowserViewRenderer : public content::SynchronousCompositorClient,
   // spot over a period of time).
   // TODO(miletus): Make overscroll_rounding_error_ a gfx::ScrollOffset.
   gfx::Vector2dF overscroll_rounding_error_;
-
-  uint32_t next_compositor_id_;
 
   ParentCompositorDrawConstraints external_draw_constraints_;
 

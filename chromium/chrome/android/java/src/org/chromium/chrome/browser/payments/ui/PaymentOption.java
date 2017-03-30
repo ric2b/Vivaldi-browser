@@ -4,34 +4,44 @@
 
 package org.chromium.chrome.browser.payments.ui;
 
+import javax.annotation.Nullable;
+
 /**
  * An option that the user can select, e.g., a shipping option, a shipping address, or a payment
  * method.
  */
-public class PaymentOption {
-    /**
-     * The placeholder value that indicates the absence of an icon for this option.
-     */
+public class PaymentOption implements Completable {
+    /** The placeholder value that indicates the absence of an icon for this option. */
     public static final int NO_ICON = 0;
 
-    private final String mId;
-    private final String mLabel;
-    private final String mSublabel;
-    private final int mIcon;
+    protected boolean mIsComplete;
+    private String mId;
+    private int mIcon;
+    private String[] mLabels = {null, null, null};
+    private boolean mIsValid = true;
+
+    /** See {@link #PaymentOption(String, String, String, String, int)}. */
+    public PaymentOption(String id, @Nullable String label, @Nullable String sublabel, int icon) {
+        this(id, label, sublabel, null, icon);
+    }
 
     /**
      * Constructs a payment option.
      *
-     * @param id The identifier.
-     * @param label The label.
-     * @param sublabel The optional sublabel.
-     * @param icon The drawable icon identifier or NO_ICON.
+     * @param id            The identifier.
+     * @param label         The label.
+     * @param sublabel      The optional sublabel.
+     * @param tertiarylabel The optional tertiary label.
+     * @param icon          The drawable icon identifier or NO_ICON.
      */
-    public PaymentOption(String id, String label, String sublabel, int icon) {
-        mId = id;
-        mLabel = label;
-        mSublabel = sublabel;
-        mIcon = icon;
+    public PaymentOption(String id, @Nullable String label, @Nullable String sublabel,
+            @Nullable String tertiarylabel, int icon) {
+        updateIdentifierLabelsAndIcon(id, label, sublabel, tertiarylabel, icon);
+    }
+
+    @Override
+    public boolean isComplete() {
+        return mIsComplete;
     }
 
     /**
@@ -45,22 +55,73 @@ public class PaymentOption {
     /**
      * The primary label of this option. For example, “Visa***1234” or "2-day shipping".
      */
-    public String getLabel() {
-        return mLabel;
+    @Nullable public String getLabel() {
+        return mLabels[0];
     }
 
     /**
      * The optional sublabel of this option. For example, “Expiration date: 12/2025”.
      */
-    public String getSublabel() {
-        return mSublabel;
+    @Nullable public String getSublabel() {
+        return mLabels[1];
     }
 
     /**
-     * The identifier for the drawable icon for this payment option. For example,
-     * R.drawable.visa_card_issuer_icon or NO_ICON.
+     * The optional tertiary label of this option.  For example, "(555) 867-5309".
+     */
+    @Nullable public String getTertiaryLabel() {
+        return mLabels[2];
+    }
+
+    /** See {@link #updateIdentifierAndLabels(String, String, String, String)}. */
+    protected void updateIdentifierAndLabels(String id, String label, @Nullable String sublabel) {
+        updateIdentifierAndLabels(id, label, sublabel, null);
+    }
+
+    /** See {@link #updateIdentifierLabelsAndIcon(String, String, String, String, int)}. */
+    protected void updateIdentifierAndLabels(
+            String id, String label, @Nullable String sublabel, @Nullable String tertiarylabel) {
+        mId = id;
+        mLabels[0] = label;
+        mLabels[1] = sublabel;
+        mLabels[2] = tertiarylabel;
+    }
+
+    /**
+     * Updates the identifier, labels, and icon of this option. Called after the user has
+     * edited this option.
+     *
+     * @param id            The new id to use. Should not be null.
+     * @param label         The new label to use. Should not be null.
+     * @param sublabel      The new sublabel to use. Can be null.
+     * @param tertiarylabel The new tertiary label to use. Can be null.
+     * @param icon          The drawable icon identifier or NO_ICON.
+     */
+    protected void updateIdentifierLabelsAndIcon(
+            String id, String label, @Nullable String sublabel, @Nullable String tertiarylabel,
+            int icon) {
+        updateIdentifierAndLabels(id, label, sublabel, tertiarylabel);
+        mIcon = icon;
+    }
+
+    /**
+     * The identifier for the drawable icon for this payment option. For example, R.drawable.pr_visa
+     * or NO_ICON.
      */
     public int getDrawableIconId() {
         return mIcon;
+    }
+
+    /**
+     * Marks this option as invalid. For example, this can be a shipping address that's not served
+     * by the merchant.
+     */
+    public void setInvalid() {
+        mIsValid = false;
+    }
+
+    /** @return True if this option is valid. */
+    public boolean isValid() {
+        return mIsValid;
     }
 }

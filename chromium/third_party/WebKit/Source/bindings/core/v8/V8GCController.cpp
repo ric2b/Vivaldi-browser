@@ -44,6 +44,7 @@
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/inspector/InspectorTraceEvents.h"
 #include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/Platform.h"
@@ -160,8 +161,7 @@ public:
         ASSERT(V8DOMWrapper::hasInternalFieldsSet(wrapper));
 
         const WrapperTypeInfo* type = toWrapperTypeInfo(wrapper);
-        if (!RuntimeEnabledFeatures::traceWrappablesEnabled()
-            && type->hasPendingActivity(wrapper)) {
+        if (type->hasPendingActivity(wrapper)) {
             // If you hit this assert, you'll need to add a [DependentiLifetime]
             // extended attribute to the DOM interface. A DOM interface that
             // overrides hasPendingActivity must be marked as [DependentLifetime].
@@ -174,16 +174,14 @@ public:
             return;
 
         if (classId == WrapperTypeInfo::NodeClassId) {
-            if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
-                ASSERT(V8Node::hasInstance(wrapper, m_isolate));
-                Node* node = V8Node::toImpl(wrapper);
-                if (node->hasEventListeners())
-                    addReferencesForNodeWithEventListeners(m_isolate, node, v8::Persistent<v8::Object>::Cast(*value));
-                Node* root = V8GCController::opaqueRootForGC(m_isolate, node);
-                m_isolate->SetObjectGroupId(*value, v8::UniqueId(reinterpret_cast<intptr_t>(root)));
-                if (m_constructRetainedObjectInfos)
-                    m_groupsWhichNeedRetainerInfo.append(root);
-            }
+            DCHECK(V8Node::hasInstance(wrapper, m_isolate));
+            Node* node = V8Node::toImpl(wrapper);
+            if (node->hasEventListeners())
+                addReferencesForNodeWithEventListeners(m_isolate, node, v8::Persistent<v8::Object>::Cast(*value));
+            Node* root = V8GCController::opaqueRootForGC(m_isolate, node);
+            m_isolate->SetObjectGroupId(*value, v8::UniqueId(reinterpret_cast<intptr_t>(root)));
+            if (m_constructRetainedObjectInfos)
+                m_groupsWhichNeedRetainerInfo.append(root);
         } else if (classId == WrapperTypeInfo::ObjectClassId) {
             type->visitDOMWrapper(m_isolate, toScriptWrappable(wrapper), v8::Persistent<v8::Object>::Cast(*value));
         } else {
@@ -257,7 +255,10 @@ void objectGroupingForMajorGC(v8::Isolate* isolate, bool constructRetainedObject
 
 void gcPrologueForMajorGC(v8::Isolate* isolate, bool constructRetainedObjectInfos)
 {
-    objectGroupingForMajorGC(isolate, constructRetainedObjectInfos);
+    // TODO(hlopko): Collect retained object infos for heap profiler
+    if (!RuntimeEnabledFeatures::traceWrappablesEnabled()) {
+        objectGroupingForMajorGC(isolate, constructRetainedObjectInfos);
+    }
 }
 
 } // namespace
@@ -352,41 +353,40 @@ void V8GCController::gcEpilogue(v8::Isolate* isolate, v8::GCType type, v8::GCCal
     if (BlameContext* blameContext = Platform::current()->topLevelBlameContext())
         blameContext->Leave();
 
-    // v8::kGCCallbackFlagForced forces a Blink heap garbage collection
-    // when a garbage collection was forced from V8. This is either used
-    // for tests that force GCs from JavaScript to verify that objects die
-    // when expected.
-    if (flags & v8::kGCCallbackFlagForced) {
-        // This single GC is not enough for two reasons:
-        //   (1) The GC is not precise because the GC scans on-stack pointers conservatively.
-        //   (2) One GC is not enough to break a chain of persistent handles. It's possible that
-        //       some heap allocated objects own objects that contain persistent handles
-        //       pointing to other heap allocated objects. To break the chain, we need multiple GCs.
-        //
-        // Regarding (1), we force a precise GC at the end of the current event loop. So if you want
-        // to collect all garbage, you need to wait until the next event loop.
-        // Regarding (2), it would be OK in practice to trigger only one GC per gcEpilogue, because
-        // GCController.collectAll() forces multiple V8's GC.
-        ThreadHeap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
+    if (ThreadState::current() && !ThreadState::current()->isGCForbidden()) {
+        // v8::kGCCallbackFlagForced forces a Blink heap garbage collection
+        // when a garbage collection was forced from V8. This is either used
+        // for tests that force GCs from JavaScript to verify that objects die
+        // when expected.
+        if (flags & v8::kGCCallbackFlagForced) {
+            // This single GC is not enough for two reasons:
+            //   (1) The GC is not precise because the GC scans on-stack pointers conservatively.
+            //   (2) One GC is not enough to break a chain of persistent handles. It's possible that
+            //       some heap allocated objects own objects that contain persistent handles
+            //       pointing to other heap allocated objects. To break the chain, we need multiple GCs.
+            //
+            // Regarding (1), we force a precise GC at the end of the current event loop. So if you want
+            // to collect all garbage, you need to wait until the next event loop.
+            // Regarding (2), it would be OK in practice to trigger only one GC per gcEpilogue, because
+            // GCController.collectAll() forces multiple V8's GC.
+            ThreadHeap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
 
-        // Forces a precise GC at the end of the current event loop.
-        if (ThreadState::current()) {
+            // Forces a precise GC at the end of the current event loop.
             RELEASE_ASSERT(!ThreadState::current()->isInGC());
             ThreadState::current()->setGCState(ThreadState::FullGCScheduled);
         }
-    }
 
-    // v8::kGCCallbackFlagCollectAllAvailableGarbage is used when V8 handles
-    // low memory notifications.
-    if (flags & v8::kGCCallbackFlagCollectAllAvailableGarbage) {
-        // This single GC is not enough. See the above comment.
-        ThreadHeap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
+        // v8::kGCCallbackFlagCollectAllAvailableGarbage is used when V8 handles
+        // low memory notifications.
+        if (flags & v8::kGCCallbackFlagCollectAllAvailableGarbage) {
+            // This single GC is not enough. See the above comment.
+            ThreadHeap::collectGarbage(BlinkGC::HeapPointersOnStack, BlinkGC::GCWithSweep, BlinkGC::ForcedGC);
 
-        // Do not force a precise GC at the end of the current event loop.
-        // According to UMA stats, the collection rate of the precise GC
-        // scheduled at the end of the low memory handling is extremely low,
-        // because the above conservative GC is sufficient for collecting
-        // most objects. So we intentionally don't schedule a precise GC here.
+            // The conservative GC might have left floating garbage. Schedule
+            // precise GC to ensure that we collect all available garbage.
+            if (ThreadState::current())
+                ThreadState::current()->schedulePreciseGC();
+        }
     }
 
     TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "UpdateCounters", TRACE_EVENT_SCOPE_THREAD, "data", InspectorUpdateCountersEvent::data());

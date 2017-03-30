@@ -91,7 +91,7 @@
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
 #include "chrome/browser/ui/blocked_content/popup_blocker_tab_helper.h"
-#include "chrome/browser/ui/bluetooth/bluetooth_chooser_bubble_controller.h"
+#include "chrome/browser/ui/bluetooth/bluetooth_chooser_controller.h"
 #include "chrome/browser/ui/bluetooth/bluetooth_chooser_desktop.h"
 #include "chrome/browser/ui/bookmarks/bookmark_tab_helper.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
@@ -142,6 +142,7 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/unload_controller.h"
 #include "chrome/browser/ui/validation_message_bubble.h"
+#include "chrome/browser/ui/website_settings/chooser_bubble_delegate.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_manager.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
@@ -174,8 +175,8 @@
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "components/toolbar/toolbar_model_impl.h"
 #include "components/translate/core/browser/language_state.h"
-#include "components/ui/zoom/zoom_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/invalidate_type.h"
@@ -189,8 +190,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
-#include "content/public/browser/security_style_explanation.h"
-#include "content/public/browser/security_style_explanations.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents.h"
@@ -219,7 +218,6 @@
 #if defined(OS_WIN)
 #include <windows.h>
 #include <shellapi.h>
-#include "chrome/browser/task_manager/task_manager.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "components/autofill/core/browser/autofill_ie_toolbar_import_win.h"
 #include "ui/base/touch/touch_device.h"
@@ -235,7 +233,7 @@
 #endif
 
 #if defined(USE_ASH)
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "ash/shell.h"
 #endif
 
@@ -275,28 +273,6 @@ BrowserWindow* CreateBrowserWindow(Browser* browser) {
 bool IsFastTabUnloadEnabled() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kEnableFastUnload);
-}
-
-// Note: This is a lossy operation. Not all of the policies that can be
-// expressed by a SecurityLevel (a //chrome concept) can be expressed by
-// a content::SecurityStyle.
-content::SecurityStyle SecurityLevelToSecurityStyle(
-    SecurityStateModel::SecurityLevel security_level) {
-  switch (security_level) {
-    case SecurityStateModel::NONE:
-      return content::SECURITY_STYLE_UNAUTHENTICATED;
-    case SecurityStateModel::SECURITY_WARNING:
-    case SecurityStateModel::SECURITY_POLICY_WARNING:
-      return content::SECURITY_STYLE_WARNING;
-    case SecurityStateModel::EV_SECURE:
-    case SecurityStateModel::SECURE:
-      return content::SECURITY_STYLE_AUTHENTICATED;
-    case SecurityStateModel::SECURITY_ERROR:
-      return content::SECURITY_STYLE_AUTHENTICATION_BROKEN;
-  }
-
-  NOTREACHED();
-  return content::SECURITY_STYLE_UNKNOWN;
 }
 
 }  // namespace
@@ -651,7 +627,8 @@ gfx::Image Browser::GetCurrentPageIcon() const {
   return favicon_driver ? favicon_driver->GetFavicon() : gfx::Image();
 }
 
-base::string16 Browser::GetWindowTitleForCurrentTab() const {
+base::string16 Browser::GetWindowTitleForCurrentTab(
+    bool include_app_name) const {
   WebContents* contents = tab_strip_model_->GetActiveWebContents();
   base::string16 title;
 
@@ -668,15 +645,15 @@ base::string16 Browser::GetWindowTitleForCurrentTab() const {
   if (title.empty())
     title = CoreTabHelper::GetDefaultTitle();
 
-#if defined(OS_MACOSX) || defined(USE_ASH)
-  // On Mac and Ash, we don't want to suffix the page title with the application
-  // name.
+#if defined(OS_MACOSX)
+  // On Mac, we don't want to suffix the page title with the application name.
   return title;
 #endif
-  // Don't append the app name to window titles on app frames and app popups
-  return is_app() ?
-      title :
-      l10n_util::GetStringFUTF16(IDS_BROWSER_WINDOW_TITLE_FORMAT, title);
+  // Include the app name in window titles for tabbed browser windows when
+  // requested with |include_app_name|.
+  return (!is_app() && include_app_name) ?
+      l10n_util::GetStringFUTF16(IDS_BROWSER_WINDOW_TITLE_FORMAT, title):
+      title;
 }
 
 // static
@@ -1360,6 +1337,10 @@ void Browser::ShowValidationMessage(content::WebContents* web_contents,
                                     const gfx::Rect& anchor_in_root_view,
                                     const base::string16& main_text,
                                     const base::string16& sub_text) {
+  // If the web contents is unparented (e.g. in a blocked popup) it does not
+  // make sense to show a validation message. See http://crbug.com/616990
+  if (!web_contents->GetTopLevelNativeWindow())
+    return;
   validation_message_bubble_ =
       TabDialogs::FromWebContents(web_contents)
           ->ShowValidationMessage(anchor_in_root_view, main_text, sub_text);
@@ -1410,98 +1391,8 @@ content::SecurityStyle Browser::GetSecurityStyle(
   ChromeSecurityStateModelClient* model_client =
       ChromeSecurityStateModelClient::FromWebContents(web_contents);
   DCHECK(model_client);
-  const SecurityStateModel::SecurityInfo& security_info =
-      model_client->GetSecurityInfo();
-
-  const content::SecurityStyle security_style =
-      SecurityLevelToSecurityStyle(security_info.security_level);
-
-  security_style_explanations->ran_insecure_content_style =
-      SecurityLevelToSecurityStyle(
-          SecurityStateModel::kRanInsecureContentLevel);
-  security_style_explanations->displayed_insecure_content_style =
-      SecurityLevelToSecurityStyle(
-          SecurityStateModel::kDisplayedInsecureContentLevel);
-
-  // Check if the page is HTTP; if so, no explanations are needed. Note
-  // that SECURITY_STYLE_UNAUTHENTICATED does not necessarily mean that
-  // the page is loaded over HTTP, because the security style merely
-  // represents how the embedder wishes to display the security state of
-  // the page, and the embedder can choose to display HTTPS page as HTTP
-  // if it wants to (for example, displaying deprecated crypto
-  // algorithms with the same UI treatment as HTTP pages).
-  security_style_explanations->scheme_is_cryptographic =
-      security_info.scheme_is_cryptographic;
-  if (!security_info.scheme_is_cryptographic) {
-    return security_style;
-  }
-
-  if (security_info.sha1_deprecation_status ==
-      SecurityStateModel::DEPRECATED_SHA1_MAJOR) {
-    security_style_explanations->broken_explanations.push_back(
-        content::SecurityStyleExplanation(
-            l10n_util::GetStringUTF8(IDS_MAJOR_SHA1),
-            l10n_util::GetStringUTF8(IDS_MAJOR_SHA1_DESCRIPTION),
-            security_info.cert_id));
-  } else if (security_info.sha1_deprecation_status ==
-             SecurityStateModel::DEPRECATED_SHA1_MINOR) {
-    security_style_explanations->unauthenticated_explanations.push_back(
-        content::SecurityStyleExplanation(
-            l10n_util::GetStringUTF8(IDS_MINOR_SHA1),
-            l10n_util::GetStringUTF8(IDS_MINOR_SHA1_DESCRIPTION),
-            security_info.cert_id));
-  }
-
-  security_style_explanations->ran_insecure_content =
-      security_info.mixed_content_status ==
-          SecurityStateModel::RAN_MIXED_CONTENT ||
-      security_info.mixed_content_status ==
-          SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
-  security_style_explanations->displayed_insecure_content =
-      security_info.mixed_content_status ==
-          SecurityStateModel::DISPLAYED_MIXED_CONTENT ||
-      security_info.mixed_content_status ==
-          SecurityStateModel::RAN_AND_DISPLAYED_MIXED_CONTENT;
-
-  if (net::IsCertStatusError(security_info.cert_status)) {
-    base::string16 error_string = base::UTF8ToUTF16(net::ErrorToString(
-        net::MapCertStatusToNetError(security_info.cert_status)));
-
-    content::SecurityStyleExplanation explanation(
-        l10n_util::GetStringUTF8(IDS_CERTIFICATE_CHAIN_ERROR),
-        l10n_util::GetStringFUTF8(
-            IDS_CERTIFICATE_CHAIN_ERROR_DESCRIPTION_FORMAT, error_string),
-        security_info.cert_id);
-
-    if (net::IsCertStatusMinorError(security_info.cert_status))
-      security_style_explanations->unauthenticated_explanations.push_back(
-          explanation);
-    else
-      security_style_explanations->broken_explanations.push_back(explanation);
-  } else {
-    // If the certificate does not have errors and is not using
-    // deprecated SHA1, then add an explanation that the certificate is
-    // valid.
-    if (security_info.sha1_deprecation_status ==
-        SecurityStateModel::NO_DEPRECATED_SHA1) {
-      security_style_explanations->secure_explanations.push_back(
-          content::SecurityStyleExplanation(
-              l10n_util::GetStringUTF8(IDS_VALID_SERVER_CERTIFICATE),
-              l10n_util::GetStringUTF8(
-                  IDS_VALID_SERVER_CERTIFICATE_DESCRIPTION),
-              security_info.cert_id));
-    }
-  }
-
-  if (security_info.is_secure_protocol_and_ciphersuite) {
-    security_style_explanations->secure_explanations.push_back(
-        content::SecurityStyleExplanation(
-            l10n_util::GetStringUTF8(IDS_SECURE_PROTOCOL_AND_CIPHERSUITE),
-            l10n_util::GetStringUTF8(
-                IDS_SECURE_PROTOCOL_AND_CIPHERSUITE_DESCRIPTION)));
-  }
-
-  return security_style;
+  return model_client->GetSecurityStyle(model_client->GetSecurityInfo(),
+                                        security_style_explanations);
 }
 
 void Browser::ShowCertificateViewerInDevTools(
@@ -1515,23 +1406,20 @@ void Browser::ShowCertificateViewerInDevTools(
 std::unique_ptr<content::BluetoothChooser> Browser::RunBluetoothChooser(
     content::RenderFrameHost* frame,
     const content::BluetoothChooser::EventHandler& event_handler) {
-  std::unique_ptr<BluetoothChooserDesktop> bluetooth_chooser_desktop(
-      new BluetoothChooserDesktop(event_handler));
-  std::unique_ptr<BluetoothChooserBubbleController> bubble_controller(
-      new BluetoothChooserBubbleController(frame));
-  BluetoothChooserBubbleController* bubble_controller_ptr =
-      bubble_controller.get();
+  std::unique_ptr<BluetoothChooserController> bluetooth_chooser_controller(
+      new BluetoothChooserController(frame, event_handler));
 
-  // Wire the ChooserBubbleController to the BluetoothChooser.
-  bluetooth_chooser_desktop->set_bluetooth_chooser_bubble_controller(
-      bubble_controller_ptr);
-  bubble_controller->set_bluetooth_chooser(bluetooth_chooser_desktop.get());
+  std::unique_ptr<BluetoothChooserDesktop> bluetooth_chooser_desktop(
+      new BluetoothChooserDesktop(bluetooth_chooser_controller.get()));
+
+  std::unique_ptr<ChooserBubbleDelegate> chooser_bubble_delegate(
+      new ChooserBubbleDelegate(frame,
+                                std::move(bluetooth_chooser_controller)));
 
   Browser* browser = chrome::FindBrowserWithWebContents(
       WebContents::FromRenderFrameHost(frame));
-  BubbleReference bubble_reference =
-      browser->GetBubbleManager()->ShowBubble(std::move(bubble_controller));
-  bubble_controller_ptr->set_bubble_reference(bubble_reference);
+  BubbleReference bubble_reference = browser->GetBubbleManager()->ShowBubble(
+      std::move(chooser_bubble_delegate));
 
   return std::move(bluetooth_chooser_desktop);
 }
@@ -1540,8 +1428,7 @@ void Browser::RequestAppBannerFromDevTools(content::WebContents* web_contents) {
   banners::AppBannerManagerEmulation::CreateForWebContents(web_contents);
   banners::AppBannerManagerEmulation* manager =
       banners::AppBannerManagerEmulation::FromWebContents(web_contents);
-  manager->RequestAppBanner(web_contents->GetMainFrame(),
-                            web_contents->GetLastCommittedURL(), true);
+  manager->RequestAppBanner(web_contents->GetLastCommittedURL(), true);
 }
 
 bool Browser::IsMouseLocked() const {
@@ -1555,8 +1442,8 @@ void Browser::OnWindowDidShow() {
 
   startup_metric_utils::RecordBrowserWindowDisplay(base::TimeTicks::Now());
 
-  // Nothing to do for non-tabbed windows.
-  if (!is_type_tabbed())
+  // Nothing to do for non-tabbed and minimized windows.
+  if (!is_type_tabbed() || window_->IsMinimized())
     return;
 
   // Show any pending global error bubble.
@@ -1881,9 +1768,9 @@ content::ColorChooser* Browser::OpenColorChooser(
   return chrome::ShowColorChooser(web_contents, initial_color);
 }
 
-void Browser::RunFileChooser(WebContents* web_contents,
+void Browser::RunFileChooser(content::RenderFrameHost* render_frame_host,
                              const content::FileChooserParams& params) {
-  FileSelectHelper::RunFileChooser(web_contents, params);
+  FileSelectHelper::RunFileChooser(render_frame_host, params);
 }
 
 void Browser::EnumerateDirectory(WebContents* web_contents,
@@ -2088,27 +1975,6 @@ bool Browser::CanSaveContents(content::WebContents* web_contents) const {
 ///////////////////////////////////////////////////////////////////////////////
 // Browser, SearchTabHelperDelegate implementation:
 
-void Browser::NavigateOnThumbnailClick(const GURL& url,
-                                       WindowOpenDisposition disposition,
-                                       content::WebContents* source_contents) {
-  DCHECK(source_contents);
-  // We're guaranteed that AUTO_BOOKMARK is the right transition since this only
-  // gets called to handle clicks in the new tab page (to navigate to most
-  // visited item URLs) and in the search results page (to navigate to
-  // privileged destinations (e.g. chrome://URLs)).
-  //
-  // TODO(kmadhusu): Page transitions to privileged destinations should be
-  // marked as "LINK" instead of "AUTO_BOOKMARK"?
-  chrome::NavigateParams params(this, url,
-                                ui::PAGE_TRANSITION_AUTO_BOOKMARK);
-  params.referrer = content::Referrer();
-  params.source_contents = source_contents;
-  params.disposition = disposition;
-  params.is_renderer_initiated = false;
-  params.initiating_profile = profile_;
-  chrome::Navigate(&params);
-}
-
 void Browser::OnWebContentsInstantSupportDisabled(
     const content::WebContents* web_contents) {
   DCHECK(web_contents);
@@ -2164,7 +2030,7 @@ void Browser::URLStarredChanged(content::WebContents* web_contents,
 // Browser, ZoomObserver implementation:
 
 void Browser::OnZoomChanged(
-    const ui_zoom::ZoomController::ZoomChangedEventData& data) {
+    const zoom::ZoomController::ZoomChangedEventData& data) {
   if (data.web_contents == tab_strip_model_->GetActiveWebContents()) {
     window_->ZoomChangedForActiveTab(data.can_show_bubble);
     // Change the zoom commands state based on the zoom state
@@ -2586,10 +2452,10 @@ void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
   //translate::ContentTranslateDriver& content_translate_driver =
   //    ChromeTranslateClient::FromWebContents(web_contents)->translate_driver();
   if (delegate) {
-    ui_zoom::ZoomController::FromWebContents(web_contents)->AddObserver(this);
+    zoom::ZoomController::FromWebContents(web_contents)->AddObserver(this);
     //Vivaldi: content_translate_driver.AddObserver(this);
   } else {
-    ui_zoom::ZoomController::FromWebContents(web_contents)->RemoveObserver(
+    zoom::ZoomController::FromWebContents(web_contents)->RemoveObserver(
         this);
     //Vivaldi: content_translate_driver.RemoveObserver(this);
   }
@@ -2598,10 +2464,10 @@ void Browser::SetAsDelegate(WebContents* web_contents, bool set_delegate) {
     // If we are not running as Vivaldi the translation need to be activated for tests
     translate::ContentTranslateDriver& content_translate_driver =
       ChromeTranslateClient::FromWebContents(web_contents)->translate_driver();
-   if (delegate)
-     content_translate_driver.AddObserver(this);
-   else
-     content_translate_driver.RemoveObserver(this);
+    if (delegate)
+      content_translate_driver.AddObserver(this);
+    else
+      content_translate_driver.RemoveObserver(this);
   }
 }
 

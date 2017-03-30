@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -32,24 +33,16 @@ namespace mojo {
 namespace test {
 namespace {
 
-// A Runnable object that saves the last value it sees via the
-// provided int32_t*. Used on the client side.
-class ValueSaver {
- public:
-  ValueSaver(int32_t* last_value_seen, const base::Closure& closure)
-      : last_value_seen_(last_value_seen), closure_(closure) {}
-  void Run(int32_t x) const {
-    *last_value_seen_ = x;
-    if (!closure_.is_null()) {
-      closure_.Run();
-      closure_.Reset();
-    }
-  }
+void SaveValue(int32_t* storage, const base::Closure& closure, int32_t value) {
+  *storage = value;
+  if (!closure.is_null())
+    closure.Run();
+}
 
- private:
-  int32_t* const last_value_seen_;
-  mutable base::Closure closure_;
-};
+base::Callback<void(int32_t)> BindValueSaver(int32_t* last_value_seen,
+                                             const base::Closure& closure) {
+  return base::Bind(&SaveValue, last_value_seen, closure);
+}
 
 // An implementation of sample::Provider used on the server side.
 // It only implements one of the methods: EchoInt().
@@ -58,7 +51,7 @@ class InterfaceImpl : public sample::Provider {
  public:
   InterfaceImpl()
       : last_server_value_seen_(0),
-        callback_saved_(new Callback<void(int32_t)>()) {}
+        callback_saved_(new EchoIntCallback) {}
 
   ~InterfaceImpl() override {
     if (callback_saved_) {
@@ -85,7 +78,7 @@ class InterfaceImpl : public sample::Provider {
   // sample::Provider implementation
 
   // Saves its two input values in member variables and does nothing else.
-  void EchoInt(int32_t x, const Callback<void(int32_t)>& callback) override {
+  void EchoInt(int32_t x, const EchoIntCallback& callback) override {
     last_server_value_seen_ = x;
     *callback_saved_ = callback;
     if (!closure_.is_null()) {
@@ -95,24 +88,23 @@ class InterfaceImpl : public sample::Provider {
   }
 
   void EchoString(const String& a,
-                  const Callback<void(String)>& callback) override {
+                  const EchoStringCallback& callback) override {
     CHECK(false) << "Not implemented.";
   }
 
   void EchoStrings(const String& a,
                    const String& b,
-                   const Callback<void(String, String)>& callback) override {
+                   const EchoStringsCallback& callback) override {
     CHECK(false) << "Not implemented.";
   }
 
   void EchoMessagePipeHandle(
       ScopedMessagePipeHandle a,
-      const Callback<void(ScopedMessagePipeHandle)>& callback) override {
+      const EchoMessagePipeHandleCallback& callback) override {
     CHECK(false) << "Not implemented.";
   }
 
-  void EchoEnum(sample::Enum a,
-                const Callback<void(sample::Enum)>& callback) override {
+  void EchoEnum(sample::Enum a, const EchoEnumCallback& callback) override {
     CHECK(false) << "Not implemented.";
   }
 
@@ -124,7 +116,7 @@ class InterfaceImpl : public sample::Provider {
 
  private:
   int32_t last_server_value_seen_;
-  Callback<void(int32_t)>* callback_saved_;
+  EchoIntCallback* callback_saved_;
   base::Closure closure_;
 };
 
@@ -159,7 +151,8 @@ TEST_F(BindingCallbackTest, Basic) {
   server_impl.set_closure(run_loop.QuitClosure());
   interface_ptr_->EchoInt(
       7,
-      ValueSaver(&last_client_callback_value_seen_, run_loop2.QuitClosure()));
+      BindValueSaver(&last_client_callback_value_seen_,
+                     run_loop2.QuitClosure()));
   run_loop.Run();
 
   // Check that server saw the correct value, but the client has not yet.
@@ -182,7 +175,8 @@ TEST_F(BindingCallbackTest, Basic) {
   server_impl.set_closure(run_loop3.QuitClosure());
   interface_ptr_->EchoInt(
       13,
-      ValueSaver(&last_client_callback_value_seen_, run_loop4.QuitClosure()));
+      BindValueSaver(&last_client_callback_value_seen_,
+                     run_loop4.QuitClosure()));
   run_loop3.Run();
 
   // Check that server saw the correct value, but the client has not yet.
@@ -217,7 +211,7 @@ TEST_F(BindingCallbackTest, DeleteBindingThenRunCallback) {
     server_impl.set_closure(run_loop2.QuitClosure());
     interface_ptr_->EchoInt(
         7,
-        ValueSaver(&last_client_callback_value_seen_, base::Closure()));
+        BindValueSaver(&last_client_callback_value_seen_, base::Closure()));
     run_loop2.Run();
   }
   // The binding has now been destroyed and the pipe is closed.
@@ -238,7 +232,7 @@ TEST_F(BindingCallbackTest, DeleteBindingThenRunCallback) {
   // encountered.
   interface_ptr_->EchoInt(
       13,
-      ValueSaver(&last_client_callback_value_seen_, base::Closure()));
+      BindValueSaver(&last_client_callback_value_seen_, base::Closure()));
   run_loop.Run();
   EXPECT_TRUE(interface_ptr_.encountered_error());
 }
@@ -261,7 +255,7 @@ TEST_F(BindingCallbackTest, DeleteBindingThenDeleteCallback) {
     server_impl.set_closure(run_loop.QuitClosure());
     interface_ptr_->EchoInt(
         7,
-        ValueSaver(&last_client_callback_value_seen_, base::Closure()));
+        BindValueSaver(&last_client_callback_value_seen_, base::Closure()));
     run_loop.Run();
   }
   // The binding has now been destroyed and the pipe is closed.
@@ -292,7 +286,7 @@ TEST_F(BindingCallbackTest, CloseBindingBeforeDeletingCallback) {
   server_impl.set_closure(run_loop.QuitClosure());
   interface_ptr_->EchoInt(
       7,
-      ValueSaver(&last_client_callback_value_seen_, base::Closure()));
+      BindValueSaver(&last_client_callback_value_seen_, base::Closure()));
   run_loop.Run();
 
   // Check that server saw the correct value, but the client has not yet.
@@ -327,7 +321,7 @@ TEST_F(BindingCallbackTest, DeleteCallbackBeforeBindingDeathTest) {
   server_impl.set_closure(run_loop.QuitClosure());
   interface_ptr_->EchoInt(
       7,
-      ValueSaver(&last_client_callback_value_seen_, base::Closure()));
+      BindValueSaver(&last_client_callback_value_seen_, base::Closure()));
   run_loop.Run();
 
   // Check that server saw the correct value, but the client has not yet.

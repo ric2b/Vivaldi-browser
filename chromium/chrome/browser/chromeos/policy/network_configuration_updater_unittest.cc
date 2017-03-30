@@ -36,9 +36,9 @@
 #include "components/user_manager/user_type.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/x509_certificate.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "policy/policy_constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -92,13 +92,19 @@ class FakeWebTrustedCertsObserver
 
 class FakeNetworkDeviceHandler : public chromeos::FakeNetworkDeviceHandler {
  public:
-  FakeNetworkDeviceHandler() : allow_roaming_(false) {}
+  FakeNetworkDeviceHandler()
+      : allow_roaming_(false), mac_addr_randomization_(false) {}
 
   void SetCellularAllowRoaming(bool allow_roaming) override {
     allow_roaming_ = allow_roaming;
   }
 
+  void SetMACAddressRandomizationEnabled(bool enabled) override {
+    mac_addr_randomization_ = enabled;
+  }
+
   bool allow_roaming_;
+  bool mac_addr_randomization_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(FakeNetworkDeviceHandler);

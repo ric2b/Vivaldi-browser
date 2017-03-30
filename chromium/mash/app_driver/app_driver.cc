@@ -29,21 +29,21 @@ enum class Accelerator : uint32_t {
 
 struct AcceleratorSpec {
   Accelerator id;
-  mus::mojom::KeyboardCode keyboard_code;
+  ui::mojom::KeyboardCode keyboard_code;
   // A bitfield of kEventFlag* and kMouseEventFlag* values in
   // input_event_constants.mojom.
   int event_flags;
 };
 
 AcceleratorSpec g_spec[] = {
-    {Accelerator::NewChromeWindow, mus::mojom::KeyboardCode::N,
-     mus::mojom::kEventFlagControlDown},
-    {Accelerator::NewChromeTab, mus::mojom::KeyboardCode::T,
-     mus::mojom::kEventFlagControlDown},
-    {Accelerator::NewChromeIncognitoWindow, mus::mojom::KeyboardCode::N,
-     mus::mojom::kEventFlagControlDown | mus::mojom::kEventFlagShiftDown},
-    {Accelerator::ShowTaskManager, mus::mojom::KeyboardCode::ESCAPE,
-     mus::mojom::kEventFlagShiftDown},
+    {Accelerator::NewChromeWindow, ui::mojom::KeyboardCode::N,
+     ui::mojom::kEventFlagControlDown},
+    {Accelerator::NewChromeTab, ui::mojom::KeyboardCode::T,
+     ui::mojom::kEventFlagControlDown},
+    {Accelerator::NewChromeIncognitoWindow, ui::mojom::KeyboardCode::N,
+     ui::mojom::kEventFlagControlDown | ui::mojom::kEventFlagShiftDown},
+    {Accelerator::ShowTaskManager, ui::mojom::KeyboardCode::ESCAPE,
+     ui::mojom::kEventFlagShiftDown},
 };
 
 void AssertTrue(bool success) {
@@ -60,7 +60,7 @@ AppDriver::AppDriver()
 AppDriver::~AppDriver() {}
 
 void AppDriver::OnAvailableCatalogEntries(
-    const mojo::Array<catalog::mojom::EntryPtr>& entries) {
+    mojo::Array<catalog::mojom::EntryPtr> entries) {
   if (entries.empty()) {
     LOG(ERROR) << "Unable to install accelerators for launching chrome.";
     return;
@@ -102,7 +102,7 @@ bool AppDriver::ShellConnectionLost() {
   return true;
 }
 
-void AppDriver::OnAccelerator(uint32_t id, mus::mojom::EventPtr event) {
+void AppDriver::OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) {
   struct LaunchOptions {
     uint32_t option;
     const char* app;

@@ -35,11 +35,10 @@
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
+#include "core/editing/markers/DocumentMarker.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/VisualViewport.h"
-#include "core/input/EventHandler.h"
-#include "core/layout/LayoutView.h"
 #include "core/style/ComputedStyle.h"
 #include "core/page/Page.h"
 #include "modules/accessibility/AXObject.h"
@@ -49,6 +48,7 @@
 #include "modules/accessibility/AXTableColumn.h"
 #include "modules/accessibility/AXTableRow.h"
 #include "platform/PlatformKeyboardEvent.h"
+#include "public/platform/WebFloatRect.h"
 #include "public/platform/WebPoint.h"
 #include "public/platform/WebRect.h"
 #include "public/platform/WebString.h"
@@ -119,6 +119,14 @@ int WebAXObject::axID() const
         return -1;
 
     return m_private->axObjectID();
+}
+
+int WebAXObject::generateAXID() const
+{
+    if (isDetached())
+        return -1;
+
+    return m_private->axObjectCache().platformGenerateAXID();
 }
 
 bool WebAXObject::updateLayoutAndCheckValidity()
@@ -592,6 +600,17 @@ WebString WebAXObject::liveRegionStatus() const
     return m_private->liveRegionStatus();
 }
 
+WebAXObject WebAXObject::liveRegionRoot() const
+{
+    if (isDetached())
+        return WebAXObject();
+
+    AXObject* liveRegionRoot = m_private->liveRegionRoot();
+    if (liveRegionRoot)
+        return WebAXObject(liveRegionRoot);
+    return WebAXObject();
+}
+
 bool WebAXObject::containerLiveRegionAtomic() const
 {
     if (isDetached())
@@ -751,19 +770,19 @@ WebString WebAXObject::keyboardShortcut() const
 
     DEFINE_STATIC_LOCAL(String, modifierString, ());
     if (modifierString.isNull()) {
-        unsigned modifiers = EventHandler::accessKeyModifiers();
+        unsigned modifiers = PlatformKeyboardEvent::accessKeyModifiers();
         // Follow the same order as Mozilla MSAA implementation:
         // Ctrl+Alt+Shift+Meta+key. MSDN states that keyboard shortcut strings
         // should not be localized and defines the separator as "+".
         StringBuilder modifierStringBuilder;
         if (modifiers & PlatformEvent::CtrlKey)
-            modifierStringBuilder.appendLiteral("Ctrl+");
+            modifierStringBuilder.append("Ctrl+");
         if (modifiers & PlatformEvent::AltKey)
-            modifierStringBuilder.appendLiteral("Alt+");
+            modifierStringBuilder.append("Alt+");
         if (modifiers & PlatformEvent::ShiftKey)
-            modifierStringBuilder.appendLiteral("Shift+");
+            modifierStringBuilder.append("Shift+");
         if (modifiers & PlatformEvent::MetaKey)
-            modifierStringBuilder.appendLiteral("Win+");
+            modifierStringBuilder.append("Win+");
         modifierString = modifierStringBuilder.toString();
     }
 
@@ -1424,6 +1443,34 @@ WebAXObject WebAXObject::previousOnLine() const
     return WebAXObject(m_private.get()->previousOnLine());
 }
 
+void WebAXObject::markers(
+    WebVector<WebAXMarkerType>& types,
+    WebVector<int>& starts,
+    WebVector<int>& ends) const
+{
+    if (isDetached())
+        return;
+
+    Vector<DocumentMarker::MarkerType> markerTypes;
+    Vector<AXObject::AXRange> markerRanges;
+    m_private->markers(markerTypes, markerRanges);
+    DCHECK_EQ(markerTypes.size(), markerRanges.size());
+
+    WebVector<WebAXMarkerType> webMarkerTypes(markerTypes.size());
+    WebVector<int> startOffsets(markerRanges.size());
+    WebVector<int> endOffsets(markerRanges.size());
+    for (size_t i = 0; i < markerTypes.size(); ++i) {
+        webMarkerTypes[i] = static_cast<WebAXMarkerType>(markerTypes[i]);
+        DCHECK(markerRanges[i].isSimple());
+        startOffsets[i] = markerRanges[i].anchorOffset;
+        endOffsets[i] = markerRanges[i].focusOffset;
+    }
+
+    types.swap(webMarkerTypes);
+    starts.swap(startOffsets);
+    ends.swap(endOffsets);
+}
+
 void WebAXObject::characterOffsets(WebVector<int>& offsets) const
 {
     if (isDetached())
@@ -1497,6 +1544,22 @@ void WebAXObject::setScrollOffset(const WebPoint& offset) const
         return;
 
     m_private->setScrollOffset(offset);
+}
+
+void WebAXObject::getRelativeBounds(WebAXObject& offsetContainer, WebFloatRect& boundsInContainer, SkMatrix44& containerTransform) const
+{
+    if (isDetached())
+        return;
+
+#if DCHECK_IS_ON()
+    DCHECK(isLayoutClean(m_private->getDocument()));
+#endif
+
+    AXObject* container = nullptr;
+    FloatRect bounds;
+    m_private->getRelativeBounds(&container, bounds, containerTransform);
+    offsetContainer = WebAXObject(container);
+    boundsInContainer = WebFloatRect(bounds);
 }
 
 void WebAXObject::scrollToMakeVisible() const

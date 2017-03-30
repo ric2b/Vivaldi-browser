@@ -36,6 +36,9 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
   // Called when a RenderView is reused for the same WebUI type (i.e. reload).
   void RenderViewReused(RenderViewHost* render_view_host, bool was_main_frame);
 
+  // Called when the owning RenderFrameHost has started swapping out.
+  void RenderFrameHostSwappingOut();
+
   // WebUI implementation:
   WebContents* GetWebContents() const override;
   WebUIController* GetController() const override;
@@ -56,29 +59,32 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
                            const std::string& message,
                            const base::ListValue& args) override;
   bool CanCallJavascript() override;
-  void CallJavascriptFunction(const std::string& function_name) override;
-  void CallJavascriptFunction(const std::string& function_name,
-                              const base::Value& arg) override;
-  void CallJavascriptFunction(const std::string& function_name,
-                              const base::Value& arg1,
-                              const base::Value& arg2) override;
-  void CallJavascriptFunction(const std::string& function_name,
-                              const base::Value& arg1,
-                              const base::Value& arg2,
-                              const base::Value& arg3) override;
-  void CallJavascriptFunction(const std::string& function_name,
-                              const base::Value& arg1,
-                              const base::Value& arg2,
-                              const base::Value& arg3,
-                              const base::Value& arg4) override;
-  void CallJavascriptFunction(
+  void CallJavascriptFunctionUnsafe(const std::string& function_name) override;
+  void CallJavascriptFunctionUnsafe(const std::string& function_name,
+                                    const base::Value& arg) override;
+  void CallJavascriptFunctionUnsafe(const std::string& function_name,
+                                    const base::Value& arg1,
+                                    const base::Value& arg2) override;
+  void CallJavascriptFunctionUnsafe(const std::string& function_name,
+                                    const base::Value& arg1,
+                                    const base::Value& arg2,
+                                    const base::Value& arg3) override;
+  void CallJavascriptFunctionUnsafe(const std::string& function_name,
+                                    const base::Value& arg1,
+                                    const base::Value& arg2,
+                                    const base::Value& arg3,
+                                    const base::Value& arg4) override;
+  void CallJavascriptFunctionUnsafe(
       const std::string& function_name,
       const std::vector<const base::Value*>& args) override;
+  ScopedVector<WebUIMessageHandler>* GetHandlersForTesting() override;
 
   // IPC::Listener implementation:
   bool OnMessageReceived(const IPC::Message& message) override;
 
  private:
+  class MainFrameNavigationObserver;
+
   // IPC message handling.
   void OnWebUISend(const GURL& source_url,
                    const std::string& message,
@@ -97,6 +103,9 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
   void AddToSetIfFrameNameMatches(std::set<RenderFrameHost*>* frame_set,
                                   RenderFrameHost* host);
 
+  // Called internally and by the owned MainFrameNavigationObserver.
+  void DisallowJavascriptOnAllHandlers();
+
   // A map of message name -> message handling callback.
   typedef std::map<std::string, MessageCallback> MessageCallbackMap;
   MessageCallbackMap message_callbacks_;
@@ -113,6 +122,9 @@ class CONTENT_EXPORT WebUIImpl : public WebUI,
 
   // Non-owning pointer to the WebContents this WebUI is associated with.
   WebContents* web_contents_;
+
+  // Notifies this WebUI about notifications in the main frame.
+  std::unique_ptr<MainFrameNavigationObserver> web_contents_observer_;
 
   // The name of the frame this WebUI is embedded in. If empty, the main frame
   // is used.

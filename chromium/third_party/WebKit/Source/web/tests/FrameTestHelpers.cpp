@@ -48,6 +48,7 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebRemoteFrameImpl.h"
 #include "wtf/Functional.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -80,7 +81,7 @@ void runServeAsyncRequestsTask(TestWebFrameClient* client)
 {
     Platform::current()->getURLLoaderMockFactory()->serveAsynchronousRequests();
     if (client->isLoading())
-        Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&runServeAsyncRequestsTask, client));
+        Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&runServeAsyncRequestsTask, WTF::unretained(client)));
     else
         testing::exitRunLoop();
 }
@@ -148,7 +149,7 @@ void reloadFrameIgnoringCache(WebFrame* frame)
 
 void pumpPendingRequestsForFrameToLoad(WebFrame* frame)
 {
-    Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&runServeAsyncRequestsTask, testClientForFrame(frame)));
+    Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&runServeAsyncRequestsTask, WTF::unretained(testClientForFrame(frame))));
     testing::enterRunLoop();
 }
 
@@ -199,7 +200,7 @@ WebViewImpl* WebViewHelper::initializeWithOpener(WebFrame* opener, bool enableJa
         webViewClient = defaultWebViewClient();
     if (!webWidgetClient)
         webWidgetClient = webViewClient->widgetClient();
-    m_webView = WebViewImpl::create(webViewClient);
+    m_webView = WebViewImpl::create(webViewClient, WebPageVisibilityStateVisible);
     m_webView->settings()->setJavaScriptEnabled(enableJavascript);
     m_webView->settings()->setPluginsEnabled(true);
     // Enable (mocked) network loads of image URLs, as this simplifies
@@ -306,7 +307,7 @@ void TestWebRemoteFrameClient::frameDetached(DetachType type)
 
 void TestWebViewClient::initializeLayerTreeView()
 {
-    m_layerTreeView = adoptPtr(new WebLayerTreeViewImplForTesting);
+    m_layerTreeView = wrapUnique(new WebLayerTreeViewImplForTesting);
 }
 
 } // namespace FrameTestHelpers

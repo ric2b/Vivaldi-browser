@@ -25,7 +25,7 @@ CSSPaintValue::~CSSPaintValue()
 String CSSPaintValue::customCSSText() const
 {
     StringBuilder result;
-    result.appendLiteral("paint(");
+    result.append("paint(");
     result.append(m_name->customCSSText());
     result.append(')');
     return result.toString();
@@ -41,7 +41,7 @@ PassRefPtr<Image> CSSPaintValue::image(const LayoutObject& layoutObject, const I
     if (!m_generator)
         m_generator = CSSPaintImageGenerator::create(name(), layoutObject.document(), m_paintImageGeneratorObserver);
 
-    return m_generator->paint(size);
+    return m_generator->paint(layoutObject, size);
 }
 
 void CSSPaintValue::Observer::paintImageGeneratorReady()

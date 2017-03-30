@@ -50,7 +50,8 @@ class VIEWS_EXPORT FloodFillInkDropRipple : public InkDropRipple {
  public:
   FloodFillInkDropRipple(const gfx::Rect& clip_bounds,
                          const gfx::Point& center_point,
-                         SkColor color);
+                         SkColor color,
+                         float visible_opacity);
   ~FloodFillInkDropRipple() override;
 
   // InkDropRipple:
@@ -101,11 +102,15 @@ class VIEWS_EXPORT FloodFillInkDropRipple : public InkDropRipple {
   // Returns the target Transform for when the ink drop is fully shown.
   gfx::Transform GetMaxSizeTargetTransform() const;
 
-  // The clip bounds.
-  const gfx::Rect clip_bounds_;
+  // Returns the largest distance from |point| to the corners of the
+  // |root_layer_| bounds.
+  float MaxDistanceToCorners(const gfx::Point& point) const;
 
   // The point where the Center of the ink drop's circle should be drawn.
   gfx::Point center_point_;
+
+  // Ink drop opacity when it is visible.
+  float visible_opacity_;
 
   // The root layer that parents the animating layer. The root layer is used to
   // manipulate opacity and clipping bounds, and it child is used to manipulate

@@ -28,6 +28,7 @@ class DummyTextInputClient : public TextInputClient {
   void InsertChar(const KeyEvent& event) override;
   TextInputType GetTextInputType() const override;
   TextInputMode GetTextInputMode() const override;
+  base::i18n::TextDirection GetTextDirection() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
@@ -46,11 +47,15 @@ class DummyTextInputClient : public TextInputClient {
       base::i18n::TextDirection direction) override;
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
   void EnsureCaretInRect(const gfx::Rect& rect) override;
-  bool IsEditCommandEnabled(int command_id) override;
-  void SetEditCommandForNextKeyEvent(int command_id) override;
+  bool IsTextEditCommandEnabled(TextEditCommand command) const override;
+  void SetTextEditCommandForNextKeyEvent(TextEditCommand command) override;
 
   int insert_char_count() const { return insert_char_count_; }
   base::char16 last_insert_char() const { return last_insert_char_; }
+  int insert_text_count() const { return insert_text_count_; }
+  base::string16 last_insert_text() const { return last_insert_text_; }
+  int set_composition_count() const { return set_composition_count_; }
+  const CompositionText& last_composition() const { return last_composition_; }
 
   TextInputType text_input_type_;
 
@@ -58,7 +63,11 @@ class DummyTextInputClient : public TextInputClient {
 
  private:
   int insert_char_count_;
+  int insert_text_count_;
+  int set_composition_count_;
   base::char16 last_insert_char_;
+  base::string16 last_insert_text_;
+  CompositionText last_composition_;
 };
 
 }  // namespace ui

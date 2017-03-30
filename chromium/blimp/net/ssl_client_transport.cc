@@ -21,8 +21,10 @@ namespace blimp {
 
 SSLClientTransport::SSLClientTransport(const net::IPEndPoint& ip_endpoint,
                                        scoped_refptr<net::X509Certificate> cert,
+                                       BlimpConnectionStatistics* statistics,
                                        net::NetLog* net_log)
-    : TCPClientTransport(ip_endpoint, net_log), ip_endpoint_(ip_endpoint) {
+    : TCPClientTransport(ip_endpoint, statistics, net_log),
+      ip_endpoint_(ip_endpoint) {
   // Test code may pass in a null value for |cert|. Only spin up a CertVerifier
   // if there is a cert present.
   if (cert) {
@@ -59,6 +61,8 @@ void SSLClientTransport::OnTCPConnectComplete(int result) {
   net::SSLClientSocketContext create_context;
   create_context.cert_verifier = cert_verifier_.get();
   create_context.transport_security_state = &transport_security_state_;
+  create_context.ct_policy_enforcer = &ct_policy_enforcer_;
+  create_context.cert_transparency_verifier = &cert_transparency_verifier_;
 
   std::unique_ptr<net::StreamSocket> ssl_socket(
       socket_factory()->CreateSSLClientSocket(std::move(socket_handle),

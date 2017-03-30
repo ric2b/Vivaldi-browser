@@ -11,10 +11,10 @@
 #include "base/memory/shared_memory.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "components/mus/common/mojo_buffer_backing.h"
 #include "components/mus/gles2/gl_surface_adapter.h"
 #include "components/mus/gles2/gpu_memory_tracker.h"
 #include "components/mus/gles2/gpu_state.h"
-#include "components/mus/gles2/mojo_buffer_backing.h"
 #include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "gpu/command_buffer/service/command_buffer_service.h"
 #include "gpu/command_buffer/service/command_executor.h"
@@ -25,8 +25,7 @@
 #include "gpu/command_buffer/service/query_manager.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/platform_handle/platform_handle_functions.h"
+#include "mojo/public/cpp/system/platform_handle.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/vsync_provider.h"
@@ -84,18 +83,19 @@ bool CommandBufferDriver::Initialize(
   gpu::gles2::ContextCreationAttribHelper attrib_helper;
   if (!attrib_helper.Parse(attribs.storage()))
     return false;
+  // TODO(piman): attribs can't currently represent gpu_preference.
 
   const bool offscreen = widget_ == gfx::kNullAcceleratedWidget;
   if (offscreen) {
     surface_ = gl::init::CreateOffscreenGLSurface(gfx::Size(0, 0));
   } else {
 #if defined(USE_OZONE)
-    scoped_refptr<gfx::GLSurface> underlying_surface =
+    scoped_refptr<gl::GLSurface> underlying_surface =
         gl::init::CreateSurfacelessViewGLSurface(widget_);
     if (!underlying_surface)
       underlying_surface = gl::init::CreateViewGLSurface(widget_);
 #else
-    scoped_refptr<gfx::GLSurface> underlying_surface =
+    scoped_refptr<gl::GLSurface> underlying_surface =
         gl::init::CreateViewGLSurface(widget_);
 #endif
     scoped_refptr<GLSurfaceAdapterMus> surface_adapter =
@@ -117,9 +117,9 @@ bool CommandBufferDriver::Initialize(
   if (!surface_.get())
     return false;
 
-  // TODO(piman): virtual contexts, gpu preference.
+  // TODO(piman): virtual contexts.
   context_ = gl::init::CreateGLContext(
-      gpu_state_->share_group(), surface_.get(), gfx::PreferIntegratedGpu);
+      gpu_state_->share_group(), surface_.get(), attrib_helper.gpu_preference);
   if (!context_.get())
     return false;
 
@@ -131,13 +131,15 @@ bool CommandBufferDriver::Initialize(
   const bool bind_generates_resource = attrib_helper.bind_generates_resource;
   scoped_refptr<gpu::gles2::FeatureInfo> feature_info =
       new gpu::gles2::FeatureInfo(gpu_state_->gpu_driver_bug_workarounds());
+  // TODO(erikchen): The ContextGroup needs a reference to the
+  // GpuMemoryBufferManager.
   scoped_refptr<gpu::gles2::ContextGroup> context_group =
       new gpu::gles2::ContextGroup(
           gpu_state_->gpu_preferences(), gpu_state_->mailbox_manager(),
           new GpuMemoryTracker,
           new gpu::gles2::ShaderTranslatorCache(gpu_state_->gpu_preferences()),
           new gpu::gles2::FramebufferCompletenessCache, feature_info,
-          bind_generates_resource);
+          bind_generates_resource, nullptr);
 
   command_buffer_.reset(
       new gpu::CommandBufferService(context_group->transfer_buffer_manager()));
@@ -153,11 +155,15 @@ bool CommandBufferDriver::Initialize(
       &CommandBufferDriver::OnFenceSyncRelease, base::Unretained(this)));
   decoder_->SetWaitFenceSyncCallback(base::Bind(
       &CommandBufferDriver::OnWaitFenceSync, base::Unretained(this)));
+  decoder_->SetDescheduleUntilFinishedCallback(base::Bind(
+      &CommandBufferDriver::OnDescheduleUntilFinished, base::Unretained(this)));
+  decoder_->SetRescheduleAfterFinishedCallback(base::Bind(
+      &CommandBufferDriver::OnRescheduleAfterFinished, base::Unretained(this)));
 
   gpu::gles2::DisallowedFeatures disallowed_features;
 
-  if (!decoder_->Initialize(surface_, context_, offscreen, gfx::Size(1, 1),
-                            disallowed_features, attrib_helper))
+  if (!decoder_->Initialize(surface_, context_, offscreen, disallowed_features,
+                            attrib_helper))
     return false;
 
   command_buffer_->SetPutOffsetChangeCallback(base::Bind(
@@ -218,7 +224,7 @@ void CommandBufferDriver::DestroyTransferBuffer(int32_t id) {
 void CommandBufferDriver::CreateImage(int32_t id,
                                       mojo::ScopedHandle memory_handle,
                                       int32_t type,
-                                      mojo::SizePtr size,
+                                      const gfx::Size& size,
                                       int32_t format,
                                       int32_t internal_format) {
   DCHECK(CalledOnValidThread());
@@ -238,8 +244,7 @@ void CommandBufferDriver::CreateImage(int32_t id,
     return;
   }
 
-  gfx::Size gfx_size = size.To<gfx::Size>();
-  if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(gfx_size, gpu_format)) {
+  if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(size, gpu_format)) {
     LOG(ERROR) << "Invalid image size for format.";
     return;
   }
@@ -255,26 +260,26 @@ void CommandBufferDriver::CreateImage(int32_t id,
     return;
   }
 
-  MojoPlatformHandle platform_handle;
-  MojoResult extract_result = MojoExtractPlatformHandle(
-      memory_handle.release().value(), &platform_handle);
-  if (extract_result != MOJO_RESULT_OK) {
+  base::PlatformFile platform_file;
+  MojoResult unwrap_result = mojo::UnwrapPlatformFile(std::move(memory_handle),
+                                                      &platform_file);
+  if (unwrap_result != MOJO_RESULT_OK) {
     NOTREACHED();
     return;
   }
 
 #if defined(OS_WIN)
-  base::SharedMemoryHandle handle(platform_handle, base::GetCurrentProcId());
+  base::SharedMemoryHandle handle(platform_file, base::GetCurrentProcId());
 #else
-  base::FileDescriptor handle(platform_handle, false);
+  base::FileDescriptor handle(platform_file, false);
 #endif
 
   scoped_refptr<gl::GLImageSharedMemory> image =
-      new gl::GLImageSharedMemory(gfx_size, internal_format);
+      new gl::GLImageSharedMemory(size, internal_format);
   // TODO(jam): also need a mojo enum for this enum
   if (!image->Initialize(
           handle, gfx::GpuMemoryBufferId(id), gpu_format, 0,
-          gfx::RowSizeForBufferFormat(gfx_size.width(), gpu_format, 0))) {
+          gfx::RowSizeForBufferFormat(size.width(), gpu_format, 0))) {
     NOTREACHED();
     return;
   }
@@ -297,8 +302,8 @@ void CommandBufferDriver::CreateImageNativeOzone(int32_t id,
     return;
   }
 
-  scoped_refptr<gfx::GLImageOzoneNativePixmap> image =
-      new gfx::GLImageOzoneNativePixmap(size, internal_format);
+  scoped_refptr<gl::GLImageOzoneNativePixmap> image =
+      new gl::GLImageOzoneNativePixmap(size, internal_format);
   if (!image->Initialize(pixmap, format)) {
     NOTREACHED();
     return;
@@ -481,10 +486,8 @@ void CommandBufferDriver::OnUpdateVSyncParameters(
     const base::TimeTicks timebase,
     const base::TimeDelta interval) {
   DCHECK(CalledOnValidThread());
-  if (client_) {
-    client_->UpdateVSyncParameters(timebase.ToInternalValue(),
-                                   interval.ToInternalValue());
-  }
+  if (client_)
+    client_->UpdateVSyncParameters(timebase, interval);
 }
 
 void CommandBufferDriver::OnFenceSyncRelease(uint64_t release) {
@@ -514,6 +517,21 @@ bool CommandBufferDriver::OnWaitFenceSync(
                            base::Bind(&gpu::CommandExecutor::SetScheduled,
                                       executor_->AsWeakPtr(), true));
   return executor_->scheduled();
+}
+
+void CommandBufferDriver::OnDescheduleUntilFinished() {
+  DCHECK(CalledOnValidThread());
+  DCHECK(IsScheduled());
+  DCHECK(executor_->HasMoreIdleWork());
+
+  executor_->SetScheduled(false);
+}
+
+void CommandBufferDriver::OnRescheduleAfterFinished() {
+  DCHECK(CalledOnValidThread());
+  DCHECK(!executor_->scheduled());
+
+  executor_->SetScheduled(true);
 }
 
 void CommandBufferDriver::OnParseError() {

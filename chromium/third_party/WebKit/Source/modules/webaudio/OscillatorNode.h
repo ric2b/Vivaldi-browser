@@ -28,7 +28,6 @@
 #include "modules/webaudio/AudioParam.h"
 #include "modules/webaudio/AudioScheduledSourceNode.h"
 #include "platform/audio/AudioBus.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Threading.h"
@@ -100,7 +99,7 @@ private:
 class OscillatorNode final : public AudioScheduledSourceNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static OscillatorNode* create(AbstractAudioContext&, float sampleRate);
+    static OscillatorNode* create(AbstractAudioContext&, ExceptionState&);
     DECLARE_VIRTUAL_TRACE();
 
     String type() const;
@@ -110,7 +109,7 @@ public:
     void setPeriodicWave(PeriodicWave*);
 
 private:
-    OscillatorNode(AbstractAudioContext&, float sampleRate);
+    OscillatorNode(AbstractAudioContext&);
     OscillatorHandler& oscillatorHandler() const;
 
     Member<AudioParam> m_frequency;

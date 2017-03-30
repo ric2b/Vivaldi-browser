@@ -23,9 +23,8 @@
 #define WTF_ListHashSet_h
 
 #include "wtf/HashSet.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/allocator/PartitionAllocator.h"
+#include <memory>
 
 namespace WTF {
 
@@ -268,7 +267,7 @@ struct ListHashSetAllocator : public PartitionAllocator {
         }
 
     private:
-        // Not using OwnPtr as this pointer should be deleted at
+        // Not using std::unique_ptr as this pointer should be deleted at
         // releaseAllocator() method rather than at destructor.
         ListHashSetAllocator* m_allocator;
     };
@@ -1026,7 +1025,7 @@ template <typename T, size_t inlineCapacity, typename U, typename V>
 template <typename VisitorDispatcher>
 void ListHashSet<T, inlineCapacity, U, V>::trace(VisitorDispatcher visitor)
 {
-    static_assert(HashTraits<T>::weakHandlingFlag == NoWeakHandlingInCollections, "ListHashSet does not support weakness");
+    static_assert(HashTraits<T>::weakHandlingFlag == NoWeakHandlingInCollections, "HeapListHashSet does not support weakness, consider using HeapLinkedHashSet instead.");
     // This marks all the nodes and their contents live that can be accessed
     // through the HashTable. That includes m_head and m_tail so we do not have
     // to explicitly trace them here.

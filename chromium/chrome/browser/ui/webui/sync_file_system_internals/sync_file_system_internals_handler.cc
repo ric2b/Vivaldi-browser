@@ -6,6 +6,8 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -83,8 +85,8 @@ void SyncFileSystemInternalsHandler::OnSyncStateUpdated(
 
   // TODO(calvinlo): OnSyncStateUpdated should be updated to also provide the
   // notification mechanism (XMPP or Polling).
-  web_ui()->CallJavascriptFunction("SyncService.onGetServiceStatus",
-                                   base::StringValue(state_string));
+  web_ui()->CallJavascriptFunctionUnsafe("SyncService.onGetServiceStatus",
+                                         base::StringValue(state_string));
 }
 
 void SyncFileSystemInternalsHandler::OnFileSynced(
@@ -106,7 +108,7 @@ void SyncFileSystemInternalsHandler::OnLogRecorded(
   std::unique_ptr<base::ListValue> details(new base::ListValue);
   details->AppendStrings(task_log.details);
   dict.Set("details", details.release());
-  web_ui()->CallJavascriptFunction("TaskLog.onTaskLogRecorded", dict);
+  web_ui()->CallJavascriptFunctionUnsafe("TaskLog.onTaskLogRecorded", dict);
 }
 
 void SyncFileSystemInternalsHandler::GetServiceStatus(
@@ -118,8 +120,8 @@ void SyncFileSystemInternalsHandler::GetServiceStatus(
     state_enum = sync_service->GetSyncServiceState();
   const std::string state_string = extensions::api::sync_file_system::ToString(
       extensions::SyncServiceStateToExtensionEnum(state_enum));
-  web_ui()->CallJavascriptFunction("SyncService.onGetServiceStatus",
-                                   base::StringValue(state_string));
+  web_ui()->CallJavascriptFunctionUnsafe("SyncService.onGetServiceStatus",
+                                         base::StringValue(state_string));
 }
 
 void SyncFileSystemInternalsHandler::GetNotificationSource(
@@ -130,8 +132,9 @@ void SyncFileSystemInternalsHandler::GetNotificationSource(
     return;
   bool xmpp_enabled = drive_notification_manager->push_notification_enabled();
   std::string notification_source = xmpp_enabled ? "XMPP" : "Polling";
-  web_ui()->CallJavascriptFunction("SyncService.onGetNotificationSource",
-                                   base::StringValue(notification_source));
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "SyncService.onGetNotificationSource",
+      base::StringValue(notification_source));
 }
 
 void SyncFileSystemInternalsHandler::GetLog(
@@ -151,18 +154,18 @@ void SyncFileSystemInternalsHandler::GetLog(
     if (log_entry->id <= last_log_id_sent)
       continue;
 
-    base::DictionaryValue* dict = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
     dict->SetInteger("id", log_entry->id);
     dict->SetString("time",
         google_apis::util::FormatTimeAsStringLocaltime(log_entry->when));
     dict->SetString("logEvent", log_entry->what);
-    list.Append(dict);
+    list.Append(std::move(dict));
     last_log_id_sent = log_entry->id;
   }
   if (list.empty())
     return;
 
-  web_ui()->CallJavascriptFunction("SyncService.onGetLog", list);
+  web_ui()->CallJavascriptFunctionUnsafe("SyncService.onGetLog", list);
 }
 
 void SyncFileSystemInternalsHandler::ClearLogs(const base::ListValue* args) {

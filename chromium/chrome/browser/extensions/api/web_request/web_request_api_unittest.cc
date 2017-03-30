@@ -19,6 +19,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_piece.h"
@@ -191,7 +192,7 @@ class ExtensionWebRequestTest : public testing::Test {
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
     ChromeNetworkDelegate::InitializePrefsOnUIThread(
-        &enable_referrers_, NULL, NULL, NULL,
+        &enable_referrers_, nullptr, nullptr, nullptr, nullptr,
         profile_.GetTestingPrefService());
     network_delegate_.reset(
         new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_,
@@ -294,7 +295,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceRedirect) {
             request->identifier(), response));
 
     request->Start();
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
 
     EXPECT_TRUE(!request->is_pending());
     EXPECT_EQ(net::URLRequestStatus::SUCCESS, request->status().status());
@@ -345,7 +346,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceRedirect) {
             request2->identifier(), response));
 
     request2->Start();
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
 
     EXPECT_TRUE(!request2->is_pending());
     EXPECT_EQ(net::URLRequestStatus::SUCCESS, request2->status().status());
@@ -410,7 +411,7 @@ TEST_F(ExtensionWebRequestTest, BlockingEventPrecedenceCancel) {
 
   request->Start();
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_TRUE(!request->is_pending());
   EXPECT_EQ(net::URLRequestStatus::FAILED, request->status().status());
@@ -472,7 +473,7 @@ TEST_F(ExtensionWebRequestTest, SimulateChancelWhileBlocked) {
   request->Start();
   // request->Start() will have submitted OnBeforeRequest by the time we cancel.
   request->Cancel();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_TRUE(!request->is_pending());
   EXPECT_EQ(net::URLRequestStatus::CANCELED, request->status().status());
@@ -497,7 +498,7 @@ bool GenerateInfoSpec(const std::string& values, int* result) {
   for (const std::string& cur :
        base::SplitString(values, ",", base::KEEP_WHITESPACE,
                          base::SPLIT_WANT_NONEMPTY))
-    list_value.Append(new base::StringValue(cur));
+    list_value.AppendString(cur);
   return ExtraInfoSpec::InitFromValue(list_value, result);
 }
 
@@ -599,8 +600,7 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
       &raw);
   extensions::subtle::AppendKeyValuePair(
       keys::kRequestBodyRawFileKey,
-      new base::StringValue(std::string()),
-      &raw);
+      base::MakeUnique<base::StringValue>(std::string()), &raw);
   extensions::subtle::AppendKeyValuePair(
       keys::kRequestBodyRawBytesKey,
       BinaryValue::CreateWithCopiedBuffer(kPlainBlock2, kPlainBlock2Length),
@@ -640,7 +640,7 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
   FireURLRequestWithData(kMethodPost, kMultipart, form_1, form_2);
 
   // We inspect the result in the message list of |ipc_sender_| later.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   ExtensionWebRequestEventRouter::GetInstance()->RemoveEventListener(
       &profile_, extension_id, kEventName + "/1", 0, 0);
@@ -673,7 +673,7 @@ TEST_F(ExtensionWebRequestTest, AccessRequestBodyData) {
   // Now send a PUT request with the same body as above.
   FireURLRequestWithData(kMethodPut, NULL /*no header*/, plain_1, plain_2);
 
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Clean-up.
   ExtensionWebRequestEventRouter::GetInstance()->RemoveEventListener(
@@ -750,7 +750,7 @@ TEST_F(ExtensionWebRequestTest, MinimalAccessRequestBodyData) {
   const std::vector<char> part_of_body(1);
   FireURLRequestWithData("POST", nullptr, part_of_body, part_of_body);
 
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Clean-up
   ExtensionWebRequestEventRouter::GetInstance()->RemoveEventListener(
@@ -813,7 +813,7 @@ TEST_F(ExtensionWebRequestTest, NoAccessRequestBodyData) {
   }
 
   // We inspect the result in the message list of |ipc_sender_| later.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   ExtensionWebRequestEventRouter::GetInstance()->RemoveEventListener(
       &profile_, extension_id, kEventName + "/1", 0, 0);
@@ -871,7 +871,7 @@ class ExtensionWebRequestHeaderModificationTest
   void SetUp() override {
     ASSERT_TRUE(profile_manager_.SetUp());
     ChromeNetworkDelegate::InitializePrefsOnUIThread(
-        &enable_referrers_, NULL, NULL, NULL,
+        &enable_referrers_, nullptr, nullptr, nullptr, nullptr,
         profile_.GetTestingPrefService());
     network_delegate_.reset(
         new ChromeNetworkDelegate(event_router_.get(), &enable_referrers_,
@@ -984,7 +984,7 @@ TEST_P(ExtensionWebRequestHeaderModificationTest, TestModifications) {
   // exists and are therefore not listed in the responses. This makes
   // them seem deleted.
   request->Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_TRUE(!request->is_pending());
   // This cannot succeed as we send the request to a server that does not exist.
@@ -1262,11 +1262,11 @@ TEST(ExtensionWebRequestHelpersTest,
 
 TEST(ExtensionWebRequestHelpersTest, TestStringToCharList) {
   base::ListValue list_value;
-  list_value.Append(new base::FundamentalValue('1'));
-  list_value.Append(new base::FundamentalValue('2'));
-  list_value.Append(new base::FundamentalValue('3'));
-  list_value.Append(new base::FundamentalValue(0xFE));
-  list_value.Append(new base::FundamentalValue(0xD1));
+  list_value.AppendInteger('1');
+  list_value.AppendInteger('2');
+  list_value.AppendInteger('3');
+  list_value.AppendInteger(0xFE);
+  list_value.AppendInteger(0xD1);
 
   unsigned char char_value[] = {'1', '2', '3', 0xFE, 0xD1};
   std::string string_value(reinterpret_cast<char *>(char_value), 5);

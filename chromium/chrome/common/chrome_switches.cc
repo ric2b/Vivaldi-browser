@@ -12,7 +12,7 @@ namespace switches {
 
 // -----------------------------------------------------------------------------
 // Can't find the switch you are looking for? Try looking in:
-// ash/ash_switches.cc
+// ash/common/ash_switches.cc
 // base/base_switches.cc
 // chromeos/chromeos_switches.cc
 // etc.
@@ -271,9 +271,6 @@ const char kDisableExtensionsHttpThrottling[] =
 // Disable field trial tests configured in fieldtrial_testing_config.json.
 const char kDisableFieldTrialTestingConfig[] = "disable-field-trial-config";
 
-// Disable HTTP/2 and SPDY/3.1 protocols.
-const char kDisableHttp2[]                   = "disable-http2";
-
 // Disable the behavior that the second click on a launcher item (the click when
 // the item is already active) minimizes the item.
 const char kDisableMinimizeOnSecondLauncherItemClick[] =
@@ -296,6 +293,11 @@ const char kDisableOutOfProcessPac[] = "disable-out-of-process-pac";
 // for blacklisted sites.
 const char kDisablePermissionsBlacklist[] = "disable-permissions-blacklist";
 
+// Disables permission action reporting to Safe Browsing servers for opted in
+// users.
+const char kDisablePermissionActionReporting[] =
+    "disable-permission-action-reporting";
+
 // Disable pop-up blocking.
 const char kDisablePopupBlocking[]          = "disable-popup-blocking";
 
@@ -310,19 +312,17 @@ const char kDisablePrintPreview[]           = "disable-print-preview";
 // disable that check. This switch is used during automated testing.
 const char kDisablePromptOnRepost[]         = "disable-prompt-on-repost";
 
-// Disables support for the QUIC protocol.
-const char kDisableQuic[]                   = "disable-quic";
-
-// Disable use of Chromium's port selection for the ephemeral port via bind().
-// This only has an effect if QUIC protocol is enabled.
-const char kDisableQuicPortSelection[]      = "disable-quic-port-selection";
-
 // Disables using bubbles for session restore request.
 const char kDisableSessionCrashedBubble[] = "disable-session-crashed-bubble";
 
 // Disables the Site Engagement service, which records interaction with sites
 // and allocates certain resources accordingly.
 const char kDisableSiteEngagementService[] = "disable-site-engagement-service";
+
+#if defined(OS_ANDROID)
+// Disable VR UI if supported.
+const char kDisableVrShell[] = "disable-vr-shell";
+#endif
 
 // Disables Web Notification custom layouts.
 const char kDisableWebNotificationCustomLayouts[] =
@@ -371,6 +371,11 @@ const char kEnableAppLink[] = "enable-app-link";
 
 // Enable OS integration for Chrome app file associations.
 const char kEnableAppsFileAssociations[]    = "enable-apps-file-associations";
+
+#if defined(OS_CHROMEOS)
+// Enables the intent picker so the user can handle URL links with ARC apps.
+const char kEnableIntentPicker[] = "enable-intent-picker";
+#endif  // defined(OS_CHROMEOS)
 
 // If the WebRTC logging private API is active, enables audio debug recordings.
 const char kEnableAudioDebugRecordingsFromExtension[] =
@@ -473,6 +478,11 @@ const char kDisablePanels[]                 = "disable-panels";
 // for blacklisted sites.
 const char kEnablePermissionsBlacklist[] = "enable-permissions-blacklist";
 
+// Enables permission action reporting to Safe Browsing servers for opted in
+// users.
+const char kEnablePermissionActionReporting[] =
+    "enable-permission-action-reporting";
+
 // Enables a number of potentially annoying security features (strict mixed
 // content mode, powerful feature restrictions, etc.)
 const char kEnablePotentiallyAnnoyingSecurityFeatures[] =
@@ -495,13 +505,6 @@ const char kEnableProfiling[]               = "enable-profiling";
 // Enable or disable background mode for the Push API.
 const char kEnablePushApiBackgroundMode[] = "enable-push-api-background-mode";
 const char kDisablePushApiBackgroundMode[] = "disable-push-api-background-mode";
-
-// Enables support for the QUIC protocol.  This is a temporary testing flag.
-const char kEnableQuic[]                    = "enable-quic";
-
-// Enable use of Chromium's port selection for the ephemeral port via bind().
-// This only has an effect if QUIC protocol is enabled.
-const char kEnableQuicPortSelection[]       = "enable-quic-port-selection";
 
 // If the WebRTC logging private API is active, enables WebRTC event logging.
 const char kEnableWebRtcEventLoggingFromExtension[] =
@@ -546,9 +549,19 @@ const char kEnableThumbnailRetargeting[]   = "enable-thumbnail-retargeting";
 const char kEnableUserAlternateProtocolPorts[] =
     "enable-user-controlled-alternate-protocol-ports";
 
+#if defined(OS_ANDROID)
+// Enable VR UI if supported.
+const char kEnableVrShell[] = "enable-vr-shell";
+#endif
+
 // Enables a new "web app" style frame for hosted apps (including bookmark
 // apps).
 const char kEnableWebAppFrame[] = "enable-web-app-frame";
+
+#if defined(OS_ANDROID)
+// Enables "Add to Home screen" in the app menu to generate WebAPKs.
+const char kEnableWebApk[] = "enable-webapk";
+#endif
 
 // Enables Web Notification custom layouts.
 const char kEnableWebNotificationCustomLayouts[] =
@@ -635,13 +648,6 @@ const char kHostRules[]                     = "host-rules";
 // to disable host resolver retry attempts.
 const char kHostResolverRetryAttempts[]     = "host-resolver-retry-attempts";
 
-// Causes net::URLFetchers to ignore requests for SSL client certificates,
-// causing them to attempt an unauthenticated SSL/TLS session. This is intended
-// for use when testing various service URLs (eg: kPromoServerURL, kSbURLPrefix,
-// kSyncServiceURL, etc)
-const char kIgnoreUrlFetcherCertRequests[]  =
-    "ignore-urlfetcher-cert-requests";
-
 // Causes the browser to launch directly in incognito mode.
 const char kIncognito[]                     = "incognito";
 
@@ -658,10 +664,6 @@ const char kInstantProcess[]                = "instant-process";
 
 // The URL for the interests API.
 const char kInterestsURL[]                  = "interests-url";
-
-// Dumps IPC messages sent from renderer processes to the browser process to
-// the given directory. Used primarily to gather samples for IPC fuzzing.
-const char kIpcDumpDirectory[]              = "ipc-dump-directory";
 
 // Used for testing - keeps browser alive after last browser window closes.
 const char kKeepAliveForTest[]              = "keep-alive-for-test";
@@ -770,12 +772,13 @@ const char kNumPacThreads[]                 = "num-pac-threads";
 // Launches URL in new browser window.
 const char kOpenInNewWindow[]               = "new-window";
 
-// Specifies a comma separated list of host/port pairs to force use of QUIC.
-const char kOriginToForceQuicOn[]           = "origin-to-force-quic-on";
-
 // The time that a new chrome process which is delegating to an already running
 // chrome process started. (See ProcessSingleton for more details.)
 const char kOriginalProcessStartTime[]      = "original-process-start-time";
+
+// Contains a list of feature names for which origin trial experiments should
+// be disabled. Names should be separated by "|" characters.
+const char kOriginTrialDisabledFeatures[] = "origin-trial-disabled-features";
 
 // Overrides the default public key for checking origin trial tokens.
 const char kOriginTrialPublicKey[] = "origin-trial-public-key";
@@ -880,19 +883,6 @@ const char kProxyServer[]                   = "proxy-server";
 // suspended to save memory usage. The default value is "0" and purging and
 // suspending never happen.
 const char kPurgeAndSuspendTime[]           = "purge-and-suspend-time";
-
-// Specifies a comma separated list of QUIC connection options to send to
-// the server.
-const char kQuicConnectionOptions[]         = "quic-connection-options";
-
-// Specifies a comma separated list of hosts to whitelist QUIC for.
-const char kQuicHostWhitelist[]             = "quic-host-whitelist";
-
-// Specifies the maximum length for a QUIC packet.
-const char kQuicMaxPacketLength[]           = "quic-max-packet-length";
-
-// Specifies the version of QUIC to use.
-const char kQuicVersion[]                   = "quic-version";
 
 // Porvides a list of addresses to discover DevTools remote debugging targets.
 // The format is <host>:<port>,...,<host>:port.
@@ -1123,6 +1113,9 @@ const char kEnableTabSwitcherInDocumentMode[] =
 
 // Switch to an existing tab for a suggestion opened from the New Tab Page.
 const char kNtpSwitchToExistingTab[] = "ntp-switch-to-existing-tab";
+
+// Enable theme colors in the tab switcher.
+const char kEnableTabSwitcherThemeColors[] = "enable-tab-switcher-theme-colors";
 #endif  // defined(OS_ANDROID)
 
 #if defined(USE_ASH)
@@ -1156,6 +1149,14 @@ const char kDisableAppInfoDialogMac[] = "disable-app-info-dialog-mac";
 // Disables custom Cmd+` window cycling for platform apps and hosted apps.
 const char kDisableAppWindowCycling[] = "disable-app-window-cycling";
 
+// Disables fullscreen low power mode on Mac.
+const char kDisableFullscreenLowPowerMode[] =
+    "disable-fullscreen-low-power-mode";
+
+// Disables tab detaching in fullscreen mode on Mac.
+const char kDisableFullscreenTabDetaching[] =
+    "disable-fullscreen-tab-detaching";
+
 // Disables app shim creation for hosted apps on Mac.
 const char kDisableHostedAppShimCreation[] = "disable-hosted-app-shim-creation";
 
@@ -1186,9 +1187,9 @@ const char kEnableHostedAppsInWindows[] = "enable-hosted-apps-in-windows";
 const char kEnableMacViewsNativeAppWindows[] =
     "enable-mac-views-native-app-windows";
 
-// Causes Chrome to use an equivalent toolkit-views version of a browser dialog
-// when available, rather than a Cocoa one.
-const char kEnableMacViewsDialogs[] = "enable-mac-views-dialogs";
+// Enables the fullscreen toolbar to reveal itself for tab strip changes.
+const char kEnableFullscreenToolbarReveal[] =
+    "enable-fullscreen-toolbar-reveal";
 
 // Enables Translate experimental new UX which replaces the infobar.
 const char kEnableTranslateNewUX[] = "enable-translate-new-ux";
@@ -1253,20 +1254,10 @@ const char kWatcherProcess[]                = "watcher";
 const char kWindows8Search[]                = "windows8-search";
 #endif  // defined(OS_WIN)
 
-#if defined(ENABLE_IPC_FUZZER)
-// Specifies the testcase used by the IPC fuzzer.
-const char kIpcFuzzerTestcase[]             = "ipc-fuzzer-testcase";
-#endif
-
 #if defined(ENABLE_PRINT_PREVIEW) && !defined(OFFICIAL_BUILD)
 // Enables support to debug printing subsystem.
 const char kDebugPrint[] = "debug-print";
 #endif
-
-#if defined(ENABLE_TASK_MANAGER)
-// Disables the new implementation of the task manager.
-const char kDisableNewTaskManager[]   = "disable-new-task-manager";
-#endif  // defined(ENABLE_TASK_MANAGER)
 
 #if defined(ENABLE_WAYLAND_SERVER)
 // Enables Wayland display server support.
@@ -1350,17 +1341,6 @@ bool PowerOverlayEnabled() {
       ::switches::kEnablePowerOverlay);
 }
 #endif
-
-#if defined(ENABLE_TASK_MANAGER)
-bool NewTaskManagerEnabled() {
-#if defined(OS_MACOSX)
-  return false;  // The new task manager hasn't been adopted on Mac yet.
-#else
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      kDisableNewTaskManager);
-#endif  // defined(OS_MACOSX)
-}
-#endif  // defined(ENABLE_TASK_MANAGER)
 
 // -----------------------------------------------------------------------------
 // DO NOT ADD YOUR CRAP TO THE BOTTOM OF THIS FILE.

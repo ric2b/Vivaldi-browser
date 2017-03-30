@@ -50,14 +50,7 @@ void AccessibilityCursorRingLayer::Set(const gfx::Point& location) {
   aura::Window* root_window = ash::Shell::GetInstance()
                                   ->window_tree_host_manager()
                                   ->GetRootWindowForDisplayId(display.id());
-  CreateOrUpdateLayer(root_window, "AccessibilityCursorRing");
-
-  // Update the layer bounds.
-  layer()->SetBounds(bounds);
-}
-
-void AccessibilityCursorRingLayer::SetOpacity(float opacity) {
-  layer()->SetOpacity(opacity);
+  CreateOrUpdateLayer(root_window, "AccessibilityCursorRing", bounds);
 }
 
 void AccessibilityCursorRingLayer::OnPaintLayer(

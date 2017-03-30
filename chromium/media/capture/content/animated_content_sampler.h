@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_CAPTURE_ANIMATED_CONTENT_SAMPLER_H_
-#define MEDIA_CAPTURE_ANIMATED_CONTENT_SAMPLER_H_
+#ifndef MEDIA_CAPTURE_CONTENT_ANIMATED_CONTENT_SAMPLER_H_
+#define MEDIA_CAPTURE_CONTENT_ANIMATED_CONTENT_SAMPLER_H_
 
 #include <deque>
 
 #include "base/time/time.h"
-#include "media/base/media_export.h"
+#include "media/capture/capture_export.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace media {
@@ -22,7 +22,7 @@ namespace media {
 // In addition, AnimatedContentSampler will provide rewritten frame timestamps,
 // for downstream consumers, that are "truer" to the source content than to the
 // local presentation hardware.
-class MEDIA_EXPORT AnimatedContentSampler {
+class CAPTURE_EXPORT AnimatedContentSampler {
  public:
   explicit AnimatedContentSampler(base::TimeDelta min_capture_period);
   ~AnimatedContentSampler();
@@ -154,4 +154,4 @@ class MEDIA_EXPORT AnimatedContentSampler {
 
 }  // namespace media
 
-#endif  // MEDIA_CAPTURE_ANIMATED_CONTENT_SAMPLER_H_
+#endif  // MEDIA_CAPTURE_CONTENT_ANIMATED_CONTENT_SAMPLER_H_

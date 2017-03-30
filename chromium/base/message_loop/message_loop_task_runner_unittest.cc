@@ -11,6 +11,8 @@
 #include "base/debug/leak_annotations.h"
 #include "base/message_loop/message_loop.h"
 #include "base/message_loop/message_loop_task_runner.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -24,7 +26,8 @@ class MessageLoopTaskRunnerTest : public testing::Test {
   MessageLoopTaskRunnerTest()
       : current_loop_(new MessageLoop()),
         task_thread_("task_thread"),
-        thread_sync_(true, false) {}
+        thread_sync_(WaitableEvent::ResetPolicy::MANUAL,
+                     WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void DeleteCurrentMessageLoop() { current_loop_.reset(); }
 
@@ -35,7 +38,7 @@ class MessageLoopTaskRunnerTest : public testing::Test {
     task_thread_.Start();
 
     // Allow us to pause the |task_thread_|'s MessageLoop.
-    task_thread_.message_loop()->PostTask(
+    task_thread_.message_loop()->task_runner()->PostTask(
         FROM_HERE, Bind(&MessageLoopTaskRunnerTest::BlockTaskThreadHelper,
                         Unretained(this)));
   }
@@ -257,7 +260,8 @@ class MessageLoopTaskRunnerThreadingTest : public testing::Test {
   }
 
   void Quit() const {
-    loop_.PostTask(FROM_HERE, MessageLoop::QuitWhenIdleClosure());
+    loop_.task_runner()->PostTask(FROM_HERE,
+                                  MessageLoop::QuitWhenIdleClosure());
   }
 
   void AssertOnIOThread() const {
@@ -313,21 +317,21 @@ class MessageLoopTaskRunnerThreadingTest : public testing::Test {
 
 TEST_F(MessageLoopTaskRunnerThreadingTest, Release) {
   EXPECT_TRUE(io_thread_->task_runner()->ReleaseSoon(FROM_HERE, this));
-  MessageLoop::current()->Run();
+  RunLoop().Run();
 }
 
 TEST_F(MessageLoopTaskRunnerThreadingTest, Delete) {
   DeletedOnFile* deleted_on_file = new DeletedOnFile(this);
   EXPECT_TRUE(
       file_thread_->task_runner()->DeleteSoon(FROM_HERE, deleted_on_file));
-  MessageLoop::current()->Run();
+  RunLoop().Run();
 }
 
 TEST_F(MessageLoopTaskRunnerThreadingTest, PostTask) {
   EXPECT_TRUE(file_thread_->task_runner()->PostTask(
       FROM_HERE, Bind(&MessageLoopTaskRunnerThreadingTest::BasicFunction,
                       Unretained(this))));
-  MessageLoop::current()->Run();
+  RunLoop().Run();
 }
 
 TEST_F(MessageLoopTaskRunnerThreadingTest, PostTaskAfterThreadExits) {

@@ -22,6 +22,8 @@
 #include "third_party/WebKit/public/web/WebCache.h"
 #include "ui/gfx/image/image_skia.h"
 
+class PrefRegistrySimple;
+
 namespace net {
 class URLRequest;
 }  // namespace net
@@ -33,6 +35,17 @@ namespace task_management {
 // enabled calculations of the usage of the various resources.
 class TaskManagerInterface {
  public:
+  // Registers the task manager related prefs.
+  static void RegisterPrefs(PrefRegistrySimple* registry);
+
+  // Returns true if the user is allowed to end processes.
+  static bool IsEndProcessEnabled();
+
+#if defined(OS_MACOSX)
+  // On Mac OS, the old task manager is still being used on cocoa.
+  static bool IsNewTaskManagerEnabled();
+#endif  // defined(OS_MACOSX)
+
   // Gets the existing instance of the task manager if any, otherwise it will
   // create it first. Must be called on the UI thread.
   static TaskManagerInterface* GetTaskManager();
@@ -48,6 +61,9 @@ class TaskManagerInterface {
   // Activates the task with |task_id| by bringing its container to the front if
   // possible.
   virtual void ActivateTask(TaskId task_id) = 0;
+
+  // Returns if the task is killable.
+  virtual bool IsTaskKillable(TaskId task_id) = 0;
 
   // Kills the task with |task_id|.
   virtual void KillTask(TaskId task_id) = 0;
@@ -173,10 +189,12 @@ class TaskManagerInterface {
       TaskId task_id,
       blink::WebCache::ResourceTypeStats* stats) const = 0;
 
-  // Gets the list of task IDs currently tracked by the task manager. The list
-  // will be sorted such that the task representing the browser process is at
-  // the top of the list and the rest of the IDs will be sorted by the process
-  // IDs on which the tasks are running, then by the task IDs themselves.
+  // Gets the list of task IDs currently tracked by the task manager. Tasks that
+  // share the same process id will always be consecutive. The list will be
+  // sorted in a way that reflects the process tree: the browser process will be
+  // first, followed by the gpu process if it exists. Related processes (e.g., a
+  // subframe process and its parent) will be kept together if possible. Callers
+  // can expect this ordering to be stable when a process is added or removed.
   virtual const TaskIdList& GetTaskIdsList() const = 0;
 
   // Gets the list of task IDs of the tasks that run on the same process as the

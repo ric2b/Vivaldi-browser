@@ -63,7 +63,6 @@ import org.chromium.content.browser.accessibility.captioning.SystemCaptioningBri
 import org.chromium.content.browser.accessibility.captioning.TextTrackSettings;
 import org.chromium.content.browser.input.AnimationIntervalProvider;
 import org.chromium.content.browser.input.FloatingPastePopupMenu;
-import org.chromium.content.browser.input.GamepadList;
 import org.chromium.content.browser.input.ImeAdapter;
 import org.chromium.content.browser.input.InputMethodManagerWrapper;
 import org.chromium.content.browser.input.JoystickScrollProvider;
@@ -81,6 +80,7 @@ import org.chromium.content_public.browser.AccessibilitySnapshotNode;
 import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.device.gamepad.GamepadList;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.ViewAndroidDelegate;
 import org.chromium.ui.base.WindowAndroid;
@@ -406,11 +406,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         boolean super_onKeyUp(int keyCode, KeyEvent event);
 
         /**
-         * @see View#dispatchKeyEventPreIme(KeyEvent)
-         */
-        boolean super_dispatchKeyEventPreIme(KeyEvent event);
-
-        /**
          * @see View#dispatchKeyEvent(KeyEvent)
          */
         boolean super_dispatchKeyEvent(KeyEvent event);
@@ -533,9 +528,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     private boolean mPreserveSelectionOnNextLossOfFocus;
     private WebActionModeCallback.ActionHandler mActionHandler;
     private final Rect mSelectionRect = new Rect();
-
-    // Delegate that will handle GET downloads, and be notified of completion of POST downloads.
-    private ContentViewDownloadDelegate mDownloadDelegate;
 
     // Whether native accessibility, i.e. without any script injection, is allowed.
     private boolean mNativeAccessibilityAllowed;
@@ -1515,6 +1507,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         GamepadList.onAttachedToWindow(mContext);
         mAccessibilityManager.addAccessibilityStateChangeListener(this);
         mSystemCaptioningBridge.addListener(this);
+        mImeAdapter.onViewAttachedToWindow();
     }
 
     /**
@@ -1540,6 +1533,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     @SuppressWarnings("javadoc")
     @SuppressLint("MissingSuperCall")
     public void onDetachedFromWindow() {
+        mImeAdapter.onViewDetachedFromWindow();
         mZoomControlsDelegate.dismissZoomPicker();
 
         ScreenOrientationListener.getInstance().removeObserver(this);
@@ -1655,6 +1649,7 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
      * @see View#onWindowFocusChanged(boolean)
      */
     public void onWindowFocusChanged(boolean hasWindowFocus) {
+        mImeAdapter.onWindowFocusChanged(hasWindowFocus);
         if (!hasWindowFocus) resetGestureDetection();
         if (mActionMode != null) mActionMode.onWindowFocusChanged(hasWindowFocus);
         for (mGestureStateListenersIterator.rewind(); mGestureStateListenersIterator.hasNext();) {
@@ -1693,18 +1688,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
             return true;
         }
         return mContainerViewInternals.super_onKeyUp(keyCode, event);
-    }
-
-    /**
-     * @see View#dispatchKeyEventPreIme(KeyEvent)
-     */
-    public boolean dispatchKeyEventPreIme(KeyEvent event) {
-        try {
-            TraceEvent.begin("ContentViewCore.dispatchKeyEventPreIme");
-            return mContainerViewInternals.super_dispatchKeyEventPreIme(event);
-        } finally {
-            TraceEvent.end("ContentViewCore.dispatchKeyEventPreIme");
-        }
     }
 
     /**
@@ -1990,21 +1973,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
         if (mNativeContentViewCore == 0) return;
 
         nativeSendOrientationChangeEvent(mNativeContentViewCore, orientation);
-    }
-
-    /**
-     * Register the delegate to be used when content can not be handled by
-     * the rendering engine, and should be downloaded instead. This will replace
-     * the current delegate, if any.
-     * @param delegate An implementation of ContentViewDownloadDelegate.
-     */
-    public void setDownloadDelegate(ContentViewDownloadDelegate delegate) {
-        mDownloadDelegate = delegate;
-    }
-
-    // Called by DownloadController.
-    ContentViewDownloadDelegate getDownloadDelegate() {
-        return mDownloadDelegate;
     }
 
     @VisibleForTesting
@@ -2313,9 +2281,6 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
                 mSelectionRect.set(left, top, right, bottom);
                 mHasSelection = true;
                 mUnselectAllOnActionModeDismiss = true;
-                // TODO(cjhopman): Remove this when there is a better signal that long press caused
-                // a selection. See http://crbug.com/150151.
-                mContainerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
                 showSelectActionMode(true);
                 break;
 
@@ -2661,15 +2626,18 @@ public class ContentViewCore implements AccessibilityStateChangeListener, Screen
     @SuppressWarnings("unused")
     @CalledByNative
     private boolean showPastePopupWithFeedback(int x, int y) {
-        // TODO(jdduke): Remove this when there is a better signal that long press caused
-        // showing of the paste popup. See http://crbug.com/150151.
         if (showPastePopup(x, y)) {
-            mContainerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             if (mWebContents != null) mWebContents.onContextMenuOpened();
             return true;
         } else {
             return false;
         }
+    }
+
+    @SuppressWarnings("unused")
+    @CalledByNative
+    private void performLongPressHapticFeedback() {
+        mContainerView.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
     }
 
     @VisibleForTesting

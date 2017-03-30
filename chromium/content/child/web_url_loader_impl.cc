@@ -17,6 +17,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -32,7 +33,7 @@
 #include "content/child/web_url_request_util.h"
 #include "content/child/weburlresponse_extradata_impl.h"
 #include "content/common/resource_messages.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/public/child/fixed_received_data.h"
@@ -43,7 +44,7 @@
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
 #include "net/cert/cert_status_flags.h"
-#include "net/cert/sct_status_flags.h"
+#include "net/cert/ct_sct_to_string.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_util.h"
 #include "net/ssl/ssl_cipher_suite_names.h"
@@ -187,8 +188,28 @@ int GetInfoFromDataURL(const GURL& url,
   return net::OK;
 }
 
+// Convert a net::SignedCertificateTimestampAndStatus object to a
+// blink::WebURLResponse::SignedCertificateTimestamp object.
+blink::WebURLResponse::SignedCertificateTimestamp NetSCTToBlinkSCT(
+    const net::SignedCertificateTimestampAndStatus& sct_and_status) {
+  return blink::WebURLResponse::SignedCertificateTimestamp(
+      WebString::fromUTF8(net::ct::StatusToString(sct_and_status.status)),
+      WebString::fromUTF8(net::ct::OriginToString(sct_and_status.sct->origin)),
+      WebString::fromUTF8(sct_and_status.sct->log_description),
+      WebString::fromUTF8(base::HexEncode(sct_and_status.sct->log_id.c_str(),
+                                          sct_and_status.sct->log_id.length())),
+      sct_and_status.sct->timestamp.ToJavaTime(),
+      WebString::fromUTF8(net::ct::HashAlgorithmToString(
+          sct_and_status.sct->signature.hash_algorithm)),
+      WebString::fromUTF8(net::ct::SignatureAlgorithmToString(
+          sct_and_status.sct->signature.signature_algorithm)),
+      WebString::fromUTF8(
+          base::HexEncode(sct_and_status.sct->signature.signature_data.c_str(),
+          sct_and_status.sct->signature.signature_data.length())));
+}
+
 void SetSecurityStyleAndDetails(const GURL& url,
-                                const std::string& security_info,
+                                const ResourceResponseInfo& info,
                                 WebURLResponse* response,
                                 bool report_security_info) {
   if (!report_security_info) {
@@ -202,6 +223,7 @@ void SetSecurityStyleAndDetails(const GURL& url,
 
   // There are cases where an HTTPS request can come in without security
   // info attached (such as a redirect response).
+  const std::string& security_info = info.security_info;
   if (security_info.empty()) {
     response->setSecurityStyle(WebURLResponse::SecurityStyleUnknown);
     return;
@@ -259,10 +281,16 @@ void SetSecurityStyleAndDetails(const GURL& url,
   size_t num_invalid_scts = ssl_status.num_invalid_scts;
   size_t num_valid_scts = ssl_status.num_valid_scts;
 
+  blink::WebURLResponse::SignedCertificateTimestampList sct_list(
+      info.signed_certificate_timestamps.size());
+
+  for (size_t i = 0; i < sct_list.size(); ++i)
+    sct_list[i] = NetSCTToBlinkSCT(info.signed_certificate_timestamps[i]);
+
   blink::WebURLResponse::WebSecurityDetails webSecurityDetails(
       WebString::fromUTF8(protocol), WebString::fromUTF8(key_exchange),
-      WebString::fromUTF8(cipher), WebString::fromUTF8(mac),
-      ssl_status.cert_id, num_unknown_scts, num_invalid_scts, num_valid_scts);
+      WebString::fromUTF8(cipher), WebString::fromUTF8(mac), ssl_status.cert_id,
+      num_unknown_scts, num_invalid_scts, num_valid_scts, sct_list);
 
   response->setSecurityDetails(webSecurityDetails);
 }
@@ -436,12 +464,6 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
                                       SyncLoadResponse* sync_load_response) {
   DCHECK(request_id_ == -1);
   request_ = request;  // Save the request.
-  if (request.getExtraData()) {
-    RequestExtraData* extra_data =
-        static_cast<RequestExtraData*>(request.getExtraData());
-    stream_override_ = extra_data->TakeStreamOverrideOwnership();
-  }
-
   GURL url = request.url();
 
   if (CanHandleDataURLRequestLocally()) {
@@ -460,6 +482,13 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
     }
     return;
   }
+
+  if (request.getExtraData()) {
+    RequestExtraData* extra_data =
+        static_cast<RequestExtraData*>(request.getExtraData());
+    stream_override_ = extra_data->TakeStreamOverrideOwnership();
+  }
+
 
   // PlzNavigate: outside of tests, the only navigation requests going through
   // the WebURLLoader are the ones created by CommitNavigation. Several browser
@@ -505,7 +534,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   request_info.routing_id = request.requestorID();
   request_info.download_to_file = request.downloadToFile();
   request_info.has_user_gesture = request.hasUserGesture();
-  request_info.skip_service_worker = request.skipServiceWorker();
+  request_info.skip_service_worker =
+      GetSkipServiceWorkerForWebURLRequest(request);
   request_info.should_reset_appcache = request.shouldResetAppCache();
   request_info.fetch_request_mode =
       GetFetchRequestModeForWebURLRequest(request);
@@ -522,7 +552,7 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
   request_info.loading_web_task_runner.reset(web_task_runner_->clone());
   request_info.lofi_state = static_cast<LoFiState>(request.getLoFiState());
 
-  scoped_refptr<ResourceRequestBody> request_body =
+  scoped_refptr<ResourceRequestBodyImpl> request_body =
       GetRequestBodyForWebURLRequest(request).get();
 
   // PlzNavigate: during navigation, the renderer should request a stream which
@@ -580,9 +610,12 @@ bool WebURLLoaderImpl::Context::OnReceivedRedirect(
 
   WebURLRequest new_request;
   new_request.initialize();
-  PopulateURLRequestForRedirect(request_, redirect_info, referrer_policy_,
-                                !info.was_fetched_via_service_worker,
-                                &new_request);
+  PopulateURLRequestForRedirect(
+      request_, redirect_info, referrer_policy_,
+      info.was_fetched_via_service_worker
+          ? blink::WebURLRequest::SkipServiceWorker::None
+          : blink::WebURLRequest::SkipServiceWorker::All,
+      &new_request);
 
   client_->willFollowRedirect(loader_, new_request, response);
   request_ = new_request;
@@ -956,9 +989,15 @@ void WebURLLoaderImpl::PopulateURLResponse(const GURL& url,
       info.is_in_cache_storage
           ? blink::WebString::fromUTF8(info.cache_storage_cache_name)
           : blink::WebString());
+  blink::WebVector<blink::WebString> cors_exposed_header_names(
+      info.cors_exposed_header_names.size());
+  std::transform(
+      info.cors_exposed_header_names.begin(),
+      info.cors_exposed_header_names.end(), cors_exposed_header_names.begin(),
+      [](const std::string& h) { return blink::WebString::fromLatin1(h); });
+  response->setCorsExposedHeaderNames(cors_exposed_header_names);
 
-  SetSecurityStyleAndDetails(url, info.security_info, response,
-                             report_security_info);
+  SetSecurityStyleAndDetails(url, info, response, report_security_info);
 
   WebURLResponseExtraDataImpl* extra_data =
       new WebURLResponseExtraDataImpl(info.npn_negotiated_protocol);
@@ -1065,7 +1104,7 @@ void WebURLLoaderImpl::PopulateURLRequestForRedirect(
     const blink::WebURLRequest& request,
     const net::RedirectInfo& redirect_info,
     blink::WebReferrerPolicy referrer_policy,
-    bool skip_service_worker,
+    blink::WebURLRequest::SkipServiceWorker skip_service_worker,
     blink::WebURLRequest* new_request) {
   // TODO(darin): We lack sufficient information to construct the actual
   // request that resulted from the redirect.
@@ -1083,6 +1122,7 @@ void WebURLLoaderImpl::PopulateURLRequestForRedirect(
 
   new_request->setHTTPReferrer(WebString::fromUTF8(redirect_info.new_referrer),
                               referrer_policy);
+  new_request->setPriority(request.getPriority());
 
   std::string old_method = request.httpMethod().utf8();
   new_request->setHTTPMethod(WebString::fromUTF8(redirect_info.new_method));

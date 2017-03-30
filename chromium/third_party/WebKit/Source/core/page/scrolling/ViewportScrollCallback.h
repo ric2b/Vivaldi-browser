@@ -21,12 +21,14 @@ class OverscrollController;
 
 class ViewportScrollCallback : public ScrollStateCallback {
 public:
-    ViewportScrollCallback(TopControls&, OverscrollController&);
+    // ViewportScrollCallback does not assume ownership of TopControls or of
+    // OverscrollController.
+    ViewportScrollCallback(TopControls*, OverscrollController*);
     ~ViewportScrollCallback();
 
     void handleEvent(ScrollState*) override;
 
-    void setScroller(ScrollableArea&);
+    void setScroller(ScrollableArea*);
 
     DECLARE_VIRTUAL_TRACE();
 

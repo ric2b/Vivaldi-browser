@@ -30,19 +30,13 @@
 
 #include "public/web/WebLeakDetector.h"
 
-#include "bindings/core/v8/ScriptPromise.h"
-#include "bindings/core/v8/V8Binding.h"
 #include "bindings/core/v8/V8GCController.h"
-#include "core/dom/ActiveDOMObject.h"
-#include "core/dom/Document.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/inspector/InstanceCounters.h"
-#include "core/layout/LayoutObject.h"
+#include "core/workers/InProcessWorkerMessagingProxy.h"
 #include "core/workers/WorkerThread.h"
-#include "modules/webaudio/AudioNode.h"
 #include "platform/Timer.h"
-#include "public/web/WebDocument.h"
 #include "public/web/WebFrame.h"
 #include "web/WebLocalFrameImpl.h"
 
@@ -131,10 +125,19 @@ void WebLeakDetectorImpl::delayedGCAndReport(Timer<WebLeakDetectorImpl>*)
     // Note: Oilpan precise GC is scheduled at the end of the event loop.
 
     // Inspect counters on the next event loop.
-    if (--m_numberOfGCNeeded)
+    if (--m_numberOfGCNeeded > 0) {
         m_delayedGCAndReportTimer.startOneShot(0, BLINK_FROM_HERE);
-    else
+    } else if (m_numberOfGCNeeded > -1 && InProcessWorkerMessagingProxy::proxyCount()) {
+        // It is possible that all posted tasks for finalizing in-process proxy objects
+        // will not have run before the final round of GCs started. If so, do yet
+        // another pass, letting these tasks run and then afterwards perform a GC to tidy up.
+        //
+        // TODO(sof): use proxyCount() to always decide if another GC needs to be scheduled.
+        // Some debug bots running browser unit tests disagree (crbug.com/616714)
+        m_delayedGCAndReportTimer.startOneShot(0, BLINK_FROM_HERE);
+    } else {
         m_delayedReportTimer.startOneShot(0, BLINK_FROM_HERE);
+    }
 }
 
 void WebLeakDetectorImpl::delayedReport(Timer<WebLeakDetectorImpl>*)

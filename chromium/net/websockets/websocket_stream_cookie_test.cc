@@ -43,10 +43,11 @@ class TestBase : public WebSocketStreamCreateTestBase {
 
     url_request_context_host_.SetExpectations(
         WebSocketStandardRequestWithCookies(url.path(), url.host(), origin,
-                                            cookie_header, std::string()),
+                                            cookie_header, std::string(),
+                                            std::string()),
         response_body);
     CreateAndConnectStream(url, NoSubProtocols(), origin,
-                           first_party_for_cookies, nullptr);
+                           first_party_for_cookies, "", nullptr);
   }
 
   std::string AddCRLFIfNotEmpty(const std::string& s) {

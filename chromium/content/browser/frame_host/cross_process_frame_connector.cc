@@ -172,7 +172,10 @@ void CrossProcessFrameConnector::BubbleScrollEvent(
     memcpy(&resent_wheel_event, &event, sizeof(resent_wheel_event));
     resent_wheel_event.x += offset_from_parent.x();
     resent_wheel_event.y += offset_from_parent.y();
-    parent_view->ProcessMouseWheelEvent(resent_wheel_event);
+    // TODO(wjmaclean): Initialize latency info correctly for OOPIFs.
+    // https://crbug.com/613628
+    ui::LatencyInfo latency_info;
+    parent_view->ProcessMouseWheelEvent(resent_wheel_event, latency_info);
   } else {
     NOTIMPLEMENTED();
   }
@@ -189,6 +192,19 @@ void CrossProcessFrameConnector::FocusRootView() {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
   if (root_view)
     root_view->Focus();
+}
+
+bool CrossProcessFrameConnector::LockMouse() {
+  RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
+  if (root_view)
+    return root_view->LockMouse();
+  return false;
+}
+
+void CrossProcessFrameConnector::UnlockMouse() {
+  RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
+  if (root_view)
+    root_view->UnlockMouse();
 }
 
 void CrossProcessFrameConnector::OnForwardInputEvent(
@@ -217,23 +233,26 @@ void CrossProcessFrameConnector::OnForwardInputEvent(
   }
 
   if (blink::WebInputEvent::isMouseEventType(event->type)) {
-    view_->ProcessMouseEvent(*static_cast<const blink::WebMouseEvent*>(event));
+    // TODO(wjmaclean): Initialize latency info correctly for OOPIFs.
+    // https://crbug.com/613628
+    ui::LatencyInfo latency_info;
+    view_->ProcessMouseEvent(*static_cast<const blink::WebMouseEvent*>(event),
+                              latency_info);
     return;
   }
 
   if (event->type == blink::WebInputEvent::MouseWheel) {
+    // TODO(wjmaclean): Initialize latency info correctly for OOPIFs.
+    // https://crbug.com/613628
+    ui::LatencyInfo latency_info;
     view_->ProcessMouseWheelEvent(
-        *static_cast<const blink::WebMouseWheelEvent*>(event));
+        *static_cast<const blink::WebMouseWheelEvent*>(event), latency_info);
     return;
   }
 }
 
 void CrossProcessFrameConnector::OnFrameRectChanged(
     const gfx::Rect& frame_rect) {
-  // TODO(wjmaclean) When changing the zoom of a WebView child without also
-  // changing the zoom of the embedder (e.g. using WebView.setZoom()), we
-  // shouldn't propagate this change in the frame rect. We need to find a way
-  // to detect when this happens. http://crbug.com/607978
   if (!frame_rect.size().IsEmpty())
     SetRect(frame_rect);
 }
@@ -277,7 +296,7 @@ void CrossProcessFrameConnector::SetRect(const gfx::Rect& frame_rect) {
   if (view_) {
     view_->SetBounds(frame_rect);
 
-    // Out-of-process iframes nested underneath this one implicitly have their
+    // Other local root frames nested underneath this one implicitly have their
     // view rects changed when their ancestor is repositioned, and therefore
     // need to have their screen rects updated.
     FrameTreeNode* proxy_node =
@@ -286,8 +305,7 @@ void CrossProcessFrameConnector::SetRect(const gfx::Rect& frame_rect) {
         old_rect.y() != child_frame_rect_.y()) {
       for (FrameTreeNode* node :
            proxy_node->frame_tree()->SubtreeNodes(proxy_node)) {
-        if (node != proxy_node &&
-            node->current_frame_host()->GetRenderWidgetHost())
+        if (node != proxy_node && node->current_frame_host()->is_local_root())
           node->current_frame_host()->GetRenderWidgetHost()->SendScreenRects();
       }
     }

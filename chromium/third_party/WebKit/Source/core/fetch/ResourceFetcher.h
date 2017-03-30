@@ -33,6 +33,7 @@
 #include "core/fetch/FetchRequest.h"
 #include "core/fetch/Resource.h"
 #include "core/fetch/ResourceLoaderOptions.h"
+#include "core/fetch/ResourceLoaderSet.h"
 #include "core/fetch/SubstituteData.h"
 #include "platform/Timer.h"
 #include "platform/network/ResourceError.h"
@@ -41,6 +42,7 @@
 #include "wtf/HashSet.h"
 #include "wtf/ListHashSet.h"
 #include "wtf/text/StringHash.h"
+#include <memory>
 
 namespace blink {
 
@@ -55,7 +57,6 @@ class ScriptResource;
 class XSLStyleSheetResource;
 class KURL;
 class ResourceTimingInfo;
-class ResourceLoaderSet;
 
 // The ResourceFetcher provides a per-context interface to the MemoryCache
 // and enforces a bunch of security checks and rules for resource revalidation.
@@ -79,6 +80,9 @@ public:
 
     using DocumentResourceMap = HeapHashMap<String, WeakMember<Resource>>;
     const DocumentResourceMap& allResources() const { return m_documentResources; }
+
+    // Actually starts loading a Resource if it wasn't started during requestResource().
+    bool startLoad(Resource*);
 
     void setAutoLoadImages(bool);
     void setImagesEnabled(bool);
@@ -115,7 +119,6 @@ public:
     void didReceiveResponse(Resource*, const ResourceResponse&);
     void didReceiveData(const Resource*, const char* data, int dataLength, int encodedDataLength);
     void didDownloadData(const Resource*, int dataLength, int encodedDataLength);
-    void willStartLoadingResource(Resource*, ResourceLoader*, ResourceRequest&);
     bool defersLoading() const;
 
     enum AccessControlLoggingDecision {
@@ -133,15 +136,13 @@ public:
         ResourceLoadingFromNetwork,
         ResourceLoadingFromCache
     };
-    void requestLoadStarted(Resource*, const FetchRequest&, ResourceLoadStartType, bool isStaticData = false);
+    void requestLoadStarted(unsigned long identifier, Resource*, const FetchRequest&, ResourceLoadStartType, bool isStaticData = false);
     static const ResourceLoaderOptions& defaultResourceOptions();
 
     String getCacheIdentifier() const;
 
     static void determineRequestContext(ResourceRequest&, Resource::Type, bool isMainFrame);
     void determineRequestContext(ResourceRequest&, Resource::Type);
-
-    WebTaskRunner* loadingTaskRunner();
 
     void updateAllImageResourcePriorities();
 
@@ -155,7 +156,7 @@ private:
 
     explicit ResourceFetcher(FetchContext*);
 
-    void initializeRevalidation(const FetchRequest&, Resource*);
+    void initializeRevalidation(ResourceRequest&, Resource*);
     Resource* createResourceForLoading(FetchRequest&, const String& charset, const ResourceFactory&);
     void storeResourceTimingInitiatorInformation(Resource*);
 
@@ -170,6 +171,7 @@ private:
     void removeResourceLoader(ResourceLoader*);
 
     void initializeResourceRequest(ResourceRequest&, Resource::Type, FetchRequest::DeferOption);
+    void willSendRequest(unsigned long identifier, ResourceRequest&, const ResourceResponse&, const ResourceLoaderOptions&);
 
     bool resourceNeedsLoad(Resource*, const FetchRequest&, RevalidationPolicy);
     bool shouldDeferImageLoad(const KURL&) const;
@@ -190,13 +192,13 @@ private:
 
     Timer<ResourceFetcher> m_resourceTimingReportTimer;
 
-    using ResourceTimingInfoMap = HeapHashMap<Member<Resource>, OwnPtr<ResourceTimingInfo>>;
+    using ResourceTimingInfoMap = HeapHashMap<Member<Resource>, std::unique_ptr<ResourceTimingInfo>>;
     ResourceTimingInfoMap m_resourceTimingInfoMap;
 
-    Vector<OwnPtr<ResourceTimingInfo>> m_scheduledResourceTimingReports;
+    Vector<std::unique_ptr<ResourceTimingInfo>> m_scheduledResourceTimingReports;
 
-    Member<ResourceLoaderSet> m_loaders;
-    Member<ResourceLoaderSet> m_nonBlockingLoaders;
+    ResourceLoaderSet m_loaders;
+    ResourceLoaderSet m_nonBlockingLoaders;
 
     // Used in hit rate histograms.
     class DeadResourceStatsRecorder {
@@ -218,6 +220,7 @@ private:
     bool m_autoLoadImages : 1;
     bool m_imagesEnabled : 1;
     bool m_allowStaleResources : 1;
+    bool m_imageFetched : 1;
     bool m_onlyLoadServeCachedResources : 1;
 };
 

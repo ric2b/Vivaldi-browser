@@ -201,7 +201,8 @@ void RenderFrameHostManager::RemoveOuterDelegateFrame() {
 RenderFrameHostImpl* RenderFrameHostManager::Navigate(
     const GURL& dest_url,
     const FrameNavigationEntry& frame_entry,
-    const NavigationEntryImpl& entry) {
+    const NavigationEntryImpl& entry,
+    bool is_reload) {
   TRACE_EVENT1("navigation", "RenderFrameHostManager:Navigate",
                "FrameTreeNode id", frame_tree_node_->frame_tree_node_id());
   // Create a pending RenderFrameHost to use for the navigation.
@@ -210,7 +211,7 @@ RenderFrameHostImpl* RenderFrameHostManager::Navigate(
       entry.GetTransitionType(),
       entry.restore_type() != NavigationEntryImpl::RESTORE_NONE,
       entry.IsViewSourceMode(), entry.transferred_global_request_id(),
-      entry.bindings());
+      entry.bindings(), is_reload);
   if (!dest_render_frame_host)
     return nullptr;  // We weren't able to create a pending render frame host.
 
@@ -233,9 +234,9 @@ RenderFrameHostImpl* RenderFrameHostManager::Navigate(
     // with the new render frame if necessary.  Note that this call needs to
     // occur before initializing the RenderView; the flow of creating the
     // RenderView can cause browser-side code to execute that expects the this
-    // RFH's ServiceRegistry to be initialized (e.g., if the site is a WebUI
-    // site that is handled via Mojo, then Mojo WebUI code in //chrome will
-    // add a service to this RFH's ServiceRegistry).
+    // RFH's shell::InterfaceRegistry to be initialized (e.g., if the site is a
+    // WebUI site that is handled via Mojo, then Mojo WebUI code in //chrome
+    // will add an interface to this RFH's InterfaceRegistry).
     dest_render_frame_host->SetUpMojoIfNeeded();
 
     // Recreate the opener chain.
@@ -488,9 +489,12 @@ void RenderFrameHostManager::OnCrossSiteResponse(
 
   transferring_render_frame_host->frame_tree_node()
       ->navigator()
-      ->RequestTransferURL(transferring_render_frame_host, transfer_url,
-                           nullptr, rest_of_chain, referrer, page_transition,
-                           global_request_id, should_replace_current_entry);
+      ->RequestTransferURL(
+          transferring_render_frame_host, transfer_url, nullptr, rest_of_chain,
+          referrer, page_transition, global_request_id,
+          should_replace_current_entry,
+          transfer_navigation_handle_->IsPost() ? "POST" : "GET",
+          transfer_navigation_handle_->resource_request_body());
 
   // The transferring request was only needed during the RequestTransferURL
   // call, so it is safe to clear at this point.
@@ -963,14 +967,44 @@ void RenderFrameHostManager::OnDidResetContentSecurityPolicy() {
   }
 }
 
-void RenderFrameHostManager::OnEnforceStrictMixedContentChecking(
-    bool should_enforce) {
+void RenderFrameHostManager::OnEnforceInsecureRequestPolicy(
+    blink::WebInsecureRequestPolicy policy) {
   if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
     return;
 
   for (const auto& pair : proxy_hosts_) {
-    pair.second->Send(new FrameMsg_EnforceStrictMixedContentChecking(
-        pair.second->GetRoutingID(), should_enforce));
+    pair.second->Send(new FrameMsg_EnforceInsecureRequestPolicy(
+        pair.second->GetRoutingID(), policy));
+  }
+}
+
+void RenderFrameHostManager::OnDidUpdateFrameOwnerProperties(
+    const blink::WebFrameOwnerProperties& properties) {
+  if (!SiteIsolationPolicy::AreCrossProcessFramesPossible())
+    return;
+
+  // WebFrameOwnerProperties exist only for frames that have a parent.
+  CHECK(frame_tree_node_->parent());
+  SiteInstance* parent_instance =
+      frame_tree_node_->parent()->current_frame_host()->GetSiteInstance();
+
+  // Notify the RenderFrame if it lives in a different process from its parent.
+  if (render_frame_host_->GetSiteInstance() != parent_instance) {
+    render_frame_host_->Send(new FrameMsg_SetFrameOwnerProperties(
+        render_frame_host_->GetRoutingID(), properties));
+  }
+
+  // Notify this frame's proxies if they live in a different process from its
+  // parent.  This is only currently needed for the allowFullscreen property,
+  // since that can be queried on RemoteFrame ancestors.
+  //
+  // TODO(alexmos): It would be sufficient to only send this update to proxies
+  // in the current FrameTree.
+  for (const auto& pair : proxy_hosts_) {
+    if (pair.second->GetSiteInstance() != parent_instance) {
+      pair.second->Send(new FrameMsg_SetFrameOwnerProperties(
+          pair.second->GetRoutingID(), properties));
+    }
   }
 }
 
@@ -1755,7 +1789,8 @@ int RenderFrameHostManager::CreateRenderFrameProxy(SiteInstance* instance) {
   if (!render_view_host) {
     CHECK(frame_tree_node_->IsMainFrame());
     render_view_host = frame_tree_node_->frame_tree()->CreateRenderViewHost(
-        instance, MSG_ROUTING_NONE, MSG_ROUTING_NONE, true, true);
+        instance, MSG_ROUTING_NONE, MSG_ROUTING_NONE, true,
+        delegate_->IsHidden());
   }
 
   RenderFrameProxyHost* proxy = GetRenderFrameProxyHost(instance);
@@ -2168,7 +2203,8 @@ RenderFrameHostImpl* RenderFrameHostManager::UpdateStateForNavigate(
     bool dest_is_restore,
     bool dest_is_view_source_mode,
     const GlobalRequestID& transferred_request_id,
-    int bindings) {
+    int bindings,
+    bool is_reload) {
   if (!frame_tree_node_->IsMainFrame() &&
       !CanSubframeSwapProcess(dest_url, source_instance, dest_instance)) {
     // Note: Do not add code here to determine whether the subframe should swap
@@ -2244,14 +2280,14 @@ RenderFrameHostImpl* RenderFrameHostManager::UpdateStateForNavigate(
       // a timeout).  If the handler returns false, we'll have to cancel the
       // request.
       //
-      // Also make sure the old render view stops, in case a load is in
+      // Also make sure the old RenderFrame stops, in case a load is in
       // progress.  (We don't want to do this for transfers, since it will
       // interrupt the transfer with an unexpected DidStopLoading.)
       render_frame_host_->Send(new FrameMsg_Stop(
           render_frame_host_->GetRoutingID()));
       pending_render_frame_host_->SetNavigationsSuspended(true,
                                                           base::TimeTicks());
-      render_frame_host_->DispatchBeforeUnload(true);
+      render_frame_host_->DispatchBeforeUnload(true, is_reload);
     }
 
     return pending_render_frame_host_.get();

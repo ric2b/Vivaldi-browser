@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "cc/test/fake_layer_tree_host_impl.h"
+
 #include <stddef.h>
 
+#include "cc/animation/animation_host.h"
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/layer_tree_settings_for_testing.h"
@@ -46,6 +49,7 @@ FakeLayerTreeHostImpl::FakeLayerTreeHostImpl(
                         manager,
                         gpu_memory_buffer_manager,
                         task_graph_runner,
+                        AnimationHost::CreateForTesting(ThreadInstance::IMPL),
                         0),
       notify_tile_state_changed_called_(false) {
   // Explicitly clear all debug settings.
@@ -85,9 +89,9 @@ void FakeLayerTreeHostImpl::AdvanceToNextFrame(base::TimeDelta advance_by) {
 
 int FakeLayerTreeHostImpl::RecursiveUpdateNumChildren(LayerImpl* layer) {
   int num_children_that_draw_content = 0;
-  for (size_t i = 0; i < layer->children().size(); ++i) {
+  for (size_t i = 0; i < layer->test_properties()->children.size(); ++i) {
     num_children_that_draw_content +=
-        RecursiveUpdateNumChildren(layer->children()[i]);
+        RecursiveUpdateNumChildren(layer->test_properties()->children[i]);
   }
   layer->test_properties()->num_descendants_that_draw_content =
       num_children_that_draw_content;
@@ -100,9 +104,9 @@ void FakeLayerTreeHostImpl::UpdateNumChildrenAndDrawPropertiesForActiveTree() {
 
 void FakeLayerTreeHostImpl::UpdateNumChildrenAndDrawProperties(
     LayerTreeImpl* layerTree) {
-  RecursiveUpdateNumChildren(layerTree->root_layer());
+  RecursiveUpdateNumChildren(layerTree->root_layer_for_testing());
   bool update_lcd_text = false;
-  layerTree->BuildPropertyTreesForTesting();
+  layerTree->BuildLayerListAndPropertyTreesForTesting();
   layerTree->UpdateDrawProperties(update_lcd_text);
 }
 

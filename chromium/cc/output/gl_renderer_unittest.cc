@@ -64,6 +64,16 @@ class GLRendererTest : public testing::Test {
   RenderPass* root_render_pass() {
     return render_passes_in_draw_order_.back().get();
   }
+  void DrawFrame(Renderer* renderer, const gfx::Rect& viewport_rect) {
+    renderer->DrawFrame(&render_passes_in_draw_order_, 1.f, gfx::ColorSpace(),
+                        viewport_rect, viewport_rect, false);
+  }
+  void DrawFrame(Renderer* renderer,
+                 const gfx::Rect& viewport_rect,
+                 const gfx::Rect& clip_rect) {
+    renderer->DrawFrame(&render_passes_in_draw_order_, 1.f, gfx::ColorSpace(),
+                        viewport_rect, clip_rect, false);
+  }
 
   RenderPassList render_passes_in_draw_order_;
 };
@@ -172,9 +182,12 @@ class GLRendererShaderPixelTest : public GLRendererPixelTest {
         renderer()->GetTileProgramSwizzleOpaque(precision, sampler));
     EXPECT_PROGRAM_VALID(
         renderer()->GetTileProgramSwizzleAA(precision, sampler));
-    EXPECT_PROGRAM_VALID(renderer()->GetVideoYUVProgram(precision, sampler));
-    EXPECT_PROGRAM_VALID(renderer()->GetVideoNV12Program(precision, sampler));
-    EXPECT_PROGRAM_VALID(renderer()->GetVideoYUVAProgram(precision, sampler));
+    for (int j = 0; j < 2; j++) {
+      for (int k = 0; k < 2; k++) {
+        EXPECT_PROGRAM_VALID(
+            renderer()->GetVideoYUVProgram(precision, sampler, j, k));
+      }
+    }
   }
 
   void TestShadersWithMasks(TexCoordPrecision precision,
@@ -537,11 +550,7 @@ TEST_F(GLRendererWithDefaultHarnessTest,
                 gfx::Transform());
 
   renderer_->SetVisible(true);
-  renderer_->DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       viewport_rect,
-                       false);
+  DrawFrame(renderer_.get(), viewport_rect);
   EXPECT_FALSE(renderer_->IsBackbufferDiscarded());
 
   SwapBuffers();
@@ -559,11 +568,7 @@ TEST_F(GLRendererWithDefaultHarnessTest, ExternalStencil) {
                     viewport_rect, gfx::Transform());
   root_pass->has_transparent_background = false;
 
-  renderer_->DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       viewport_rect,
-                       false);
+  DrawFrame(renderer_.get(), viewport_rect);
   EXPECT_TRUE(renderer_->stencil_enabled());
 }
 
@@ -770,11 +775,7 @@ TEST_F(GLRendererTest, OpaqueBackground) {
 #else
   EXPECT_CALL(*context, clear(_)).Times(1);
 #endif
-  renderer.DrawFrame(&render_passes_in_draw_order_,
-                     1.f,
-                     viewport_rect,
-                     viewport_rect,
-                     false);
+  DrawFrame(&renderer, viewport_rect);
   Mock::VerifyAndClearExpectations(context);
 }
 
@@ -808,11 +809,7 @@ TEST_F(GLRendererTest, TransparentBackground) {
 
   EXPECT_CALL(*context, discardFramebufferEXT(GL_FRAMEBUFFER, 1, _)).Times(1);
   EXPECT_CALL(*context, clear(_)).Times(1);
-  renderer.DrawFrame(&render_passes_in_draw_order_,
-                     1.f,
-                     viewport_rect,
-                     viewport_rect,
-                     false);
+  DrawFrame(&renderer, viewport_rect);
 
   Mock::VerifyAndClearExpectations(context);
 }
@@ -849,11 +846,7 @@ TEST_F(GLRendererTest, OffscreenOutputSurface) {
       .With(Args<2, 1>(ElementsAre(GL_COLOR_ATTACHMENT0)))
       .Times(1);
   EXPECT_CALL(*context, clear(_)).Times(AnyNumber());
-  renderer.DrawFrame(&render_passes_in_draw_order_,
-                     1.f,
-                     viewport_rect,
-                     viewport_rect,
-                     false);
+  DrawFrame(&renderer, viewport_rect);
   Mock::VerifyAndClearExpectations(context);
 }
 
@@ -950,11 +943,7 @@ TEST_F(GLRendererTest, ActiveTextureState) {
   }
 
   gfx::Rect viewport_rect(100, 100);
-  renderer.DrawFrame(&render_passes_in_draw_order_,
-                     1.f,
-                     viewport_rect,
-                     viewport_rect,
-                     false);
+  DrawFrame(&renderer, viewport_rect);
   Mock::VerifyAndClearExpectations(context);
 }
 
@@ -1027,11 +1016,7 @@ TEST_F(GLRendererTest, ShouldClearRootRenderPass) {
       first_render_pass);
 
   renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-  renderer.DrawFrame(&render_passes_in_draw_order_,
-                     1.f,
-                     viewport_rect,
-                     viewport_rect,
-                     false);
+  DrawFrame(&renderer, viewport_rect);
 
   // In multiple render passes all but the root pass should clear the
   // framebuffer.
@@ -1107,11 +1092,7 @@ TEST_F(GLRendererTest, ScissorTestWhenClearing) {
   AddRenderPassQuad(child_pass, grand_child_pass);
 
   renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-  renderer.DrawFrame(&render_passes_in_draw_order_,
-                     1.f,
-                     viewport_rect,
-                     viewport_rect,
-                     false);
+  DrawFrame(&renderer, viewport_rect);
 }
 
 class DiscardCheckingContext : public TestWebGraphicsContext3D {
@@ -1139,11 +1120,13 @@ class NonReshapableOutputSurface : public FakeOutputSurface {
   explicit NonReshapableOutputSurface(
       std::unique_ptr<TestWebGraphicsContext3D> context3d)
       : FakeOutputSurface(TestContextProvider::Create(std::move(context3d)),
+                          nullptr,
                           false) {
     surface_size_ = gfx::Size(500, 500);
   }
   void Reshape(const gfx::Size& size,
                float scale_factor,
+               const gfx::ColorSpace& color_space,
                bool has_alpha) override {}
   void set_fixed_size(const gfx::Size& size) { surface_size_ = size; }
 };
@@ -1187,11 +1170,7 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
     root_pass->damage_rect = gfx::Rect(2, 2, 3, 3);
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-    renderer.DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       clip_rect,
-                       false);
+    DrawFrame(&renderer, viewport_rect, clip_rect);
     EXPECT_EQ(0, context->discarded());
     context->reset();
   }
@@ -1205,11 +1184,7 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
     root_pass->damage_rect = root_pass->output_rect;
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-    renderer.DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       clip_rect,
-                       false);
+    DrawFrame(&renderer, viewport_rect, clip_rect);
     EXPECT_EQ(1, context->discarded());
     context->reset();
   }
@@ -1225,11 +1200,7 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
     root_pass->has_transparent_background = false;
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-    renderer.DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       clip_rect,
-                       false);
+    DrawFrame(&renderer, viewport_rect, clip_rect);
     EXPECT_EQ(0, context->discarded());
     context->reset();
     output_surface->set_has_external_stencil_test(false);
@@ -1245,11 +1216,7 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
     root_pass->damage_rect = root_pass->output_rect;
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-    renderer.DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       clip_rect,
-                       false);
+    DrawFrame(&renderer, viewport_rect, clip_rect);
     EXPECT_EQ(0, context->discarded());
     context->reset();
   }
@@ -1264,11 +1231,7 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
     root_pass->damage_rect = root_pass->output_rect;
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-    renderer.DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       clip_rect,
-                       false);
+    DrawFrame(&renderer, viewport_rect, clip_rect);
     EXPECT_EQ(0, context->discarded());
     context->reset();
   }
@@ -1284,11 +1247,7 @@ TEST_F(GLRendererTest, NoDiscardOnPartialUpdates) {
     root_pass->damage_rect = root_pass->output_rect;
 
     renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-    renderer.DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       clip_rect,
-                       false);
+    DrawFrame(&renderer, viewport_rect, clip_rect);
     EXPECT_EQ(0, context->discarded());
     context->reset();
   }
@@ -1344,11 +1303,7 @@ TEST_F(GLRendererTest, ScissorAndViewportWithinNonreshapableSurface) {
   AddClippedQuad(root_pass, quad_rect, SK_ColorGREEN);
 
   renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-  renderer.DrawFrame(&render_passes_in_draw_order_,
-                     1.f,
-                     device_viewport_rect,
-                     device_viewport_rect,
-                     false);
+  DrawFrame(&renderer, device_viewport_rect);
 }
 
 TEST_F(GLRendererTest, DrawFramePreservesFramebuffer) {
@@ -1388,11 +1343,10 @@ TEST_F(GLRendererTest, DrawFramePreservesFramebuffer) {
   gpu::gles2::GLES2Interface* gl =
       output_surface->context_provider()->ContextGL();
   gl->GenFramebuffers(1, &fbo);
-  output_surface->set_framebuffer(fbo);
+  output_surface->set_framebuffer(fbo, GL_RGB);
 
   renderer.DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-  renderer.DrawFrame(&render_passes_in_draw_order_, 1.f, device_viewport_rect,
-                     device_viewport_rect, false);
+  DrawFrame(&renderer, device_viewport_rect);
 
   int bound_fbo;
   gl->GetIntegerv(GL_FRAMEBUFFER_BINDING, &bound_fbo);
@@ -1463,11 +1417,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassProgram(TEX_COORD_PRECISION_MEDIUM, blend_mode);
 
     // RenderPassColorMatrixProgram
@@ -1488,11 +1438,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassColorMatrixProgram(TEX_COORD_PRECISION_MEDIUM, blend_mode);
 
     // RenderPassMaskProgram
@@ -1517,11 +1463,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassMaskProgram(TEX_COORD_PRECISION_MEDIUM, SAMPLER_TYPE_2D,
                               blend_mode);
 
@@ -1543,11 +1485,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassMaskColorMatrixProgram(TEX_COORD_PRECISION_MEDIUM,
                                          SAMPLER_TYPE_2D, blend_mode);
 
@@ -1573,11 +1511,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassProgramAA(TEX_COORD_PRECISION_MEDIUM, blend_mode);
 
     // RenderPassColorMatrixProgramAA
@@ -1598,11 +1532,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassColorMatrixProgramAA(TEX_COORD_PRECISION_MEDIUM, blend_mode);
 
     // RenderPassMaskProgramAA
@@ -1627,11 +1557,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassMaskProgramAA(TEX_COORD_PRECISION_MEDIUM, SAMPLER_TYPE_2D,
                                 blend_mode);
 
@@ -1653,11 +1579,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadShaderPermutations) {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         1.f,
-                         viewport_rect,
-                         viewport_rect,
-                         false);
+    DrawFrame(renderer_.get(), viewport_rect);
     TestRenderPassMaskColorMatrixProgramAA(TEX_COORD_PRECISION_MEDIUM,
                                            SAMPLER_TYPE_2D, blend_mode);
   }
@@ -1704,11 +1626,7 @@ TEST_F(GLRendererShaderTest, DrawRenderPassQuadSkipsAAForClippingTransform) {
                     SkXfermode::kSrcOver_Mode);
 
   renderer_->DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-  renderer_->DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       viewport_rect,
-                       false);
+  DrawFrame(renderer_.get(), viewport_rect);
 
   // If use_aa incorrectly ignores clipping, it will use the
   // RenderPassProgramAA shader instead of the RenderPassProgram.
@@ -1734,11 +1652,7 @@ TEST_F(GLRendererShaderTest, DrawSolidColorShader) {
                      pixel_aligned_transform_causing_aa);
 
   renderer_->DecideRenderPassAllocationsForFrame(render_passes_in_draw_order_);
-  renderer_->DrawFrame(&render_passes_in_draw_order_,
-                       1.f,
-                       viewport_rect,
-                       viewport_rect,
-                       false);
+  DrawFrame(renderer_.get(), viewport_rect);
 
   TestSolidColorProgramAA();
 }
@@ -1761,19 +1675,26 @@ class OutputSurfaceMockContext : public TestWebGraphicsContext3D {
 class MockOutputSurface : public OutputSurface {
  public:
   MockOutputSurface()
-      : OutputSurface(TestContextProvider::Create(
-            std::unique_ptr<TestWebGraphicsContext3D>(
-                new StrictMock<OutputSurfaceMockContext>))) {
+      : OutputSurface(
+            TestContextProvider::Create(
+                base::MakeUnique<StrictMock<OutputSurfaceMockContext>>()),
+            nullptr,
+            nullptr) {
     surface_size_ = gfx::Size(100, 100);
   }
   virtual ~MockOutputSurface() {}
 
   MOCK_METHOD0(EnsureBackbuffer, void());
   MOCK_METHOD0(DiscardBackbuffer, void());
-  MOCK_METHOD3(Reshape,
-               void(const gfx::Size& size, float scale_factor, bool has_alpha));
+  MOCK_METHOD4(Reshape,
+               void(const gfx::Size& size,
+                    float scale_factor,
+                    const gfx::ColorSpace& color_space,
+                    bool has_alpha));
   MOCK_METHOD0(BindFramebuffer, void());
-  MOCK_METHOD1(SwapBuffers, void(CompositorFrame* frame));
+  MOCK_METHOD0(GetFramebufferCopyTextureFormat, GLenum());
+  MOCK_METHOD1(SwapBuffers_, void(CompositorFrame& frame));
+  void SwapBuffers(CompositorFrame frame) override { SwapBuffers_(frame); }
 };
 
 class MockOutputSurfaceTest : public GLRendererTest {
@@ -1807,7 +1728,7 @@ class MockOutputSurfaceTest : public GLRendererTest {
     EXPECT_CALL(output_surface_, EnsureBackbuffer()).WillRepeatedly(Return());
 
     EXPECT_CALL(output_surface_, Reshape(device_viewport_rect.size(),
-                                         device_scale_factor, transparent))
+                                         device_scale_factor, _, transparent))
         .Times(1);
 
     EXPECT_CALL(output_surface_, BindFramebuffer()).Times(1);
@@ -1816,11 +1737,9 @@ class MockOutputSurfaceTest : public GLRendererTest {
 
     renderer_->DecideRenderPassAllocationsForFrame(
         render_passes_in_draw_order_);
-    renderer_->DrawFrame(&render_passes_in_draw_order_,
-                         device_scale_factor,
-                         device_viewport_rect,
-                         device_viewport_rect,
-                         false);
+    renderer_->DrawFrame(&render_passes_in_draw_order_, device_scale_factor,
+                         gfx::ColorSpace(), device_viewport_rect,
+                         device_viewport_rect, false);
   }
 
   OutputSurfaceMockContext* Context() {
@@ -1842,7 +1761,7 @@ TEST_F(MockOutputSurfaceTest, DrawFrameAndSwap) {
   gfx::Rect device_viewport_rect(1, 1);
   DrawFrame(1.f, device_viewport_rect, true);
 
-  EXPECT_CALL(output_surface_, SwapBuffers(_)).Times(1);
+  EXPECT_CALL(output_surface_, SwapBuffers_(_)).Times(1);
   renderer_->SwapBuffers(CompositorFrameMetadata());
 }
 
@@ -1850,7 +1769,7 @@ TEST_F(MockOutputSurfaceTest, DrawOpaqueFrameAndSwap) {
   gfx::Rect device_viewport_rect(1, 1);
   DrawFrame(1.f, device_viewport_rect, false);
 
-  EXPECT_CALL(output_surface_, SwapBuffers(_)).Times(1);
+  EXPECT_CALL(output_surface_, SwapBuffers_(_)).Times(1);
   renderer_->SwapBuffers(CompositorFrameMetadata());
 }
 
@@ -1858,23 +1777,23 @@ TEST_F(MockOutputSurfaceTest, DrawFrameAndResizeAndSwap) {
   gfx::Rect device_viewport_rect(1, 1);
 
   DrawFrame(1.f, device_viewport_rect, true);
-  EXPECT_CALL(output_surface_, SwapBuffers(_)).Times(1);
+  EXPECT_CALL(output_surface_, SwapBuffers_(_)).Times(1);
   renderer_->SwapBuffers(CompositorFrameMetadata());
 
   device_viewport_rect = gfx::Rect(2, 2);
 
   DrawFrame(2.f, device_viewport_rect, true);
-  EXPECT_CALL(output_surface_, SwapBuffers(_)).Times(1);
+  EXPECT_CALL(output_surface_, SwapBuffers_(_)).Times(1);
   renderer_->SwapBuffers(CompositorFrameMetadata());
 
   DrawFrame(2.f, device_viewport_rect, true);
-  EXPECT_CALL(output_surface_, SwapBuffers(_)).Times(1);
+  EXPECT_CALL(output_surface_, SwapBuffers_(_)).Times(1);
   renderer_->SwapBuffers(CompositorFrameMetadata());
 
   device_viewport_rect = gfx::Rect(1, 1);
 
   DrawFrame(1.f, device_viewport_rect, true);
-  EXPECT_CALL(output_surface_, SwapBuffers(_)).Times(1);
+  EXPECT_CALL(output_surface_, SwapBuffers_(_)).Times(1);
   renderer_->SwapBuffers(CompositorFrameMetadata());
 }
 
@@ -1960,9 +1879,9 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   root_pass->copy_requests.push_back(
       CopyOutputRequest::CreateRequest(base::Bind(&IgnoreCopyResult)));
 
-  TextureMailbox mailbox = TextureMailbox(
-      gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D,
-      gfx::Size(256, 256), gfx::GpuMemoryBufferId(), true, false);
+  TextureMailbox mailbox =
+      TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D,
+                     gfx::Size(256, 256), true, false);
   std::unique_ptr<SingleReleaseCallbackImpl> release_callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&MailboxReleased));
   ResourceId resource_id = resource_provider->CreateResourceFromTextureMailbox(
@@ -1987,8 +1906,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   // list because the render pass is cleaned up by DrawFrame.
   EXPECT_CALL(*processor->strategy_, Attempt(_, _, _)).Times(0);
   EXPECT_CALL(*validator, AllowCALayerOverlays()).Times(0);
-  renderer.DrawFrame(&render_passes_in_draw_order_, 1.f, viewport_rect,
-                     viewport_rect, false);
+  DrawFrame(&renderer, viewport_rect);
   Mock::VerifyAndClearExpectations(processor->strategy_);
   Mock::VerifyAndClearExpectations(validator.get());
 
@@ -2007,8 +1925,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       .Times(1)
       .WillOnce(::testing::Return(false));
   EXPECT_CALL(*processor->strategy_, Attempt(_, _, _)).Times(1);
-  renderer.DrawFrame(&render_passes_in_draw_order_, 1.f, viewport_rect,
-                     viewport_rect, false);
+  DrawFrame(&renderer, viewport_rect);
 
   // If the CALayerOverlay path is taken, then the ordinary overlay path should
   // not be called.
@@ -2026,8 +1943,7 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       .Times(1)
       .WillOnce(::testing::Return(true));
   EXPECT_CALL(*processor->strategy_, Attempt(_, _, _)).Times(0);
-  renderer.DrawFrame(&render_passes_in_draw_order_, 1.f, viewport_rect,
-                     viewport_rect, false);
+  DrawFrame(&renderer, viewport_rect);
 }
 
 class SingleOverlayOnTopProcessor : public OverlayProcessor {
@@ -2118,9 +2034,9 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
 
   gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
                             gpu::CommandBufferId::FromUnsafeValue(0x123), 29);
-  TextureMailbox mailbox = TextureMailbox(
-      gpu::Mailbox::Generate(), sync_token, GL_TEXTURE_2D, gfx::Size(256, 256),
-      gfx::GpuMemoryBufferId(), true, false);
+  TextureMailbox mailbox =
+      TextureMailbox(gpu::Mailbox::Generate(), sync_token, GL_TEXTURE_2D,
+                     gfx::Size(256, 256), true, false);
   std::unique_ptr<SingleReleaseCallbackImpl> release_callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&MailboxReleased));
   ResourceId resource_id = resource_provider->CreateResourceFromTextureMailbox(
@@ -2149,8 +2065,7 @@ TEST_F(GLRendererTest, OverlaySyncTokensAreProcessed) {
               Schedule(1, gfx::OVERLAY_TRANSFORM_NONE, _, viewport_rect,
                        BoundingRect(uv_top_left, uv_bottom_right))).Times(1);
 
-  renderer.DrawFrame(&render_passes_in_draw_order_, 1.f, viewport_rect,
-                     viewport_rect, false);
+  DrawFrame(&renderer, viewport_rect);
 }
 
 }  // namespace

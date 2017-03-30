@@ -123,6 +123,10 @@ SkColor ThemeService::BrowserThemeProvider::GetColor(int id) const {
   return theme_service_.GetColor(id, incognito_);
 }
 
+color_utils::HSL ThemeService::BrowserThemeProvider::GetTint(int id) const {
+  return theme_service_.GetTint(id, incognito_);
+}
+
 int ThemeService::BrowserThemeProvider::GetDisplayProperty(int id) const {
   return theme_service_.GetDisplayProperty(id);
 }
@@ -460,6 +464,10 @@ SkColor ThemeService::GetDefaultColor(int id, bool incognito) const {
           GetColor(ThemeProperties::COLOR_TOOLBAR, incognito),
           incognito ? kTintIncognito : kTint);
     }
+    case ThemeProperties::COLOR_BOOKMARK_BAR_INSTRUCTIONS_TEXT:
+      if (UsingDefaultTheme())
+        break;
+      return GetColor(ThemeProperties::COLOR_BOOKMARK_TEXT, incognito);
     case ThemeProperties::COLOR_DETACHED_BOOKMARK_BAR_BACKGROUND:
       if (UsingDefaultTheme())
         break;

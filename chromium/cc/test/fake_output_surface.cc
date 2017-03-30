@@ -18,73 +18,49 @@ FakeOutputSurface::FakeOutputSurface(
     scoped_refptr<ContextProvider> context_provider,
     scoped_refptr<ContextProvider> worker_context_provider,
     bool delegated_rendering)
-    : OutputSurface(context_provider, worker_context_provider),
-      client_(NULL),
-      num_sent_frames_(0),
-      has_external_stencil_test_(false),
-      suspended_for_recycle_(false),
-      framebuffer_(0),
-      overlay_candidate_validator_(nullptr) {
-  capabilities_.delegated_rendering = delegated_rendering;
-}
-
-FakeOutputSurface::FakeOutputSurface(
-    scoped_refptr<ContextProvider> context_provider,
-    bool delegated_rendering)
-    : OutputSurface(context_provider),
-      client_(NULL),
-      num_sent_frames_(0),
-      has_external_stencil_test_(false),
-      suspended_for_recycle_(false),
-      framebuffer_(0),
-      overlay_candidate_validator_(nullptr) {
-  capabilities_.delegated_rendering = delegated_rendering;
-}
+    : FakeOutputSurface(std::move(context_provider),
+                        std::move(worker_context_provider),
+                        nullptr,
+                        delegated_rendering) {}
 
 FakeOutputSurface::FakeOutputSurface(
     std::unique_ptr<SoftwareOutputDevice> software_device,
     bool delegated_rendering)
-    : OutputSurface(std::move(software_device)),
-      client_(NULL),
-      num_sent_frames_(0),
-      has_external_stencil_test_(false),
-      suspended_for_recycle_(false),
-      framebuffer_(0),
-      overlay_candidate_validator_(nullptr) {
-  capabilities_.delegated_rendering = delegated_rendering;
-}
+    : FakeOutputSurface(nullptr,
+                        nullptr,
+                        std::move(software_device),
+                        delegated_rendering) {}
 
 FakeOutputSurface::FakeOutputSurface(
     scoped_refptr<ContextProvider> context_provider,
+    scoped_refptr<ContextProvider> worker_context_provider,
     std::unique_ptr<SoftwareOutputDevice> software_device,
     bool delegated_rendering)
-    : OutputSurface(context_provider, std::move(software_device)),
-      client_(NULL),
-      num_sent_frames_(0),
-      has_external_stencil_test_(false),
-      suspended_for_recycle_(false),
-      framebuffer_(0),
-      overlay_candidate_validator_(nullptr) {
+    : OutputSurface(std::move(context_provider),
+                    std::move(worker_context_provider),
+                    std::move(software_device)) {
   capabilities_.delegated_rendering = delegated_rendering;
 }
 
 FakeOutputSurface::~FakeOutputSurface() {}
 
-void FakeOutputSurface::SwapBuffers(CompositorFrame* frame) {
-  if (frame->delegated_frame_data || !context_provider()) {
-    frame->AssignTo(&last_sent_frame_);
+void FakeOutputSurface::SwapBuffers(CompositorFrame frame) {
+  std::unique_ptr<CompositorFrame> frame_copy(new CompositorFrame);
+  *frame_copy = std::move(frame);
+  if (frame_copy->delegated_frame_data || !context_provider()) {
+    last_sent_frame_ = std::move(frame_copy);
 
-    if (last_sent_frame_.delegated_frame_data) {
+    if (last_sent_frame_->delegated_frame_data) {
       resources_held_by_parent_.insert(
           resources_held_by_parent_.end(),
-          last_sent_frame_.delegated_frame_data->resource_list.begin(),
-          last_sent_frame_.delegated_frame_data->resource_list.end());
+          last_sent_frame_->delegated_frame_data->resource_list.begin(),
+          last_sent_frame_->delegated_frame_data->resource_list.end());
     }
 
     ++num_sent_frames_;
   } else {
-    last_swap_rect_ = frame->gl_frame_data->sub_buffer_rect;
-    frame->AssignTo(&last_sent_frame_);
+    last_swap_rect_ = frame_copy->gl_frame_data->sub_buffer_rect;
+    last_sent_frame_ = std::move(frame_copy);
     ++num_sent_frames_;
   }
   PostSwapBuffersComplete();
@@ -92,11 +68,19 @@ void FakeOutputSurface::SwapBuffers(CompositorFrame* frame) {
 }
 
 void FakeOutputSurface::BindFramebuffer() {
-  if (framebuffer_)
+  if (framebuffer_) {
     context_provider_->ContextGL()->BindFramebuffer(GL_FRAMEBUFFER,
                                                     framebuffer_);
-  else
+  } else {
     OutputSurface::BindFramebuffer();
+  }
+}
+
+uint32_t FakeOutputSurface::GetFramebufferCopyTextureFormat() {
+  if (framebuffer_)
+    return framebuffer_format_;
+  else
+    return GL_RGB;
 }
 
 bool FakeOutputSurface::BindToClient(OutputSurfaceClient* client) {

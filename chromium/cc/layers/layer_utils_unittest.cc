@@ -13,6 +13,7 @@
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "cc/trees/layer_tree_host_common.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/box_f.h"
@@ -32,15 +33,16 @@ class LayerUtilsGetAnimationBoundsTest : public testing::Test {
                    &shared_bitmap_manager_,
                    &task_graph_runner_),
         root_(CreateTwoForkTree(&host_impl_)),
-        parent1_(root_->children()[0]),
-        parent2_(root_->children()[1]),
-        child1_(parent1_->children()[0]),
-        child2_(parent2_->children()[0]),
-        grand_child_(child2_->children()[0]),
-        great_grand_child_(grand_child_->children()[0]) {
+        parent1_(root_->test_properties()->children[0]),
+        parent2_(root_->test_properties()->children[1]),
+        child1_(parent1_->test_properties()->children[0]),
+        child2_(parent2_->test_properties()->children[0]),
+        grand_child_(child2_->test_properties()->children[0]),
+        great_grand_child_(grand_child_->test_properties()->children[0]) {
     timeline_ =
         AnimationTimeline::Create(AnimationIdProvider::NextTimelineId());
     host_impl_.animation_host()->AddAnimationTimeline(timeline_);
+    host_impl_.active_tree()->SetElementIdsForTesting();
   }
 
   LayerImpl* root() { return root_; }
@@ -59,17 +61,29 @@ class LayerUtilsGetAnimationBoundsTest : public testing::Test {
     std::unique_ptr<LayerImpl> root =
         LayerImpl::Create(host_impl->active_tree(), 1);
     LayerImpl* root_ptr = root.get();
-    root->AddChild(LayerImpl::Create(host_impl->active_tree(), 2));
-    root->children()[0]->AddChild(
+    root->test_properties()->AddChild(
+        LayerImpl::Create(host_impl->active_tree(), 2));
+    root->test_properties()->children[0]->test_properties()->AddChild(
         LayerImpl::Create(host_impl->active_tree(), 3));
-    root->AddChild(LayerImpl::Create(host_impl->active_tree(), 4));
-    root->children()[1]->AddChild(
+    root->test_properties()->AddChild(
+        LayerImpl::Create(host_impl->active_tree(), 4));
+    root->test_properties()->children[1]->test_properties()->AddChild(
         LayerImpl::Create(host_impl->active_tree(), 5));
-    root->children()[1]->children()[0]->AddChild(
-        LayerImpl::Create(host_impl->active_tree(), 6));
-    root->children()[1]->children()[0]->children()[0]->AddChild(
-        LayerImpl::Create(host_impl->active_tree(), 7));
-    host_impl->active_tree()->SetRootLayer(std::move(root));
+    root->test_properties()
+        ->children[1]
+        ->test_properties()
+        ->children[0]
+        ->test_properties()
+        ->AddChild(LayerImpl::Create(host_impl->active_tree(), 6));
+    root->test_properties()
+        ->children[1]
+        ->test_properties()
+        ->children[0]
+        ->test_properties()
+        ->children[0]
+        ->test_properties()
+        ->AddChild(LayerImpl::Create(host_impl->active_tree(), 7));
+    host_impl->active_tree()->SetRootLayerForTesting(std::move(root));
     return root_ptr;
   }
 
@@ -94,8 +108,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, ScaleRoot) {
   start.AppendScale(1.f, 1.f, 1.f);
   TransformOperations end;
   end.AppendScale(2.f, 2.f, 1.f);
-  AddAnimatedTransformToLayerWithPlayer(root()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(root()->element_id(), timeline(),
+                                          duration, start, end);
 
   root()->SetPosition(gfx::PointF());
   parent1()->SetPosition(gfx::PointF());
@@ -105,7 +119,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, ScaleRoot) {
   child1()->SetPosition(gfx::PointF(150.f, 50.f));
   child1()->SetBounds(gfx::Size(100, 200));
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -121,8 +135,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateParentLayer) {
   start.AppendTranslate(0.f, 0.f, 0.f);
   TransformOperations end;
   end.AppendTranslate(50.f, 50.f, 0.f);
-  AddAnimatedTransformToLayerWithPlayer(parent1()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(parent1()->element_id(), timeline(),
+                                          duration, start, end);
 
   parent1()->SetBounds(gfx::Size(350, 200));
 
@@ -130,7 +144,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateParentLayer) {
   child1()->SetPosition(gfx::PointF(150.f, 50.f));
   child1()->SetBounds(gfx::Size(100, 200));
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -146,15 +160,15 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateChildLayer) {
   start.AppendTranslate(0.f, 0.f, 0.f);
   TransformOperations end;
   end.AppendTranslate(50.f, 50.f, 0.f);
-  AddAnimatedTransformToLayerWithPlayer(child1()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(child1()->element_id(), timeline(),
+                                          duration, start, end);
   parent1()->SetBounds(gfx::Size(350, 200));
 
   child1()->SetDrawsContent(true);
   child1()->SetPosition(gfx::PointF(150.f, 50.f));
   child1()->SetBounds(gfx::Size(100, 200));
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -170,13 +184,13 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateBothLayers) {
   start.AppendTranslate(0.f, 0.f, 0.f);
   TransformOperations child_end;
   child_end.AppendTranslate(50.f, 0.f, 0.f);
-  AddAnimatedTransformToLayerWithPlayer(parent1()->id(), timeline(), duration,
-                                        start, child_end);
+  AddAnimatedTransformToElementWithPlayer(parent1()->element_id(), timeline(),
+                                          duration, start, child_end);
 
   TransformOperations grand_child_end;
   grand_child_end.AppendTranslate(0.f, 50.f, 0.f);
-  AddAnimatedTransformToLayerWithPlayer(child1()->id(), timeline(), duration,
-                                        start, grand_child_end);
+  AddAnimatedTransformToElementWithPlayer(child1()->element_id(), timeline(),
+                                          duration, start, grand_child_end);
 
   parent1()->SetBounds(gfx::Size(350, 200));
 
@@ -184,7 +198,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, TranslateBothLayers) {
   child1()->SetPosition(gfx::PointF(150.f, 50.f));
   child1()->SetBounds(gfx::Size(100, 200));
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -201,8 +215,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXNoPerspective) {
   TransformOperations end;
   end.AppendRotate(1.f, 0.f, 0.f, 90.f);
 
-  AddAnimatedTransformToLayerWithPlayer(child1()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(child1()->element_id(), timeline(),
+                                          duration, start, end);
 
   parent1()->SetBounds(gfx::Size(350, 200));
 
@@ -213,7 +227,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXNoPerspective) {
   child1()->test_properties()->transform_origin =
       gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -230,8 +244,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspective) {
   TransformOperations end;
   end.AppendRotate(1.f, 0.f, 0.f, 90.f);
 
-  AddAnimatedTransformToLayerWithPlayer(child1()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(child1()->element_id(), timeline(),
+                                          duration, start, end);
 
   // Make the anchor point not the default 0.5 value and line up with the
   // child center to make the math easier.
@@ -250,7 +264,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspective) {
   child1()->test_properties()->transform_origin =
       gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -271,8 +285,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspectiveOnSameLayer) {
   TransformOperations end;
   end.AppendRotate(1.f, 0.f, 0.f, 90.f);
 
-  AddAnimatedTransformToLayerWithPlayer(parent1()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(parent1()->element_id(), timeline(),
+                                          duration, start, end);
 
   // Make the anchor point not the default 0.5 value and line up
   // with the child center to make the math easier.
@@ -291,7 +305,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateXWithPerspectiveOnSameLayer) {
   child1()->test_properties()->transform_origin =
       gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -307,8 +321,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateZ) {
   start.AppendRotate(0.f, 0.f, 1.f, 0.f);
   TransformOperations end;
   end.AppendRotate(0.f, 0.f, 1.f, 90.f);
-  AddAnimatedTransformToLayerWithPlayer(child1()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(child1()->element_id(), timeline(),
+                                          duration, start, end);
 
   parent1()->SetBounds(gfx::Size(350, 200));
 
@@ -319,7 +333,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, RotateZ) {
   child1()->test_properties()->transform_origin =
       gfx::Point3F(bounds.width() * 0.5f, bounds.height() * 0.5f, 0);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -341,8 +355,8 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, MismatchedTransforms) {
   start.AppendTranslate(5, 6, 7);
   TransformOperations end;
   end.AppendRotate(0.f, 0.f, 1.f, 90.f);
-  AddAnimatedTransformToLayerWithPlayer(child1()->id(), timeline(), duration,
-                                        start, end);
+  AddAnimatedTransformToElementWithPlayer(child1()->element_id(), timeline(),
+                                          duration, start, end);
 
   parent1()->SetBounds(gfx::Size(350, 200));
 
@@ -351,7 +365,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest, MismatchedTransforms) {
   child1()->SetPosition(gfx::PointF(150.f, 50.f));
   child1()->SetBounds(bounds);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*child1(), &box);
@@ -376,8 +390,9 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   start.AppendTranslate(0.f, 0.f, 0.f);
   TransformOperations great_grand_child_end;
   great_grand_child_end.AppendTranslate(50.f, 0.f, 0.f);
-  AddAnimatedTransformToLayerWithPlayer(grand_child()->id(), timeline(),
-                                        duration, start, great_grand_child_end);
+  AddAnimatedTransformToElementWithPlayer(grand_child()->element_id(),
+                                          timeline(), duration, start,
+                                          great_grand_child_end);
 
   gfx::Transform translate_2d_transform;
   translate_2d_transform.Translate(80.f, 60.f);
@@ -387,7 +402,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   great_grand_child()->SetDrawsContent(true);
   great_grand_child()->SetPosition(gfx::PointF(150.f, 50.f));
   great_grand_child()->SetBounds(gfx::Size(100, 200));
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*great_grand_child(), &box);
@@ -404,8 +419,9 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   start.AppendRotate(0.f, 0.f, 1.f, 0.f);
   TransformOperations great_grand_child_end;
   great_grand_child_end.AppendRotate(0.f, 0.f, 1.f, 90.f);
-  AddAnimatedTransformToLayerWithPlayer(grand_child()->id(), timeline(),
-                                        duration, start, great_grand_child_end);
+  AddAnimatedTransformToElementWithPlayer(grand_child()->element_id(),
+                                          timeline(), duration, start,
+                                          great_grand_child_end);
 
   gfx::Transform translate_2d_transform;
   translate_2d_transform.Translate(80.f, 60.f);
@@ -423,7 +439,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   great_grand_child()->SetBounds(gfx::Size(50.f, 50.f));
   great_grand_child()->SetDrawsContent(true);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*great_grand_child(), &box);
@@ -451,8 +467,9 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   start.AppendRotate(1.f, 0.f, 0.f, 0.f);
   TransformOperations great_grand_child_end;
   great_grand_child_end.AppendRotate(1.f, 0.f, 0.f, 90.f);
-  AddAnimatedTransformToLayerWithPlayer(great_grand_child()->id(), timeline(),
-                                        duration, start, great_grand_child_end);
+  AddAnimatedTransformToElementWithPlayer(great_grand_child()->element_id(),
+                                          timeline(), duration, start,
+                                          great_grand_child_end);
 
   gfx::Transform translate_2d_transform;
   translate_2d_transform.Translate(80.f, 60.f);
@@ -477,7 +494,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   great_grand_child()->SetBounds(gfx::Size(50.f, 50.f));
   great_grand_child()->SetDrawsContent(true);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*great_grand_child(), &box);
@@ -532,8 +549,9 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
   start.AppendRotate(1.f, 0.f, 0.f, 0.f);
   TransformOperations rotate_x_end;
   rotate_x_end.AppendRotate(1.f, 0.f, 0.f, 90.f);
-  AddAnimatedTransformToLayerWithPlayer(great_grand_child()->id(), timeline(),
-                                        duration, start, rotate_x_end);
+  AddAnimatedTransformToElementWithPlayer(great_grand_child()->element_id(),
+                                          timeline(), duration, start,
+                                          rotate_x_end);
 
   gfx::Transform translate_2d_transform;
   translate_2d_transform.Translate(80.f, 60.f);
@@ -553,7 +571,7 @@ TEST_F(LayerUtilsGetAnimationBoundsTest,
       gfx::Size(bounds.width() * 0.5f, bounds.height() * 0.5f));
   great_grand_child()->SetDrawsContent(true);
 
-  host_impl().active_tree()->BuildPropertyTreesForTesting();
+  host_impl().active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::BoxF box;
   bool success = LayerUtils::GetAnimationBounds(*great_grand_child(), &box);

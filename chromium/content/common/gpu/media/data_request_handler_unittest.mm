@@ -162,8 +162,10 @@ class DataRequestHandlerTest : public testing::Test {
  private:
   struct Request {
     Request()
-        : data_available_event(false, false),
-          finished_event(true, false),
+        : data_available_event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                               base::WaitableEvent::InitialState::NOT_SIGNALED),
+          finished_event(base::WaitableEvent::ResetPolicy::MANUAL,
+                         base::WaitableEvent::InitialState::NOT_SIGNALED),
           status(DataRequestHandler::SUCCESS) {}
 
     base::WaitableEvent data_available_event;
@@ -298,7 +300,8 @@ TEST_F(DataRequestHandlerTest, CanBeCanceled) {
 
   // Make sure our IPCDataSource will not respond with the first piece of data
   // until we tell it to.
-  base::WaitableEvent unblock_data_source(true, false);
+  base::WaitableEvent unblock_data_source(base::WaitableEvent::ResetPolicy::MANUAL,
+                                          base::WaitableEvent::InitialState::NOT_SIGNALED);
   data_source_.set_blocked_on(&unblock_data_source);
 
   ASSERT_NO_FATAL_FAILURE(CallHandleDataRequest(nil, request));
@@ -330,7 +333,8 @@ TEST_F(DataRequestHandlerTest, ConcurrentRequests) {
   // Make sure our IPCDataSource will not respond with the first piece of data
   // until we tell it to.  Set |manual_reset| to false so that our
   // IPCDataSource blocks again after handling one Read().
-  base::WaitableEvent unblock_data_source(false, false);
+  base::WaitableEvent unblock_data_source(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                                          base::WaitableEvent::InitialState::NOT_SIGNALED);
   data_source_.set_blocked_on(&unblock_data_source);
 
   request.offset = 0;
@@ -368,7 +372,8 @@ TEST_F(DataRequestHandlerTest, ConcurrentRequestsError) {
   request.length = DataRequestHandler::kBufferSize + 15;
 
   // Make sure our IPCDataSource will not respond until we tell it to.
-  base::WaitableEvent unblock_data_source(true, false);
+  base::WaitableEvent unblock_data_source(base::WaitableEvent::ResetPolicy::MANUAL,
+                                          base::WaitableEvent::InitialState::NOT_SIGNALED);
   data_source_.set_blocked_on(&unblock_data_source);
 
   request.offset = 0;
@@ -398,7 +403,8 @@ TEST_F(DataRequestHandlerTest, SuspendResume) {
   // Make sure our IPCDataSource will not respond with the first piece of data
   // until we tell it to.  Set |manual_reset| to false so that our
   // IPCDataSource blocks again after handling one Read().
-  base::WaitableEvent unblock_data_source(false, false);
+  base::WaitableEvent unblock_data_source(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                                          base::WaitableEvent::InitialState::NOT_SIGNALED);
   data_source_.set_blocked_on(&unblock_data_source);
 
   data_source_.Suspend();

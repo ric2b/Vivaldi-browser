@@ -143,10 +143,6 @@ class OmniboxResultView : public views::View,
   // the keyword match will hide even the icon of the regular match.
   bool ShowOnlyKeywordMatch() const;
 
-  // Resets all RenderTexts for contents and description of the |match_| and its
-  // associated keyword match.
-  void ResetRenderTexts() const;
-
   // Initializes |contents_rendertext_| if it is NULL.
   void InitContentsRenderTextIfNecessary() const;
 
@@ -171,7 +167,7 @@ class OmniboxResultView : public views::View,
   // Creates a RenderText with text and styling from the image line.
   std::unique_ptr<gfx::RenderText> CreateAnswerLine(
       const SuggestionAnswer::ImageLine& line,
-      gfx::FontList font_list);
+      gfx::FontList font_list) const;
 
   // Adds |text| to |destination|.  |text_type| is an index into the
   // kTextStyles constant defined in the .cc file and is used to style the text,
@@ -179,21 +175,14 @@ class OmniboxResultView : public views::View,
   // TextStyle struct in the .cc file for more.
   void AppendAnswerText(gfx::RenderText* destination,
                         const base::string16& text,
-                        int text_type);
+                        int text_type) const;
 
   // AppendAnswerText will break up the |text| into bold and non-bold pieces
   // and pass each to this helper with the correct |is_bold| value.
   void AppendAnswerTextHelper(gfx::RenderText* destination,
                               const base::string16& text,
                               int text_type,
-                              bool is_bold);
-
-  // Returns the necessary margin, if any, at the start and end of the view.
-  // This allows us to keep the icon and text in the view aligned with the
-  // location bar contents. For a left-to-right language, StartMargin()
-  // and EndMargin() correspond to the left and right margins, respectively.
-  int StartMargin() const;
-  int EndMargin() const;
+                              bool is_bold) const;
 
   static int default_icon_size_;
 

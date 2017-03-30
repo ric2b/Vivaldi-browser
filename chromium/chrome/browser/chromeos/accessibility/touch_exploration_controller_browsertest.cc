@@ -4,7 +4,9 @@
 
 #include "ui/chromeos/touch_exploration_controller.h"
 
-#include "ash/accessibility_delegate.h"
+#include "ash/common/accessibility_delegate.h"
+#include "ash/common/accessibility_types.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
@@ -23,8 +25,6 @@
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/test_event_handler.h"
-
-namespace ui {
 
 class TouchExplorationTest : public InProcessBrowserTest {
  public:
@@ -57,16 +57,13 @@ class TouchExplorationTest : public InProcessBrowserTest {
   }
 
   void SwitchTouchExplorationMode(bool on) {
-    ash::AccessibilityDelegate* ad =
-        ash::Shell::GetInstance()->accessibility_delegate();
-    if (on != ad->IsSpokenFeedbackEnabled())
-      ad->ToggleSpokenFeedback(ui::A11Y_NOTIFICATION_NONE);
+    ash::AccessibilityDelegate* delegate =
+        ash::WmShell::Get()->GetAccessibilityDelegate();
+    if (on != delegate->IsSpokenFeedbackEnabled())
+      delegate->ToggleSpokenFeedback(ash::A11Y_NOTIFICATION_NONE);
   }
 
-  base::TimeDelta Now() {
-    return base::TimeDelta::FromInternalValue(
-        simulated_clock_->NowTicks().ToInternalValue());
-  }
+  base::TimeTicks Now() { return simulated_clock_->NowTicks(); }
 
   ui::GestureDetector::Config gesture_detector_config_;
   base::SimpleTestTickClock* simulated_clock_;
@@ -90,7 +87,7 @@ IN_PROC_BROWSER_TEST_F(TouchExplorationTest, MAYBE_NoRewritingEventsWhenOff) {
   SwitchTouchExplorationMode(false);
   ui::test::EventGenerator generator(root_window_);
 
-  base::TimeDelta initial_time = Now();
+  base::TimeTicks initial_time = Now();
   ui::TouchEvent initial_press(
       ui::ET_TOUCH_PRESSED, gfx::Point(99, 200), 1, initial_time);
   generator.Dispatch(&initial_press);
@@ -139,7 +136,7 @@ IN_PROC_BROWSER_TEST_F(TouchExplorationTest, DISABLED_RewritesEventsWhenOn) {
   SwitchTouchExplorationMode(true);
   ui::test::EventGenerator generator(root_window_);
 
-  base::TimeDelta initial_time = Now();
+  base::TimeTicks initial_time = Now();
   ui::TouchEvent initial_press(
       ui::ET_TOUCH_PRESSED, gfx::Point(100, 200), 1, initial_time);
   generator.Dispatch(&initial_press);
@@ -209,7 +206,7 @@ IN_PROC_BROWSER_TEST_F(TouchExplorationTest, DISABLED_SplitTapExplore) {
 
   // The cursor should be shown immediately after the  press, and hidden
   // after the move.
-  base::TimeDelta initial_time = Now();
+  base::TimeTicks initial_time = Now();
   ui::TouchEvent initial_press(
       ui::ET_TOUCH_PRESSED, gfx::Point(100, 200), 1, initial_time);
   generator.Dispatch(&initial_press);
@@ -250,5 +247,3 @@ IN_PROC_BROWSER_TEST_F(TouchExplorationTest, DISABLED_SplitTapExplore) {
   EXPECT_TRUE(cursor_client->IsMouseEventsEnabled());
   EXPECT_FALSE(cursor_client->IsCursorVisible());
 }
-
-}  // namespace ui

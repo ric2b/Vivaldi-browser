@@ -31,6 +31,7 @@
 #include "core/css/parser/CSSParser.h"
 #include "core/frame/UseCounter.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 namespace blink {
 
@@ -74,7 +75,7 @@ void StyleRuleKeyframes::wrapperRemoveKeyframe(unsigned index)
 
 int StyleRuleKeyframes::findKeyframeIndex(const String& key) const
 {
-    OwnPtr<Vector<double>> keys = CSSParser::parseKeyframeKeyList(key);
+    std::unique_ptr<Vector<double>> keys = CSSParser::parseKeyframeKeyList(key);
     if (!keys)
         return -1;
     for (size_t i = m_keyframes.size(); i--; ) {
@@ -153,15 +154,15 @@ String CSSKeyframesRule::cssText() const
 {
     StringBuilder result;
     if (isVendorPrefixed())
-        result.appendLiteral("@-webkit-keyframes ");
+        result.append("@-webkit-keyframes ");
     else
-        result.appendLiteral("@keyframes ");
+        result.append("@keyframes ");
     result.append(name());
-    result.appendLiteral(" { \n");
+    result.append(" { \n");
 
     unsigned size = length();
     for (unsigned i = 0; i < size; ++i) {
-        result.appendLiteral("  ");
+        result.append("  ");
         result.append(m_keyframesRule->keyframes()[i]->cssText());
         result.append('\n');
     }

@@ -238,9 +238,9 @@ void LayoutThemeMac::systemFont(CSSValueID systemFontID, FontStyle& fontStyle, F
 
 bool LayoutThemeMac::needsHackForTextControlWithFontFamily(const AtomicString& family) const
 {
-    // This hack is only applied on OSX 10.9 and earlier.
+    // This hack is only applied on OSX 10.9.
     // https://code.google.com/p/chromium/issues/detail?id=515989#c8
-    return IsOSMavericksOrEarlier() && family == "BlinkMacSystemFont";
+    return IsOSMavericks() && family == "BlinkMacSystemFont";
 }
 
 static RGBA32 convertNSColorToColor(NSColor *color)
@@ -793,8 +793,6 @@ void LayoutThemeMac::setPopupButtonCellState(const LayoutObject& object, const I
     updateCheckedState(popupButton, object);
     updateEnabledState(popupButton, object);
     updatePressedState(popupButton, object);
-    if (ThemeMac::drawWithFrameDrawsFocusRing())
-        updateFocusedState(popupButton, object);
 }
 
 const IntSize* LayoutThemeMac::menuListSizes() const
@@ -883,30 +881,6 @@ const IntSize* LayoutThemeMac::cancelButtonSizes() const
 void LayoutThemeMac::adjustSearchFieldCancelButtonStyle(ComputedStyle& style) const
 {
     IntSize size = sizeForSystemFont(style, cancelButtonSizes());
-    style.setWidth(Length(size.width(), Fixed));
-    style.setHeight(Length(size.height(), Fixed));
-    style.setBoxShadow(nullptr);
-}
-
-const IntSize* LayoutThemeMac::resultsButtonSizes() const
-{
-    static const IntSize sizes[3] = { IntSize(15, 14), IntSize(16, 13), IntSize(14, 11) };
-    return sizes;
-}
-
-void LayoutThemeMac::adjustSearchFieldDecorationStyle(ComputedStyle& style) const
-{
-    NSControlSize controlSize = controlSizeForSystemFont(style);
-    IntSize searchFieldSize = searchFieldSizes()[controlSize];
-    int width = searchFieldSize.height() / 2 - searchFieldBorderWidth - searchFieldHorizontalPaddings()[controlSize];
-    style.setWidth(Length(width, Fixed));
-    style.setHeight(Length(0, Fixed));
-    style.setBoxShadow(nullptr);
-}
-
-void LayoutThemeMac::adjustSearchFieldResultsDecorationStyle(ComputedStyle& style) const
-{
-    IntSize size = sizeForSystemFont(style, resultsButtonSizes());
     style.setWidth(Length(size.width(), Fixed));
     style.setHeight(Length(size.height(), Fixed));
     style.setBoxShadow(nullptr);
@@ -1003,8 +977,7 @@ String LayoutThemeMac::fileListNameForWidth(Locale& locale, const FileList* file
         else
             strToTruncate = file->name();
     } else {
-        // FIXME: Localization of fileList->length().
-        return StringTruncator::rightTruncate(locale.queryString(WebLocalizedString::MultipleFileUploadText, String::number(fileList->length())), width, font);
+        return StringTruncator::rightTruncate(locale.queryString(WebLocalizedString::MultipleFileUploadText, locale.convertToLocalizedNumber(String::number(fileList->length()))), width, font);
     }
 
     return StringTruncator::centerTruncate(strToTruncate, width, font);

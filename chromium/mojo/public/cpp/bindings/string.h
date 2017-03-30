@@ -20,8 +20,6 @@ namespace mojo {
 // object.
 class String {
  public:
-  typedef internal::String_Data Data_;
-
   // Constructs an empty string.
   String() : is_null_(false) {}
   String(const std::string& str) : value_(str), is_null_(false) {}
@@ -37,6 +35,9 @@ class String {
   template <size_t N>
   String(const char chars[N])
       : value_(chars, N - 1), is_null_(false) {}
+
+  String(std::string&& other) : value_(std::move(other)), is_null_(false) {}
+  String(String&& other) : is_null_(true) { Swap(&other); }
 
   template <typename U>
   static String From(const U& other) {
@@ -68,6 +69,18 @@ class String {
     return *this;
   }
 
+  String& operator=(std::string&& other) {
+    value_ = std::move(other);
+    is_null_ = false;
+    return *this;
+  }
+  String& operator=(String&& other) {
+    is_null_ = true;
+    value_.clear();
+    Swap(&other);
+    return *this;
+  }
+
   bool is_null() const { return is_null_; }
 
   size_t size() const { return value_.size(); }
@@ -79,6 +92,16 @@ class String {
 
   const std::string& get() const { return value_; }
   operator const std::string&() const { return value_; }
+
+  // Returns a const reference to the |std::string| managed by this class. If
+  // the string is null, this will be an empty std::string.
+  const std::string& storage() const { return value_; }
+
+  // Passes the underlying storage and resets this string to null.
+  std::string PassStorage() {
+    is_null_ = true;
+    return std::move(value_);
+  }
 
   void Swap(String* other) {
     std::swap(is_null_, other->is_null_);

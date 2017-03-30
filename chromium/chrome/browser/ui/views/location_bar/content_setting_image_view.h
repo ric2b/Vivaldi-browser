@@ -31,7 +31,6 @@ class FontList;
 namespace views {
 class BubbleDialogDelegateView;
 class ImageView;
-class InkDropDelegate;
 class Label;
 }
 
@@ -68,12 +67,13 @@ class ContentSettingImageView : public IconLabelBubbleView,
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
+  bool ShouldShowInkDropForFocus() const override;
   SkColor GetTextColor() const override;
   SkColor GetBorderColor() const override;
   bool ShouldShowBackground() const override;
   double WidthMultiplier() const override;
   bool IsShrinking() const override;
-  bool OnActivate() override;
+  bool OnActivate(const ui::Event& event) override;
 
   // gfx::AnimationDelegate:
   void AnimationEnded(const gfx::Animation* animation) override;
@@ -98,9 +98,6 @@ class ContentSettingImageView : public IconLabelBubbleView,
   // event. If this is true then the mouse released event is ignored to prevent
   // the bubble from reshowing.
   bool suppress_mouse_released_action_;
-
-  // Animation delegate for the ink drop ripple effect.
-  std::unique_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSettingImageView);
 };

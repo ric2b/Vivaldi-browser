@@ -24,8 +24,6 @@ component("ash") {
   public_deps = [
     "//ash/resources",
     "//ash/strings",
-    "//ash/wm/common:ash_wm_common",
-    "//ash/wm/common/resources",
   ]
   deps = [
     "//base",
@@ -120,6 +118,10 @@ component("ash") {
       "//ui/chromeos/strings",
       "//ui/display/util",
     ]
+
+    data = [
+      "display/test_data/",
+    ]
   } else {
     sources -= [
       "accelerators/key_hold_detector.cc",
@@ -130,9 +132,6 @@ component("ash") {
       "accelerators/spoken_feedback_toggler.h",
       "display/resolution_notification_controller.cc",
       "display/resolution_notification_controller.h",
-      "system/tray/media_security/media_capture_observer.h",
-      "system/tray/media_security/multi_profile_media_tray_item.cc",
-      "system/tray/media_security/multi_profile_media_tray_item.h",
       "touch/touch_transformer_controller.cc",
       "touch/touch_transformer_controller.h",
       "touch/touchscreen_util.cc",
@@ -193,7 +192,6 @@ source_set("test_support") {
   deps = [
     ":test_support_with_content",  # TODO(beng): reverse this direction.
     "//ash/resources",
-    "//ash/wm/common/resources",
     "//base:i18n",
     "//base/test:test_support",
     "//components/signin/core/account_id",
@@ -284,7 +282,6 @@ static_library("ash_shell_lib") {
     ":test_support",
     "//ash/resources",
     "//ash/strings",
-    "//ash/wm/common/resources",
     "//base",
     "//base:i18n",
     "//components/user_manager",
@@ -352,13 +349,13 @@ test("ash_unittests") {
     ":test_support_with_content",
     "//ash/resources",
     "//ash/strings",
-    "//ash/wm/common/resources",
     "//base",
     "//base/test:test_support",
     "//components/signin/core/account_id",
     "//components/user_manager",
     "//content/public/browser",
     "//content/test:test_support",
+    "//mojo/edk/system",
     "//skia",
     "//testing/gtest",
     "//third_party/icu",
@@ -389,6 +386,7 @@ test("ash_unittests") {
     "//ui/views/controls/webview:test_support",
     "//ui/web_dialogs:test_support",
     "//ui/wm",
+    "//ui/wm:test_support",
     "//url",
   ]
 
@@ -406,14 +404,14 @@ test("ash_unittests") {
       # All tests for multiple displays: not supported on Windows Ash.
       "wm/drag_window_resizer_unittest.cc",
 
-      # Accelerometer is only available on Chrome OS.
+      # Maximize mode is only available on Chrome OS.
       "wm/maximize_mode/maximize_mode_controller_unittest.cc",
+      "wm/maximize_mode/maximize_mode_window_manager_unittest.cc",
 
       # Can't resize on Windows Ash. http://crbug.com/165962
       "autoclick/autoclick_unittest.cc",
       "magnifier/magnification_controller_unittest.cc",
       "sticky_keys/sticky_keys_overlay_unittest.cc",
-      "system/tray/media_security/multi_profile_media_tray_item_unittest.cc",
       "virtual_keyboard_controller_unittest.cc",
       "wm/workspace/workspace_window_resizer_unittest.cc",
     ]

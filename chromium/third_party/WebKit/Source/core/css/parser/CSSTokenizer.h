@@ -9,6 +9,7 @@
 #include "core/css/parser/CSSParserToken.h"
 #include "core/html/parser/InputStreamPreprocessor.h"
 #include "wtf/Allocator.h"
+#include "wtf/text/StringView.h"
 #include "wtf/text/WTFString.h"
 
 #include <climits>
@@ -17,7 +18,6 @@ namespace blink {
 
 class CSSTokenizerInputStream;
 class CSSParserObserverWrapper;
-struct CSSParserString;
 class CSSParserTokenRange;
 
 class CORE_EXPORT CSSTokenizer {
@@ -35,7 +35,7 @@ public:
 
     private:
         void storeString(const String& string) { m_stringPool.append(string); }
-        Vector<CSSParserToken> m_tokens;
+        Vector<CSSParserToken, 32> m_tokens;
         // We only allocate strings when escapes are used.
         Vector<String> m_stringPool;
         String m_string;
@@ -49,7 +49,6 @@ private:
     CSSParserToken nextToken();
 
     UChar consume();
-    void consume(unsigned);
     void reconsume(UChar);
 
     CSSParserToken consumeNumericToken();
@@ -60,12 +59,11 @@ private:
     CSSParserToken consumeUrlToken();
 
     void consumeBadUrlRemnants();
-    void consumeUntilNonWhitespace();
     void consumeSingleWhitespaceIfNext();
     void consumeUntilCommentEndFound();
 
     bool consumeIfNext(UChar);
-    CSSParserString consumeName();
+    StringView consumeName();
     UChar32 consumeEscape();
 
     bool nextTwoCharsAreValidEscape();
@@ -73,14 +71,10 @@ private:
     bool nextCharsAreNumber();
     bool nextCharsAreIdentifier(UChar);
     bool nextCharsAreIdentifier();
+
     CSSParserToken blockStart(CSSParserTokenType);
-    CSSParserToken blockStart(CSSParserTokenType blockType, CSSParserTokenType, CSSParserString);
+    CSSParserToken blockStart(CSSParserTokenType blockType, CSSParserTokenType, StringView);
     CSSParserToken blockEnd(CSSParserTokenType, CSSParserTokenType startType);
-
-    using CodePoint = CSSParserToken (CSSTokenizer::*)(UChar);
-
-    static const CodePoint codePoints[];
-    Vector<CSSParserTokenType> m_blockStack;
 
     CSSParserToken whiteSpace(UChar);
     CSSParserToken leftParenthesis(UChar);
@@ -110,8 +104,12 @@ private:
     CSSParserToken stringStart(UChar);
     CSSParserToken endOfFile(UChar);
 
-    CSSParserString registerString(const String&);
+    StringView registerString(const String&);
 
+    using CodePoint = CSSParserToken (CSSTokenizer::*)(UChar);
+    static const CodePoint codePoints[];
+
+    Vector<CSSParserTokenType, 8> m_blockStack;
     CSSTokenizerInputStream& m_input;
     Scope& m_scope;
 };

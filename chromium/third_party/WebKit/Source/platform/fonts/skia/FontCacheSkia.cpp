@@ -38,11 +38,14 @@
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/FontFaceCreationParams.h"
 #include "platform/fonts/SimpleFontData.h"
+#include "platform/graphics/skia/SkiaUtils.h"
 #include "public/platform/Platform.h"
 #include "public/platform/linux/WebSandboxSupport.h"
 #include "wtf/Assertions.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/AtomicString.h"
 #include "wtf/text/CString.h"
+#include <memory>
 #include <unicode/locid.h>
 
 #if !OS(WIN) && !OS(ANDROID)
@@ -54,7 +57,7 @@ static PassRefPtr<SkTypeface> typefaceForFontconfigInterfaceIdAndTtcIndex(int fo
     SkFontConfigInterface::FontIdentity fontIdentity;
     fontIdentity.fID = fontconfigInterfaceId;
     fontIdentity.fTTCIndex = ttcIndex;
-    return adoptRef(fci->createTypeface(fontIdentity));
+    return blink::fromSkSp(fci->makeTypeface(fontIdentity));
 }
 #endif
 
@@ -160,7 +163,7 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
     if (creationParams.creationType() == CreateFontByFciIdAndTtcIndex) {
         if (Platform::current()->sandboxSupport())
             return typefaceForFontconfigInterfaceIdAndTtcIndex(creationParams.fontconfigInterfaceId(), creationParams.ttcIndex());
-        return adoptRef(SkTypeface::CreateFromFile(creationParams.filename().data(), creationParams.ttcIndex()));
+        return fromSkSp(SkTypeface::MakeFromFile(creationParams.filename().data(), creationParams.ttcIndex()));
     }
 #endif
 
@@ -200,7 +203,7 @@ PassRefPtr<SkTypeface> FontCache::createTypeface(const FontDescription& fontDesc
 }
 
 #if !OS(WIN)
-PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescription& fontDescription,
+std::unique_ptr<FontPlatformData> FontCache::createFontPlatformData(const FontDescription& fontDescription,
     const FontFaceCreationParams& creationParams, float fontSize)
 {
     CString name;
@@ -208,10 +211,10 @@ PassOwnPtr<FontPlatformData> FontCache::createFontPlatformData(const FontDescrip
     if (!tf)
         return nullptr;
 
-    return adoptPtr(new FontPlatformData(tf,
+    return wrapUnique(new FontPlatformData(tf,
         name.data(),
         fontSize,
-        (fontDescription.weight() > 200 + tf->fontStyle().weight()) || fontDescription.isSyntheticBold(),
+        (numericFontWeight(fontDescription.weight()) > 200 + tf->fontStyle().weight()) || fontDescription.isSyntheticBold(),
         ((fontDescription.style() == FontStyleItalic || fontDescription.style() == FontStyleOblique) && !tf->isItalic()) || fontDescription.isSyntheticItalic(),
         fontDescription.orientation()));
 }

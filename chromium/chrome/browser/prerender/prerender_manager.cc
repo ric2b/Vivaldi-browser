@@ -22,7 +22,6 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/values.h"
-#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/prerender/prerender_contents.h"
@@ -35,12 +34,10 @@
 #include "chrome/browser/prerender/prerender_tab_helper.h"
 #include "chrome/browser/prerender/prerender_util.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/search.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper_delegate.h"
-#include "chrome/common/chrome_switches.h"
 #include "chrome/common/prerender_types.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -848,12 +845,6 @@ PrerenderContents* PrerenderManager::PrerenderData::ReleaseContents() {
   return contents_.release();
 }
 
-void PrerenderManager::SetPrerenderContentsFactory(
-    PrerenderContents::Factory* prerender_contents_factory) {
-  DCHECK(CalledOnValidThread());
-  prerender_contents_factory_.reset(prerender_contents_factory);
-}
-
 void PrerenderManager::SourceNavigatedAway(PrerenderData* prerender_data) {
   // The expiry time of our prerender data will likely change because of
   // this navigation. This requires a resort of active_prerenders_.
@@ -1203,15 +1194,10 @@ void PrerenderManager::RecordFinalStatusWithoutCreatingPrerenderContents(
 void PrerenderManager::Observe(int type,
                                const content::NotificationSource& source,
                                const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_PROFILE_DESTROYED:
-      DestroyAllContents(FINAL_STATUS_PROFILE_DESTROYED);
-      on_close_web_contents_deleters_.clear();
-      break;
-    default:
-      NOTREACHED() << "Unexpected notification sent.";
-      break;
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_PROFILE_DESTROYED, type);
+
+  DestroyAllContents(FINAL_STATUS_PROFILE_DESTROYED);
+  on_close_web_contents_deleters_.clear();
 }
 
 void PrerenderManager::OnCreatingAudioStream(int render_process_id,
@@ -1307,6 +1293,12 @@ void PrerenderManager::RenderProcessHostDestroyed(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   size_t erased = prerender_process_hosts_.erase(host);
   DCHECK_EQ(1u, erased);
+}
+
+void PrerenderManager::SetPrerenderContentsFactoryForTest(
+    PrerenderContents::Factory* prerender_contents_factory) {
+  DCHECK(CalledOnValidThread());
+  prerender_contents_factory_.reset(prerender_contents_factory);
 }
 
 }  // namespace prerender

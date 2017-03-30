@@ -38,7 +38,6 @@
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutTextControlSingleLine.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutTextControlItem.h"
 #include "platform/UserGestureIndicator.h"
 
@@ -148,54 +147,6 @@ PassRefPtr<ComputedStyle> TextControlInnerEditorElement::customStyleForLayoutObj
     // to apply only editing-related.
     StyleAdjuster::adjustStyleForEditing(*innerEditorStyle);
     return innerEditorStyle.release();
-}
-
-// ----------------------------
-
-inline SearchFieldDecorationElement::SearchFieldDecorationElement(Document& document)
-    : HTMLDivElement(document)
-{
-}
-
-SearchFieldDecorationElement* SearchFieldDecorationElement::create(Document& document)
-{
-    SearchFieldDecorationElement* element = new SearchFieldDecorationElement(document);
-    element->setAttribute(idAttr, ShadowElementNames::searchDecoration());
-    return element;
-}
-
-const AtomicString& SearchFieldDecorationElement::shadowPseudoId() const
-{
-    DEFINE_STATIC_LOCAL(AtomicString, resultsDecorationId, ("-webkit-search-results-decoration"));
-    DEFINE_STATIC_LOCAL(AtomicString, decorationId, ("-webkit-search-decoration"));
-    Element* host = shadowHost();
-    if (!host)
-        return resultsDecorationId;
-    if (isHTMLInputElement(*host)) {
-        if (toHTMLInputElement(host)->maxResults() < 0)
-            return decorationId;
-        return resultsDecorationId;
-    }
-    return resultsDecorationId;
-}
-
-void SearchFieldDecorationElement::defaultEventHandler(Event* event)
-{
-    // On mousedown, focus the search field
-    HTMLInputElement* input = toHTMLInputElement(shadowHost());
-    if (input && event->type() == EventTypeNames::mousedown && event->isMouseEvent() && toMouseEvent(event)->button() == LeftButton) {
-        input->focus();
-        input->select(NotDispatchSelectEvent);
-        event->setDefaultHandled();
-    }
-
-    if (!event->defaultHandled())
-        HTMLDivElement::defaultEventHandler(event);
-}
-
-bool SearchFieldDecorationElement::willRespondToMouseClickEvents()
-{
-    return true;
 }
 
 // ----------------------------

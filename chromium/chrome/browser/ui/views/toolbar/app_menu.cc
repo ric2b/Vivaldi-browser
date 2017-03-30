@@ -10,9 +10,9 @@
 #include <cmath>
 #include <set>
 
+#include "base/i18n/number_formatting.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -22,6 +22,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
@@ -30,9 +31,9 @@
 #include "chrome/browser/ui/views/toolbar/extension_toolbar_menu_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
-#include "components/ui/zoom/page_zoom.h"
-#include "components/ui/zoom/zoom_controller.h"
-#include "components/ui/zoom/zoom_event_manager.h"
+#include "components/zoom/page_zoom.h"
+#include "components/zoom/zoom_controller.h"
+#include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -489,8 +490,7 @@ class AppMenu::ZoomView : public AppMenuView {
         zoom_label_max_width_(0),
         zoom_label_max_width_valid_(false) {
     browser_zoom_subscription_ =
-        ui_zoom::ZoomEventManager::GetForBrowserContext(
-            menu->browser_->profile())
+        zoom::ZoomEventManager::GetForBrowserContext(menu->browser_->profile())
             ->AddZoomLevelChangedCallback(
                 base::Bind(&AppMenu::ZoomView::OnZoomLevelChanged,
                            base::Unretained(this)));
@@ -499,8 +499,7 @@ class AppMenu::ZoomView : public AppMenuView {
         IDS_ZOOM_MINUS2, InMenuButtonBackground::LEADING_BORDER,
         decrement_index, IDS_ACCNAME_ZOOM_MINUS2);
 
-    zoom_label_ = new Label(
-        l10n_util::GetStringFUTF16Int(IDS_ZOOM_PERCENT, 100));
+    zoom_label_ = new Label(base::FormatPercent(100));
     zoom_label_->SetAutoColorReadabilityEnabled(false);
     zoom_label_->SetHorizontalAlignment(gfx::ALIGN_RIGHT);
 
@@ -631,21 +630,18 @@ class AppMenu::ZoomView : public AppMenuView {
   }
 
   void UpdateZoomControls() {
-    WebContents* selected_tab = GetActiveWebContents();
+    WebContents* contents = GetActiveWebContents();
     int zoom = 100;
-    if (selected_tab) {
-      auto zoom_controller =
-          ui_zoom::ZoomController::FromWebContents(selected_tab);
+    if (contents) {
+      auto zoom_controller = zoom::ZoomController::FromWebContents(contents);
       if (zoom_controller)
         zoom = zoom_controller->GetZoomPercent();
       increment_button_->SetEnabled(zoom <
-                                    selected_tab->GetMaximumZoomPercent());
+                                    contents->GetMaximumZoomPercent());
       decrement_button_->SetEnabled(zoom >
-                                    selected_tab->GetMinimumZoomPercent());
+                                    contents->GetMinimumZoomPercent());
     }
-    zoom_label_->SetText(
-        l10n_util::GetStringFUTF16Int(IDS_ZOOM_PERCENT, zoom));
-
+    zoom_label_->SetText(base::FormatPercent(zoom));
     zoom_label_max_width_valid_ = false;
   }
 
@@ -662,21 +658,19 @@ class AppMenu::ZoomView : public AppMenuView {
       WebContents* selected_tab = GetActiveWebContents();
       if (selected_tab) {
         auto zoom_controller =
-            ui_zoom::ZoomController::FromWebContents(selected_tab);
+            zoom::ZoomController::FromWebContents(selected_tab);
         DCHECK(zoom_controller);
         // Enumerate all zoom factors that can be used in PageZoom::Zoom.
-        std::vector<double> zoom_factors = ui_zoom::PageZoom::PresetZoomFactors(
+        std::vector<double> zoom_factors = zoom::PageZoom::PresetZoomFactors(
             zoom_controller->GetZoomPercent());
         for (auto zoom : zoom_factors) {
           int w = gfx::GetStringWidth(
-              l10n_util::GetStringFUTF16Int(IDS_ZOOM_PERCENT,
-                                            static_cast<int>(zoom * 100 + 0.5)),
+              base::FormatPercent(static_cast<int>(std::round(zoom * 100))),
               font_list);
           max_w = std::max(w, max_w);
         }
       } else {
-        max_w = gfx::GetStringWidth(
-            l10n_util::GetStringFUTF16Int(IDS_ZOOM_PERCENT, 100), font_list);
+        max_w = gfx::GetStringWidth(base::FormatPercent(100), font_list);
       }
       zoom_label_max_width_ = max_w + border_width;
 
@@ -1084,16 +1078,12 @@ void AppMenu::BookmarkModelChanged() {
 void AppMenu::Observe(int type,
                       const content::NotificationSource& source,
                       const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_GLOBAL_ERRORS_CHANGED:
-      // A change in the global errors list can add or remove items from the
-      // menu. Close the menu to avoid have a stale menu on-screen.
-      if (root_)
-        root_->Cancel();
-      break;
-    default:
-      NOTREACHED();
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_GLOBAL_ERRORS_CHANGED, type);
+
+  // A change in the global errors list can add or remove items from the
+  // menu. Close the menu to avoid have a stale menu on-screen.
+  if (root_)
+    root_->Cancel();
 }
 
 void AppMenu::PopulateMenu(MenuItemView* parent, MenuModel* model) {

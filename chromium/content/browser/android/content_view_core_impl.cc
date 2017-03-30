@@ -19,7 +19,6 @@
 #include "cc/layers/layer.h"
 #include "cc/layers/solid_color_layer.h"
 #include "cc/output/begin_frame_args.h"
-#include "cc/output/viewport_selection_bound.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/android/gesture_event_type.h"
@@ -58,6 +57,7 @@
 #include "ui/android/window_android.h"
 #include "ui/events/android/motion_event_android.h"
 #include "ui/events/blink/blink_event_util.h"
+#include "ui/events/event_utils.h"
 #include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -423,7 +423,7 @@ void ContentViewCoreImpl::UpdateFrameInfo(
     const gfx::Vector2dF& controls_offset,
     const gfx::Vector2dF& content_offset,
     bool is_mobile_optimized_hint,
-    const cc::ViewportSelectionBound& selection_start) {
+    const gfx::SelectionBound& selection_start) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
   if (obj.is_null() || !window_android_)
@@ -437,14 +437,14 @@ void ContentViewCoreImpl::UpdateFrameInfo(
   // The CursorAnchorInfo API in Android only supports zero width selection
   // bounds.
   const jboolean has_insertion_marker =
-      selection_start.type == cc::SELECTION_BOUND_CENTER;
-  const jboolean is_insertion_marker_visible = selection_start.visible;
+      selection_start.type() == gfx::SelectionBound::CENTER;
+  const jboolean is_insertion_marker_visible = selection_start.visible();
   const jfloat insertion_marker_horizontal =
-      has_insertion_marker ? selection_start.edge_top.x() : 0.0f;
+      has_insertion_marker ? selection_start.edge_top().x() : 0.0f;
   const jfloat insertion_marker_top =
-      has_insertion_marker ? selection_start.edge_top.y() : 0.0f;
+      has_insertion_marker ? selection_start.edge_top().y() : 0.0f;
   const jfloat insertion_marker_bottom =
-      has_insertion_marker ? selection_start.edge_bottom.y() : 0.0f;
+      has_insertion_marker ? selection_start.edge_bottom().y() : 0.0f;
 
   Java_ContentViewCore_updateFrameInfo(
       env, obj.obj(),
@@ -597,6 +597,10 @@ void ContentViewCoreImpl::OnGestureEventAck(const blink::WebGestureEvent& event,
           ack_result == INPUT_EVENT_ACK_STATE_CONSUMED,
           event.x * dpi_scale(),
           event.y * dpi_scale());
+      break;
+    case WebInputEvent::GestureLongPress:
+      if (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED)
+        Java_ContentViewCore_performLongPressHapticFeedback(env, j_obj.obj());
       break;
     default:
       break;
@@ -1034,6 +1038,14 @@ jboolean ContentViewCoreImpl::SendMouseWheelEvent(
 
   if (!ticks_x && !ticks_y)
     return false;
+
+  // Compute Event.Latency.OS.MOUSE_WHEEL histogram.
+  base::TimeTicks current_time = ui::EventTimeForNow();
+  base::TimeTicks event_time = base::TimeTicks() +
+      base::TimeDelta::FromMilliseconds(time_ms);
+  base::TimeDelta delta = current_time - event_time;
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Event.Latency.OS.MOUSE_WHEEL",
+      delta.InMicroseconds(), 1, 1000000, 50);
 
   blink::WebMouseWheelEvent event = WebMouseWheelEventBuilder::Build(
       ticks_x, ticks_y, pixels_per_tick / dpi_scale(), time_ms / 1000.0,

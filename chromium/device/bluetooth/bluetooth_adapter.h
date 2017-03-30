@@ -440,7 +440,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
       const std::string& identifier) const = 0;
 
   // The following methods are used to send various events to observers.
-  void NotifyAdapterStateChanged(bool powered);
+  void NotifyAdapterPoweredChanged(bool powered);
   void NotifyDeviceChanged(BluetoothDevice* device);
 
 #if defined(OS_CHROMEOS) || defined(OS_LINUX)
@@ -466,6 +466,9 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   void NotifyGattDescriptorValueChanged(
       BluetoothRemoteGattDescriptor* descriptor,
       const std::vector<uint8_t>& value);
+
+  // The timeout in seconds used by RemoveTimedOutDevices.
+  static const base::TimeDelta timeoutSec;
 
  protected:
   friend class base::RefCounted<BluetoothAdapter>;
@@ -561,6 +564,12 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
       BluetoothDiscoverySession* discovery_session);
 
   void DeleteDeviceForTesting(const std::string& address);
+
+  // Removes from |devices_| any previously paired, connected or seen
+  // devices which are no longer present. Notifies observers. Note:
+  // this is only used by platforms where there is no notification of
+  // lost devices.
+  void RemoveTimedOutDevices();
 
   // Observers of BluetoothAdapter, notified from implementation subclasses.
   base::ObserverList<device::BluetoothAdapter::Observer> observers_;

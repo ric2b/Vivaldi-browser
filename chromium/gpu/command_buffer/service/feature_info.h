@@ -19,7 +19,7 @@ namespace base {
 class CommandLine;
 }
 
-namespace gfx {
+namespace gl {
 struct GLVersionInfo;
 }
 
@@ -42,6 +42,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     // Use the IMG GLenum values and functions rather than EXT.
     bool use_img_for_multisampled_render_to_texture;
     bool chromium_screen_space_antialiasing;
+    bool use_chromium_screen_space_antialiasing_via_shaders;
     bool oes_standard_derivatives;
     bool oes_egl_image_external;
     bool nv_egl_stream_consumer_external;
@@ -89,6 +90,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     bool ext_multisample_compatibility;
     bool ext_blend_func_extended;
     bool ext_read_format_bgra;
+    bool desktop_srgb_support;
   };
 
   FeatureInfo();
@@ -97,7 +99,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   explicit FeatureInfo(
       const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds);
 
-  // Constructor with workarounds taken from |command_line|
+  // Constructor with workarounds taken from |command_line|.
   FeatureInfo(const base::CommandLine& command_line,
               const GpuDriverBugWorkarounds& gpu_driver_bug_workarounds);
 
@@ -130,7 +132,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
     return disallowed_features_;
   }
 
-  const gfx::GLVersionInfo& gl_version_info() const {
+  const gl::GLVersionInfo& gl_version_info() const {
     DCHECK(gl_version_info_.get());
     return *(gl_version_info_.get());
   }
@@ -189,7 +191,7 @@ class GPU_EXPORT FeatureInfo : public base::RefCounted<FeatureInfo> {
   bool oes_texture_half_float_linear_available_;
 
   bool disable_shader_translator_;
-  std::unique_ptr<gfx::GLVersionInfo> gl_version_info_;
+  std::unique_ptr<gl::GLVersionInfo> gl_version_info_;
 
   DISALLOW_COPY_AND_ASSIGN(FeatureInfo);
 };

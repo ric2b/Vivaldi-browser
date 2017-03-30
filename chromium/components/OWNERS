@@ -30,6 +30,8 @@ per-file cdm.gypi=file://components/cdm/OWNERS
 
 per-file certificate_transparency.gypi=file://components/certificate_transparency/OWNERS
 
+per-file chooser_controller.gypi=file://components/chooser_controller/OWNERS
+
 per-file chrome_apps.gypi=file://components/chrome_apps/OWNERS
 
 per-file cloud_devices.gypi=file://components/cloud_devices/OWNERS
@@ -43,6 +45,7 @@ per-file content_settings.gypi=file://components/content_settings/OWNERS
 per-file copresence.gypi=file://components/copresence/OWNERS
 
 per-file crash.gypi=file://components/crash/OWNERS
+per-file crash_strings.grdp=file://components/crash/OWNERS
 
 per-file cronet.gypi=file://components/cronet/OWNERS
 
@@ -103,6 +106,7 @@ per-file leveldb_proto.gypi=file://components/leveldb_proto/OWNERS
 
 per-file login.gypi=file://components/login/OWNERS
 
+per-file memory_coordinator.gypi=file://components/memory_coordinator/OWNERS
 per-file memory_pressure.gypi=file://components/memory_pressure/OWNERS
 
 per-file metrics.gypi=file://components/metrics/OWNERS
@@ -117,9 +121,12 @@ per-file navigation_interception.gypi=file://components/navigation_interception/
 
 per-file network_hints.gypi=file://components/network_hints/OWNERS
 
+per-file network_session_configurator.gypi=file://components/network_session_configurator/OWNERS
+
 per-file network_time.gypi=file://components/network_time/OWNERS
 
 per-file ntp_snippets.gypi=file://components/ntp_snippets/OWNERS
+per-file ntp_snippets_strings.grdp=file://components/ntp_snippets/OWNERS
 
 per-file ntp_tiles.gypi=file://components/ntp_tiles/OWNERS
 
@@ -197,6 +204,8 @@ per-file startup_metric_utils.gypi=file://components/startup_metric_utils/OWNERS
 
 per-file storage_monitor.gypi=file://components/storage_monitor/OWNERS
 
+per-file subresource_filter.gypi=file://components/subresource_filter/OWNERS
+
 per-file suggestions.gypi=file://components/suggestions/OWNERS
 
 per-file supervised_user_error_page.gypi=file://components/supervised_user_error_page/OWNERS
@@ -208,8 +217,8 @@ per-file sync_sessions.gypi=file://components/sync_sessions/OWNERS
 
 per-file timers.gypi=file://components/timers/OWNERS
 
-per-file tracing.gypi=file://components/tracing/OWNERS
-per-file tracing_nacl.gypi=file://components/tracing/OWNERS
+per-file tracing.gyp=file://components/tracing/OWNERS
+per-file tracing_nacl.gyp=file://components/tracing/OWNERS
 
 per-file translate.gypi=file://components/translate/OWNERS
 per-file translate_strings.grdp=file://components/translate/OWNERS
@@ -239,6 +248,8 @@ per-file web_restrictions.gypi=file://components/web_restrictions/OWNERS
 
 per-file webdata.gypi=file://components/webdata/OWNERS
 per-file webdata_services.gypi=file://components/webdata_services/OWNERS
+
+per-file webmessaging.gypi=file://components/webmessaging/OWNERS
 
 per-file webp_transcode.gypi=file://components/webp_transcode/OWNERS
 

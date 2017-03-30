@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/webui/invalidations_message_handler.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "chrome/browser/invalidation/profile_invalidation_provider_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -76,17 +78,17 @@ void InvalidationsMessageHandler::OnRegistrationChange(
   for (std::multiset<std::string>::const_iterator it =
        registered_handlers.begin();
        it != registered_handlers.end(); ++it) {
-    list_of_handlers.Append(new base::StringValue(*it));
+    list_of_handlers.AppendString(*it);
   }
-  web_ui()->CallJavascriptFunction("chrome.invalidations.updateHandlers",
-                                   list_of_handlers);
+  web_ui()->CallJavascriptFunctionUnsafe("chrome.invalidations.updateHandlers",
+                                         list_of_handlers);
 }
 
 void InvalidationsMessageHandler::OnStateChange(
     const syncer::InvalidatorState& new_state,
     const base::Time& last_changed_timestamp) {
   std::string state(syncer::InvalidatorStateToString(new_state));
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "chrome.invalidations.updateInvalidatorState", base::StringValue(state),
       base::FundamentalValue(last_changed_timestamp.ToJsTime()));
 }
@@ -102,11 +104,11 @@ void InvalidationsMessageHandler::OnUpdateIds(
     dic->SetString("name", (it->first).name());
     dic->SetInteger("source", (it->first).source());
     dic->SetInteger("totalCount", it->second);
-    list_of_objects.Append(dic.release());
+    list_of_objects.Append(std::move(dic));
   }
-  web_ui()->CallJavascriptFunction("chrome.invalidations.updateIds",
-                                   base::StringValue(handler_name),
-                                   list_of_objects);
+  web_ui()->CallJavascriptFunctionUnsafe("chrome.invalidations.updateIds",
+                                         base::StringValue(handler_name),
+                                         list_of_objects);
 }
 void InvalidationsMessageHandler::OnDebugMessage(
     const base::DictionaryValue& details) {}
@@ -115,12 +117,12 @@ void InvalidationsMessageHandler::OnInvalidation(
     const syncer::ObjectIdInvalidationMap& new_invalidations) {
   std::unique_ptr<base::ListValue> invalidations_list =
       new_invalidations.ToValue();
-  web_ui()->CallJavascriptFunction("chrome.invalidations.logInvalidations",
-                                   *invalidations_list);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "chrome.invalidations.logInvalidations", *invalidations_list);
 }
 
 void InvalidationsMessageHandler::OnDetailedStatus(
     const base::DictionaryValue& network_details) {
-  web_ui()->CallJavascriptFunction("chrome.invalidations.updateDetailedStatus",
-                                   network_details);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "chrome.invalidations.updateDetailedStatus", network_details);
 }

@@ -91,7 +91,7 @@ public class SignInPreference extends Preference
             summary = getContext().getString(R.string.sign_in_to_chrome_summary);
             fragment = null;
         } else {
-            summary = getSyncSummaryString(getContext(), account.name);
+            summary = SyncPreference.getSyncStatusSummary(getContext());
             fragment = AccountManagementFragment.class.getName();
             title = AccountManagementFragment.getCachedUserName(account.name);
             if (title == null) {
@@ -132,17 +132,12 @@ public class SignInPreference extends Preference
         setOnPreferenceClickListener(new OnPreferenceClickListener() {
             @Override
             public boolean onPreferenceClick(Preference preference) {
-                if (ChromeSigninController.get(getContext()).isSignedIn()) return false;
-                if (!SigninManager.get(getContext()).isSignInAllowed()) {
-                    if (SigninManager.get(getContext()).isSigninDisabledByPolicy()) {
-                        ManagedPreferencesUtils.showManagedByAdministratorToast(getContext());
-                    }
+                if (!AccountSigninActivity.startIfAllowed(
+                            getContext(), SigninAccessPoint.SETTINGS)) {
                     return false;
                 }
 
                 setEnabled(false);
-                AccountSigninActivity.startAccountSigninActivity(
-                        getContext(), SigninAccessPoint.SETTINGS);
                 return true;
             }
         });
@@ -155,16 +150,6 @@ public class SignInPreference extends Preference
         } else {
             setWidgetLayoutResource(0);
         }
-    }
-
-    private static String getSyncSummaryString(Context context, String accountName) {
-        boolean syncEnabled = AndroidSyncSettings.isSyncEnabled(context);
-        if (syncEnabled) {
-            return String.format(
-                context.getString(R.string.account_management_sync_summary), accountName);
-        }
-
-        return context.getString(R.string.sync_is_disabled);
     }
 
     @Override

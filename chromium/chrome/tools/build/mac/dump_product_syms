@@ -142,7 +142,7 @@ for SRC_NAME in "${SRC_NAMES[@]}"; do
     if [ "${DWARF_PATH}" -nt "${BPAD_SYM_PATH}" -o \
          "${SRC_PATH}" -nt "${BPAD_SYM_PATH}" ] ; then
       "${BREAKPAD_DUMP_SYMS}" -a "${ARCH}" -g "${DWARF_PATH}" "${SRC_PATH}" > \
-          "${BPAD_SYM_PATH}"
+          "${BPAD_SYM_PATH}" 2>/dev/null
     fi
 
     # Some executables will show up with variant names. The Breakpad symbol

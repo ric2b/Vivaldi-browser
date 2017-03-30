@@ -20,7 +20,7 @@
 #include "build/build_config.h"
 #include "media/base/audio_buffer.h"
 #include "media/base/audio_buffer_converter.h"
-#include "media/base/audio_hardware_config.h"
+#include "media/base/audio_latency.h"
 #include "media/base/audio_splicer.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/demuxer_stream.h"
@@ -37,14 +37,12 @@ AudioRendererImpl::AudioRendererImpl(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     media::AudioRendererSink* sink,
     ScopedVector<AudioDecoder> decoders,
-    const AudioHardwareConfig& hardware_config,
     const scoped_refptr<MediaLog>& media_log)
     : task_runner_(task_runner),
       expecting_config_changes_(false),
       sink_(sink),
       audio_buffer_stream_(
           new AudioBufferStream(task_runner, std::move(decoders), media_log)),
-      hardware_config_(hardware_config),
       media_log_(media_log),
       client_(nullptr),
       tick_clock_(new base::DefaultTickClock()),
@@ -365,7 +363,8 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
   // failed.
   init_cb_ = BindToCurrentLoop(init_cb);
 
-  const AudioParameters& hw_params = hardware_config_.GetOutputConfig();
+  const AudioParameters& hw_params =
+      sink_->GetOutputDeviceInfo().output_params();
   expecting_config_changes_ = stream->SupportsConfigChanges();
   if (!expecting_config_changes_ || !hw_params.IsValid() ||
       hw_params.format() == AudioParameters::AUDIO_FAKE) {
@@ -443,7 +442,7 @@ void AudioRendererImpl::Initialize(DemuxerStream* stream,
 
     audio_parameters_.Reset(hw_params.format(), renderer_channel_layout,
                             sample_rate, hw_params.bits_per_sample(),
-                            AudioHardwareConfig::GetHighLatencyBufferSize(
+                            media::AudioLatency::GetHighLatencyBufferSize(
                                 sample_rate, preferred_buffer_size));
   }
 

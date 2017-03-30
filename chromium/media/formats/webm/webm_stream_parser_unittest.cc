@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/demuxer.h"
 #include "media/base/media_tracks.h"
 #include "media/base/mock_media_log.h"
 #include "media/base/stream_parser.h"
@@ -107,14 +108,14 @@ TEST_F(WebMStreamParserTest, VerifyMediaTrackMetadata) {
 
   const MediaTrack& video_track = *(media_tracks_->tracks()[0]);
   EXPECT_EQ(video_track.type(), MediaTrack::Video);
-  EXPECT_EQ(video_track.id(), "1");
+  EXPECT_EQ(video_track.bytestream_track_id(), 1);
   EXPECT_EQ(video_track.kind(), "main");
   EXPECT_EQ(video_track.label(), "");
   EXPECT_EQ(video_track.language(), "und");
 
   const MediaTrack& audio_track = *(media_tracks_->tracks()[1]);
   EXPECT_EQ(audio_track.type(), MediaTrack::Audio);
-  EXPECT_EQ(audio_track.id(), "2");
+  EXPECT_EQ(audio_track.bytestream_track_id(), 2);
   EXPECT_EQ(audio_track.kind(), "main");
   EXPECT_EQ(audio_track.label(), "");
   EXPECT_EQ(audio_track.language(), "und");

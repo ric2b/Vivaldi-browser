@@ -4,12 +4,12 @@
 
 #include "ash/wm/drag_window_resizer.h"
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/wm/window_positioning_utils.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/window_positioning_utils.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/drag_window_controller.h"
 #include "ash/wm/window_util.h"
 #include "base/memory/weak_ptr.h"
@@ -40,9 +40,8 @@ DragWindowResizer::~DragWindowResizer() {
 }
 
 // static
-DragWindowResizer* DragWindowResizer::Create(
-    WindowResizer* next_window_resizer,
-    wm::WindowState* window_state) {
+DragWindowResizer* DragWindowResizer::Create(WindowResizer* next_window_resizer,
+                                             wm::WindowState* window_state) {
   return new DragWindowResizer(next_window_resizer, window_state);
 }
 
@@ -100,11 +99,11 @@ void DragWindowResizer::CompleteDrag() {
       if (last_mouse_location_in_screen.x() < dst_bounds.x())
         dst_bounds.set_x(last_mouse_location_in_screen.x());
       else if (last_mouse_location_in_screen.x() > dst_bounds.right())
-        dst_bounds.set_x(
-            last_mouse_location_in_screen.x() - dst_bounds.width());
+        dst_bounds.set_x(last_mouse_location_in_screen.x() -
+                         dst_bounds.width());
     }
-    ash::wm::AdjustBoundsToEnsureMinimumWindowVisibility(
-        dst_display.bounds(), &dst_bounds);
+    ash::wm::AdjustBoundsToEnsureMinimumWindowVisibility(dst_display.bounds(),
+                                                         &dst_bounds);
 
     GetAuraTarget()->SetBoundsInScreen(dst_bounds, dst_display);
   }
@@ -168,7 +167,7 @@ bool DragWindowResizer::ShouldAllowMouseWarp() {
 }
 
 aura::Window* DragWindowResizer::GetAuraTarget() {
-  return wm::WmWindowAura::GetAuraWindow(GetTarget());
+  return WmWindowAura::GetAuraWindow(GetTarget());
 }
 
 }  // namespace ash

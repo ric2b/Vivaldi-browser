@@ -6,8 +6,10 @@ import("//build/config/features.gni")
 import("//media/media_options.gni")
 import("//testing/test.gni")
 
-source_set("capture") {
+component("capture") {
+  defines = [ "CAPTURE_IMPLEMENTATION" ]
   sources = [
+    "capture_export.h",
     "content/animated_content_sampler.cc",
     "content/animated_content_sampler.h",
     "content/capture_resolution_chooser.cc",
@@ -25,10 +27,6 @@ source_set("capture") {
     "device_monitor_mac.mm",
     "system_message_window_win.cc",
     "system_message_window_win.h",
-    "video/android/video_capture_device_android.cc",
-    "video/android/video_capture_device_android.h",
-    "video/android/video_capture_device_factory_android.cc",
-    "video/android/video_capture_device_factory_android.h",
     "video/fake_video_capture_device.cc",
     "video/fake_video_capture_device.h",
     "video/fake_video_capture_device_factory.cc",
@@ -52,6 +50,7 @@ source_set("capture") {
     "video/mac/video_capture_device_factory_mac.mm",
     "video/mac/video_capture_device_mac.h",
     "video/mac/video_capture_device_mac.mm",
+    "video/scoped_result_callback.h",
     "video/video_capture_device.cc",
     "video/video_capture_device.h",
     "video/video_capture_device_factory.cc",
@@ -80,28 +79,37 @@ source_set("capture") {
   public_deps = []
   deps = [
     "//base",
-    "//media/base",
+    "//base:i18n",
+    "//media",
+    "//media/mojo/interfaces:image_capture",
     "//skia",
     "//ui/display",
+    "//ui/gfx",
   ]
 
   configs += [
+    # TODO(mcasas): media/base should be a component and not a source_set, but
+    # it depends on parts of media/filters, media/ffmpeg etc. Until then, we
+    # pretend to be inside media.dll and duplicate the few symbols needed, see
+    # https://crbug.com/590017.
     "//media:media_implementation",
-
-    # TODO(mcasas): Fix size_t to int truncation warning-treated-as-errors.
-    "//build/config/compiler:no_size_t_to_int_warning",
   ]
 
   if (is_android) {
-    public_deps += [ "video/android" ]
+    public_deps += [
+      "video/android",
+      "video/android:capture_java",
+    ]
     deps += [ "video/android:capture_jni_headers" ]
   }
 
   if (is_mac) {
     deps += [ "//third_party/decklink" ]
     libs = [
+      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreFoundation.framework",
       "CoreGraphics.framework",
+      "CoreVideo.framework",
       "Foundation.framework",
     ]
   }
@@ -115,25 +123,28 @@ source_set("capture") {
   }
 
   if (is_win) {
-    public_deps += [ "//media/base/win" ]
+    deps += [
+      "//media/base",  # For media_switches.
+      "//media/base/win",
+    ]
     libs = [
       "mf.lib",
       "mfplat.lib",
       "mfreadwrite.lib",
       "mfuuid.lib",
     ]
-
     ldflags = [
       "/DELAYLOAD:mf.dll",
       "/DELAYLOAD:mfplat.dll",
       "/DELAYLOAD:mfreadwrite.dll",
     ]
+
+    # TODO(jschuh): https://crbug.com/167187 fix size_t to int truncations.
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
   }
 }
 
-source_set("unittests") {
-  testonly = true
-
+test("capture_unittests") {
   sources = [
     "content/animated_content_sampler_unittest.cc",
     "content/capture_resolution_chooser_unittest.cc",
@@ -147,11 +158,22 @@ source_set("unittests") {
   ]
 
   deps = [
-    "//media/base:unittests",
+    ":capture",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//media/base:test_support",
+    "//media/mojo/interfaces:image_capture",
     "//testing/gmock",
     "//testing/gtest",
+    "//ui/gfx:test_support",
   ]
 
-  # TODO(mcasas): Fix size_t to int truncation warning-treated-as-errors.
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  if (is_android) {
+    deps += [ "//media/capture/video/android:capture_java" ]
+  }
+
+  if (is_win) {
+    # TODO(jschuh): https://crbug.com/167187 fix size_t to int truncations.
+    configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  }
 }

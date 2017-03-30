@@ -24,6 +24,8 @@ import tempfile
 import time
 import traceback
 
+import psutil
+
 import chrome_cache
 import common_util
 import device_setup
@@ -36,6 +38,7 @@ _SRC_DIR = os.path.abspath(os.path.join(
 _CATAPULT_DIR = os.path.join(_SRC_DIR, 'third_party', 'catapult')
 
 sys.path.append(os.path.join(_CATAPULT_DIR, 'devil'))
+from devil.android import device_errors
 from devil.android.sdk import intent
 
 sys.path.append(
@@ -71,6 +74,21 @@ class ChromeControllerInternalError(Exception):
   pass
 
 
+def _AllocateTcpListeningPort():
+  """Allocates a TCP listening port.
+
+  Note: The use of this function is inherently OS level racy because the
+    port returned by this function might be re-used by another running process.
+  """
+  temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  try:
+    temp_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    temp_socket.bind(('', 0))
+    return temp_socket.getsockname()[1]
+  finally:
+    temp_socket.close()
+
+
 class ChromeControllerError(Exception):
   """Chrome error with detailed log.
 
@@ -80,6 +98,7 @@ class ChromeControllerError(Exception):
   """
   _INTERMITTENT_WHITE_LIST = {websocket.WebSocketTimeoutException,
                               devtools_monitor.DevToolsConnectionTargetCrashed}
+  _PASSTHROUGH_WHITE_LIST = (MemoryError, SyntaxError)
 
   def __init__(self, log):
     """Constructor
@@ -111,6 +130,10 @@ class ChromeControllerError(Exception):
   def IsIntermittent(self):
     """Returns whether the error is an known intermittent error."""
     return self.error_type in self._INTERMITTENT_WHITE_LIST
+
+  def RaiseOriginal(self):
+    """Raises the original exception that has caused <self>."""
+    raise self.error_type, self.error_value, self.error_traceback
 
 
 class ChromeControllerBase(object):
@@ -154,9 +177,9 @@ class ChromeControllerBase(object):
     self._network_name = None
     self._slow_death = False
 
-  def AddChromeArgument(self, arg):
-    """Add command-line argument to the chrome execution."""
-    self._chrome_args.append(arg)
+  def AddChromeArguments(self, args):
+    """Add command-line arguments to the chrome execution."""
+    self._chrome_args.extend(args)
 
   @contextlib.contextmanager
   def Open(self):
@@ -294,16 +317,16 @@ class RemoteChromeController(ChromeControllerBase):
     Caution: The browser state might need to be manually reseted.
 
     Args:
-      device: an android device.
+      device: (device_utils.DeviceUtils) an android device.
     """
     assert device is not None, 'Should you be using LocalController instead?'
     super(RemoteChromeController, self).__init__()
     self._device = device
-    self._device.EnableRoot()
     self._metadata['platform'] = {
         'os': 'A-' + device.build_id,
         'product_model': device.product_model
     }
+    self._InitDevice()
 
   def GetDevice(self):
     """Overridden android device."""
@@ -323,6 +346,7 @@ class RemoteChromeController(ChromeControllerBase):
         subprocess.list2cmdline(chrome_args)))
     with device_setup.FlagReplacer(
         self._device, command_line_path, self._GetChromeArguments()):
+      self._DismissCrashDialogIfNeeded()
       start_intent = intent.Intent(
           package=package_info.package, activity=package_info.activity,
           data='about:blank')
@@ -331,41 +355,72 @@ class RemoteChromeController(ChromeControllerBase):
       try:
         for attempt_id in xrange(self.DEVTOOLS_CONNECTION_ATTEMPTS):
           logging.info('Devtools connection attempt %d' % attempt_id)
-          with device_setup.ForwardPort(
-              self._device, 'tcp:%d' % OPTIONS.devtools_port,
-              'localabstract:chrome_devtools_remote'):
-            try:
-              connection = devtools_monitor.DevToolsConnection(
-                  OPTIONS.devtools_hostname, OPTIONS.devtools_port)
-              self._StartConnection(connection)
-            except socket.error as e:
-              if e.errno != errno.ECONNRESET:
-                raise
-              time.sleep(self.DEVTOOLS_CONNECTION_ATTEMPT_INTERVAL_SECONDS)
-              continue
-            yield connection
-            if self._slow_death:
-              self._device.adb.Shell('am start com.google.android.launcher')
-              time.sleep(self.TIME_TO_IDLE_SECONDS)
-            break
+          # Adb forwarding does not provide a way to print the port number if
+          # it is allocated atomically by the OS by passing port=0, but we need
+          # dynamically allocated listening port here to handle parallel run on
+          # different devices.
+          host_side_port = _AllocateTcpListeningPort()
+          logging.info('Allocated host sided listening port for devtools '
+              'connection: %d', host_side_port)
+          try:
+            with device_setup.ForwardPort(
+                self._device, 'tcp:%d' % host_side_port,
+                'localabstract:chrome_devtools_remote'):
+              try:
+                connection = devtools_monitor.DevToolsConnection(
+                    OPTIONS.devtools_hostname, host_side_port)
+                self._StartConnection(connection)
+              except socket.error as e:
+                if e.errno != errno.ECONNRESET:
+                  raise
+                time.sleep(self.DEVTOOLS_CONNECTION_ATTEMPT_INTERVAL_SECONDS)
+                continue
+              yield connection
+              if self._slow_death:
+                self._device.adb.Shell('am start com.google.android.launcher')
+                time.sleep(self.TIME_TO_IDLE_SECONDS)
+              break
+          except device_errors.AdbCommandFailedError as error:
+            _KNOWN_ADB_FORWARDER_FAILURES = [
+              'cannot bind to socket: Address already in use',
+              'cannot rebind existing socket: Resource temporarily unavailable']
+            for message in _KNOWN_ADB_FORWARDER_FAILURES:
+              if message in error.message:
+                break
+            else:
+              raise
+            continue
         else:
           raise ChromeControllerInternalError(
               'Failed to connect to Chrome devtools after {} '
               'attempts.'.format(self.DEVTOOLS_CONNECTION_ATTEMPTS))
-      except:
+      except ChromeControllerError._PASSTHROUGH_WHITE_LIST:
+        raise
+      except Exception:
         logcat = ''.join([l + '\n' for l in self._device.adb.Logcat(dump=True)])
         raise ChromeControllerError(log=logcat)
       finally:
         self._device.ForceStop(package_info.package)
+        self._DismissCrashDialogIfNeeded()
 
   def ResetBrowserState(self):
-    """Override for chrome state reseting."""
-    logging.info('Reset chrome\'s profile')
-    package_info = OPTIONS.ChromePackage()
-    # We assume all the browser is in the Default user profile directory.
-    cmd = ['rm', '-rf', '/data/data/{}/app_chrome/Default'.format(
-               package_info.package)]
-    self._device.adb.Shell(subprocess.list2cmdline(cmd))
+    """Override resetting Chrome local state."""
+    logging.info('Resetting Chrome local state')
+    package = OPTIONS.ChromePackage().package
+    # Remove the Chrome Profile and the various disk caches. Other parts
+    # theoretically should not affect loading performance. Also remove the tab
+    # state to prevent it from growing infinitely. [:D]
+    for directory in ['app_chrome/Default', 'cache', 'app_chrome/ShaderCache',
+                      'app_tabs']:
+      cmd = ['rm', '-rf', '/data/data/{}/{}'.format(package, directory)]
+      self._device.adb.Shell(subprocess.list2cmdline(cmd))
+
+  def RebootDevice(self):
+    """Reboot the remote device."""
+    assert self._wpr_attributes is None, 'WPR should be closed before rebooting'
+    logging.warning('Rebooting the device')
+    device_setup.Reboot(self._device)
+    self._InitDevice()
 
   def PushBrowserCache(self, cache_path):
     """Override for chrome cache pushing."""
@@ -394,6 +449,14 @@ class RemoteChromeController(ChromeControllerBase):
       yield
     self._wpr_attributes = None
 
+  def _DismissCrashDialogIfNeeded(self):
+    for _ in xrange(10):
+      if not self._device.DismissCrashDialogIfNeeded():
+        break
+
+  def _InitDevice(self):
+    self._device.EnableRoot()
+
 
 class LocalChromeController(ChromeControllerBase):
   """Controller for a local (desktop) chrome instance."""
@@ -405,12 +468,12 @@ class LocalChromeController(ChromeControllerBase):
     """
     super(LocalChromeController, self).__init__()
     if OPTIONS.no_sandbox:
-      self.AddChromeArgument('--no-sandbox')
+      self.AddChromeArguments(['--no-sandbox'])
     self._profile_dir = OPTIONS.local_profile_dir
     self._using_temp_profile_dir = self._profile_dir is None
     if self._using_temp_profile_dir:
       self._profile_dir = tempfile.mkdtemp(suffix='.profile')
-    self._chrome_env_override = None
+    self._chrome_env_override = {}
     self._metadata['platform'] = {
         'os': platform.system()[0] + '-' + platform.release(),
         'product_model': 'unknown'
@@ -419,6 +482,36 @@ class LocalChromeController(ChromeControllerBase):
   def __del__(self):
     if self._using_temp_profile_dir:
       shutil.rmtree(self._profile_dir)
+
+  @staticmethod
+  def KillChromeProcesses():
+    """Kills all the running instances of Chrome.
+
+    Returns: (int) The number of processes that were killed.
+    """
+    killed_count = 0
+    chrome_path = OPTIONS.LocalBinary('chrome')
+    for process in psutil.process_iter():
+      try:
+        process_bin_path = None
+        # In old versions of psutil, process.exe is a member, in newer ones it's
+        # a method.
+        if type(process.exe) == str:
+          process_bin_path = process.exe
+        else:
+          process_bin_path = process.exe()
+        if os.path.abspath(process_bin_path) == os.path.abspath(chrome_path):
+          process.terminate()
+          killed_count += 1
+          try:
+            process.wait(timeout=10)
+          except psutil.TimeoutExpired:
+            process.kill()
+      except psutil.AccessDenied:
+        pass
+      except psutil.NoSuchProcess:
+        pass
+    return killed_count
 
   def SetChromeEnvOverride(self, env):
     """Set the environment for Chrome.
@@ -431,6 +524,11 @@ class LocalChromeController(ChromeControllerBase):
   @contextlib.contextmanager
   def Open(self):
     """Overridden connection creation."""
+    # Kill all existing Chrome instances.
+    killed_count = LocalChromeController.KillChromeProcesses()
+    if killed_count > 0:
+      logging.warning('Killed existing Chrome instance.')
+
     chrome_cmd = [OPTIONS.LocalBinary('chrome')]
     chrome_cmd.extend(self._GetChromeArguments())
     # Force use of simple cache.
@@ -445,7 +543,7 @@ class LocalChromeController(ChromeControllerBase):
         tempfile.NamedTemporaryFile(prefix="chrome_controller_", suffix='.log')
     chrome_process = None
     try:
-      chrome_env_override = self._chrome_env_override or {}
+      chrome_env_override = self._chrome_env_override.copy()
       if self._wpr_attributes:
         chrome_env_override.update(self._wpr_attributes.chrome_env_override)
 
@@ -483,14 +581,19 @@ class LocalChromeController(ChromeControllerBase):
         connection.Close()
         chrome_process.wait()
         chrome_process = None
-    except:
+    except ChromeControllerError._PASSTHROUGH_WHITE_LIST:
+      raise
+    except Exception:
       raise ChromeControllerError(log=open(tmp_log.name).read())
     finally:
       if OPTIONS.local_noisy:
         sys.stderr.write(open(tmp_log.name).read())
       del tmp_log
       if chrome_process:
-        chrome_process.kill()
+        try:
+          chrome_process.kill()
+        except OSError:
+          pass  # Chrome is already dead.
 
   def ResetBrowserState(self):
     """Override for chrome state reseting."""

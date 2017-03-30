@@ -45,15 +45,14 @@
 #include "wtf/Assertions.h"
 #include "wtf/HashMap.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/text/AtomicStringHash.h"
+#include <memory>
 
 namespace blink {
 
 class ConsoleMessage;
-class ConsoleMessageStorage;
 class ExceptionState;
 class V8AbstractEventListener;
 class WorkerClients;
@@ -92,7 +91,7 @@ public:
 
     WorkerThread* thread() const { return m_thread; }
 
-    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) final; // Executes the task on context's thread asynchronously.
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>, const String& taskNameForInstrumentation) final; // Executes the task on context's thread asynchronously.
 
     // WorkerGlobalScope
     WorkerGlobalScope* self() { return this; }
@@ -139,9 +138,8 @@ public:
     using SecurityContext::contentSecurityPolicy;
 
     void addConsoleMessage(ConsoleMessage*) final;
-    ConsoleMessageStorage* messageStorage();
 
-    void exceptionHandled(int exceptionId, bool isHandled);
+    void exceptionUnhandled(const String& errorMessage, std::unique_ptr<SourceLocation>);
 
     virtual void scriptLoaded(size_t scriptSize, size_t cachedMetadataSize) { }
 
@@ -153,10 +151,10 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 protected:
-    WorkerGlobalScope(const KURL&, const String& userAgent, WorkerThread*, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData>, WorkerClients*);
+    WorkerGlobalScope(const KURL&, const String& userAgent, WorkerThread*, double timeOrigin, std::unique_ptr<SecurityOrigin::PrivilegeData>, WorkerClients*);
     void applyContentSecurityPolicyFromVector(const Vector<CSPHeaderAndType>& headers);
 
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override;
+    void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) override;
     void addMessageToWorkerConsole(ConsoleMessage*);
     void setV8CacheOptions(V8CacheOptions v8CacheOptions) { m_v8CacheOptions = v8CacheOptions; }
 
@@ -199,10 +197,6 @@ private:
 
     double m_timeOrigin;
 
-    Member<ConsoleMessageStorage> m_messageStorage;
-
-    unsigned long m_workerExceptionUniqueIdentifier;
-    HeapHashMap<unsigned long, Member<ConsoleMessage>> m_pendingMessages;
     HeapListHashSet<Member<V8AbstractEventListener>> m_eventListeners;
 };
 

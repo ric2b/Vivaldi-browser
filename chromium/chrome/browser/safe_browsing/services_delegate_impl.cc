@@ -17,12 +17,14 @@
 
 namespace safe_browsing {
 
+#ifdef NDEBUG
 namespace {
 const base::Feature kSafeBrowsingV4LocalDatabaseManagerEnabled {
     "SafeBrowsingV4LocalDatabaseManagerEnabled",
     base::FEATURE_DISABLED_BY_DEFAULT
 };
 }  // namespace
+#endif
 
 // static
 std::unique_ptr<ServicesDelegate> ServicesDelegate::Create(
@@ -180,12 +182,16 @@ void ServicesDelegateImpl::StopOnIOThread(bool shutdown) {
 }
 
 V4LocalDatabaseManager* ServicesDelegateImpl::CreateV4LocalDatabaseManager() {
-  return new V4LocalDatabaseManager();
+  return new V4LocalDatabaseManager(SafeBrowsingService::GetBaseFilename());
 }
 
 bool ServicesDelegateImpl::IsV4LocalDatabaseManagerEnabled() {
+#ifndef NDEBUG
+  return true;
+#else
   return base::FeatureList::IsEnabled(
       kSafeBrowsingV4LocalDatabaseManagerEnabled);
+#endif
 }
 
 }  // namespace safe_browsing

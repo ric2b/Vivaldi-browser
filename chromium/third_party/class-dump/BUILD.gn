@@ -4,10 +4,7 @@
 
 config("config") {
   visibility = [ ":class-dump" ]
-  libs = [
-    "Foundation.framework",
-    "crypto",
-  ]
+  libs = [ "Foundation.framework" ]
 
   # TODO(crbug.com/595295): Building class-dump tools requires OS X SDK
   # version 10.9 or higher. Remove this override once the global version
@@ -184,6 +181,7 @@ executable("class-dump") {
     "src/class-dump.m",
   ]
 
+  configs -= [ "//build/config/compiler:chromium_code" ]
   configs += [
     ":config",
     "//build/config/compiler:enable_arc",

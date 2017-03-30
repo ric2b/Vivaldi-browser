@@ -20,7 +20,6 @@
 #include "net/base/completion_callback.h"
 
 namespace blimp {
-namespace {
 
 // Forwards incoming blimp messages to PacketWriter.
 class BlimpMessageSender : public BlimpMessageProcessor {
@@ -33,6 +32,8 @@ class BlimpMessageSender : public BlimpMessageProcessor {
   }
 
   // BlimpMessageProcessor implementation.
+  // |callback| receives net::OK on write success, or receives an error code
+  // otherwise.
   void ProcessMessage(std::unique_ptr<BlimpMessage> message,
                       const net::CompletionCallback& callback) override;
 
@@ -91,28 +92,76 @@ void BlimpMessageSender::ProcessMessage(
 void BlimpMessageSender::OnWritePacketComplete(int result) {
   DVLOG(2) << "OnWritePacketComplete, result=" << result;
   DCHECK_NE(net::ERR_IO_PENDING, result);
-  base::ResetAndReturn(&pending_process_msg_callback_).Run(result);
+
+  // Create a stack-local copy of |pending_process_msg_callback_|, in case an
+  // observer deletes |this|.
+  net::CompletionCallback process_callback =
+      base::ResetAndReturn(&pending_process_msg_callback_);
+
   if (result != net::OK) {
     error_observer_->OnConnectionError(result);
   }
+
+  process_callback.Run(result);
 }
 
-}  // namespace
+// MessageProcessor filter used to route EndConnection messages through to
+// OnConnectionError notifications on the owning BlimpConnection.
+class BlimpConnection::EndConnectionFilter : public BlimpMessageProcessor {
+ public:
+  explicit EndConnectionFilter(BlimpConnection* connection);
+
+  void set_message_handler(BlimpMessageProcessor* message_handler) {
+    message_handler_ = message_handler;
+  }
+
+  // BlimpMessageProcessor implementation.
+  void ProcessMessage(std::unique_ptr<BlimpMessage> message,
+                      const net::CompletionCallback& callback) override;
+
+ private:
+  // Owning BlimpConnection, on which to call OnConnectionError.
+  BlimpConnection* connection_;
+
+  // Caller-provided message handler to forward non-EndConnection messages to.
+  BlimpMessageProcessor* message_handler_;
+
+  DISALLOW_COPY_AND_ASSIGN(EndConnectionFilter);
+};
+
+BlimpConnection::EndConnectionFilter::EndConnectionFilter(
+    BlimpConnection* connection)
+    : connection_(connection), message_handler_(nullptr) {}
+
+void BlimpConnection::EndConnectionFilter::ProcessMessage(
+    std::unique_ptr<BlimpMessage> message,
+    const net::CompletionCallback& callback) {
+  if (message->has_protocol_control() &&
+      message->protocol_control().has_end_connection()) {
+    // Report the EndConnection reason to connection error observers.
+    connection_->OnConnectionError(
+        message->protocol_control().end_connection().reason());
+
+    // Caller must ensure |callback| safe to call after OnConnectionError.
+    callback.Run(message->protocol_control().end_connection().reason());
+    return;
+  }
+
+  message_handler_->ProcessMessage(std::move(message), callback);
+}
 
 BlimpConnection::BlimpConnection(std::unique_ptr<PacketReader> reader,
                                  std::unique_ptr<PacketWriter> writer)
     : reader_(std::move(reader)),
       message_pump_(new BlimpMessagePump(reader_.get())),
       writer_(std::move(writer)),
-      outgoing_msg_processor_(new BlimpMessageSender(writer_.get())) {
+      outgoing_msg_processor_(new BlimpMessageSender(writer_.get())),
+      end_connection_filter_(new EndConnectionFilter(this)) {
   DCHECK(writer_);
+  DCHECK(reader_);
 
-  // Observe the connection errors received by any of this connection's network
-  // objects.
   message_pump_->set_error_observer(this);
-  BlimpMessageSender* sender =
-      static_cast<BlimpMessageSender*>(outgoing_msg_processor_.get());
-  sender->set_error_observer(this);
+  outgoing_msg_processor_->set_error_observer(this);
 }
 
 BlimpConnection::BlimpConnection() {}
@@ -133,7 +182,9 @@ void BlimpConnection::RemoveConnectionErrorObserver(
 
 void BlimpConnection::SetIncomingMessageProcessor(
     BlimpMessageProcessor* processor) {
-  message_pump_->SetMessageProcessor(processor);
+  end_connection_filter_->set_message_handler(processor);
+  message_pump_->SetMessageProcessor(processor ? end_connection_filter_.get()
+                                               : nullptr);
 }
 
 BlimpMessageProcessor* BlimpConnection::GetOutgoingMessageProcessor() {

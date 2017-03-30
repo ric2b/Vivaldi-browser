@@ -13,7 +13,6 @@
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "cc/animation/animation.h"
-#include "cc/animation/scroll_offset_animations_impl.h"
 #include "cc/base/cc_export.h"
 #include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/geometry/box_f.h"
@@ -30,6 +29,8 @@ class AnimationPlayer;
 class AnimationTimeline;
 class ElementAnimations;
 class LayerTreeHost;
+class ScrollOffsetAnimations;
+class ScrollOffsetAnimationsImpl;
 
 enum class ThreadInstance { MAIN, IMPL };
 
@@ -44,9 +45,15 @@ enum class ThreadInstance { MAIN, IMPL };
 class CC_EXPORT AnimationHost {
  public:
   using ElementToAnimationsMap =
-      std::unordered_map<ElementId, scoped_refptr<ElementAnimations>>;
+      std::unordered_map<ElementId,
+                         scoped_refptr<ElementAnimations>,
+                         ElementIdHash>;
 
-  static std::unique_ptr<AnimationHost> Create(ThreadInstance thread_instance);
+  static std::unique_ptr<AnimationHost> CreateMainInstance();
+  static std::unique_ptr<AnimationHost> CreateForTesting(
+      ThreadInstance thread_instance);
+  std::unique_ptr<AnimationHost> CreateImplInstance(
+      bool supports_impl_scrolling) const;
   ~AnimationHost();
 
   void AddAnimationTimeline(scoped_refptr<AnimationTimeline> timeline);
@@ -108,8 +115,6 @@ class CC_EXPORT AnimationHost {
   bool HasAnyAnimationTargetingProperty(ElementId element_id,
                                         TargetProperty::Type property) const;
 
-  bool ScrollOffsetIsAnimatingOnImplOnly(ElementId element_id) const;
-
   bool HasFilterAnimationThatInflatesBounds(ElementId element_id) const;
   bool HasTransformAnimationThatInflatesBounds(ElementId element_id) const;
   bool HasAnimationThatInflatesBounds(ElementId element_id) const;
@@ -145,6 +150,9 @@ class CC_EXPORT AnimationHost {
       base::TimeTicks frame_monotonic_time);
 
   void ScrollAnimationAbort(bool needs_completion);
+
+  // This should only be called from the main thread.
+  ScrollOffsetAnimations& scroll_offset_animations() const;
 
   // Registers the given element animations as active. An active element
   // animations is one that has a running animation that needs to be ticked.
@@ -186,6 +194,7 @@ class CC_EXPORT AnimationHost {
 
   MutatorHostClient* mutator_host_client_;
 
+  std::unique_ptr<ScrollOffsetAnimations> scroll_offset_animations_;
   std::unique_ptr<ScrollOffsetAnimationsImpl> scroll_offset_animations_impl_;
 
   const ThreadInstance thread_instance_;

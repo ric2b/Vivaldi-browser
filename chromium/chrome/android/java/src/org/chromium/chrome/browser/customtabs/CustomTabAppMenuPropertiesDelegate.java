@@ -16,6 +16,7 @@ import org.chromium.base.BuildInfo;
 import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegate;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
@@ -32,7 +33,6 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
     private static final String SAMPLE_URL = "https://www.google.com";
 
     private final boolean mShowShare;
-    private final boolean mShowBookmark;
     private final List<String> mMenuEntries;
     private final Map<MenuItem, Integer> mItemToIndexMap = new HashMap<MenuItem, Integer>();
     private final AsyncTask<Void, Void, String> mDefaultBrowserFetcher;
@@ -43,12 +43,10 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
      * Creates an {@link CustomTabAppMenuPropertiesDelegate} instance.
      */
     public CustomTabAppMenuPropertiesDelegate(final ChromeActivity activity,
-            List<String> menuEntries, boolean showShare, boolean showBookmark,
-            final boolean isOpenedByChrome) {
+            List<String> menuEntries, boolean showShare, final boolean isOpenedByChrome) {
         super(activity);
         mMenuEntries = menuEntries;
         mShowShare = showShare;
-        mShowBookmark = showBookmark;
 
         mDefaultBrowserFetcher = new AsyncTask<Void, Void, String>() {
             @Override
@@ -93,22 +91,19 @@ public class CustomTabAppMenuPropertiesDelegate extends AppMenuPropertiesDelegat
                         mActivity, menu.findItem(R.id.direct_share_menu_id));
             }
 
-            if (mShowBookmark) {
-                MenuItem bookmarkItem = menu.findItem(R.id.bookmark_this_page_id);
-                updateBookmarkMenuItem(bookmarkItem, currentTab);
-            } else {
-                // Because we have custom logic for laying out the icon row, the bookmark icon must
-                // be explicitly removed instead of just made invisible.
-                menu.findItem(R.id.icon_row_menu_id).getSubMenu().removeItem(
-                        R.id.bookmark_this_page_id);
-            }
-
             MenuItem openInChromeItem = menu.findItem(R.id.open_in_browser_id);
-            try {
-                openInChromeItem.setTitle(mDefaultBrowserFetcher.get());
-            } catch (InterruptedException | ExecutionException e) {
-                openInChromeItem.setTitle(
-                        mActivity.getString(R.string.menu_open_in_product_default));
+            MenuItem readItLaterItem = menu.findItem(R.id.read_it_later_id);
+            if (ChromeFeatureList.isEnabled("ReadItLaterInMenu")) {
+                // In the read-it-later experiment, Chrome will be the only browser to open the link
+                openInChromeItem.setTitle(R.string.menu_open_in_chrome);
+            } else {
+                readItLaterItem.setVisible(false);
+                try {
+                    openInChromeItem.setTitle(mDefaultBrowserFetcher.get());
+                } catch (InterruptedException | ExecutionException e) {
+                    openInChromeItem.setTitle(
+                            mActivity.getString(R.string.menu_open_in_product_default));
+                }
             }
 
             // Add custom menu items. Make sure they are only added once.

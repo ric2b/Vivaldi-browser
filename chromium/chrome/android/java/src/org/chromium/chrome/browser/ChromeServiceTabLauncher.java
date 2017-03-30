@@ -8,7 +8,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.AsyncTask;
 
-import org.chromium.chrome.browser.document.DocumentMetricIds;
+import org.chromium.base.CommandLine;
+import org.chromium.base.annotations.UsedByReflection;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
@@ -19,7 +20,10 @@ import org.chromium.chrome.browser.webapps.WebappRegistry.FetchWebappDataStorage
 import org.chromium.components.service_tab_launcher.ServiceTabLauncher;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.Referrer;
+import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.webapk.lib.client.WebApkNavigationClient;
+import org.chromium.webapk.lib.client.WebApkValidator;
 
 /**
  * Service Tab Launcher implementation for Chrome. Provides the ability for Android Services
@@ -35,27 +39,38 @@ import org.chromium.ui.base.PageTransition;
  * TODO(peter): after upstreaming, merge this with ServiceTabLauncher and remove reflection calls
  *              in ServiceTabLauncher.
  */
+@UsedByReflection("ServiceTabLauncher.java")
 public class ChromeServiceTabLauncher extends ServiceTabLauncher {
     @Override
+    @UsedByReflection("ServiceTabLauncher.java")
     public void launchTab(final Context context, final int requestId, final boolean incognito,
             final String url, final int disposition, final String referrerUrl,
-            final int referrerPolicy, final String extraHeaders, final byte[] postData) {
+            final int referrerPolicy, final String extraHeaders,
+            final ResourceRequestBody postData) {
         final TabDelegate tabDelegate = new TabDelegate(incognito);
 
-        // Try and retrieve a WebappDataStorage object with scope corresponding to the URL to be
-        // opened. If one is found, and it has been opened recently, create an intent to launch the
-        // URL in a standalone web app frame. Otherwise, open the URL in a tab.
+        // 1. Launch WebAPK if one matches the target URL.
+        if (CommandLine.getInstance().hasSwitch(ChromeSwitches.ENABLE_WEBAPK)) {
+            String webApkPackageName = WebApkValidator.queryWebApkPackage(context, url);
+            if (webApkPackageName != null) {
+                Intent intent =
+                        WebApkNavigationClient.createLaunchWebApkIntent(webApkPackageName, url);
+                if (intent != null) {
+                    intent.putExtra(ShortcutHelper.EXTRA_SOURCE, ShortcutSource.NOTIFICATION);
+                    context.startActivity(intent);
+                    return;
+                }
+            }
+        }
+
+        // 2. Launch WebappActivity if one matches the target URL and was opened recently.
+        // Otherwise, open the URL in a tab.
         FetchWebappDataStorageCallback callback = new FetchWebappDataStorageCallback() {
             @Override
             public void onWebappDataStorageRetrieved(final WebappDataStorage storage) {
                 // If we do not find a WebappDataStorage corresponding to this URL, or if it hasn't
                 // been opened recently enough, open the URL in a tab.
                 if (storage == null || !storage.wasLaunchedRecently()) {
-                    // TODO(peter): Determine the intent source based on the |disposition| with
-                    // which the tab is being launched. Right now this is gated by a check in the
-                    // native implementation.
-                    int intentSource = DocumentMetricIds.STARTED_BY_WINDOW_OPEN;
-
                     LoadUrlParams loadUrlParams = new LoadUrlParams(url, PageTransition.LINK);
                     loadUrlParams.setPostData(postData);
                     loadUrlParams.setVerbatimHeaders(extraHeaders);
@@ -63,8 +78,6 @@ public class ChromeServiceTabLauncher extends ServiceTabLauncher {
 
                     AsyncTabCreationParams asyncParams = new AsyncTabCreationParams(loadUrlParams,
                             requestId);
-                    asyncParams.setDocumentStartedBy(intentSource);
-
                     tabDelegate.createNewTab(asyncParams, TabLaunchType.FROM_CHROME_UI,
                             Tab.INVALID_TAB_ID);
                 } else {

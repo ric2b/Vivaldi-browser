@@ -5,6 +5,8 @@
 #ifndef SERVICES_SHELL_RUNNER_COMMON_CLIENT_UTIL_H_
 #define SERVICES_SHELL_RUNNER_COMMON_CLIENT_UTIL_H_
 
+#include <string>
+
 #include "services/shell/public/interfaces/shell_client.mojom.h"
 
 namespace base {
@@ -18,12 +20,16 @@ namespace shell {
 // extract a ShellClientRequest from this by calling
 // GetShellClientRequestFromCommandLine().
 mojom::ShellClientPtr PassShellClientRequestOnCommandLine(
-    base::CommandLine* command_line);
+    base::CommandLine* command_line, const std::string& child_token);
 
 // Extracts a ShellClientRequest from the command line of the current process.
 // The parent of this process should have passed a request using
 // PassShellClientRequestOnCommandLine().
 mojom::ShellClientRequest GetShellClientRequestFromCommandLine();
+
+// Returns true if the ShellClientRequest came via the command line from a shell
+// instance in another process.
+bool ShellIsRemote();
 
 }  // namespace shell
 

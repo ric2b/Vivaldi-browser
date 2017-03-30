@@ -27,30 +27,9 @@ namespace usb {
 namespace {
 
 using MojoTransferInCallback =
-    mojo::Callback<void(TransferStatus, mojo::Array<uint8_t>)>;
+    base::Callback<void(TransferStatus, mojo::Array<uint8_t>)>;
 
-using MojoTransferOutCallback = mojo::Callback<void(TransferStatus)>;
-
-template <typename... Args>
-void CallMojoCallback(std::unique_ptr<mojo::Callback<void(Args...)>> callback,
-                      Args... args) {
-  callback->Run(args...);
-}
-
-// Generic wrapper to convert a Mojo callback to something we can rebind and
-// pass around. This is only usable for callbacks with no move-only arguments.
-template <typename... Args>
-base::Callback<void(Args...)> WrapMojoCallback(
-    const mojo::Callback<void(Args...)>& callback) {
-  // mojo::Callback is not thread safe. By wrapping |callback| in a scoped_ptr
-  // we guarantee that it will be freed when CallMojoCallback is run and not
-  // retained until the base::Callback is destroyed, which could happen on any
-  // thread. This pattern is also used below in places where this generic
-  // wrapper is not used.
-  auto callback_ptr =
-      base::WrapUnique(new mojo::Callback<void(Args...)>(callback));
-  return base::Bind(&CallMojoCallback<Args...>, base::Passed(&callback_ptr));
-}
+using MojoTransferOutCallback = base::Callback<void(TransferStatus)>;
 
 scoped_refptr<net::IOBuffer> CreateTransferBuffer(size_t size) {
   scoped_refptr<net::IOBuffer> buffer = new net::IOBuffer(
@@ -160,7 +139,7 @@ bool DeviceImpl::HasControlTransferPermission(
     ControlTransferRecipient recipient,
     uint16_t index) {
   DCHECK(device_handle_);
-  const UsbConfigDescriptor* config = device_->GetActiveConfiguration();
+  const UsbConfigDescriptor* config = device_->active_configuration();
 
   if (!permission_provider_)
     return false;
@@ -204,18 +183,43 @@ void DeviceImpl::OnOpen(const OpenCallback& callback,
   callback.Run(handle ? OpenDeviceError::OK : OpenDeviceError::ACCESS_DENIED);
 }
 
+void DeviceImpl::OnPermissionGrantedForOpen(const OpenCallback& callback,
+                                            bool granted) {
+  if (granted && permission_provider_ &&
+      permission_provider_->HasDevicePermission(device_)) {
+    device_->Open(
+        base::Bind(&DeviceImpl::OnOpen, weak_factory_.GetWeakPtr(), callback));
+  } else {
+    callback.Run(OpenDeviceError::ACCESS_DENIED);
+  }
+}
+
 void DeviceImpl::GetDeviceInfo(const GetDeviceInfoCallback& callback) {
-  const UsbConfigDescriptor* config = device_->GetActiveConfiguration();
+  const UsbConfigDescriptor* config = device_->active_configuration();
   device_info_->active_configuration = config ? config->configuration_value : 0;
   callback.Run(device_info_->Clone());
 }
 
 void DeviceImpl::Open(const OpenCallback& callback) {
-  if (device_handle_)
+  if (device_handle_) {
     callback.Run(OpenDeviceError::ALREADY_OPEN);
-  else
+    return;
+  }
+
+  if (!device_->permission_granted()) {
+    device_->RequestPermission(
+        base::Bind(&DeviceImpl::OnPermissionGrantedForOpen,
+                   weak_factory_.GetWeakPtr(), callback));
+    return;
+  }
+
+  if (permission_provider_ &&
+      permission_provider_->HasDevicePermission(device_)) {
     device_->Open(
         base::Bind(&DeviceImpl::OnOpen, weak_factory_.GetWeakPtr(), callback));
+  } else {
+    callback.Run(OpenDeviceError::ACCESS_DENIED);
+  }
 }
 
 void DeviceImpl::Close(const CloseCallback& callback) {
@@ -232,7 +236,7 @@ void DeviceImpl::SetConfiguration(uint8_t value,
 
   if (permission_provider_ &&
       permission_provider_->HasConfigurationPermission(value, device_)) {
-    device_handle_->SetConfiguration(value, WrapMojoCallback(callback));
+    device_handle_->SetConfiguration(value, callback);
   } else {
     callback.Run(false);
   }
@@ -245,7 +249,7 @@ void DeviceImpl::ClaimInterface(uint8_t interface_number,
     return;
   }
 
-  const UsbConfigDescriptor* config = device_->GetActiveConfiguration();
+  const UsbConfigDescriptor* config = device_->active_configuration();
   if (!config) {
     callback.Run(false);
     return;
@@ -265,8 +269,7 @@ void DeviceImpl::ClaimInterface(uint8_t interface_number,
       permission_provider_->HasFunctionPermission(interface_it->first_interface,
                                                   config->configuration_value,
                                                   device_)) {
-    device_handle_->ClaimInterface(interface_number,
-                                   WrapMojoCallback(callback));
+    device_handle_->ClaimInterface(interface_number, callback);
   } else {
     callback.Run(false);
   }
@@ -279,8 +282,7 @@ void DeviceImpl::ReleaseInterface(uint8_t interface_number,
     return;
   }
 
-  device_handle_->ReleaseInterface(interface_number,
-                                   WrapMojoCallback(callback));
+  device_handle_->ReleaseInterface(interface_number, callback);
 }
 
 void DeviceImpl::SetInterfaceAlternateSetting(
@@ -292,8 +294,8 @@ void DeviceImpl::SetInterfaceAlternateSetting(
     return;
   }
 
-  device_handle_->SetInterfaceAlternateSetting(
-      interface_number, alternate_setting, WrapMojoCallback(callback));
+  device_handle_->SetInterfaceAlternateSetting(interface_number,
+                                               alternate_setting, callback);
 }
 
 void DeviceImpl::Reset(const ResetCallback& callback) {
@@ -302,7 +304,7 @@ void DeviceImpl::Reset(const ResetCallback& callback) {
     return;
   }
 
-  device_handle_->ResetDevice(WrapMojoCallback(callback));
+  device_handle_->ResetDevice(callback);
 }
 
 void DeviceImpl::ClearHalt(uint8_t endpoint,
@@ -312,7 +314,7 @@ void DeviceImpl::ClearHalt(uint8_t endpoint,
     return;
   }
 
-  device_handle_->ClearHalt(endpoint, WrapMojoCallback(callback));
+  device_handle_->ClearHalt(endpoint, callback);
 }
 
 void DeviceImpl::ControlTransferIn(ControlTransferParamsPtr params,

@@ -11,7 +11,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_instance.h"
-#include "content/public/common/service_registry.h"
 #include "extensions/browser/api/serial/serial_service_factory.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extensions_browser_client.h"
@@ -20,6 +19,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/switches.h"
+#include "services/shell/public/cpp/interface_registry.h"
 
 #if defined(ENABLE_WIFI_DISPLAY)
 #include "extensions/browser/api/display_source/wifi_display/wifi_display_media_service_impl.h"
@@ -47,26 +47,26 @@ void RegisterServicesForFrame(content::RenderFrameHost* render_frame_host,
                               const Extension* extension) {
   DCHECK(extension);
 
-  content::ServiceRegistry* service_registry =
-      render_frame_host->GetServiceRegistry();
+  shell::InterfaceRegistry* registry =
+      render_frame_host->GetInterfaceRegistry();
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableMojoSerialService)) {
     if (ExtensionHasPermission(extension, render_frame_host->GetProcess(),
                                "serial")) {
-      service_registry->AddService(base::Bind(&BindToSerialServiceRequest));
+      registry->AddInterface(base::Bind(&BindToSerialServiceRequest));
     }
   }
-  service_registry->AddService(base::Bind(
+  registry->AddInterface(base::Bind(
       KeepAliveImpl::Create,
       render_frame_host->GetProcess()->GetBrowserContext(), extension));
 
 #if defined(ENABLE_WIFI_DISPLAY)
   if (ExtensionHasPermission(extension, render_frame_host->GetProcess(),
                              "displaySource")) {
-    service_registry->AddService(
+    registry->AddInterface(
         base::Bind(WiFiDisplaySessionServiceImpl::BindToRequest,
                    render_frame_host->GetProcess()->GetBrowserContext()));
-    service_registry->AddService(
+    registry->AddInterface(
         base::Bind(WiFiDisplayMediaServiceImpl::BindToRequest));
   }
 #endif

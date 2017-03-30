@@ -103,6 +103,13 @@ public:
 
     virtual String altText() const { return String(); }
 
+    int offsetLeftForBinding();
+    int offsetTopForBinding();
+    int offsetWidthForBinding();
+    int offsetHeightForBinding();
+
+    Element* unclosedOffsetParent();
+
 protected:
     HTMLElement(const QualifiedName& tagName, Document&, ConstructionType);
 
@@ -113,6 +120,7 @@ protected:
     void applyBorderAttributeToStyle(const AtomicString&, MutableStylePropertySet*);
 
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
+    static bool parseColorWithLegacyRules(const String& attributeValue, Color& parsedColor);
     bool isPresentationAttribute(const QualifiedName&) const override;
     void collectStyleForPresentationAttribute(const QualifiedName&, const AtomicString&, MutableStylePropertySet*) override;
     unsigned parseBorderWidthAttribute(const AtomicString&) const;

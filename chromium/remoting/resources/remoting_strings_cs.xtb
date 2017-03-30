@@ -131,6 +131,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Pokud chcete přístup k tomuto počítači zabezpečit, zvolte prosím kód PIN v délce <ph name="BOLD_START" />alespoň šesti číslic<ph name="BOLD_END" />. Tento kód PIN bude vyžadován při připojení z jiného místa.</translation>
 <translation id="4176825807642096119">Přístupový kód</translation>
 <translation id="4207623512727273241">Před pokračováním prosím spusťte stažený instalační program.</translation>
+<translation id="4227991223508142681">Nástroj pro správu hostitele</translation>
 <translation id="4240294130679914010">Nástroj k odinstalaci hostitele funkce Chromoting</translation>
 <translation id="4277463233460010382">Tento počítač je nakonfigurován tak, aby jednomu nebo více klientům umožnil připojení bez zadávání kódu PIN.</translation>
 <translation id="4277736576214464567">Přístupový kód je neplatný. Zkuste to prosím znovu.</translation>
@@ -230,7 +231,7 @@ plochy Chrome</translation>
 <translation id="6668065415969892472">Váš kód PIN byl aktualizován.</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. Všechna práva vyhrazena.</translation>
 <translation id="6746493157771801606">Vymazat historii</translation>
-<translation id="6748108480210050150">Klient</translation>
+<translation id="6748108480210050150">Od</translation>
 <translation id="677755392401385740">Pro následujícího uživatele bylo zahájeno hostování: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Zobrazit/upravit</translation>
 <translation id="6930242544192836755">Délka</translation>
@@ -238,7 +239,7 @@ plochy Chrome</translation>
 <translation id="6944854424004126054">Obnovit okno</translation>
 <translation id="6965382102122355670">OK</translation>
 <translation id="6985691951107243942">Opravdu chcete zakázat vzdálená připojení k počítači <ph name="HOSTNAME" />? Pokud později své rozhodnutí změníte, bude nutné připojení povolit přímo z uvedeného počítače.</translation>
-<translation id="6998989275928107238">Hostitel</translation>
+<translation id="6998989275928107238">Komu</translation>
 <translation id="7019153418965365059">Neznámá chyba hostitele: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Vzdálená pomoc</translation>
 <translation id="7038683108611689168">Pomozte nám funkci Chromoting vylepšit tím, že nám povolíte shromažďovat statistiky využití a zprávy o selhání.</translation>
@@ -262,6 +263,7 @@ plochy Chrome</translation>
 <translation id="7836926030608666805">Chybí některé povinné komponenty. Zkontrolujte, zda máte nejnovější verzi Chromu, a zkuste to znovu.</translation>
 <translation id="7868137160098754906">Zadejte kód PIN pro vzdálený počítač.</translation>
 <translation id="7869445566579231750">Ke spuštění této aplikace nemáte oprávnění.</translation>
+<translation id="7895403300744144251">Zásady zabezpečení na vzdáleném počítači připojení z vašeho účtu nepovolují.</translation>
 <translation id="7948001860594368197">Možnosti obrazovky</translation>
 <translation id="7970576581263377361">Ověření selhalo. Přihlaste se do prohlížeče Chromium znovu.</translation>
 <translation id="7981525049612125370">Platnost vzdálené relace vypršela.</translation>

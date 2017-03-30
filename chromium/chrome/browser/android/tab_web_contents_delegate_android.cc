@@ -117,9 +117,9 @@ void TabWebContentsDelegateAndroid::LoadingStateChanged(
 }
 
 void TabWebContentsDelegateAndroid::RunFileChooser(
-    WebContents* web_contents,
+    content::RenderFrameHost* render_frame_host,
     const FileChooserParams& params) {
-  FileSelectHelper::RunFileChooser(web_contents, params);
+  FileSelectHelper::RunFileChooser(render_frame_host, params);
 }
 
 std::unique_ptr<BluetoothChooser>
@@ -165,16 +165,10 @@ void TabWebContentsDelegateAndroid::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_FIND_RESULT_AVAILABLE:
-      OnFindResultAvailable(
-          content::Source<WebContents>(source).ptr(),
-          content::Details<FindNotificationDetails>(details).ptr());
-      break;
-    default:
-      NOTREACHED() << "Unexpected notification: " << type;
-      break;
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_FIND_RESULT_AVAILABLE, type);
+  OnFindResultAvailable(
+      content::Source<WebContents>(source).ptr(),
+      content::Details<FindNotificationDetails>(details).ptr());
 }
 
 blink::WebDisplayMode TabWebContentsDelegateAndroid::GetDisplayMode(

@@ -6,7 +6,10 @@
 
 #include <memory>
 
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/files/important_file_writer.h"
+#include "base/files/memory_mapped_file.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -16,6 +19,7 @@
 #include "base/metrics/persistent_sample_map.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/pickle.h"
 #include "base/synchronization/lock.h"
 
 // TODO(bcwhite): Order these methods to match the header file. The current
@@ -325,7 +329,6 @@ void PersistentHistogramAllocator::RecordCreateHistogramResult(
     result_histogram->Add(result);
 }
 
-// static
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
     PersistentHistogramData* histogram_data_ptr) {
   if (!histogram_data_ptr) {
@@ -450,6 +453,36 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
   return histogram;
 }
 
+HistogramBase*
+PersistentHistogramAllocator::GetOrCreateStatisticsRecorderHistogram(
+    const HistogramBase* histogram) {
+  // This should never be called on the global histogram allocator as objects
+  // created there are already within the global statistics recorder.
+  DCHECK_NE(g_allocator, this);
+  DCHECK(histogram);
+
+  HistogramBase* existing =
+      StatisticsRecorder::FindHistogram(histogram->histogram_name());
+  if (existing)
+    return existing;
+
+  // Adding the passed histogram to the SR would cause a problem if the
+  // allocator that holds it eventually goes away. Instead, create a new
+  // one from a serialized version.
+  base::Pickle pickle;
+  if (!histogram->SerializeInfo(&pickle))
+    return nullptr;
+  PickleIterator iter(pickle);
+  existing = DeserializeHistogramInfo(&iter);
+  if (!existing)
+    return nullptr;
+
+  // Make sure there is no "serialization" flag set.
+  DCHECK_EQ(0, existing->flags() & HistogramBase::kIPCSerializationSourceFlag);
+  // Record the newly created histogram in the SR.
+  return StatisticsRecorder::RegisterOrDeleteDuplicate(existing);
+}
+
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
     Reference ref) {
   // Unfortunately, the histogram "pickle" methods cannot be used as part of
@@ -480,7 +513,42 @@ void PersistentHistogramAllocator::FinalizeHistogram(Reference ref,
   // two to be created. The allocator does not support releasing the
   // acquired memory so just change the type to be empty.
   else
-    memory_allocator_->SetType(ref, 0);
+    memory_allocator_->ChangeType(ref, 0, kTypeIdHistogram);
+}
+
+void PersistentHistogramAllocator::MergeHistogramDeltaToStatisticsRecorder(
+    HistogramBase* histogram) {
+  DCHECK(histogram);
+
+  HistogramBase* existing = GetOrCreateStatisticsRecorderHistogram(histogram);
+  if (!existing) {
+    // The above should never fail but if it does, no real harm is done.
+    // The data won't be merged but it also won't be recorded as merged
+    // so a future try, if successful, will get what was missed. If it
+    // continues to fail, some metric data will be lost but that is better
+    // than crashing.
+    NOTREACHED();
+    return;
+  }
+
+  // Merge the delta from the passed object to the one in the SR.
+  existing->AddSamples(*histogram->SnapshotDelta());
+}
+
+void PersistentHistogramAllocator::MergeHistogramFinalDeltaToStatisticsRecorder(
+    const HistogramBase* histogram) {
+  DCHECK(histogram);
+
+  HistogramBase* existing = GetOrCreateStatisticsRecorderHistogram(histogram);
+  if (!existing) {
+    // The above should never fail but if it does, no real harm is done.
+    // Some metric data will be lost but that is better than crashing.
+    NOTREACHED();
+    return;
+  }
+
+  // Merge the delta from the passed object to the one in the SR.
+  existing->AddSamples(*histogram->SnapshotFinalDelta());
 }
 
 PersistentSampleMapRecords* PersistentHistogramAllocator::UseSampleMapRecords(
@@ -620,6 +688,37 @@ void GlobalHistogramAllocator::CreateWithLocalMemory(
       WrapUnique(new LocalPersistentMemoryAllocator(size, id, name)))));
 }
 
+#if !defined(OS_NACL)
+// static
+void GlobalHistogramAllocator::CreateWithFile(
+    const FilePath& file_path,
+    size_t size,
+    uint64_t id,
+    StringPiece name) {
+  bool exists = PathExists(file_path);
+  File file(
+      file_path, File::FLAG_OPEN_ALWAYS | File::FLAG_SHARE_DELETE |
+                 File::FLAG_READ | File::FLAG_WRITE);
+
+  std::unique_ptr<MemoryMappedFile> mmfile(new MemoryMappedFile());
+  if (exists) {
+    mmfile->Initialize(std::move(file), MemoryMappedFile::READ_WRITE);
+  } else {
+    mmfile->Initialize(std::move(file), {0, static_cast<int64_t>(size)},
+                       MemoryMappedFile::READ_WRITE_EXTEND);
+  }
+  if (!mmfile->IsValid() ||
+      !FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, true)) {
+    NOTREACHED();
+    return;
+  }
+
+  Set(WrapUnique(new GlobalHistogramAllocator(
+      WrapUnique(new FilePersistentMemoryAllocator(
+          std::move(mmfile), size, id, name, false)))));
+}
+#endif
+
 // static
 void GlobalHistogramAllocator::CreateWithSharedMemory(
     std::unique_ptr<SharedMemory> memory,
@@ -711,6 +810,10 @@ GlobalHistogramAllocator::ReleaseForTesting() {
 
 void GlobalHistogramAllocator::SetPersistentLocation(const FilePath& location) {
   persistent_location_ = location;
+}
+
+const FilePath& GlobalHistogramAllocator::GetPersistentLocation() const {
+  return persistent_location_;
 }
 
 bool GlobalHistogramAllocator::WriteToPersistentLocation() {

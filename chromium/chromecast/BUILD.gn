@@ -95,8 +95,21 @@ cast_test_group("cast_tests") {
       # DoAppendUTF8Invalid fails because of dcheck_always_on flag in Eng builds
       "url_unittests --gtest_filter=-URLCanonTest.DoAppendUTF8Invalid",
     ]
+
+    if (disable_display) {
+      filters += [ "base_unittests --gtest_filter=-TimeFormattingTest.*" ]
+    }
   } else if (is_cast_desktop_build || target_os == "android") {
     filters += [
+      # URLRequestTestHTTP.GetTest_ManyCookies takes roughly 55s to run. Increase
+      # timeout to 90s from 45s to allow it to pass (b/19821476) (b/29415636).
+      # CTLogVerifierTest.VerifiesValidConsistencyProofsFromReferenceGenerator
+      # times out occasionally, paricularly on the CQ bots; disable to reduce
+      # CQ flakiness (crbug/598406) (b/29415636).
+      # Running a batch of net_unittests has high overhead, so
+      # run tests in batches of 25 to reduce number of batches (b/23156294).
+      "net_unittests --gtest_filter=-CTLogVerifierTest.VerifiesValidConsistencyProofsFromReferenceGenerator --test-launcher-timeout=90000 --test-launcher-batch-limit=25",
+
       # Disable PipelineIntegrationTest.BasicPlayback_MediaSource_VP9_WebM (not supported)
       "media_unittests --gtest_filter=-PipelineIntegrationTest.BasicPlayback_MediaSource_VP9_WebM",
     ]
@@ -136,7 +149,7 @@ cast_test_group_list("cast_test_lists") {
 
   run_list_path = "$root_out_dir/tests/run_test_list.txt"
 
-  additional_options = [ "--ozone-platform=headless" ]
+  additional_options = [ "--ozone-platform=headless --test-launcher-bot-mode" ]
 
   build_tests = true
 
@@ -144,6 +157,27 @@ cast_test_group_list("cast_test_lists") {
 
   if (chromecast_branding != "public") {
     test_groups += [ "//chromecast/internal:internal_cast_tests" ]
+  }
+}
+
+if (is_android) {
+  cast_test_group("cast_junit_tests") {
+    test_type = "junit"
+    tests = [
+      "//base:base_junit_tests",
+      "//content/public/android:content_junit_tests",
+      "//net/android:net_junit_tests",
+      "//testing/android/junit:junit_unit_tests",
+      "//ui/android:ui_junit_tests",
+    ]
+  }
+
+  cast_test_group_list("cast_junit_test_lists") {
+    test_type = "junit"
+    build_list_path = "$root_out_dir/junit/build_junit_test_list.txt"
+    run_list_path = "$root_out_dir/junit/run_junit_test_list.txt"
+    build_tests = true
+    test_groups = [ ":cast_junit_tests" ]
   }
 }
 

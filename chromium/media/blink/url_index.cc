@@ -6,7 +6,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "media/blink/resource_multibuffer_data_provider.h"
 #include "media/blink/url_index.h"
@@ -141,7 +143,7 @@ bool UrlData::ValidateDataOrigin(const GURL& origin) {
 
 void UrlData::OnEmpty() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&UrlIndex::RemoveUrlDataIfEmpty, url_index_,
                             scoped_refptr<UrlData>(this)));
 }
@@ -184,8 +186,7 @@ UrlIndex::UrlIndex(blink::WebFrame* frame) : UrlIndex(frame, kBlockSizeShift) {}
 
 UrlIndex::UrlIndex(blink::WebFrame* frame, int block_shift)
     : frame_(frame),
-      lru_(new MultiBuffer::GlobalLRU(
-          base::MessageLoop::current()->task_runner())),
+      lru_(new MultiBuffer::GlobalLRU(base::ThreadTaskRunnerHandle::Get())),
       block_shift_(block_shift),
       weak_factory_(this) {}
 

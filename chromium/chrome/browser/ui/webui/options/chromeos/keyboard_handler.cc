@@ -18,8 +18,7 @@
 #include "content/public/browser/web_ui.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/events/devices/device_data_manager.h"
-#include "ui/events/devices/keyboard_device.h"
+#include "ui/events/devices/input_device_manager.h"
 
 namespace {
 const struct ModifierKeysSelectItem {
@@ -51,8 +50,8 @@ const char* kDataValuesNames[] = {
 };
 
 bool HasExternalKeyboard() {
-  for (const ui::KeyboardDevice& keyboard :
-       ui::DeviceDataManager::GetInstance()->keyboard_devices()) {
+  for (const ui::InputDevice& keyboard :
+       ui::InputDeviceManager::GetInstance()->GetKeyboardDevices()) {
     if (keyboard.type == ui::InputDeviceType::INPUT_DEVICE_EXTERNAL)
       return true;
   }
@@ -65,11 +64,11 @@ namespace chromeos {
 namespace options {
 
 KeyboardHandler::KeyboardHandler() {
-  ui::DeviceDataManager::GetInstance()->AddObserver(this);
+  ui::InputDeviceManager::GetInstance()->AddObserver(this);
 }
 
 KeyboardHandler::~KeyboardHandler() {
-  ui::DeviceDataManager::GetInstance()->RemoveObserver(this);
+  ui::InputDeviceManager::GetInstance()->RemoveObserver(this);
 }
 
 void KeyboardHandler::GetLocalizedValues(
@@ -156,7 +155,7 @@ void KeyboardHandler::InitializePage() {
       chromeos::switches::kHasChromeOSDiamondKey);
   const base::FundamentalValue show_diamond_key_options(has_diamond_key);
 
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "options.KeyboardOverlay.showDiamondKeyOptions",
       show_diamond_key_options);
 
@@ -181,9 +180,8 @@ void KeyboardHandler::HandleShowKeyboardShortcuts(const base::ListValue* args) {
 
 void KeyboardHandler::UpdateCapsLockOptions() const {
   const base::FundamentalValue show_caps_lock_options(HasExternalKeyboard());
-  web_ui()->CallJavascriptFunction(
-      "options.KeyboardOverlay.showCapsLockOptions",
-      show_caps_lock_options);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "options.KeyboardOverlay.showCapsLockOptions", show_caps_lock_options);
 }
 
 }  // namespace options

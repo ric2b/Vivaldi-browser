@@ -30,7 +30,9 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/ListMarkerText.h"
 #include "core/style/ComputedStyle.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 #ifndef NDEBUG
 #include <stdio.h>
@@ -41,7 +43,7 @@ namespace blink {
 using namespace HTMLNames;
 
 typedef HashMap<AtomicString, RefPtr<CounterNode>> CounterMap;
-typedef HashMap<const LayoutObject*, OwnPtr<CounterMap>> CounterMaps;
+typedef HashMap<const LayoutObject*, std::unique_ptr<CounterMap>> CounterMaps;
 
 static CounterNode* makeCounterNodeIfNeeded(LayoutObject&, const AtomicString& identifier, bool alwaysCreateCounter);
 
@@ -227,7 +229,7 @@ static bool findPlaceForCounter(LayoutObject& counterOwner, const AtomicString& 
                             // we are a root node if that reset is a root.
                             parent = currentCounter->parent();
                             previousSibling = parent ? currentCounter : nullptr;
-                            return parent;
+                            return parent.get();
                         }
                         // We are not a reset node or the previous reset must be on an ancestor of our owner layoutObject
                         // hence we must be a child of that reset counter.
@@ -261,7 +263,7 @@ static bool findPlaceForCounter(LayoutObject& counterOwner, const AtomicString& 
                         if (isReset && areLayoutObjectsElementsSiblings(*currentLayoutObject, counterOwner)) {
                             parent = currentCounter->parent();
                             previousSibling = currentCounter;
-                            return parent;
+                            return parent.get();
                         }
                         parent = currentCounter;
                         previousSibling = previousSiblingProtector.get();
@@ -339,7 +341,7 @@ static CounterNode* makeCounterNodeIfNeeded(LayoutObject& object, const AtomicSt
         nodeMap = counterMaps().get(&object);
     } else {
         nodeMap = new CounterMap;
-        counterMaps().set(&object, adoptPtr(nodeMap));
+        counterMaps().set(&object, wrapUnique(nodeMap));
         object.setHasCounterNodeMap(true);
     }
     nodeMap->set(identifier, newNode);

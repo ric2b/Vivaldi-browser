@@ -4,16 +4,21 @@
 
 #include "ios/chrome/browser/ntp_snippets/ios_chrome_ntp_snippets_service_factory.h"
 
+#include "base/files/file_path.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
+#include "components/image_fetcher/image_decoder.h"
 #include "components/image_fetcher/image_fetcher.h"
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
+#include "components/ntp_snippets/ntp_snippets_constants.h"
+#include "components/ntp_snippets/ntp_snippets_database.h"
 #include "components/ntp_snippets/ntp_snippets_fetcher.h"
 #include "components/ntp_snippets/ntp_snippets_service.h"
+#include "components/ntp_snippets/ntp_snippets_status_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/application_context.h"
@@ -21,6 +26,7 @@
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/suggestions/image_fetcher_impl.h"
+#include "ios/chrome/browser/suggestions/ios_image_decoder_impl.h"
 #include "ios/chrome/browser/suggestions/suggestions_service_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
 #include "ios/chrome/common/channel_info.h"
@@ -29,6 +35,7 @@
 #include "net/url_request/url_request_context_getter.h"
 
 using suggestions::ImageFetcherImpl;
+using suggestions::IOSImageDecoderImpl;
 using suggestions::SuggestionsService;
 using suggestions::SuggestionsServiceFactory;
 
@@ -98,18 +105,28 @@ IOSChromeNTPSnippetsServiceFactory::BuildServiceInstanceFor(
 
   ntp_snippets::NTPSnippetsScheduler* scheduler = nullptr;
 
+  base::FilePath database_dir(
+      browser_state->GetStatePath().Append(ntp_snippets::kDatabaseFolder));
   scoped_refptr<base::SequencedTaskRunner> task_runner =
       web::WebThread::GetBlockingPool()
           ->GetSequencedTaskRunnerWithShutdownBehavior(
               base::SequencedWorkerPool::GetSequenceToken(),
               base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN);
+
+  // TODO(treib,markusheintz): Inject an image_fetcher::ImageDecoder once that's
+  // implemented on iOS. crbug.com/609127
   return base::WrapUnique(new ntp_snippets::NTPSnippetsService(
-      chrome_browser_state->GetPrefs(), sync_service, suggestions_service,
-      task_runner, GetApplicationContext()->GetApplicationLocale(), scheduler,
-      base::WrapUnique(new ntp_snippets::NTPSnippetsFetcher(
-          signin_manager, token_service, request_context,
-          base::Bind(&ParseJson),
-          GetChannel() == version_info::Channel::STABLE)),
-      base::WrapUnique(new ImageFetcherImpl(
-          request_context.get(), web::WebThread::GetBlockingPool()))));
+      false /* enabled */, chrome_browser_state->GetPrefs(),
+      suggestions_service, GetApplicationContext()->GetApplicationLocale(),
+      scheduler, base::WrapUnique(new ntp_snippets::NTPSnippetsFetcher(
+                     signin_manager, token_service, request_context,
+                     base::Bind(&ParseJson),
+                     GetChannel() == version_info::Channel::STABLE)),
+      base::WrapUnique(new ImageFetcherImpl(request_context.get(),
+                                            web::WebThread::GetBlockingPool())),
+      base::MakeUnique<IOSImageDecoderImpl>(),
+      base::WrapUnique(
+          new ntp_snippets::NTPSnippetsDatabase(database_dir, task_runner)),
+      base::WrapUnique(new ntp_snippets::NTPSnippetsStatusService(
+          signin_manager, sync_service))));
 }

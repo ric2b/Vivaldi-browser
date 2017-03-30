@@ -7,7 +7,7 @@
 
 #include <memory>
 
-#include "ash/shell_observer.h"
+#include "ash/common/shell_observer.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/views/frame/browser_non_client_frame_view.h"
@@ -76,7 +76,7 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
 
  protected:
   // BrowserNonClientFrameView:
-  void UpdateAvatar() override;
+  void UpdateProfileIcons() override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest, WindowHeader);
@@ -86,6 +86,8 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
                            ImmersiveFullscreen);
   FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
                            ToggleMaximizeModeRelayout);
+  FRIEND_TEST_ALL_PREFIXES(BrowserNonClientFrameViewAshTest,
+                           AvatarDisplayOnTeleportedWindow);
   FRIEND_TEST_ALL_PREFIXES(WebAppLeftHeaderViewTest, BackButton);
   FRIEND_TEST_ALL_PREFIXES(WebAppLeftHeaderViewTest, LocationIcon);
   friend class BrowserHeaderPainterAsh;
@@ -116,8 +118,7 @@ class BrowserNonClientFrameViewAsh : public BrowserNonClientFrameView,
   // accoutrements.
   bool UseWebAppHeaderStyle() const;
 
-  // Layout the avatar button.
-  void LayoutAvatar();
+  void LayoutProfileIndicatorIcon();
 
   // Returns true if there is anything to paint. Some fullscreen windows do not
   // need their frames painted.

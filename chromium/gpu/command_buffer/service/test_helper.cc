@@ -102,7 +102,7 @@ const GLint TestHelper::kUniformBufferOffsetAlignment;
 std::vector<std::string> TestHelper::split_extensions_;
 
 void TestHelper::SetupTextureInitializationExpectations(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     GLenum target,
     bool use_default_textures) {
   InSequence sequence;
@@ -202,7 +202,7 @@ void TestHelper::SetupTextureInitializationExpectations(
 }
 
 void TestHelper::SetupTextureManagerInitExpectations(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     bool is_es3_enabled,
     bool is_desktop_core_profile,
     const char* extensions,
@@ -246,7 +246,7 @@ void TestHelper::SetupTextureManagerInitExpectations(
 }
 
 void TestHelper::SetupTextureDestructionExpectations(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     GLenum target,
     bool use_default_textures) {
   if (!use_default_textures)
@@ -282,7 +282,7 @@ void TestHelper::SetupTextureDestructionExpectations(
 }
 
 void TestHelper::SetupTextureManagerDestructionExpectations(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     bool is_es3_enabled,
     bool is_desktop_core_profile,
     const char* extensions,
@@ -327,7 +327,7 @@ void TestHelper::SetupTextureManagerDestructionExpectations(
 }
 
 void TestHelper::SetupContextGroupInitExpectations(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     const DisallowedFeatures& disallowed_features,
     const char* extensions,
     const char* gl_version,
@@ -336,20 +336,32 @@ void TestHelper::SetupContextGroupInitExpectations(
 
   SetupFeatureInfoInitExpectationsWithGLVersion(gl, extensions, "", gl_version);
 
-  gfx::GLVersionInfo gl_info(gl_version, "", extensions);
+  gl::GLVersionInfo gl_info(gl_version, "", extensions);
 
   EXPECT_CALL(*gl, GetIntegerv(GL_MAX_RENDERBUFFER_SIZE, _))
       .WillOnce(SetArgumentPointee<1>(kMaxRenderbufferSize))
       .RetiresOnSaturation();
   if (strstr(extensions, "GL_EXT_framebuffer_multisample") ||
       strstr(extensions, "GL_EXT_multisampled_render_to_texture") ||
-      gl_info.is_es3) {
+      gl_info.is_es3 || gl_info.is_desktop_core_profile) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_SAMPLES, _))
         .WillOnce(SetArgumentPointee<1>(kMaxSamples))
         .RetiresOnSaturation();
   } else if (strstr(extensions, "GL_IMG_multisampled_render_to_texture")) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_SAMPLES_IMG, _))
         .WillOnce(SetArgumentPointee<1>(kMaxSamples))
+        .RetiresOnSaturation();
+  }
+
+  if (strstr(extensions, "GL_EXT_draw_buffers") ||
+      strstr(extensions, "GL_ARB_draw_buffers") ||
+      (gl_info.is_es3 && strstr(extensions, "GL_NV_draw_buffers")) ||
+      gl_info.is_desktop_core_profile) {
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, _))
+        .WillOnce(SetArgumentPointee<1>(8))
+        .RetiresOnSaturation();
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_DRAW_BUFFERS_ARB, _))
+        .WillOnce(SetArgumentPointee<1>(8))
         .RetiresOnSaturation();
   }
 
@@ -362,7 +374,7 @@ void TestHelper::SetupContextGroupInitExpectations(
         .RetiresOnSaturation();
   }
 
-  if (gl_info.IsES3Capable()) {
+  if (gl_info.is_es3_capable) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS, _))
         .WillOnce(SetArgumentPointee<1>(kMaxTransformFeedbackSeparateAttribs))
         .RetiresOnSaturation();
@@ -386,17 +398,18 @@ void TestHelper::SetupContextGroupInitExpectations(
   EXPECT_CALL(*gl, GetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, _))
       .WillOnce(SetArgumentPointee<1>(kMaxCubeMapTextureSize))
       .RetiresOnSaturation();
-  if (gl_info.IsES3Capable()) {
+  if (gl_info.is_es3_capable) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_3D_TEXTURE_SIZE, _))
         .WillOnce(SetArgumentPointee<1>(kMax3DTextureSize))
         .RetiresOnSaturation();
   }
-  if (gl_info.IsES3Capable()) {
+  if (gl_info.is_es3_capable) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, _))
         .WillOnce(SetArgumentPointee<1>(kMaxArrayTextureLayers))
         .RetiresOnSaturation();
   }
-  if (strstr(extensions, "GL_ARB_texture_rectangle")) {
+  if (strstr(extensions, "GL_ARB_texture_rectangle") ||
+      gl_info.is_desktop_core_profile) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_RECTANGLE_TEXTURE_SIZE, _))
         .WillOnce(SetArgumentPointee<1>(kMaxRectangleTextureSize))
         .RetiresOnSaturation();
@@ -408,7 +421,7 @@ void TestHelper::SetupContextGroupInitExpectations(
       .WillOnce(SetArgumentPointee<1>(kMaxVertexTextureImageUnits))
       .RetiresOnSaturation();
 
-  if (gl_info.is_es) {
+  if (gl_info.is_es || gl_info.is_desktop_core_profile) {
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_FRAGMENT_UNIFORM_VECTORS, _))
         .WillOnce(SetArgumentPointee<1>(kMaxFragmentUniformVectors))
         .RetiresOnSaturation();
@@ -453,17 +466,17 @@ void TestHelper::SetupContextGroupInitExpectations(
       use_default_textures);
 }
 
-void TestHelper::SetupFeatureInfoInitExpectations(
-      ::gfx::MockGLInterface* gl, const char* extensions) {
+void TestHelper::SetupFeatureInfoInitExpectations(::gl::MockGLInterface* gl,
+                                                  const char* extensions) {
   SetupFeatureInfoInitExpectationsWithGLVersion(gl, extensions, "", "");
 }
 
 void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
-     ::gfx::MockGLInterface* gl,
-     const char* extensions,
-     const char* gl_renderer,
-     const char* gl_version,
-     bool enable_es3) {
+    ::gl::MockGLInterface* gl,
+    const char* extensions,
+    const char* gl_renderer,
+    const char* gl_version,
+    bool enable_es3) {
   InSequence sequence;
 
   EXPECT_CALL(*gl, GetString(GL_VERSION))
@@ -477,7 +490,7 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
         extensions, " ", base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
   }
 
-  gfx::GLVersionInfo gl_info(gl_version, gl_renderer, extensions);
+  gl::GLVersionInfo gl_info(gl_version, gl_renderer, extensions);
   if (!gl_info.is_es && gl_info.major_version >= 3) {
     EXPECT_CALL(*gl, GetIntegerv(GL_NUM_EXTENSIONS, _))
         .WillOnce(SetArgumentPointee<1>(split_extensions_.size()))
@@ -553,7 +566,7 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
           .WillOnce(Return(GL_FRAMEBUFFER_COMPLETE))
           .RetiresOnSaturation();
 
-      if (enable_es3 && gl_info.IsES3Capable()) {
+      if (enable_es3 && gl_info.is_es3_capable) {
         EXPECT_CALL(*gl, TexImage2D(GL_TEXTURE_2D, 0, GL_R16F, width, width,
             0, GL_RED, GL_FLOAT, _))
             .Times(1)
@@ -686,8 +699,9 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
   }
 }
 
-void TestHelper::SetupExpectationsForClearingUniforms(
-    ::gfx::MockGLInterface* gl, UniformInfo* uniforms, size_t num_uniforms) {
+void TestHelper::SetupExpectationsForClearingUniforms(::gl::MockGLInterface* gl,
+                                                      UniformInfo* uniforms,
+                                                      size_t num_uniforms) {
   for (size_t ii = 0; ii < num_uniforms; ++ii) {
     const UniformInfo& info = uniforms[ii];
     switch (info.type) {
@@ -787,7 +801,7 @@ void TestHelper::SetupExpectationsForClearingUniforms(
 }
 
 void TestHelper::SetupProgramSuccessExpectations(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     const FeatureInfo* feature_info,
     AttribInfo* attribs,
     size_t num_attribs,
@@ -929,7 +943,7 @@ void TestHelper::SetupProgramSuccessExpectations(
             .RetiresOnSaturation();
       }
   }
-  if (feature_info->gl_version_info().IsES3Capable() &&
+  if (feature_info->gl_version_info().is_es3_capable &&
       !feature_info->disable_shader_translator()) {
     for (size_t ii = 0; ii < num_program_outputs; ++ii) {
       ProgramOutputInfo& info = program_outputs[ii];
@@ -952,7 +966,7 @@ void TestHelper::SetupProgramSuccessExpectations(
   }
 }
 
-void TestHelper::SetupShaderExpectations(::gfx::MockGLInterface* gl,
+void TestHelper::SetupShaderExpectations(::gl::MockGLInterface* gl,
                                          const FeatureInfo* feature_info,
                                          AttribInfo* attribs,
                                          size_t num_attribs,
@@ -969,7 +983,7 @@ void TestHelper::SetupShaderExpectations(::gfx::MockGLInterface* gl,
 }
 
 void TestHelper::SetupShaderExpectationsWithVaryings(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     const FeatureInfo* feature_info,
     AttribInfo* attribs,
     size_t num_attribs,
@@ -992,10 +1006,15 @@ void TestHelper::SetupShaderExpectationsWithVaryings(
       num_varyings, program_outputs, num_program_outputs, service_id);
 }
 
-void TestHelper::DoBufferData(
-    ::gfx::MockGLInterface* gl, MockErrorState* error_state,
-    BufferManager* manager, Buffer* buffer, GLenum target, GLsizeiptr size,
-    GLenum usage, const GLvoid* data, GLenum error) {
+void TestHelper::DoBufferData(::gl::MockGLInterface* gl,
+                              MockErrorState* error_state,
+                              BufferManager* manager,
+                              Buffer* buffer,
+                              GLenum target,
+                              GLsizeiptr size,
+                              GLenum usage,
+                              const GLvoid* data,
+                              GLenum error) {
   EXPECT_CALL(*error_state, CopyRealGLErrorsToWrapper(_, _, _))
       .Times(1)
       .RetiresOnSaturation();
@@ -1014,10 +1033,13 @@ void TestHelper::DoBufferData(
   manager->DoBufferData(error_state, buffer, target, size, usage, data);
 }
 
-void TestHelper::SetTexParameteriWithExpectations(
-    ::gfx::MockGLInterface* gl, MockErrorState* error_state,
-    TextureManager* manager, TextureRef* texture_ref,
-    GLenum pname, GLint value, GLenum error) {
+void TestHelper::SetTexParameteriWithExpectations(::gl::MockGLInterface* gl,
+                                                  MockErrorState* error_state,
+                                                  TextureManager* manager,
+                                                  TextureRef* texture_ref,
+                                                  GLenum pname,
+                                                  GLint value,
+                                                  GLenum error) {
   if (error == GL_NO_ERROR) {
     EXPECT_CALL(*gl, TexParameteri(texture_ref->texture()->target(),
                                    pname, value))
@@ -1037,7 +1059,7 @@ void TestHelper::SetTexParameteriWithExpectations(
 
 // static
 void TestHelper::SetShaderStates(
-    ::gfx::MockGLInterface* gl,
+    ::gl::MockGLInterface* gl,
     Shader* shader,
     bool expected_valid,
     const std::string* const expected_log_info,
@@ -1121,8 +1143,9 @@ void TestHelper::SetShaderStates(
 }
 
 // static
-void TestHelper::SetShaderStates(
-      ::gfx::MockGLInterface* gl, Shader* shader, bool valid) {
+void TestHelper::SetShaderStates(::gl::MockGLInterface* gl,
+                                 Shader* shader,
+                                 bool valid) {
   SetShaderStates(gl, shader, valid, nullptr, nullptr, nullptr, nullptr,
                   nullptr, nullptr, nullptr, nullptr, nullptr);
 }
@@ -1162,13 +1185,13 @@ sh::OutputVariable TestHelper::ConstructOutputVariable(
 }
 
 ScopedGLImplementationSetter::ScopedGLImplementationSetter(
-    gfx::GLImplementation implementation)
-    : old_implementation_(gfx::GetGLImplementation()) {
-  gfx::SetGLImplementation(implementation);
+    gl::GLImplementation implementation)
+    : old_implementation_(gl::GetGLImplementation()) {
+  gl::SetGLImplementation(implementation);
 }
 
 ScopedGLImplementationSetter::~ScopedGLImplementationSetter() {
-  gfx::SetGLImplementation(old_implementation_);
+  gl::SetGLImplementation(old_implementation_);
 }
 
 }  // namespace gles2

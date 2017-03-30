@@ -12,7 +12,6 @@
 #include "base/i18n/case_conversion.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
@@ -367,7 +366,7 @@ HotwordService::HotwordService(Profile* profile)
                  weak_factory_.GetWeakPtr()));
 
   SetAudioHistoryHandler(new HotwordAudioHistoryHandler(
-      profile_, base::MessageLoop::current()->task_runner()));
+      profile_, base::ThreadTaskRunnerHandle::Get()));
 
   if (HotwordServiceFactory::IsAlwaysOnAvailable() &&
       IsHotwordAllowed()) {
@@ -402,7 +401,7 @@ HotwordService::HotwordService(Profile* profile)
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
       base::Bind(&HotwordService::InitializeMicrophoneObserver,
-                 base::Unretained(this)));
+                 weak_factory_.GetWeakPtr()));
 }
 
 HotwordService::~HotwordService() {

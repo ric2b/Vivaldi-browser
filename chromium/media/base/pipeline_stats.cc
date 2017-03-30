@@ -82,9 +82,9 @@ std::vector<PipelineStatus> StatusQueue::Deserialize(
   if (!dictionary.GetListWithoutPathExpansion(kStatusListPath, &list))
     return result;
 
-  for (const auto value : *list) {
+  for (size_t i = 0; i < list->GetSize(); ++i) {
     int int_value;
-    if (value->GetAsInteger(&int_value) && 0 <= int_value &&
+    if (list->GetInteger(i, &int_value) && 0 <= int_value &&
         int_value < PIPELINE_STATUS_COUNT) {
       result.push_back(static_cast<PipelineStatus>(int_value));
     }

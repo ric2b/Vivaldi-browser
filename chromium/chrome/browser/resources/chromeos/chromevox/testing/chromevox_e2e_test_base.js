@@ -35,7 +35,7 @@ ChromeVoxE2ETest.prototype = {
   /** @override */
   testGenCppIncludes: function() {
     GEN_BLOCK(function() {/*!
-#include "ash/accessibility_delegate.h"
+#include "ash/common/accessibility_delegate.h"
 #include "base/bind.h"
 #include "base/callback.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
@@ -50,7 +50,7 @@ ChromeVoxE2ETest.prototype = {
       base::Bind(&chromeos::AccessibilityManager::EnableSpokenFeedback,
           base::Unretained(chromeos::AccessibilityManager::Get()),
           true,
-          ui::A11Y_NOTIFICATION_NONE);
+          ash::A11Y_NOTIFICATION_NONE);
   WaitForExtension(extension_misc::kChromeVoxExtensionId, load_cb);
     */});
   },
@@ -77,10 +77,7 @@ ChromeVoxE2ETest.prototype = {
    *     document is created.
    */
   runWithTab: function(doc, opt_callback) {
-    var docString = TestUtils.extractHtmlFromCommentEncodedString(doc);
-    var url = 'data:text/html,<!doctype html>' +
-        docString +
-        '<!-- chromevox_next_test -->';
+    var url = TestUtils.createUrlForDoc(doc);
     var createParams = {
       active: true,
       url: url
@@ -92,20 +89,16 @@ ChromeVoxE2ETest.prototype = {
   },
 
   /**
-   * Send a key to the page.
+   * Increment the selected index of a select control.
    * @param {number} tabId Of the page.
-   * @param {string} key Name of the key (e.g. Down).
    * @param {string} elementQueryString
    */
-  sendKeyToElement: function(tabId, key, elementQueryString) {
+  incrementSelectedIndex: function(tabId, elementQueryString) {
     var code = TestUtils.extractHtmlFromCommentEncodedString(function() {/*!
-      var target = document.body.querySelector('$1');
+      var target = document.body.querySelector('$0');
       target.focus();
-      var evt = document.createEvent('KeyboardEvent');
-      evt.initKeyboardEvent('keydown', true, true, window, '$0', 0, false,
-          false, false, false);
-      document.activeElement.dispatchEvent(evt);
-    */}, [key, elementQueryString]);
+      target.selectedIndex++;
+    */}, [elementQueryString]);
 
     chrome.tabs.executeScript(tabId, {code: code});
   },

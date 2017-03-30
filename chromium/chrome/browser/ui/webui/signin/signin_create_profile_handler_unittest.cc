@@ -13,8 +13,6 @@
 #include "chrome/browser/signin/fake_signin_manager_builder.h"
 #include "chrome/browser/signin/signin_error_controller_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
-#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -32,6 +30,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if defined(ENABLE_SUPERVISED_USERS)
+#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
+#include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
+#endif
+
 // Gmock matchers and actions.
 using testing::_;
 using testing::Invoke;
@@ -48,6 +51,7 @@ const char kTestEmail2[] = "foo2@bar.com";
 
 const char kTestWebUIResponse[] = "cr.webUIListenerCallback";
 
+#if defined(ENABLE_SUPERVISED_USERS)
 const char kSupervisedUserId1[] = "test-supervised-id-1";
 const char kSupervisedUserId2[] = "test-supervised-id-2";
 
@@ -73,6 +77,7 @@ syncer::SyncData CreateSyncData(const std::string& id,
       syncer::AttachmentIdList(),
       syncer::AttachmentServiceProxyForTest::Create());
 }
+#endif
 
 }  // namespace
 
@@ -135,6 +140,7 @@ class TestSigninCreateProfileHandler : public SigninCreateProfileHandler {
                     Profile* custodian_profile,
                     Profile* new_profile));
 
+#if defined(ENABLE_SUPERVISED_USERS)
   // Calls the callback method to resume profile creation flow.
   void RealRegisterSupervisedUser(bool create_shortcut,
                                   const std::string& supervised_user_id,
@@ -147,6 +153,7 @@ class TestSigninCreateProfileHandler : public SigninCreateProfileHandler {
         new_profile,
         GoogleServiceAuthError(GoogleServiceAuthError::NONE));
   }
+#endif
 
  private:
   TestingProfileManager* profile_manager_;
@@ -185,6 +192,7 @@ class SigninCreateProfileHandlerTest : public BrowserWithTestWindowTest {
     fake_signin_manager_->SetAuthenticatedAccountInfo(kTestGaiaId1,
                                                       kTestEmail1);
 
+#if defined(ENABLE_SUPERVISED_USERS)
     // Add supervised users to the custodian profile.
     SupervisedUserSyncService* sync_service_ =
         SupervisedUserSyncServiceFactory::GetForProfile(custodian_);
@@ -216,6 +224,7 @@ class SigninCreateProfileHandlerTest : public BrowserWithTestWindowTest {
 
     EXPECT_EQ(2u,
         profile_manager()->profile_attributes_storage()->GetNumberOfProfiles());
+#endif
   }
 
   void TearDown() override {
@@ -338,10 +347,10 @@ TEST_F(SigninCreateProfileHandlerTest, CreateProfile) {
 
   // Create a non-supervised profile.
   base::ListValue list_args;
-  list_args.Append(new base::StringValue(kTestProfileName));
-  list_args.Append(new base::StringValue(profiles::GetDefaultAvatarIconUrl(0)));
-  list_args.Append(new base::FundamentalValue(false));  // create_shortcut
-  list_args.Append(new base::FundamentalValue(false));  // is_supervised
+  list_args.AppendString(kTestProfileName);
+  list_args.AppendString(profiles::GetDefaultAvatarIconUrl(0));
+  list_args.AppendBoolean(false);  // create_shortcut
+  list_args.AppendBoolean(false);  // is_supervised
   handler()->CreateProfile(&list_args);
 
   // Expect a JS callbacks with the new profile information.
@@ -366,6 +375,8 @@ TEST_F(SigninCreateProfileHandlerTest, CreateProfile) {
   ASSERT_FALSE(is_supervised);
 }
 
+#if defined(ENABLE_SUPERVISED_USERS)
+
 TEST_F(SigninCreateProfileHandlerTest, CreateSupervisedUser) {
   // Expect the call to create the profile.
   EXPECT_CALL(*handler(), DoCreateProfile(_, _, _, _, _))
@@ -384,12 +395,12 @@ TEST_F(SigninCreateProfileHandlerTest, CreateSupervisedUser) {
   // Create a supervised profile.
   base::ListValue list_args;
   list_args.Clear();
-  list_args.Append(new base::StringValue(kSupervisedUsername1));
-  list_args.Append(new base::StringValue(profiles::GetDefaultAvatarIconUrl(0)));
-  list_args.Append(new base::FundamentalValue(false));  // create_shortcut
-  list_args.Append(new base::FundamentalValue(true));  // is_supervised
-  list_args.Append(new base::StringValue(""));  // supervised_user_id
-  list_args.Append(new base::StringValue(custodian()->GetPath().value()));
+  list_args.AppendString(kSupervisedUsername1);
+  list_args.AppendString(profiles::GetDefaultAvatarIconUrl(0));
+  list_args.AppendBoolean(false);  // create_shortcut
+  list_args.AppendBoolean(true);  // is_supervised
+  list_args.AppendString("");  // supervised_user_id
+  list_args.AppendString(custodian()->GetPath().value());
   handler()->CreateProfile(&list_args);
 
   // Expect a JS callbacks with the new profile information.
@@ -432,13 +443,13 @@ TEST_F(SigninCreateProfileHandlerTest, ImportSupervisedUser) {
   // Import a supervised profile.
   base::ListValue list_args;
   list_args.Clear();
-  list_args.Append(new base::StringValue(kSupervisedUsername1));
-  list_args.Append(new base::StringValue(profiles::GetDefaultAvatarIconUrl(0)));
-  list_args.Append(new base::FundamentalValue(false));   // create_shortcut
-  list_args.Append(new base::FundamentalValue(true));  // is_supervised
-  list_args.Append(
-      new base::StringValue(kSupervisedUserId1));  // supervised_user_id
-  list_args.Append(new base::StringValue(custodian()->GetPath().value()));
+  list_args.AppendString(kSupervisedUsername1);
+  list_args.AppendString(profiles::GetDefaultAvatarIconUrl(0));
+  list_args.AppendBoolean(false);   // create_shortcut
+  list_args.AppendBoolean(true);  // is_supervised
+  list_args.AppendString(
+      kSupervisedUserId1);  // supervised_user_id
+  list_args.AppendString(custodian()->GetPath().value());
   handler()->CreateProfile(&list_args);
 
   // Expect a JS callbacks with the new profile information.
@@ -467,12 +478,12 @@ TEST_F(SigninCreateProfileHandlerTest, ImportSupervisedUserAlreadyOnDevice) {
   // Import a supervised profile whose already on the current device.
   base::ListValue list_args;
   list_args.Clear();
-  list_args.Append(new base::StringValue(kSupervisedUsername2));
-  list_args.Append(new base::StringValue(profiles::GetDefaultAvatarIconUrl(0)));
-  list_args.Append(new base::FundamentalValue(false));
-  list_args.Append(new base::FundamentalValue(true));
-  list_args.Append(new base::StringValue(kSupervisedUserId2));
-  list_args.Append(new base::StringValue(custodian()->GetPath().value()));
+  list_args.AppendString(kSupervisedUsername2);
+  list_args.AppendString(profiles::GetDefaultAvatarIconUrl(0));
+  list_args.AppendBoolean(false);
+  list_args.AppendBoolean(true);
+  list_args.AppendString(kSupervisedUserId2);
+  list_args.AppendString(custodian()->GetPath().value());
   handler()->CreateProfile(&list_args);
 
   // Expect a JS callbacks containing an error message.
@@ -503,12 +514,12 @@ TEST_F(SigninCreateProfileHandlerTest, CustodianNotAuthenticated) {
   // Create a supervised profile.
   base::ListValue list_args;
   list_args.Clear();
-  list_args.Append(new base::StringValue(kSupervisedUsername1));
-  list_args.Append(new base::StringValue(profiles::GetDefaultAvatarIconUrl(0)));
-  list_args.Append(new base::FundamentalValue(false));  // create_shortcut
-  list_args.Append(new base::FundamentalValue(true));  // is_supervised
-  list_args.Append(new base::StringValue(""));  // supervised_user_id
-  list_args.Append(new base::StringValue(custodian()->GetPath().value()));
+  list_args.AppendString(kSupervisedUsername1);
+  list_args.AppendString(profiles::GetDefaultAvatarIconUrl(0));
+  list_args.AppendBoolean(false);  // create_shortcut
+  list_args.AppendBoolean(true);  // is_supervised
+  list_args.AppendString("");  // supervised_user_id
+  list_args.AppendString(custodian()->GetPath().value());
   handler()->CreateProfile(&list_args);
 
   // Expect a JS callbacks containing an error message.
@@ -520,8 +531,9 @@ TEST_F(SigninCreateProfileHandlerTest, CustodianNotAuthenticated) {
   ASSERT_TRUE(web_ui()->call_data()[0]->arg1()->GetAsString(&callback_name));
   EXPECT_EQ("create-profile-error", callback_name);
 
-  base::string16 expected_error_message = l10n_util::GetStringUTF16(
-      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR);
+  base::string16 expected_error_message = l10n_util::GetStringFUTF16(
+      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR,
+      base::ASCIIToUTF16(custodian()->GetProfileUserName()));
   base::string16 error_message;
   ASSERT_TRUE(web_ui()->call_data()[0]->arg2()->GetAsString(&error_message));
   EXPECT_EQ(expected_error_message, error_message);
@@ -538,12 +550,12 @@ TEST_F(SigninCreateProfileHandlerTest, CustodianHasAuthError) {
   // Create a supervised profile.
   base::ListValue list_args;
   list_args.Clear();
-  list_args.Append(new base::StringValue(kSupervisedUsername1));
-  list_args.Append(new base::StringValue(profiles::GetDefaultAvatarIconUrl(0)));
-  list_args.Append(new base::FundamentalValue(false));  // create_shortcut
-  list_args.Append(new base::FundamentalValue(true));  // is_supervised
-  list_args.Append(new base::StringValue(""));  // supervised_user_id
-  list_args.Append(new base::StringValue(custodian()->GetPath().value()));
+  list_args.AppendString(kSupervisedUsername1);
+  list_args.AppendString(profiles::GetDefaultAvatarIconUrl(0));
+  list_args.AppendBoolean(false);  // create_shortcut
+  list_args.AppendBoolean(true);  // is_supervised
+  list_args.AppendString("");  // supervised_user_id
+  list_args.AppendString(custodian()->GetPath().value());
   handler()->CreateProfile(&list_args);
 
   // Expect a JS callbacks containing an error message.
@@ -555,8 +567,9 @@ TEST_F(SigninCreateProfileHandlerTest, CustodianHasAuthError) {
   ASSERT_TRUE(web_ui()->call_data()[0]->arg1()->GetAsString(&callback_name));
   EXPECT_EQ("create-profile-error", callback_name);
 
-  base::string16 expected_error_message = l10n_util::GetStringUTF16(
-      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR);
+  base::string16 expected_error_message = l10n_util::GetStringFUTF16(
+      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR,
+      base::ASCIIToUTF16(custodian()->GetProfileUserName()));
   base::string16 error_message;
   ASSERT_TRUE(web_ui()->call_data()[0]->arg2()->GetAsString(&error_message));
   EXPECT_EQ(expected_error_message, error_message);
@@ -570,14 +583,28 @@ TEST_F(SigninCreateProfileHandlerTest, NotAllowedToCreateSupervisedUser) {
   // Create a supervised profile.
   base::ListValue list_args;
   list_args.Clear();
-  list_args.Append(new base::StringValue(kSupervisedUsername1));
-  list_args.Append(new base::StringValue(profiles::GetDefaultAvatarIconUrl(0)));
-  list_args.Append(new base::FundamentalValue(false));  // create_shortcut
-  list_args.Append(new base::FundamentalValue(true));  // is_supervised
-  list_args.Append(new base::StringValue(""));  // supervised_user_id
-  list_args.Append(new base::StringValue(custodian()->GetPath().value()));
+  list_args.AppendString(kSupervisedUsername1);
+  list_args.AppendString(profiles::GetDefaultAvatarIconUrl(0));
+  list_args.AppendBoolean(false);  // create_shortcut
+  list_args.AppendBoolean(true);  // is_supervised
+  list_args.AppendString("");  // supervised_user_id
+  list_args.AppendString(custodian()->GetPath().value());
   handler()->CreateProfile(&list_args);
 
-  // Expect nothing to happen.
-  EXPECT_EQ(0U, web_ui()->call_data().size());
+  // Expect a JS callbacks containing an error message.
+  EXPECT_EQ(1U, web_ui()->call_data().size());
+
+  EXPECT_EQ(kTestWebUIResponse, web_ui()->call_data()[0]->function_name());
+
+  std::string callback_name;
+  ASSERT_TRUE(web_ui()->call_data()[0]->arg1()->GetAsString(&callback_name));
+  EXPECT_EQ("create-profile-error", callback_name);
+
+  base::string16 expected_error_message = l10n_util::GetStringUTF16(
+      IDS_PROFILES_CREATE_SUPERVISED_NOT_ALLOWED_BY_POLICY);
+  base::string16 error_message;
+  ASSERT_TRUE(web_ui()->call_data()[0]->arg2()->GetAsString(&error_message));
+  EXPECT_EQ(expected_error_message, error_message);
 }
+
+#endif

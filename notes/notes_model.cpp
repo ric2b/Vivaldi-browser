@@ -20,7 +20,9 @@ Notes_Node* AsMutable(const Notes_Node *node) {
 
 Notes_Model::Notes_Model(Profile *profile)
     : profile_(profile), root_(0), trash_node_(nullptr), loaded_(false),
-      loaded_signal_(true, false), extensive_changes_(0),
+      loaded_signal_(base::WaitableEvent::ResetPolicy::MANUAL,
+                     base::WaitableEvent::InitialState::NOT_SIGNALED),
+      extensive_changes_(0),
       current_index_(0) {  // root_ has 0
   root_.SetType(Notes_Node::FOLDER);
   if (!profile_) {

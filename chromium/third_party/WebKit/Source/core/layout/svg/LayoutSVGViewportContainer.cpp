@@ -64,14 +64,21 @@ void LayoutSVGViewportContainer::calcViewport()
     }
 }
 
-bool LayoutSVGViewportContainer::calculateLocalTransform()
+void LayoutSVGViewportContainer::setNeedsTransformUpdate()
+{
+    setMayNeedPaintInvalidationSubtree();
+    m_needsTransformUpdate = true;
+}
+
+SVGTransformChange LayoutSVGViewportContainer::calculateLocalTransform()
 {
     if (!m_needsTransformUpdate)
-        return false;
+        return SVGTransformChange::None;
 
+    SVGTransformChangeDetector changeDetector(m_localToParentTransform);
     m_localToParentTransform = AffineTransform::translation(m_viewport.x(), m_viewport.y()) * viewportTransform();
     m_needsTransformUpdate = false;
-    return true;
+    return changeDetector.computeChange(m_localToParentTransform);
 }
 
 AffineTransform LayoutSVGViewportContainer::viewportTransform() const

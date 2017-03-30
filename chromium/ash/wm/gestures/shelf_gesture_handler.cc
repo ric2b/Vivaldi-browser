@@ -4,14 +4,14 @@
 
 #include "ash/wm/gestures/shelf_gesture_handler.h"
 
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm_shell.h"
 #include "ash/root_window_controller.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_types.h"
 #include "ash/shelf/shelf_widget.h"
-#include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/window.h"
@@ -22,22 +22,17 @@
 
 namespace ash {
 
-ShelfGestureHandler::ShelfGestureHandler()
-    : drag_in_progress_(false) {
-}
+ShelfGestureHandler::ShelfGestureHandler() : drag_in_progress_(false) {}
 
-ShelfGestureHandler::~ShelfGestureHandler() {
-}
+ShelfGestureHandler::~ShelfGestureHandler() {}
 
 bool ShelfGestureHandler::ProcessGestureEvent(
     const ui::GestureEvent& event,
     const aura::Window* event_target_window) {
-  Shell* shell = Shell::GetInstance();
-  if (!shell->session_state_delegate()->NumberOfLoggedInUsers() ||
-      shell->session_state_delegate()->IsScreenLocked()) {
-    // The gestures are disabled in the lock/login screen.
+  // The gestures are disabled in the lock/login screen.
+  SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
+  if (!delegate->NumberOfLoggedInUsers() || delegate->IsScreenLocked())
     return false;
-  }
 
   RootWindowController* controller =
       RootWindowController::ForWindow(event_target_window);
@@ -50,7 +45,8 @@ bool ShelfGestureHandler::ProcessGestureEvent(
 
   const aura::Window* fullscreen = controller->GetWindowForFullscreenMode();
   if (fullscreen &&
-      ash::wm::GetWindowState(fullscreen)->hide_shelf_when_fullscreen()) {
+      wm::GetWindowState(fullscreen)->shelf_mode_in_fullscreen() ==
+          wm::WindowState::SHELF_HIDDEN) {
     return false;
   }
 

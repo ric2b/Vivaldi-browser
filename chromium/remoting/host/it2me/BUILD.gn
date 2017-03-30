@@ -5,6 +5,14 @@
 import("//build/config/features.gni")
 import("//remoting/remoting_enable.gni")
 import("//remoting/remoting_srcs.gni")
+import("//remoting/remoting_locales.gni")
+
+if (is_win) {
+  import("//remoting/host/predefines_win.gni")
+}
+if (is_mac) {
+  import("//build/config/mac/rules.gni")
+}
 
 source_set("common") {
   sources = rebase_path(
@@ -52,7 +60,7 @@ if (!is_chromeos && !is_android && enable_remoting_host) {
         "it2me_native_messaging_host_entry_point.cc",
       ]
 
-      defines = [ "BINARY=BINARY_REMOTE_ASSISTANCE_HOST" ]
+      defines = host_predefines + [ "BINARY=BINARY_REMOTE_ASSISTANCE_HOST" ]
 
       ldflags = [
         "/MANIFEST:EMBED",
@@ -67,16 +75,45 @@ if (!is_chromeos && !is_android && enable_remoting_host) {
       ]
     }
   } else {
-    executable("remote_assistance_host") {
+    if (is_mac) {
+      app_target_type = "mac_app_bundle"
+
+      # remote_assistance_host-InfoPlist.strings
+      foreach(locale, remoting_locales_with_underscores) {
+        bundle_data("remote_assistance_host_strings_${locale}_bundle_data") {
+          sources = [
+            "$root_gen_dir/remoting/host/remote_assistance_host-InfoPlist.strings/$locale.lproj/InfoPlist.strings",
+          ]
+          outputs = [
+            "{{bundle_resources_dir}}/$locale.lproj/{{source_file_part}}",
+          ]
+          deps = [
+            "//remoting/host:remoting_infoplist_strings",
+          ]
+        }
+      }
+    } else {
+      app_target_type = "executable"
+    }
+
+    target(app_target_type, "remote_assistance_host") {
+      if (is_mac) {
+        info_plist = "remote_assistance_host-Info.plist"
+        extra_configs = [
+          "//build/config/compiler:wexit_time_destructors",
+          "//remoting:version",
+        ]
+      } else {
+        configs += [
+          "//build/config/compiler:wexit_time_destructors",
+          "//remoting:version",
+        ]
+      }
+
       sources = [
         "it2me_native_messaging_host_entry_point.cc",
         "it2me_native_messaging_host_main.cc",
         "it2me_native_messaging_host_main.h",
-      ]
-
-      configs += [
-        "//build/config/compiler:wexit_time_destructors",
-        "//remoting:version",
       ]
 
       deps = [
@@ -87,6 +124,18 @@ if (!is_chromeos && !is_android && enable_remoting_host) {
         "//remoting/proto",
         "//ui/gfx",
       ]
+      if (is_mac) {
+        foreach(locale, remoting_locales_with_underscores) {
+          deps += [
+            ":remote_assistance_host_strings_${locale}_bundle_data",
+            "//remoting/host:remoting_host_locale_${locale}_bundle_data",
+          ]
+        }
+        deps += [
+          "//remoting/host:remoting_infoplist_strings",
+          "//remoting/resources:copy_locales",
+        ]
+      }
 
       if (enable_webrtc) {
         deps += [ "//third_party/libjingle:libjingle_webrtc" ]

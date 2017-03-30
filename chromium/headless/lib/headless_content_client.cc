@@ -9,14 +9,13 @@
 
 namespace headless {
 
-HeadlessContentClient::HeadlessContentClient(
-    const HeadlessBrowser::Options& options)
+HeadlessContentClient::HeadlessContentClient(HeadlessBrowser::Options* options)
     : options_(options) {}
 
 HeadlessContentClient::~HeadlessContentClient() {}
 
 std::string HeadlessContentClient::GetUserAgent() const {
-  return options_.user_agent;
+  return options_->user_agent;
 }
 
 base::string16 HeadlessContentClient::GetLocalizedString(int message_id) const {
@@ -30,7 +29,7 @@ base::StringPiece HeadlessContentClient::GetDataResource(
       resource_id, scale_factor);
 }
 
-base::RefCountedStaticMemory* HeadlessContentClient::GetDataResourceBytes(
+base::RefCountedMemory* HeadlessContentClient::GetDataResourceBytes(
     int resource_id) const {
   return ResourceBundle::GetSharedInstance().LoadDataResourceBytes(resource_id);
 }

@@ -39,9 +39,9 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
-#include "platform/graphics/CompositorFactory.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
 
 namespace blink {
@@ -80,7 +80,7 @@ AnimationTimeline::AnimationTimeline(Document* document, PlatformTiming* timing)
         m_timing = timing;
 
     if (Platform::current()->isThreadedAnimationEnabled())
-        m_compositorTimeline = adoptPtr(CompositorFactory::current().createAnimationTimeline());
+        m_compositorTimeline = CompositorAnimationTimeline::create();
 
     ASSERT(document);
 }
@@ -345,6 +345,12 @@ void AnimationTimeline::setAllCompositorPending(bool sourceChanged)
 double AnimationTimeline::playbackRate() const
 {
     return m_playbackRate;
+}
+
+void AnimationTimeline::invalidateKeyframeEffects()
+{
+    for (const auto& animation : m_animations)
+        animation->invalidateKeyframeEffect();
 }
 
 DEFINE_TRACE(AnimationTimeline)

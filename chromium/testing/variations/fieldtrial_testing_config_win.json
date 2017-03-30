@@ -61,7 +61,7 @@
     ],
     "DefaultBrowserInfobar": [
         {
-            "group_name": "SettingsText"
+            "group_name": "SettingsTextNotNow"
         }
     ],
     "DisallowFetchForDocWrittenScriptsInMainFrame": [
@@ -190,6 +190,14 @@
             "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
+    "NewAudioRenderingMixingStrategy": [
+        {
+            "enable_features": [
+                "NewAudioRenderingMixingStrategy"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "NewProfileManagement": [
         {
             "group_name": "Enabled"
@@ -295,14 +303,6 @@
         },
         {
             "group_name": "DontShowAndDontSend"
-        }
-    ],
-    "ResourcePriorities": [
-        {
-            "group_name": "Launch50pct_11011_1_1_10"
-        },
-        {
-            "group_name": "Control50pct"
         }
     ],
     "SRTPromptFieldTrial": [
@@ -419,6 +419,9 @@
     ],
     "V8CacheStrategiesForCacheStorage": [
         {
+            "group_name": "default"
+        },
+        {
             "group_name": "none"
         },
         {
@@ -434,11 +437,6 @@
             "params": {
                 "fetch_period_min": "30"
             }
-        }
-    ],
-    "WebFontsIntervention": [
-        {
-            "group_name": "Enabled"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

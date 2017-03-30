@@ -23,7 +23,6 @@
 #include "core/dom/Document.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
-#include "core/layout/api/LineLayoutBlockFlow.h"
 #include "core/layout/api/LineLayoutBox.h"
 #include "core/layout/api/LineLayoutInline.h"
 #include "core/layout/api/LineLayoutListMarker.h"
@@ -37,6 +36,7 @@
 #include "core/paint/InlineFlowBoxPainter.h"
 #include "core/style/ShadowList.h"
 #include "platform/fonts/Font.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
 #include <math.h>
 
@@ -872,7 +872,8 @@ inline void InlineFlowBox::addTextBoxVisualOverflow(InlineTextBox* textBox, Glyp
 
     logicalVisualOverflow = LayoutRect(logicalLeftVisualOverflow, logicalTopVisualOverflow, logicalRightVisualOverflow - logicalLeftVisualOverflow, logicalBottomVisualOverflow - logicalTopVisualOverflow);
 
-    textBox->setLogicalOverflowRect(logicalVisualOverflow);
+    if (logicalVisualOverflow != textBox->logicalFrameRect())
+        textBox->setLogicalOverflowRect(logicalVisualOverflow);
 }
 
 inline void InlineFlowBox::addReplacedChildOverflow(const InlineBox* inlineBox, LayoutRect& logicalLayoutOverflow, LayoutRect& logicalVisualOverflow)
@@ -905,7 +906,7 @@ void InlineFlowBox::computeOverflow(LayoutUnit lineTop, LayoutUnit lineBottom, G
     }
 
     if (m_overflow)
-        m_overflow.clear();
+        m_overflow.reset();
 
     // Visual overflow just includes overflow for stuff we need to issues paint invalidations for ourselves. Self-painting layers are ignored.
     // Layout overflow is used to determine scrolling extent, so it still includes child layers and also factors in
@@ -952,7 +953,7 @@ void InlineFlowBox::setLayoutOverflow(const LayoutRect& rect, const LayoutRect& 
         return;
 
     if (!m_overflow)
-        m_overflow = adoptPtr(new SimpleOverflowModel(frameBox, frameBox));
+        m_overflow = wrapUnique(new SimpleOverflowModel(frameBox, frameBox));
 
     m_overflow->setLayoutOverflow(rect);
 }
@@ -964,7 +965,7 @@ void InlineFlowBox::setVisualOverflow(const LayoutRect& rect, const LayoutRect& 
         return;
 
     if (!m_overflow)
-        m_overflow = adoptPtr(new SimpleOverflowModel(frameBox, frameBox));
+        m_overflow = wrapUnique(new SimpleOverflowModel(frameBox, frameBox));
 
     m_overflow->setVisualOverflow(rect);
 }

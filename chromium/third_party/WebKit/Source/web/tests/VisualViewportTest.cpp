@@ -512,6 +512,9 @@ TEST_P(ParameterizedVisualViewportTest, TestVisibleRectInDocument)
 
 TEST_P(ParameterizedVisualViewportTest, TestFractionalScrollOffsetIsNotOverwritten)
 {
+    bool origFractionalOffsetsEnabled = RuntimeEnabledFeatures::fractionalScrollOffsetsEnabled();
+    RuntimeEnabledFeatures::setFractionalScrollOffsetsEnabled(true);
+
     initializeWithAndroidSettings();
     webViewImpl()->resize(IntSize(200, 250));
 
@@ -523,6 +526,8 @@ TEST_P(ParameterizedVisualViewportTest, TestFractionalScrollOffsetIsNotOverwritt
     webViewImpl()->applyViewportDeltas(WebFloatSize(), WebFloatSize(10, 20), WebFloatSize(), 1, 0);
 
     EXPECT_EQ(30.5, frameView.layoutViewportScrollableArea()->scrollPositionDouble().y());
+
+    RuntimeEnabledFeatures::setFractionalScrollOffsetsEnabled(origFractionalOffsetsEnabled);
 }
 
 // Test that the viewport's scroll offset is always appropriately bounded such that the
@@ -948,8 +953,8 @@ TEST_P(ParameterizedVisualViewportTest, DISABLED_TestWebFrameRangeAccountsForVis
     EXPECT_EQ("t ", mainFrame->selectionAsText().utf8());
 }
 
-// Test that the scrollFocusedNodeIntoRect method works with the visual viewport.
-TEST_P(ParameterizedVisualViewportTest, DISABLED_TestScrollFocusedNodeIntoRect)
+// Test that the scrollFocusedEditableElementIntoRect method works with the visual viewport.
+TEST_P(ParameterizedVisualViewportTest, DISABLED_TestScrollFocusedEditableElementIntoRect)
 {
     initializeWithDesktopSettings();
     webViewImpl()->resize(IntSize(500, 300));
@@ -961,7 +966,7 @@ TEST_P(ParameterizedVisualViewportTest, DISABLED_TestScrollFocusedNodeIntoRect)
     webViewImpl()->resizeVisualViewport(IntSize(200, 100));
     webViewImpl()->setInitialFocus(false);
     visualViewport.setLocation(FloatPoint());
-    webViewImpl()->scrollFocusedNodeIntoRect(IntRect(0, 0, 500, 200));
+    webViewImpl()->scrollFocusedEditableElementIntoRect(IntRect(0, 0, 500, 200));
 
     EXPECT_POINT_EQ(IntPoint(0, frame()->view()->maximumScrollPosition().y()),
         frame()->view()->scrollPosition());
@@ -973,7 +978,7 @@ TEST_P(ParameterizedVisualViewportTest, DISABLED_TestScrollFocusedNodeIntoRect)
     visualViewport.setLocation(FloatPoint(0, 0));
 
     webViewImpl()->setPageScaleFactor(2);
-    webViewImpl()->scrollFocusedNodeIntoRect(IntRect(0, 0, 500, 200));
+    webViewImpl()->scrollFocusedEditableElementIntoRect(IntRect(0, 0, 500, 200));
     EXPECT_POINT_EQ(IntPoint(0, frame()->view()->maximumScrollPosition().y()),
         frame()->view()->scrollPosition());
     EXPECT_FLOAT_POINT_EQ(FloatPoint(125, 150), visualViewport.visibleRect().location());
@@ -988,7 +993,7 @@ TEST_P(ParameterizedVisualViewportTest, DISABLED_TestScrollFocusedNodeIntoRect)
     visualViewport.setLocation(FloatPoint(30, 50));
 
     webViewImpl()->setPageScaleFactor(2);
-    webViewImpl()->scrollFocusedNodeIntoRect(IntRect(0, 0, 500, 200));
+    webViewImpl()->scrollFocusedEditableElementIntoRect(IntRect(0, 0, 500, 200));
     EXPECT_POINT_EQ(IntPoint(200-30-75, 600-50-65), frame()->view()->scrollPosition());
     EXPECT_FLOAT_POINT_EQ(FloatPoint(30, 50), visualViewport.visibleRect().location());
 }
@@ -1112,7 +1117,7 @@ TEST_P(ParameterizedVisualViewportTest, TestClientNotifiedOfScrollEvents)
     webViewImpl()->mainFrameImpl()->setClient(oldClient);
 }
 
-// Tests that calling scroll into view on a visible element doesn cause
+// Tests that calling scroll into view on a visible element doesn't cause
 // a scroll due to a fractional offset. Bug crbug.com/463356.
 TEST_P(ParameterizedVisualViewportTest, ScrollIntoViewFractionalOffset)
 {
@@ -1136,14 +1141,14 @@ TEST_P(ParameterizedVisualViewportTest, ScrollIntoViewFractionalOffset)
     layoutViewportScrollableArea->setScrollPosition(DoublePoint(0, 900.75), ProgrammaticScroll);
     inputBox->scrollIntoViewIfNeeded(false);
 
-    EXPECT_POINT_EQ(DoublePoint(0, 900.75), layoutViewportScrollableArea->scrollPositionDouble());
+    EXPECT_POINT_EQ(DoublePoint(0, 900), layoutViewportScrollableArea->scrollPositionDouble());
     EXPECT_POINT_EQ(FloatPoint(250.25f, 100.25f), visualViewport.location());
 
     // Change the fractional part of the frameview to one that would round down.
     layoutViewportScrollableArea->setScrollPosition(DoublePoint(0, 900.125), ProgrammaticScroll);
     inputBox->scrollIntoViewIfNeeded(false);
 
-    EXPECT_POINT_EQ(DoublePoint(0, 900.125), layoutViewportScrollableArea->scrollPositionDouble());
+    EXPECT_POINT_EQ(DoublePoint(0, 900), layoutViewportScrollableArea->scrollPositionDouble());
     EXPECT_POINT_EQ(FloatPoint(250.25f, 100.25f), visualViewport.location());
 
     // Repeat both tests above with the visual viewport at a high fractional.
@@ -1151,14 +1156,14 @@ TEST_P(ParameterizedVisualViewportTest, ScrollIntoViewFractionalOffset)
     layoutViewportScrollableArea->setScrollPosition(DoublePoint(0, 900.75), ProgrammaticScroll);
     inputBox->scrollIntoViewIfNeeded(false);
 
-    EXPECT_POINT_EQ(DoublePoint(0, 900.75), layoutViewportScrollableArea->scrollPositionDouble());
+    EXPECT_POINT_EQ(DoublePoint(0, 900), layoutViewportScrollableArea->scrollPositionDouble());
     EXPECT_POINT_EQ(FloatPoint(250.875f, 100.875f), visualViewport.location());
 
     // Change the fractional part of the frameview to one that would round down.
     layoutViewportScrollableArea->setScrollPosition(DoublePoint(0, 900.125), ProgrammaticScroll);
     inputBox->scrollIntoViewIfNeeded(false);
 
-    EXPECT_POINT_EQ(DoublePoint(0, 900.125), layoutViewportScrollableArea->scrollPositionDouble());
+    EXPECT_POINT_EQ(DoublePoint(0, 900), layoutViewportScrollableArea->scrollPositionDouble());
     EXPECT_POINT_EQ(FloatPoint(250.875f, 100.875f), visualViewport.location());
 
     // Both viewports with a 0.5 fraction.
@@ -1166,7 +1171,7 @@ TEST_P(ParameterizedVisualViewportTest, ScrollIntoViewFractionalOffset)
     layoutViewportScrollableArea->setScrollPosition(DoublePoint(0, 900.5), ProgrammaticScroll);
     inputBox->scrollIntoViewIfNeeded(false);
 
-    EXPECT_POINT_EQ(DoublePoint(0, 900.5), layoutViewportScrollableArea->scrollPositionDouble());
+    EXPECT_POINT_EQ(DoublePoint(0, 900), layoutViewportScrollableArea->scrollPositionDouble());
     EXPECT_POINT_EQ(FloatPoint(250.5f, 100.5f), visualViewport.location());
 }
 

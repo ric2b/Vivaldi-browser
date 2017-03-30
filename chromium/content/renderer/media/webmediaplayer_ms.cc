@@ -18,13 +18,14 @@
 #include "content/common/gpu/client/context_provider_command_buffer.h"
 #include "content/public/renderer/media_stream_audio_renderer.h"
 #include "content/public/renderer/media_stream_renderer_factory.h"
-#include "content/public/renderer/video_frame_provider.h"
+#include "content/public/renderer/media_stream_video_renderer.h"
 #include "content/renderer/media/web_media_element_source_utils.h"
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/media_log.h"
 #include "media/base/video_frame.h"
+#include "media/base/video_types.h"
 #include "media/blink/webmediaplayer_util.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
@@ -52,6 +53,7 @@ WebMediaPlayerMS::WebMediaPlayerMS(
       client_(client),
       delegate_(delegate),
       delegate_id_(0),
+      last_frame_opaque_(true),
       paused_(true),
       render_frame_suspended_(false),
       received_first_frame_(false),
@@ -124,7 +126,7 @@ void WebMediaPlayerMS::load(LoadType load_type,
       web_stream.isNull() ? std::string() : web_stream.id().utf8();
   media_log_->AddEvent(media_log_->CreateLoadEvent(stream_id));
 
-  video_frame_provider_ = renderer_factory_->GetVideoFrameProvider(
+  video_frame_provider_ = renderer_factory_->GetVideoRenderer(
       web_stream, base::Bind(&WebMediaPlayerMS::OnSourceError, AsWeakPtr()),
       base::Bind(&WebMediaPlayerMS::OnFrameAvailable, AsWeakPtr()),
       media_task_runner_, worker_task_runner_, gpu_factories_);
@@ -168,7 +170,7 @@ void WebMediaPlayerMS::play() {
     return;
 
   if (video_frame_provider_)
-    video_frame_provider_->Play();
+    video_frame_provider_->Resume();
 
   compositor_->StartRendering();
 
@@ -458,15 +460,20 @@ bool WebMediaPlayerMS::copyVideoTextureToPlatformTexture(
   scoped_refptr<media::VideoFrame> video_frame =
       compositor_->GetCurrentFrameWithoutUpdatingStatistics();
 
-  if (!video_frame.get() || !video_frame->HasTextures() ||
-      media::VideoFrame::NumPlanes(video_frame->format()) != 1) {
+  if (!video_frame.get() || !video_frame->HasTextures())
     return false;
-  }
 
-  media::SkCanvasVideoRenderer::CopyVideoFrameSingleTextureToGLTexture(
-      gl, video_frame.get(), texture, internal_format, type, premultiply_alpha,
-      flip_y);
-  return true;
+  media::Context3D context_3d;
+  auto* provider =
+      RenderThreadImpl::current()->SharedMainThreadContextProvider().get();
+  // GPU Process crashed.
+  if (!provider)
+    return false;
+  context_3d = media::Context3D(provider->ContextGL(), provider->GrContext());
+  DCHECK(context_3d.gl);
+  return video_renderer_.CopyVideoFrameTexturesToGLTexture(
+      context_3d, gl, video_frame.get(), texture, internal_format, type,
+      premultiply_alpha, flip_y);
 }
 
 void WebMediaPlayerMS::OnFrameAvailable(
@@ -485,19 +492,28 @@ void WebMediaPlayerMS::OnFrameAvailable(
   } else {
     TRACE_EVENT0("webrtc", "WebMediaPlayerMS::OnFrameAvailable");
   }
+  const bool is_opaque = media::IsOpaque(frame->format());
 
   if (!received_first_frame_) {
     received_first_frame_ = true;
+    last_frame_opaque_ = is_opaque;
     SetReadyState(WebMediaPlayer::ReadyStateHaveMetadata);
     SetReadyState(WebMediaPlayer::ReadyStateHaveEnoughData);
 
     if (video_frame_provider_.get()) {
       video_weblayer_.reset(new cc_blink::WebLayerImpl(
           cc::VideoLayer::Create(compositor_.get(), media::VIDEO_ROTATION_0)));
-      video_weblayer_->layer()->SetContentsOpaque(false);
+      video_weblayer_->layer()->SetContentsOpaque(is_opaque);
       video_weblayer_->SetContentsOpaqueIsFixed(true);
       get_client()->setWebLayer(video_weblayer_.get());
     }
+  }
+
+  // Only configure opacity on changes, since marking it as transparent is
+  // expensive, see https://crbug.com/647886.
+  if (video_weblayer_ && last_frame_opaque_ != is_opaque) {
+    last_frame_opaque_ = is_opaque;
+    video_weblayer_->layer()->SetContentsOpaque(is_opaque);
   }
 
   compositor_->EnqueueFrame(frame);

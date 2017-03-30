@@ -77,6 +77,7 @@
 #include "wtf/Assertions.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/CString.h"
+#include <memory>
 
 namespace blink {
 
@@ -127,7 +128,6 @@ void logConsoleError(ExecutionContext* context, const String& message)
     // FIXME: It's not good to report the bad usage without indicating what source line it came from.
     // We should pass additional parameters so we can tell the console where the mistake occurred.
     ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message);
-    consoleMessage->collectCallStack();
     context->addConsoleMessage(consoleMessage);
 }
 
@@ -335,7 +335,7 @@ Blob* XMLHttpRequest::responseBlob()
             // copying the bytes between the browser and the renderer.
             m_responseBlob = Blob::create(createBlobDataHandleFromResponse());
         } else {
-            OwnPtr<BlobData> blobData = BlobData::create();
+            std::unique_ptr<BlobData> blobData = BlobData::create();
             size_t size = 0;
             if (m_binaryResponseBuilder && m_binaryResponseBuilder->size()) {
                 size = m_binaryResponseBuilder->size();
@@ -531,11 +531,6 @@ void XMLHttpRequest::setWithCredentials(bool value, ExceptionState& exceptionSta
         return;
     }
 
-    // FIXME: According to XMLHttpRequest Level 2 we should throw InvalidAccessError exception here.
-    // However for time being only print warning message to warn web developers.
-    if (!m_async)
-        Deprecation::countDeprecation(getExecutionContext(), UseCounter::SyncXHRWithCredentials);
-
     m_includeCredentials = value;
 }
 
@@ -651,7 +646,7 @@ bool XMLHttpRequest::initSend(ExceptionState& exceptionState)
 
 void XMLHttpRequest::send(const ArrayBufferOrArrayBufferViewOrBlobOrDocumentOrStringOrFormData& body, ExceptionState& exceptionState)
 {
-    InspectorInstrumentation::willSendXMLHttpRequest(getExecutionContext(), url());
+    InspectorInstrumentation::willSendXMLHttpOrFetchNetworkRequest(getExecutionContext(), url());
 
     if (body.isNull()) {
         send(String(), exceptionState);
@@ -892,7 +887,7 @@ void XMLHttpRequest::createRequest(PassRefPtr<EncodedFormData> httpBody, Excepti
     request.setHTTPMethod(m_method);
     request.setRequestContext(WebURLRequest::RequestContextXMLHttpRequest);
     request.setFetchCredentialsMode(m_includeCredentials ? WebURLRequest::FetchCredentialsModeInclude : WebURLRequest::FetchCredentialsModeSameOrigin);
-    request.setSkipServiceWorker(m_isolatedWorldSecurityOrigin);
+    request.setSkipServiceWorker(m_isolatedWorldSecurityOrigin.get() ? WebURLRequest::SkipServiceWorker::All : WebURLRequest::SkipServiceWorker::None);
     request.setExternalRequestStateFromRequestorAddressSpace(executionContext.securityContext().addressSpace());
 
     InspectorInstrumentation::willLoadXHR(&executionContext, this, this, m_method, m_url, m_async, httpBody ? httpBody->deepCopy() : nullptr, m_requestHeaders, m_includeCredentials);
@@ -993,7 +988,7 @@ void XMLHttpRequest::clearVariablesForLoading()
         m_blobLoader = nullptr;
     }
 
-    m_decoder.clear();
+    m_decoder.reset();
 
     if (m_responseDocumentParser) {
         m_responseDocumentParser->removeClient(this);
@@ -1029,7 +1024,7 @@ bool XMLHttpRequest::internalAbort()
     // If, window.onload contains open() and send(), m_loader will be set to
     // non 0 value. So, we cannot continue the outer open(). In such case,
     // just abort the outer open() by returning false.
-    OwnPtr<ThreadableLoader> loader = std::move(m_loader);
+    std::unique_ptr<ThreadableLoader> loader = std::move(m_loader);
     loader->cancel();
 
     // If abort() called internalAbort() and a nested open() ended up
@@ -1232,7 +1227,8 @@ String XMLHttpRequest::getAllResponseHeaders() const
     StringBuilder stringBuilder;
 
     HTTPHeaderSet accessControlExposeHeaderSet;
-    parseAccessControlExposeHeadersAllowList(m_response.httpHeaderField(HTTPNames::Access_Control_Expose_Headers), accessControlExposeHeaderSet);
+    extractCorsExposedHeaderNamesList(m_response, accessControlExposeHeaderSet);
+
     HTTPHeaderMap::const_iterator end = m_response.httpHeaderFields().end();
     for (HTTPHeaderMap::const_iterator it = m_response.httpHeaderFields().begin(); it!= end; ++it) {
         // Hide any headers whose name is a forbidden response-header name.
@@ -1269,7 +1265,7 @@ const AtomicString& XMLHttpRequest::getResponseHeader(const AtomicString& name) 
     }
 
     HTTPHeaderSet accessControlExposeHeaderSet;
-    parseAccessControlExposeHeadersAllowList(m_response.httpHeaderField(HTTPNames::Access_Control_Expose_Headers), accessControlExposeHeaderSet);
+    extractCorsExposedHeaderNamesList(m_response, accessControlExposeHeaderSet);
 
     if (!m_sameOriginRequest && !isOnAccessControlResponseHeaderWhitelist(name) && !accessControlExposeHeaderSet.contains(name)) {
         logConsoleError(getExecutionContext(), "Refused to get unsafe header \"" + name + "\"");
@@ -1441,7 +1437,7 @@ void XMLHttpRequest::didFailLoadingFromBlob()
 PassRefPtr<BlobDataHandle> XMLHttpRequest::createBlobDataHandleFromResponse()
 {
     ASSERT(m_downloadingToFile);
-    OwnPtr<BlobData> blobData = BlobData::create();
+    std::unique_ptr<BlobData> blobData = BlobData::create();
     String filePath = m_response.downloadedFilePath();
     // If we errored out or got no data, we return an empty handle.
     if (!filePath.isEmpty() && m_lengthDownloadedToFile) {
@@ -1514,7 +1510,7 @@ void XMLHttpRequest::didSendData(unsigned long long bytesSent, unsigned long lon
     }
 }
 
-void XMLHttpRequest::didReceiveResponse(unsigned long identifier, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void XMLHttpRequest::didReceiveResponse(unsigned long identifier, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT_UNUSED(handle, !handle);
     WTF_LOG(Network, "XMLHttpRequest %p didReceiveResponse(%lu)", this, identifier);
@@ -1549,7 +1545,7 @@ void XMLHttpRequest::parseDocumentChunk(const char* data, unsigned len)
     m_responseDocumentParser->appendBytes(data, len);
 }
 
-PassOwnPtr<TextResourceDecoder> XMLHttpRequest::createDecoder() const
+std::unique_ptr<TextResourceDecoder> XMLHttpRequest::createDecoder() const
 {
     if (m_responseTypeCode == ResponseTypeJSON)
         return TextResourceDecoder::create("application/json", "UTF-8");
@@ -1559,7 +1555,7 @@ PassOwnPtr<TextResourceDecoder> XMLHttpRequest::createDecoder() const
 
     // allow TextResourceDecoder to look inside the m_response if it's XML or HTML
     if (responseIsXML()) {
-        OwnPtr<TextResourceDecoder> decoder = TextResourceDecoder::create("application/xml");
+        std::unique_ptr<TextResourceDecoder> decoder = TextResourceDecoder::create("application/xml");
         // Don't stop on encoding errors, unlike it is done for other kinds
         // of XML resources. This matches the behavior of previous WebKit
         // versions, Firefox and Opera.

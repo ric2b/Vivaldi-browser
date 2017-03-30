@@ -22,12 +22,12 @@
 #include "mojo/public/cpp/bindings/array.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "ui/gfx/buffer_types.h"
+#include "ui/gfx/geometry/mojo/geometry.mojom.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/swap_result.h"
-#include "ui/mojo/geometry/geometry.mojom.h"
 
-namespace gfx {
+namespace gl {
 class GLContext;
 class GLSurface;
 }
@@ -60,7 +60,8 @@ class CommandBufferDriver : base::NonThreadSafe {
    public:
     virtual ~Client();
     virtual void DidLoseContext(uint32_t reason) = 0;
-    virtual void UpdateVSyncParameters(int64_t timebase, int64_t interval) = 0;
+    virtual void UpdateVSyncParameters(const base::TimeTicks& timebase,
+                                       const base::TimeDelta& interval) = 0;
     virtual void OnGpuCompletedSwapBuffers(gfx::SwapResult result) = 0;
   };
   CommandBufferDriver(gpu::CommandBufferNamespace command_buffer_namespace,
@@ -85,7 +86,7 @@ class CommandBufferDriver : base::NonThreadSafe {
   void CreateImage(int32_t id,
                    mojo::ScopedHandle memory_handle,
                    int32_t type,
-                   mojo::SizePtr size,
+                   const gfx::Size& size,
                    int32_t format,
                    int32_t internal_format);
   void CreateImageNativeOzone(int32_t id,
@@ -136,6 +137,8 @@ class CommandBufferDriver : base::NonThreadSafe {
   bool OnWaitFenceSync(gpu::CommandBufferNamespace namespace_id,
                        gpu::CommandBufferId command_buffer_id,
                        uint64_t release);
+  void OnDescheduleUntilFinished();
+  void OnRescheduleAfterFinished();
   void OnParseError();
   void OnContextLost(uint32_t reason);
   void OnGpuCompletedSwapBuffers(gfx::SwapResult result);
@@ -149,8 +152,8 @@ class CommandBufferDriver : base::NonThreadSafe {
   std::unique_ptr<gpu::CommandExecutor> executor_;
   scoped_refptr<gpu::SyncPointOrderData> sync_point_order_data_;
   std::unique_ptr<gpu::SyncPointClient> sync_point_client_;
-  scoped_refptr<gfx::GLContext> context_;
-  scoped_refptr<gfx::GLSurface> surface_;
+  scoped_refptr<gl::GLContext> context_;
+  scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<GpuState> gpu_state_;
 
   scoped_refptr<base::SingleThreadTaskRunner> context_lost_task_runner_;

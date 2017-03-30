@@ -22,10 +22,8 @@ base::TimeTicks FakeDelayBasedTimeSource::Now() const { return now_; }
 
 TestDelayBasedTimeSource::TestDelayBasedTimeSource(
     base::SimpleTestTickClock* now_src,
-    base::TimeDelta interval,
     OrderedSimpleTaskRunner* task_runner)
-    : DelayBasedTimeSource(interval, task_runner), now_src_(now_src) {
-}
+    : DelayBasedTimeSource(task_runner), now_src_(now_src) {}
 
 base::TimeTicks TestDelayBasedTimeSource::Now() const {
   return now_src_->NowTicks();
@@ -36,35 +34,6 @@ std::string TestDelayBasedTimeSource::TypeString() const {
 }
 
 TestDelayBasedTimeSource::~TestDelayBasedTimeSource() {
-}
-
-FakeBeginFrameSource::FakeBeginFrameSource() {}
-
-FakeBeginFrameSource::~FakeBeginFrameSource() {}
-
-TestBackToBackBeginFrameSource::TestBackToBackBeginFrameSource(
-    base::SimpleTestTickClock* now_src,
-    base::SingleThreadTaskRunner* task_runner)
-    : BackToBackBeginFrameSource(task_runner), now_src_(now_src) {
-}
-
-TestBackToBackBeginFrameSource::~TestBackToBackBeginFrameSource() {
-}
-
-base::TimeTicks TestBackToBackBeginFrameSource::Now() {
-  return now_src_->NowTicks();
-}
-
-TestSyntheticBeginFrameSource::TestSyntheticBeginFrameSource(
-    base::SimpleTestTickClock* now_src,
-    OrderedSimpleTaskRunner* task_runner,
-    base::TimeDelta initial_interval)
-    : SyntheticBeginFrameSource(
-          TestDelayBasedTimeSource::Create(now_src,
-                                           initial_interval,
-                                           task_runner)) {}
-
-TestSyntheticBeginFrameSource::~TestSyntheticBeginFrameSource() {
 }
 
 std::unique_ptr<FakeCompositorTimingHistory>
@@ -91,7 +60,6 @@ FakeCompositorTimingHistory::~FakeCompositorTimingHistory() {
 }
 
 void FakeCompositorTimingHistory::SetAllEstimatesTo(base::TimeDelta duration) {
-  begin_main_frame_to_commit_duration_ = duration;
   begin_main_frame_queue_duration_critical_ = duration;
   begin_main_frame_queue_duration_not_critical_ = duration;
   begin_main_frame_start_to_commit_duration_ = duration;
@@ -99,11 +67,6 @@ void FakeCompositorTimingHistory::SetAllEstimatesTo(base::TimeDelta duration) {
   prepare_tiles_duration_ = duration;
   activate_duration_ = duration;
   draw_duration_ = duration;
-}
-
-void FakeCompositorTimingHistory::SetBeginMainFrameToCommitDurationEstimate(
-    base::TimeDelta duration) {
-  begin_main_frame_to_commit_duration_ = duration;
 }
 
 void FakeCompositorTimingHistory::
@@ -140,11 +103,6 @@ void FakeCompositorTimingHistory::SetActivateDurationEstimate(
 void FakeCompositorTimingHistory::SetDrawDurationEstimate(
     base::TimeDelta duration) {
   draw_duration_ = duration;
-}
-
-base::TimeDelta
-FakeCompositorTimingHistory::BeginMainFrameToCommitDurationEstimate() const {
-  return begin_main_frame_to_commit_duration_;
 }
 
 base::TimeDelta

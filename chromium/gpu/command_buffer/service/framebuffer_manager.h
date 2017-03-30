@@ -53,6 +53,12 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
     virtual bool IsRenderbuffer(
         Renderbuffer* renderbuffer) const = 0;
     virtual bool Is3D() const = 0;
+
+    // If it's a 3D texture attachment, return true if
+    // FRAMEBUFFER_ATTACHMENT_TEXTURE_LAYER is smaller than the number of
+    // layers in the texture.
+    virtual bool IsLayerValid() const = 0;
+
     virtual bool CanRenderTo(const FeatureInfo* feature_info) const = 0;
     virtual void DetachFromFramebuffer(Framebuffer* framebuffer) const = 0;
     virtual bool ValidForAttachmentType(GLenum attachment_type,
@@ -77,6 +83,8 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
 
   bool HasUnclearedAttachment(GLenum attachment) const;
   bool HasUnclearedColorAttachments() const;
+
+  bool HasSRGBAttachments() const;
 
   void ClearUnclearedIntOr3DTexturesOrPartiallyClearedTextures(
       GLES2Decoder* decoder,
@@ -123,6 +131,8 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
 
   const Attachment* GetReadBufferAttachment() const;
 
+  GLsizei GetSamples() const;
+
   bool IsDeleted() const {
     return deleted_;
   }
@@ -137,6 +147,8 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
 
   bool HasDepthAttachment() const;
   bool HasStencilAttachment() const;
+  GLenum GetDepthFormat() const;
+  GLenum GetStencilFormat() const;
   GLenum GetDrawBufferInternalFormat() const;
   GLenum GetReadBufferInternalFormat() const;
   // If the color attachment is a texture, returns its type; otherwise,

@@ -59,11 +59,6 @@ class URLRequestContext;
 class URLRequestJob;
 class X509Certificate;
 
-// This stores the values of the Set-Cookie headers received during the request.
-// Each item in the vector corresponds to a Set-Cookie: line received,
-// excluding the "Set-Cookie:" part.
-typedef std::vector<std::string> ResponseCookies;
-
 //-----------------------------------------------------------------------------
 // A class  representing the asynchronous load of a data stream from an URL.
 //
@@ -86,27 +81,31 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
                                            NetworkDelegate* network_delegate,
                                            const std::string& scheme);
 
-  // Referrer policies (see set_referrer_policy): During server redirects, the
-  // referrer header might be cleared, if the protocol changes from HTTPS to
-  // HTTP. This is the default behavior of URLRequest, corresponding to
-  // CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE. Alternatively, the
-  // referrer policy can be set to strip the referrer down to an origin upon
-  // cross-origin navigation (ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN), or
-  // never change the referrer header (NEVER_CLEAR_REFERRER). Embedders will
-  // want to use these options when implementing referrer policy support
-  // (https://w3c.github.io/webappsec/specs/referrer-policy/).
-  //
-  // REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN is a slight variant
-  // on CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE: If the request
-  // downgrades from HTTPS to HTTP, the referrer will be cleared. If the request
-  // transitions cross-origin (but does not downgrade), the referrer's
-  // granularity will be reduced (currently stripped down to an origin rather
-  // than a full URL). Same-origin requests will send the full referrer.
+  // A ReferrerPolicy for the request can be set with
+  // set_referrer_policy() and controls the contents of the Referer
+  // header when URLRequest follows server redirects.
   enum ReferrerPolicy {
+    // Clear the referrer header if the protocol changes from HTTPS to
+    // HTTP. This is the default behavior of URLRequest.
     CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+    // A slight variant on
+    // CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE: If the
+    // request downgrades from HTTPS to HTTP, the referrer will be
+    // cleared. If the request transitions cross-origin (but does not
+    // downgrade), the referrer's granularity will be reduced (currently
+    // stripped down to an origin rather than a full URL). Same-origin
+    // requests will send the full referrer.
     REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
+    // Strip the referrer down to an origin upon cross-origin navigation.
     ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
+    // Never change the referrer.
     NEVER_CLEAR_REFERRER,
+    // Strip the referrer down to the origin regardless of the redirect
+    // location.
+    ORIGIN,
+    // Always clear the referrer regardless of the redirect location.
+    NO_REFERRER,
+    MAX_REFERRER_POLICY
   };
 
   // First-party URL redirect policy: During server redirects, the first-party
@@ -390,6 +389,12 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // are used for range requests or auth.
   int64_t GetTotalSentBytes() const;
 
+  // The size of the response body before removing any content encodings.
+  // Does not include redirects or sub-requests issued at lower levels (range
+  // requests or auth). Only includes bytes which have been read so far,
+  // including bytes from the cache.
+  int64_t GetRawBodyBytes() const;
+
   // Returns the current load state for the request. The returned value's
   // |param| field is an optional parameter describing details related to the
   // load state. Not all load states have a parameter.
@@ -492,12 +497,6 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // Returns true and fills in |endpoint| if the endpoint is available; returns
   // false and leaves |endpoint| unchanged if it is unavailable.
   bool GetRemoteEndpoint(IPEndPoint* endpoint) const;
-
-  // Returns the cookie values included in the response, if the request is one
-  // that can have cookies.  Returns true if the request is a cookie-bearing
-  // type, false otherwise.  This method may only be called once the
-  // delegate's OnResponseStarted method has been called.
-  bool GetResponseCookies(ResponseCookies* cookies);
 
   // Get the mime type.  This method may only be called once the delegate's
   // OnResponseStarted method has been called.
@@ -632,10 +631,6 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // jobs. Must not change the priority to anything other than
   // MAXIMUM_PRIORITY if the IGNORE_LIMITS load flag is set.
   void SetPriority(RequestPriority priority);
-
-  // Returns true iff this request would be internally redirected to HTTPS
-  // due to HSTS. If so, |redirect_url| is rewritten to the new HTTPS URL.
-  bool GetHSTSRedirect(GURL* redirect_url) const;
 
   void set_received_response_content_length(int64_t received_content_length) {
     received_response_content_length_ = received_content_length;

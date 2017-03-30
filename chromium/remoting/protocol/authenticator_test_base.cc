@@ -9,10 +9,11 @@
 #include "base/base64.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "base/timer/timer.h"
 #include "net/base/net_errors.h"
-#include "net/base/test_data_directory.h"
+#include "net/test/test_data_directory.h"
 #include "remoting/base/rsa_key_pair.h"
 #include "remoting/protocol/authenticator.h"
 #include "remoting/protocol/channel_authenticator.h"
@@ -147,7 +148,7 @@ void AuthenticatorTestBase::RunChannelAuth(bool expected_fail) {
   base::Timer shutdown_timer(false, false);
   shutdown_timer.Start(FROM_HERE, TestTimeouts::action_timeout(),
                        base::MessageLoop::QuitWhenIdleClosure());
-  message_loop_.Run();
+  base::RunLoop().Run();
   shutdown_timer.Stop();
 
   testing::Mock::VerifyAndClearExpectations(&client_callback_);

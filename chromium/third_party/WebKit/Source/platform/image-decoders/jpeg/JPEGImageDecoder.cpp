@@ -37,7 +37,11 @@
 
 #include "platform/image-decoders/jpeg/JPEGImageDecoder.h"
 
+#include "platform/Histogram.h"
 #include "platform/PlatformInstrumentation.h"
+#include "wtf/PtrUtil.h"
+#include "wtf/Threading.h"
+#include <memory>
 
 extern "C" {
 #include <stdio.h> // jpeglib.h needs stdio FILE.
@@ -423,6 +427,12 @@ public:
 
             m_state = JPEG_START_DECOMPRESS;
 
+            {
+                DEFINE_THREAD_SAFE_STATIC_LOCAL(blink::CustomCountHistogram,
+                    dimensionsLocationHistogram,
+                    new blink::CustomCountHistogram("Blink.DecodedImage.EffectiveDimensionsLocation.JPEG", 0, 50000, 50));
+                dimensionsLocationHistogram.count(m_nextReadPosition - m_info.src->bytes_in_buffer - 1);
+            }
             // We can fill in the size now that the header is available.
             if (!m_decoder->setSize(m_info.image_width, m_info.image_height))
                 return false;
@@ -785,7 +795,7 @@ bool JPEGImageDecoder::decodeToYUV()
     return !failed();
 }
 
-void JPEGImageDecoder::setImagePlanes(PassOwnPtr<ImagePlanes> imagePlanes)
+void JPEGImageDecoder::setImagePlanes(std::unique_ptr<ImagePlanes> imagePlanes)
 {
     m_imagePlanes = std::move(imagePlanes);
 }
@@ -980,7 +990,7 @@ void JPEGImageDecoder::decode(bool onlySize)
         return;
 
     if (!m_reader) {
-        m_reader = adoptPtr(new JPEGImageReader(this));
+        m_reader = wrapUnique(new JPEGImageReader(this));
         m_reader->setData(m_data.get());
     }
 
@@ -991,7 +1001,7 @@ void JPEGImageDecoder::decode(bool onlySize)
 
     // If decoding is done or failed, we don't need the JPEGImageReader anymore.
     if (isComplete(this, onlySize) || failed())
-        m_reader.clear();
+        m_reader.reset();
 }
 
 } // namespace blink

@@ -86,8 +86,10 @@ void XSLStyleSheetResource::checkNotify()
         m_sheet = decodedText();
 
     ResourceClientWalker<StyleSheetResourceClient> w(m_clients);
-    while (StyleSheetResourceClient* c = w.next())
-        c->setXSLStyleSheet(m_resourceRequest.url(), m_response.url(), m_sheet);
+    while (StyleSheetResourceClient* c = w.next()) {
+        markClientFinished(c);
+        c->setXSLStyleSheet(resourceRequest().url(), response().url(), m_sheet);
+    }
 }
 
 } // namespace blink

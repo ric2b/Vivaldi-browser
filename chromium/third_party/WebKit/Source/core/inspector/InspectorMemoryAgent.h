@@ -33,11 +33,11 @@
 
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
-#include "wtf/PassOwnPtr.h"
+#include "core/inspector/protocol/Memory.h"
 
 namespace blink {
 
-class CORE_EXPORT InspectorMemoryAgent final : public InspectorBaseAgent<InspectorMemoryAgent, protocol::Frontend::Memory>, public protocol::Backend::Memory {
+class CORE_EXPORT InspectorMemoryAgent final : public InspectorBaseAgent<protocol::Memory::Metainfo> {
     WTF_MAKE_NONCOPYABLE(InspectorMemoryAgent);
 public:
     static InspectorMemoryAgent* create()

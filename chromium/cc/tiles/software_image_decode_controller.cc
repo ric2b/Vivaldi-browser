@@ -4,6 +4,7 @@
 
 #include "cc/tiles/software_image_decode_controller.h"
 
+#include <inttypes.h>
 #include <stdint.h>
 
 #include <algorithm>
@@ -19,6 +20,8 @@
 #include "base/trace_event/memory_dump_manager.h"
 #include "cc/debug/devtools_instrumentation.h"
 #include "cc/raster/tile_task.h"
+#include "cc/resources/resource_format_utils.h"
+#include "cc/tiles/mipmap_util.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkPixmap.h"
@@ -26,11 +29,6 @@
 
 namespace cc {
 namespace {
-
-// The amount of memory we can lock ahead of time (128MB). This limit is only
-// used to inform the caller of the amount of space available in the cache. The
-// caller can still request tasks which can cause this limit to be breached.
-const size_t kLockedMemoryLimitBytes = 128 * 1024 * 1024;
 
 // The largest single high quality image to try and process. Images above this
 // size will drop down to medium quality.
@@ -80,8 +78,7 @@ class ImageDecodeTaskImpl : public TileTask {
   }
 
   // Overridden from TileTask:
-  void ScheduleOnOriginThread(RasterBufferProvider* provider) override {}
-  void CompleteOnOriginThread(RasterBufferProvider* provider) override {
+  void OnTaskCompleted() override {
     controller_->RemovePendingTask(image_key_);
   }
 
@@ -97,55 +94,14 @@ class ImageDecodeTaskImpl : public TileTask {
   DISALLOW_COPY_AND_ASSIGN(ImageDecodeTaskImpl);
 };
 
-// Most images are scaled from the source image's size to the target size.
-// But in the case of mipmaps, we are scaling from the mip level which is
-// larger than we need.
-// This function gets the scale of the mip level which will be used.
-SkSize GetMipMapScaleAdjustment(const gfx::Size& src_size,
-                                const gfx::Size& target_size) {
-  int src_height = src_size.height();
-  int src_width = src_size.width();
-  int target_height = target_size.height();
-  int target_width = target_size.width();
-  if (target_height == 0 || target_width == 0)
-    return SkSize::Make(-1.f, -1.f);
-
-  int next_mip_height = src_height;
-  int next_mip_width = src_width;
-  for (int current_mip_level = 0;; current_mip_level++) {
-    int mip_height = next_mip_height;
-    int mip_width = next_mip_width;
-
-    next_mip_height = std::max(1, src_height / (1 << (current_mip_level + 1)));
-    next_mip_width = std::max(1, src_width / (1 << (current_mip_level + 1)));
-
-    // Check if an axis on the next mip level would be smaller than the target.
-    // If so, use the current mip level.
-    // This effectively always uses the larger image and always scales down.
-    if (next_mip_height < target_height || next_mip_width < target_width) {
-      SkScalar y_scale = static_cast<float>(mip_height) / src_height;
-      SkScalar x_scale = static_cast<float>(mip_width) / src_width;
-
-      return SkSize::Make(x_scale, y_scale);
-    }
-
-    if (mip_height == 1 && mip_width == 1) {
-      // We have reached the final mip level
-      SkScalar y_scale = static_cast<float>(mip_height) / src_height;
-      SkScalar x_scale = static_cast<float>(mip_width) / src_width;
-
-      return SkSize::Make(x_scale, y_scale);
-    }
-  }
-}
-
 SkSize GetScaleAdjustment(const ImageDecodeControllerKey& key) {
   // If the requested filter quality did not require scale, then the adjustment
   // is identity.
   if (key.can_use_original_decode()) {
     return SkSize::Make(1.f, 1.f);
   } else if (key.filter_quality() == kMedium_SkFilterQuality) {
-    return GetMipMapScaleAdjustment(key.src_rect().size(), key.target_size());
+    return MipMapUtil::GetScaleAdjustmentForSize(key.src_rect().size(),
+                                                 key.target_size());
   } else {
     float x_scale =
         key.target_size().width() / static_cast<float>(key.src_rect().width());
@@ -185,10 +141,11 @@ void RecordLockExistingCachedImageHistogram(TilePriority::PriorityBin bin,
 }  // namespace
 
 SoftwareImageDecodeController::SoftwareImageDecodeController(
-    ResourceFormat format)
+    ResourceFormat format,
+    size_t locked_memory_limit_bytes)
     : decoded_images_(ImageMRUCache::NO_AUTO_EVICT),
       at_raster_decoded_images_(ImageMRUCache::NO_AUTO_EVICT),
-      locked_images_budget_(kLockedMemoryLimitBytes),
+      locked_images_budget_(locked_memory_limit_bytes),
       format_(format) {
   // In certain cases, ThreadTaskRunnerHandle isn't set (Android Webview).
   // Don't register a dump provider in these cases.
@@ -198,9 +155,6 @@ SoftwareImageDecodeController::SoftwareImageDecodeController(
         base::ThreadTaskRunnerHandle::Get());
   }
 }
-
-SoftwareImageDecodeController::SoftwareImageDecodeController()
-    : SoftwareImageDecodeController(RGBA_8888) {}
 
 SoftwareImageDecodeController::~SoftwareImageDecodeController() {
   DCHECK_EQ(0u, decoded_images_ref_counts_.size());
@@ -454,6 +408,7 @@ DecodedDrawImage SoftwareImageDecodeController::GetDecodedImageForDrawInternal(
     decoded_image = decoded_images_it->second.get();
     if (decoded_image->is_locked()) {
       RefImage(key);
+      decoded_image->mark_used();
       SanityCheckState(__LINE__, true);
       return DecodedDrawImage(
           decoded_image->image(), decoded_image->src_rect_offset(),
@@ -472,6 +427,7 @@ DecodedDrawImage SoftwareImageDecodeController::GetDecodedImageForDrawInternal(
     RefAtRasterImage(key);
     SanityCheckState(__LINE__, true);
     DecodedImage* at_raster_decoded_image = at_raster_images_it->second.get();
+    at_raster_decoded_image->mark_used();
     auto decoded_draw_image =
         DecodedDrawImage(at_raster_decoded_image->image(),
                          at_raster_decoded_image->src_rect_offset(),
@@ -524,6 +480,7 @@ DecodedDrawImage SoftwareImageDecodeController::GetDecodedImageForDrawInternal(
   DCHECK(decoded_image->is_locked());
   RefAtRasterImage(key);
   SanityCheckState(__LINE__, true);
+  decoded_image->mark_used();
   auto decoded_draw_image =
       DecodedDrawImage(decoded_image->image(), decoded_image->src_rect_offset(),
                        GetScaleAdjustment(key), GetDecodedFilterQuality(key));
@@ -751,9 +708,9 @@ void SoftwareImageDecodeController::DumpImageMemoryForCache(
 
   for (const auto& image_pair : cache) {
     std::string dump_name = base::StringPrintf(
-        "cc/image_memory/controller_%p/%s/image_%" PRIu64 "_id_%d", this,
-        cache_name, image_pair.second->tracing_id(),
-        image_pair.first.image_id());
+        "cc/image_memory/controller_0x%" PRIXPTR "/%s/image_%" PRIu64 "_id_%d",
+        reinterpret_cast<uintptr_t>(this), cache_name,
+        image_pair.second->tracing_id(), image_pair.first.image_id());
     base::trace_event::MemoryAllocatorDump* dump =
         image_pair.second->memory()->CreateMemoryAllocatorDump(
             dump_name.c_str(), pmd);
@@ -775,7 +732,7 @@ void SoftwareImageDecodeController::SanityCheckState(int line,
     return;
   }
 
-  MemoryBudget budget(kLockedMemoryLimitBytes);
+  MemoryBudget budget(locked_images_budget_.total_limit_bytes());
   for (const auto& image_pair : decoded_images_) {
     const auto& key = image_pair.first;
     const auto& image = image_pair.second;
@@ -860,8 +817,7 @@ ImageDecodeControllerKey ImageDecodeControllerKey::FromDrawImage(
 
   if (quality == kMedium_SkFilterQuality && !target_size.IsEmpty()) {
     SkSize mip_target_size =
-        GetMipMapScaleAdjustment(src_rect.size(), target_size);
-    DCHECK(mip_target_size.width() != -1.f && mip_target_size.height() != -1.f);
+        MipMapUtil::GetScaleAdjustmentForSize(src_rect.size(), target_size);
     target_size.set_width(src_rect.width() * mip_target_size.width());
     target_size.set_height(src_rect.height() * mip_target_size.height());
   }
@@ -932,14 +888,56 @@ SoftwareImageDecodeController::DecodedImage::DecodedImage(
 
 SoftwareImageDecodeController::DecodedImage::~DecodedImage() {
   DCHECK(!locked_);
+  // lock_count | used  | last lock failed | result state
+  // ===========+=======+==================+==================
+  //  1         | false | false            | WASTED
+  //  1         | false | true             | WASTED
+  //  1         | true  | false            | USED
+  //  1         | true  | true             | USED_RELOCK_FAILED
+  //  >1        | false | false            | WASTED_RELOCKED
+  //  >1        | false | true             | WASTED_RELOCKED
+  //  >1        | true  | false            | USED_RELOCKED
+  //  >1        | true  | true             | USED_RELOCKED
+  // Note that it's important not to reorder the following enums, since the
+  // numerical values are used in the histogram code.
+  enum State : int {
+    DECODED_IMAGE_STATE_WASTED,
+    DECODED_IMAGE_STATE_USED,
+    DECODED_IMAGE_STATE_USED_RELOCK_FAILED,
+    DECODED_IMAGE_STATE_WASTED_RELOCKED,
+    DECODED_IMAGE_STATE_USED_RELOCKED,
+    DECODED_IMAGE_STATE_COUNT
+  } state = DECODED_IMAGE_STATE_WASTED;
+
+  if (usage_stats_.lock_count == 1) {
+    if (!usage_stats_.used)
+      state = DECODED_IMAGE_STATE_WASTED;
+    else if (usage_stats_.last_lock_failed)
+      state = DECODED_IMAGE_STATE_USED_RELOCK_FAILED;
+    else
+      state = DECODED_IMAGE_STATE_USED;
+  } else {
+    if (usage_stats_.used)
+      state = DECODED_IMAGE_STATE_USED_RELOCKED;
+    else
+      state = DECODED_IMAGE_STATE_WASTED_RELOCKED;
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("Renderer4.SoftwareImageDecodeState", state,
+                            DECODED_IMAGE_STATE_COUNT);
+  UMA_HISTOGRAM_BOOLEAN("Renderer4.SoftwareImageDecodeState.FirstLockWasted",
+                        usage_stats_.first_lock_wasted);
 }
 
 bool SoftwareImageDecodeController::DecodedImage::Lock() {
   DCHECK(!locked_);
   bool success = memory_->Lock();
-  if (!success)
+  if (!success) {
+    usage_stats_.last_lock_failed = true;
     return false;
+  }
   locked_ = true;
+  ++usage_stats_.lock_count;
   return true;
 }
 
@@ -947,6 +945,8 @@ void SoftwareImageDecodeController::DecodedImage::Unlock() {
   DCHECK(locked_);
   memory_->Unlock();
   locked_ = false;
+  if (usage_stats_.lock_count == 1)
+    usage_stats_.first_lock_wasted = !usage_stats_.used;
 }
 
 // MemoryBudget

@@ -5,11 +5,13 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_WEBSITE_SETTINGS_PERMISSIONS_BUBBLE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_WEBSITE_SETTINGS_PERMISSIONS_BUBBLE_VIEW_H_
 
+#include <memory>
 #include <string>
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/browser/ui/website_settings/permission_bubble_view.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/bubble/bubble_border.h"
 
 namespace views {
@@ -40,7 +42,15 @@ class PermissionBubbleViewViews : public PermissionBubbleView {
   void Deny();
 
  private:
+  // These three functions have separate implementations for Views-based and
+  // Cocoa-based browsers, to allow this bubble to be used in either.
+
+  // Returns the view to anchor the permission bubble to. May be null.
   views::View* GetAnchorView();
+  // Returns the anchor point to anchor the permission bubble to, as a fallback.
+  // Only used if GetAnchorView() returns nullptr.
+  gfx::Point GetAnchorPoint();
+  // Returns the type of arrow to display on the permission bubble.
   views::BubbleBorder::Arrow GetAnchorArrow();
 
   Browser* browser_;

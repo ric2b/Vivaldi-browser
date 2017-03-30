@@ -7,6 +7,7 @@
 #include "base/mac/sdk_forward_declarations.h"
 #import "ui/base/cocoa/menu_controller.h"
 #include "ui/base/models/menu_model.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/mac/coordinate_conversion.h"
@@ -95,7 +96,7 @@ MenuRunnerImplInterface* MenuRunnerImplInterface::Create(
 MenuRunnerImplCocoa::MenuRunnerImplCocoa(ui::MenuModel* menu)
     : running_(false),
       delete_after_run_(false),
-      closing_event_time_(base::TimeDelta()) {
+      closing_event_time_(base::TimeTicks()) {
   menu_controller_.reset(
       [[MenuController alloc] initWithModel:menu useWithPopUpButtonCell:NO]);
 }
@@ -124,7 +125,7 @@ MenuRunner::RunResult MenuRunnerImplCocoa::RunMenuAt(Widget* parent,
   DCHECK(run_types & kNativeRunTypes);
   DCHECK(!IsRunning());
   DCHECK(parent);
-  closing_event_time_ = base::TimeDelta();
+  closing_event_time_ = base::TimeTicks();
   running_ = true;
 
   if (run_types & MenuRunner::CONTEXT_MENU) {
@@ -160,7 +161,7 @@ void MenuRunnerImplCocoa::Cancel() {
   [menu_controller_ cancel];
 }
 
-base::TimeDelta MenuRunnerImplCocoa::GetClosingEventTime() const {
+base::TimeTicks MenuRunnerImplCocoa::GetClosingEventTime() const {
   return closing_event_time_;
 }
 

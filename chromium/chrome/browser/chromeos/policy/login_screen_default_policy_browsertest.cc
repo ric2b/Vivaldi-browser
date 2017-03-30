@@ -4,14 +4,16 @@
 
 #include <string>
 
+#include "ash/common/accessibility_types.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
@@ -27,7 +29,6 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "ui/chromeos/accessibility_types.h"
 
 namespace em = enterprise_management;
 
@@ -190,8 +191,8 @@ void LoginScreenDefaultPolicyLoginScreenBrowsertest::SetUpOnMainThread() {
 }
 
 void LoginScreenDefaultPolicyLoginScreenBrowsertest::TearDownOnMainThread() {
-  base::MessageLoop::current()->PostTask(FROM_HERE,
-                                         base::Bind(&chrome::AttemptExit));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&chrome::AttemptExit));
   base::RunLoop().RunUntilIdle();
   LoginScreenDefaultPolicyBrowsertestBase::TearDownOnMainThread();
 }
@@ -326,14 +327,14 @@ IN_PROC_BROWSER_TEST_F(LoginScreenDefaultPolicyLoginScreenBrowsertest,
   VerifyPrefFollowsRecommendation(prefs::kAccessibilityScreenMagnifierEnabled,
                                   base::FundamentalValue(true));
   VerifyPrefFollowsRecommendation(prefs::kAccessibilityScreenMagnifierType,
-                                  base::FundamentalValue(ui::MAGNIFIER_FULL));
+                                  base::FundamentalValue(ash::MAGNIFIER_FULL));
 
   // Verify that the full-screen magnifier is enabled.
   chromeos::MagnificationManager* magnification_manager =
       chromeos::MagnificationManager::Get();
   ASSERT_TRUE(magnification_manager);
   EXPECT_TRUE(magnification_manager->IsMagnifierEnabled());
-  EXPECT_EQ(ui::MAGNIFIER_FULL, magnification_manager->GetMagnifierType());
+  EXPECT_EQ(ash::MAGNIFIER_FULL, magnification_manager->GetMagnifierType());
 }
 
 IN_PROC_BROWSER_TEST_F(LoginScreenDefaultPolicyInSessionBrowsertest,
@@ -434,7 +435,7 @@ IN_PROC_BROWSER_TEST_F(LoginScreenDefaultPolicyInSessionBrowsertest,
       chromeos::MagnificationManager::Get();
   ASSERT_TRUE(magnification_manager);
   EXPECT_FALSE(magnification_manager->IsMagnifierEnabled());
-  EXPECT_EQ(ui::kDefaultMagnifierType,
+  EXPECT_EQ(ash::kDefaultMagnifierType,
             magnification_manager->GetMagnifierType());
 }
 

@@ -143,7 +143,7 @@ void ShellDevToolsFrontend::Close() {
 void ShellDevToolsFrontend::DisconnectFromTarget() {
   if (!agent_host_)
     return;
-  agent_host_->DetachClient();
+  agent_host_->DetachClient(this);
   agent_host_ = NULL;
 }
 
@@ -177,8 +177,23 @@ void ShellDevToolsFrontend::DocumentAvailableInMainFrame() {
 
 void ShellDevToolsFrontend::WebContentsDestroyed() {
   if (agent_host_)
-    agent_host_->DetachClient();
+    agent_host_->DetachClient(this);
   delete this;
+}
+
+void ShellDevToolsFrontend::SetPreferences(const std::string& json) {
+  preferences_.Clear();
+  if (json.empty())
+    return;
+  base::DictionaryValue* dict = nullptr;
+  std::unique_ptr<base::Value> parsed = base::JSONReader::Read(json);
+  if (!parsed || !parsed->GetAsDictionary(&dict))
+    return;
+  for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd(); it.Advance()) {
+    if (!it.value().IsType(base::Value::TYPE_STRING))
+      continue;
+    preferences_.SetWithoutPathExpansion(it.key(), it.value().CreateDeepCopy());
+  }
 }
 
 void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend(
@@ -199,11 +214,12 @@ void ShellDevToolsFrontend::HandleMessageFromDevToolsFrontend(
   dict->GetList("params", &params);
 
   if (method == "dispatchProtocolMessage" && params && params->GetSize() == 1) {
+    if (!agent_host_ || !agent_host_->IsAttached())
+      return;
     std::string protocol_message;
     if (!params->GetString(0, &protocol_message))
       return;
-    if (agent_host_)
-      agent_host_->DispatchProtocolMessage(protocol_message);
+    agent_host_->DispatchProtocolMessage(this, protocol_message);
   } else if (method == "loadCompleted") {
     web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(
         base::ASCIIToUTF16("DevToolsAPI.setUseSoftMenu(true);"));

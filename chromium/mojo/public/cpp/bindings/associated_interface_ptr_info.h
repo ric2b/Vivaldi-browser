@@ -18,8 +18,6 @@ namespace mojo {
 // it doesn't own a message pipe handle.
 template <typename Interface>
 class AssociatedInterfacePtrInfo {
-  DISALLOW_COPY_AND_ASSIGN_WITH_MOVE_FOR_BIND(AssociatedInterfacePtrInfo);
-
  public:
   AssociatedInterfacePtrInfo() : version_(0u) {}
 
@@ -57,9 +55,20 @@ class AssociatedInterfacePtrInfo {
   uint32_t version() const { return version_; }
   void set_version(uint32_t version) { version_ = version; }
 
+  bool Equals(const AssociatedInterfacePtrInfo& other) const {
+    if (this == &other)
+      return true;
+
+    // Now that the two refer to different objects, they are equivalent if
+    // and only if they are both invalid.
+    return !is_valid() && !other.is_valid();
+  }
+
  private:
   ScopedInterfaceEndpointHandle handle_;
   uint32_t version_;
+
+  DISALLOW_COPY_AND_ASSIGN(AssociatedInterfacePtrInfo);
 };
 
 }  // namespace mojo

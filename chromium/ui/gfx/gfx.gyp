@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 {
-  'variables': {
+ 'variables': {
     'chromium_code': 1,
   },
   'targets': [
@@ -65,6 +65,29 @@
       ],
       'includes': [
         '../../build/android/increase_size_for_speed.gypi',
+      ],
+    },
+    {
+      # GN version: //ui/gfx/geometry/mojo
+      'target_name': 'mojo_geometry_bindings_mojom',
+      'type': 'none',
+      'variables': {
+        'mojom_files': [
+          'geometry/mojo/geometry.mojom',
+        ],
+        'mojom_typemaps': [
+          'geometry/mojo/geometry.typemap',
+        ],
+      },
+      'includes': [ '../../mojo/mojom_bindings_generator_explicit.gypi' ],
+    },
+    {
+      # GN version: //ui/gfx/geometry/mojo
+      'target_name': 'mojo_geometry_bindings',
+      'type': 'static_library',
+      'dependencies': [
+        'mojo_geometry_bindings_mojom',
+        '../../mojo/mojo_public.gyp:mojo_cpp_bindings',
       ],
     },
     {
@@ -173,10 +196,10 @@
         'color_analysis.cc',
         'color_analysis.h',
         'color_palette.h',
-        'color_profile.cc',
-        'color_profile.h',
-        'color_profile_mac.mm',
-        'color_profile_win.cc',
+        'color_space.cc',
+        'color_space.h',
+        'color_space_mac.mm',
+        'color_space_win.cc',
         'color_utils.cc',
         'color_utils.h',
         'favicon_size.cc',
@@ -246,6 +269,7 @@
         'mac/nswindow_frame_controls.h',
         'mac/nswindow_frame_controls.mm',
         'mac/scoped_cocoa_disable_screen_updates.h',
+        'native_pixmap_handle_ozone.cc',
         'native_pixmap_handle_ozone.h',
         'native_widget_types.h',
         'nine_image_painter.cc',
@@ -286,6 +310,8 @@
         'scoped_ui_graphics_push_context_ios.mm',
         'scrollbar_size.cc',
         'scrollbar_size.h',
+        'selection_bound.cc',
+        'selection_bound.h',
         'selection_model.cc',
         'selection_model.h',
         'sequential_id_generator.cc',
@@ -330,6 +356,8 @@
         'win/singleton_hwnd.h',
         'win/singleton_hwnd_observer.cc',
         'win/singleton_hwnd_observer.h',
+        'win/text_analysis_source.cc',
+        'win/text_analysis_source.h',
         'win/window_impl.cc',
         'win/window_impl.h',
       ],

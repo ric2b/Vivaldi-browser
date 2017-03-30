@@ -22,46 +22,8 @@ namespace {
 // Android MediaCodec can only output 16bit PCM audio.
 const int kBytesPerOutputSample = 2;
 
-// Valid MediaCodec buffer indexes are zero or positive.
-const int kInvalidBufferIndex = -1;
-
-inline const base::TimeDelta DecodePollDelay() {
-  return base::TimeDelta::FromMilliseconds(10);
-}
-
-inline const base::TimeDelta NoWaitTimeout() {
-  return base::TimeDelta::FromMicroseconds(0);
-}
-
-inline const base::TimeDelta IdleTimerTimeout() {
-  return base::TimeDelta::FromSeconds(1);
-}
-
 inline int GetChannelCount(const AudioDecoderConfig& config) {
   return ChannelLayoutToChannelCount(config.channel_layout());
-}
-
-std::unique_ptr<MediaCodecBridge> CreateMediaCodec(
-    const AudioDecoderConfig& config,
-    jobject media_crypto) {
-  DVLOG(1) << __FUNCTION__ << ": config:" << config.AsHumanReadableString();
-
-  std::unique_ptr<AudioCodecBridge> audio_codec_bridge(
-      AudioCodecBridge::Create(config.codec()));
-  if (!audio_codec_bridge) {
-    DVLOG(0) << __FUNCTION__ << " failed: cannot create AudioCodecBridge";
-    return nullptr;
-  }
-
-  const bool do_play = false;  // Do not create AudioTrack object.
-
-  if (!audio_codec_bridge->ConfigureAndStart(config, do_play, media_crypto)) {
-    DVLOG(0) << __FUNCTION__ << " failed: cannot configure audio codec for "
-             << config.AsHumanReadableString();
-    return nullptr;
-  }
-
-  return std::move(audio_codec_bridge);
 }
 
 // Converts interleaved data into planar data and writes it to |planes|.
@@ -94,7 +56,6 @@ MediaCodecAudioDecoder::MediaCodecAudioDecoder(
     : task_runner_(task_runner),
       state_(STATE_UNINITIALIZED),
       channel_count_(0),
-      pending_input_buf_index_(kInvalidBufferIndex),
       media_drm_bridge_cdm_context_(nullptr),
       cdm_registration_id_(0),
       weak_factory_(this) {
@@ -104,10 +65,15 @@ MediaCodecAudioDecoder::MediaCodecAudioDecoder(
 MediaCodecAudioDecoder::~MediaCodecAudioDecoder() {
   DVLOG(1) << __FUNCTION__;
 
-  media_codec_.reset();
+  codec_loop_.reset();
 
   if (media_drm_bridge_cdm_context_) {
     DCHECK(cdm_registration_id_);
+
+    // Cancel previously registered callback (if any).
+    media_drm_bridge_cdm_context_->SetMediaCryptoReadyCB(
+        MediaDrmBridgeCdmContext::MediaCryptoReadyCB());
+
     media_drm_bridge_cdm_context_->UnregisterPlayer(cdm_registration_id_);
   }
 
@@ -156,14 +122,45 @@ void MediaCodecAudioDecoder::Initialize(const AudioDecoderConfig& config,
     return;
   }
 
-  media_codec_ = CreateMediaCodec(config_, nullptr);
-  if (!media_codec_) {
+  if (!CreateMediaCodecLoop()) {
     bound_init_cb.Run(false);
     return;
   }
 
+  // Guess the channel count from |config_| in case OnOutputFormatChanged
+  // that delivers the true count is not called before the first data arrives.
+  // It seems upon certain input errors a codec may substitute silence and
+  // not call OnOutputFormatChanged in this case.
+  channel_count_ = GetChannelCount(config_);
+
   SetState(STATE_READY);
   bound_init_cb.Run(true);
+}
+
+bool MediaCodecAudioDecoder::CreateMediaCodecLoop() {
+  DVLOG(1) << __FUNCTION__ << ": config:" << config_.AsHumanReadableString();
+
+  codec_loop_.reset();
+
+  std::unique_ptr<AudioCodecBridge> audio_codec_bridge(
+      AudioCodecBridge::Create(config_.codec()));
+  if (!audio_codec_bridge) {
+    DLOG(ERROR) << __FUNCTION__ << " failed: cannot create AudioCodecBridge";
+    return false;
+  }
+
+  jobject media_crypto_obj = media_crypto_ ? media_crypto_->obj() : nullptr;
+
+  if (!audio_codec_bridge->ConfigureAndStart(config_, false /* no AudioTrack */,
+                                             media_crypto_obj)) {
+    DLOG(ERROR) << __FUNCTION__ << " failed: cannot configure audio codec for "
+                << config_.AsHumanReadableString();
+    return false;
+  }
+
+  codec_loop_.reset(new MediaCodecLoop(this, std::move(audio_codec_bridge)));
+
+  return true;
 }
 
 void MediaCodecAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
@@ -177,6 +174,7 @@ void MediaCodecAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
     return;
   }
 
+  // Note that we transition to STATE_ERROR if |codec_loop_| does.
   if (state_ == STATE_ERROR) {
     // We get here if an error happens in DequeueOutput() or Reset().
     DVLOG(2) << __FUNCTION__ << " " << buffer->AsHumanReadableString()
@@ -185,6 +183,8 @@ void MediaCodecAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
     bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
   }
+
+  DCHECK(codec_loop_);
 
   DVLOG(2) << __FUNCTION__ << " " << buffer->AsHumanReadableString();
 
@@ -196,32 +196,20 @@ void MediaCodecAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 
   input_queue_.push_back(std::make_pair(buffer, bound_decode_cb));
 
-  DoIOTask();
+  codec_loop_->DoPendingWork();
 }
 
 void MediaCodecAudioDecoder::Reset(const base::Closure& closure) {
   DVLOG(1) << __FUNCTION__;
 
-  io_timer_.Stop();
-
   ClearInputQueue(DecodeStatus::ABORTED);
 
   // Flush if we can, otherwise completely recreate and reconfigure the codec.
-  // Prior to JellyBean-MR2, flush() had several bugs (b/8125974, b/8347958) so
-  // we have to completely destroy and recreate the codec there.
-  bool success = false;
-  if (state_ != STATE_ERROR && state_ != STATE_DRAINED &&
-      base::android::BuildInfo::GetInstance()->sdk_int() >= 18) {
-    // media_codec_->Reset() calls MediaCodec.flush().
-    success = (media_codec_->Reset() == MEDIA_CODEC_OK);
-  }
+  bool success = codec_loop_->TryFlush();
 
-  if (!success) {
-    media_codec_.reset();
-    jobject media_crypto_obj = media_crypto_ ? media_crypto_->obj() : nullptr;
-    media_codec_ = CreateMediaCodec(config_, media_crypto_obj);
-    success = !!media_codec_;
-  }
+  // If the flush failed, then we have to re-create the codec.
+  if (!success)
+    success = CreateMediaCodecLoop();
 
   // Reset AudioTimestampHelper.
   timestamp_helper_->SetBaseTimestamp(kNoTimestamp());
@@ -263,6 +251,15 @@ void MediaCodecAudioDecoder::SetCdm(CdmContext* cdm_context,
                  weak_factory_.GetWeakPtr(), init_cb)));
 }
 
+void MediaCodecAudioDecoder::OnKeyAdded() {
+  DVLOG(1) << __FUNCTION__;
+
+  // We don't register |codec_loop_| directly with the DRM bridge, since it's
+  // subject to replacement.
+  if (codec_loop_)
+    codec_loop_->OnKeyAdded();
+}
+
 void MediaCodecAudioDecoder::OnMediaCryptoReady(
     const InitCB& init_cb,
     MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
@@ -279,218 +276,68 @@ void MediaCodecAudioDecoder::OnMediaCryptoReady(
   }
 
   DCHECK(!media_crypto->is_null());
+  media_crypto_ = std::move(media_crypto);
 
   // We assume this is a part of the initialization process, thus MediaCodec
   // is not created yet.
-  DCHECK(!media_codec_);
+  DCHECK(!codec_loop_);
 
   // After receiving |media_crypto_| we can configure MediaCodec.
-
-  media_codec_ = CreateMediaCodec(config_, media_crypto->obj());
-  if (!media_codec_) {
+  if (!CreateMediaCodecLoop()) {
     SetState(STATE_UNINITIALIZED);
     init_cb.Run(false);
     return;
   }
 
-  media_crypto_ = std::move(media_crypto);
-
   SetState(STATE_READY);
   init_cb.Run(true);
 }
 
-void MediaCodecAudioDecoder::OnKeyAdded() {
-  DVLOG(1) << __FUNCTION__;
-
-  if (state_ == STATE_WAITING_FOR_KEY)
-    SetState(STATE_READY);
-
-  DoIOTask();
-}
-
-void MediaCodecAudioDecoder::DoIOTask() {
-  if (state_ == STATE_ERROR)
-    return;
-
-  const bool did_input = QueueInput();
-  const bool did_output = DequeueOutput();
-
-  ManageTimer(did_input || did_output);
-}
-
-bool MediaCodecAudioDecoder::QueueInput() {
-  DVLOG(2) << __FUNCTION__;
-
-  bool did_work = false;
-  while (QueueOneInputBuffer())
-    did_work = true;
-
-  return did_work;
-}
-
-bool MediaCodecAudioDecoder::QueueOneInputBuffer() {
-  DVLOG(2) << __FUNCTION__;
-
-  if (input_queue_.empty())
+bool MediaCodecAudioDecoder::IsAnyInputPending() const {
+  if (state_ != STATE_READY)
     return false;
 
-  if (state_ == STATE_WAITING_FOR_KEY || state_ == STATE_DRAINING ||
-      state_ == STATE_DRAINED)
-    return false;
-
-  // DequeueInputBuffer() may set STATE_ERROR.
-  InputBufferInfo input_info = DequeueInputBuffer();
-
-  if (input_info.buf_index == kInvalidBufferIndex) {
-    if (state_ == STATE_ERROR)
-      ClearInputQueue(DecodeStatus::DECODE_ERROR);
-
-    return false;
-  }
-
-  // EnqueueInputBuffer() may set STATE_DRAINING, STATE_WAITING_FOR_KEY or
-  // STATE_ERROR.
-  bool did_work = EnqueueInputBuffer(input_info);
-
-  switch (state_) {
-    case STATE_READY: {
-      const DecodeCB& decode_cb = input_queue_.front().second;
-      decode_cb.Run(DecodeStatus::OK);
-      input_queue_.pop_front();
-    } break;
-
-    case STATE_DRAINING:
-      // After queueing EOS we need to flush decoder, i.e. receive this EOS at
-      // the output, and then call corresponding decoder_cb.
-      // Keep the EOS buffer in the input queue.
-      break;
-
-    case STATE_WAITING_FOR_KEY:
-      // Keep trying to enqueue the same input buffer.
-      // The buffer is owned by us (not the MediaCodec) and is filled with data.
-      break;
-
-    case STATE_ERROR:
-      ClearInputQueue(DecodeStatus::DECODE_ERROR);
-      break;
-
-    default:
-      NOTREACHED() << ": internal error, unexpected state " << AsString(state_);
-      SetState(STATE_ERROR);
-      ClearInputQueue(DecodeStatus::DECODE_ERROR);
-      did_work = false;
-      break;
-  }
-
-  return did_work;
+  return !input_queue_.empty();
 }
 
-MediaCodecAudioDecoder::InputBufferInfo
-MediaCodecAudioDecoder::DequeueInputBuffer() {
+MediaCodecLoop::InputData MediaCodecAudioDecoder::ProvideInputData() {
   DVLOG(2) << __FUNCTION__;
-
-  // Do not dequeue a new input buffer if we failed with MEDIA_CODEC_NO_KEY.
-  // That status does not return the input buffer back to the pool of
-  // available input buffers. We have to reuse it in QueueSecureInputBuffer().
-  if (pending_input_buf_index_ != kInvalidBufferIndex) {
-    InputBufferInfo result(pending_input_buf_index_, true);
-    pending_input_buf_index_ = kInvalidBufferIndex;
-    return result;
-  }
-
-  int input_buf_index = kInvalidBufferIndex;
-
-  media::MediaCodecStatus status =
-      media_codec_->DequeueInputBuffer(NoWaitTimeout(), &input_buf_index);
-  switch (status) {
-    case media::MEDIA_CODEC_DEQUEUE_INPUT_AGAIN_LATER:
-      DVLOG(2) << __FUNCTION__ << ": MEDIA_CODEC_DEQUEUE_INPUT_AGAIN_LATER";
-      break;
-
-    case media::MEDIA_CODEC_ERROR:
-      DVLOG(1) << __FUNCTION__ << ": MEDIA_CODEC_ERROR from DequeInputBuffer";
-      SetState(STATE_ERROR);
-      break;
-
-    case media::MEDIA_CODEC_OK:
-      break;
-
-    default:
-      NOTREACHED() << "Unknown DequeueInputBuffer status " << status;
-      SetState(STATE_ERROR);
-      break;
-  }
-
-  return InputBufferInfo(input_buf_index, false);
-}
-
-bool MediaCodecAudioDecoder::EnqueueInputBuffer(
-    const InputBufferInfo& input_info) {
-  DVLOG(2) << __FUNCTION__ << ": index:" << input_info.buf_index;
-
-  DCHECK_NE(input_info.buf_index, kInvalidBufferIndex);
 
   scoped_refptr<DecoderBuffer> decoder_buffer = input_queue_.front().first;
 
+  MediaCodecLoop::InputData input_data;
   if (decoder_buffer->end_of_stream()) {
-    media_codec_->QueueEOS(input_info.buf_index);
-
-    SetState(STATE_DRAINING);
-    return true;
-  }
-
-  media::MediaCodecStatus status = MEDIA_CODEC_OK;
-
-  const DecryptConfig* decrypt_config = decoder_buffer->decrypt_config();
-  if (decrypt_config && decrypt_config->is_encrypted()) {
-    // A pending buffer is already filled with data, no need to copy it again.
-    const uint8_t* memory =
-        input_info.is_pending ? nullptr : decoder_buffer->data();
-
-    DVLOG(2) << __FUNCTION__ << ": QueueSecureInputBuffer:"
-             << " index:" << input_info.buf_index
-             << " pts:" << decoder_buffer->timestamp()
-             << " size:" << decoder_buffer->data_size();
-
-    status = media_codec_->QueueSecureInputBuffer(
-        input_info.buf_index, memory, decoder_buffer->data_size(),
-        decrypt_config->key_id(), decrypt_config->iv(),
-        decrypt_config->subsamples(), decoder_buffer->timestamp());
-
+    input_data.is_eos = true;
   } else {
-    DVLOG(2) << __FUNCTION__ << ": QueueInputBuffer:"
-             << " index:" << input_info.buf_index
-             << " pts:" << decoder_buffer->timestamp()
-             << " size:" << decoder_buffer->data_size();
-
-    status = media_codec_->QueueInputBuffer(
-        input_info.buf_index, decoder_buffer->data(),
-        decoder_buffer->data_size(), decoder_buffer->timestamp());
+    input_data.memory = static_cast<const uint8_t*>(decoder_buffer->data());
+    input_data.length = decoder_buffer->data_size();
+    const DecryptConfig* decrypt_config = decoder_buffer->decrypt_config();
+    if (decrypt_config && decrypt_config->is_encrypted()) {
+      input_data.is_encrypted = true;
+      input_data.key_id = decrypt_config->key_id();
+      input_data.iv = decrypt_config->iv();
+      input_data.subsamples = decrypt_config->subsamples();
+    }
+    input_data.presentation_time = decoder_buffer->timestamp();
   }
 
-  bool did_work = false;
-  switch (status) {
-    case MEDIA_CODEC_ERROR:
-      DVLOG(0) << __FUNCTION__ << ": MEDIA_CODEC_ERROR from QueueInputBuffer";
-      SetState(STATE_ERROR);
-      break;
+  // We do not pop |input_queue_| here.  MediaCodecLoop may refer to data that
+  // it owns until OnInputDataQueued is called.
 
-    case MEDIA_CODEC_NO_KEY:
-      DVLOG(1) << "QueueSecureInputBuffer failed: MEDIA_CODEC_NO_KEY";
-      pending_input_buf_index_ = input_info.buf_index;
-      SetState(STATE_WAITING_FOR_KEY);
-      break;
+  return input_data;
+}
 
-    case MEDIA_CODEC_OK:
-      did_work = true;
-      break;
+void MediaCodecAudioDecoder::OnInputDataQueued(bool success) {
+  // If this is an EOS buffer, then wait to call back until we are notified that
+  // it has been processed via OnDecodedEos().  If the EOS was not queued
+  // successfully, then we do want to signal error now since there is no queued
+  // EOS to process later.
+  if (input_queue_.front().first->end_of_stream() && success)
+    return;
 
-    default:
-      NOTREACHED() << "Unknown Queue(Secure)InputBuffer status " << status;
-      SetState(STATE_ERROR);
-      break;
-  }
-  return did_work;
+  input_queue_.front().second.Run(success ? DecodeStatus::OK
+                                          : DecodeStatus::DECODE_ERROR);
+  input_queue_.pop_front();
 }
 
 void MediaCodecAudioDecoder::ClearInputQueue(DecodeStatus decode_status) {
@@ -502,126 +349,47 @@ void MediaCodecAudioDecoder::ClearInputQueue(DecodeStatus decode_status) {
   input_queue_.clear();
 }
 
-bool MediaCodecAudioDecoder::DequeueOutput() {
-  DVLOG(2) << __FUNCTION__;
-
-  MediaCodecStatus status;
-  OutputBufferInfo out;
-  bool did_work = false;
-  do {
-    status = media_codec_->DequeueOutputBuffer(NoWaitTimeout(), &out.buf_index,
-                                               &out.offset, &out.size, &out.pts,
-                                               &out.is_eos, &out.is_key_frame);
-
-    switch (status) {
-      case MEDIA_CODEC_OUTPUT_BUFFERS_CHANGED:
-        // Output buffers are replaced in MediaCodecBridge, nothing to do.
-        DVLOG(2) << __FUNCTION__ << " MEDIA_CODEC_OUTPUT_BUFFERS_CHANGED";
-        did_work = true;
-        break;
-
-      case MEDIA_CODEC_OUTPUT_FORMAT_CHANGED:
-        DVLOG(2) << __FUNCTION__ << " MEDIA_CODEC_OUTPUT_FORMAT_CHANGED";
-        OnOutputFormatChanged();
-        did_work = true;
-        break;
-
-      case MEDIA_CODEC_OK:
-        // We got the decoded frame.
-        if (out.is_eos)
-          OnDecodedEos(out);
-        else
-          OnDecodedFrame(out);
-
-        did_work = true;
-        break;
-
-      case MEDIA_CODEC_DEQUEUE_OUTPUT_AGAIN_LATER:
-        // Nothing to do.
-        DVLOG(2) << __FUNCTION__ << " MEDIA_CODEC_DEQUEUE_OUTPUT_AGAIN_LATER";
-        break;
-
-      case MEDIA_CODEC_ERROR:
-        DVLOG(0) << __FUNCTION__
-                 << ": MEDIA_CODEC_ERROR from DequeueOutputBuffer";
-
-        // Next Decode() will report the error to the pipeline.
-        SetState(STATE_ERROR);
-        break;
-
-      default:
-        NOTREACHED() << "Unknown DequeueOutputBuffer status " << status;
-        // Next Decode() will report the error to the pipeline.
-        SetState(STATE_ERROR);
-        break;
-    }
-  } while (status != MEDIA_CODEC_DEQUEUE_OUTPUT_AGAIN_LATER &&
-           status != MEDIA_CODEC_ERROR && !out.is_eos);
-
-  return did_work;
-}
-
-void MediaCodecAudioDecoder::ManageTimer(bool did_work) {
-  bool should_be_running = true;
-
-  base::TimeTicks now = base::TimeTicks::Now();
-  if (did_work || idle_time_begin_ == base::TimeTicks()) {
-    idle_time_begin_ = now;
-  } else {
-    // Make sure that we have done work recently enough, else stop the timer.
-    if (now - idle_time_begin_ > IdleTimerTimeout())
-      should_be_running = false;
-  }
-
-  if (should_be_running && !io_timer_.IsRunning()) {
-    io_timer_.Start(FROM_HERE, DecodePollDelay(), this,
-                    &MediaCodecAudioDecoder::DoIOTask);
-  } else if (!should_be_running && io_timer_.IsRunning()) {
-    io_timer_.Stop();
-  }
-}
-
 void MediaCodecAudioDecoder::SetState(State new_state) {
   DVLOG(1) << __FUNCTION__ << ": " << AsString(state_) << "->"
            << AsString(new_state);
   state_ = new_state;
 }
 
-void MediaCodecAudioDecoder::OnDecodedEos(const OutputBufferInfo& out) {
-  DVLOG(2) << __FUNCTION__ << " pts:" << out.pts;
-
-  DCHECK_NE(out.buf_index, kInvalidBufferIndex);
-  DCHECK(media_codec_);
-
-  DCHECK_EQ(state_, STATE_DRAINING);
-
-  media_codec_->ReleaseOutputBuffer(out.buf_index, false);
-
-  // Report the end of decoding for EOS DecoderBuffer.
-  DCHECK(!input_queue_.empty());
-  DCHECK(input_queue_.front().first->end_of_stream());
-
-  const DecodeCB& decode_cb = input_queue_.front().second;
-  decode_cb.Run(DecodeStatus::OK);
-
-  // Remove the EOS buffer from the input queue.
-  input_queue_.pop_front();
-
-  // Set state STATE_DRAINED after we have received EOS frame at the output.
-  // media_decoder_job.cc says: once output EOS has occurred, we should
-  // not be asked to decode again.
-  SetState(STATE_DRAINED);
+void MediaCodecAudioDecoder::OnCodecLoopError() {
+  // If the codec transitions into the error state, then so should we.
+  SetState(STATE_ERROR);
+  ClearInputQueue(DecodeStatus::DECODE_ERROR);
 }
 
-void MediaCodecAudioDecoder::OnDecodedFrame(const OutputBufferInfo& out) {
+void MediaCodecAudioDecoder::OnDecodedEos(
+    const MediaCodecLoop::OutputBuffer& out) {
+  DVLOG(2) << __FUNCTION__ << " pts:" << out.pts;
+
+  // If we've transitioned into the error state, then we don't really know what
+  // to do.  If we transitioned because of OnCodecError, then all of our
+  // buffers have been returned anyway.  Otherwise, it's unclear.  Note that
+  // MCL does not call us back after OnCodecError(), since it stops decoding.
+  // So, we shouldn't be in that state.  So, just DCHECK here.
+  DCHECK_NE(state_, STATE_ERROR);
+  DCHECK(input_queue_.size());
+  DCHECK(input_queue_.front().first->end_of_stream());
+  input_queue_.front().second.Run(DecodeStatus::OK);
+  input_queue_.pop_front();
+}
+
+bool MediaCodecAudioDecoder::OnDecodedFrame(
+    const MediaCodecLoop::OutputBuffer& out) {
   DVLOG(2) << __FUNCTION__ << " pts:" << out.pts;
 
   DCHECK_NE(out.size, 0U);
-  DCHECK_NE(out.buf_index, kInvalidBufferIndex);
-  DCHECK(media_codec_);
+  DCHECK_NE(out.index, MediaCodecLoop::kInvalidBufferIndex);
+  DCHECK(codec_loop_);
+  MediaCodecBridge* media_codec = codec_loop_->GetCodec();
+  DCHECK(media_codec);
 
   // For proper |frame_count| calculation we need to use the actual number
   // of channels which can be different from |config_| value.
+  DCHECK_GT(channel_count_, 0);
   const int bytes_per_frame = kBytesPerOutputSample * channel_count_;
   const size_t frame_count = out.size / bytes_per_frame;
 
@@ -639,24 +407,26 @@ void MediaCodecAudioDecoder::OnDecodedFrame(const OutputBufferInfo& out) {
     // Copy data into AudioBuffer.
     CHECK_LE(out.size, audio_buffer->data_size());
 
-    MediaCodecStatus status = media_codec_->CopyFromOutputBuffer(
-        out.buf_index, out.offset, audio_buffer->channel_data()[0], out.size);
+    MediaCodecStatus status = media_codec->CopyFromOutputBuffer(
+        out.index, out.offset, audio_buffer->channel_data()[0], out.size);
 
-    // TODO(timav,watk): This CHECK maintains the behavior of this call before
-    // we started catching CodecException and returning it as MEDIA_CODEC_ERROR.
-    // It needs to be handled some other way. http://crbug.com/585978
-    CHECK_EQ(status, MEDIA_CODEC_OK);
+    if (status != MEDIA_CODEC_OK) {
+      media_codec->ReleaseOutputBuffer(out.index, false);
+      return false;
+    }
   } else {
     // Separate the planes while copying MediaCodec buffer into AudioBuffer.
     DCHECK_LT(channel_count_, config_channel_count);
 
     const uint8_t* interleaved_data = nullptr;
     size_t interleaved_capacity = 0;
-    MediaCodecStatus status = media_codec_->GetOutputBufferAddress(
-        out.buf_index, out.offset, &interleaved_data, &interleaved_capacity);
+    MediaCodecStatus status = media_codec->GetOutputBufferAddress(
+        out.index, out.offset, &interleaved_data, &interleaved_capacity);
 
-    // TODO(timav): Handle wrong status properly, http://crbug.com/585978.
-    CHECK_EQ(status, MEDIA_CODEC_OK);
+    if (status != MEDIA_CODEC_OK) {
+      media_codec->ReleaseOutputBuffer(out.index, false);
+      return false;
+    }
 
     DCHECK_LE(out.size, interleaved_capacity);
 
@@ -666,7 +436,7 @@ void MediaCodecAudioDecoder::OnDecodedFrame(const OutputBufferInfo& out) {
   }
 
   // Release MediaCodec output buffer.
-  media_codec_->ReleaseOutputBuffer(out.buf_index, false);
+  media_codec->ReleaseOutputBuffer(out.index, false);
 
   // Calculate and set buffer timestamp.
 
@@ -682,18 +452,23 @@ void MediaCodecAudioDecoder::OnDecodedFrame(const OutputBufferInfo& out) {
 
   // Call the |output_cb_|.
   output_cb_.Run(audio_buffer);
+
+  return true;
 }
 
-void MediaCodecAudioDecoder::OnOutputFormatChanged() {
+bool MediaCodecAudioDecoder::OnOutputFormatChanged() {
   DVLOG(2) << __FUNCTION__;
+  MediaCodecBridge* media_codec = codec_loop_->GetCodec();
+
+  // Note that if we return false to transition |codec_loop_| to the error
+  // state, then we'll also transition to the error state when it notifies us.
 
   int new_sampling_rate = 0;
   MediaCodecStatus status =
-      media_codec_->GetOutputSamplingRate(&new_sampling_rate);
+      media_codec->GetOutputSamplingRate(&new_sampling_rate);
   if (status != MEDIA_CODEC_OK) {
     DLOG(ERROR) << "GetOutputSamplingRate failed.";
-    SetState(STATE_ERROR);
-    return;
+    return false;
   }
   if (new_sampling_rate != config_.samples_per_second()) {
     // We do not support the change of sampling rate on the fly
@@ -701,15 +476,13 @@ void MediaCodecAudioDecoder::OnOutputFormatChanged() {
                 << GetDisplayName() << " (detected change "
                 << config_.samples_per_second() << "->" << new_sampling_rate
                 << ")";
-    SetState(STATE_ERROR);
-    return;
+    return false;
   }
 
-  status = media_codec_->GetOutputChannelCount(&channel_count_);
+  status = media_codec->GetOutputChannelCount(&channel_count_);
   if (status != MEDIA_CODEC_OK) {
     DLOG(ERROR) << "GetOutputChannelCount failed.";
-    SetState(STATE_ERROR);
-    return;
+    return false;
   }
 
   const int config_channel_count = GetChannelCount(config_);
@@ -719,9 +492,10 @@ void MediaCodecAudioDecoder::OnOutputFormatChanged() {
   if (channel_count_ > config_channel_count) {
     DLOG(ERROR) << "Actual channel count " << channel_count_
                 << " is greater than configured " << config_channel_count;
-    SetState(STATE_ERROR);
-    return;
+    return false;
   }
+
+  return true;
 }
 
 #undef RETURN_STRING
@@ -735,9 +509,6 @@ const char* MediaCodecAudioDecoder::AsString(State state) {
     RETURN_STRING(STATE_UNINITIALIZED);
     RETURN_STRING(STATE_WAITING_FOR_MEDIA_CRYPTO);
     RETURN_STRING(STATE_READY);
-    RETURN_STRING(STATE_WAITING_FOR_KEY);
-    RETURN_STRING(STATE_DRAINING);
-    RETURN_STRING(STATE_DRAINED);
     RETURN_STRING(STATE_ERROR);
   }
   NOTREACHED() << "Unknown state " << state;

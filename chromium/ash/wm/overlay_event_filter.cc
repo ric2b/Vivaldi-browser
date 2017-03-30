@@ -11,9 +11,7 @@
 
 namespace ash {
 
-OverlayEventFilter::OverlayEventFilter()
-    : delegate_(NULL) {
-}
+OverlayEventFilter::OverlayEventFilter() : delegate_(NULL) {}
 
 OverlayEventFilter::~OverlayEventFilter() {
   delegate_ = NULL;
@@ -34,8 +32,7 @@ void OverlayEventFilter::OnKeyEvent(ui::KeyEvent* event) {
     event->StopPropagation();
 }
 
-void OverlayEventFilter::OnLoginStateChanged(
-    user::LoginStatus status) {
+void OverlayEventFilter::OnLoginStateChanged(LoginStatus status) {
   Cancel();
 }
 

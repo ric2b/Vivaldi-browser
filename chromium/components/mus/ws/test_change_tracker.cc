@@ -25,11 +25,6 @@ std::string WindowIdToString(Id id) {
 
 namespace {
 
-std::string RectToString(const mojo::Rect& rect) {
-  return base::StringPrintf("%d,%d %dx%d", rect.x, rect.y, rect.width,
-                            rect.height);
-}
-
 std::string DirectionToString(mojom::OrderDirection direction) {
   return direction == mojom::OrderDirection::ABOVE ? "above" : "below";
 }
@@ -69,12 +64,7 @@ std::string ChangeToDescription(const Change& change,
       return base::StringPrintf(
           "BoundsChanged window=%s old_bounds=%s new_bounds=%s",
           WindowIdToString(change.window_id).c_str(),
-          RectToString(change.bounds).c_str(),
-          RectToString(change.bounds2).c_str());
-
-    case CHANGE_TYPE_NODE_VIEWPORT_METRICS_CHANGED:
-      // TODO(sky): Not implemented.
-      return "ViewportMetricsChanged";
+          change.bounds.ToString().c_str(), change.bounds2.ToString().c_str());
 
     case CHANGE_TYPE_NODE_HIERARCHY_CHANGED:
       return base::StringPrintf(
@@ -221,7 +211,7 @@ void WindowDatasToTestWindows(const Array<mojom::WindowDataPtr>& data,
 
 Change::Change()
     : type(CHANGE_TYPE_EMBED),
-      connection_id(0),
+      client_id(0),
       window_id(0),
       window_id2(0),
       window_id3(0),
@@ -241,12 +231,12 @@ TestChangeTracker::TestChangeTracker() : delegate_(NULL) {}
 
 TestChangeTracker::~TestChangeTracker() {}
 
-void TestChangeTracker::OnEmbed(ConnectionSpecificId connection_id,
+void TestChangeTracker::OnEmbed(ClientSpecificId client_id,
                                 mojom::WindowDataPtr root,
                                 bool drawn) {
   Change change;
   change.type = CHANGE_TYPE_EMBED;
-  change.connection_id = connection_id;
+  change.client_id = client_id;
   change.bool_value = drawn;
   change.windows.push_back(WindowDataToTestWindow(root));
   AddChange(change);
@@ -260,19 +250,13 @@ void TestChangeTracker::OnEmbeddedAppDisconnected(Id window_id) {
 }
 
 void TestChangeTracker::OnWindowBoundsChanged(Id window_id,
-                                              mojo::RectPtr old_bounds,
-                                              mojo::RectPtr new_bounds) {
+                                              const gfx::Rect& old_bounds,
+                                              const gfx::Rect& new_bounds) {
   Change change;
   change.type = CHANGE_TYPE_NODE_BOUNDS_CHANGED;
   change.window_id = window_id;
-  change.bounds.x = old_bounds->x;
-  change.bounds.y = old_bounds->y;
-  change.bounds.width = old_bounds->width;
-  change.bounds.height = old_bounds->height;
-  change.bounds2.x = new_bounds->x;
-  change.bounds2.y = new_bounds->y;
-  change.bounds2.width = new_bounds->width;
-  change.bounds2.height = new_bounds->height;
+  change.bounds = old_bounds;
+  change.bounds2 = new_bounds;
   AddChange(change);
 }
 
@@ -305,15 +289,6 @@ void TestChangeTracker::OnLostCapture(Id window_id) {
   Change change;
   change.type = CHANGE_TYPE_LOST_CAPTURE;
   change.window_id = window_id;
-  AddChange(change);
-}
-
-void TestChangeTracker::OnWindowViewportMetricsChanged(
-    mojom::ViewportMetricsPtr old_metrics,
-    mojom::ViewportMetricsPtr new_metrics) {
-  Change change;
-  change.type = CHANGE_TYPE_NODE_VIEWPORT_METRICS_CHANGED;
-  // NOT IMPLEMENTED
   AddChange(change);
 }
 
@@ -375,21 +350,21 @@ void TestChangeTracker::OnWindowParentDrawnStateChanged(Id window_id,
 }
 
 void TestChangeTracker::OnWindowInputEvent(Id window_id,
-                                           mojom::EventPtr event,
+                                           const ui::Event& event,
                                            uint32_t event_observer_id) {
   Change change;
   change.type = CHANGE_TYPE_INPUT_EVENT;
   change.window_id = window_id;
-  change.event_action = static_cast<int32_t>(event->action);
+  change.event_action = static_cast<int32_t>(event.type());
   change.event_observer_id = event_observer_id;
   AddChange(change);
 }
 
-void TestChangeTracker::OnEventObserved(mojom::EventPtr event,
+void TestChangeTracker::OnEventObserved(const ui::Event& event,
                                         uint32_t event_observer_id) {
   Change change;
   change.type = CHANGE_TYPE_EVENT_OBSERVED;
-  change.event_action = static_cast<int32_t>(event->action);
+  change.event_action = static_cast<int32_t>(event.type());
   change.event_observer_id = event_observer_id;
   AddChange(change);
 }

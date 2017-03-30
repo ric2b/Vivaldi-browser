@@ -24,10 +24,12 @@ URLRequestContext::URLRequestContext()
       http_auth_handler_factory_(nullptr),
       proxy_service_(nullptr),
       network_delegate_(nullptr),
+      http_server_properties_(nullptr),
       http_user_agent_settings_(nullptr),
       cookie_store_(nullptr),
       transport_security_state_(nullptr),
       cert_transparency_verifier_(nullptr),
+      ct_policy_enforcer_(nullptr),
       http_transaction_factory_(nullptr),
       job_factory_(nullptr),
       throttler_manager_(nullptr),
@@ -35,8 +37,8 @@ URLRequestContext::URLRequestContext()
       sdch_manager_(nullptr),
       network_quality_estimator_(nullptr),
       url_requests_(new std::set<const URLRequest*>),
-      has_known_mismatched_cookie_store_(false),
-      enable_brotli_(false) {}
+      enable_brotli_(false),
+      enable_referrer_policy_header_(false) {}
 
 URLRequestContext::~URLRequestContext() {
   AssertNoURLRequests();
@@ -56,6 +58,7 @@ void URLRequestContext::CopyFrom(const URLRequestContext* other) {
   set_cookie_store(other->cookie_store_);
   set_transport_security_state(other->transport_security_state_);
   set_cert_transparency_verifier(other->cert_transparency_verifier_);
+  set_ct_policy_enforcer(other->ct_policy_enforcer_);
   set_http_transaction_factory(other->http_transaction_factory_);
   set_job_factory(other->job_factory_);
   set_throttler_manager(other->throttler_manager_);
@@ -64,6 +67,7 @@ void URLRequestContext::CopyFrom(const URLRequestContext* other) {
   set_http_user_agent_settings(other->http_user_agent_settings_);
   set_network_quality_estimator(other->network_quality_estimator_);
   set_enable_brotli(other->enable_brotli_);
+  set_enable_referrer_policy_header(other->enable_referrer_policy_header_);
 }
 
 const HttpNetworkSession::Params* URLRequestContext::GetNetworkSessionParams(

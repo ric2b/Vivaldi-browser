@@ -48,7 +48,7 @@ static DatabaseManager* s_databaseManager;
 
 DatabaseManager& DatabaseManager::manager()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     if (!s_databaseManager)
         s_databaseManager = new DatabaseManager();
     return *s_databaseManager;
@@ -56,7 +56,7 @@ DatabaseManager& DatabaseManager::manager()
 
 void DatabaseManager::terminateDatabaseThread()
 {
-    ASSERT(isMainThread());
+    DCHECK(isMainThread());
     if (!s_databaseManager)
         return;
     for (const Member<DatabaseContext>& context : s_databaseManager->m_contextMap.values())
@@ -75,33 +75,11 @@ DatabaseManager::~DatabaseManager()
 {
 }
 
-class DatabaseCreationCallbackTask final : public ExecutionContextTask {
-public:
-    static std::unique_ptr<DatabaseCreationCallbackTask> create(Database* database, DatabaseCallback* creationCallback)
-    {
-        return wrapUnique(new DatabaseCreationCallbackTask(database, creationCallback));
-    }
-
-    void performTask(ExecutionContext*) override
-    {
-        m_creationCallback->handleEvent(m_database.get());
-    }
-
-    String taskNameForInstrumentation() const override
-    {
-        return "openDatabase";
-    }
-
-private:
-    DatabaseCreationCallbackTask(Database* database, DatabaseCallback* callback)
-        : m_database(database)
-        , m_creationCallback(callback)
-    {
-    }
-
-    Persistent<Database> m_database;
-    Persistent<DatabaseCallback> m_creationCallback;
-};
+// This is just for ignoring DatabaseCallback::handleEvent()'s return value.
+static void databaseCallbackHandleEvent(DatabaseCallback* callback, Database* database)
+{
+    callback->handleEvent(database);
+}
 
 DatabaseContext* DatabaseManager::existingDatabaseContextFor(ExecutionContext* context)
 {
@@ -174,7 +152,7 @@ static void logOpenDatabaseError(ExecutionContext* context, const String& name)
 
 Database* DatabaseManager::openDatabaseInternal(ExecutionContext* context,
     const String& name, const String& expectedVersion, const String& displayName,
-    unsigned long estimatedSize, bool setVersionInNewDatabase, DatabaseError& error, String& errorMessage)
+    unsigned estimatedSize, bool setVersionInNewDatabase, DatabaseError& error, String& errorMessage)
 {
     ASSERT(error == DatabaseError::None);
 
@@ -203,7 +181,7 @@ Database* DatabaseManager::openDatabaseInternal(ExecutionContext* context,
 
 Database* DatabaseManager::openDatabase(ExecutionContext* context,
     const String& name, const String& expectedVersion, const String& displayName,
-    unsigned long estimatedSize, DatabaseCallback* creationCallback,
+    unsigned estimatedSize, DatabaseCallback* creationCallback,
     DatabaseError& error, String& errorMessage)
 {
     ASSERT(error == DatabaseError::None);
@@ -219,7 +197,7 @@ Database* DatabaseManager::openDatabase(ExecutionContext* context,
 
     if (database->isNew() && creationCallback) {
         WTF_LOG(StorageAPI, "Scheduling DatabaseCreationCallbackTask for database %p\n", database);
-        database->getExecutionContext()->postTask(BLINK_FROM_HERE, DatabaseCreationCallbackTask::create(database, creationCallback));
+        database->getExecutionContext()->postTask(BLINK_FROM_HERE, createSameThreadTask(&databaseCallbackHandleEvent, wrapPersistent(creationCallback), wrapPersistent(database)), "openDatabase");
     }
 
     ASSERT(database);

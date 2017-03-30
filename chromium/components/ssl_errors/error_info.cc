@@ -131,12 +131,6 @@ ErrorInfo ErrorInfo::CreateError(ErrorType error_type,
       short_description =
           l10n_util::GetStringUTF16(IDS_CERT_ERROR_WEAK_KEY_DESCRIPTION);
       break;
-    case CERT_WEAK_KEY_DH:
-      details = l10n_util::GetStringFUTF16(IDS_CERT_ERROR_WEAK_KEY_DETAILS,
-                                           UTF8ToUTF16(request_url.host()));
-      short_description =
-          l10n_util::GetStringUTF16(IDS_CERT_ERROR_WEAK_KEY_DESCRIPTION);
-      break;
     case CERT_NAME_CONSTRAINT_VIOLATION:
       details = l10n_util::GetStringFUTF16(
           IDS_CERT_ERROR_NAME_CONSTRAINT_VIOLATION_DETAILS,
@@ -162,6 +156,12 @@ ErrorInfo ErrorInfo::CreateError(ErrorType error_type,
           IDS_CERT_ERROR_UNABLE_TO_CHECK_REVOCATION_DETAILS);
       short_description = l10n_util::GetStringUTF16(
           IDS_CERT_ERROR_UNABLE_TO_CHECK_REVOCATION_DESCRIPTION);
+      break;
+    case CERTIFICATE_TRANSPARENCY_REQUIRED:
+      details = l10n_util::GetStringUTF16(
+          IDS_CERT_ERROR_CERTIFICATE_TRANSPARENCY_REQUIRED_DETAILS);
+      short_description = l10n_util::GetStringUTF16(
+          IDS_CERT_ERROR_CERTIFICATE_TRANSPARENCY_REQUIRED_DESCRIPTION);
       break;
     case UNKNOWN:
       details = l10n_util::GetStringUTF16(IDS_CERT_ERROR_UNKNOWN_ERROR_DETAILS);
@@ -203,10 +203,10 @@ ErrorInfo::ErrorType ErrorInfo::NetErrorToErrorType(int net_error) {
       return CERT_NAME_CONSTRAINT_VIOLATION;
     case net::ERR_CERT_VALIDITY_TOO_LONG:
       return CERT_VALIDITY_TOO_LONG;
-    case net::ERR_SSL_WEAK_SERVER_EPHEMERAL_DH_KEY:
-      return CERT_WEAK_KEY_DH;
     case net::ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN:
       return CERT_PINNED_KEY_MISSING;
+    case net::ERR_CERTIFICATE_TRANSPARENCY_REQUIRED:
+      return CERTIFICATE_TRANSPARENCY_REQUIRED;
     default:
       NOTREACHED();
       return UNKNOWN;
@@ -231,6 +231,7 @@ void ErrorInfo::GetErrorsForCertStatus(
       net::CERT_STATUS_WEAK_KEY,
       net::CERT_STATUS_NAME_CONSTRAINT_VIOLATION,
       net::CERT_STATUS_VALIDITY_TOO_LONG,
+      net::CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED,
   };
 
   const ErrorType kErrorTypes[] = {
@@ -245,6 +246,7 @@ void ErrorInfo::GetErrorsForCertStatus(
       CERT_WEAK_KEY,
       CERT_NAME_CONSTRAINT_VIOLATION,
       CERT_VALIDITY_TOO_LONG,
+      CERTIFICATE_TRANSPARENCY_REQUIRED,
   };
   DCHECK(arraysize(kErrorFlags) == arraysize(kErrorTypes));
 

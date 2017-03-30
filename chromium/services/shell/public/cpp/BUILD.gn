@@ -21,8 +21,11 @@ source_set("sources") {
     "interface_binder.h",
     "interface_factory.h",
     "interface_factory_impl.h",
+    "interface_provider.h",
     "interface_registry.h",
     "lib/application_runner.cc",
+    "lib/callback_binder.cc",
+    "lib/callback_binder.h",
     "lib/capabilities.cc",
     "lib/connection_impl.cc",
     "lib/connection_impl.h",
@@ -30,6 +33,7 @@ source_set("sources") {
     "lib/connector_impl.h",
     "lib/identity.cc",
     "lib/interface_factory_binder.h",
+    "lib/interface_provider.cc",
     "lib/interface_registry.cc",
     "lib/names.cc",
     "lib/shell_client.cc",
@@ -50,40 +54,41 @@ source_set("sources") {
   ]
 }
 
-source_set("application_support") {
-  sources = [
-    "lib/init_commandline.cc",
-    "lib/initialize_base_and_icu.cc",
-  ]
+if (!is_ios) {
+  source_set("application_support") {
+    sources = [
+      "lib/init_commandline.cc",
+      "lib/initialize_base_and_icu.cc",
+    ]
 
-  deps = [
-    "//base",
-    "//base:i18n",
-    "//mojo/public/c/system",
-  ]
-}
+    deps = [
+      "//base",
+      "//base:i18n",
+      "//mojo/public/c/system",
+    ]
+  }
 
-source_set("shell_test_support") {
-  testonly = true
-  sources = [
-    "lib/shell_test.cc",
-    "shell_test.h",
-  ]
+  source_set("shell_test_support") {
+    testonly = true
+    sources = [
+      "lib/shell_test.cc",
+      "shell_test.h",
+    ]
 
-  public_deps = [
-    ":cpp",
-    "//testing/gtest",
-  ]
+    public_deps = [
+      ":cpp",
+      "//testing/gtest",
+    ]
 
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//mojo/logging",
-    "//mojo/public/cpp/bindings",
-    "//mojo/public/cpp/system",
-    "//services/shell/background:lib",
-    "//services/shell/public/interfaces:interfaces_cpp_sources",
-  ]
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//mojo/public/cpp/bindings",
+      "//mojo/public/cpp/system",
+      "//services/shell/background:lib",
+      "//services/shell/public/interfaces:interfaces_cpp_sources",
+    ]
 
-  data_deps = []
+    data_deps = []
+  }
 }

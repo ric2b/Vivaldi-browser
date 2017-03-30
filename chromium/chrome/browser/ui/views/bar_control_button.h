@@ -15,10 +15,6 @@ namespace gfx {
 enum class VectorIconId;
 }
 
-namespace views {
-class InkDropDelegate;
-}
-
 // A class for buttons that control bars (find bar, download shelf, etc.). The
 // button has an image and no text.
 class BarControlButton : public views::ImageButton {
@@ -38,9 +34,6 @@ class BarControlButton : public views::ImageButton {
  private:
   gfx::VectorIconId id_;
   base::Callback<SkColor(void)> get_text_color_callback_;
-
-  // Controls the visual feedback for the button state.
-  std::unique_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(BarControlButton);
 };

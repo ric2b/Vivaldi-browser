@@ -91,7 +91,6 @@ class WebMediaStream;
 class WebMediaStreamCenter;
 class WebMediaStreamCenterClient;
 class WebMediaStreamTrack;
-class WebMemoryDumpProvider;
 class WebMessagePortChannel;
 class WebMimeRegistry;
 class WebNotificationManager;
@@ -370,12 +369,6 @@ public:
     // Returns true on success.
     virtual bool loadAudioResource(WebAudioBus* destinationBus, const char* audioFileData, size_t dataSize) { return false; }
 
-    // Screen -------------------------------------------------------------
-
-    // Supplies the system monitor color profile.
-    virtual void screenColorProfile(WebVector<char>* profile) { }
-
-
     // Scrollbar ----------------------------------------------------------
 
     // Must return non-null.
@@ -408,7 +401,7 @@ public:
     virtual WebURLLoaderMockFactory* getURLLoaderMockFactory() { return nullptr; }
 
     // Record to a RAPPOR privacy-preserving metric, see: https://www.chromium.org/developers/design-documents/rappor.
-    // recordRappor records a sample string, while recordRapporURL records the domain and registry of a url.
+    // recordRappor records a sample string, while recordRapporURL records the eTLD+1 of a url.
     virtual void recordRappor(const char* metric, const WebString& sample) { }
     virtual void recordRapporURL(const char* metric, const blink::WebURL& url) { }
 
@@ -417,16 +410,6 @@ public:
     // that script for more details.  Intended use is:
     // recordAction(UserMetricsAction("MyAction"))
     virtual void recordAction(const UserMetricsAction&) { }
-
-    // Registers a memory dump provider. The WebMemoryDumpProvider::onMemoryDump
-    // method will be called on the same thread that called the
-    // registerMemoryDumpProvider() method. |name| is used for debugging
-    // (duplicates are allowed) and must be a long-lived C string.
-    // See crbug.com/458295 for design docs.
-    virtual void registerMemoryDumpProvider(blink::WebMemoryDumpProvider*, const char* name);
-
-    // Must be called on the thread that called registerMemoryDumpProvider().
-    virtual void unregisterMemoryDumpProvider(blink::WebMemoryDumpProvider*);
 
     class TraceLogEnabledStateObserver {
     public:
@@ -515,7 +498,8 @@ public:
 
     // Fills in the WebMediaStream to capture from the WebMediaPlayer identified
     // by the second parameter.
-    virtual void createHTMLVideoElementCapturer(WebMediaStream*, WebMediaPlayer*) {}
+    virtual void createHTMLVideoElementCapturer(WebMediaStream*, WebMediaPlayer*) { }
+    virtual void createHTMLAudioElementCapturer(WebMediaStream*, WebMediaPlayer*) { }
 
     // Creates a WebImageCaptureFrameGrabber to take a snapshot of a Video Tracks.
     // May return null if the functionality is not available.
@@ -526,6 +510,7 @@ public:
     virtual void didStartWorkerThread() { }
     virtual void willStopWorkerThread() { }
     virtual void workerContextCreated(const v8::Local<v8::Context>& worker) { }
+    virtual bool allowScriptExtensionForServiceWorker(const WebURL& scriptUrl) { return false; }
 
     // WebCrypto ----------------------------------------------------------
 

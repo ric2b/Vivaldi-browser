@@ -34,6 +34,10 @@ BluetoothTestAndroid::~BluetoothTestAndroid() {
 void BluetoothTestAndroid::SetUp() {
   // Register in SetUp so that ASSERT can be used.
   ASSERT_TRUE(RegisterNativesImpl(AttachCurrentThread()));
+
+  // Set the permission to true so that we can use the API.
+  Java_Fakes_setLocationServicesState(
+      AttachCurrentThread(), true /* hasPermission */, true /* isEnabled */);
 }
 
 void BluetoothTestAndroid::TearDown() {
@@ -68,8 +72,8 @@ void BluetoothTestAndroid::InitWithFakeAdapter() {
 }
 
 bool BluetoothTestAndroid::DenyPermission() {
-  Java_FakeBluetoothAdapter_denyPermission(AttachCurrentThread(),
-                                           j_fake_bluetooth_adapter_.obj());
+  Java_Fakes_setLocationServicesState(
+      AttachCurrentThread(), false /* hasPermission */, true /* isEnabled */);
   return true;
 }
 
@@ -79,6 +83,11 @@ BluetoothDevice* BluetoothTestAndroid::SimulateLowEnergyDevice(
   Java_FakeBluetoothAdapter_simulateLowEnergyDevice(
       AttachCurrentThread(), j_fake_bluetooth_adapter_.obj(), device_ordinal);
   return observer.last_device();
+}
+
+void BluetoothTestAndroid::SimulateLocationServicesOff() {
+  Java_Fakes_setLocationServicesState(
+      AttachCurrentThread(), true /* hasPermission */, false /* isEnabled */);
 }
 
 void BluetoothTestAndroid::ForceIllegalStateException() {
@@ -471,7 +480,7 @@ void BluetoothTestAndroid::OnFakeAdapterStateChanged(
     JNIEnv* env,
     const JavaParamRef<jobject>& caller,
     const bool powered) {
-  adapter_->NotifyAdapterStateChanged(powered);
+  adapter_->NotifyAdapterPoweredChanged(powered);
 }
 
 }  // namespace device

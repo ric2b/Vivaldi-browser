@@ -144,7 +144,7 @@ void MediaCodecPlayer::DeleteOnCorrectThread() {
   GetMediaTaskRunner()->DeleteSoon(FROM_HERE, this);
 }
 
-void MediaCodecPlayer::SetVideoSurface(gfx::ScopedJavaSurface surface) {
+void MediaCodecPlayer::SetVideoSurface(gl::ScopedJavaSurface surface) {
   RUN_ON_MEDIA_THREAD(SetVideoSurface, base::Passed(&surface));
 
   DVLOG(1) << __FUNCTION__ << (surface.IsEmpty() ? " empty" : " non-empty");
@@ -679,14 +679,8 @@ void MediaCodecPlayer::OnPermissionDecided(bool granted) {
       }
       break;
 
-    case kStatePaused:
-    case kStateWaitingForSeek:
-    case kStateError:
-      break;  // ignore
-
     default:
-      NOTREACHED() << __FUNCTION__ << ": wrong state " << AsString(state_);
-      break;
+      break;  // ignore
   }
 }
 

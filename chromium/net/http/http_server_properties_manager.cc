@@ -4,6 +4,8 @@
 
 #include "net/http/http_server_properties_manager.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
@@ -126,12 +128,6 @@ void HttpServerPropertiesManager::SetVersion(
   DCHECK_LE(version_number, kVersionNumber);
   if (version_number <= kVersionNumber)
     http_server_properties_dict->SetInteger(kVersionKey, version_number);
-}
-
-// This is required for conformance with the HttpServerProperties interface.
-base::WeakPtr<HttpServerProperties> HttpServerPropertiesManager::GetWeakPtr() {
-  DCHECK(network_task_runner_->RunsTasksOnCurrentThread());
-  return network_weak_ptr_factory_->GetWeakPtr();
 }
 
 void HttpServerPropertiesManager::Clear() {
@@ -261,19 +257,6 @@ void HttpServerPropertiesManager::ConfirmAlternativeService(
   // IsAlternativeServiceBroken. If that value changes, then call persist.
   if (old_value != new_value)
     ScheduleUpdatePrefsOnNetworkThread(CONFIRM_ALTERNATIVE_SERVICE);
-}
-
-void HttpServerPropertiesManager::ClearAlternativeServices(
-    const url::SchemeHostPort& origin) {
-  DCHECK(network_task_runner_->RunsTasksOnCurrentThread());
-  const AlternativeServiceMap& map =
-      http_server_properties_impl_->alternative_service_map();
-  size_t old_size = map.size();
-  http_server_properties_impl_->ClearAlternativeServices(origin);
-  size_t new_size = map.size();
-  // Persist only if we have deleted an entry.
-  if (old_size != new_size)
-    ScheduleUpdatePrefsOnNetworkThread(CLEAR_ALTERNATIVE_SERVICE);
 }
 
 const AlternativeServiceMap&
@@ -714,10 +697,12 @@ bool HttpServerPropertiesManager::AddToAlternativeServiceMap(
           kAlternativeServiceKey, &alternative_service_list)) {
     return true;
   }
+  if (server.scheme() != "https") {
+    return false;
+  }
 
   AlternativeServiceInfoVector alternative_service_info_vector;
-  for (const base::Value* alternative_service_list_item :
-       *alternative_service_list) {
+  for (const auto& alternative_service_list_item : *alternative_service_list) {
     const base::DictionaryValue* alternative_service_dict;
     if (!alternative_service_list_item->GetAsDictionary(
             &alternative_service_dict))
@@ -965,12 +950,12 @@ void HttpServerPropertiesManager::UpdatePrefsFromCacheOnNetworkThread(
     if (notbroken_alternative_service_info_vector.empty()) {
       continue;
     }
-    std::string canonical_suffix =
+    const std::string* canonical_suffix =
         http_server_properties_impl_->GetCanonicalSuffix(server.host());
-    if (!canonical_suffix.empty()) {
-      if (persisted_map.find(canonical_suffix) != persisted_map.end())
+    if (canonical_suffix != nullptr) {
+      if (persisted_map.find(*canonical_suffix) != persisted_map.end())
         continue;
-      persisted_map[canonical_suffix] = true;
+      persisted_map[*canonical_suffix] = true;
     }
     alternative_service_map->Put(server,
                                  notbroken_alternative_service_info_vector);
@@ -1194,7 +1179,8 @@ void HttpServerPropertiesManager::SaveAlternativeServiceToServerPrefs(
     const AlternativeService alternative_service =
         alternative_service_info.alternative_service;
     DCHECK(IsAlternateProtocolValid(alternative_service.protocol));
-    base::DictionaryValue* alternative_service_dict = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> alternative_service_dict(
+        new base::DictionaryValue);
     alternative_service_dict->SetInteger(kPortKey, alternative_service.port);
     if (!alternative_service.host.empty()) {
       alternative_service_dict->SetString(kHostKey, alternative_service.host);
@@ -1206,7 +1192,7 @@ void HttpServerPropertiesManager::SaveAlternativeServiceToServerPrefs(
         kExpirationKey,
         base::Int64ToString(
             alternative_service_info.expiration.ToInternalValue()));
-    alternative_service_list->Append(alternative_service_dict);
+    alternative_service_list->Append(std::move(alternative_service_dict));
   }
   if (alternative_service_list->GetSize() == 0)
     return;

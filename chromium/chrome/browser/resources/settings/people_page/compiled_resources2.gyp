@@ -106,5 +106,41 @@
       ],
       'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
     },
+    {
+      'target_name': 'user_list',
+      'dependencies': [
+        '<(EXTERNS_GYP):settings_private',
+        '<(EXTERNS_GYP):users_private',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'users_add_user_dialog',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:assert',
+        '<(EXTERNS_GYP):users_private',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'users_page',
+      'dependencies': [
+        'user_list',
+        'users_add_user_dialog',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'quick_unlock_routing_behavior',
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
+    {
+      'target_name': 'quick_unlock_authenticate',
+      'dependencies': [
+        'quick_unlock_routing_behavior',
+        '<(EXTERNS_GYP):quick_unlock_private',
+      ],
+      'includes': ['../../../../../third_party/closure_compiler/compile_js2.gypi'],
+    },
   ],
 }

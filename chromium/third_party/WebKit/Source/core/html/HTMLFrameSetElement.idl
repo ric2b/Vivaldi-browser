@@ -24,10 +24,10 @@
 [
     OverrideBuiltins,
 ] interface HTMLFrameSetElement : HTMLElement {
-    [Reflect] attribute DOMString cols;
-    [Reflect] attribute DOMString rows;
+    [CEReactions, Reflect] attribute DOMString cols;
+    [CEReactions, Reflect] attribute DOMString rows;
 
-    // TODO(philipj): These event handler attributes should be inherited from
+    // TODO(foolip): These event handler attributes should be inherited from
     // HTMLElement (which implements GlobalEventHandlers), but have different
     // behavior. See https://www.w3.org/Bugs/Public/show_bug.cgi?id=28166
     attribute EventHandler onblur;

@@ -3,16 +3,28 @@
 This describes how to adjust file-type download behavior in
 Chrome including interactions with Safe Browsing. The metadata described
 here, and stored in `download_file_types.asciipb`, will be both baked into
-Chrome released and pushable to Chrome between releases. http://crbug.com/596555
+Chrome released and pushable to Chrome between releases (via
+`FileTypePolicies` class).  http://crbug.com/596555
 
 Rendered version of this file: https://chromium.googlesource.com/chromium/src/+/master/chrome/browser/resources/safe_browsing/README.md
 
 
-## Procedure for adding a new type
-  * Edit `download_file_types.asciipb`, edit `download_stats.cc` (necessary
-    until it gets replaced), and update `histograms.xml`
-  * Get it reviewed, submit.
-  * Push via component update (PROCEDURE TBD)
+## Procedure for adding/modifying file type(s)
+  * **Edit** `download_file_types.asciipb` and update `histograms.xml`
+  * Get it reviewed, **submit.**
+  * **Push** it to all users via component update:
+    * Wait 1-3 day for this to run on Canary to verify it doesn't crash Chrome.
+    * In a synced checkout, run the following to generate protos for all
+      platforms and push them to GCS. Replace the arg with your build directory:
+        * % `chrome/browser/resources/safe_browsing/push_file_type_proto.py -d
+          out-gn/Debug`
+    * It will ask you to double check its actions before proceeding.  It will
+      fail if you're not a member of
+      `chrome-file-type-policies-pushers@google.com`, since that's required for
+      access to the GCS bucket.
+    * The Component Updater system will notice those files and push them to
+      users withing ~6 hours. If not, contact `waffles@.`
+
 
 ## Guidelines for a DownloadFileType entry:
 See `download_file_types.proto` for all fields.
@@ -53,16 +65,42 @@ See `download_file_types.proto` for all fields.
 
        3. The `default_file_type`'s settings will be filled in.
 
-  * `platform_settings.danger_level`: (required)
+  * `platform_settings.danger_level`: (required) Controls how files should be
+    handled by the UI in the absence of a better signal from the Safe Browsing
+    ping. This applies to all file types where `ping_setting` is either
+    `SAMPLED_PING` or `NO_PING`, and downloads where the Safe Browsing ping
+    either fails, is disabled, or returns an `UNKNOWN` verdict. Exceptions are
+    noted below.
+
+    The warning controlled here is a generic "This file may harm your computer."
+    If the Safe Browsing verdict is `UNCOMMON`, `POTENTIALLY_UNWANTED`,
+    `DANGEROUS_HOST`, or `DANGEROUS`, Chrome will show that more severe warning
+    regardless of this setting.
+
+    This policy also affects also how subresources are handled for *"Save As
+    ..."* downloads of complete web pages. If any subresource ends up with a
+    file type that is considered `DANGEROUS` or `ALLOW_ON_USER_GESTURE`, then
+    the filename will be changed to end in `.download`. This is done to prevent
+    the file from being opened accidentally.
+
     * `NOT_DANGEROUS`: Safe to download and open, even if the download
-       was accidental.
+       was accidental. No additional warnings are necessary.
     * `DANGEROUS`: Always warn the user that this file may harm their
       computer. We let them continue or discard the file. If Safe
-      Browsing returns a SAFE verdict, we still warn the user.
-    * `ALLOW_ON_USER_GESTURE`: Warn the user normally but skip the warning
-      if there was a user gesture or the user visited this site before
-      midnight last night (i.e. is a repeat visit). If Safe Browsing
-      returns a SAFE verdict for this file, it won't show a warning.
+      Browsing returns a `SAFE` verdict, we still warn the user.
+    * `ALLOW_ON_USER_GESTURE`: Potentially dangerous, but is likely harmless if
+      the user is familiar with host and if the download was intentional. Chrome
+      doesn't warn the user if both of the following conditions are true:
+
+        * There is a user gesture associated with the network request that
+          initiated the download.
+        * There is a recorded visit to the referring origin that's older than
+          the most recent midnight. This is taken to imply that the user has a
+          history of visiting the site.
+
+      In addition, Chrome skips the warning if the download was explicit (i.e.
+      the user selected "Save link as ..." from the context menu), or if the
+      navigation that resulted in the download was initiated using the Omnibox.
 
   * `platform_settings.auto_open_hint`: (required).
     * `ALLOW_AUTO_OPEN`: File type can be opened automatically if the user
@@ -100,6 +138,5 @@ See `download_file_types.proto` for all fields.
 
   * `default_file_type`: Settings used if a downloaded file is not in
     the above list. `extension` is ignored, but other settings are used.
-    The ping_setting should be SAMPLED_PING for all platforms. Only the
-    first platform_setting is used.
+    The ping_setting should be SAMPLED_PING for all platforms.
 

@@ -52,6 +52,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/FormData.h"
 #include "core/html/HTMLFormElement.h"
+#include "core/html/HTMLHRElement.h"
 #include "core/html/HTMLOptGroupElement.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/forms/FormController.h"
@@ -61,9 +62,7 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutListBox.h"
 #include "core/layout/LayoutMenuList.h"
-#include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTheme.h"
-#include "core/layout/LayoutView.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
@@ -424,19 +423,9 @@ HTMLOptionsCollection* HTMLSelectElement::options()
     return ensureCachedCollection<HTMLOptionsCollection>(SelectOptions);
 }
 
-void HTMLSelectElement::childrenChanged(const ChildrenChange& change)
-{
-    setRecalcListItems();
-    setNeedsValidityCheck();
-    m_lastOnChangeSelection.clear();
-
-    HTMLFormControlElementWithState::childrenChanged(change);
-}
-
 void HTMLSelectElement::optionElementChildrenChanged(const HTMLOptionElement& option)
 {
     setNeedsValidityCheck();
-    setOptionsChangedOnLayoutObject();
 
     if (layoutObject()) {
         if (option.selected() && usesMenuList())
@@ -507,7 +496,7 @@ void HTMLSelectElement::setLength(unsigned newLen, ExceptionState& exceptionStat
 
     if (diff < 0) { // Add dummy elements.
         do {
-            appendChild(document().createElement(optionTag, false), exceptionState);
+            appendChild(document().createElement(optionTag, CreatedByCreateElement), exceptionState);
             if (exceptionState.hadException())
                 break;
         } while (++diff);
@@ -763,7 +752,7 @@ void HTMLSelectElement::setOptionsChangedOnLayoutObject()
 {
     if (LayoutObject* layoutObject = this->layoutObject()) {
         if (usesMenuList())
-            toLayoutMenuList(layoutObject)->setOptionsChanged(true);
+            toLayoutMenuList(layoutObject)->setNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReason::MenuOptionsChanged);
     }
 }
 
@@ -788,12 +777,55 @@ void HTMLSelectElement::invalidateSelectedItems()
         collection->invalidateCache();
 }
 
-void HTMLSelectElement::setRecalcListItems()
+void HTMLSelectElement::setRecalcListItems(HTMLElement& subject)
 {
     // FIXME: This function does a bunch of confusing things depending on if it
     // is in the document or not.
 
-    m_shouldRecalcListItems = true;
+    bool shouldRecalc = true;
+    if (!m_shouldRecalcListItems && !isHTMLOptGroupElement(subject)) {
+        if (firstChild() == &subject) {
+            // The subject was prepended. This doesn't handle elements in an
+            // OPTGROUP.
+            DCHECK(m_listItems.size() == 0 || m_listItems[0] != &subject);
+            m_listItems.prepend(&subject);
+            shouldRecalc = false;
+        } else if (lastChild() == &subject) {
+            // The subject was appended. This doesn't handle elements in an
+            // OPTGROUP.
+            DCHECK(m_listItems.size() == 0 || m_listItems.last() != &subject);
+            m_listItems.append(&subject);
+            shouldRecalc = false;
+        } else if (!subject.isDescendantOf(this)) {
+            // |subject| was removed from this. This logic works well with
+            // SELECT children and OPTGROUP children.
+
+            // m_listItems might be empty, or might not have the OPTION.
+            //   1. Remove an OPTGROUP with OPTION children from a SELECT.
+            //   2. This function is called for the OPTGROUP removal.
+            //   3. m_shouldRecalcListItems becomes true.
+            //   4. recalcListItems() happens.  m_listItems has no OPTGROUP and
+            //      no its children.  m_shouldRecalcListItems becomes false.
+            //   5. This function is called for the removal of an OPTION child
+            //      of the OPTGROUP.
+            if (m_listItems.size() > 0) {
+                size_t index;
+                // Avoid Vector::find() in typical cases.
+                if (m_listItems.first() == &subject)
+                    index = 0;
+                else if (m_listItems.last() == &subject)
+                    index = m_listItems.size() - 1;
+                else
+                    index = m_listItems.find(&subject);
+                if (index != WTF::kNotFound) {
+                    m_listItems.remove(index);
+                    shouldRecalc = false;
+                }
+            }
+        }
+    }
+    m_shouldRecalcListItems = shouldRecalc;
+
     setOptionsChangedOnLayoutObject();
     if (!inShadowIncludingDocument()) {
         if (HTMLOptionsCollection* collection = cachedCollection<HTMLOptionsCollection>(SelectOptions))
@@ -955,7 +987,7 @@ void HTMLSelectElement::scrollToOption(HTMLOptionElement* option)
     // inserted before executing scrollToOptionTask().
     m_optionToScrollTo = option;
     if (!hasPendingTask)
-        document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLSelectElement::scrollToOptionTask, this));
+        document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLSelectElement::scrollToOptionTask, wrapPersistent(this)));
 }
 
 void HTMLSelectElement::scrollToOptionTask()
@@ -987,7 +1019,7 @@ void HTMLSelectElement::optionSelectionStateChanged(HTMLOptionElement* option, b
 void HTMLSelectElement::optionInserted(HTMLOptionElement& option, bool optionIsSelected)
 {
     ASSERT(option.ownerSelectElement() == this);
-    setRecalcListItems();
+    setRecalcListItems(option);
     if (optionIsSelected) {
         selectOption(&option, multiple() ? 0 : DeselectOtherOptions);
     } else {
@@ -995,11 +1027,13 @@ void HTMLSelectElement::optionInserted(HTMLOptionElement& option, bool optionIsS
         if (!m_lastOnChangeOption)
             resetToDefaultSelection();
     }
+    setNeedsValidityCheck();
+    m_lastOnChangeSelection.clear();
 }
 
-void HTMLSelectElement::optionRemoved(const HTMLOptionElement& option)
+void HTMLSelectElement::optionRemoved(HTMLOptionElement& option)
 {
-    setRecalcListItems();
+    setRecalcListItems(option);
     if (option.selected())
         resetToDefaultSelection(ResetReasonSelectedOptionRemoved);
     else if (!m_lastOnChangeOption)
@@ -1014,6 +1048,21 @@ void HTMLSelectElement::optionRemoved(const HTMLOptionElement& option)
         m_activeSelectionEnd.clear();
     if (option.selected())
         setAutofilled(false);
+    setNeedsValidityCheck();
+    m_lastOnChangeSelection.clear();
+}
+
+void HTMLSelectElement::optGroupInsertedOrRemoved(HTMLOptGroupElement& optgroup)
+{
+    setRecalcListItems(optgroup);
+    setNeedsValidityCheck();
+    m_lastOnChangeSelection.clear();
+}
+
+void HTMLSelectElement::hrInsertedOrRemoved(HTMLHRElement& hr)
+{
+    setRecalcListItems(hr);
+    m_lastOnChangeSelection.clear();
 }
 
 void HTMLSelectElement::selectOption(int optionIndex, SelectOptionFlags flags)
@@ -1231,7 +1280,6 @@ void HTMLSelectElement::restoreFormControlState(const FormControlState& state)
         }
     }
 
-    setOptionsChangedOnLayoutObject();
     setNeedsValidityCheck();
 }
 
@@ -1277,7 +1325,6 @@ void HTMLSelectElement::resetImpl()
         option->setDirty(false);
     }
     resetToDefaultSelection();
-    setOptionsChangedOnLayoutObject();
     setNeedsValidityCheck();
 }
 
@@ -1301,15 +1348,15 @@ void HTMLSelectElement::handlePopupOpenKeyboardEvent(Event* event)
 
 bool HTMLSelectElement::shouldOpenPopupForKeyDownEvent(KeyboardEvent* keyEvent)
 {
-    const String& keyIdentifier = keyEvent->keyIdentifier();
+    const String& key = keyEvent->key();
     LayoutTheme& layoutTheme = LayoutTheme::theme();
 
     if (isSpatialNavigationEnabled(document().frame()))
         return false;
 
-    return ((layoutTheme.popsMenuByArrowKeys() &&  (keyIdentifier == "Down" || keyIdentifier == "Up"))
-        || (layoutTheme.popsMenuByAltDownUpOrF4Key() && (keyIdentifier == "Down" || keyIdentifier == "Up") && keyEvent->altKey())
-        || (layoutTheme.popsMenuByAltDownUpOrF4Key() && (!keyEvent->altKey() && !keyEvent->ctrlKey() && keyIdentifier == "F4")));
+    return ((layoutTheme.popsMenuByArrowKeys() && (key == "ArrowDown" || key == "ArrowUp"))
+        || (layoutTheme.popsMenuByAltDownUpOrF4Key() && (key == "ArrowDown" || key == "ArrowUp") && keyEvent->altKey())
+        || (layoutTheme.popsMenuByAltDownUpOrF4Key() && (!keyEvent->altKey() && !keyEvent->ctrlKey() && key == "F4")));
 }
 
 bool HTMLSelectElement::shouldOpenPopupForKeyPressEvent(KeyboardEvent *event)
@@ -1346,23 +1393,23 @@ void HTMLSelectElement::menuListDefaultEventHandler(Event* event)
         if (LayoutTheme::theme().popsMenuByArrowKeys() && !isSpatialNavigationEnabled(document().frame()))
             return;
 
-        const String& keyIdentifier = keyEvent->keyIdentifier();
+        const String& key = keyEvent->key();
         bool handled = true;
         const ListItems& listItems = this->listItems();
         HTMLOptionElement* option = selectedOption();
         int listIndex = option ? option->listIndex() : -1;
 
-        if (keyIdentifier == "Down" || keyIdentifier == "Right")
+        if (key == "ArrowDown" || key == "ArrowRight")
             option = nextValidOption(listIndex, SkipForwards, 1);
-        else if (keyIdentifier == "Up" || keyIdentifier == "Left")
+        else if (key == "ArrowUp" || key == "ArrowLeft")
             option = nextValidOption(listIndex, SkipBackwards, 1);
-        else if (keyIdentifier == "PageDown")
+        else if (key == "PageDown")
             option = nextValidOption(listIndex, SkipForwards, 3);
-        else if (keyIdentifier == "PageUp")
+        else if (key == "PageUp")
             option = nextValidOption(listIndex, SkipBackwards, 3);
-        else if (keyIdentifier == "Home")
+        else if (key == "Home")
             option = nextValidOption(-1, SkipForwards, 1);
-        else if (keyIdentifier == "End")
+        else if (key == "End")
             option = nextValidOption(listItems.size(), SkipBackwards, 1);
         else
             handled = false;
@@ -1589,54 +1636,54 @@ void HTMLSelectElement::listBoxDefaultEventHandler(Event* event)
     } else if (event->type() == EventTypeNames::keydown) {
         if (!event->isKeyboardEvent())
             return;
-        const String& keyIdentifier = toKeyboardEvent(event)->keyIdentifier();
+        const String& key = toKeyboardEvent(event)->key();
 
         bool handled = false;
         HTMLOptionElement* endOption = nullptr;
         if (!m_activeSelectionEnd) {
             // Initialize the end index
-            if (keyIdentifier == "Down" || keyIdentifier == "PageDown") {
+            if (key == "ArrowDown" || key == "PageDown") {
                 HTMLOptionElement* startOption = lastSelectedOption();
                 handled = true;
-                if (keyIdentifier == "Down")
+                if (key == "ArrowDown")
                     endOption = nextSelectableOption(startOption);
                 else
                     endOption = nextSelectableOptionPageAway(startOption, SkipForwards);
-            } else if (keyIdentifier == "Up" || keyIdentifier == "PageUp") {
+            } else if (key == "ArrowUp" || key == "PageUp") {
                 HTMLOptionElement* startOption = selectedOption();
                 handled = true;
-                if (keyIdentifier == "Up")
+                if (key == "ArrowUp")
                     endOption = previousSelectableOption(startOption);
                 else
                     endOption = nextSelectableOptionPageAway(startOption, SkipBackwards);
             }
         } else {
             // Set the end index based on the current end index.
-            if (keyIdentifier == "Down") {
+            if (key == "ArrowDown") {
                 endOption = nextSelectableOption(m_activeSelectionEnd.get());
                 handled = true;
-            } else if (keyIdentifier == "Up") {
+            } else if (key == "ArrowUp") {
                 endOption = previousSelectableOption(m_activeSelectionEnd.get());
                 handled = true;
-            } else if (keyIdentifier == "PageDown") {
+            } else if (key == "PageDown") {
                 endOption = nextSelectableOptionPageAway(m_activeSelectionEnd.get(), SkipForwards);
                 handled = true;
-            } else if (keyIdentifier == "PageUp") {
+            } else if (key == "PageUp") {
                 endOption = nextSelectableOptionPageAway(m_activeSelectionEnd.get(), SkipBackwards);
                 handled = true;
             }
         }
-        if (keyIdentifier == "Home") {
+        if (key == "Home") {
             endOption = firstSelectableOption();
             handled = true;
-        } else if (keyIdentifier == "End") {
+        } else if (key == "End") {
             endOption = lastSelectableOption();
             handled = true;
         }
 
         if (isSpatialNavigationEnabled(document().frame())) {
             // Check if the selection moves to the boundary.
-            if (keyIdentifier == "Left" || keyIdentifier == "Right" || ((keyIdentifier == "Down" || keyIdentifier == "Up") && endOption == m_activeSelectionEnd))
+            if (key == "ArrowLeft" || key == "ArrowRight" || ((key == "ArrowDown" || key == "ArrowUp") && endOption == m_activeSelectionEnd))
                 return;
         }
 

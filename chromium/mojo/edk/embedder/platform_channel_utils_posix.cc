@@ -6,12 +6,15 @@
 
 #include <stddef.h>
 #include <sys/socket.h>
-#include <sys/uio.h>
 #include <unistd.h>
 
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
+
+#if !defined(OS_NACL)
+#include <sys/uio.h>
+#endif
 
 #if !defined(SO_PEEK_OFF)
 #define SO_PEEK_OFF 42
@@ -56,7 +59,8 @@ ssize_t PlatformChannelWrite(PlatformHandle h,
   DCHECK(bytes);
   DCHECK_GT(num_bytes, 0u);
 
-#if defined(OS_MACOSX)
+#if defined(OS_MACOSX) || defined(OS_NACL_NONSFI)
+  // send() is not available under NaCl-nonsfi.
   return HANDLE_EINTR(write(h.handle, bytes, num_bytes));
 #else
   return send(h.handle, bytes, num_bytes, kSendFlags);

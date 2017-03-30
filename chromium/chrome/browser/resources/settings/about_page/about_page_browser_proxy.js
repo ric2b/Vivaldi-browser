@@ -36,7 +36,63 @@ var BrowserChannel = {
 };
 </if>
 
+/**
+ * Enumeration of all possible update statuses. The string literals must match
+ * the ones defined at |AboutHandler::UpdateStatusToString|.
+ * @enum {string}
+ */
+var UpdateStatus = {
+  CHECKING: 'checking',
+  UPDATING: 'updating',
+  NEARLY_UPDATED: 'nearly_updated',
+  UPDATED: 'updated',
+  FAILED: 'failed',
+  DISABLED: 'disabled',
+  DISABLED_BY_ADMIN: 'disabled_by_admin',
+};
+
+/**
+ * @typedef {{
+ *   status: !UpdateStatus,
+ *   progress: (number|undefined),
+ *   message: (string|undefined),
+ * }}
+ */
+var UpdateStatusChangedEvent;
+
 cr.define('settings', function() {
+  /**
+   * @param {!BrowserChannel} channel
+   * @return {string}
+   */
+  function browserChannelToI18nId(channel) {
+    switch (channel) {
+      case BrowserChannel.BETA: return 'aboutChannelBeta';
+      case BrowserChannel.DEV: return 'aboutChannelDev';
+      case BrowserChannel.STABLE: return 'aboutChannelStable';
+    }
+
+    assertNotReached();
+  }
+
+  /**
+   * @param {!BrowserChannel} currentChannel
+   * @param {!BrowserChannel} targetChannel
+   * @return {boolean} Whether the target channel is more stable than the
+   *     current channel.
+   */
+  function isTargetChannelMoreStable(currentChannel, targetChannel) {
+    // List of channels in increasing stability order.
+    var channelList = [
+      BrowserChannel.DEV,
+      BrowserChannel.BETA,
+      BrowserChannel.STABLE,
+    ];
+    var currentIndex = channelList.indexOf(currentChannel);
+    var targetIndex = channelList.indexOf(targetChannel);
+    return currentIndex < targetIndex;
+  }
+
   /** @interface */
   function AboutPageBrowserProxy() {}
 
@@ -51,11 +107,6 @@ cr.define('settings', function() {
      * 'update-status-changed' WebUI events.
      */
     refreshUpdateStatus: function() {},
-
-    /**
-     * Relaunches the browser.
-     */
-    relaunchNow: function() {},
 
     /** Opens the help page. */
     openHelpPage: function() {},
@@ -112,11 +163,6 @@ cr.define('settings', function() {
     },
 
     /** @override */
-    relaunchNow: function() {
-      chrome.send('relaunchNow');
-    },
-
-    /** @override */
     openHelpPage: function() {
       chrome.send('openHelpPage');
     },
@@ -164,5 +210,7 @@ cr.define('settings', function() {
   return {
     AboutPageBrowserProxy: AboutPageBrowserProxy,
     AboutPageBrowserProxyImpl: AboutPageBrowserProxyImpl,
+    browserChannelToI18nId: browserChannelToI18nId,
+    isTargetChannelMoreStable: isTargetChannelMoreStable,
   };
 });

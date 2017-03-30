@@ -16,6 +16,8 @@ import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.Layout.Orientation;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.util.ColorUtils;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.ui.resources.ResourceManager;
 
 /**
@@ -56,17 +58,28 @@ public class TabListSceneLayer extends SceneLayer {
             assert t.isVisible() : "LayoutTab in that list should be visible";
             final float decoration = t.getDecorationAlpha();
 
-            int borderResource = t.isIncognito() ? R.drawable.tabswitcher_border_frame_incognito
-                                                 : R.drawable.tabswitcher_border_frame;
-            int closeBtnResource = t.isIncognito() ? R.drawable.btn_tab_close_white_normal
-                                                   : R.drawable.btn_tab_close_normal;
+            int defaultThemeColor = t.isIncognito()
+                    ? ApiCompatibilityUtils.getColor(res, R.color.incognito_primary_color)
+                    : ApiCompatibilityUtils.getColor(res, R.color.default_primary_color);
+
+            // If theme colors are enabled in the tab switcher, the theme might require lighter
+            // text.
+            boolean isDarkTheme = t.isIncognito();
+            if (FeatureUtilities.areTabSwitcherThemeColorsEnabled()) {
+                isDarkTheme |= ColorUtils.shouldUseLightForegroundOnBackground(
+                        t.getToolbarBackgroundColor());
+            }
+
+            int closeBtnResource = isDarkTheme ? R.drawable.btn_tab_close_white_normal
+                                               : R.drawable.btn_tab_close_normal;
             int borderColorResource =
                     t.isIncognito() ? R.color.tab_back_incognito : R.color.tab_back;
             // TODO(dtrainor, clholgat): remove "* dpToPx" once the native part fully supports dp.
             nativePutTabLayer(mNativePtr, t.getId(), R.id.control_container, closeBtnResource,
                     R.drawable.tabswitcher_border_frame_shadow,
                     R.drawable.tabswitcher_border_frame_decoration, R.drawable.logo_card_back,
-                    borderResource, R.drawable.tabswitcher_border_frame_inner_shadow,
+                    R.drawable.tabswitcher_border_frame,
+                    R.drawable.tabswitcher_border_frame_inner_shadow,
                     t.canUseLiveTexture(), t.getBackgroundColor(),
                     ApiCompatibilityUtils.getColor(res, borderColorResource), t.isIncognito(),
                     layout.getOrientation() == Orientation.PORTRAIT, t.getRenderX() * dpToPx,
@@ -82,10 +95,10 @@ public class TabListSceneLayer extends SceneLayer {
                     t.getShadowOpacity() * decoration, t.getBorderCloseButtonAlpha() * decoration,
                     LayoutTab.CLOSE_BUTTON_WIDTH_DP * dpToPx, t.getStaticToViewBlend(),
                     t.getBorderScale(), t.getSaturation(), t.getBrightness(), t.showToolbar(),
-                    t.getToolbarBackgroundColor(), t.anonymizeToolbar(), R.drawable.textbox,
-                    t.getTextBoxBackgroundColor(), t.getTextBoxAlpha(), t.getToolbarAlpha(),
-                    t.getToolbarYOffset() * dpToPx, t.getSideBorderScale(), true,
-                    t.insetBorderVertical());
+                    defaultThemeColor, t.getToolbarBackgroundColor(), t.anonymizeToolbar(),
+                    R.drawable.textbox, t.getTextBoxBackgroundColor(), t.getTextBoxAlpha(),
+                    t.getToolbarAlpha(), t.getToolbarYOffset() * dpToPx, t.getSideBorderScale(),
+                    true, t.insetBorderVertical());
         }
         nativeFinishBuildingFrame(mNativePtr);
     }
@@ -132,8 +145,9 @@ public class TabListSceneLayer extends SceneLayer {
             float pivotY, float rotationX, float rotationY, float alpha, float borderAlpha,
             float borderInnerShadowAlpha, float contourAlpha, float shadowAlpha, float closeAlpha,
             float closeBtnWidth, float staticToViewBlend, float borderScale, float saturation,
-            float brightness, boolean showToolbar, int toolbarBackgroundColor,
-            boolean anonymizeToolbar, int toolbarTextBoxResource, int toolbarTextBoxBackgroundColor,
-            float toolbarTextBoxAlpha, float toolbarAlpha, float toolbarYOffset,
-            float sideBorderScale, boolean attachContent, boolean insetVerticalBorder);
+            float brightness, boolean showToolbar, int defaultThemeColor,
+            int toolbarBackgroundColor, boolean anonymizeToolbar, int toolbarTextBoxResource,
+            int toolbarTextBoxBackgroundColor, float toolbarTextBoxAlpha, float toolbarAlpha,
+            float toolbarYOffset, float sideBorderScale, boolean attachContent,
+            boolean insetVerticalBorder);
 }

@@ -33,7 +33,6 @@
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/url_prefix.h"
 #include "components/search/search.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/url_formatter/url_formatter.h"
 #include "components/variations/net/variations_http_headers.h"
@@ -488,9 +487,8 @@ void SearchProvider::LogFetchComplete(bool success, bool is_keyword) {
   // non-keyword mode.
   const TemplateURL* default_url = providers_.GetDefaultProviderURL();
   if (!is_keyword && default_url &&
-      (TemplateURLPrepopulateData::GetEngineType(
-           *default_url,
-           client()->GetTemplateURLService()->search_terms_data()) ==
+      (default_url->GetEngineType(
+          client()->GetTemplateURLService()->search_terms_data()) ==
        SEARCH_ENGINE_GOOGLE)) {
     const base::TimeDelta elapsed_time =
         base::TimeTicks::Now() - time_suggest_request_sent_;
@@ -744,11 +742,6 @@ bool SearchProvider::IsQuerySuitableForSuggest(bool* query_is_private) const {
 bool SearchProvider::IsQueryPotentionallyPrivate() const {
   // If the input type might be a URL, we take extra care so that private data
   // isn't sent to the server.
-
-  // FORCED_QUERY means the user is explicitly asking us to search for this, so
-  // we assume it isn't a URL and/or there isn't private data.
-  if (input_.type() == metrics::OmniboxInputType::FORCED_QUERY)
-    return false;
 
   // Next we check the scheme.  If this is UNKNOWN/URL with a scheme that isn't
   // http/https/ftp, we shouldn't send it.  Sending things like file: and data:
@@ -1316,7 +1309,6 @@ int SearchProvider::
   switch (input_.type()) {
     case metrics::OmniboxInputType::UNKNOWN:
     case metrics::OmniboxInputType::QUERY:
-    case metrics::OmniboxInputType::FORCED_QUERY:
       return kNonURLVerbatimRelevance;
 
     case metrics::OmniboxInputType::URL:
@@ -1426,13 +1418,6 @@ AutocompleteMatch SearchProvider::NavigationToMatch(
                                    net::UnescapeRule::SPACES, nullptr, nullptr,
                                    &inline_autocomplete_offset),
           client()->GetSchemeClassifier());
-  // Preserve the forced query '?' prefix in |match.fill_into_edit|.
-  // Otherwise, user edits to a suggestion would show non-Search results.
-  if (input_.type() == metrics::OmniboxInputType::FORCED_QUERY) {
-    match.fill_into_edit.insert(0, base::ASCIIToUTF16("?"));
-    if (inline_autocomplete_offset != base::string16::npos)
-      ++inline_autocomplete_offset;
-  }
   if (inline_autocomplete_offset != base::string16::npos) {
     DCHECK(inline_autocomplete_offset <= match.fill_into_edit.length());
     match.inline_autocompletion =

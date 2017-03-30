@@ -13,6 +13,9 @@ source_set("lib") {
     "accelerator.h",
     "access_policy.h",
     "access_policy_delegate.h",
+    "animation_runner.cc",
+    "animation_runner.h",
+    "animation_runner_observer.h",
     "default_access_policy.cc",
     "default_access_policy.h",
     "display.cc",
@@ -44,6 +47,8 @@ source_set("lib") {
     "platform_screen.h",
     "platform_screen_impl.cc",
     "platform_screen_impl.h",
+    "scheduled_animation_group.cc",
+    "scheduled_animation_group.h",
     "server_window.cc",
     "server_window.h",
     "server_window_delegate.h",
@@ -56,6 +61,10 @@ source_set("lib") {
     "server_window_surface_manager.cc",
     "server_window_surface_manager.h",
     "server_window_tracker.h",
+    "touch_controller.cc",
+    "touch_controller.h",
+    "user_activity_monitor.cc",
+    "user_activity_monitor.h",
     "user_display_manager.cc",
     "user_display_manager.h",
     "user_id.h",
@@ -68,13 +77,15 @@ source_set("lib") {
     "window_finder.h",
     "window_manager_access_policy.cc",
     "window_manager_access_policy.h",
-    "window_manager_factory_registry.cc",
-    "window_manager_factory_registry.h",
-    "window_manager_factory_registry_observer.h",
-    "window_manager_factory_service.cc",
-    "window_manager_factory_service.h",
+    "window_manager_display_root.cc",
+    "window_manager_display_root.h",
     "window_manager_state.cc",
     "window_manager_state.h",
+    "window_manager_window_tree_factory.cc",
+    "window_manager_window_tree_factory.h",
+    "window_manager_window_tree_factory_set.cc",
+    "window_manager_window_tree_factory_set.h",
+    "window_manager_window_tree_factory_set_observer.h",
     "window_server.cc",
     "window_server.h",
     "window_server_delegate.cc",
@@ -89,9 +100,10 @@ source_set("lib") {
     "window_tree_host_factory.h",
   ]
 
-  deps = [
+  public_deps = [
     "//base",
     "//cc",
+    "//cc/ipc:interfaces",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
     "//components/mus/common:mus_common",
@@ -99,24 +111,22 @@ source_set("lib") {
     "//components/mus/public/interfaces",
     "//components/mus/surfaces",
     "//mojo/common:common_base",
-    "//mojo/converters/geometry",
-    "//mojo/converters/ime",
-    "//mojo/converters/input_events",
-    "//mojo/converters/surfaces",
-    "//mojo/public/cpp/bindings:callback",
+    "//mojo/public/cpp/bindings",
     "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
     "//services/tracing/public/cpp",
     "//ui/base",
     "//ui/display",
     "//ui/events",
+    "//ui/events/devices",
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
     "//ui/gl",
-    "//ui/mojo/geometry:interfaces",
     "//ui/platform_window",
     "//ui/platform_window:platform_impls",
+    "//ui/platform_window/mojo",
   ]
 
   if (use_ozone) {
@@ -128,7 +138,7 @@ source_set("lib") {
       "platform_screen_impl_ozone.cc",
       "platform_screen_impl_ozone.h",
     ]
-    deps += [ "//ui/ozone:ozone" ]
+    public_deps += [ "//ui/ozone:ozone" ]
   }
 }
 
@@ -161,7 +171,7 @@ source_set("test_support") {
     "//components/mus/public/interfaces",
     "//mojo/common",
     "//mojo/public/cpp/bindings:bindings",
-    "//ui/mojo/geometry:interfaces",
+    "//ui/gfx/geometry/mojo",
   ]
 }
 
@@ -177,11 +187,13 @@ group("tests") {
 
 test("mus_ws_unittests") {
   sources = [
+    "animation_runner_unittest.cc",
     "cursor_unittest.cc",
     "display_unittest.cc",
     "event_dispatcher_unittest.cc",
     "event_matcher_unittest.cc",
     "focus_controller_unittest.cc",
+    "scheduled_animation_group_unittest.cc",
     "server_window_drawn_tracker_unittest.cc",
     "server_window_surface_manager_test_api.cc",
     "server_window_surface_manager_test_api.h",
@@ -190,6 +202,7 @@ test("mus_ws_unittests") {
     "test_utils.cc",
     "test_utils.h",
     "transient_windows_unittest.cc",
+    "user_activity_monitor_unittest.cc",
     "user_display_manager_unittest.cc",
     "window_coordinate_conversions_unittest.cc",
     "window_finder_unittest.cc",
@@ -211,11 +224,6 @@ test("mus_ws_unittests") {
     "//components/mus/public/cpp/tests:test_support",
     "//components/mus/public/interfaces",
     "//components/mus/surfaces",
-    "//mojo/converters/geometry",
-    "//mojo/converters/input_events",
-    "//mojo/converters/transform",
-    "//mojo/gles2",
-    "//mojo/platform_handle:for_component",
     "//mojo/public/cpp/bindings:bindings",
     "//services/shell/public/cpp:shell_test_support",
     "//services/shell/public/cpp:sources",
@@ -227,9 +235,8 @@ test("mus_ws_unittests") {
     "//ui/gfx",
     "//ui/gfx:test_support",
     "//ui/gfx/geometry",
+    "//ui/gfx/geometry/mojo",
     "//ui/gl",
-    "//ui/mojo/geometry:interfaces",
-    "//ui/mojo/geometry:util",
   ]
 
   if (use_x11) {

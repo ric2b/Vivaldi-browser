@@ -25,10 +25,10 @@
 
 #include "core/css/StyleRule.h"
 #include "core/css/parser/CSSParserTokenRange.h"
+#include "wtf/text/StringView.h"
 
 namespace blink {
 
-struct CSSParserString;
 class CSSProperty;
 class CSSValue;
 class StylePropertyShorthand;
@@ -37,6 +37,7 @@ class StylePropertyShorthand;
 // Outputs: Vector of CSSProperties
 
 class CSSPropertyParser {
+    WTF_MAKE_NONCOPYABLE(CSSPropertyParser);
     STACK_ALLOCATED();
 public:
     static bool parseValue(CSSPropertyID, bool important,
@@ -45,11 +46,6 @@ public:
 
     // Parses a non-shorthand CSS property
     static CSSValue* parseSingleValue(CSSPropertyID, const CSSParserTokenRange&, const CSSParserContext&);
-
-    // TODO(timloh): This doesn't seem like the right place for these
-    static bool isSystemColor(CSSValueID);
-    static bool isColorKeyword(CSSValueID);
-    static bool isValidNumericValue(double);
 
 private:
     CSSPropertyParser(const CSSParserTokenRange&, const CSSParserContext&,
@@ -107,8 +103,8 @@ private:
     HeapVector<CSSProperty, 256>* m_parsedProperties;
 };
 
-CSSPropertyID unresolvedCSSPropertyID(const CSSParserString&);
-CSSValueID cssValueKeywordID(const CSSParserString&);
+CSSPropertyID unresolvedCSSPropertyID(StringView);
+CSSValueID cssValueKeywordID(StringView);
 
 } // namespace blink
 

@@ -32,6 +32,7 @@
 #include "core/layout/svg/ReferenceFilterBuilder.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ContentData.h"
+#include "core/style/CursorData.h"
 #include "core/style/FillLayer.h"
 #include "core/style/StyleFetchedImage.h"
 #include "core/style/StyleFetchedImageSet.h"
@@ -103,7 +104,7 @@ StyleImage* ElementStyleResources::cursorOrPendingFromValue(CSSPropertyID proper
     return value.cachedImage(m_deviceScaleFactor);
 }
 
-void ElementStyleResources::addPendingSVGDocument(FilterOperation* filterOperation, CSSSVGDocumentValue* cssSVGDocumentValue)
+void ElementStyleResources::addPendingSVGDocument(FilterOperation* filterOperation, const CSSSVGDocumentValue* cssSVGDocumentValue)
 {
     m_pendingSVGDocuments.set(filterOperation, cssSVGDocumentValue);
 }
@@ -119,7 +120,7 @@ void ElementStyleResources::loadPendingSVGDocuments(ComputedStyle* computedStyle
         if (filterOperation->type() == FilterOperation::REFERENCE) {
             ReferenceFilterOperation* referenceFilter = toReferenceFilterOperation(filterOperation);
 
-            CSSSVGDocumentValue* value = m_pendingSVGDocuments.get(referenceFilter);
+            const CSSSVGDocumentValue* value = m_pendingSVGDocuments.get(referenceFilter);
             if (!value)
                 continue;
             DocumentResource* resource = value->load(m_document);
@@ -127,7 +128,7 @@ void ElementStyleResources::loadPendingSVGDocuments(ComputedStyle* computedStyle
                 continue;
 
             // Stash the DocumentResource on the reference filter.
-            ReferenceFilterBuilder::setDocumentResourceReference(referenceFilter, adoptPtr(new DocumentResourceReference(resource)));
+            ReferenceFilterBuilder::setDocumentResourceReference(referenceFilter, new DocumentResourceReference(resource));
         }
     }
 }

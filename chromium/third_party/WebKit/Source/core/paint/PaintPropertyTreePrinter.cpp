@@ -5,6 +5,7 @@
 #include "core/paint/PaintPropertyTreePrinter.h"
 
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/ObjectPaintProperties.h"
 
@@ -99,8 +100,8 @@ public:
             printer.addPropertyNode(transform, "Transform");
         if (const TransformPaintPropertyNode* perspective = paintProperties.perspective())
             printer.addPropertyNode(perspective, "Perspective");
-        if (const TransformPaintPropertyNode* svgLocalTransform = paintProperties.svgLocalTransform())
-            printer.addPropertyNode(svgLocalTransform, "SvgLocalTransform");
+        if (const TransformPaintPropertyNode* svgLocalToBorderBoxTransform = paintProperties.svgLocalToBorderBoxTransform())
+            printer.addPropertyNode(svgLocalToBorderBoxTransform, "SvgLocalToBorderBoxTransform");
         if (const TransformPaintPropertyNode* scrollTranslation = paintProperties.scrollTranslation())
             printer.addPropertyNode(scrollTranslation, "ScrollTranslation");
         if (const TransformPaintPropertyNode* scrollbarPaintOffset = paintProperties.scrollbarPaintOffset())

@@ -54,11 +54,9 @@ class ASH_EXPORT TouchUMA {
   // Returns the singleton instance.
   static TouchUMA* GetInstance();
 
-  void RecordGestureEvent(aura::Window* target,
-                          const ui::GestureEvent& event);
+  void RecordGestureEvent(aura::Window* target, const ui::GestureEvent& event);
   void RecordGestureAction(GestureActionType action);
-  void RecordTouchEvent(aura::Window* target,
-                        const ui::TouchEvent& event);
+  void RecordTouchEvent(aura::Window* target, const ui::TouchEvent& event);
 
  private:
   friend struct base::DefaultSingletonTraits<TouchUMA>;
@@ -75,7 +73,7 @@ class ASH_EXPORT TouchUMA {
   // quick succession, regardless of the target window.
   bool touch_in_progress_;
   int burst_length_;
-  base::TimeDelta last_touch_down_time_;
+  base::TimeTicks last_touch_down_time_;
 
   DISALLOW_COPY_AND_ASSIGN(TouchUMA);
 };

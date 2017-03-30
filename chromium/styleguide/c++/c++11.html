@@ -184,7 +184,7 @@ enum <i>enumname</i> : <i>base-type</i></code></td>
 <td><code>[<i>captures</i>](<i>params</i>) -&gt; <i>ret</i> { <i>body</i> }</code></td>
 <td>Anonymous functions</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/lambda">Lambda functions</a></td>
-<td>Do not bind or store lambdas; use <code>base::Bind</code> and <code>base::Callback</code> instead, because they offer protection against a large class of object lifetime mistakes. Don't use default captures (<code>[=]</code>, <code>[&amp;]</code> &ndash; <a href="https://google.github.io/styleguide/cppguide.html#Lambda_expressions">Google Style Guide</a>). Lambdas are typically useful as a parameter to methods or functions that will use them immediately, such as those in <code>&lt;algorithm&gt;</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/D9UnnxBnciQ">Discussion thread</a></td>
+<td>Do not bind or store lambdas outside the lifetime of the stack frame they are defined in; use <code>base::Bind</code> and <code>base::Callback</code> instead, because they offer protection against a large class of object lifetime mistakes. Don't use default captures (<code>[=]</code>, <code>[&amp;]</code> &ndash; <a href="https://google.github.io/styleguide/cppguide.html#Lambda_expressions">Google Style Guide</a>). Lambdas are typically useful as a parameter to methods or functions that will use them immediately, such as those in <code>&lt;algorithm&gt;</code>. <a href="https://groups.google.com/a/chromium.org/forum/#!topic/chromium-dev/D9UnnxBnciQ">Discussion thread</a></td>
 </tr>
 
 <tr>
@@ -240,7 +240,7 @@ enum <i>enumname</i> : <i>base-type</i></code></td>
 template &lt;typename T&gt;<br/>void Function(T&& t) { ... }</code></td>
 <td>Reference that only binds to a temporary object</td>
 <td><a href="http://en.cppreference.com/w/cpp/language/references#Rvalue_references">Rvalue references</a></td>
-<td>As per the <a href="https://google.github.io/styleguide/cppguide.html#Rvalue_references">Google Style Guide</a>: Only use these to define move constructors and move assignment operators, and for perfect forwarding. Most classes should not be copyable, even if movable. Continue to use DISALLOW_COPY_AND_ASSIGN (or DISALLOW_COPY_AND_ASSIGN_WITH_MOVE_FOR_BIND if needed) in most cases. <a href="https://groups.google.com/a/chromium.org/d/topic/chromium-dev/UnRaORb4TSw">Discussion thread</a>. <a href="https://groups.google.com/a/chromium.org/d/topic/cxx/Q526tkruXpM">Another discussion thread</a>.</td>
+<td>As per the <a href="https://google.github.io/styleguide/cppguide.html#Rvalue_references">Google Style Guide</a>: Only use these to define move constructors and move assignment operators, and for perfect forwarding. Most classes should not be copyable, even if movable. Continue to use DISALLOW_COPY_AND_ASSIGN in most cases. <a href="https://groups.google.com/a/chromium.org/d/topic/chromium-dev/UnRaORb4TSw">Discussion thread</a>. <a href="https://groups.google.com/a/chromium.org/d/topic/cxx/Q526tkruXpM">Another discussion thread</a>.</td>
 </tr>
 
 <tr>
@@ -454,7 +454,8 @@ template &lt;typename T&gt;<br/>void Function(T&& t) { ... }</code></td>
 <td>All C++11 features in <code>&lt;tuple&gt;</code>, e.g. <code>std::tie</code> and <code>std::tuple</code>.</td>
 <td>A fixed-size ordered collection of values of mixed types</td>
 <td><a href="http://en.cppreference.com/w/cpp/header/tuple">&lt;tuple&gt;</a></td>
-<td>Prefer <code>std::tuple</code> over <a href="https://crbug.com/554987"><code>base::Tuple</code></a>.</td>
+<td>Use <code>base::get</code> instead of <code>std::get</code> in case the <code>std::tuple</code> may be a rvalue-reference.
+<code>std::get</code> in &lt;=libstdc++-4.6 misses an overload for rvalue-reference of a tuple, and <code>base::get</code> complements it. </td>
 </tr>
 
 <tr>

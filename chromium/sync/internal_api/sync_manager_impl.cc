@@ -252,7 +252,7 @@ void SyncManagerImpl::Init(InitArgs* args) {
       !args->restored_keystore_key_for_bootstrapping.empty());
   sync_encryption_handler_.reset(new SyncEncryptionHandlerImpl(
       &share_, args->encryptor, args->restored_key_for_bootstrapping,
-      args->restored_keystore_key_for_bootstrapping, args->clear_data_option));
+      args->restored_keystore_key_for_bootstrapping));
   sync_encryption_handler_->AddObserver(this);
   sync_encryption_handler_->AddObserver(&debug_info_event_listener_);
   sync_encryption_handler_->AddObserver(&js_sync_encryption_handler_observer_);
@@ -824,7 +824,7 @@ void SyncManagerImpl::OnSyncCycleEvent(const SyncCycleEvent& event) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Only send an event if this is due to a cycle ending and this cycle
   // concludes a canonical "sync" process; that is, based on what is known
-  // locally we are "all happy" and up-to-date.  There may be new changes on
+  // locally we are "all happy" and up to date.  There may be new changes on
   // the server, but we'll get them on a subsequent sync.
   //
   // Notifications are sent at the end of every sync cycle, regardless of

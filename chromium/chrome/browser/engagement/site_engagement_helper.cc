@@ -166,40 +166,27 @@ SiteEngagementService::Helper::Helper(content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
       input_tracker_(this, web_contents),
       media_tracker_(this, web_contents),
+      service_(SiteEngagementService::Get(
+          Profile::FromBrowserContext(web_contents->GetBrowserContext()))),
       record_engagement_(false) {}
 
 void SiteEngagementService::Helper::RecordUserInput(
     SiteEngagementMetrics::EngagementType type) {
   TRACE_EVENT0("SiteEngagement", "RecordUserInput");
   content::WebContents* contents = web_contents();
-  if (contents) {
-    Profile* profile =
-        Profile::FromBrowserContext(contents->GetBrowserContext());
-    SiteEngagementService* service = SiteEngagementService::Get(profile);
-
-    // Service is null in incognito.
-    if (service)
-      service->HandleUserInput(contents->GetVisibleURL(), type);
-  }
+  // Service is null in incognito.
+  if (contents && service_)
+    service_->HandleUserInput(contents, type);
 }
 
 void SiteEngagementService::Helper::RecordMediaPlaying(bool is_hidden) {
   content::WebContents* contents = web_contents();
-  if (contents) {
-    Profile* profile =
-        Profile::FromBrowserContext(contents->GetBrowserContext());
-    SiteEngagementService* service = SiteEngagementService::Get(profile);
-
-    if (service)
-      service->HandleMediaPlaying(contents->GetVisibleURL(), is_hidden);
-  }
+  if (contents && service_)
+    service_->HandleMediaPlaying(contents, is_hidden);
 }
 
 void SiteEngagementService::Helper::DidFinishNavigation(
     content::NavigationHandle* handle) {
-  input_tracker_.Stop();
-  media_tracker_.Stop();
-
   // Ignore all schemes except HTTP and HTTPS, as well as uncommitted, non
   // main-frame, same page, or error page navigations.
   record_engagement_ = handle->GetURL().SchemeIsHTTPOrHTTPS();
@@ -207,6 +194,9 @@ void SiteEngagementService::Helper::DidFinishNavigation(
       handle->IsSamePage() || handle->IsErrorPage() || !record_engagement_) {
     return;
   }
+
+  input_tracker_.Stop();
+  media_tracker_.Stop();
 
   // Ignore prerender loads. This means that prerenders will not receive
   // navigation engagement. The implications are as follows:
@@ -224,12 +214,8 @@ void SiteEngagementService::Helper::DidFinishNavigation(
   if (prerender::PrerenderContents::FromWebContents(web_contents()) != nullptr)
     return;
 
-  Profile* profile =
-      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
-  SiteEngagementService* service = SiteEngagementService::Get(profile);
-
-  if (service)
-    service->HandleNavigation(handle->GetURL(), handle->GetPageTransition());
+  if (service_)
+    service_->HandleNavigation(web_contents(), handle->GetPageTransition());
 
   input_tracker_.Start(
       base::TimeDelta::FromSeconds(g_seconds_delay_after_navigation));

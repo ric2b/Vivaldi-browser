@@ -5,14 +5,17 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_CLEAR_BROWSING_DATA_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_CLEAR_BROWSING_DATA_HANDLER_H_
 
+#include <memory>
+#include <vector>
+
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/scoped_observer.h"
+#include "chrome/browser/browsing_data/browsing_data_counter.h"
 #include "chrome/browser/browsing_data/browsing_data_remover.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "components/browser_sync/browser/profile_sync_service.h"
-#include "components/prefs/pref_member.h"
+#include "components/prefs/pref_change_registrar.h"
 
 namespace base {
 class ListValue;
@@ -63,6 +66,23 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   // hides the footer about other forms of history stored in user's account.
   void UpdateHistoryNotice(bool show);
 
+  // Called as an asynchronous response to |RefreshHistoryNotice()|. Enables or
+  // disables the dialog about other forms of history stored in user's account
+  // that is shown when the history deletion is finished.
+  void UpdateHistoryDeletionDialog(bool show);
+
+  // Adds a browsing data |counter|.
+  void AddCounter(std::unique_ptr<BrowsingDataCounter> counter);
+
+  // Updates a counter text according to the |result|.
+  void UpdateCounterText(std::unique_ptr<BrowsingDataCounter::Result> result);
+
+  // Cached profile corresponding to the WebUI of this handler.
+  Profile* profile_;
+
+  // Counters that calculate the data volume for individual data types.
+  std::vector<std::unique_ptr<BrowsingDataCounter>> counters_;
+
   // ProfileSyncService to observe sync state changes.
   ProfileSyncService* sync_service_;
   ScopedObserver<ProfileSyncService, sync_driver::SyncServiceObserver>
@@ -75,20 +95,17 @@ class ClearBrowsingDataHandler : public SettingsPageUIHandler,
   // can only be one such request in-flight.
   std::string webui_callback_id_;
 
-  // Keeps track of whether clearing LSO data is supported.
-  BooleanPrefMember clear_plugin_lso_data_enabled_;
-
-  // Keeps track of whether Pepper Flash is enabled and thus Flapper-specific
-  // settings and removal options (e.g. Content Licenses) are available.
-  BooleanPrefMember pepper_flash_settings_enabled_;
-
-  // Keeps track of whether deleting browsing history and downloads is allowed.
-  BooleanPrefMember allow_deleting_browser_history_;
+  // Used to listen for pref changes to allow / disallow deleting browsing data.
+  PrefChangeRegistrar profile_pref_registrar_;
 
   // Whether the sentence about other forms of history stored in user's account
   // should be displayed in the footer. This value is retrieved asynchronously,
   // so we cache it here.
-  bool should_show_history_footer_;
+  bool show_history_footer_;
+
+  // Whether we should show a dialog informing the user about other forms of
+  // history stored in their account after the history deletion is finished.
+  bool show_history_deletion_dialog_;
 
   // A weak pointer factory for asynchronous calls referencing this class.
   base::WeakPtrFactory<ClearBrowsingDataHandler> weak_ptr_factory_;

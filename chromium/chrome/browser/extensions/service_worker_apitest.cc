@@ -11,6 +11,7 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
+#include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/push_messaging/push_messaging_app_identifier.h"
 #include "chrome/browser/push_messaging/push_messaging_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_service_impl.h"
@@ -21,6 +22,7 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
+#include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
@@ -200,9 +202,9 @@ class ServiceWorkerPushMessagingTest : public ServiceWorkerTest {
   void GrantNotificationPermissionForTest(const GURL& url) {
     GURL origin = url.GetOrigin();
     DesktopNotificationProfileUtil::GrantPermission(profile(), origin);
-    ASSERT_EQ(
-        CONTENT_SETTING_ALLOW,
-        DesktopNotificationProfileUtil::GetContentSetting(profile(), origin));
+    ASSERT_EQ(blink::mojom::PermissionStatus::GRANTED,
+              PermissionManager::Get(profile())->GetPermissionStatus(
+                  content::PermissionType::NOTIFICATIONS, origin, origin));
   }
 
   PushMessagingAppIdentifier GetAppIdentifierForServiceWorkerRegistration(
@@ -595,6 +597,29 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesFetch) {
       "service_worker/web_accessible_resources/fetch/", "page.html"));
 }
 
+IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, TabsCreate) {
+  // Extensions APIs from SW are only enabled on trunk.
+  ScopedCurrentChannel current_channel_override(version_info::Channel::UNKNOWN);
+  const Extension* extension = LoadExtensionWithFlags(
+      test_data_dir_.AppendASCII("service_worker/tabs_create"), kFlagNone);
+  ASSERT_TRUE(extension);
+  ui_test_utils::NavigateToURL(browser(),
+                               extension->GetResourceURL("page.html"));
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  int starting_tab_count = browser()->tab_strip_model()->count();
+  std::string result;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
+      web_contents, "window.runServiceWorker()", &result));
+  ASSERT_EQ("chrome.tabs.create callback", result);
+  EXPECT_EQ(starting_tab_count + 1, browser()->tab_strip_model()->count());
+
+  // Check extension shutdown path.
+  UnloadExtension(extension->id());
+  EXPECT_EQ(starting_tab_count, browser()->tab_strip_model()->count());
+}
+
 // This test loads a web page that has an iframe pointing to a
 // chrome-extension:// URL. The URL is listed in the extension's
 // web_accessible_resources. Initially the iframe is served from the extension's
@@ -714,14 +739,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest,
       << message_;
 }
 
-// Flaky on ChromiumOS bots. http://crbug.com/612673
-// Flaky on Windows bots. http://crbug.com/612840
-#if defined(OS_CHROMEOS) || defined(OS_WIN)
-#define MAYBE_OnPush DISABLED_OnPush
-#else
-#define MAYBE_OnPush OnPush
-#endif
-IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, MAYBE_OnPush) {
+IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, OnPush) {
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("service_worker/push_messaging"), kFlagNone);
   ASSERT_TRUE(extension);
@@ -747,6 +765,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, MAYBE_OnPush) {
   ASSERT_EQ(app_identifier.app_id(), gcm_service()->last_registered_app_id());
   EXPECT_EQ("1234567890", gcm_service()->last_registered_sender_ids()[0]);
 
+  base::RunLoop run_loop;
   // Send a push message via gcm and expect the ServiceWorker to receive it.
   ExtensionTestMessageListener push_message_listener("OK", false);
   push_message_listener.set_failure_message("FAIL");
@@ -754,8 +773,10 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerPushMessagingTest, MAYBE_OnPush) {
   message.sender_id = "1234567890";
   message.raw_data = "testdata";
   message.decrypted = true;
+  push_service()->SetMessageCallbackForTesting(run_loop.QuitClosure());
   push_service()->OnMessage(app_identifier.app_id(), message);
   EXPECT_TRUE(push_message_listener.WaitUntilSatisfied());
+  run_loop.Run();  // Wait until the message is handled by push service.
 }
 
 }  // namespace extensions

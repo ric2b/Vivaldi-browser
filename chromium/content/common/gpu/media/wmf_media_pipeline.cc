@@ -314,7 +314,7 @@ void WMFMediaPipeline::AudioTimestampCalculator::UpdateFrameCounter(
 
 WMFMediaPipeline::DXVAPictureBuffer::~DXVAPictureBuffer() {
   if (decoding_surface_) {
-    EGLDisplay egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
+    EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
 
     eglReleaseTexImage(egl_display, decoding_surface_, EGL_BACK_BUFFER);
     eglDestroySurface(egl_display, decoding_surface_);
@@ -327,13 +327,13 @@ WMFMediaPipeline::DXVAPictureBuffer::Create(
     gfx::Size texture_size,
     EGLConfig egl_config,
     IDirect3DDevice9Ex* direct3d_device) {
-  if (!gfx::GLContext::GetCurrent())
+  if (!gl::GLContext::GetCurrent())
     return nullptr;
 
   std::unique_ptr<DXVAPictureBuffer> dxva_picture_buffer(
       new DXVAPictureBuffer(texture_id, texture_size, egl_config));
 
-  EGLDisplay egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
+  EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
 
   EGLint use_rgb = 1;
   eglGetConfigAttrib(egl_display, egl_config, EGL_BIND_TO_TEXTURE_RGB,
@@ -386,7 +386,7 @@ WMFMediaPipeline::DXVAPictureBuffer::Create(
 bool WMFMediaPipeline::DXVAPictureBuffer::Fill(
     const Direct3DContext& direct3d_context,
     IDirect3DSurface9* source_surface) {
-  if (!gfx::GLContext::GetCurrent())
+  if (!gl::GLContext::GetCurrent())
     return false;
 
   D3DSURFACE_DESC surface_desc;
@@ -455,7 +455,7 @@ bool WMFMediaPipeline::DXVAPictureBuffer::Fill(
     Sleep(1);  // Poor-man's Yield().
   }
 
-  EGLDisplay egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
+  EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
   eglBindTexImage(egl_display, decoding_surface_, EGL_BACK_BUFFER);
   glTexParameteri(media::kPlatformMediaPipelineTextureTarget,
                   GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -466,9 +466,9 @@ bool WMFMediaPipeline::DXVAPictureBuffer::Fill(
 
 void WMFMediaPipeline::DXVAPictureBuffer::Reuse() {
   DCHECK(decoding_surface_);
-  DCHECK(gfx::GLContext::GetCurrent());
+  DCHECK(gl::GLContext::GetCurrent());
 
-  EGLDisplay egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
+  EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
   eglReleaseTexImage(egl_display, decoding_surface_, EGL_BACK_BUFFER);
 }
 
@@ -579,7 +579,7 @@ EGLConfig WMFMediaPipeline::GetEGLConfig(
   if (!make_gl_context_current_cb.Run())
     return nullptr;
 
-  EGLDisplay egl_display = gfx::GLSurfaceEGL::GetHardwareDisplay();
+  EGLDisplay egl_display = gl::GLSurfaceEGL::GetHardwareDisplay();
 
   EGLint config_attribs[] = {EGL_BUFFER_SIZE, 32,
                              EGL_RED_SIZE, 8,

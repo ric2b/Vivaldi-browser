@@ -28,7 +28,6 @@ import org.chromium.chrome.browser.init.BrowserParts;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.init.EmptyBrowserParts;
 import org.chromium.chrome.browser.util.IntentUtils;
-import org.chromium.ui.base.LocalizationUtils;
 
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -53,17 +52,30 @@ public class DownloadNotificationService extends Service {
             "org.chromium.chrome.browser.download.DOWNLOAD_PAUSE";
     static final String ACTION_DOWNLOAD_RESUME =
             "org.chromium.chrome.browser.download.DOWNLOAD_RESUME";
+    public static final String ACTION_DOWNLOAD_RESUME_ALL =
+            "org.chromium.chrome.browser.download.DOWNLOAD_RESUME_ALL";
     static final int INVALID_DOWNLOAD_PERCENTAGE = -1;
     @VisibleForTesting
     static final String PENDING_DOWNLOAD_NOTIFICATIONS = "PendingDownloadNotifications";
-    private static final String NOTIFICATION_NAMESPACE = "DownloadNotificationService";
+    static final String NOTIFICATION_NAMESPACE = "DownloadNotificationService";
     private static final String TAG = "DownloadNotification";
+    private static final String NEXT_DOWNLOAD_NOTIFICATION_ID = "NextDownloadNotificationId";
+    // Notification Id starting value, to avoid conflicts from IDs used in prior versions.
+    private static final int STARTING_NOTIFICATION_ID = 1000000;
+    private static final String AUTO_RESUMPTION_ATTEMPT_LEFT = "ResumptionAttemptLeft";
+    private static final int MAX_RESUMPTION_ATTEMPT_LEFT = 5;
+    @VisibleForTesting static final int SECONDS_PER_MINUTE = 60;
+    @VisibleForTesting static final int SECONDS_PER_HOUR = 60 * 60;
+    @VisibleForTesting static final int SECONDS_PER_DAY = 24 * 60 * 60;
     private final IBinder mBinder = new LocalBinder();
     private final List<DownloadSharedPreferenceEntry> mDownloadSharedPreferenceEntries =
             new ArrayList<DownloadSharedPreferenceEntry>();
+    private final List<String> mDownloadsInProgress = new ArrayList<String>();
     private NotificationManager mNotificationManager;
     private SharedPreferences mSharedPrefs;
     private Context mContext;
+    private int mNextNotificationId;
+    private int mNumAutoResumptionAttemptLeft;
 
     /**
      * Class for clients to access.
@@ -79,8 +91,7 @@ public class DownloadNotificationService extends Service {
         // This funcion is called when Chrome is swiped away from the recent apps
         // drawer. So it doesn't catch all scenarios that chrome can get killed.
         // This will only help Android 4.4.2.
-        pauseAllDownloads();
-        stopSelf();
+        onBrowserKilled();
     }
 
     @Override
@@ -98,17 +109,52 @@ public class DownloadNotificationService extends Service {
         // there are no calls to initialize DownloadManagerService. Pause all the
         // download notifications as download will not progress without chrome.
         if (!DownloadManagerService.hasDownloadManagerService()) {
-            pauseAllDownloads();
-            stopSelf();
+            onBrowserKilled();
         }
+        mNextNotificationId = mSharedPrefs.getInt(
+                NEXT_DOWNLOAD_NOTIFICATION_ID, STARTING_NOTIFICATION_ID);
+
+    }
+
+    /**
+     * Called when browser is killed. Schedule a resumption task and pause all the download
+     * notifications.
+     */
+    private void onBrowserKilled() {
+        pauseAllDownloads();
+        if (!mDownloadSharedPreferenceEntries.isEmpty()) {
+            boolean allowMeteredConnection = false;
+            for (int i = 0; i < mDownloadSharedPreferenceEntries.size(); ++i) {
+                if (mDownloadSharedPreferenceEntries.get(i).canDownloadWhileMetered) {
+                    allowMeteredConnection = true;
+                }
+            }
+            if (mNumAutoResumptionAttemptLeft > 0) {
+                DownloadResumptionScheduler.getDownloadResumptionScheduler(mContext).schedule(
+                        allowMeteredConnection);
+            }
+        }
+        stopSelf();
     }
 
     @Override
     public int onStartCommand(final Intent intent, int flags, int startId) {
         if (isDownloadOperationIntent(intent)) {
             handleDownloadOperation(intent);
+            DownloadResumptionScheduler.getDownloadResumptionScheduler(mContext).cancelTask();
+            // Limit the number of auto resumption attempts in case Chrome falls into a vicious
+            // cycle.
+            if (intent.getAction() == ACTION_DOWNLOAD_RESUME_ALL) {
+                if (mNumAutoResumptionAttemptLeft > 0) {
+                    mNumAutoResumptionAttemptLeft--;
+                    updateResumptionAttemptLeft();
+                }
+            } else {
+                // Reset number of attempts left if the action is triggered by user.
+                mNumAutoResumptionAttemptLeft = MAX_RESUMPTION_ATTEMPT_LEFT;
+                clearResumptionAttemptLeft();
+            }
         }
-
         // This should restart the service after Chrome gets killed. However, this
         // doesn't work on Android 4.4.2.
         return START_STICKY;
@@ -120,8 +166,27 @@ public class DownloadNotificationService extends Service {
     }
 
     /**
+     * Helper method to update the remaining number of background resumption attempts left.
+     * @param attamptLeft Number of attempt left.
+     */
+    private void updateResumptionAttemptLeft() {
+        SharedPreferences.Editor editor = mSharedPrefs.edit();
+        editor.putInt(AUTO_RESUMPTION_ATTEMPT_LEFT, mNumAutoResumptionAttemptLeft);
+        editor.apply();
+    }
+
+    /**
+     * Helper method to clear the remaining number of background resumption attempts left.
+     */
+    static void clearResumptionAttemptLeft() {
+        SharedPreferences SharedPrefs = ContextUtils.getAppSharedPreferences();
+        SharedPreferences.Editor editor = SharedPrefs.edit();
+        editor.remove(AUTO_RESUMPTION_ATTEMPT_LEFT);
+        editor.apply();
+    }
+
+    /**
      * Add a in-progress download notification.
-     * @param notificationId Notification ID of the download.
      * @param downloadGuid GUID of the download.
      * @param fileName File name of the download.
      * @param percentage Percentage completed. Value should be between 0 to 100 if
@@ -131,8 +196,8 @@ public class DownloadNotificationService extends Service {
      * @param isResumable Whether the download can be resumed.
      * @param canDownloadWhileMetered Whether the download can happen in metered network.
      */
-    public void notifyDownloadProgress(int notificationId, String downloadGuid, String fileName,
-            int percentage, long timeRemainingInMillis, long startTime, boolean isResumable,
+    public void notifyDownloadProgress(String downloadGuid, String fileName, int percentage,
+            long timeRemainingInMillis, long startTime, boolean isResumable,
             boolean canDownloadWhileMetered) {
         boolean indeterminate = percentage == INVALID_DOWNLOAD_PERCENTAGE;
         NotificationCompat.Builder builder = buildNotification(
@@ -142,7 +207,7 @@ public class DownloadNotificationService extends Service {
         if (!indeterminate) {
             NumberFormat formatter = NumberFormat.getPercentInstance(Locale.getDefault());
             String percentText = formatter.format(percentage / 100.0);
-            String duration = getDurationString(timeRemainingInMillis);
+            String duration = formatRemainingTime(mContext, timeRemainingInMillis);
             builder.setContentText(duration);
             if (Build.VERSION.CODENAME.equals("N")
                     || Build.VERSION.SDK_INT > Build.VERSION_CODES.M) {
@@ -151,6 +216,7 @@ public class DownloadNotificationService extends Service {
                 builder.setContentInfo(percentText);
             }
         }
+        int notificationId = getNotificationId(downloadGuid);
         addOrReplaceSharedPreferenceEntry(new DownloadSharedPreferenceEntry(
                 notificationId, isResumable, canDownloadWhileMetered, downloadGuid, fileName));
         if (startTime > 0) builder.setWhen(startTime);
@@ -165,26 +231,31 @@ public class DownloadNotificationService extends Service {
                             fileName, false));
         }
         updateNotification(notificationId, builder.build());
-    }
-
-    /**
-     * Converts milliseconds to time remaining format.
-     * @param timeRemainingInMillis Remaining download time in milliseconds.
-     * @return formatted remaining time string for display.
-     */
-    @VisibleForTesting
-    String getDurationString(long timeRemainingInMillis) {
-        return LocalizationUtils.getDurationString(timeRemainingInMillis);
+        if (!mDownloadsInProgress.contains(downloadGuid)) {
+            mDownloadsInProgress.add(downloadGuid);
+        }
     }
 
     /**
      * Cancel a download notification.
-     * @param notificationId Notification ID of the download.
+     * @notificationId Notification ID of the download
      * @param downloadGuid GUID of the download.
      */
-    public void cancelNotification(int notificationId, String downloadGuid) {
-        mNotificationManager.cancel(NOTIFICATION_NAMESPACE, notificationId);
+    @VisibleForTesting
+    void cancelNotification(int notificaitonId, String downloadGuid) {
+        mNotificationManager.cancel(NOTIFICATION_NAMESPACE, notificaitonId);
         removeSharedPreferenceEntry(downloadGuid);
+        mDownloadsInProgress.remove(downloadGuid);
+    }
+
+    /**
+     * Called when a download is canceled.
+     * @param downloadGuid GUID of the download.
+     */
+    public void notifyDownloadCanceled(String downloadGuid) {
+        DownloadSharedPreferenceEntry entry = getDownloadSharedPreferenceEntry(downloadGuid);
+        if (entry == null) return;
+        cancelNotification(entry.notificationId, downloadGuid);
     }
 
     /**
@@ -207,7 +278,7 @@ public class DownloadNotificationService extends Service {
                 mContext.getResources().getString(R.string.download_notification_cancel_button),
                 cancelIntent);
         if (entry.isResumable) {
-            builder.addAction(R.drawable.resume_download,
+            builder.addAction(R.drawable.ic_get_app_white_24dp,
                     mContext.getResources().getString(
                             R.string.download_notification_resume_button),
                     buildPendingIntent(ACTION_DOWNLOAD_RESUME, entry.notificationId,
@@ -218,17 +289,19 @@ public class DownloadNotificationService extends Service {
         if (!entry.isResumable || !isAutoResumable) {
             removeSharedPreferenceEntry(downloadGuid);
         }
+        mDownloadsInProgress.remove(downloadGuid);
     }
 
     /**
      * Add a download successful notification.
-     * @param notificationId Notification ID of the download.
      * @param downloadGuid GUID of the download.
      * @param fileName GUID of the download.
      * @param intent Intent to launch when clicking the notification.
+     * @return ID of the successful download notification. Used for removing the notification when
+     *         user click on the snackbar.
      */
-    public void notifyDownloadSuccessful(int notificationId, String downloadGuid, String fileName,
-            Intent intent) {
+    public int notifyDownloadSuccessful(String downloadGuid, String fileName, Intent intent) {
+        int notificationId = getNotificationId(downloadGuid);
         NotificationCompat.Builder builder = buildNotification(
                 android.R.drawable.stat_sys_download_done, fileName,
                 mContext.getResources().getString(R.string.download_notification_completed));
@@ -238,15 +311,16 @@ public class DownloadNotificationService extends Service {
         }
         updateNotification(notificationId, builder.build());
         removeSharedPreferenceEntry(downloadGuid);
+        mDownloadsInProgress.remove(downloadGuid);
+        return notificationId;
     }
 
     /**
      * Add a download failed notification.
-     * @param notificationId Notification ID of the download.
      * @param downloadGuid GUID of the download.
      * @param fileName GUID of the download.
      */
-    public void notifyDownloadFailed(int notificationId, String downloadGuid, String fileName) {
+    public void notifyDownloadFailed(String downloadGuid, String fileName) {
         // If the download is not in history db, fileName could be empty. Get it from
         // SharedPreferences.
         if (TextUtils.isEmpty(fileName)) {
@@ -255,11 +329,13 @@ public class DownloadNotificationService extends Service {
             fileName = entry.fileName;
         }
 
+        int notificationId = getNotificationId(downloadGuid);
         NotificationCompat.Builder builder = buildNotification(
                 android.R.drawable.stat_sys_download_done, fileName,
                 mContext.getResources().getString(R.string.download_notification_failed));
         updateNotification(notificationId, builder.build());
         removeSharedPreferenceEntry(downloadGuid);
+        mDownloadsInProgress.remove(downloadGuid);
     }
 
     /**
@@ -315,40 +391,52 @@ public class DownloadNotificationService extends Service {
     }
 
     /**
+     * Retrives DownloadSharedPreferenceEntry from a download action intent.
+     * @param intent Intent that contains the download action.
+     */
+    private DownloadSharedPreferenceEntry getDownloadEntryFromIntent(Intent intent) {
+        if (intent.getAction() == ACTION_DOWNLOAD_RESUME_ALL) return null;
+        String guid = IntentUtils.safeGetStringExtra(
+                intent, DownloadNotificationService.EXTRA_DOWNLOAD_GUID);
+        DownloadSharedPreferenceEntry entry = getDownloadSharedPreferenceEntry(guid);
+        if (entry != null) return entry;
+        int notificationId = IntentUtils.safeGetIntExtra(
+                intent, DownloadNotificationService.EXTRA_DOWNLOAD_NOTIFICATION_ID, -1);
+        String fileName = IntentUtils.safeGetStringExtra(
+                intent, DownloadNotificationService.EXTRA_DOWNLOAD_FILE_NAME);
+        boolean metered = DownloadManagerService.isActiveNetworkMetered(mContext);
+        return new DownloadSharedPreferenceEntry(notificationId, true, metered, guid, fileName);
+    }
+
+    /**
      * Helper method to launch the browser process and handle a download operation that is included
      * in the given intent.
      * @param intent Intent with the download operation.
      */
     private void handleDownloadOperation(final Intent intent) {
-        final int notificationId = IntentUtils.safeGetIntExtra(
-                intent, DownloadNotificationService.EXTRA_DOWNLOAD_NOTIFICATION_ID, -1);
-        final String guid = IntentUtils.safeGetStringExtra(
-                intent, DownloadNotificationService.EXTRA_DOWNLOAD_GUID);
-        final String fileName = IntentUtils.safeGetStringExtra(
-                intent, DownloadNotificationService.EXTRA_DOWNLOAD_FILE_NAME);
-        DownloadSharedPreferenceEntry entry = null;
+        final DownloadSharedPreferenceEntry entry = getDownloadEntryFromIntent(intent);
         if (intent.getAction() == ACTION_DOWNLOAD_PAUSE) {
-            notifyDownloadPaused(guid, false);
             // If browser process already goes away, the download should have already paused. Do
             // nothing in that case.
-            if (!DownloadManagerService.hasDownloadManagerService()) return;
+            if (!DownloadManagerService.hasDownloadManagerService()) {
+                notifyDownloadPaused(entry.downloadGuid, false);
+                return;
+            }
         } else if (intent.getAction() == ACTION_DOWNLOAD_RESUME) {
-            entry = getDownloadSharedPreferenceEntry(guid);
             boolean metered = DownloadManagerService.isActiveNetworkMetered(mContext);
-            if (entry == null) {
-                entry = new DownloadSharedPreferenceEntry(
-                        notificationId, true, metered, guid, fileName);
-            } else if (!entry.canDownloadWhileMetered) {
+            if (!entry.canDownloadWhileMetered) {
                 // If user manually resumes a download, update the network type if it
                 // is not metered previously.
                 entry.canDownloadWhileMetered = metered;
             }
             // Update the SharedPreference entry.
             addOrReplaceSharedPreferenceEntry(entry);
+        } else if (intent.getAction() == ACTION_DOWNLOAD_RESUME_ALL
+                && (mDownloadSharedPreferenceEntries.isEmpty()
+                        || DownloadManagerService.hasDownloadManagerService())) {
+            return;
         }
-        final DownloadItem item = entry == null ? null : entry.buildDownloadItem();
-        final boolean canDownloadWhileMetered =
-                entry == null ? false : entry.canDownloadWhileMetered;
+
         BrowserParts parts = new EmptyBrowserParts() {
             @Override
             public boolean shouldStartGpuProcess() {
@@ -364,19 +452,22 @@ public class DownloadNotificationService extends Service {
                         // TODO(qinmin): Alternatively, we can delete the downloaded content on
                         // SD card, and remove the download ID from the SharedPreferences so we
                         // don't need to restart the browser process. http://crbug.com/579643.
-                        cancelNotification(notificationId, guid);
-                        service.cancelDownload(guid, IntentUtils.safeGetBooleanExtra(
+                        cancelNotification(entry.notificationId, entry.downloadGuid);
+                        service.cancelDownload(entry.downloadGuid, IntentUtils.safeGetBooleanExtra(
                                 intent, EXTRA_NOTIFICATION_DISMISSED, false));
                         break;
                     case ACTION_DOWNLOAD_PAUSE:
-                        service.pauseDownload(guid);
+                        service.pauseDownload(entry.downloadGuid);
                         break;
                     case ACTION_DOWNLOAD_RESUME:
-                        assert item != null;
-                        notifyDownloadProgress(notificationId, guid, fileName,
+                        notifyDownloadProgress(entry.downloadGuid, entry.fileName,
                                 INVALID_DOWNLOAD_PERCENTAGE, 0, 0, true,
-                                canDownloadWhileMetered);
-                        service.resumeDownload(item, true);
+                                entry.canDownloadWhileMetered);
+                        service.resumeDownload(entry.buildDownloadItem(), true);
+                        break;
+                    case ACTION_DOWNLOAD_RESUME_ALL:
+                        assert entry == null;
+                        resumeAllPendingDownloads();
                         break;
                     default:
                         Log.e(TAG, "Unrecognized intent action.", intent);
@@ -410,6 +501,7 @@ public class DownloadNotificationService extends Service {
      */
     static boolean isDownloadOperationIntent(Intent intent) {
         if (intent == null) return false;
+        if (ACTION_DOWNLOAD_RESUME_ALL.equals(intent.getAction())) return true;
         if (!ACTION_DOWNLOAD_CANCEL.equals(intent.getAction())
                 && !ACTION_DOWNLOAD_RESUME.equals(intent.getAction())
                 && !ACTION_DOWNLOAD_PAUSE.equals(intent.getAction())) {
@@ -472,7 +564,8 @@ public class DownloadNotificationService extends Service {
     }
 
     /**
-     * Resumes all pending downloads from |mDownloadSharedPreferenceEntries|.
+     * Resumes all pending downloads from |mDownloadSharedPreferenceEntries|. If a download is
+     * already in progress, do nothing.
      */
     public void resumeAllPendingDownloads() {
         boolean isNetworkMetered = DownloadManagerService.isActiveNetworkMetered(mContext);
@@ -482,17 +575,20 @@ public class DownloadNotificationService extends Service {
         for (int i = 0; i < mDownloadSharedPreferenceEntries.size(); ++i) {
             DownloadSharedPreferenceEntry entry = mDownloadSharedPreferenceEntries.get(i);
             if (!entry.canDownloadWhileMetered && isNetworkMetered) continue;
-            notifyDownloadProgress(entry.notificationId, entry.downloadGuid, entry.fileName,
+            if (mDownloadsInProgress.contains(entry.downloadGuid)) continue;
+            notifyDownloadProgress(entry.downloadGuid, entry.fileName,
                     INVALID_DOWNLOAD_PERCENTAGE, 0, 0, true, entry.canDownloadWhileMetered);
             service.resumeDownload(entry.buildDownloadItem(), false);
         }
     }
 
     /**
-     * Parse the DownloadSharedPreferenceEntry from the shared preference and return a list of them.
-     * @return a list of parsed DownloadSharedPreferenceEntry.
+     * Parse a list of the DownloadSharedPreferenceEntry and the number of auto resumption attempt
+     * left from the shared preference.
      */
     void parseDownloadSharedPrefs() {
+        mNumAutoResumptionAttemptLeft = mSharedPrefs.getInt(AUTO_RESUMPTION_ATTEMPT_LEFT,
+                MAX_RESUMPTION_ATTEMPT_LEFT);
         if (!mSharedPrefs.contains(PENDING_DOWNLOAD_NOTIFICATIONS)) return;
         Set<String> entries = DownloadManagerService.getStoredDownloadInfo(
                 mSharedPrefs, PENDING_DOWNLOAD_NOTIFICATIONS);
@@ -530,5 +626,73 @@ public class DownloadNotificationService extends Service {
         }
         DownloadManagerService.storeDownloadInfo(
                 mSharedPrefs, PENDING_DOWNLOAD_NOTIFICATIONS, entries);
+    }
+
+    /**
+     * Return the notification ID for the given download GUID.
+     * @return notification ID to be used.
+     */
+    private int getNotificationId(String downloadGuid) {
+        DownloadSharedPreferenceEntry entry = getDownloadSharedPreferenceEntry(downloadGuid);
+        if (entry != null) return entry.notificationId;
+        int notificationId = mNextNotificationId;
+        mNextNotificationId = mNextNotificationId == Integer.MAX_VALUE
+                ? STARTING_NOTIFICATION_ID : mNextNotificationId + 1;
+        SharedPreferences.Editor editor = mSharedPrefs.edit();
+        editor.putInt(NEXT_DOWNLOAD_NOTIFICATION_ID, mNextNotificationId);
+        editor.apply();
+        return notificationId;
+    }
+
+    /**
+     * Format remaining time for the given millis, in the following format:
+     * 5 hours; will include 1 unit, can go down to seconds precision.
+     * This is similar to what android.java.text.Formatter.formatShortElapsedTime() does. Don't use
+     * ui::TimeFormat::Simple() as it is very expensive.
+     *
+     * @param context the application context.
+     * @param millis the remaining time in milli seconds.
+     * @return the formatted remaining time.
+     */
+    public static String formatRemainingTime(Context context, long millis) {
+        long secondsLong = millis / 1000;
+
+        int days = 0;
+        int hours = 0;
+        int minutes = 0;
+        if (secondsLong >= SECONDS_PER_DAY) {
+            days = (int) (secondsLong / SECONDS_PER_DAY);
+            secondsLong -= (long) days * SECONDS_PER_DAY;
+        }
+        if (secondsLong >= SECONDS_PER_HOUR) {
+            hours = (int) (secondsLong / SECONDS_PER_HOUR);
+            secondsLong -= (long) hours * SECONDS_PER_HOUR;
+        }
+        if (secondsLong >= SECONDS_PER_MINUTE) {
+            minutes = (int) (secondsLong / SECONDS_PER_MINUTE);
+            secondsLong -= (long) minutes * SECONDS_PER_MINUTE;
+        }
+        int seconds = (int) secondsLong;
+
+        if (days >= 2) {
+            days += (hours + 12) / 24;
+            return context.getString(R.string.remaining_duration_days, days);
+        } else if (days > 0) {
+            return context.getString(R.string.remaining_duration_one_day);
+        } else if (hours >= 2) {
+            hours += (minutes + 30) / 60;
+            return context.getString(R.string.remaining_duration_hours, hours);
+        } else if (hours > 0) {
+            return context.getString(R.string.remaining_duration_one_hour);
+        } else if (minutes >= 2) {
+            minutes += (seconds + 30) / 60;
+            return context.getString(R.string.remaining_duration_minutes, minutes);
+        } else if (minutes > 0) {
+            return context.getString(R.string.remaining_duration_one_minute);
+        } else if (seconds == 1) {
+            return context.getString(R.string.remaining_duration_one_second);
+        } else {
+            return context.getString(R.string.remaining_duration_seconds, seconds);
+        }
     }
 }

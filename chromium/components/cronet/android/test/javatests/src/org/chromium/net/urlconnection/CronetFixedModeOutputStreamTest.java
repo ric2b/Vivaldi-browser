@@ -10,7 +10,9 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetTestBase;
 import org.chromium.net.CronetTestFramework;
 import org.chromium.net.NativeTestServer;
+import org.chromium.net.UrlRequestException;
 
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpRetryException;
 import java.net.HttpURLConnection;
@@ -66,8 +68,76 @@ public class CronetFixedModeOutputStreamTest extends CronetTestBase {
     @SmallTest
     @Feature({"Cronet"})
     @CompareDefaultWithCronet
-    public void testFixedLengthStreamingModeZeroContentLength()
-            throws Exception {
+    public void testWriteAfterRequestFailed() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        byte[] largeData = TestUtil.getLargeData();
+        connection.setFixedLengthStreamingMode(largeData.length);
+        OutputStream out = connection.getOutputStream();
+        out.write(largeData, 0, 10);
+        NativeTestServer.shutdownNativeTestServer();
+        try {
+            out.write(largeData, 10, largeData.length - 10);
+            connection.getResponseCode();
+            fail();
+        } catch (IOException e) {
+            // Expected.
+            if (!testingSystemHttpURLConnection()) {
+                UrlRequestException requestException = (UrlRequestException) e;
+                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
+                        requestException.getErrorCode());
+            }
+        }
+        // Restarting server to run the test for a second time.
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testGetResponseAfterWriteFailed() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        NativeTestServer.shutdownNativeTestServer();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        // Set content-length as 1 byte, so Cronet will upload once that 1 byte
+        // is passed to it.
+        connection.setFixedLengthStreamingMode(1);
+        try {
+            OutputStream out = connection.getOutputStream();
+            out.write(1);
+            fail();
+        } catch (IOException e) {
+            if (!testingSystemHttpURLConnection()) {
+                UrlRequestException requestException = (UrlRequestException) e;
+                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
+                        requestException.getErrorCode());
+            }
+        }
+        // Make sure IOException is reported again when trying to read response
+        // from the connection.
+        try {
+            connection.getResponseCode();
+            fail();
+        } catch (IOException e) {
+            // Expected.
+            if (!testingSystemHttpURLConnection()) {
+                UrlRequestException requestException = (UrlRequestException) e;
+                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
+                        requestException.getErrorCode());
+            }
+        }
+        // Restarting server to run the test for a second time.
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testFixedLengthStreamingModeZeroContentLength() throws Exception {
         // Check content length is set.
         URL echoLength = new URL(NativeTestServer.getEchoHeaderURL("Content-Length"));
         HttpURLConnection connection1 =
@@ -275,14 +345,22 @@ public class CronetFixedModeOutputStreamTest extends CronetTestBase {
     @SmallTest
     @Feature({"Cronet"})
     @OnlyRunCronetHttpURLConnection
-    public void testLargeDataMoreThanNativeBufferSize()
-            throws Exception {
+    public void testJavaBufferSizeLargerThanNativeBufferSize() throws Exception {
         // Set an internal buffer of size larger than the buffer size used
         // in network stack internally.
         // Normal stream uses 16384, QUIC uses 14520, and SPDY uses 16384.
-        CronetFixedModeOutputStream.setDefaultBufferLengthForTesting(17384);
-        testFixedLengthStreamingModeLargeDataWriteOneByte();
-        testFixedLengthStreamingModeLargeData();
+        // Try two different buffer lengths. 17384 will make the last write
+        // smaller than the native buffer length; 18384 will make the last write
+        // bigger than the native buffer length
+        // (largeData.length % 17384 = 9448, largeData.length % 18384 = 16752).
+        int[] bufferLengths = new int[] {17384, 18384};
+        for (int length : bufferLengths) {
+            CronetFixedModeOutputStream.setDefaultBufferLengthForTesting(length);
+            // Run the following three tests with this custom buffer size.
+            testFixedLengthStreamingModeLargeDataWriteOneByte();
+            testFixedLengthStreamingModeLargeData();
+            testOneMassiveWrite();
+        }
     }
 
     @SmallTest

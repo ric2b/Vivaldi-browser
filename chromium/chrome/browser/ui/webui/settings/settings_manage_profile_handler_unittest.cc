@@ -46,15 +46,21 @@ class ManageProfileHandlerTest : public testing::Test {
   }
 
   void VerifyIconList(const base::Value* value) {
-    const base::ListValue* icon_urls = nullptr;
-    ASSERT_TRUE(value->GetAsList(&icon_urls));
+    const base::ListValue* icons = nullptr;
+    ASSERT_TRUE(value->GetAsList(&icons));
 
-    // Expect the list of icon URLs to be a non-empty list of non-empty strings.
-    EXPECT_FALSE(icon_urls->empty());
-    for (size_t i = 0; i < icon_urls->GetSize(); ++i) {
+    // Expect a non-empty list of dictionaries containing non-empty strings for
+    // profile avatar icon urls and labels.
+    EXPECT_FALSE(icons->empty());
+    for (size_t i = 0; i < icons->GetSize(); ++i) {
+      const base::DictionaryValue* icon = nullptr;
+      EXPECT_TRUE(icons->GetDictionary(i, &icon));
       std::string icon_url;
-      EXPECT_TRUE(icon_urls->GetString(i, &icon_url));
+      EXPECT_TRUE(icon->GetString("url", &icon_url));
       EXPECT_FALSE(icon_url.empty());
+      std::string icon_label;
+      EXPECT_TRUE(icon->GetString("label", &icon_label));
+      EXPECT_FALSE(icon_label.empty());
     }
   }
 
@@ -73,9 +79,8 @@ class ManageProfileHandlerTest : public testing::Test {
 
 TEST_F(ManageProfileHandlerTest, HandleSetProfileIconAndName) {
   base::ListValue list_args;
-  list_args.Append(
-      new base::StringValue("chrome://theme/IDR_PROFILE_AVATAR_15"));
-  list_args.Append(new base::StringValue("New Profile Name"));
+  list_args.AppendString("chrome://theme/IDR_PROFILE_AVATAR_15");
+  list_args.AppendString("New Profile Name");
   handler()->HandleSetProfileIconAndName(&list_args);
 
   PrefService* pref_service = profile()->GetPrefs();
@@ -88,7 +93,7 @@ TEST_F(ManageProfileHandlerTest, HandleSetProfileIconAndName) {
 
 TEST_F(ManageProfileHandlerTest, HandleGetAvailableIcons) {
   base::ListValue list_args;
-  list_args.Append(new base::StringValue("get-icons-callback-id"));
+  list_args.AppendString("get-icons-callback-id");
   handler()->HandleGetAvailableIcons(&list_args);
 
   EXPECT_EQ(1U, web_ui()->call_data().size());

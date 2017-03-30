@@ -34,7 +34,7 @@ message AutofillQueryResponseContents {
 
 // This message contains information about the field types in a single form.
 // It is sent by the toolbar to contribute to the field type statistics.
-// Next available id: 18
+// Next available id: 20
 message AutofillUploadContents {
   required string client_version = 1;
   required fixed64 form_signature = 2;
@@ -79,9 +79,21 @@ message AutofillUploadContents {
       AUTOMATICALLY_TRIGGERED_GENERATION_ON_CHANGE_PASSWORD_FORM = 2;
       MANUALLY_TRIGGERED_GENERATION_ON_SIGN_UP_FORM = 3;
       MANUALLY_TRIGGERED_GENERATION_ON_CHANGE_PASSWORD_FORM = 4;
+      IGNORED_GENERATION_POPUP = 5;
     }
     // The type of password generation, if it happened.
     optional PasswordGenerationType generation_type = 17;
+
+    enum FormClassifierOutcome {
+      NO_OUTCOME = 0;
+      NON_GENERATION_ELEMENT = 1;
+      GENERATION_ELEMENT = 2;
+    }
+    // The outcome of HTML parsing based form classifier.
+    optional FormClassifierOutcome form_classifier_outcome = 18;
+
+    // The value of the class attribute on the field, if present.
+    optional string css_classes = 19;
   }
   // Signature of the form action host (e.g. Hash64Bit("example.com")).
   optional fixed64 action_signature = 13;

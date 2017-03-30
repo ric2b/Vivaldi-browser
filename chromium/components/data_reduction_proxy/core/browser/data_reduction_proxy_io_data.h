@@ -6,20 +6,22 @@
 #define COMPONENTS_DATA_REDUCTION_PROXY_CORE_BROWSER_DATA_REDUCTION_PROXY_IO_DATA_H_
 
 #include <stdint.h>
-
 #include <memory>
 #include <string>
 #include <utility>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
+#include "components/data_reduction_proxy/core/browser/data_use_group_provider.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_storage_delegate.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/lofi_decider.h"
 #include "components/data_reduction_proxy/core/common/lofi_ui_service.h"
 
@@ -51,13 +53,14 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   // configurations. |enabled| sets the initial state of the Data Reduction
   // Proxy.
   DataReductionProxyIOData(
-      const Client& client,
+      Client client,
       int param_flags,
       net::NetLog* net_log,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
       bool enabled,
-      const std::string& user_agent);
+      const std::string& user_agent,
+      const std::string& channel);
 
   virtual ~DataReductionProxyIOData();
 
@@ -100,12 +103,13 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   void SetLoFiModeOff();
 
   // Bridge methods to safely call to the UI thread objects.
-  void UpdateContentLengths(int64_t data_used,
-                            int64_t original_size,
-                            bool data_reduction_proxy_enabled,
-                            DataReductionProxyRequestType request_type,
-                            const std::string& data_usage_host,
-                            const std::string& mime_type);
+  void UpdateContentLengths(
+      int64_t data_used,
+      int64_t original_size,
+      bool data_reduction_proxy_enabled,
+      DataReductionProxyRequestType request_type,
+      const scoped_refptr<DataUseGroup>& data_usage_source,
+      const std::string& mime_type);
   void SetLoFiModeActiveOnMainFrame(bool lo_fi_mode_active);
 
   // Overrides of DataReductionProxyEventStorageDelegate. Bridges to the UI
@@ -120,6 +124,10 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
 
   // Returns true if the Data Reduction Proxy is enabled and false otherwise.
   bool IsEnabled() const;
+
+  // Changes the reporting fraction for the pingback service to
+  // |pingback_reporting_fraction|. Overridden in testing.
+  virtual void SetPingbackReportingFraction(float pingback_reporting_fraction);
 
   // Various accessor methods.
   DataReductionProxyConfigurator* configurator() const {
@@ -173,6 +181,17 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
     lofi_ui_service_ = std::move(lofi_ui_service);
   }
 
+  void set_data_usage_source_provider(
+      std::unique_ptr<DataUseGroupProvider> data_usage_source_provider) {
+    data_use_group_provider_ = std::move(data_usage_source_provider);
+  }
+
+  // The production channel of this build.
+  std::string channel() const { return channel_; }
+
+  // The Client type of this build.
+  Client client() const { return client_; }
+
  private:
   friend class TestDataReductionProxyIOData;
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyIODataTest, TestConstruction);
@@ -201,7 +220,7 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   void StoreSerializedConfig(const std::string& serialized_config);
 
   // The type of Data Reduction Proxy client.
-  Client client_;
+  const Client client_;
 
   // Parameters including DNS names and allowable configurations.
   std::unique_ptr<DataReductionProxyConfig> config_;
@@ -241,6 +260,10 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
 
+  // Manages instances of |DataUsageSource| and maps |URLRequest| instances to
+  // their appropriate |DataUsageSource|.
+  std::unique_ptr<DataUseGroupProvider> data_use_group_provider_;
+
   // Whether the Data Reduction Proxy has been enabled or not by the user. In
   // practice, this can be overridden by the command line.
   bool enabled_;
@@ -251,6 +274,9 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   // A net::URLRequestContextGetter used for making secure proxy checks. It
   // does not use alternate protocols.
   scoped_refptr<net::URLRequestContextGetter> basic_url_request_context_getter_;
+
+  // The production channel of this build.
+  const std::string channel_;
 
   base::WeakPtrFactory<DataReductionProxyIOData> weak_factory_;
 

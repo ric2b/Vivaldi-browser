@@ -19,9 +19,9 @@
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/gpu_export.h"
 
-namespace gfx {
-  class GPUTimer;
-  class GPUTimingClient;
+namespace gl {
+class GPUTimer;
+class GPUTimingClient;
 }
 
 namespace gpu {
@@ -211,7 +211,7 @@ class GPU_EXPORT QueryManager {
   void Destroy(bool have_context);
 
   // Sets up a location to be incremented whenever a disjoint is detected.
-  void SetDisjointSync(int32_t shm_id, uint32_t shm_offset);
+  error::Error SetDisjointSync(int32_t shm_id, uint32_t shm_offset);
 
   // Creates a Query for the given query.
   Query* CreateQuery(GLenum target,
@@ -262,7 +262,7 @@ class GPU_EXPORT QueryManager {
     return decoder_;
   }
 
-  std::unique_ptr<gfx::GPUTimer> CreateGPUTimer(bool elapsed_time);
+  std::unique_ptr<gl::GPUTimer> CreateGPUTimer(bool elapsed_time);
   bool GPUTimingAvailable();
 
   void GenQueries(GLsizei n, const GLuint* queries);
@@ -338,7 +338,7 @@ class GPU_EXPORT QueryManager {
   // Async pixel transfer queries waiting for completion.
   QueryQueue pending_transfer_queries_;
 
-  scoped_refptr<gfx::GPUTimingClient> gpu_timing_client_;
+  scoped_refptr<gl::GPUTimingClient> gpu_timing_client_;
 
   DISALLOW_COPY_AND_ASSIGN(QueryManager);
 };

@@ -19,7 +19,8 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/views/animation/button_ink_drop_delegate.h"
+#include "ui/views/animation/test/ink_drop_host_view_test_api.h"
+#include "ui/views/animation/test/test_ink_drop.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/widget_test.h"
@@ -347,7 +348,8 @@ TEST_F(LabelButtonTest, ButtonStyleIsDefaultStyle) {
   gfx::Size non_default_size = button->label()->size();
   EXPECT_EQ(button->label()->GetPreferredSize().width(),
             non_default_size.width());
-  EXPECT_FALSE(button->label()->font_list().GetFontStyle() & gfx::Font::BOLD);
+  EXPECT_EQ(button->label()->font_list().GetFontWeight(),
+            gfx::Font::Weight::NORMAL);
   EXPECT_EQ(styled_normal_text_color_, button->label()->enabled_color());
   button->SetIsDefault(true);
   button->SizeToPreferredSize();
@@ -355,10 +357,12 @@ TEST_F(LabelButtonTest, ButtonStyleIsDefaultStyle) {
   EXPECT_EQ(styled_highlight_text_color_, button->label()->enabled_color());
   if (PlatformStyle::kDefaultLabelButtonHasBoldFont) {
     EXPECT_NE(non_default_size, button->label()->size());
-    EXPECT_TRUE(button->label()->font_list().GetFontStyle() & gfx::Font::BOLD);
+    EXPECT_EQ(button->label()->font_list().GetFontWeight(),
+              gfx::Font::Weight::BOLD);
   } else {
     EXPECT_EQ(non_default_size, button->label()->size());
-    EXPECT_FALSE(button->label()->font_list().GetFontStyle() & gfx::Font::BOLD);
+    EXPECT_EQ(button->label()->font_list().GetFontWeight(),
+              gfx::Font::Weight::NORMAL);
   }
 }
 
@@ -401,50 +405,6 @@ TEST_F(LabelButtonTest, HighlightedButtonStyle) {
             default_before->label()->enabled_color());
 }
 
-// A ButtonInkDropDelegate that tracks the last hover state requested.
-class TestButtonInkDropDelegate : public ButtonInkDropDelegate {
- public:
-  TestButtonInkDropDelegate(InkDropHost* ink_drop_host, View* view)
-      : ButtonInkDropDelegate(ink_drop_host, view), is_hovered_(false) {}
-
-  ~TestButtonInkDropDelegate() override {}
-
-  bool is_hovered() const { return is_hovered_; }
-
-  // ButtonInkDropDelegate:
-  void SetHovered(bool is_hovered) override {
-    is_hovered_ = is_hovered;
-    ButtonInkDropDelegate::SetHovered(is_hovered);
-  }
-
- private:
-  // The last |is_hover| value passed to SetHovered().
-  bool is_hovered_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestButtonInkDropDelegate);
-};
-
-// A generic LabelButton configured with an |InkDropDelegate|.
-class InkDropLabelButton : public LabelButton {
- public:
-  InkDropLabelButton()
-      : LabelButton(nullptr, base::string16()),
-        test_ink_drop_delegate_(this, this) {
-    set_ink_drop_delegate(&test_ink_drop_delegate_);
-  }
-
-  ~InkDropLabelButton() override {}
-
-  TestButtonInkDropDelegate* test_ink_drop_delegate() {
-    return &test_ink_drop_delegate_;
-  }
-
- private:
-  TestButtonInkDropDelegate test_ink_drop_delegate_;
-
-  DISALLOW_COPY_AND_ASSIGN(InkDropLabelButton);
-};
-
 // Test fixture for a LabelButton that has an ink drop configured.
 class InkDropLabelButtonTest : public ViewsTestBase {
  public:
@@ -465,7 +425,12 @@ class InkDropLabelButtonTest : public ViewsTestBase {
     widget_->Init(params);
     widget_->Show();
 
-    button_ = new InkDropLabelButton();
+    button_ = new LabelButton(nullptr, base::string16());
+
+    test_ink_drop_ = new test::TestInkDrop();
+    test::InkDropHostViewTestApi(button_).SetInkDrop(
+        base::WrapUnique(test_ink_drop_));
+
     widget_->SetContentsView(button_);
   }
 
@@ -480,27 +445,29 @@ class InkDropLabelButtonTest : public ViewsTestBase {
   std::unique_ptr<Widget> widget_;
 
   // The test target.
-  InkDropLabelButton* button_ = nullptr;
+  LabelButton* button_ = nullptr;
+
+  // Weak ptr, |button_| owns the instance.
+  test::TestInkDrop* test_ink_drop_ = nullptr;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(InkDropLabelButtonTest);
 };
 
 TEST_F(InkDropLabelButtonTest, HoverStateAfterMouseEnterAndExitEvents) {
-  ui::test::EventGenerator event_generator(GetContext(),
-                                           widget_->GetNativeWindow());
+  ui::test::EventGenerator event_generator(widget_->GetNativeWindow());
   const gfx::Point out_of_bounds_point(button_->bounds().bottom_right() +
                                        gfx::Vector2d(1, 1));
   const gfx::Point in_bounds_point(button_->bounds().CenterPoint());
 
   event_generator.MoveMouseTo(out_of_bounds_point);
-  EXPECT_FALSE(button_->test_ink_drop_delegate()->is_hovered());
+  EXPECT_FALSE(test_ink_drop_->is_hovered());
 
   event_generator.MoveMouseTo(in_bounds_point);
-  EXPECT_TRUE(button_->test_ink_drop_delegate()->is_hovered());
+  EXPECT_TRUE(test_ink_drop_->is_hovered());
 
   event_generator.MoveMouseTo(out_of_bounds_point);
-  EXPECT_FALSE(button_->test_ink_drop_delegate()->is_hovered());
+  EXPECT_FALSE(test_ink_drop_->is_hovered());
 }
 
 // Verifies the target event handler View is the |LabelButton| and not any of

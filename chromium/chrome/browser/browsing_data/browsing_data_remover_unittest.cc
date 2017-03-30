@@ -17,12 +17,15 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/guid.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -58,6 +61,7 @@
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/os_crypt/os_crypt_mocker.h"
 #include "components/password_manager/core/browser/mock_password_store.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
@@ -162,7 +166,7 @@ bool MatchPrimaryPattern(const ContentSettingsPattern& expected_primary,
 
 #if defined(OS_CHROMEOS)
 void FakeDBusCall(const chromeos::BoolDBusMethodCallback& callback) {
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(callback, chromeos::DBUS_METHOD_CALL_SUCCESS, true));
 }
@@ -442,7 +446,7 @@ class RemoveSafeBrowsingCookieTester : public RemoveCookieTester {
         safe_browsing::SafeBrowsingService::CreateSafeBrowsingService();
     browser_process_->SetSafeBrowsingService(sb_service.get());
     sb_service->Initialize();
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
     // Make sure the safe browsing cookie store has no cookies.
     // TODO(mmenke): Is this really needed?
@@ -458,7 +462,7 @@ class RemoveSafeBrowsingCookieTester : public RemoveCookieTester {
 
   virtual ~RemoveSafeBrowsingCookieTester() {
     browser_process_->safe_browsing_service()->ShutDown();
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     browser_process_->SetSafeBrowsingService(nullptr);
   }
 
@@ -489,8 +493,7 @@ class RemoveChannelIDTester : public net::SSLConfigService::Observer {
                              base::Time creation_time) {
     GetChannelIDStore()->SetChannelID(
         base::WrapUnique(new net::ChannelIDStore::ChannelID(
-            server_identifier, creation_time,
-            base::WrapUnique(crypto::ECPrivateKey::Create()))));
+            server_identifier, creation_time, crypto::ECPrivateKey::Create())));
   }
 
   // Add a server bound cert for |server|, with the current time as the
@@ -681,6 +684,7 @@ class RemoveAutofillTester : public autofill::PersonalDataManagerObserver {
 
   ~RemoveAutofillTester() override {
     personal_data_manager_->RemoveObserver(this);
+    autofill::test::ReenableSystemServices();
   }
 
   // Returns true if there are autofill profiles.
@@ -727,7 +731,7 @@ class RemoveAutofillTester : public autofill::PersonalDataManagerObserver {
     profiles.push_back(profile);
 
     personal_data_manager_->SetProfiles(&profiles);
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
 
     std::vector<autofill::CreditCard> cards;
     autofill::CreditCard card;
@@ -742,7 +746,7 @@ class RemoveAutofillTester : public autofill::PersonalDataManagerObserver {
     cards.push_back(card);
 
     personal_data_manager_->SetCreditCards(&cards);
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
   }
 
  private:
@@ -978,7 +982,11 @@ class RemovePasswordsTester {
         PasswordStoreFactory::GetInstance()
             ->GetForProfile(testing_profile, ServiceAccessType::EXPLICIT_ACCESS)
             .get());
+
+    OSCryptMocker::SetUpWithSingleton();
   }
+
+  ~RemovePasswordsTester() { OSCryptMocker::TearDown(); }
 
   password_manager::MockPasswordStore* store() { return store_; }
 
@@ -1021,7 +1029,7 @@ class BrowsingDataRemoverTest : public testing::Test {
     // the message loop is cleared out, before destroying the threads and loop.
     // Otherwise we leak memory.
     profile_.reset();
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
     TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
   }
@@ -2249,7 +2257,7 @@ TEST_F(BrowsingDataRemoverTest, ContentProtectionPlatformKeysRemoval) {
 
   BlockUntilBrowsingDataRemoved(
       BrowsingDataRemover::EVERYTHING,
-      BrowsingDataRemover::REMOVE_CONTENT_LICENSES, false);
+      BrowsingDataRemover::REMOVE_MEDIA_LICENSES, false);
 
   chromeos::DBusThreadManager::Shutdown();
 }
@@ -2412,16 +2420,16 @@ TEST_F(BrowsingDataRemoverTest, RemoveContentSettingsWithBlacklist) {
       HostContentSettingsMapFactory::GetForProfile(GetProfile());
   host_content_settings_map->SetWebsiteSettingDefaultScope(
       kOrigin1, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      new base::DictionaryValue());
+      base::WrapUnique(new base::DictionaryValue()));
   host_content_settings_map->SetWebsiteSettingDefaultScope(
       kOrigin2, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      new base::DictionaryValue());
+      base::WrapUnique(new base::DictionaryValue()));
   host_content_settings_map->SetWebsiteSettingDefaultScope(
       kOrigin3, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      new base::DictionaryValue());
+      base::WrapUnique(new base::DictionaryValue()));
   host_content_settings_map->SetWebsiteSettingDefaultScope(
       kOrigin4, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      new base::DictionaryValue());
+      base::WrapUnique(new base::DictionaryValue()));
 
   // Clear all except for origin1 and origin3.
   RegistrableDomainFilterBuilder filter(
@@ -2470,21 +2478,21 @@ TEST_F(BrowsingDataRemoverTest, ClearWithPredicate) {
 
   host_content_settings_map->SetContentSettingCustomScope(
       pattern2, ContentSettingsPattern::Wildcard(),
-      CONTENT_SETTINGS_TYPE_IMAGES, std::string(), CONTENT_SETTING_BLOCK);
+      CONTENT_SETTINGS_TYPE_COOKIES, std::string(), CONTENT_SETTING_BLOCK);
   host_content_settings_map->SetContentSettingCustomScope(
-      pattern, ContentSettingsPattern::Wildcard(), CONTENT_SETTINGS_TYPE_IMAGES,
-      std::string(), CONTENT_SETTING_BLOCK);
+      pattern, ContentSettingsPattern::Wildcard(),
+      CONTENT_SETTINGS_TYPE_COOKIES, std::string(), CONTENT_SETTING_BLOCK);
   host_content_settings_map->SetWebsiteSettingCustomScope(
       pattern2, ContentSettingsPattern::Wildcard(),
       CONTENT_SETTINGS_TYPE_APP_BANNER, std::string(),
       base::WrapUnique(new base::DictionaryValue()));
 
-  // First, test that we clear only IMAGES (not APP_BANNER), and pattern2.
+  // First, test that we clear only COOKIES (not APP_BANNER), and pattern2.
   BrowsingDataRemover::ClearSettingsForOneTypeWithPredicate(
-      host_content_settings_map, CONTENT_SETTINGS_TYPE_IMAGES,
+      host_content_settings_map, CONTENT_SETTINGS_TYPE_COOKIES,
       base::Bind(&MatchPrimaryPattern, pattern2));
   host_content_settings_map->GetSettingsForOneType(
-      CONTENT_SETTINGS_TYPE_IMAGES, std::string(), &host_settings);
+      CONTENT_SETTINGS_TYPE_COOKIES, std::string(), &host_settings);
   // |host_settings| contains default & block.
   EXPECT_EQ(2U, host_settings.size());
   EXPECT_EQ(pattern, host_settings[0].primary_pattern);
@@ -2507,14 +2515,14 @@ TEST_F(BrowsingDataRemoverTest, ClearWithPredicate) {
   // Add settings.
   host_content_settings_map->SetWebsiteSettingDefaultScope(
       url1, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      new base::DictionaryValue());
+      base::WrapUnique(new base::DictionaryValue()));
   // This setting should override the one above, as it's the same origin.
   host_content_settings_map->SetWebsiteSettingDefaultScope(
       url2, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      new base::DictionaryValue());
+      base::WrapUnique(new base::DictionaryValue()));
   host_content_settings_map->SetWebsiteSettingDefaultScope(
       url3, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-      new base::DictionaryValue());
+      base::WrapUnique(new base::DictionaryValue()));
   // Verify we only have two.
   host_content_settings_map->GetSettingsForOneType(
       CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(), &host_settings);

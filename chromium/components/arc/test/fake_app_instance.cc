@@ -24,6 +24,15 @@ struct TypeConverter<arc::mojom::AppInfoPtr, arc::mojom::AppInfo> {
   }
 };
 
+template <>
+struct TypeConverter<arc::mojom::ArcPackageInfoPtr,
+                     arc::mojom::ArcPackageInfo> {
+  static arc::mojom::ArcPackageInfoPtr Convert(
+      const arc::mojom::ArcPackageInfo& package_info) {
+    return package_info.Clone();
+  }
+};
+
 }  // namespace mojo
 
 namespace arc {
@@ -38,7 +47,7 @@ void FakeAppInstance::RefreshAppList() {
 
 void FakeAppInstance::LaunchApp(const mojo::String& package_name,
                                 const mojo::String& activity,
-                                mojom::ScreenRectPtr dimension) {
+                                const gfx::Rect& dimension) {
   launch_requests_.push_back(new Request(package_name, activity));
 }
 
@@ -54,9 +63,32 @@ void FakeAppInstance::SendRefreshAppList(
   app_host_->OnAppListRefreshed(mojo::Array<mojom::AppInfoPtr>::From(apps));
 }
 
+void FakeAppInstance::SendPackageAppListRefreshed(
+    const mojo::String& package_name,
+    const std::vector<mojom::AppInfo>& apps) {
+  app_host_->OnPackageAppListRefreshed(
+      package_name,
+      mojo::Array<mojom::AppInfoPtr>::From(apps));
+}
+
+void FakeAppInstance::SendInstallShortcuts(
+    const std::vector<mojom::ShortcutInfo>& shortcuts) {
+  for (auto& shortcut : shortcuts) {
+    app_host_->OnInstallShortcut(shortcut.Clone());
+  }
+}
+
+void FakeAppInstance::SendInstallShortcut(const mojom::ShortcutInfo& shortcut) {
+  app_host_->OnInstallShortcut(shortcut.Clone());
+}
+
+void FakeAppInstance::SendAppAdded(const mojom::AppInfo& app) {
+  app_host_->OnAppAddedDeprecated(mojom::AppInfo::From(app));
+}
+
 void FakeAppInstance::SendTaskCreated(int32_t taskId,
                                       const mojom::AppInfo& app) {
-  app_host_->OnTaskCreated(taskId, app.package_name, app.activity);
+  app_host_->OnTaskCreated(taskId, app.package_name, app.activity, app.name);
 }
 
 void FakeAppInstance::SendTaskDestroyed(int32_t taskId) {
@@ -66,6 +98,18 @@ void FakeAppInstance::SendTaskDestroyed(int32_t taskId) {
 bool FakeAppInstance::GenerateAndSendIcon(const mojom::AppInfo& app,
                                           mojom::ScaleFactor scale_factor,
                                           std::string* png_data_as_string) {
+  if (!GetFakeIcon(scale_factor, png_data_as_string)) {
+    return false;
+  }
+
+  app_host_->OnAppIcon(app.package_name, app.activity, scale_factor,
+                       mojo::Array<uint8_t>::From(*png_data_as_string));
+
+  return true;
+}
+
+bool FakeAppInstance::GetFakeIcon(mojom::ScaleFactor scale_factor,
+                                  std::string* png_data_as_string) {
   CHECK(png_data_as_string != nullptr);
   std::string icon_file_name;
   switch (scale_factor) {
@@ -111,9 +155,6 @@ bool FakeAppInstance::GenerateAndSendIcon(const mojom::AppInfo& app,
   CHECK(base::PathExists(icon_file_path));
   CHECK(base::ReadFileToString(icon_file_path, png_data_as_string));
 
-  app_host_->OnAppIcon(app.package_name, app.activity, scale_factor,
-                       mojo::Array<uint8_t>::From(*png_data_as_string));
-
   return true;
 }
 
@@ -121,6 +162,20 @@ void FakeAppInstance::SetTaskInfo(int32_t task_id,
                                   const std::string& package_name,
                                   const std::string& activity) {
   task_id_to_info_[task_id].reset(new Request(package_name, activity));
+}
+
+void FakeAppInstance::SendRefreshPackageList(
+    const std::vector<mojom::ArcPackageInfo>& packages) {
+  app_host_->OnPackageListRefreshed(
+      mojo::Array<mojom::ArcPackageInfoPtr>::From(packages));
+}
+
+void FakeAppInstance::SendPackageAdded(const mojom::ArcPackageInfo& package) {
+  app_host_->OnPackageAdded(mojom::ArcPackageInfoPtr(package.Clone()));
+}
+
+void FakeAppInstance::SendPackageUninstalled(const mojo::String& package_name) {
+  app_host_->OnPackageRemoved(package_name);
 }
 
 void FakeAppInstance::WaitForIncomingMethodCall() {
@@ -145,12 +200,13 @@ void FakeAppInstance::WaitForOnAppInstanceReady() {
 void FakeAppInstance::CanHandleResolution(
     const mojo::String& package_name,
     const mojo::String& activity,
-    mojom::ScreenRectPtr dimension,
+    const gfx::Rect& dimension,
     const CanHandleResolutionCallback& callback) {
   callback.Run(true);
 }
 
 void FakeAppInstance::UninstallPackage(const mojo::String& package_name) {
+  app_host_->OnPackageRemoved(package_name);
 }
 
 void FakeAppInstance::GetTaskInfo(int32_t task_id,
@@ -167,5 +223,41 @@ void FakeAppInstance::SetTaskActive(int32_t task_id) {
 
 void FakeAppInstance::CloseTask(int32_t task_id) {
 }
+
+void FakeAppInstance::ShowPackageInfoDeprecated(
+    const mojo::String& package_name,
+    const gfx::Rect& dimension_on_screen) {}
+
+void FakeAppInstance::ShowPackageInfoOnPage(
+    const mojo::String& package_name,
+    mojom::ShowPackageInfoPage page,
+    const gfx::Rect& dimension_on_screen) {}
+
+void FakeAppInstance::SetNotificationsEnabled(const mojo::String& package_name,
+                                              bool enabled) {
+}
+
+void FakeAppInstance::InstallPackage(mojom::ArcPackageInfoPtr arcPackageInfo) {
+  app_host_->OnPackageAdded(std::move(arcPackageInfo));
+}
+
+void FakeAppInstance::LaunchIntent(const mojo::String& intent_uri,
+                                   const gfx::Rect& dimension_on_screen) {
+  launch_intents_.push_back(new mojo::String(intent_uri));
+}
+
+void FakeAppInstance::RequestIcon(const mojo::String& icon_resource_id,
+                                  arc::mojom::ScaleFactor scale_factor,
+                                  const RequestIconCallback& callback) {
+  shortcut_icon_requests_.push_back(
+      new ShortcutIconRequest(icon_resource_id, scale_factor));
+
+  std::string png_data_as_string;
+  if (GetFakeIcon(scale_factor, &png_data_as_string)) {
+    callback.Run(mojo::Array<uint8_t>::From(png_data_as_string));
+  }
+}
+
+void FakeAppInstance::RemoveCachedIcon(const mojo::String& icon_resource_id) {}
 
 }  // namespace arc

@@ -12,6 +12,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread.h"
+#include "components/mus/common/gpu_service.h"
 #include "components/mus/common/switches.h"
 #include "services/shell/background/background_shell.h"
 #include "services/shell/public/cpp/connector.h"
@@ -42,24 +43,27 @@ class DefaultShellClient : public shell::ShellClient {
 
 class PlatformTestHelperMus : public PlatformTestHelper {
  public:
-  PlatformTestHelperMus() {
-    ViewsDelegate::GetInstance()->set_native_widget_factory(base::Bind(
-        &WindowManagerConnection::CreateNativeWidgetMus,
-        base::Unretained(WindowManagerConnection::Get()),
-        std::map<std::string, std::vector<uint8_t>>()));
+  PlatformTestHelperMus(shell::Connector* connector,
+                        const shell::Identity& identity) {
+    mus::GpuService::Initialize(connector);
+    // It is necessary to recreate the WindowManagerConnection for each test,
+    // since a new MessageLoop is created for each test.
+    connection_ = WindowManagerConnection::Create(connector, identity);
   }
-  ~PlatformTestHelperMus() override {}
+  ~PlatformTestHelperMus() override {
+    mus::GpuService::Terminate();
+  }
 
  private:
+  std::unique_ptr<WindowManagerConnection> connection_;
+
   DISALLOW_COPY_AND_ASSIGN(PlatformTestHelperMus);
 };
 
 std::unique_ptr<PlatformTestHelper> CreatePlatformTestHelper(
-    shell::Connector* connector,
-    const shell::Identity& identity) {
-  if (!WindowManagerConnection::Exists())
-    WindowManagerConnection::Create(connector, identity);
-  return base::WrapUnique(new PlatformTestHelperMus);
+    const shell::Identity& identity,
+    const base::Callback<shell::Connector*(void)>& callback) {
+  return base::WrapUnique(new PlatformTestHelperMus(callback.Run(), identity));
 }
 
 }  // namespace
@@ -67,7 +71,8 @@ std::unique_ptr<PlatformTestHelper> CreatePlatformTestHelper(
 class ShellConnection {
  public:
   ShellConnection() : thread_("Persistent shell connections") {
-    base::WaitableEvent wait(false, false);
+    base::WaitableEvent wait(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     base::Thread::Options options;
     thread_.StartWithOptions(options);
     thread_.task_runner()->PostTask(
@@ -81,13 +86,13 @@ class ShellConnection {
     // been installed first. So delay the creation until the necessary
     // dependencies have been met.
     PlatformTestHelper::set_factory(base::Bind(
-        &CreatePlatformTestHelper, shell_connector_.get(), shell_identity_));
+        &CreatePlatformTestHelper, shell_identity_,
+        base::Bind(&ShellConnection::GetConnector, base::Unretained(this))));
   }
 
   ~ShellConnection() {
-    if (views::WindowManagerConnection::Exists())
-      views::WindowManagerConnection::Reset();
-    base::WaitableEvent wait(false, false);
+    base::WaitableEvent wait(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     thread_.task_runner()->PostTask(
         FROM_HERE, base::Bind(&ShellConnection::TearDownConnections,
                               base::Unretained(this), &wait));
@@ -95,6 +100,23 @@ class ShellConnection {
   }
 
  private:
+  shell::Connector* GetConnector() {
+    shell_connector_.reset();
+    base::WaitableEvent wait(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    thread_.task_runner()->PostTask(FROM_HERE,
+                                    base::Bind(&ShellConnection::CloneConnector,
+                                               base::Unretained(this), &wait));
+    wait.Wait();
+    DCHECK(shell_connector_);
+    return shell_connector_.get();
+  }
+
+  void CloneConnector(base::WaitableEvent* wait) {
+    shell_connector_ = shell_connection_->connector()->Clone();
+    wait->Signal();
+  }
+
   void SetUpConnections(base::WaitableEvent* wait) {
     background_shell_.reset(new shell::BackgroundShell);
     background_shell_->Init(nullptr);
@@ -103,10 +125,9 @@ class ShellConnection {
         shell_client_.get(),
         background_shell_->CreateShellClientRequest(GetTestName())));
 
-    // ui/views/mus requires a WindowManager running, for now use the desktop
-    // one.
+    // ui/views/mus requires a WindowManager running, so launch test_wm.
     shell::Connector* connector = shell_connection_->connector();
-    connector->Connect("mojo:desktop_wm");
+    connector->Connect("mojo:test_wm");
     shell_connector_ = connector->Clone();
     shell_identity_ = shell_connection_->identity();
     wait->Signal();

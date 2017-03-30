@@ -9,6 +9,8 @@
 
 #ifdef INSIDE_BLINK
 #include "wtf/Functional.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 #endif
 
 namespace blink {
@@ -63,12 +65,12 @@ public:
     void postDelayedTask(const WebTraceLocation&, std::unique_ptr<CrossThreadClosure>, long long delayMs);
 
     // For same-thread posting. Must be called from the associated WebThread.
-    void postTask(const WebTraceLocation&, std::unique_ptr<SameThreadClosure>);
-    void postDelayedTask(const WebTraceLocation&, std::unique_ptr<SameThreadClosure>, long long delayMs);
+    void postTask(const WebTraceLocation&, std::unique_ptr<WTF::Closure>);
+    void postDelayedTask(const WebTraceLocation&, std::unique_ptr<WTF::Closure>, long long delayMs);
 
-    PassOwnPtr<WebTaskRunner> adoptClone()
+    std::unique_ptr<WebTaskRunner> adoptClone()
     {
-        return adoptPtr(clone());
+        return wrapUnique(clone());
     }
 #endif
 };

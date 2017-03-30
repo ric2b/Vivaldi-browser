@@ -2,14 +2,14 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/wm/common/workspace/multi_window_resize_controller.h"
+#include "ash/common/wm/workspace/multi_window_resize_controller.h"
 
-#include "ash/ash_constants.h"
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/ash_constants.h"
 #include "ash/frame/custom_frame_view_ash.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
-#include "ash/wm/aura/wm_window_aura.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/workspace/workspace_event_handler_test_helper.h"
 #include "ash/wm/workspace_controller.h"
@@ -34,9 +34,7 @@ class TestWidgetDelegate : public views::WidgetDelegateView {
   ~TestWidgetDelegate() override {}
 
   // views::WidgetDelegateView:
-  bool CanResize() const override {
-    return true;
-  }
+  bool CanResize() const override { return true; }
 
   views::NonClientFrameView* CreateNonClientFrameView(
       views::Widget* widget) override {
@@ -60,8 +58,8 @@ class MultiWindowResizeControllerTest : public test::AshTestBase {
         test::ShellTestApi(Shell::GetInstance()).workspace_controller();
     WorkspaceEventHandler* event_handler =
         WorkspaceControllerTestHelper(wc).GetEventHandler();
-    resize_controller_ = WorkspaceEventHandlerTestHelper(event_handler).
-        resize_controller();
+    resize_controller_ =
+        WorkspaceEventHandlerTestHelper(event_handler).resize_controller();
   }
 
  protected:
@@ -76,26 +74,18 @@ class MultiWindowResizeControllerTest : public test::AshTestBase {
     return window;
   }
 
-  void ShowNow() {
-    resize_controller_->ShowNow();
-  }
+  void ShowNow() { resize_controller_->ShowNow(); }
 
-  bool IsShowing() {
-    return resize_controller_->IsShowing();
-  }
+  bool IsShowing() { return resize_controller_->IsShowing(); }
 
-  bool HasPendingShow() {
-    return resize_controller_->show_timer_.IsRunning();
-  }
+  bool HasPendingShow() { return resize_controller_->show_timer_.IsRunning(); }
 
-  void Hide() {
-    resize_controller_->Hide();
-  }
+  void Hide() { resize_controller_->Hide(); }
 
   bool HasTarget(aura::Window* window) {
     if (!resize_controller_->windows_.is_valid())
       return false;
-    wm::WmWindow* wm_window = wm::WmWindowAura::Get(window);
+    WmWindow* wm_window = WmWindowAura::Get(window);
     if ((resize_controller_->windows_.window1 == wm_window ||
          resize_controller_->windows_.window2 == wm_window))
       return true;

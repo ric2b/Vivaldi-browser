@@ -36,9 +36,9 @@
 #include "core/frame/LocalFrameLifecycleObserver.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
-
 #include "wtf/Assertions.h"
 #include "wtf/Forward.h"
+#include <memory>
 
 namespace blink {
 
@@ -54,8 +54,9 @@ class IntRect;
 class MessageEvent;
 class Page;
 class PostMessageTimer;
-class ScriptCallStack;
 class SecurityOrigin;
+class SourceLocation;
+class DOMVisualViewport;
 
 enum PageshowEventPersistence {
     PageshowEventNotPersisted = 0,
@@ -86,7 +87,6 @@ public:
     LocalDOMWindow* toLocalDOMWindow() override;
 
     // DOMWindow overrides:
-    bool isLocalDOMWindow() const override { return true; }
     LocalFrame* frame() const override;
     Screen* screen() const override;
     History* history() const override;
@@ -106,6 +106,7 @@ public:
     int screenY() const override;
     double scrollX() const override;
     double scrollY() const override;
+    DOMVisualViewport* visualViewport() override;
     const AtomicString& name() const override;
     void setName(const AtomicString&) override;
     String status() const override;
@@ -146,7 +147,7 @@ public:
     int requestIdleCallback(IdleRequestCallback*, const IdleRequestOptions&) override;
     void cancelIdleCallback(int id) override;
     CustomElementsRegistry* customElements(ScriptState*) const override;
-    void schedulePostMessage(MessageEvent*, SecurityOrigin* target, PassRefPtr<ScriptCallStack>);
+    CustomElementsRegistry* customElements() const;
 
     void registerProperty(DOMWindowProperty*);
     void unregisterProperty(DOMWindowProperty*);
@@ -169,7 +170,7 @@ public:
 
     void postMessageTimerFired(PostMessageTimer*);
     void removePostMessageTimer(PostMessageTimer*);
-    void dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, Event*, PassRefPtr<ScriptCallStack>);
+    void dispatchMessageEventWithOriginCheck(SecurityOrigin* intendedTargetOrigin, Event*, std::unique_ptr<SourceLocation>);
 
     // Events
     // EventTarget API
@@ -201,6 +202,8 @@ public:
 
     void acceptLanguagesChanged();
 
+    FloatSize getViewportSize(IncludeScrollbarsInRect) const;
+
 protected:
     // EventTarget overrides.
     void addedEventListener(const AtomicString& eventType, RegisteredEventListener&) override;
@@ -211,6 +214,11 @@ protected:
 
 private:
     class WindowFrameObserver;
+
+    // Intentionally private to prevent redundant checks when the type is
+    // already LocalDOMWindow.
+    bool isLocalDOMWindow() const override { return true; }
+    bool isRemoteDOMWindow() const override { return false; }
 
     explicit LocalDOMWindow(LocalFrame&);
     void dispose();
@@ -224,6 +232,7 @@ private:
 
     Member<WindowFrameObserver> m_frameObserver;
     Member<Document> m_document;
+    Member<DOMVisualViewport> m_visualViewport;
 
     bool m_shouldPrintWhenFinishedLoading;
 

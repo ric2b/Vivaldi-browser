@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
-#include "components/mus/public/interfaces/compositor_frame.mojom.h"
+#include "components/mus/public/interfaces/surface.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/ws/ids.h"
 #include "components/mus/ws/server_window_surface.h"
@@ -81,6 +81,10 @@ class ServerWindow {
   const gfx::Insets& client_area() const { return client_area_; }
   void SetClientArea(const gfx::Insets& insets,
                      const std::vector<gfx::Rect>& additional_client_areas);
+
+  const gfx::Rect* hit_test_mask() const { return hit_test_mask_.get(); }
+  void SetHitTestMask(const gfx::Rect& mask);
+  void ClearHitTestMask();
 
   int32_t cursor() const { return static_cast<int32_t>(cursor_id_); }
   int32_t non_client_cursor() const {
@@ -229,6 +233,10 @@ class ServerWindow {
   // The hit test for windows extends outside the bounds of the window by this
   // amount.
   gfx::Insets extended_hit_test_region_;
+
+  // Mouse events outside the hit test mask don't hit the window. An empty mask
+  // means all events miss the window. If null there is no mask.
+  std::unique_ptr<gfx::Rect> hit_test_mask_;
 
   base::ObserverList<ServerWindowObserver> observers_;
 

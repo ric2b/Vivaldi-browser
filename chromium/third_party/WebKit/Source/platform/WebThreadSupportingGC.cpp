@@ -6,18 +6,20 @@
 
 #include "platform/heap/SafePoint.h"
 #include "public/platform/WebScheduler.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Threading.h"
+#include <memory>
 
 namespace blink {
 
-PassOwnPtr<WebThreadSupportingGC> WebThreadSupportingGC::create(const char* name, bool perThreadHeapEnabled)
+std::unique_ptr<WebThreadSupportingGC> WebThreadSupportingGC::create(const char* name, bool perThreadHeapEnabled)
 {
-    return adoptPtr(new WebThreadSupportingGC(name, nullptr, perThreadHeapEnabled));
+    return wrapUnique(new WebThreadSupportingGC(name, nullptr, perThreadHeapEnabled));
 }
 
-PassOwnPtr<WebThreadSupportingGC> WebThreadSupportingGC::createForThread(WebThread* thread, bool perThreadHeapEnabled)
+std::unique_ptr<WebThreadSupportingGC> WebThreadSupportingGC::createForThread(WebThread* thread, bool perThreadHeapEnabled)
 {
-    return adoptPtr(new WebThreadSupportingGC(nullptr, thread, perThreadHeapEnabled));
+    return wrapUnique(new WebThreadSupportingGC(nullptr, thread, perThreadHeapEnabled));
 }
 
 WebThreadSupportingGC::WebThreadSupportingGC(const char* name, WebThread* thread, bool perThreadHeapEnabled)
@@ -32,7 +34,7 @@ WebThreadSupportingGC::WebThreadSupportingGC(const char* name, WebThread* thread
 #endif
     if (!m_thread) {
         // If |thread| is not given, create a new one and own it.
-        m_owningThread = adoptPtr(Platform::current()->createThread(name));
+        m_owningThread = wrapUnique(Platform::current()->createThread(name));
         m_thread = m_owningThread.get();
     }
 }
@@ -42,14 +44,14 @@ WebThreadSupportingGC::~WebThreadSupportingGC()
     if (ThreadState::current() && m_owningThread) {
         // WebThread's destructor blocks until all the tasks are processed.
         SafePointScope scope(BlinkGC::HeapPointersOnStack);
-        m_owningThread.clear();
+        m_owningThread.reset();
     }
 }
 
 void WebThreadSupportingGC::initialize()
 {
     ThreadState::attachCurrentThread(m_perThreadHeapEnabled);
-    m_gcTaskRunner = adoptPtr(new GCTaskRunner(m_thread));
+    m_gcTaskRunner = wrapUnique(new GCTaskRunner(m_thread));
 }
 
 void WebThreadSupportingGC::shutdown()
@@ -58,7 +60,7 @@ void WebThreadSupportingGC::shutdown()
     ThreadState::current()->releaseStaticPersistentNodes();
 #endif
     // Ensure no posted tasks will run from this point on.
-    m_gcTaskRunner.clear();
+    m_gcTaskRunner.reset();
 
     // Shutdown the thread (via its scheduler) only when the thread is created
     // and is owned by this instance.

@@ -21,6 +21,7 @@ class NetLog;
 
 namespace views {
 class ViewsDelegate;
+class WindowManagerConnection;
 }
 
 namespace navigation {
@@ -42,14 +43,11 @@ class BrowserMainParts : public content::BrowserMainParts {
     return browser_context_.get();
   }
 
-  void set_navigation(Navigation* navigation) { navigation_ = navigation; }
-
  private:
   std::unique_ptr<net::NetLog> net_log_;
   std::unique_ptr<content::ShellBrowserContext> browser_context_;
   std::unique_ptr<views::ViewsDelegate> views_delegate_;
-
-  Navigation* navigation_ = nullptr;
+  std::unique_ptr<views::WindowManagerConnection> window_manager_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserMainParts);
 };

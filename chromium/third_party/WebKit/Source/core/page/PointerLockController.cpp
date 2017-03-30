@@ -53,6 +53,8 @@ void PointerLockController::requestPointerLock(Element* target)
     }
 
     UseCounter::countCrossOriginIframe(target->document(), UseCounter::ElementRequestPointerLockIframe);
+    if (target->isInShadowTree())
+        UseCounter::count(target->document(), UseCounter::ElementRequestPointerLockInShadow);
 
     if (target->document().isSandboxed(SandboxPointerLock)) {
         // FIXME: This message should be moved off the console once a solution to https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
@@ -68,7 +70,7 @@ void PointerLockController::requestPointerLock(Element* target)
         }
         enqueueEvent(EventTypeNames::pointerlockchange, target);
         m_element = target;
-    } else if (m_page->chromeClient().requestPointerLock()) {
+    } else if (m_page->chromeClient().requestPointerLock(target->document().frame())) {
         m_lockPending = true;
         m_element = target;
     } else {
@@ -78,25 +80,25 @@ void PointerLockController::requestPointerLock(Element* target)
 
 void PointerLockController::requestPointerUnlock()
 {
-    return m_page->chromeClient().requestPointerUnlock();
+    return m_page->chromeClient().requestPointerUnlock(m_element->document().frame());
 }
 
 void PointerLockController::elementRemoved(Element* element)
 {
     if (m_element == element) {
         m_documentOfRemovedElementWhileWaitingForUnlock = &m_element->document();
+        requestPointerUnlock();
         // Set element null immediately to block any future interaction with it
         // including mouse events received before the unlock completes.
         clearElement();
-        requestPointerUnlock();
     }
 }
 
 void PointerLockController::documentDetached(Document* document)
 {
     if (m_element && m_element->document() == document) {
-        clearElement();
         requestPointerUnlock();
+        clearElement();
     }
 }
 

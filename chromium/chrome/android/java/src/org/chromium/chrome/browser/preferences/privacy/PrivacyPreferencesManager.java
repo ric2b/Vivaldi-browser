@@ -26,10 +26,10 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
 
     static final String PREF_CRASH_DUMP_UPLOAD = "crash_dump_upload";
     static final String PREF_CRASH_DUMP_UPLOAD_NO_CELLULAR = "crash_dump_upload_no_cellular";
+    static final String PREF_METRICS_REPORTING = "metrics_reporting";
     private static final String PREF_NETWORK_PREDICTIONS = "network_predictions";
     private static final String PREF_BANDWIDTH_OLD = "prefetch_bandwidth";
     private static final String PREF_BANDWIDTH_NO_CELLULAR_OLD = "prefetch_bandwidth_no_cellular";
-    private static final String PREF_METRICS_REPORTING = "metrics_reporting";
     private static final String PREF_CELLULAR_EXPERIMENT = "cellular_experiment";
     private static final String ALLOW_PRERENDER_OLD = "allow_prefetch";
     private static final String PREF_PHYSICAL_WEB = "physical_web";
@@ -63,9 +63,9 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
         mCrashDumpAlwaysUpload = context.getString(R.string.crash_dump_always_upload_value);
     }
 
-    public static PrivacyPreferencesManager getInstance(Context context) {
+    public static PrivacyPreferencesManager getInstance() {
         if (sInstance == null) {
-            sInstance = new PrivacyPreferencesManager(context.getApplicationContext());
+            sInstance = new PrivacyPreferencesManager(ContextUtils.getApplicationContext());
         }
         return sInstance;
     }
@@ -252,7 +252,6 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
         if (!mSharedPreferences.contains(PREF_METRICS_REPORTING)) {
             setUsageAndCrashReporting(isUploadCrashDumpEnabled());
         }
-
         return mSharedPreferences.getBoolean(PREF_METRICS_REPORTING, false);
     }
 
@@ -348,7 +347,8 @@ public class PrivacyPreferencesManager implements CrashReportingPermissionManage
             ed.putBoolean(PREF_CRASH_DUMP_UPLOAD_NO_CELLULAR, allowCrashUpload);
         }
         ed.apply();
-        PrefServiceBridge.getInstance().setCrashReportingEnabled(allowCrashUpload);
+        if (isCellularExperimentEnabled()) setUsageAndCrashReporting(allowCrashUpload);
+        syncUsageAndCrashReportingPrefs();
     }
 
     /**

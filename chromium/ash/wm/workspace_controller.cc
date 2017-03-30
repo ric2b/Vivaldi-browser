@@ -6,15 +6,15 @@
 
 #include <utility>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/workspace/workspace_layout_manager.h"
+#include "ash/common/wm/workspace/workspace_layout_manager_backdrop_delegate.h"
+#include "ash/common/wm/workspace/workspace_layout_manager_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
-#include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/workspace/workspace_layout_manager.h"
-#include "ash/wm/common/workspace/workspace_layout_manager_backdrop_delegate.h"
-#include "ash/wm/common/workspace/workspace_layout_manager_delegate.h"
 #include "ash/wm/window_animations.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -50,13 +50,11 @@ WorkspaceController::WorkspaceController(
     : viewport_(viewport),
       shelf_(NULL),
       event_handler_(new WorkspaceEventHandler),
-      layout_manager_(
-          new WorkspaceLayoutManager(wm::WmWindowAura::Get(viewport),
-                                     std::move(delegate))) {
-  SetWindowVisibilityAnimationTransition(
-      viewport_, ::wm::ANIMATE_NONE);
+      layout_manager_(new WorkspaceLayoutManager(WmWindowAura::Get(viewport),
+                                                 std::move(delegate))) {
+  SetWindowVisibilityAnimationTransition(viewport_, ::wm::ANIMATE_NONE);
 
-  wm::WmWindowAura::Get(viewport_)->SetLayoutManager(
+  WmWindowAura::Get(viewport_)->SetLayoutManager(
       base::WrapUnique(layout_manager_));
   viewport_->AddPreTargetHandler(event_handler_.get());
 }
@@ -69,20 +67,19 @@ WorkspaceController::~WorkspaceController() {
 wm::WorkspaceWindowState WorkspaceController::GetWindowState() const {
   if (!shelf_)
     return wm::WORKSPACE_WINDOW_STATE_DEFAULT;
-  const aura::Window* topmost_fullscreen_window = GetRootWindowController(
-      viewport_->GetRootWindow())->GetWindowForFullscreenMode();
+  const aura::Window* topmost_fullscreen_window =
+      GetRootWindowController(viewport_->GetRootWindow())
+          ->GetWindowForFullscreenMode();
   if (topmost_fullscreen_window &&
-      !wm::GetWindowState(topmost_fullscreen_window)->ignored_by_shelf() &&
-      wm::GetWindowState(topmost_fullscreen_window)
-          ->transparent_insets()
-          .IsEmpty()) {
+      !wm::GetWindowState(topmost_fullscreen_window)->ignored_by_shelf()) {
     return wm::WORKSPACE_WINDOW_STATE_FULL_SCREEN;
   }
 
   // These are the container ids of containers which may contain windows that
   // may overlap the launcher shelf and affect its transparency.
-  const int kWindowContainerIds[] = {kShellWindowId_DefaultContainer,
-                                     kShellWindowId_DockedContainer, };
+  const int kWindowContainerIds[] = {
+      kShellWindowId_DefaultContainer, kShellWindowId_DockedContainer,
+  };
   const gfx::Rect shelf_bounds(shelf_->GetIdealBounds());
   bool window_overlaps_launcher = false;
   for (size_t idx = 0; idx < arraysize(kWindowContainerIds); idx++) {
@@ -97,13 +94,11 @@ wm::WorkspaceWindowState WorkspaceController::GetWindowState() const {
       ui::Layer* layer = (*i)->layer();
       if (!layer->GetTargetVisibility())
         continue;
-      if (window_state->IsMaximized() &&
-          window_state->transparent_insets().IsEmpty()) {
+      if (window_state->IsMaximized()) {
         return wm::WORKSPACE_WINDOW_STATE_MAXIMIZED;
       }
-      gfx::Rect bounds((*i)->bounds());
-      bounds.Inset(window_state->transparent_insets());
-      if (!window_overlaps_launcher && bounds.Intersects(shelf_bounds)) {
+      if (!window_overlaps_launcher &&
+          ((*i)->bounds().Intersects(shelf_bounds))) {
         window_overlaps_launcher = true;
       }
     }
@@ -122,8 +117,8 @@ void WorkspaceController::DoInitialAnimation() {
   viewport_->Show();
 
   viewport_->layer()->SetOpacity(0.0f);
-  SetTransformForScaleAnimation(
-      viewport_->layer(), LAYER_SCALE_ANIMATION_ABOVE);
+  SetTransformForScaleAnimation(viewport_->layer(),
+                                LAYER_SCALE_ANIMATION_ABOVE);
 
   // In order for pause to work we need to stop animations.
   viewport_->layer()->GetAnimator()->StopAnimating();

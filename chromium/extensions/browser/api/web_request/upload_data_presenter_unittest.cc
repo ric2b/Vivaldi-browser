@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 
+#include <utility>
+
 #include "base/values.h"
 #include "extensions/browser/api/web_request/upload_data_presenter.h"
 #include "extensions/browser/api/web_request/web_request_api_constants.h"
@@ -24,7 +26,7 @@ TEST(WebRequestUploadDataPresenterTest, ParsedData) {
 
   // Expected output.
   std::unique_ptr<base::ListValue> values(new base::ListValue);
-  values->Append(new base::StringValue("value"));
+  values->AppendString("value");
   base::DictionaryValue expected_form;
   expected_form.SetWithoutPathExpansion("key.with.dots", values.release());
 
@@ -60,12 +62,12 @@ TEST(WebRequestUploadDataPresenterTest, RawData) {
   ASSERT_TRUE(expected_c.get() != NULL);
 
   base::ListValue expected_list;
-  subtle::AppendKeyValuePair(
-      keys::kRequestBodyRawBytesKey, expected_a.release(), &expected_list);
-  subtle::AppendKeyValuePair(
-      keys::kRequestBodyRawFileKey, expected_b.release(), &expected_list);
-  subtle::AppendKeyValuePair(
-      keys::kRequestBodyRawBytesKey, expected_c.release(), &expected_list);
+  subtle::AppendKeyValuePair(keys::kRequestBodyRawBytesKey,
+                             std::move(expected_a), &expected_list);
+  subtle::AppendKeyValuePair(keys::kRequestBodyRawFileKey,
+                             std::move(expected_b), &expected_list);
+  subtle::AppendKeyValuePair(keys::kRequestBodyRawBytesKey,
+                             std::move(expected_c), &expected_list);
 
   // Real output.
   RawDataPresenter raw_presenter;

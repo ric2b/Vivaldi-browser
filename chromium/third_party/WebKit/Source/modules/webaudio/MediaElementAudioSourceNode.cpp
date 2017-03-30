@@ -22,16 +22,17 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "modules/webaudio/MediaElementAudioSourceNode.h"
 #include "core/dom/CrossThreadTask.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeOutput.h"
+#include "modules/webaudio/MediaElementAudioSourceNode.h"
 #include "platform/Logging.h"
 #include "platform/audio/AudioUtilities.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "wtf/Locker.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -73,7 +74,7 @@ void MediaElementAudioSourceHandler::setFormat(size_t numberOfChannels, float so
     if (numberOfChannels != m_sourceNumberOfChannels || sourceSampleRate != m_sourceSampleRate) {
         if (!numberOfChannels || numberOfChannels > AbstractAudioContext::maxNumberOfChannels() || !AudioUtilities::isValidAudioBufferSampleRate(sourceSampleRate)) {
             // process() will generate silence for these uninitialized values.
-            WTF_LOG(Media, "MediaElementAudioSourceNode::setFormat(%u, %f) - unhandled format change", static_cast<unsigned>(numberOfChannels), sourceSampleRate);
+            DLOG(ERROR) << "setFormat(" << numberOfChannels << ", " << sourceSampleRate << ") - unhandled format change";
             // Synchronize with process().
             Locker<MediaElementAudioSourceHandler> locker(*this);
             m_sourceNumberOfChannels = 0;
@@ -90,10 +91,10 @@ void MediaElementAudioSourceHandler::setFormat(size_t numberOfChannels, float so
 
         if (sourceSampleRate != sampleRate()) {
             double scaleFactor = sourceSampleRate / sampleRate();
-            m_multiChannelResampler = adoptPtr(new MultiChannelResampler(scaleFactor, numberOfChannels));
+            m_multiChannelResampler = wrapUnique(new MultiChannelResampler(scaleFactor, numberOfChannels));
         } else {
             // Bypass resampling.
-            m_multiChannelResampler.clear();
+            m_multiChannelResampler.reset();
         }
 
         {
@@ -206,9 +207,32 @@ MediaElementAudioSourceNode::MediaElementAudioSourceNode(AbstractAudioContext& c
     setHandler(MediaElementAudioSourceHandler::create(*this, mediaElement));
 }
 
-MediaElementAudioSourceNode* MediaElementAudioSourceNode::create(AbstractAudioContext& context, HTMLMediaElement& mediaElement)
+MediaElementAudioSourceNode* MediaElementAudioSourceNode::create(AbstractAudioContext& context, HTMLMediaElement& mediaElement, ExceptionState& exceptionState)
 {
-    return new MediaElementAudioSourceNode(context, mediaElement);
+    DCHECK(isMainThread());
+
+    if (context.isContextClosed()) {
+        context.throwExceptionForClosedState(exceptionState);
+        return nullptr;
+    }
+
+    // First check if this media element already has a source node.
+    if (mediaElement.audioSourceNode()) {
+        exceptionState.throwDOMException(
+            InvalidStateError,
+            "HTMLMediaElement already connected previously to a different MediaElementSourceNode.");
+        return nullptr;
+    }
+
+    MediaElementAudioSourceNode* node = new MediaElementAudioSourceNode(context, mediaElement);
+
+    if (node) {
+        mediaElement.setAudioSourceNode(node);
+        // context keeps reference until node is disconnected
+        context.notifySourceNodeStartedProcessing(node);
+    }
+
+    return node;
 }
 
 DEFINE_TRACE(MediaElementAudioSourceNode)

@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/platform_thread.h"
 #include "base/threading/thread.h"
@@ -48,10 +49,11 @@ class BlockingTask : public CancelationObserver {
 };
 
 BlockingTask::BlockingTask(CancelationSignal* cancel_signal)
-  : event_(true, false),
-    exec_thread_("BlockingTaskBackgroundThread"),
-    cancel_signal_(cancel_signal),
-    was_started_(false) { }
+    : event_(base::WaitableEvent::ResetPolicy::MANUAL,
+             base::WaitableEvent::InitialState::NOT_SIGNALED),
+      exec_thread_("BlockingTaskBackgroundThread"),
+      cancel_signal_(cancel_signal),
+      was_started_(false) {}
 
 BlockingTask::~BlockingTask() {
   if (was_started_) {
@@ -62,12 +64,10 @@ BlockingTask::~BlockingTask() {
 void BlockingTask::RunAsync(base::WaitableEvent* task_start_signal,
                             base::WaitableEvent* task_done_signal) {
   exec_thread_.Start();
-  exec_thread_.message_loop()->PostTask(
-      FROM_HERE,
-      base::Bind(&BlockingTask::Run,
-                 base::Unretained(this),
-                 base::Unretained(task_start_signal),
-                 base::Unretained(task_done_signal)));
+  exec_thread_.task_runner()->PostTask(
+      FROM_HERE, base::Bind(&BlockingTask::Run, base::Unretained(this),
+                            base::Unretained(task_start_signal),
+                            base::Unretained(task_done_signal)));
 }
 
 void BlockingTask::Run(
@@ -122,9 +122,11 @@ class CancelationSignalTest : public ::testing::Test {
 };
 
 CancelationSignalTest::CancelationSignalTest()
-  : task_start_event_(false, false),
-    task_done_event_(false, false),
-    blocking_task_(&signal_) {}
+    : task_start_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                        base::WaitableEvent::InitialState::NOT_SIGNALED),
+      task_done_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                       base::WaitableEvent::InitialState::NOT_SIGNALED),
+      blocking_task_(&signal_) {}
 
 CancelationSignalTest::~CancelationSignalTest() {}
 

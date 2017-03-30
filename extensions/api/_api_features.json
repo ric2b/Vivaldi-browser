@@ -33,9 +33,9 @@
     "dependencies": [ "permission:extensionActionUtils" ],
     "contexts": [ "blessed_extension" ]
   },
-  "historySearch": {
+  "historyPrivate": {
     "vivaldi": true,
-    "dependencies": [ "permission:historySearch" ],
+    "dependencies": [ "permission:historyPrivate" ],
     "contexts": [ "blessed_extension" ]
   },
   "importData": {

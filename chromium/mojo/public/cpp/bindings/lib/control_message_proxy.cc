@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/bind.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/lib/message_builder.h"
 #include "mojo/public/cpp/bindings/lib/serialization.h"
@@ -19,7 +20,7 @@ namespace internal {
 
 namespace {
 
-using RunCallback = Callback<void(QueryVersionResultPtr)>;
+using RunCallback = base::Callback<void(QueryVersionResultPtr)>;
 
 class RunResponseForwardToCallback : public MessageReceiver {
  public:
@@ -87,6 +88,11 @@ void SendRunOrClosePipeMessage(MessageReceiverWithResponder* receiver,
   ALLOW_UNUSED_LOCAL(ok);
 }
 
+void RunVersionCallback(const base::Callback<void(uint32_t)>& callback,
+                        QueryVersionResultPtr query_version_result) {
+  callback.Run(query_version_result->version);
+}
+
 }  // namespace
 
 ControlMessageProxy::ControlMessageProxy(MessageReceiverWithResponder* receiver)
@@ -94,11 +100,9 @@ ControlMessageProxy::ControlMessageProxy(MessageReceiverWithResponder* receiver)
 }
 
 void ControlMessageProxy::QueryVersion(
-    const Callback<void(uint32_t)>& callback) {
-  auto run_callback = [callback](QueryVersionResultPtr query_version_result) {
-    callback.Run(query_version_result->version);
-  };
-  SendRunMessage(receiver_, QueryVersion::New(), run_callback, &context_);
+    const base::Callback<void(uint32_t)>& callback) {
+  SendRunMessage(receiver_, QueryVersion::New(),
+                 base::Bind(&RunVersionCallback, callback), &context_);
 }
 
 void ControlMessageProxy::RequireVersion(uint32_t version) {

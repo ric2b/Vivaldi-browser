@@ -15,7 +15,7 @@
 #include "content/common/content_param_traits_macros.h"
 #include "content/common/navigation_params.h"
 #include "content/common/resource_request.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/resource_request_completion_status.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/public/common/common_param_traits.h"
@@ -86,8 +86,8 @@ struct ParamTraits<net::LoadTimingInfo> {
 };
 
 template <>
-struct ParamTraits<scoped_refptr<content::ResourceRequestBody> > {
-  typedef scoped_refptr<content::ResourceRequestBody> param_type;
+struct ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>> {
+  typedef scoped_refptr<content::ResourceRequestBodyImpl> param_type;
   static void GetSize(base::PickleSizer* s, const param_type& p);
   static void Write(base::Pickle* m, const param_type& p);
   static bool Read(const base::Pickle* m,
@@ -128,6 +128,9 @@ IPC_ENUM_TRAITS_MAX_VALUE(content::FetchCredentialsMode,
 
 IPC_ENUM_TRAITS_MAX_VALUE(content::FetchRedirectMode,
                           content::FetchRedirectMode::LAST)
+
+IPC_ENUM_TRAITS_MAX_VALUE(content::SkipServiceWorker,
+                          content::SkipServiceWorker::LAST)
 
 IPC_ENUM_TRAITS_MAX_VALUE(
     net::NetworkQualityEstimator::EffectiveConnectionType,
@@ -180,7 +183,11 @@ IPC_STRUCT_TRAITS_BEGIN(content::ResourceResponseInfo)
   IPC_STRUCT_TRAITS_MEMBER(is_using_lofi)
   IPC_STRUCT_TRAITS_MEMBER(effective_connection_type)
   IPC_STRUCT_TRAITS_MEMBER(signed_certificate_timestamps)
+  IPC_STRUCT_TRAITS_MEMBER(cors_exposed_header_names)
 IPC_STRUCT_TRAITS_END()
+
+IPC_ENUM_TRAITS_MAX_VALUE(net::URLRequest::ReferrerPolicy,
+                          net::URLRequest::MAX_REFERRER_POLICY - 1)
 
 IPC_STRUCT_TRAITS_BEGIN(net::RedirectInfo)
   IPC_STRUCT_TRAITS_MEMBER(status_code)
@@ -188,6 +195,7 @@ IPC_STRUCT_TRAITS_BEGIN(net::RedirectInfo)
   IPC_STRUCT_TRAITS_MEMBER(new_url)
   IPC_STRUCT_TRAITS_MEMBER(new_first_party_for_cookies)
   IPC_STRUCT_TRAITS_MEMBER(new_referrer)
+  IPC_STRUCT_TRAITS_MEMBER(new_referrer_policy)
   IPC_STRUCT_TRAITS_MEMBER(referred_token_binding_host)
 IPC_STRUCT_TRAITS_END()
 
@@ -240,6 +248,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ResourceRequest)
   IPC_STRUCT_TRAITS_MEMBER(report_raw_headers)
   IPC_STRUCT_TRAITS_MEMBER(lofi_state)
   IPC_STRUCT_TRAITS_MEMBER(resource_body_stream_url)
+  IPC_STRUCT_TRAITS_MEMBER(initiated_in_secure_context)
 IPC_STRUCT_TRAITS_END()
 
 // Parameters for a ResourceMsg_RequestComplete

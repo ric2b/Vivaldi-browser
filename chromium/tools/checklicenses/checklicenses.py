@@ -83,6 +83,7 @@ WHITELISTED_LICENSES = [
     'MPL (v1.1) BSD (3 clause) LGPL (v2.1 or later)',
     'MPL (v1.1) BSD-like GPL (unversioned/unknown version)',
     'MPL (v1.1) BSD-like GPL (v2) LGPL (v2.1 or later)',
+    'MPL (v1.1) BSD-like LGPL (v2.1 or later)',
     'MPL (v1.1) BSD-like',
     'MPL (v1.1) GPL (unversioned/unknown version)',
     'MPL (v1.1) GPL (v2) LGPL (v2 or later)',
@@ -143,12 +144,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
     # directories might have suppressions below (like simplejson), whitelist the
     # whole directory. This is also not shipped code.
     'chrome/common/extensions/docs/server2/third_party': [
-        'UNKNOWN',
-    ],
-    'courgette/third_party/bsdiff/bsdiff_create.cc': [  # http://crbug.com/98095
-        'UNKNOWN',
-    ],
-    'courgette/third_party/bsdiff/qsufsort.h': [  # http://crbug.com/98095
         'UNKNOWN',
     ],
     'native_client': [  # http://crbug.com/98099
@@ -376,10 +371,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'GPL (v3 or later)',
         'UNKNOWN',  # http://crbug.com/98123
     ],
-    'third_party/flatbuffers': [
-        # https://github.com/google/flatbuffers/issues/3872
-        'UNKNOWN',
-    ],
     'third_party/fontconfig': [
         # https://bugs.freedesktop.org/show_bug.cgi?id=73401
         'UNKNOWN',
@@ -388,6 +379,9 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
     'third_party/freetype-android': [ # http://crbug.com/177319
+        'UNKNOWN',
+    ],
+    'third_party/grpc': [ # https://github.com/grpc/grpc/issues/6951
         'UNKNOWN',
     ],
     'third_party/hunspell': [  # http://crbug.com/98134
@@ -536,21 +530,9 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
 
-    # http://crbug.com/334668
-    # Apache v2.0.
-    'tools/swarming_client/third_party/oauth2client': [
-        'UNKNOWN',
-    ],
-
     # http://crbug.com/471372
     # BSD
     'tools/swarming_client/third_party/pyasn1': [
-        'UNKNOWN',
-    ],
-
-    # http://crbug.com/471372
-    # Apache v2.0.
-    'tools/swarming_client/third_party/rsa': [
         'UNKNOWN',
     ],
 
@@ -623,18 +605,6 @@ PATH_SPECIFIC_WHITELISTED_LICENSES = {
         'UNKNOWN',
     ],
     'tools/symsrc/pefile.py': [
-        'UNKNOWN',
-    ],
-    # Not shipped, MIT license but the header files contain no licensing info.
-    'tools/telemetry/third_party/altgraph': [
-        'UNKNOWN',
-    ],
-    # Not shipped, MIT license but the header files contain no licensing info.
-    'tools/telemetry/third_party/modulegraph': [
-        'UNKNOWN',
-    ],
-    'tools/telemetry/third_party/pyserial': [
-        # https://sourceforge.net/p/pyserial/feature-requests/35/
         'UNKNOWN',
     ],
     # Not shipped, MIT license but the header files contain no licensing info.

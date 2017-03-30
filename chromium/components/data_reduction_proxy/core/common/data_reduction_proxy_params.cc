@@ -48,6 +48,10 @@ const char kTrustedSpdyProxyFieldTrialName[] = "DataReductionTrustedSpdyProxy";
 const char kClientConfigURL[] =
     "https://datasaver.googleapis.com/v1/clientConfigs";
 
+// Default URL for sending pageload metrics.
+const char kPingbackURL[] =
+    "https://datasaver.googleapis.com/v1/metrics:recordPageloadMetrics";
+
 // The name of the server side experiment field trial.
 const char kServerExperimentsFieldTrial[] =
     "DataReductionProxyServerExperiments";
@@ -90,23 +94,34 @@ const char* GetLoFiFlagFieldTrialName() {
 }
 
 bool IsIncludedInLoFiEnabledFieldTrial() {
-  return FieldTrialList::FindFullName(GetLoFiFieldTrialName()).find(kEnabled) ==
-         0;
+  return !IsLoFiOnViaFlags() && !IsLoFiDisabledViaFlags() &&
+         FieldTrialList::FindFullName(GetLoFiFieldTrialName()).find(kEnabled) ==
+             0;
 }
 
 bool IsIncludedInLoFiControlFieldTrial() {
-  return FieldTrialList::FindFullName(GetLoFiFieldTrialName()).find(kControl) ==
-         0;
+  return !IsLoFiOnViaFlags() && !IsLoFiDisabledViaFlags() &&
+         FieldTrialList::FindFullName(GetLoFiFieldTrialName()).find(kControl) ==
+             0;
 }
 
 bool IsIncludedInLoFiPreviewFieldTrial() {
-  return FieldTrialList::FindFullName(GetLoFiFieldTrialName()).find(kPreview) ==
-         0;
+  return !IsLoFiOnViaFlags() && !IsLoFiDisabledViaFlags() &&
+         FieldTrialList::FindFullName(GetLoFiFieldTrialName()).find(kPreview) ==
+             0;
 }
 
+bool IsIncludedInServerExperimentsFieldTrial() {
+  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
+             data_reduction_proxy::switches::
+                 kDataReductionProxyServerExperimentsDisabled) &&
+         FieldTrialList::FindFullName(kServerExperimentsFieldTrial)
+                 .find(kDisabled) != 0;
+}
 bool IsIncludedInTamperDetectionExperiment() {
-  return FieldTrialList::FindFullName("DataReductionProxyServerExperiments")
-             .find("TamperDetection_Enabled") == 0;
+  return IsIncludedInServerExperimentsFieldTrial() &&
+         FieldTrialList::FindFullName(kServerExperimentsFieldTrial)
+                 .find("TamperDetection_Enabled") == 0;
 }
 
 bool IsLoFiOnViaFlags() {
@@ -149,6 +164,11 @@ bool IsLoFiDisabledViaFlags() {
 bool AreLoFiPreviewsEnabledViaFlags() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       data_reduction_proxy::switches::kEnableDataReductionProxyLoFiPreview);
+}
+
+bool IsForcePingbackEnabledViaFlags() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      data_reduction_proxy::switches::kEnableDataReductionProxyForcePingback);
 }
 
 bool WarnIfNoDataReductionProxy() {
@@ -194,6 +214,26 @@ GURL GetConfigServiceURL() {
   LOG(WARNING) << "The following client config URL specified at the "
                << "command-line or variation is invalid: " << url;
   return GURL(kClientConfigURL);
+}
+
+GURL GetPingbackURL() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  std::string url;
+  if (command_line->HasSwitch(switches::kDataReductionPingbackURL)) {
+    url =
+        command_line->GetSwitchValueASCII(switches::kDataReductionPingbackURL);
+  }
+
+  if (url.empty())
+    return GURL(kPingbackURL);
+
+  GURL result(url);
+  if (result.is_valid())
+    return result;
+
+  LOG(WARNING) << "The following page load metrics URL specified at the "
+               << "command-line or variation is invalid: " << url;
+  return GURL(kPingbackURL);
 }
 
 bool ShouldForceEnableDataReductionProxy() {
@@ -287,7 +327,7 @@ const char* GetServerExperimentsFieldTrialName() {
 
 }  // namespace params
 
-DataReductionProxyTypeInfo::DataReductionProxyTypeInfo() : is_fallback(false) {}
+DataReductionProxyTypeInfo::DataReductionProxyTypeInfo() : proxy_index(0) {}
 
 DataReductionProxyTypeInfo::DataReductionProxyTypeInfo(
     const DataReductionProxyTypeInfo& other) = default;

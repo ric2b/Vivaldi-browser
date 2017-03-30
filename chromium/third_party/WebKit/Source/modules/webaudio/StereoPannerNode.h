@@ -10,6 +10,7 @@
 #include "modules/webaudio/AudioParam.h"
 #include "platform/audio/AudioBus.h"
 #include "platform/audio/Spatializer.h"
+#include <memory>
 
 namespace blink {
 
@@ -31,7 +32,7 @@ public:
 private:
     StereoPannerHandler(AudioNode&, float sampleRate, AudioParamHandler& pan);
 
-    OwnPtr<Spatializer> m_stereoPanner;
+    std::unique_ptr<Spatializer> m_stereoPanner;
     RefPtr<AudioParamHandler> m_pan;
 
     AudioFloatArray m_sampleAccuratePanValues;
@@ -42,13 +43,13 @@ private:
 class StereoPannerNode final : public AudioNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static StereoPannerNode* create(AbstractAudioContext&, float sampleRate);
+    static StereoPannerNode* create(AbstractAudioContext&, ExceptionState&);
     DECLARE_VIRTUAL_TRACE();
 
     AudioParam* pan() const;
 
 private:
-    StereoPannerNode(AbstractAudioContext&, float sampleRate);
+    StereoPannerNode(AbstractAudioContext&);
 
     Member<AudioParam> m_pan;
 };

@@ -13,12 +13,14 @@
 #include "base/callback_helpers.h"
 #include "base/format_macros.h"
 #include "base/lazy_instance.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_byteorder.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "extensions/browser/api/cast_channel/cast_auth_util.h"
 #include "extensions/browser/api/cast_channel/cast_framer.h"
@@ -32,6 +34,8 @@
 #include "net/base/net_errors.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/transport_security_state.h"
 #include "net/socket/client_socket_factory.h"
@@ -78,17 +82,14 @@ class FakeCertVerifier : public net::CertVerifier {
   FakeCertVerifier() {}
   ~FakeCertVerifier() override {}
 
-  int Verify(net::X509Certificate* cert,
-             const std::string&,
-             const std::string&,
-             int,
+  int Verify(const RequestParams& params,
              net::CRLSet*,
              net::CertVerifyResult* verify_result,
              const net::CompletionCallback&,
-             std::unique_ptr<net::CertVerifier::Request>*,
+             std::unique_ptr<Request>*,
              const net::BoundNetLog&) override {
     verify_result->Reset();
-    verify_result->verified_cert = cert;
+    verify_result->verified_cert = params.certificate();
     return net::OK;
   }
 };
@@ -187,11 +188,15 @@ std::unique_ptr<net::SSLClientSocket> CastSocketImpl::CreateSslSocket(
   net::SSLConfig ssl_config;
   cert_verifier_ = base::WrapUnique(new FakeCertVerifier);
   transport_security_state_.reset(new net::TransportSecurityState);
+  cert_transparency_verifier_.reset(new net::MultiLogCTVerifier());
+  ct_policy_enforcer_.reset(new net::CTPolicyEnforcer());
+
+  // Note that |context| fields remain owned by CastSocketImpl.
   net::SSLClientSocketContext context;
-  // CertVerifier and TransportSecurityState are owned by us, not the
-  // context object.
   context.cert_verifier = cert_verifier_.get();
   context.transport_security_state = transport_security_state_.get();
+  context.cert_transparency_verifier = cert_transparency_verifier_.get();
+  context.ct_policy_enforcer = ct_policy_enforcer_.get();
 
   std::unique_ptr<net::ClientSocketHandle> connection(
       new net::ClientSocketHandle);
@@ -297,8 +302,8 @@ void CastSocketImpl::PostTaskToStartConnectLoop(int result) {
   DCHECK(connect_loop_callback_.IsCancelled());
   connect_loop_callback_.Reset(base::Bind(&CastSocketImpl::DoConnectLoop,
                                           base::Unretained(this), result));
-  base::MessageLoop::current()->PostTask(FROM_HERE,
-                                         connect_loop_callback_.callback());
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, connect_loop_callback_.callback());
 }
 
 // This method performs the state machine transitions for connection flow.

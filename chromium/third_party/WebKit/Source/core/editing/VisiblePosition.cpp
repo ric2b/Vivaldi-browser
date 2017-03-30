@@ -35,8 +35,6 @@
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/html/HTMLElement.h"
-#include "core/layout/LayoutBlock.h"
-#include "core/layout/line/RootInlineBox.h"
 #include "platform/geometry/FloatQuad.h"
 #include "wtf/text/CString.h"
 #include <ostream> // NOLINT
@@ -78,9 +76,39 @@ VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::create(cons
 }
 
 template <typename Strategy>
+VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::afterNode(Node* node)
+{
+    return create(PositionWithAffinityTemplate<Strategy>(PositionTemplate<Strategy>::afterNode(node)));
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::beforeNode(Node* node)
+{
+    return create(PositionWithAffinityTemplate<Strategy>(PositionTemplate<Strategy>::beforeNode(node)));
+}
+
+template <typename Strategy>
 VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::firstPositionInNode(Node* node)
 {
     return create(PositionWithAffinityTemplate<Strategy>(PositionTemplate<Strategy>::firstPositionInNode(node)));
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::inParentAfterNode(const Node& node)
+{
+    return create(PositionWithAffinityTemplate<Strategy>(PositionTemplate<Strategy>::inParentAfterNode(node)));
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::inParentBeforeNode(const Node& node)
+{
+    return create(PositionWithAffinityTemplate<Strategy>(PositionTemplate<Strategy>::inParentBeforeNode(node)));
+}
+
+template <typename Strategy>
+VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::lastPositionInNode(Node* node)
+{
+    return create(PositionWithAffinityTemplate<Strategy>(PositionTemplate<Strategy>::lastPositionInNode(node)));
 }
 
 VisiblePosition createVisiblePosition(const Position& position, TextAffinity affinity)

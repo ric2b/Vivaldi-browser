@@ -20,7 +20,6 @@
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/search_engines/template_url.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/url_request/url_fetcher.h"
@@ -233,17 +232,13 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
         &match.description_class, 0, ACMatchClassification::NONE);
   }
 
+  const base::string16 input_lower = base::i18n::ToLower(input.text());
   // suggestion.match_contents() should have already been collapsed.
   match.allowed_to_be_default_match =
       (!in_keyword_mode || suggestion.from_keyword_provider()) &&
-      (base::CollapseWhitespace(input.text(), false) ==
-       suggestion.match_contents());
+      (base::CollapseWhitespace(input_lower, false) ==
+       base::i18n::ToLower(suggestion.match_contents()));
 
-  // When the user forced a query, we need to make sure all the fill_into_edit
-  // values preserve that property.  Otherwise, if the user starts editing a
-  // suggestion, non-Search results will suddenly appear.
-  if (input.type() == metrics::OmniboxInputType::FORCED_QUERY)
-    match.fill_into_edit.assign(base::ASCIIToUTF16("?"));
   if (suggestion.from_keyword_provider())
     match.fill_into_edit.append(match.keyword + base::char16(' '));
   // We only allow inlinable navsuggestions that were received before the
@@ -252,8 +247,8 @@ AutocompleteMatch BaseSearchProvider::CreateSearchSuggestion(
       !suggestion.received_after_last_keystroke() &&
       (!in_keyword_mode || suggestion.from_keyword_provider()) &&
       base::StartsWith(
-          base::i18n::ToLower(suggestion.suggestion()),
-          base::i18n::ToLower(input.text()), base::CompareCase::SENSITIVE)) {
+          base::i18n::ToLower(suggestion.suggestion()), input_lower,
+          base::CompareCase::SENSITIVE)) {
     match.inline_autocompletion =
         suggestion.suggestion().substr(input.text().length());
     match.allowed_to_be_default_match = true;
@@ -321,8 +316,7 @@ bool BaseSearchProvider::ZeroSuggestEnabled(
   // (currently only the prepopulated Google provider).
   if (template_url == NULL ||
       !template_url->SupportsReplacement(search_terms_data) ||
-      TemplateURLPrepopulateData::GetEngineType(
-          *template_url, search_terms_data) != SEARCH_ENGINE_GOOGLE)
+      template_url->GetEngineType(search_terms_data) != SEARCH_ENGINE_GOOGLE)
     return false;
 
   return true;

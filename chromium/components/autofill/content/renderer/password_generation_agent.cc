@@ -10,6 +10,7 @@
 #include "base/logging.h"
 #include "components/autofill/content/common/autofill_messages.h"
 #include "components/autofill/content/renderer/form_autofill_util.h"
+#include "components/autofill/content/renderer/form_classifier.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/autofill/content/renderer/password_form_conversion_utils.h"
 #include "components/autofill/core/common/autofill_switches.h"
@@ -125,6 +126,7 @@ PasswordGenerationAgent::PasswordGenerationAgent(
       generation_popup_shown_(false),
       editing_popup_shown_(false),
       enabled_(password_generation::IsPasswordGenerationEnabled()),
+      form_classifier_enabled_(false),
       password_agent_(password_agent) {
   VLOG(2) << "Password Generation is " << (enabled_ ? "Enabled" : "Disabled");
 }
@@ -179,12 +181,34 @@ void PasswordGenerationAgent::DidFinishDocumentLoad() {
   FindPossibleGenerationForm();
 }
 
+void PasswordGenerationAgent::DidFinishLoad() {
+  // Since forms on some sites are available only at this event (but not at
+  // DidFinishDocumentLoad), again call FindPossibleGenerationForm to detect
+  // these forms (crbug.com/617893).
+  FindPossibleGenerationForm();
+}
+
 void PasswordGenerationAgent::OnDestruct() {
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
 void PasswordGenerationAgent::OnDynamicFormsSeen() {
   FindPossibleGenerationForm();
+}
+
+void PasswordGenerationAgent::OnAllowToRunFormClassifier() {
+  form_classifier_enabled_ = true;
+}
+
+void PasswordGenerationAgent::RunFormClassifierAndSaveVote(
+    const blink::WebFormElement& web_form,
+    const PasswordForm& form) {
+  DCHECK(form_classifier_enabled_);
+
+  base::string16 generation_field;
+  ClassifyFormAndFindGenerationField(web_form, &generation_field);
+  Send(new AutofillHostMsg_SaveGenerationFieldDetectedByClassifier(
+      routing_id(), form, generation_field));
 }
 
 void PasswordGenerationAgent::FindPossibleGenerationForm() {
@@ -225,6 +249,8 @@ void PasswordGenerationAgent::FindPossibleGenerationForm() {
     if (GetAccountCreationPasswordFields(
             form_util::ExtractAutofillableElementsInForm(forms[i]),
             &passwords)) {
+      if (form_classifier_enabled_)
+        RunFormClassifierAndSaveVote(forms[i], *password_form);
       AccountCreationFormData ac_form_data(
           make_linked_ptr(password_form.release()), passwords);
       possible_account_creation_forms_.push_back(ac_form_data);
@@ -265,6 +291,8 @@ bool PasswordGenerationAgent::OnMessageReceived(const IPC::Message& message) {
                         OnFormsEligibleForGenerationFound);
     IPC_MESSAGE_HANDLER(AutofillMsg_UserTriggeredGeneratePassword,
                         OnUserTriggeredGeneratePassword);
+    IPC_MESSAGE_HANDLER(AutofillMsg_AllowToRunFormClassifier,
+                        OnAllowToRunFormClassifier);
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;

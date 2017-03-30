@@ -41,6 +41,7 @@
 #include "bindings/core/v8/V8ObjectConstructor.h"
 #include "bindings/core/v8/V8Window.h"
 #include "bindings/core/v8/V8WorkerGlobalScope.h"
+#include "bindings/core/v8/V8WorkletGlobalScope.h"
 #include "bindings/core/v8/V8XPathNSResolver.h"
 #include "bindings/core/v8/WindowProxy.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
@@ -56,7 +57,9 @@
 #include "core/inspector/InspectorTraceEvents.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
+#include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkletGlobalScope.h"
 #include "core/xml/XPathNSResolver.h"
 #include "platform/TracedValue.h"
 #include "wtf/MathExtras.h"
@@ -691,22 +694,6 @@ LocalDOMWindow* currentDOMWindow(v8::Isolate* isolate)
     return toLocalDOMWindow(toDOMWindow(isolate->GetCurrentContext()));
 }
 
-LocalDOMWindow* callingDOMWindow(v8::Isolate* isolate)
-{
-    v8::Local<v8::Context> context = isolate->GetCallingContext();
-    if (context.IsEmpty()) {
-        // Unfortunately, when processing script from a plugin, we might not
-        // have a calling context. In those cases, we fall back to the
-        // entered context.
-        context = isolate->GetEnteredContext();
-    }
-    return toLocalDOMWindow(toDOMWindow(context));
-}
-
-namespace {
-ExecutionContext* (*s_toExecutionContextForModules)(v8::Local<v8::Context>) = nullptr;
-}
-
 ExecutionContext* toExecutionContext(v8::Local<v8::Context> context)
 {
     if (context.IsEmpty())
@@ -718,13 +705,11 @@ ExecutionContext* toExecutionContext(v8::Local<v8::Context> context)
     v8::Local<v8::Object> workerWrapper = V8WorkerGlobalScope::findInstanceInPrototypeChain(global, context->GetIsolate());
     if (!workerWrapper.IsEmpty())
         return V8WorkerGlobalScope::toImpl(workerWrapper)->getExecutionContext();
-    ASSERT(s_toExecutionContextForModules);
-    return (*s_toExecutionContextForModules)(context);
-}
-
-void registerToExecutionContextForModules(ExecutionContext* (*toExecutionContextForModules)(v8::Local<v8::Context>))
-{
-    s_toExecutionContextForModules = toExecutionContextForModules;
+    v8::Local<v8::Object> workletWrapper = V8WorkletGlobalScope::findInstanceInPrototypeChain(global, context->GetIsolate());
+    if (!workletWrapper.IsEmpty())
+        return V8WorkletGlobalScope::toImpl(workletWrapper);
+    // FIXME: Is this line of code reachable?
+    return nullptr;
 }
 
 ExecutionContext* currentExecutionContext(v8::Isolate* isolate)
@@ -834,7 +819,24 @@ InstallOriginTrialsFunction s_installOriginTrialsFunction = &installOriginTrials
 
 void installOriginTrials(ScriptState* scriptState)
 {
+    v8::Local<v8::Context> context = scriptState->context();
+    ExecutionContext* executionContext = toExecutionContext(context);
+    OriginTrialContext* originTrialContext = OriginTrialContext::from(executionContext, OriginTrialContext::DontCreateIfNotExists);
+    if (!originTrialContext)
+        return;
+
+    ScriptState::Scope scope(scriptState);
+
     (*s_installOriginTrialsFunction)(scriptState);
+
+    // Mark each enabled feature as having been installed.
+    if (!originTrialContext->featureBindingsInstalled("DurableStorage") && (RuntimeEnabledFeatures::durableStorageEnabled() || originTrialContext->isFeatureEnabled("DurableStorage", nullptr))) {
+        originTrialContext->setFeatureBindingsInstalled("DurableStorage");
+    }
+
+    if (!originTrialContext->featureBindingsInstalled("WebBluetooth") && (RuntimeEnabledFeatures::webBluetoothEnabled() || originTrialContext->isFeatureEnabled("WebBluetooth", nullptr))) {
+        originTrialContext->setFeatureBindingsInstalled("WebBluetooth");
+    }
 }
 
 InstallOriginTrialsFunction setInstallOriginTrialsFunction(InstallOriginTrialsFunction newInstallOriginTrialsFunction)

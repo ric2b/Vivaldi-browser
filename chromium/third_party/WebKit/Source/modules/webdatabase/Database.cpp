@@ -55,6 +55,7 @@
 #include "public/platform/WebSecurityOrigin.h"
 #include "wtf/Atomics.h"
 #include "wtf/CurrentTime.h"
+#include <memory>
 
 // Registering "opened" databases with the DatabaseTracker
 // =======================================================
@@ -203,7 +204,7 @@ static DatabaseGuid guidForOriginAndName(const String& origin, const String& nam
     return guid;
 }
 
-Database::Database(DatabaseContext* databaseContext, const String& name, const String& expectedVersion, const String& displayName, unsigned long estimatedSize)
+Database::Database(DatabaseContext* databaseContext, const String& name, const String& expectedVersion, const String& displayName, unsigned estimatedSize)
     : m_databaseContext(databaseContext)
     , m_name(name.isolatedCopy())
     , m_expectedVersion(expectedVersion.isolatedCopy())
@@ -215,6 +216,7 @@ Database::Database(DatabaseContext* databaseContext, const String& name, const S
     , m_transactionInProgress(false)
     , m_isTransactionQueueEnabled(true)
 {
+    DCHECK(isMainThread());
     m_contextThreadSecurityOrigin = m_databaseContext->getSecurityOrigin()->isolatedCopy();
 
     m_databaseAuthorizer = DatabaseAuthorizer::create(infoTableName);
@@ -254,7 +256,6 @@ DEFINE_TRACE(Database)
     visitor->trace(m_databaseContext);
     visitor->trace(m_sqliteDatabase);
     visitor->trace(m_databaseAuthorizer);
-    visitor->trace(m_transactionQueue);
 }
 
 bool Database::openAndVerifyVersion(bool setVersionInNewDatabase, DatabaseError& error, String& errorMessage)
@@ -265,7 +266,7 @@ bool Database::openAndVerifyVersion(bool setVersionInNewDatabase, DatabaseError&
 
     DatabaseTracker::tracker().prepareToOpenDatabase(this);
     bool success = false;
-    OwnPtr<DatabaseOpenTask> task = DatabaseOpenTask::create(this, setVersionInNewDatabase, &synchronizer, error, errorMessage, success);
+    std::unique_ptr<DatabaseOpenTask> task = DatabaseOpenTask::create(this, setVersionInNewDatabase, &synchronizer, error, errorMessage, success);
     getDatabaseContext()->databaseThread()->scheduleTask(std::move(task));
     synchronizer.waitForTaskCompletion();
 
@@ -331,7 +332,7 @@ void Database::scheduleTransaction()
         transaction = m_transactionQueue.takeFirst();
 
     if (transaction && getDatabaseContext()->databaseThreadAvailable()) {
-        OwnPtr<DatabaseTransactionTask> task = DatabaseTransactionTask::create(transaction);
+        std::unique_ptr<DatabaseTransactionTask> task = DatabaseTransactionTask::create(transaction);
         WTF_LOG(StorageAPI, "Scheduling DatabaseTransactionTask %p for transaction %p\n", task.get(), task->transaction());
         m_transactionInProgress = true;
         getDatabaseContext()->databaseThread()->scheduleTask(std::move(task));
@@ -345,7 +346,7 @@ void Database::scheduleTransactionStep(SQLTransactionBackend* transaction)
     if (!getDatabaseContext()->databaseThreadAvailable())
         return;
 
-    OwnPtr<DatabaseTransactionTask> task = DatabaseTransactionTask::create(transaction);
+    std::unique_ptr<DatabaseTransactionTask> task = DatabaseTransactionTask::create(transaction);
     WTF_LOG(StorageAPI, "Scheduling DatabaseTransactionTask %p for the transaction step\n", task.get());
     getDatabaseContext()->databaseThread()->scheduleTask(std::move(task));
 }
@@ -411,7 +412,7 @@ public:
     void setOpenSucceeded() { m_openSucceeded = true; }
 
 private:
-    Member<Database> m_database;
+    CrossThreadPersistent<Database> m_database;
     bool m_openSucceeded;
 };
 
@@ -563,7 +564,7 @@ String Database::displayName() const
     return m_displayName.isolatedCopy();
 }
 
-unsigned long Database::estimatedSize() const
+unsigned Database::estimatedSize() const
 {
     return m_estimatedSize;
 }
@@ -809,7 +810,7 @@ void Database::readTransaction(
     runTransaction(callback, errorCallback, successCallback, true);
 }
 
-static void callTransactionErrorCallback(SQLTransactionErrorCallback* callback, PassOwnPtr<SQLErrorData> errorData)
+static void callTransactionErrorCallback(SQLTransactionErrorCallback* callback, std::unique_ptr<SQLErrorData> errorData)
 {
     callback->handleEvent(SQLError::create(*errorData));
 }
@@ -835,8 +836,8 @@ void Database::runTransaction(
         SQLTransactionErrorCallback* callback = transaction->releaseErrorCallback();
         ASSERT(callback == originalErrorCallback);
         if (callback) {
-            OwnPtr<SQLErrorData> error = SQLErrorData::create(SQLError::UNKNOWN_ERR, "database has been closed");
-            getExecutionContext()->postTask(BLINK_FROM_HERE, createSameThreadTask(&callTransactionErrorCallback, callback, passed(std::move(error))));
+            std::unique_ptr<SQLErrorData> error = SQLErrorData::create(SQLError::UNKNOWN_ERR, "database has been closed");
+            getExecutionContext()->postTask(BLINK_FROM_HERE, createSameThreadTask(&callTransactionErrorCallback, wrapPersistent(callback), passed(std::move(error))));
         }
     }
 }
@@ -887,7 +888,7 @@ Vector<String> Database::tableNames()
     if (!getDatabaseContext()->databaseThreadAvailable())
         return result;
 
-    OwnPtr<DatabaseTableNamesTask> task = DatabaseTableNamesTask::create(this, &synchronizer, result);
+    std::unique_ptr<DatabaseTableNamesTask> task = DatabaseTableNamesTask::create(this, &synchronizer, result);
     getDatabaseContext()->databaseThread()->scheduleTask(std::move(task));
     synchronizer.waitForTaskCompletion();
 

@@ -6,7 +6,6 @@
 
 #include "core/css/MediaList.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -27,7 +26,7 @@ static void testMediaQuery(TestCase test, MediaQuerySet& querySet, bool oldParse
         ++j;
         if (j >= querySet.queryVector().size())
             break;
-        output.appendLiteral(", ");
+        output.append(", ");
     }
     if (!oldParser || test.shouldWorkOnOldParser) {
         if (test.output)

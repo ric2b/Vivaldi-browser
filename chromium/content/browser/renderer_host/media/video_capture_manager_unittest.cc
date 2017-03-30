@@ -61,8 +61,7 @@ class MockFrameObserver : public VideoCaptureControllerEventHandler {
   void OnBufferDestroyed(VideoCaptureControllerID id, int buffer_id) override {}
   void OnBufferReady(VideoCaptureControllerID id,
                      int buffer_id,
-                     const scoped_refptr<media::VideoFrame>& frame,
-                     const base::TimeTicks& timestamp) override {}
+                     const scoped_refptr<media::VideoFrame>& frame) override {}
   void OnEnded(VideoCaptureControllerID id) override {}
 
   void OnGotControllerCallback(VideoCaptureControllerID) {}
@@ -106,7 +105,7 @@ class VideoCaptureManagerTest : public testing::Test {
       ASSERT_TRUE(0 == controllers_.count(id));
       controllers_[id] = controller.get();
     } else {
-      ASSERT_TRUE(NULL == controller);
+      ASSERT_FALSE(controller);
     }
     quit_closure.Run();
   }

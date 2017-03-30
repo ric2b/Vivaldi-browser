@@ -73,6 +73,13 @@ public:
         Aggressive,
     };
 
+    enum class ProgressBarCompletion {
+        LoadEvent,
+        ResourcesBeforeDCL,
+        DOMContentLoaded,
+        ResourcesBeforeDCLAndSameOriginIFrames
+    };
+
     // Selection strategy defines how the selection granularity changes when the
     // selection extent is moved.
     enum class SelectionStrategyType {
@@ -135,6 +142,7 @@ public:
     virtual void setAllowRunningOfInsecureContent(bool) = 0;
     virtual void setAllowScriptsToCloseWindows(bool) = 0;
     virtual void setAllowUniversalAccessFromFileURLs(bool) = 0;
+    virtual void setAlwaysShowContextMenuOnTouch(bool) = 0;
     virtual void setAntialiased2dCanvasEnabled(bool) = 0;
     virtual void setAntialiasedClips2dCanvasEnabled(bool) = 0;
     virtual void setAutoplayExperimentMode(const WebString&) = 0;
@@ -181,6 +189,7 @@ public:
     virtual void setLoadsImagesAutomatically(bool) = 0;
     virtual void setLoadWithOverviewMode(bool) = 0;
     virtual void setShouldReuseGlobalForUnownedMainFrame(bool) = 0;
+    virtual void setProgressBarCompletion(ProgressBarCompletion) = 0;
     virtual void setLocalStorageEnabled(bool) = 0;
     virtual void setMainFrameClipsContent(bool) = 0;
     virtual void setMainFrameResizesAreOrientationChanges(bool) = 0;
@@ -270,7 +279,6 @@ public:
     virtual void setViewportMetaZeroValuesQuirk(bool) = 0;
     virtual void setWebGLErrorsToConsoleEnabled(bool) = 0;
     virtual void setWebSecurityEnabled(bool) = 0;
-    virtual void setWheelGesturesEnabled(bool) = 0;
     virtual void setWideViewportQuirkEnabled(bool) = 0;
     virtual void setXSSAuditorEnabled(bool) = 0;
 

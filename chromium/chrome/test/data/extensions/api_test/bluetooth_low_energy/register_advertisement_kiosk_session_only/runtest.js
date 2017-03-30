@@ -14,5 +14,5 @@ chrome.bluetoothLowEnergy.registerAdvertisement(advertisement, function() {
     chrome.test.succeed();
     return;
   }
-  chrome.test.fail("Should not work outside of kiosk mode");
+  chrome.test.fail("Should not work in kiosk unless app was autolaunched");
 });

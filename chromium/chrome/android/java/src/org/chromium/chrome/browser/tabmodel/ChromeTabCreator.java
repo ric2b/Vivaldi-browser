@@ -5,10 +5,12 @@
 package org.chromium.chrome.browser.tabmodel;
 
 import android.content.Intent;
+import android.os.Handler;
 import android.text.TextUtils;
 
 import org.chromium.base.SysUtils;
 import org.chromium.base.TraceEvent;
+import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.TabState;
@@ -25,11 +27,13 @@ import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.widget.Toast;
 
 /**
  * This class creates various kinds of new tabs and adds them to the right {@link TabModel}.
  */
 public class ChromeTabCreator extends TabCreatorManager.TabCreator {
+    private static final int VISIBLE_DURATION_MS = 600;
 
     private final ChromeActivity mActivity;
     private final WindowAndroid mNativeWindow;
@@ -103,7 +107,7 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
 
             // Sanitize the url.
             loadUrlParams.setUrl(UrlUtilities.fixupUrl(loadUrlParams.getUrl()));
-            loadUrlParams.setTransitionType(getTransitionType(type));
+            loadUrlParams.setTransitionType(getTransitionType(type, intent));
 
             // Check if the tab is being created asynchronously.
             int assignedTabId = intent == null ? Tab.INVALID_TAB_ID : IntentUtils.safeGetIntExtra(
@@ -165,6 +169,20 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
             }
 
             mTabModel.addTab(tab, position, type);
+
+            if (type == TabLaunchType.FROM_REPARENTING) {
+                TabReparentingParams params = (TabReparentingParams) asyncParams;
+                if (!params.shouldStayInChrome()) {
+                    new Handler().postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            mActivity.moveTaskToBack(true);
+                            Toast.makeText(mActivity, R.string.tab_sent_to_background,
+                                    Toast.LENGTH_LONG).show();
+                        }
+                    }, VISIBLE_DURATION_MS);
+                }
+            }
             return tab;
         } finally {
             TraceEvent.end("ChromeTabCreator.createNewTab");
@@ -295,21 +313,28 @@ public class ChromeTabCreator extends TabCreatorManager.TabCreator {
 
     /**
      * @param type Type of the tab launch.
+     * @param intent The intent causing the tab launch.
      * @return The page transition type constant.
      */
-    private static int getTransitionType(TabLaunchType type) {
+    private int getTransitionType(TabLaunchType type, Intent intent) {
+        int transition = PageTransition.LINK;
         switch (type) {
             case FROM_LINK:
             case FROM_EXTERNAL_APP:
-                return PageTransition.LINK | PageTransition.FROM_API;
+                transition = PageTransition.LINK | PageTransition.FROM_API;
+                break;
             case FROM_CHROME_UI:
             case FROM_LONGPRESS_FOREGROUND:
             case FROM_LONGPRESS_BACKGROUND:
-                return PageTransition.AUTO_TOPLEVEL;
+                transition = PageTransition.AUTO_TOPLEVEL;
+                break;
             default:
                 assert false;
-                return PageTransition.LINK;
+                break;
         }
+
+        return IntentHandler.getTransitionTypeFromIntent(mActivity.getApplicationContext(),
+                intent, transition);
     }
 
     /**

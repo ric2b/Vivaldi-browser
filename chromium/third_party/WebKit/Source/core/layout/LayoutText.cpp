@@ -30,7 +30,6 @@
 #include "core/editing/iterators/TextIterator.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
-#include "core/html/parser/TextResourceDecoder.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutTextCombine.h"
 #include "core/layout/LayoutView.h"
@@ -39,17 +38,13 @@
 #include "core/layout/line/EllipsisBox.h"
 #include "core/layout/line/GlyphOverflow.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/paint/PaintLayer.h"
-#include "platform/LayoutTestSupport.h"
 #include "platform/fonts/CharacterRange.h"
-#include "platform/fonts/FontCache.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/text/BidiResolver.h"
 #include "platform/text/Character.h"
 #include "platform/text/Hyphenation.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/text/TextRunIterator.h"
-#include "wtf/text/CharacterNames.h"
 #include "wtf/text/StringBuffer.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -203,10 +198,8 @@ void LayoutText::styleDidChange(StyleDifference diff, const ComputedStyle* oldSt
         transformText();
 
     // This is an optimization that kicks off font load before layout.
-    // In order to make it fast, we only check if the first character of the
-    // text is included in the unicode ranges of the fonts.
     if (!text().containsOnlyWhitespace())
-        newStyle.font().willUseFontData(text().characterStartingAt(0));
+        newStyle.font().willUseFontData(text());
 }
 
 void LayoutText::removeAndDestroyTextBoxes()
@@ -875,7 +868,7 @@ static float maxWordFragmentWidth(LayoutText* layoutText,
         return 0;
 
     Vector<size_t, 8> hyphenLocations = hyphenation.hyphenLocations(
-        layoutText->text().createView(wordOffset, wordLength));
+        StringView(layoutText->text(), wordOffset, wordLength));
     if (hyphenLocations.isEmpty())
         return 0;
 
@@ -939,7 +932,7 @@ void LayoutText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
     bool disableSoftHyphen = styleToUse.getHyphens() == HyphensNone;
     float maxWordWidth = 0;
     if (!hyphenation)
-        maxWordWidth = std::numeric_limits<float>::max();
+        maxWordWidth = std::numeric_limits<float>::infinity();
 
     BidiResolver<TextRunIterator, BidiCharacterRun> bidiResolver;
     BidiCharacterRun* run;
@@ -1063,6 +1056,7 @@ void LayoutText::computePreferredLogicalWidths(float leadWidth, HashSet<const Si
             }
 
             if (w > maxWordWidth) {
+                DCHECK(hyphenation);
                 int suffixStart;
                 float maxFragmentWidth = maxWordFragmentWidth(this, styleToUse, f, textDirection, *hyphenation, i, wordLen, suffixStart);
                 if (suffixStart) {
@@ -1749,15 +1743,15 @@ PassRefPtr<AbstractInlineTextBox> LayoutText::firstAbstractInlineTextBox()
     return AbstractInlineTextBox::getOrCreate(LineLayoutText(this), m_firstTextBox);
 }
 
-void LayoutText::invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason) const
+void LayoutText::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
 {
-    LayoutObject::invalidateDisplayItemClients(paintInvalidationContainer, invalidationReason);
+    LayoutObject::invalidateDisplayItemClients(invalidationReason);
 
     for (InlineTextBox* box = firstTextBox(); box; box = box->nextTextBox()) {
-        paintInvalidationContainer.invalidateDisplayItemClientOnBacking(*box, invalidationReason);
+        invalidateDisplayItemClient(*box, invalidationReason);
         if (box->truncation() != cNoTruncation) {
             if (EllipsisBox* ellipsisBox = box->root().ellipsisBox())
-                paintInvalidationContainer.invalidateDisplayItemClientOnBacking(*ellipsisBox, invalidationReason);
+                invalidateDisplayItemClient(*ellipsisBox, invalidationReason);
         }
     }
 }

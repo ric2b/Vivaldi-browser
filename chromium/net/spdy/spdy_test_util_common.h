@@ -42,6 +42,8 @@ class GURL;
 namespace net {
 
 class BoundNetLog;
+class CTVerifier;
+class CTPolicyEnforcer;
 class HostPortPair;
 class SpdySession;
 class SpdySessionKey;
@@ -51,7 +53,7 @@ class SpdyStreamRequest;
 
 // Default upload data used by both, mock objects and framer when creating
 // data frames.
-const char kDefaultURL[] = "http://www.example.org/";
+const char kDefaultUrl[] = "https://www.example.org/";
 const char kUploadData[] = "hello!";
 const int kUploadDataSize = arraysize(kUploadData)-1;
 
@@ -129,6 +131,7 @@ struct SpdyHeaderInfo {
   SpdyStreamId id;
   SpdyStreamId assoc_id;
   SpdyPriority priority;
+  int weight;
   SpdyControlFlags control_flags;
   SpdyRstStreamStatus status;
   const char* data;
@@ -161,7 +164,8 @@ class MockECSignatureCreatorFactory : public crypto::ECSignatureCreatorFactory {
   ~MockECSignatureCreatorFactory() override;
 
   // crypto::ECSignatureCreatorFactory
-  crypto::ECSignatureCreator* Create(crypto::ECPrivateKey* key) override;
+  std::unique_ptr<crypto::ECSignatureCreator> Create(
+      crypto::ECPrivateKey* key) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockECSignatureCreatorFactory);
@@ -189,11 +193,13 @@ struct SpdySessionDependencies {
   std::unique_ptr<CertVerifier> cert_verifier;
   std::unique_ptr<ChannelIDService> channel_id_service;
   std::unique_ptr<TransportSecurityState> transport_security_state;
+  std::unique_ptr<CTVerifier> cert_transparency_verifier;
+  std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer;
   std::unique_ptr<ProxyService> proxy_service;
   scoped_refptr<SSLConfigService> ssl_config_service;
   std::unique_ptr<MockClientSocketFactory> socket_factory;
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory;
-  HttpServerPropertiesImpl http_server_properties;
+  std::unique_ptr<HttpServerPropertiesImpl> http_server_properties;
   bool enable_ip_pooling;
   bool enable_ping;
   bool enable_user_alternate_protocol_ports;
@@ -201,14 +207,12 @@ struct SpdySessionDependencies {
   bool enable_priority_dependencies;
   bool enable_spdy31;
   bool enable_quic;
-  bool enable_alternative_service_for_insecure_origins;
   NextProto protocol;
   size_t session_max_recv_window_size;
   size_t stream_max_recv_window_size;
   SpdySession::TimeFunc time_func;
   std::unique_ptr<ProxyDelegate> proxy_delegate;
-  bool parse_alternative_services;
-  bool enable_alternative_service_with_different_host;
+  bool enable_http2_alternative_service_with_different_host;
   NetLog* net_log;
 };
 
@@ -292,26 +296,20 @@ class SpdyTestUtil {
   void AddUrlToHeaderBlock(base::StringPiece url,
                            SpdyHeaderBlock* headers) const;
 
-  std::unique_ptr<SpdyHeaderBlock> ConstructGetHeaderBlock(
-      base::StringPiece url) const;
-  std::unique_ptr<SpdyHeaderBlock> ConstructGetHeaderBlockForProxy(
-      base::StringPiece url) const;
-  std::unique_ptr<SpdyHeaderBlock> ConstructHeadHeaderBlock(
-      base::StringPiece url,
-      int64_t content_length) const;
-  std::unique_ptr<SpdyHeaderBlock> ConstructPostHeaderBlock(
-      base::StringPiece url,
-      int64_t content_length) const;
-  std::unique_ptr<SpdyHeaderBlock> ConstructPutHeaderBlock(
-      base::StringPiece url,
-      int64_t content_length) const;
+  SpdyHeaderBlock ConstructGetHeaderBlock(base::StringPiece url) const;
+  SpdyHeaderBlock ConstructGetHeaderBlockForProxy(base::StringPiece url) const;
+  SpdyHeaderBlock ConstructHeadHeaderBlock(base::StringPiece url,
+                                           int64_t content_length) const;
+  SpdyHeaderBlock ConstructPostHeaderBlock(base::StringPiece url,
+                                           int64_t content_length) const;
+  SpdyHeaderBlock ConstructPutHeaderBlock(base::StringPiece url,
+                                          int64_t content_length) const;
 
   // Construct a SPDY frame.  If it is a SYN_STREAM or SYN_REPLY frame (as
   // specified in header_info.kind), the provided headers are included in the
   // frame.
-  SpdySerializedFrame* ConstructSpdyFrame(
-      const SpdyHeaderInfo& header_info,
-      std::unique_ptr<SpdyHeaderBlock> headers) const;
+  SpdySerializedFrame* ConstructSpdyFrame(const SpdyHeaderInfo& header_info,
+                                          SpdyHeaderBlock headers) const;
 
   // Construct a SPDY frame.  If it is a SYN_STREAM or SYN_REPLY frame (as
   // specified in header_info.kind), the headers provided in extra_headers and
@@ -407,10 +405,9 @@ class SpdyTestUtil {
                                          const char* status,
                                          const char* location);
 
-  SpdySerializedFrame* ConstructInitialSpdyPushFrame(
-      std::unique_ptr<SpdyHeaderBlock> headers,
-      int stream_id,
-      int associated_stream_id);
+  SpdySerializedFrame* ConstructInitialSpdyPushFrame(SpdyHeaderBlock headers,
+                                                     int stream_id,
+                                                     int associated_stream_id);
 
   SpdySerializedFrame* ConstructSpdyPushHeaders(
       int stream_id,
@@ -419,15 +416,14 @@ class SpdyTestUtil {
 
   // Constructs a SPDY header frame with the request header compression context
   // with END_STREAM flag set to |fin|.
-  SpdySerializedFrame* ConstructSpdyResponseHeaders(
-      int stream_id,
-      const SpdyHeaderBlock& headers,
-      bool fin);
+  SpdySerializedFrame* ConstructSpdyResponseHeaders(int stream_id,
+                                                    SpdyHeaderBlock headers,
+                                                    bool fin);
 
   // Construct a SPDY syn (HEADERS or SYN_STREAM, depending on protocol
   // version) carrying exactly the given headers and priority.
   SpdySerializedFrame* ConstructSpdySyn(int stream_id,
-                                        const SpdyHeaderBlock& headers,
+                                        SpdyHeaderBlock headers,
                                         RequestPriority priority,
                                         bool fin);
 
@@ -435,7 +431,7 @@ class SpdyTestUtil {
   // version) carrying exactly the given headers, and the default priority
   // (or no priority, depending on protocol version).
   SpdySerializedFrame* ConstructSpdyReply(int stream_id,
-                                          const SpdyHeaderBlock& headers);
+                                          SpdyHeaderBlock headers);
 
   // Constructs a standard SPDY SYN_REPLY frame to match the SPDY GET.
   // |extra_headers| are the extra header-value pairs, which typically
@@ -513,13 +509,15 @@ class SpdyTestUtil {
       const std::unique_ptr<SpdySerializedFrame>& frame,
       int stream_id);
 
+  // Serialize a SpdyFrameIR with |headerless_spdy_framer_|.
+  SpdySerializedFrame SerializeFrame(const SpdyFrameIR& frame_ir);
+
   // Called when necessary (when it will affect stream dependency specification
   // when setting dependencies based on priorioties) to notify the utility
   // class of stream destruction.
   void UpdateWithStreamDestruction(int stream_id);
 
   // For versions below SPDY4, adds the version HTTP/1.1 header.
-  void MaybeAddVersionHeader(SpdyFrameWithHeaderBlockIR* frame_ir) const;
   void MaybeAddVersionHeader(SpdyHeaderBlock* block) const;
 
   // Maps |priority| to SPDY version priority, and sets it on |frame_ir|.
@@ -529,7 +527,6 @@ class SpdyTestUtil {
   SpdyMajorVersion spdy_version() const { return spdy_version_; }
   bool include_version_header() const { return protocol_ < kProtoHTTP2; }
 
-  const GURL& default_url() const { return default_url_; }
   void set_default_url(const GURL& url) { default_url_ = url; }
 
   const char* GetMethodKey() const;
@@ -542,10 +539,9 @@ class SpdyTestUtil {
  private:
   // |content_length| may be NULL, in which case the content-length
   // header will be omitted.
-  std::unique_ptr<SpdyHeaderBlock> ConstructHeaderBlock(
-      base::StringPiece method,
-      base::StringPiece url,
-      int64_t* content_length) const;
+  SpdyHeaderBlock ConstructHeaderBlock(base::StringPiece method,
+                                       base::StringPiece url,
+                                       int64_t* content_length) const;
 
   const NextProto protocol_;
   const SpdyMajorVersion spdy_version_;

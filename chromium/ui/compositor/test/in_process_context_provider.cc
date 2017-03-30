@@ -83,14 +83,12 @@ bool InProcessContextProvider::BindToCurrentThread() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (!context_) {
-    gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
     context_.reset(gpu::GLInProcessContext::Create(
         nullptr,  /* service */
         nullptr,  /* surface */
         !window_, /* is_offscreen */
-        window_, gfx::Size(1, 1),
-        (shared_context_ ? shared_context_->context_.get() : nullptr), attribs_,
-        gpu_preference, gpu::SharedMemoryLimits(), gpu_memory_buffer_manager_,
+        window_, (shared_context_ ? shared_context_->context_.get() : nullptr),
+        attribs_, gpu::SharedMemoryLimits(), gpu_memory_buffer_manager_,
         image_factory_));
 
     if (!context_)
@@ -158,6 +156,15 @@ void InProcessContextProvider::DeleteCachedResources() {
 void InProcessContextProvider::SetLostContextCallback(
     const LostContextCallback& lost_context_callback) {
   // Pixel tests do not test lost context.
+}
+
+uint32_t InProcessContextProvider::GetCopyTextureInternalFormat() {
+  if (attribs_.alpha_size > 0)
+    return GL_RGBA;
+  DCHECK_NE(attribs_.red_size, 0);
+  DCHECK_NE(attribs_.green_size, 0);
+  DCHECK_NE(attribs_.blue_size, 0);
+  return GL_RGB;
 }
 
 }  // namespace ui

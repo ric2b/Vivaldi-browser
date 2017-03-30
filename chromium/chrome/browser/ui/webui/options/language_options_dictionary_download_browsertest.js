@@ -51,8 +51,9 @@ LanguagesOptionsDictionaryDownloadWebUITest.prototype = {
 
 // Verify that dictionary download success does not show, "This language can't
 // be used for spellchecking." or "Download failed."
+// Disabled due to flakiness (crbug.com/616550).
 TEST_F('LanguagesOptionsDictionaryDownloadWebUITest',
-       'testdictionaryDownloadSuccess',
+       'DISABLED_testdictionaryDownloadSuccess',
        function() {
   options.LanguageOptions.onDictionaryDownloadSuccess('en-US');
   expectTrue($('spellcheck-language-message').hidden);
@@ -64,8 +65,9 @@ TEST_F('LanguagesOptionsDictionaryDownloadWebUITest',
 
 // Verify that dictionary download in progress shows 'Downloading spell check
 // language' message.
+// Disabled due to flakiness (crbug.com/616550).
 TEST_F('LanguagesOptionsDictionaryDownloadWebUITest',
-       'testdictionaryDownloadProgress',
+       'DISABLED_testdictionaryDownloadProgress',
        function() {
   options.LanguageOptions.onDictionaryDownloadBegin('en-US');
   expectTrue($('spellcheck-language-message').hidden);
@@ -108,8 +110,15 @@ TEST_F('LanguagesOptionsDictionaryDownloadWebUITest',
 });
 
 // Verify that clicking the retry button calls the handler.
+// This test is flaky on Windows. https://crbug.com/616791
+GEN('#if defined(OS_WIN)');
+GEN('#define MAYBE_testdictionaryDownloadRetry ' +
+    'DISABLED_testdictionaryDownloadRetry');
+GEN('#else');
+GEN('#define MAYBE_testdictionaryDownloadRetry testdictionaryDownloadRetry');
+GEN('#endif  // defined(OS_WIN)');
 TEST_F('LanguagesOptionsDictionaryDownloadWebUITest',
-       'testdictionaryDownloadRetry',
+       'MAYBE_testdictionaryDownloadRetry',
        function() {
   this.mockHandler.expects(once()).retryDictionaryDownload('en-US').
       will(callFunction(function() {

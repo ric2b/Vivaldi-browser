@@ -46,9 +46,9 @@
 #include "public/platform/WebFileSystem.h"
 #include "public/platform/WebFileSystemCallbacks.h"
 #include "public/platform/WebSecurityOrigin.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -67,13 +67,13 @@ DOMFileSystem* DOMFileSystem::createIsolatedFileSystem(ExecutionContext* context
 
     StringBuilder filesystemName;
     filesystemName.append(Platform::current()->fileSystemCreateOriginIdentifier(WebSecurityOrigin(context->getSecurityOrigin())));
-    filesystemName.appendLiteral(":Isolated_");
+    filesystemName.append(":Isolated_");
     filesystemName.append(filesystemId);
 
     // The rootURL created here is going to be attached to each filesystem request and
     // is to be validated each time the request is being handled.
     StringBuilder rootURL;
-    rootURL.appendLiteral("filesystem:");
+    rootURL.append("filesystem:");
     rootURL.append(context->getSecurityOrigin()->toString());
     rootURL.append('/');
     rootURL.append(isolatedPathPrefix);
@@ -117,7 +117,13 @@ bool DOMFileSystem::hasPendingActivity() const
 
 void DOMFileSystem::reportError(ErrorCallback* errorCallback, FileError* fileError)
 {
-    scheduleCallback(errorCallback, fileError);
+    reportError(getExecutionContext(), errorCallback, fileError);
+}
+
+void DOMFileSystem::reportError(ExecutionContext* executionContext, ErrorCallback* errorCallback, FileError* fileError)
+{
+    if (errorCallback)
+        scheduleCallback(executionContext, createSameThreadTask(&ErrorCallback::handleEvent, wrapPersistent(errorCallback), wrapPersistent(fileError)));
 }
 
 namespace {
@@ -160,7 +166,7 @@ void DOMFileSystem::createWriter(const FileEntry* fileEntry, FileWriterCallback*
 
     FileWriter* fileWriter = FileWriter::create(getExecutionContext());
     FileWriterBaseCallback* conversionCallback = ConvertToFileWriterCallback::create(successCallback);
-    OwnPtr<AsyncFileSystemCallbacks> callbacks = FileWriterBaseCallbacks::create(fileWriter, conversionCallback, errorCallback, m_context);
+    std::unique_ptr<AsyncFileSystemCallbacks> callbacks = FileWriterBaseCallbacks::create(fileWriter, conversionCallback, errorCallback, m_context);
     fileSystem()->createFileWriter(createFileSystemURL(fileEntry), fileWriter, std::move(callbacks));
 }
 

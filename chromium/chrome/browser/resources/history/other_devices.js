@@ -25,7 +25,8 @@
   EXPAND_SESSION: 7,
   OPEN_ALL: 8,
   HAS_FOREIGN_DATA: 9,
-  LIMIT: 10  // Should always be the last one.
+  HIDE_FOR_NOW: 10,
+  LIMIT: 11  // Should always be the last one.
 };
 
 /**
@@ -297,7 +298,9 @@ Device.prototype.createSessionContents_ = function(maxNumTabs) {
     moreLink.classList.add('device-show-more-tabs');
     moreLink.addEventListener('click', this.view_.increaseRowHeight.bind(
         this.view_, this.row_, numTabsHidden));
-    moreLink.textContent = loadTimeData.getStringF('xMore', numTabsHidden);
+    // TODO(jshin): Use plural message formatter when available in JS.
+    moreLink.textContent = loadTimeData.getStringF('xMore',
+        numTabsHidden.toLocaleString());
     var moreWrapper = createElementWithClassName('div', 'more-wrapper');
     moreWrapper.appendChild(moreLink);
     contents.appendChild(moreWrapper);

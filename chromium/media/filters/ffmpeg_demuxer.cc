@@ -30,6 +30,7 @@
 #include "media/base/media_log.h"
 #include "media/base/media_tracks.h"
 #include "media/base/timestamp_constants.h"
+#include "media/base/video_codecs.h"
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_aac_bitstream_converter.h"
 #include "media/filters/ffmpeg_bitstream_converter.h"
@@ -146,7 +147,11 @@ static void RecordAudioCodecStats(const AudioDecoderConfig& audio_config) {
 
 // Record video decoder config UMA stats corresponding to a src= playback.
 static void RecordVideoCodecStats(const VideoDecoderConfig& video_config,
-                                  AVColorRange color_range) {
+                                  AVColorRange color_range,
+                                  MediaLog* media_log) {
+  media_log->RecordRapporWithSecurityOrigin("Media.OriginUrl.SRC.VideoCodec." +
+                                            GetCodecName(video_config.codec()));
+
   UMA_HISTOGRAM_ENUMERATION("Media.VideoCodec", video_config.codec(),
                             kVideoCodecMax + 1);
 
@@ -970,7 +975,7 @@ void FFmpegDemuxer::AddTextStreams() {
 
 int64_t FFmpegDemuxer::GetMemoryUsage() const {
   int64_t allocation_size = 0;
-  for (const auto& stream : streams_) {
+  for (auto* stream : streams_) {
     if (stream)
       allocation_size += stream->MemoryUsage();
   }
@@ -1215,7 +1220,7 @@ void FFmpegDemuxer::OnFindStreamInfoDone(const PipelineStatusCB& status_cb,
       continue;
     }
 
-    std::string track_id = base::IntToString(stream->id);
+    StreamParser::TrackId track_id = stream->id;
     std::string track_label = streams_[i]->GetMetadata("handler_name");
     std::string track_language = streams_[i]->GetMetadata("language");
 
@@ -1224,28 +1229,34 @@ void FFmpegDemuxer::OnFindStreamInfoDone(const PipelineStatusCB& status_cb,
         strstr(format_context->iformat->name, "matroska")) {
       // TODO(servolk): FFmpeg doesn't set stream->id correctly for webm files.
       // Need to fix that and use it as track id. crbug.com/323183
-      track_id = base::UintToString(media_tracks->tracks().size() + 1);
+      track_id =
+          static_cast<StreamParser::TrackId>(media_tracks->tracks().size() + 1);
       track_label = streams_[i]->GetMetadata("title");
     }
 
     // Note when we find our audio/video stream (we only want one of each) and
     // record src= playback UMA stats for the stream's decoder config.
+    MediaTrack* media_track = nullptr;
     if (codec_type == AVMEDIA_TYPE_AUDIO) {
       CHECK(!audio_stream);
       audio_stream = stream;
       audio_config = streams_[i]->audio_decoder_config();
       RecordAudioCodecStats(audio_config);
 
-      media_tracks->AddAudioTrack(audio_config, track_id, "main", track_label,
-                                  track_language);
+      media_track = media_tracks->AddAudioTrack(audio_config, track_id, "main",
+                                                track_label, track_language);
+      media_track->set_id(base::UintToString(track_id));
     } else if (codec_type == AVMEDIA_TYPE_VIDEO) {
       CHECK(!video_stream);
       video_stream = stream;
       video_config = streams_[i]->video_decoder_config();
-      RecordVideoCodecStats(video_config, stream->codec->color_range);
 
-      media_tracks->AddVideoTrack(video_config, track_id, "main", track_label,
-                                  track_language);
+      RecordVideoCodecStats(video_config, stream->codec->color_range,
+                            media_log_.get());
+
+      media_track = media_tracks->AddVideoTrack(video_config, track_id, "main",
+                                                track_label, track_language);
+      media_track->set_id(base::UintToString(track_id));
     }
 
     max_duration = std::max(max_duration, streams_[i]->duration());
@@ -1496,6 +1507,8 @@ void FFmpegDemuxer::OnReadFrameDone(ScopedAVPacket packet, int result) {
   // - either underlying ffmpeg returned an error
   // - or FFMpegDemuxer reached the maximum allowed memory usage.
   if (result < 0 || IsMaxMemoryUsageReached()) {
+    LOG(ERROR) << __FUNCTION__ << " result=" << result
+               << " IsMaxMemoryUsageReached=" << IsMaxMemoryUsageReached();
     // Update the duration based on the highest elapsed time across all streams
     // if it was previously unknown.
     if (!duration_known_) {
@@ -1598,7 +1611,7 @@ void FFmpegDemuxer::OnDataSourceError() {
 
 void FFmpegDemuxer::SetLiveness(DemuxerStream::Liveness liveness) {
   DCHECK(task_runner_->BelongsToCurrentThread());
-  for (const auto& stream : streams_) {  // |stream| is a ref to a pointer.
+  for (auto* stream : streams_) {
     if (stream)
       stream->SetLiveness(liveness);
   }

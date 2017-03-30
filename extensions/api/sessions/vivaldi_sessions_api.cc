@@ -26,6 +26,7 @@
 #include "ui/vivaldi_session_service.h"
 
 using extensions::vivaldi::sessions_private::SessionItem;
+using extensions::vivaldi::sessions_private::SessionOpenOptions;
 
 namespace {
 enum SessionErrorCodes {
@@ -173,6 +174,11 @@ bool SessionsPrivateOpenFunction::RunAsync() {
       vivaldi::sessions_private::Open::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  ::vivaldi::SessionOptions opts;
+  if (params->options.get()) {
+    opts.openInNewWindow_ = params->options->open_in_new_window;
+  }
+
   int error_code = SessionErrorCodes::kNoError;
   base::FilePath path = GenerateFilename(GetProfile(), params->name, false);
   if (!base::PathExists(path)) {
@@ -181,7 +187,7 @@ bool SessionsPrivateOpenFunction::RunAsync() {
     Browser* browser = GetActiveBrowser();
     std::unique_ptr<::vivaldi::VivaldiSessionService> service(
         new ::vivaldi::VivaldiSessionService(GetProfile()));
-    if (!service->Load(path, browser)) {
+    if (!service->Load(path, browser, opts)) {
       error_code = kErrorFileMissing;
     }
   }

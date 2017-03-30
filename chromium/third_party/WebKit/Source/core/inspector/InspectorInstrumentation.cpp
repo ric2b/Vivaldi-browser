@@ -30,24 +30,23 @@
 
 #include "core/inspector/InspectorInstrumentation.h"
 
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "core/InstrumentingAgents.h"
+#include "core/events/Event.h"
 #include "core/events/EventTarget.h"
 #include "core/fetch/FetchInitiatorInfo.h"
 #include "core/frame/FrameHost.h"
 #include "core/inspector/InspectorCSSAgent.h"
-#include "core/inspector/InspectorConsoleAgent.h"
 #include "core/inspector/InspectorDOMDebuggerAgent.h"
-#include "core/inspector/InspectorDebuggerAgent.h"
+#include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorPageAgent.h"
-#include "core/inspector/InspectorProfilerAgent.h"
-#include "core/inspector/InspectorResourceAgent.h"
 #include "core/inspector/InspectorSession.h"
 #include "core/inspector/MainThreadDebugger.h"
+#include "core/inspector/ThreadDebugger.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/page/Page.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "platform/v8_inspector/public/V8Debugger.h"
 
 namespace blink {
 
@@ -58,24 +57,44 @@ AsyncTask::AsyncTask(ExecutionContext* context, void* task) : AsyncTask(context,
 }
 
 AsyncTask::AsyncTask(ExecutionContext* context, void* task, bool enabled)
-    : m_instrumentingAgents(enabled ? instrumentingAgentsFor(context) : nullptr)
+    : m_debugger(enabled ? ThreadDebugger::from(toIsolate(context)) : nullptr)
     , m_task(task)
 {
-    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorSessions())
-        return;
-    for (InspectorSession* session : m_instrumentingAgents->inspectorSessions())
-        session->asyncTaskStarted(m_task);
+    if (m_debugger)
+        m_debugger->asyncTaskStarted(m_task);
 }
 
 AsyncTask::~AsyncTask()
 {
-    if (!m_instrumentingAgents || !m_instrumentingAgents->hasInspectorSessions())
-        return;
-    for (InspectorSession* session : m_instrumentingAgents->inspectorSessions())
-        session->asyncTaskFinished(m_task);
+    if (m_debugger)
+        m_debugger->asyncTaskFinished(m_task);
 }
 
-NativeBreakpoint::NativeBreakpoint(ExecutionContext* context, const String& name, bool sync)
+void asyncTaskScheduled(ExecutionContext* context, const String& name, void* task)
+{
+    if (ThreadDebugger* debugger = ThreadDebugger::from(toIsolate(context)))
+        debugger->asyncTaskScheduled(name, task, false);
+}
+
+void asyncTaskScheduled(ExecutionContext* context, const String& name, void* task, bool recurring)
+{
+    if (ThreadDebugger* debugger = ThreadDebugger::from(toIsolate(context)))
+        debugger->asyncTaskScheduled(name, task, recurring);
+}
+
+void asyncTaskCanceled(ExecutionContext* context, void* task)
+{
+    if (ThreadDebugger* debugger = ThreadDebugger::from(toIsolate(context)))
+        debugger->asyncTaskCanceled(task);
+}
+
+void allAsyncTasksCanceled(ExecutionContext* context)
+{
+    if (ThreadDebugger* debugger = ThreadDebugger::from(toIsolate(context)))
+        debugger->allAsyncTasksCanceled();
+}
+
+NativeBreakpoint::NativeBreakpoint(ExecutionContext* context, const char* name, bool sync)
     : m_instrumentingAgents(instrumentingAgentsFor(context))
     , m_sync(sync)
 {
@@ -108,19 +127,19 @@ NativeBreakpoint::~NativeBreakpoint()
 StyleRecalc::StyleRecalc(Document* document)
     : m_instrumentingAgents(instrumentingAgentsFor(document))
 {
-    if (!m_instrumentingAgents || m_instrumentingAgents->hasInspectorResourceAgents())
+    if (!m_instrumentingAgents || m_instrumentingAgents->hasInspectorNetworkAgents())
         return;
-    for (InspectorResourceAgent* resourceAgent : m_instrumentingAgents->inspectorResourceAgents())
-        resourceAgent->willRecalculateStyle(document);
+    for (InspectorNetworkAgent* networkAgent : m_instrumentingAgents->inspectorNetworkAgents())
+        networkAgent->willRecalculateStyle(document);
 }
 
 StyleRecalc::~StyleRecalc()
 {
     if (!m_instrumentingAgents)
         return;
-    if (m_instrumentingAgents->hasInspectorResourceAgents()) {
-        for (InspectorResourceAgent* resourceAgent : m_instrumentingAgents->inspectorResourceAgents())
-            resourceAgent->didRecalculateStyle();
+    if (m_instrumentingAgents->hasInspectorNetworkAgents()) {
+        for (InspectorNetworkAgent* networkAgent : m_instrumentingAgents->inspectorNetworkAgents())
+            networkAgent->didRecalculateStyle();
     }
     if (m_instrumentingAgents->hasInspectorPageAgents()) {
         for (InspectorPageAgent* pageAgent : m_instrumentingAgents->inspectorPageAgents())
@@ -173,18 +192,6 @@ void continueWithPolicyIgnore(LocalFrame* frame, DocumentLoader* loader, unsigne
     didReceiveResourceResponseButCanceled(frame, loader, identifier, r, resource);
 }
 
-bool consoleAgentEnabled(ExecutionContext* executionContext)
-{
-    InstrumentingAgents* instrumentingAgents = instrumentingAgentsFor(executionContext);
-    if (!instrumentingAgents || !instrumentingAgents->hasInspectorConsoleAgents())
-        return false;
-    for (InspectorConsoleAgent* consoleAgent: instrumentingAgents->inspectorConsoleAgents()) {
-        if (consoleAgent->enabled())
-            return true;
-    }
-    return false;
-}
-
 InstrumentingAgents* instrumentingAgentsFor(WorkerGlobalScope* workerGlobalScope)
 {
     if (!workerGlobalScope)
@@ -198,7 +205,7 @@ InstrumentingAgents* instrumentingAgentsForNonDocumentContext(ExecutionContext* 
 {
     if (context->isWorkerGlobalScope())
         return instrumentingAgentsFor(toWorkerGlobalScope(context));
-    if (context->isWorkletGlobalScope())
+    if (context->isMainThreadWorkletGlobalScope())
         return instrumentingAgentsFor(toMainThreadWorkletGlobalScope(context)->frame());
     return nullptr;
 }

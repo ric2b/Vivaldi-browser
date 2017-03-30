@@ -5,6 +5,8 @@
 #include "content/browser/media/media_internals.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <utility>
 
 #include "base/macros.h"
@@ -13,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
+#include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
@@ -114,6 +117,7 @@ class AudioLogImpl : public media::AudioLog {
   void OnSetVolume(int component_id, double volume) override;
   void OnSwitchOutputDevice(int component_id,
                             const std::string& device_id) override;
+  void OnLogMessage(int component_id, const std::string& message) override;
 
   // Called by MediaInternals to update the WebContents title for a stream.
   void SendWebContentsTitle(int component_id,
@@ -208,6 +212,10 @@ void AudioLogImpl::OnSwitchOutputDevice(int component_id,
   media_internals_->UpdateAudioLog(MediaInternals::UPDATE_IF_EXISTS,
                                    FormatCacheKey(component_id),
                                    kAudioLogUpdateFunction, &dict);
+}
+
+void AudioLogImpl::OnLogMessage(int component_id, const std::string& message) {
+  MediaStreamManager::SendMessageToNativeLog(message);
 }
 
 void AudioLogImpl::SendWebContentsTitle(int component_id,
@@ -612,7 +620,8 @@ void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
     for (const auto& format : video_capture_device_info.supported_formats)
       format_list->AppendString(media::VideoCaptureFormat::ToString(format));
 
-    base::DictionaryValue* device_dict = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> device_dict(
+        new base::DictionaryValue());
     device_dict->SetString("id", video_capture_device_info.name.id());
     device_dict->SetString(
         "name", video_capture_device_info.name.GetNameAndModel());
@@ -622,7 +631,7 @@ void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
     device_dict->SetString(
         "captureApi", video_capture_device_info.name.GetCaptureApiTypeString());
 #endif
-    video_capture_capabilities_cached_data_.Append(device_dict);
+    video_capture_capabilities_cached_data_.Append(std::move(device_dict));
   }
 
   SendVideoCaptureDeviceCapabilities();

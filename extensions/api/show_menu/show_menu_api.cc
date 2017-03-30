@@ -596,7 +596,9 @@ bool ShowMenuCreateFunction::RunAsync() {
     VivaldiMenuController* menu = new VivaldiMenuController(
         this, &params->create_properties.items);
     menu->Show(GetAssociatedWebContents(), menu_params);
-  } else {
+  }
+#if defined(OS_MACOSX)
+  else {
     // Mac needs to update the menu even with no open windows. So we allow
     // a nullptr profile when calling the api.
     Profile* profile = nullptr;
@@ -608,7 +610,7 @@ bool ShowMenuCreateFunction::RunAsync() {
     ::vivaldi::CreateVivaldiMainMenu(profile, params->create_properties.items,
         params->create_properties.mode);
   }
-
+#endif
   return true;
 }
 
@@ -626,7 +628,6 @@ void ShowMenuCreateFunction::OnMenuItemActivated(int command_id,
   response.right = event_flags & ui::EF_RIGHT_MOUSE_BUTTON ? true : false;
   response.center = event_flags & ui::EF_MIDDLE_MOUSE_BUTTON ? true : false;
   results_ = vivaldi::show_menu::Create::Results::Create(response);
-  SendResponse(true);
   menu_cancelled_ = false;
 }
 
@@ -641,8 +642,8 @@ ShowMenuCreateFunction::~ShowMenuCreateFunction() {
     response.ctrl = response.shift = response.alt = response.command = false;
     response.left = response.right = response.center = false;
     results_ = vivaldi::show_menu::Create::Results::Create(response);
-    SendResponse(true);
   }
+  Respond(ArgumentList(std::move(results_)));
 }
 
 }  // namespace extensions

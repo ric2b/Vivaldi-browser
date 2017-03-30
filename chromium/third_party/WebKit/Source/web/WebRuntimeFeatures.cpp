@@ -110,6 +110,11 @@ void WebRuntimeFeatures::enableDisplayList2dCanvas(bool enable)
     RuntimeEnabledFeatures::setDisplayList2dCanvasEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableDoNotUnlockSharedBuffer(bool enable)
+{
+    RuntimeEnabledFeatures::setDoNotUnlockSharedBufferEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableDocumentWriteEvaluator(bool enable)
 {
     RuntimeEnabledFeatures::setDocumentWriteEvaluatorEnabled(enable);
@@ -188,6 +193,16 @@ bool WebRuntimeFeatures::isOriginTrialsEnabled()
 void WebRuntimeFeatures::enablePagePopup(bool enable)
 {
     RuntimeEnabledFeatures::setPagePopupEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableParseHTMLOnMainThread(bool enable)
+{
+    RuntimeEnabledFeatures::setParseHTMLOnMainThreadEnabled(enable);
+}
+
+void WebRuntimeFeatures::enablePaymentRequest(bool enable)
+{
+    RuntimeEnabledFeatures::setPaymentRequestEnabled(enable);
 }
 
 void WebRuntimeFeatures::enablePermissionsAPI(bool enable)
@@ -270,6 +285,11 @@ void WebRuntimeFeatures::enableUnsafeES3APIs(bool enable)
     RuntimeEnabledFeatures::setUnsafeES3APIsEnabled(enable);
 }
 
+void WebRuntimeFeatures::enableWeakMemoryCache(bool enable)
+{
+    RuntimeEnabledFeatures::setWeakMemoryCacheEnabled(enable);
+}
+
 void WebRuntimeFeatures::enableWebVR(bool enable)
 {
     RuntimeEnabledFeatures::setWebVREnabled(enable);
@@ -285,9 +305,14 @@ void WebRuntimeFeatures::enablePresentationAPI(bool enable)
     RuntimeEnabledFeatures::setPresentationEnabled(enable);
 }
 
-void WebRuntimeFeatures::enableWebFontsInterventionV2(bool enable)
+void WebRuntimeFeatures::enableWebFontsInterventionV2With2G(bool enable)
 {
-    RuntimeEnabledFeatures::setWebFontsInterventionV2Enabled(enable);
+    RuntimeEnabledFeatures::setWebFontsInterventionV2With2GEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableWebFontsInterventionV2WithSlow2G(bool enable)
+{
+    RuntimeEnabledFeatures::setWebFontsInterventionV2WithSlow2GEnabled(enable);
 }
 
 void WebRuntimeFeatures::enableWebFontsInterventionTrigger(bool enable)
@@ -303,6 +328,11 @@ void WebRuntimeFeatures::enableRenderingPipelineThrottling(bool enable)
 void WebRuntimeFeatures::enableScrollAnchoring(bool enable)
 {
     RuntimeEnabledFeatures::setScrollAnchoringEnabled(enable);
+}
+
+void WebRuntimeFeatures::enableAutoplayMutedVideos(bool enable)
+{
+    RuntimeEnabledFeatures::setAutoplayMutedVideosEnabled(enable);
 }
 
 } // namespace blink

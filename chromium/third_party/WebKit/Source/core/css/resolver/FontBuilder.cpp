@@ -24,11 +24,11 @@
 #include "core/css/resolver/FontBuilder.h"
 
 #include "core/CSSValueKeywords.h"
+#include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
-#include "core/layout/LayoutTheme.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/TextAutosizer.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/fonts/FontDescription.h"
 
@@ -332,8 +332,7 @@ void FontBuilder::updateAdjustedSize(FontDescription& fontDescription, const Com
     adjustedSize = getComputedSizeFromSpecifiedSize(fontDescription, style.effectiveZoom(), adjustedSize);
 
     float multiplier = style.textAutosizingMultiplier();
-    if (multiplier > 1)
-        adjustedSize = TextAutosizer::computeAutosizedFontSize(adjustedSize, multiplier);
+    adjustedSize = TextAutosizer::computeAutosizedFontSize(adjustedSize, multiplier);
     fontDescription.setAdjustedSize(adjustedSize);
 }
 
@@ -341,8 +340,7 @@ void FontBuilder::updateComputedSize(FontDescription& fontDescription, const Com
 {
     float computedSize = getComputedSizeFromSpecifiedSize(fontDescription, style.effectiveZoom(), fontDescription.specifiedSize());
     float multiplier = style.textAutosizingMultiplier();
-    if (multiplier > 1)
-        computedSize = TextAutosizer::computeAutosizedFontSize(computedSize, multiplier);
+    computedSize = TextAutosizer::computeAutosizedFontSize(computedSize, multiplier);
     fontDescription.setComputedSize(computedSize);
 }
 

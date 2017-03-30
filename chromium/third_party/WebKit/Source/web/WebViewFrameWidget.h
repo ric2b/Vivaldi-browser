@@ -88,12 +88,13 @@ public:
     WebColor backgroundColor() const override;
     WebPagePopup* pagePopup() const override;
     void updateTopControlsState(WebTopControlsState constraints, WebTopControlsState current, bool animate) override;
-    void setVisibilityState(WebPageVisibilityState, bool isInitialState) override;
+    void setVisibilityState(WebPageVisibilityState) override;
     bool isTransparent() const override;
     void setIsTransparent(bool) override;
     void setBaseBackgroundColor(WebColor) override;
     bool forSubframe() const { return false; }
     void scheduleAnimation() override;
+    CompositorProxyClient* createCompositorProxyClient() override;
     WebWidgetClient* client() const override { return m_client; }
 
 private:

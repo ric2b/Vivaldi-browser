@@ -7,12 +7,15 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "sync/api/attachments/attachment.h"
 #include "sync/internal_api/public/attachments/attachment_service.h"
 #include "sync/internal_api/public/base/model_type.h"
@@ -40,10 +43,9 @@ class StubAttachmentService : public AttachmentService,
     CalledOnValidThread();
     Increment();
     std::unique_ptr<AttachmentMap> attachments(new AttachmentMap());
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(callback,
-                   AttachmentService::GET_UNSPECIFIED_ERROR,
+        base::Bind(callback, AttachmentService::GET_UNSPECIFIED_ERROR,
                    base::Passed(&attachments)));
   }
 
@@ -99,7 +101,7 @@ class AttachmentServiceProxyTest : public testing::Test,
     // We must take care to call the stub's destructor on the stub_thread
     // because that's the thread to which its WeakPtrs are bound.
     if (stub) {
-      stub_thread->message_loop()->DeleteSoon(FROM_HERE, stub.release());
+      stub_thread->task_runner()->DeleteSoon(FROM_HERE, stub.release());
       WaitForStubThread();
     }
     stub_thread->Stop();
@@ -113,8 +115,9 @@ class AttachmentServiceProxyTest : public testing::Test,
   }
 
   void WaitForStubThread() {
-    base::WaitableEvent done(false, false);
-    stub_thread->message_loop()->PostTask(
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
+    stub_thread->task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&base::WaitableEvent::Signal, base::Unretained(&done)));
     done.Wait();
@@ -164,7 +167,7 @@ TEST_F(AttachmentServiceProxyTest, WrappedIsDestroyed) {
   EXPECT_EQ(1, count_callback_get_or_download);
 
   // Destroy the stub and call GetOrDownloadAttachments again.
-  stub_thread->message_loop()->DeleteSoon(FROM_HERE, stub.release());
+  stub_thread->task_runner()->DeleteSoon(FROM_HERE, stub.release());
   WaitForStubThread();
 
   // Now that the wrapped object has been destroyed, call again and see that we

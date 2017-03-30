@@ -6,6 +6,7 @@
 <translation id="1023866615269196768">Apimta.</translation>
 <translation id="1025074108959230262">Fiksuojamasis režimas neleidžiamas</translation>
 <translation id="1031961866430398710">tada</translation>
+<translation id="1038795173450935438">Jei norite pereiti nuo vieno elemento puslapyje prie kito, paspauskite „Search“ ir rodyklę dešinėn arba „Search“ ir rodyklę kairėn, kad grįžtumėte atgal. Jei norite pereiti į kitą eilutę, paspauskite „Search“ ir rodyklę žemyn. Jei norite pereiti į ankstesnę eilutę, naudokite „Search“ ir rodyklę aukštyn. Pasiekę norimą spustelėti elementą paspauskite „Search“ ir tarpo klavišą.</translation>
 <translation id="1044777062731150180">Nėra antraščių</translation>
 <translation id="106222400312645156">rwhdr</translation>
 <translation id="1065552602950927991">Įvestis negalioja</translation>
@@ -17,9 +18,11 @@
 <translation id="1155043339247954670">Nėra kito sąrašo elemento.</translation>
 <translation id="1157782847298808853">Klaviatūros pagalba</translation>
 <translation id="1157843803349774103"><ph name="VALUE" />, <ph name="NAME" />, jungtinis laukelis</translation>
+<translation id="1161762950103988776">Perėjimas</translation>
 <translation id="1167230103353892028"><ph name="NAME" />, meniu elementas, su submeniu</translation>
 <translation id="1177863135347784049">Priskirtas</translation>
 <translation id="1188858454923323853">papildomas</translation>
+<translation id="1201402288615127009">Toliau</translation>
 <translation id="1206619573307042055">marquee</translation>
 <translation id="1213216066620407844">„ChromeVox“ suteikia „Chrome“ balsą</translation>
 <translation id="1229276918471378188">Ankstesnis perėjimas</translation>
@@ -41,6 +44,7 @@
 <translation id="1452236308086741652"><ph name="VALUE" />, slaptažodžio teksto laukelis</translation>
 <translation id="1467432559032391204">Kairė</translation>
 <translation id="1474557363159888097">Nėra ankstesnio prieraišo.</translation>
+<translation id="1487494366197411587">„Chromebook“ klavišas „Search“ yra iškart virš klavišo „Shift“.</translation>
 <translation id="1499041187027566160">garsumo didinimas</translation>
 <translation id="1502086903961450562">Ankstesnis grafinis elementas</translation>
 <translation id="1506187449813838456">Padidinti aukštį</translation>
@@ -69,6 +73,7 @@
 <translation id="174268867904053074">Kitas grafinis elementas</translation>
 <translation id="1781173782405573156">Praleidimo klavišas</translation>
 <translation id="1787176709638001873">Redaguoti slaptažodžio tekstą</translation>
+<translation id="1802710350767629429">Rodyti naujinių pastabas</translation>
 <translation id="1810107444790159527">Sąrašo laukelis</translation>
 <translation id="1828385960365606039">Geg.</translation>
 <translation id="1834891354138622109">Stulpelis</translation>
@@ -111,17 +116,18 @@
 <translation id="241124561063364910">ir</translation>
 <translation id="2417569100218200841">Turinio informacija</translation>
 <translation id="2422937916923936891">Meniu elemento žymimasis laukelis</translation>
+<translation id="2428534162001909979">Komandų meniu</translation>
 <translation id="2429669115401274487">popiet</translation>
 <translation id="2435413342408885429"><ph name="KEY" /> dabar yra naujasis „ChromeVox“ modifikatorius.</translation>
 <translation id="2450814015951372393">Žymimasis laukelis</translation>
 <translation id="2462626033734746142">Akučių grupė</translation>
 <translation id="2471138580042810658">6 antraštė</translation>
 <translation id="248982282205370495">{COUNT,plural, =1{žvaigždutė}one{# žvaigždutė}few{# žvaigždutės}many{# asterisks}other{# žvaigždučių}}</translation>
+<translation id="2525706221823668172">„Chromebook“ spartieji klavišai</translation>
 <translation id="2549392850788122959"><ph name="KEY" /> nustatytas iš naujo.</translation>
 <translation id="2553108862507765288">grammatical mistake</translation>
 <translation id="257674075312929031">Grupė</translation>
 <translation id="2582407057977008361">Šalia</translation>
-<translation id="2589102159832527089">Šiame puslapyje yra automatiškai iš PDF failo &lt;b&gt;<ph name="FILENAME" />&lt;/b&gt; ištrauktas tekstas. &lt;a href="<ph name="URL" />"&gt;Jei reikia originalo, spustelėkite čia.&lt;/a&gt;</translation>
 <translation id="2606210917827248971">su {COUNT,plural, =1{# elementu}one{# elementu}few{# elementais}many{# elemento}other{# elementų}}</translation>
 <translation id="2614981083756825552">Matematikos žymėjimo kalbos išdėstymas</translation>
 <translation id="2626530649491650971">spustelėjamas</translation>
@@ -131,6 +137,7 @@
 <translation id="2644542693584024604">netaisyklingai parašyta</translation>
 <translation id="2667291555398229137">Spustelėkite maršruto parinkimo rakto elementą</translation>
 <translation id="267442004702508783">atnaujinimas</translation>
+<translation id="2684412629217766642">Uždaryti „ChromeVox“ mokymo programą</translation>
 <translation id="2697408785920771974">autoinl</translation>
 <translation id="2704429362613743330">{COUNT,plural, =1{atidaromasis skliaustas}one{# atidaromasis skliaustas}few{# atidaromieji skliaustai}many{# open parens}other{# atidaromųjų skliaustų}}</translation>
 <translation id="2705875883745373140">Nepaspausta</translation>
@@ -144,14 +151,17 @@
 <translation id="2777845298774924149">Išeita</translation>
 <translation id="2800204403141299078">Daugiau skirtingų elementų nėra.</translation>
 <translation id="2800780099804980316">Nėra ankstesnės 1 lygio antraštės.</translation>
+<translation id="2811019999044652585">Jei norite pereiti į kitas ekrano dalis, pvz., įrankių juostas ar sistemos juostelę, paspauskite „Control“ ir „Forward“. „Chromebook“ klavišas „Forward“ yra iškart virš skaičiaus 2 klavišo.</translation>
 <translation id="2811204574343810641">Eilutė</translation>
 <translation id="2816654101880605877">Nėra kito šliaužiklio.</translation>
 <translation id="2841013758207633010">Laikas</translation>
 <translation id="2843837985843789981">Ankstesnė grupė</translation>
 <translation id="2844995807198708617">Kontekstinis meniu</translation>
 <translation id="2849332794118375855">Nėra kito žymimojo laukelio.</translation>
+<translation id="2858017024918511904">Jei norite naršyti visas „ChromeVox“ komandas ir sparčiuosius klavišus, paspauskite „Search“ ir taško klavišą, tada rodyklių klavišais naršykite meniu ir paspauskite „Enter“, kad suaktyvintumėte komandą.</translation>
 <translation id="2864481629947106776">Ankstesnė nuoroda</translation>
 <translation id="2873259058405069099">Eiti į lentelės pradžią</translation>
+<translation id="288178314850623291">Jei norite praleisti konkrečių tipų elementus, naudokite nukreipimo komandas. Kad pereitumėte pirmyn nuo vienos antraštės prie kitos, paspauskite „Search“ ir H. Kad pereitumėte atgal, paspauskite „Search“ + „Shift“ + H.</translation>
 <translation id="2894654529758326923">Informacija</translation>
 <translation id="2899328121302785497">{COUNT,plural, =1{atidaromasis riestinis skliaustas}one{# atidaromasis riestinis skliaustas}few{# atidaromieji riestiniai skliaustai}many{# left braces}other{# atidaromųjų riestinių skliaustų}}</translation>
 <translation id="2911433807131383493">Atidaryti „ChromeVox“ mokymo programą</translation>
@@ -180,6 +190,7 @@
 <translation id="3096671415663099226">cbo</translation>
 <translation id="3104705064753753826">alrt dlg</translation>
 <translation id="3109724472072898302">Suskleista</translation>
+<translation id="3112457281078985179">Jei norite įjungti arba išjungti „ChromeVox“, naudokite klavišus „Control“ + „Alt“ + Z.</translation>
 <translation id="3134461040845705080">rdonly</translation>
 <translation id="3138767756593758860">Rodyti orientyrų sąrašą</translation>
 <translation id="3143851963874289911">cll</translation>
@@ -188,6 +199,8 @@
 <translation id="3163593631834463955">Tuščia stulpelio antraštė</translation>
 <translation id="316542773973815724">Naršymas</translation>
 <translation id="3172700825913348768">{COUNT,plural, =1{tarpas}one{# tarpas}few{# tarpai}many{# spaces}other{# tarpų}}</translation>
+<translation id="3183233191569362040">Sveikiname! Sužinojote pagrindinę informaciją, kaip sėkmingai naudoti „ChromeVox Next“ (beta versijos). Atminkite, kad bet kada galite atidaryti „ChromeVox“ komandų meniu paspausdami „Search“ ir taško klavišą. Jei norite sužinoti dar daugiau apie „ChromeVox“ ir „Chrome“ OS, žr. nurodytus straipsnius.
+Peržiūrėję visą mokymo programą, naudokite „ChromeVox“, kad pasiektumėte uždarymo mygtuką ir spustelėtumėte jį.</translation>
 <translation id="320961988183078793">įvesta <ph name="TYPE" /></translation>
 <translation id="3223701887221307104"><ph name="NAME" />, skirtukas</translation>
 <translation id="3226035351387556942">chk</translation>
@@ -200,9 +213,11 @@
 <translation id="3307886118343381874">Eiti į lentelės pabaigą</translation>
 <translation id="3311969765485641742">Jei norite peržiūrėti įspėjimus, paspauskite „Alt“ + „Shift“ + A</translation>
 <translation id="3312997241656799641">Kita aplankyta nuoroda</translation>
+<translation id="3313245066383501820">„ChromeVox“ modifikavimo klavišas</translation>
 <translation id="3321460131042519426">Įgalinti teksto skaidymą į eilutes</translation>
 <translation id="3322936298410871309">Ankstesnė 1 lygio antraštė</translation>
 <translation id="3323447499041942178">Teksto laukelis</translation>
+<translation id="3329854757664111426">Jei norite eiti pirmyn, paspauskite „Enter“.</translation>
 <translation id="3353420241558113817">{"ar": "arabų k.",
         "bg": "bulgarų k.",
         "ca": "katalonų k.",
@@ -245,6 +260,7 @@
         "vi": "vietnamiečių k.",
         "zh": "kinų k.",
         "zh_TW": "kinų k. (tradicinė hanių)"}</translation>
+<translation id="335581015389089642">Kalba</translation>
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3374537878095184207">{COUNT,plural, =1{pliuso ženklas}one{# pliuso ženklas}few{# pliuso ženklai}many{# plus signs}other{# pliuso ženklų}}</translation>
 <translation id="338583716107319301">Skyriklis</translation>
@@ -289,6 +305,7 @@
 <translation id="3897092660631435901">Meniu</translation>
 <translation id="3909320334364316587">Ankstesnė 6 lygio antraštė</translation>
 <translation id="3914173277599553213">Būtina</translation>
+<translation id="3951424903203718058">Ar „ChromeVox Next“ ekrano skaitymo balsu funkciją naudojate pirmą kartą? Šioje trumpoje mokymo programoje pateikiama pagrindinė informacija, kaip pradėti naudoti „ChromeVox Next“.</translation>
 <translation id="3962990492275676168">Pradėti skaityti nuo dabartinės vietos</translation>
 <translation id="4004802134384979325">pažymėta</translation>
 <translation id="4006140876663370126">img</translation>
@@ -299,6 +316,7 @@
 <translation id="4047216625641135770">Žymėjimas</translation>
 <translation id="404803211695627272"><ph name="V1" />–<ph name="V2" /></translation>
 <translation id="4054936709456751127">sts</translation>
+<translation id="4065205963140826639">Dabar pabandykite naudoti „Search“ ir rodyklę dešinėn, kad rastumėte mygtuką „Kitas“, tada paspauskite „Search“ ir tarpo klavišą, kad jį spustelėtumėte.</translation>
 <translation id="4081085052247739398">{COUNT,plural, =1{tildė}one{# tildė}few{# tildės}many{# tildes}other{# tildžių}}</translation>
 <translation id="409334809956508737">Ankstesnis objektas</translation>
 <translation id="4099274309791143834">su submeniu</translation>
@@ -307,7 +325,7 @@
 <translation id="4147126331795725888">Nėra kito valdiklio.</translation>
 <translation id="4148180433151187540">{COUNT,plural, =1{uždaromasis riestinis skliaustas}one{# uždaromasis riestinis skliaustas}few{# uždaromieji riestiniai skliaustas}many{# right braces}other{# uždaromųjų riestinių skliaustų}}</translation>
 <translation id="4158704014418536539">Skirti didžiąsias ir mažąsias raides.</translation>
-<translation id="4161663686871496107">„ChromeVox“ žodinis atsiliepimas parengtas</translation>
+<translation id="4161663686871496107">„ChromeVox“ ekrano skaitymas balsu parengtas</translation>
 <translation id="4173994908659439270">Nėra kito redaguotino teksto lauko.</translation>
 <translation id="4176463684765177261">Neleista</translation>
 <translation id="4188530942454211480">Ankstesnis sakinys</translation>
@@ -370,6 +388,7 @@
 <translation id="4842108708071771135">Nėra kitos įtraukos.</translation>
 <translation id="4848993367330139335">tmr</translation>
 <translation id="4850023505158945298">Ankstesnis panašus elementas.</translation>
+<translation id="485011152882364255">„ChromeVox Next“ klavišas „Search“ yra modifikavimo klavišas. Dauguma „ChromeVox“ sparčiųjų klavišų prasideda klavišu „Search“. Be to, naršydami galite naudoti rodyklių klavišus.</translation>
 <translation id="4866956062845190338">rdmnuitm</translation>
 <translation id="4867316986324544967">Įgalinti TĮK įrašymą į žurnalą</translation>
 <translation id="4877261390094455813">Įveskite paieškos užklaus.</translation>
@@ -435,6 +454,7 @@
 <translation id="5436105723448703439">{COUNT,plural, =1{ženklas mažiau}one{# ženklas mažiau}few{# ženklai mažiau}many{# less than signs}other{# ženklų mažiau}}</translation>
 <translation id="5444587279251314700">(aktyvus)</translation>
 <translation id="5455441614648621694">Papildomas</translation>
+<translation id="5458780372341732962">Naudoti „ChromeVox Next“ (beta versija)</translation>
 <translation id="5485036206801896268">Nėra ankstesnio grafinio vaizdo.</translation>
 <translation id="5486947920110100234">Nėra kitos perėjimo vietos.</translation>
 <translation id="549602578321198708">Žodis</translation>
@@ -460,6 +480,7 @@
 <translation id="5623842676595125836">Žurnalas</translation>
 <translation id="5628125749885014029">h4</translation>
 <translation id="5637871198229500030">Nėra ankstesnės lentelės.</translation>
+<translation id="5653397561111110475">„Chromebook“ jutiklinio ekrano pritaikymo neįgaliesiems funkcijų naudojimas</translation>
 <translation id="5655682562155942719">Praleisti komandas</translation>
 <translation id="56637627897541303">Teksto sritis</translation>
 <translation id="5678161956734658133">mled</translation>
@@ -467,6 +488,14 @@
 <translation id="5682113568322255809">Orientyras</translation>
 <translation id="5683155931978483559">Ankstesnis žymimasis laukelis</translation>
 <translation id="5684277895745049190">Sąrašas</translation>
+<translation id="5684905390246898631">Sveiki! Tai – „ChromeVox Next“!</translation>
+<translation id="5695831708991916435">Toliau pateikti keli spartieji klavišai nėra „ChromeVox“ komandos, bet jie vis tiek labai naudingi norint išnaudoti visas „Chrome“ galimybes.
+Jei norite pereiti nuo vieno suaktyvinamo elemento, pvz., mygtuko ar nuorodos, prie kito, paspauskite tabuliavimo klavišą. Jei norite grįžti atgal, paspauskite „Shift“ ir tabuliavimo klavišą. 
+Kad pereitumėte į „Chrome“ naršyklės adreso laukelį, kuris dar vadinamas „omnibox“, paspauskite „Control“ ir L. 
+Kad atidarytumėte ir automatiškai pereitumėte į naują skirtuką, paspauskite „Control“ ir T. Žymeklis bus laukelyje „omnibox“. 
+Kad uždarytumėte skirtuką, paspauskite „Control“ ir W. 
+Kad pereitumėte nuo vieno atidaryto skirtuko prie kito, naudokite „Control“ ir tabuliavimo klavišą. 
+Kad atidarytumėte „Chrome“ naršyklės meniu, paspauskite „Alt“ ir F.</translation>
 <translation id="5700650669149824506">Nėra ankstesnės 4 lygio antraštės.</translation>
 <translation id="5703716265115423771">garsumo mažinimas</translation>
 <translation id="5709192780268610569">Nėra ilgo aprašo</translation>
@@ -484,6 +513,7 @@
 <translation id="5851548754964597211">Skirtukų sąrašas</translation>
 <translation id="5859752971144398932">Išeita iš paieškos puslapyje.</translation>
 <translation id="5866042630553435010">Iš dalies pažymėta</translation>
+<translation id="5867591286054666064">Kol rodoma ši mokymo programa, paspauskite bet kurį klavišą, kad išgirstumėte jo pavadinimą.</translation>
 <translation id="5869546221129391014">Tinklelis</translation>
 <translation id="5876817486144482042">Mažinti kalbos garsumą</translation>
 <translation id="5887397643266327462">Brailio rašmenų antraštės įgalintos.</translation>
@@ -502,13 +532,13 @@
 <translation id="6006050241733874051">Forma</translation>
 <translation id="6006064078185310784">{COUNT,plural, =1{kairinis brūkšnys}one{# kairinis brūkšnys}few{# kairiniai brūkšniai}many{# backslashes}other{# kairinių brūkšnių}}</translation>
 <translation id="6037602951055904232">Stumti pirmyn</translation>
+<translation id="6082768461603900813">Pagrindinės naršymo funkcijos</translation>
 <translation id="611827076493383239">vtd</translation>
 <translation id="6119955456199054975">Langelio pabaiga.</translation>
 <translation id="6122013438240733403">btn</translation>
 <translation id="6129953537138746214">Tarpas</translation>
 <translation id="6142308968191113180">4 antraštė</translation>
 <translation id="6169420925157477918">Vaizdas su ilgu aprašu</translation>
-<translation id="6172087735260766220">Nepavyko pasiekti pasiekiamo teksto iš nuo kopijavimo apsaugoto PDF.</translation>
 <translation id="6186305613600865047">Pereinama į puslapio apačią</translation>
 <translation id="6193330012414963395">iki pietų / po pietų</translation>
 <translation id="622484624075952240">Žemiau</translation>
@@ -547,6 +577,7 @@
 <translation id="6659594942844771486">Skirtukas</translation>
 <translation id="667999046851023355">Dokumentas</translation>
 <translation id="6697092096875747123">Ankstesnis išskleidžiamasis sąrašas</translation>
+<translation id="6710213216561001401">Ankstesnis</translation>
 <translation id="6714813999819678458">Ankstesnė 2 lygio antraštė</translation>
 <translation id="6716505898850596801">Modifikavimo klavišai</translation>
 <translation id="671916444866103745">Nėra kito ARIA orientyro.</translation>
@@ -563,6 +594,7 @@
 <translation id="6897341342232909480">Perkelti į kairę</translation>
 <translation id="6901540140423170855">data</translation>
 <translation id="6910211073230771657">Ištrintas</translation>
+<translation id="6910969481785184048">Įjungimas, išjungimas ir sustabdymas</translation>
 <translation id="6911965441508464308">Nėra langelio aukščiau.</translation>
 <translation id="6919104639734799681">Rodyti lentelių sąrašą</translation>
 <translation id="6964088412282673743">Nėra ankstesnio valdiklio.</translation>
@@ -617,8 +649,10 @@
 <translation id="744163271241493234">pwded</translation>
 <translation id="7491962110804786152">Tabuliavimo klavišas</translation>
 <translation id="7492049978501397201">Įeita į dialogo langą</translation>
+<translation id="7518543783849163354">Jei norite laikinai sustabdyti „ChromeVox“, kad nekalbėtų, paspauskite klavišą „Control“.</translation>
 <translation id="7532613204005497612">Birželis</translation>
 <translation id="7540083713905917247"><ph name="VALUE" />, <ph name="NAME" />, šliaužiklis</translation>
+<translation id="7552432549459840808">Naudingi „Chrome“ spartieji klavišai</translation>
 <translation id="7586163296341959563">įklijuoti.</translation>
 <translation id="7596919493010894443">išvalytas pasirinkimas</translation>
 <translation id="7604026522577407655">Eiti į dabartinio stulpelio pradžią</translation>
@@ -664,6 +698,8 @@
 <translation id="8049189770492311300">Laikmatis</translation>
 <translation id="8065607967589909823">Pasirinkimas yra</translation>
 <translation id="8066678206530322333">Reklamjuostė</translation>
+<translation id="8076492880354921740">Skirtukai</translation>
+<translation id="8104178626892949749">Paspaudę įjunkite „ChromeVox“, kad sužinotumėte daugiau apie „ChromeVox Next“.</translation>
 <translation id="8110647606445335195">Nėra ARIA orientyrų.</translation>
 <translation id="8153880621934657047">Ne lentelės viduje.</translation>
 <translation id="817440585505441544">{COUNT,plural, =1{apatinis brūkšnys}one{# apatinis brūkšnys}few{# apatiniai brūkšniai}many{# underscores}other{# apatinių brūkšnių}}</translation>
@@ -673,6 +709,7 @@
 <translation id="8199231515320852133">Pranešti apie dabartinio langelio antraštes</translation>
 <translation id="820417203470636242">Tuščias langelis.</translation>
 <translation id="8215202828671303819">Kelių elementų pasirinkimas</translation>
+<translation id="8224171046658870249">Perjungta į „ChromeVox Next“</translation>
 <translation id="8276439074553447000">Pereiti prie ankstesni elemento, kurį galima fokusuoti</translation>
 <translation id="8278417001922463147">Nėra jokių ankstesnių straipsnių.</translation>
 <translation id="8283603667300770666">Kitas formos laukas</translation>
@@ -680,13 +717,14 @@
 <translation id="8313653172105209786">dir</translation>
 <translation id="8344569602005188545">valandos</translation>
 <translation id="8345569862449483843">{COUNT,plural, =1{grotelių ženklas}one{# grotelių ženklas}few{# grotelių ženklai}many{# pound signs}other{# grotelių ženklas}}</translation>
-<translation id="8374154622594089836">mėnuo</translation>
+<translation id="8374154622594089836">mėn.</translation>
 <translation id="8378855320830505539">Regionas</translation>
 <translation id="8382679411218029383">Automatinis eilutės ir sąrašo užbaigimas</translation>
 <translation id="8428603554127842284"><ph name="DEPTH" /> lygis</translation>
 <translation id="842922884199979200">Nėra kitos 3 lygio antraštės.</translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="844681116543532394">Nėra ankstesnio žymimojo laukelio.</translation>
+<translation id="8446884382197647889">Sužinokite daugiau</translation>
 <translation id="8455868257606149352">Maks. <ph name="X" /></translation>
 <translation id="84575901236241018">turi prieigos klavišą, <ph name="KEY" /></translation>
 <translation id="8476508772960940536">lango apžvalga</translation>
@@ -711,6 +749,7 @@
 <translation id="8664519043722036194">sekundės</translation>
 <translation id="867187640362843212">5 antraštė</translation>
 <translation id="8697111817566059991">{COUNT,plural, =1{statusis brūkšnys}one{# statusis brūkšnys}few{# statieji brūkšniai}many{# vertical pipes}other{# stačiųjų brūkšnių}}</translation>
+<translation id="8721861170709424373">„ChromeVox Next“ komandos nuoroda</translation>
 <translation id="8735450637152821465">Pradėti rinktis</translation>
 <translation id="8743786158317878347">įveskite struktūrinį turinį, pvz., lenteles</translation>
 <translation id="8747966237988593539">Rūšiuotas sąrašas</translation>
@@ -757,8 +796,11 @@
 <translation id="9178973770513562274">Jei norite naršyti, naudokite rodyklių aukštyn ir žemyn klavišus arba įveskite tekstą, jei norite ieškoti.</translation>
 <translation id="9192904702577636854">Pažymėtoji sritis</translation>
 <translation id="9212322457209634662">Nėra kitos skilties.</translation>
+<translation id="923331726185079994">„ChromeVox“ atnaujintas</translation>
 <translation id="930275611743429116">Pradėti arba baigti pasirinkimą.</translation>
 <translation id="948171205378458592">Sumažinti kalbos tempą</translation>
+<translation id="955917170449423694">Perjungta į klasikinį „ChromeVox“ režimą</translation>
 <translation id="962913030769097253">Kita 1 lygio antraštė</translation>
 <translation id="973955474346881951">Įgalinti pritraukimo režimą / neleisti jo</translation>
+<translation id="976849232629612000">Elementų nėra.</translation>
 </translationbundle>

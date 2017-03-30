@@ -130,6 +130,7 @@ povezovanje s Chromom</translation>
 <translation id="4156740505453712750">Če želite zaščititi dostop do tega računalnika, izberite vsaj <ph name="BOLD_START" />šestmestni<ph name="BOLD_END" /> PIN. Ta bo zahtevan pri povezovanju z drugega mesta.</translation>
 <translation id="4176825807642096119">Koda za dostop</translation>
 <translation id="4207623512727273241">Zaženite namestitveni program, preden nadaljujete.</translation>
+<translation id="4227991223508142681">Orodje za pripravljanje gostitelja</translation>
 <translation id="4240294130679914010">Odstranitveni program gostitelja za Oddaljeno povezovanje s Chromom</translation>
 <translation id="4277463233460010382">Ta računalnik je nastavljen tako, da enemu ali več odjemalcem dovoli povezovanje brez vnosa kode PIN.</translation>
 <translation id="4277736576214464567">Koda za dostop je neveljavna. Poskusite znova.</translation>
@@ -261,6 +262,7 @@ namizje za Chrome</translation>
 <translation id="7836926030608666805">Ni nekaterih zahtevanih delov. Preverite, ali imate najnovejšo različico Chroma in poskusite znova.</translation>
 <translation id="7868137160098754906">Vnesite PIN za oddaljeni računalnik.</translation>
 <translation id="7869445566579231750">Nimate dovoljenja za izvajanje te aplikacije.</translation>
+<translation id="7895403300744144251">Varnostni pravilniki na oddaljenem računalniku ne dovoljujejo povezav iz vašega računa.</translation>
 <translation id="7948001860594368197">Možnosti zaslona</translation>
 <translation id="7970576581263377361">Preverjanje pristnosti ni uspelo. Še enkrat se prijavite v Chromium.</translation>
 <translation id="7981525049612125370">Oddaljena seja je potekla.</translation>

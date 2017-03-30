@@ -16,6 +16,7 @@
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/interface_factory.h"
+#include "services/shell/public/cpp/shell_client.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -23,21 +24,21 @@ namespace content {
 namespace {
 
 // This object's lifetime is managed by MojoShellConnection because it's a
-// MojoShellConnection::Listener.
+// registered with it.
 class RenderWidgetWindowTreeClientFactoryImpl
-    : public MojoShellConnection::Listener,
+    : public shell::ShellClient,
       public shell::InterfaceFactory<
           mojom::RenderWidgetWindowTreeClientFactory>,
       public mojom::RenderWidgetWindowTreeClientFactory {
  public:
   RenderWidgetWindowTreeClientFactoryImpl() {
-    DCHECK(MojoShellConnection::Get());
+    DCHECK(MojoShellConnection::GetForProcess());
   }
 
   ~RenderWidgetWindowTreeClientFactoryImpl() override {}
 
  private:
-  // MojoShellConnection::Listener implementation:
+  // shell::ShellClient implementation:
   bool AcceptConnection(shell::Connection* connection) override {
     connection->AddInterface<mojom::RenderWidgetWindowTreeClientFactory>(this);
     return true;
@@ -67,8 +68,8 @@ class RenderWidgetWindowTreeClientFactoryImpl
 }  // namespace
 
 void CreateRenderWidgetWindowTreeClientFactory() {
-  MojoShellConnection::Get()->AddListener(
-      base::WrapUnique(new RenderWidgetWindowTreeClientFactoryImpl()));
+  MojoShellConnection::GetForProcess()->AddEmbeddedShellClient(
+      base::WrapUnique(new RenderWidgetWindowTreeClientFactoryImpl));
 }
 
 }  // namespace content

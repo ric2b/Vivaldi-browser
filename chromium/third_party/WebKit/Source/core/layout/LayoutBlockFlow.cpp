@@ -30,34 +30,27 @@
 
 #include "core/layout/LayoutBlockFlow.h"
 
-#include "core/dom/AXObjectCache.h"
 #include "core/editing/Editor.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
-#include "core/frame/Settings.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/layout/HitTestLocation.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutFlowThread.h"
+#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutMultiColumnFlowThread.h"
 #include "core/layout/LayoutMultiColumnSpannerPlaceholder.h"
 #include "core/layout/LayoutPagedFlowThread.h"
-#include "core/layout/LayoutText.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/TextAutosizer.h"
-#include "core/layout/api/SelectionState.h"
 #include "core/layout/line/GlyphOverflow.h"
-#include "core/layout/line/LineBreaker.h"
+#include "core/layout/line/InlineIterator.h"
+#include "core/layout/line/InlineTextBox.h"
 #include "core/layout/line/LineWidth.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
-#include "core/paint/BlockFlowPainter.h"
-#include "core/paint/ClipScope.h"
-#include "core/paint/LayoutObjectDrawingRecorder.h"
-#include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
-#include "platform/RuntimeEnabledFeatures.h"
-#include "platform/geometry/TransformState.h"
-#include "platform/text/BidiTextRun.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -65,7 +58,6 @@ bool LayoutBlockFlow::s_canPropagateFloatIntoSibling = false;
 
 struct SameSizeAsLayoutBlockFlow : public LayoutBlock {
     LineBoxList lineBoxes;
-    LayoutUnit m_paintInvalidationLogicalTopAndBottom[2];
     void* pointers[2];
 };
 
@@ -242,8 +234,10 @@ void LayoutBlockFlow::checkForPaginationLogicalHeightChange(LayoutUnit& pageLogi
         // don't know the actual height of the content yet, only call that method when height is
         // definite, or we might fool ourselves into believing that columns have a definite height
         // when they in fact don't.
+        // To check if we've a definite height we verify that percentage height is resolvable
+        // on the first in-flow child.
         LayoutUnit columnHeight;
-        if (hasDefiniteLogicalHeight() || isLayoutView()) {
+        if (!firstInFlowChildBox() || firstInFlowChildBox()->percentageLogicalHeightIsResolvable() || isLayoutView()) {
             LogicalExtentComputedValues computedValues;
             computeLogicalHeight(LayoutUnit(), logicalTop(), computedValues);
             columnHeight = computedValues.m_extent - borderAndPaddingLogicalHeight() - scrollbarLogicalHeight();
@@ -402,17 +396,6 @@ void LayoutBlockFlow::layoutBlock(bool relayoutChildren)
 
     updateAfterLayout();
 
-    if (m_paintInvalidationLogicalTop != m_paintInvalidationLogicalBottom) {
-        bool hasVisibleContent = style()->visibility() == VISIBLE;
-        if (!hasVisibleContent) {
-            PaintLayer* layer = enclosingLayer();
-            layer->updateDescendantDependentFlags();
-            hasVisibleContent = layer->hasVisibleContent();
-        }
-        if (hasVisibleContent)
-            setShouldInvalidateOverflowForPaint();
-    }
-
     if (isHTMLDialogElement(node()) && isOutOfFlowPositioned())
         positionDialog();
 
@@ -472,20 +455,29 @@ inline bool LayoutBlockFlow::layoutBlockFlow(bool relayoutChildren, LayoutUnit &
     LayoutUnit previousHeight = logicalHeight();
     setLogicalHeight(beforeEdge);
 
-    m_paintInvalidationLogicalTop = LayoutUnit();
-    m_paintInvalidationLogicalBottom = LayoutUnit();
     if (!firstChild() && !isAnonymousBlock())
         setChildrenInline(true);
 
     TextAutosizer::LayoutScope textAutosizerLayoutScope(this, &layoutScope);
 
+    bool preferredLogicalWidthsWereDirty = preferredLogicalWidthsDirty();
+
     // Reset the flag here instead of in layoutInlineChildren() in case that
     // all inline children are removed from this block.
     setContainsInlineWithOutlineAndContinuation(false);
     if (childrenInline())
-        layoutInlineChildren(relayoutChildren, m_paintInvalidationLogicalTop, m_paintInvalidationLogicalBottom, afterEdge);
+        layoutInlineChildren(relayoutChildren, afterEdge);
     else
         layoutBlockChildren(relayoutChildren, layoutScope, beforeEdge, afterEdge);
+
+    bool preferredLogicalWidthsBecameDirty = !preferredLogicalWidthsWereDirty && preferredLogicalWidthsDirty();
+    if (preferredLogicalWidthsBecameDirty) {
+        // The only thing that should dirty preferred widths at this point is the addition of
+        // overflow:auto scrollbars in a descendant.  To avoid a potential infinite loop,
+        // run layout again with auto scrollbars frozen in their current state.
+        PaintLayerScrollableArea::FreezeScrollbarsScope freezeScrollbars;
+        return layoutBlockFlow(relayoutChildren, pageLogicalHeight, layoutScope);
+    }
 
     // Expand our intrinsic height to encompass floats.
     if (lowestFloatLogicalBottom() > (logicalHeight() - afterEdge) && createsNewFormattingContext())
@@ -1125,7 +1117,7 @@ void LayoutBlockFlow::rebuildFloatsFromIntruding()
 
         LayoutBoxToFloatInfoMap::iterator end = floatMap.end();
         for (LayoutBoxToFloatInfoMap::iterator it = floatMap.begin(); it != end; ++it) {
-            OwnPtr<FloatingObject>& floatingObject = it->value;
+            std::unique_ptr<FloatingObject>& floatingObject = it->value;
             if (!floatingObject->isDescendant()) {
                 changeLogicalTop = LayoutUnit();
                 changeLogicalBottom = std::max(changeLogicalBottom, logicalBottomForFloat(*floatingObject));
@@ -1763,7 +1755,7 @@ void LayoutBlockFlow::setMustDiscardMarginBefore(bool value)
         return;
 
     if (!m_rareData)
-        m_rareData = adoptPtr(new LayoutBlockFlowRareData(this));
+        m_rareData = wrapUnique(new LayoutBlockFlowRareData(this));
 
     m_rareData->m_discardMarginBefore = value;
 }
@@ -1779,7 +1771,7 @@ void LayoutBlockFlow::setMustDiscardMarginAfter(bool value)
         return;
 
     if (!m_rareData)
-        m_rareData = adoptPtr(new LayoutBlockFlowRareData(this));
+        m_rareData = wrapUnique(new LayoutBlockFlowRareData(this));
 
     m_rareData->m_discardMarginAfter = value;
 }
@@ -1824,7 +1816,7 @@ void LayoutBlockFlow::setMaxMarginBeforeValues(LayoutUnit pos, LayoutUnit neg)
     if (!m_rareData) {
         if (pos == LayoutBlockFlowRareData::positiveMarginBeforeDefault(this) && neg == LayoutBlockFlowRareData::negativeMarginBeforeDefault(this))
             return;
-        m_rareData = adoptPtr(new LayoutBlockFlowRareData(this));
+        m_rareData = wrapUnique(new LayoutBlockFlowRareData(this));
     }
     m_rareData->m_margins.setPositiveMarginBefore(pos);
     m_rareData->m_margins.setNegativeMarginBefore(neg);
@@ -1835,7 +1827,7 @@ void LayoutBlockFlow::setMaxMarginAfterValues(LayoutUnit pos, LayoutUnit neg)
     if (!m_rareData) {
         if (pos == LayoutBlockFlowRareData::positiveMarginAfterDefault(this) && neg == LayoutBlockFlowRareData::negativeMarginAfterDefault(this))
             return;
-        m_rareData = adoptPtr(new LayoutBlockFlowRareData(this));
+        m_rareData = wrapUnique(new LayoutBlockFlowRareData(this));
     }
     m_rareData->m_margins.setPositiveMarginAfter(pos);
     m_rareData->m_margins.setNegativeMarginAfter(neg);
@@ -2199,7 +2191,7 @@ LayoutUnit LayoutBlockFlow::getClearDelta(LayoutBox* child, LayoutUnit logicalTo
 
 void LayoutBlockFlow::createFloatingObjects()
 {
-    m_floatingObjects = adoptPtr(new FloatingObjects(this, isHorizontalWritingMode()));
+    m_floatingObjects = wrapUnique(new FloatingObjects(this, isHorizontalWritingMode()));
 }
 
 void LayoutBlockFlow::willBeDestroyed()
@@ -2788,51 +2780,9 @@ void LayoutBlockFlow::invalidatePaintForOverhangingFloats(bool paintAllDescendan
     }
 }
 
-void LayoutBlockFlow::invalidatePaintForOverflow()
+void LayoutBlockFlow::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
 {
-    // FIXME: We could tighten up the left and right invalidation points if we let layoutInlineChildren fill them in based off the particular lines
-    // it had to lay out. We wouldn't need the hasOverflowClip() hack in that case either.
-    LayoutUnit paintInvalidationLogicalLeft = logicalLeftVisualOverflow();
-    LayoutUnit paintInvalidationLogicalRight = logicalRightVisualOverflow();
-    if (hasOverflowClip()) {
-        // If we have clipped overflow, we should use layout overflow as well, since visual overflow from lines didn't propagate to our block's overflow.
-        // Note the old code did this as well but even for overflow:visible. The addition of hasOverflowClip() at least tightens up the hack a bit.
-        // layoutInlineChildren should be patched to compute the entire paint invalidation rect.
-        paintInvalidationLogicalLeft = std::min(paintInvalidationLogicalLeft, logicalLeftLayoutOverflow());
-        paintInvalidationLogicalRight = std::max(paintInvalidationLogicalRight, logicalRightLayoutOverflow());
-    }
-
-    LayoutRect paintInvalidationRect;
-    if (isHorizontalWritingMode())
-        paintInvalidationRect = LayoutRect(paintInvalidationLogicalLeft, m_paintInvalidationLogicalTop, paintInvalidationLogicalRight - paintInvalidationLogicalLeft, m_paintInvalidationLogicalBottom - m_paintInvalidationLogicalTop);
-    else
-        paintInvalidationRect = LayoutRect(m_paintInvalidationLogicalTop, paintInvalidationLogicalLeft, m_paintInvalidationLogicalBottom - m_paintInvalidationLogicalTop, paintInvalidationLogicalRight - paintInvalidationLogicalLeft);
-
-    if (hasOverflowClip()) {
-        // Adjust the paint invalidation rect for scroll offset
-        paintInvalidationRect.move(-scrolledContentOffset());
-
-        // Don't allow this rect to spill out of our overflow box.
-        paintInvalidationRect.intersect(LayoutRect(LayoutPoint(), size()));
-    }
-
-    // Make sure the rect is still non-empty after intersecting for overflow above
-    if (!paintInvalidationRect.isEmpty()) {
-        // Hits in media/event-attributes.html
-        DisableCompositingQueryAsserts disabler;
-
-        invalidatePaintRectangle(paintInvalidationRect); // We need to do a partial paint invalidation of our content.
-        if (hasReflection())
-            invalidatePaintRectangle(reflectedRect(paintInvalidationRect));
-    }
-
-    m_paintInvalidationLogicalTop = LayoutUnit();
-    m_paintInvalidationLogicalBottom = LayoutUnit();
-}
-
-void LayoutBlockFlow::invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason) const
-{
-    LayoutBlock::invalidateDisplayItemClients(paintInvalidationContainer, invalidationReason);
+    LayoutBlock::invalidateDisplayItemClients(invalidationReason);
 
     // If the block is a continuation or containing block of an inline continuation, invalidate the
     // start object of the continuations if it has focus ring because change of continuation may change
@@ -2850,26 +2800,7 @@ void LayoutBlockFlow::invalidateDisplayItemClients(const LayoutBoxModelObject& p
             startOfContinuations = firstChild->node()->layoutObject();
     }
     if (startOfContinuations && startOfContinuations->styleRef().outlineStyleIsAuto())
-        startOfContinuations->invalidateDisplayItemClient(*startOfContinuations);
-}
-
-void LayoutBlockFlow::clipOutFloatingObjects(const LayoutBlock* rootBlock, ClipScope& clipScope,
-    const LayoutPoint& rootBlockPhysicalPosition, const LayoutSize& offsetFromRootBlock) const
-{
-    if (!m_floatingObjects)
-        return;
-
-    const FloatingObjectSet& floatingObjectSet = m_floatingObjects->set();
-    FloatingObjectSetIterator end = floatingObjectSet.end();
-    for (FloatingObjectSetIterator it = floatingObjectSet.begin(); it != end; ++it) {
-        const FloatingObject& floatingObject = *it->get();
-        LayoutRect floatBox(LayoutPoint(offsetFromRootBlock), floatingObject.layoutObject()->size());
-        floatBox.move(positionForFloatIncludingMargin(floatingObject));
-        rootBlock->flipForWritingMode(floatBox);
-        floatBox.move(rootBlockPhysicalPosition.x(), rootBlockPhysicalPosition.y());
-
-        clipScope.clip(floatBox, SkRegion::kDifference_Op);
-    }
+        startOfContinuations->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*startOfContinuations, invalidationReason);
 }
 
 void LayoutBlockFlow::clearFloats(EClear clear)
@@ -3023,7 +2954,7 @@ FloatingObject* LayoutBlockFlow::insertFloatingObject(LayoutBox& floatBox)
 
     // Create the special object entry & append it to the list
 
-    OwnPtr<FloatingObject> newObj = FloatingObject::create(&floatBox);
+    std::unique_ptr<FloatingObject> newObj = FloatingObject::create(&floatBox);
 
     // Our location is irrelevant if we're unsplittable or no pagination is in effect.
     // Just go ahead and lay out the float.
@@ -3481,7 +3412,7 @@ void LayoutBlockFlow::setPaginationStrutPropagatedFromChild(LayoutUnit strut)
     if (!m_rareData) {
         if (!strut)
             return;
-        m_rareData = adoptPtr(new LayoutBlockFlowRareData(this));
+        m_rareData = wrapUnique(new LayoutBlockFlowRareData(this));
     }
     m_rareData->m_paginationStrutPropagatedFromChild = strut;
 }
@@ -3623,7 +3554,7 @@ LayoutBlockFlow::LayoutBlockFlowRareData& LayoutBlockFlow::ensureRareData()
     if (m_rareData)
         return *m_rareData;
 
-    m_rareData = adoptPtr(new LayoutBlockFlowRareData(this));
+    m_rareData = wrapUnique(new LayoutBlockFlowRareData(this));
     return *m_rareData;
 }
 

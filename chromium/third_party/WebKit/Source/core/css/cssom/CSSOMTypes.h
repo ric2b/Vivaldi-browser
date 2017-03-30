@@ -6,16 +6,17 @@
 #define CSSOMTypes_h
 
 #include "core/CSSPropertyNames.h"
+#include "wtf/Allocator.h"
 
 namespace blink {
 
-class StyleValue;
+class CSSStyleValue;
 
 class CSSOMTypes {
     STATIC_ONLY(CSSOMTypes);
 
 public:
-    static bool propertyCanTake(CSSPropertyID, const StyleValue&);
+    static bool propertyCanTake(CSSPropertyID, const CSSStyleValue&);
 };
 
 } // namespace blink

@@ -35,10 +35,6 @@ class TraceEventSystemStatsMonitor;
 }  // namespace trace_event
 }  // namespace base
 
-namespace IPC {
-class ScopedIPCSupport;
-}
-
 namespace media {
 #if defined(OS_WIN)
 class SystemMessageWindowWin;
@@ -54,6 +50,12 @@ class MidiManager;
 }  // namespace midi
 }  // namespace media
 
+namespace mojo {
+namespace edk {
+class ScopedIPCSupport;
+}  // namespace edk
+}  // namespace mojo
+
 namespace net {
 class NetworkChangeNotifier;
 }  // namespace net
@@ -68,6 +70,7 @@ namespace content {
 class BrowserMainParts;
 class BrowserOnlineStateObserver;
 class BrowserThreadImpl;
+class LoaderDelegateImpl;
 class MediaStreamManager;
 class MojoShellContext;
 class ResourceDispatcherHostImpl;
@@ -186,6 +189,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   //   PreCreateThreads()
   //   CreateThreads()
   //   BrowserThreadsStarted()
+  //   PreMainMessageLoopRun()
 
   // Members initialized on construction ---------------------------------------
   const MainFunctionParams& parameters_;
@@ -257,7 +261,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   // Members initialized in |BrowserThreadsStarted()| --------------------------
   std::unique_ptr<base::Thread> indexed_db_thread_;
   std::unique_ptr<MojoShellContext> mojo_shell_context_;
-  std::unique_ptr<IPC::ScopedIPCSupport> mojo_ipc_support_;
+  std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
 
   // |user_input_monitor_| has to outlive |audio_manager_|, so declared first.
   std::unique_ptr<media::UserInputMonitor> user_input_monitor_;
@@ -278,6 +282,7 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<ui::ClientNativePixmapFactory> client_native_pixmap_factory_;
 #endif
 
+  std::unique_ptr<LoaderDelegateImpl> loader_delegate_;
   std::unique_ptr<ResourceDispatcherHostImpl> resource_dispatcher_host_;
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
   std::unique_ptr<SpeechRecognitionManagerImpl> speech_recognition_manager_;

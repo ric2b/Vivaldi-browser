@@ -5,6 +5,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/html/icon.html">
+<link rel="import" href="chrome://history/searched_label.html">
 <link rel="import" href="chrome://history/shared_style.html">
 
 <dom-module id="history-synced-device-card">
@@ -13,7 +14,7 @@
       :host {
         @apply(--layout-center);
         @apply(--layout-vertical);
-        padding: 0 var(--card-padding-side) 20px;
+        padding: 0 var(--card-padding-side) var(--card-padding-between);
       }
 
       #card-heading {
@@ -45,7 +46,8 @@
 
       #dropdown-indicator {
         -webkit-margin-end: 12px;
-        max-width: 16px;
+        height: 20px;
+        width: 20px;
       }
 
       #collapse {
@@ -90,12 +92,13 @@
             <div id="item-container">
               <div id="icon" class="website-icon"></div>
               <a href="[[tab.url]]" class="website-title" title="[[tab.title]]">
-                [[tab.title]]
+                <history-searched-label title="[[tab.title]]"
+                    search-term="[[searchedTerm]]"></history-searched-label>
               </a>
             </div>
-            <template is="dom-if" if="[[tab.needsWindowSeparator]]">
-              <div id="window-separator"></div>
-            </template>
+            <div id="window-separator"
+                hidden$="[[!isWindowSeparatorIndex_(index, separatorIndexes)]]">
+            </div>
           </template>
           <div class="item-container">
             <p on-tap="openAllTabs_" id="open-tabs">$i18n{openAll}</p>

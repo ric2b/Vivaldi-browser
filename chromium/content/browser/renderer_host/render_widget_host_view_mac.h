@@ -23,10 +23,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
-#include "cc/scheduler/begin_frame_source.h"
 #include "cc/surfaces/surface_id.h"
 #include "content/browser/renderer_host/browser_compositor_view_mac.h"
-#include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/input/mouse_wheel_rails_filter_mac.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
@@ -229,11 +227,10 @@ namespace content {
 // RenderWidgetHostView class hierarchy described in render_widget_host_view.h.
 class CONTENT_EXPORT RenderWidgetHostViewMac
     : public RenderWidgetHostViewBase,
-      public DelegatedFrameHostClient,
+      public BrowserCompositorMacClient,
       public ui::AcceleratedWidgetMacNSView,
       public IPC::Sender,
-      public display::DisplayObserver,
-      public cc::BeginFrameObserver {
+      public display::DisplayObserver {
  public:
   // The view will associate itself with the given widget. The native view must
   // be hooked up immediately to the view hierarchy, or else when it is
@@ -315,25 +312,22 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) override;
   void EndFrameSubscription() override;
   ui::AcceleratedWidgetMac* GetAcceleratedWidgetMac() const override;
-  void OnSwapCompositorFrame(
-      uint32_t output_surface_id,
-      std::unique_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
+                             cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
   gfx::Point AccessibilityOriginInScreen(const gfx::Rect& bounds) override;
+  gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget() override;
 
   bool HasAcceleratedSurface(const gfx::Size& desired_size) override;
   void GetScreenInfo(blink::WebScreenInfo* results) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
 
   bool LockMouse() override;
   void UnlockMouse() override;
-  void WheelEventAck(const blink::WebMouseWheelEvent& event,
-                     InputEventAckState ack_result) override;
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result) override;
 
@@ -346,8 +340,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
                                      gfx::Point* transformed_point) override;
   // Returns true when we can do SurfaceHitTesting for the event type.
   bool ShouldRouteEvent(const blink::WebInputEvent& event) const;
-  void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
-  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
+  void ProcessMouseEvent(const blink::WebMouseEvent& event,
+                         const ui::LatencyInfo& latency) override;
+  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
+                              const ui::LatencyInfo& latency) override;
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
@@ -420,50 +416,8 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // The background CoreAnimation layer which is hosted by |cocoa_view_|.
   base::scoped_nsobject<CALayer> background_layer_;
 
-  // The state of |delegated_frame_host_| and |browser_compositor_| to
-  // manage being visible, hidden, or occluded.
-  enum BrowserCompositorViewState {
-    // Effects:
-    // - |browser_compositor_| exists and |delegated_frame_host_| is
-    //    visible.
-    // Happens when:
-    // - |render_widet_host_| is in the visible state (this includes when
-    //   the tab isn't visible, but tab capture is enabled).
-    BrowserCompositorActive,
-    // Effects:
-    // - |browser_compositor_| exists, but |delegated_frame_host_| has
-    //   been hidden.
-    // Happens when:
-    // - The |render_widget_host_| is hidden, but |cocoa_view_| is still in the
-    //   NSWindow hierarchy.
-    // - This happens when |cocoa_view_| is hidden (minimized, on another
-    //   occluded by other windows, etc). The |browser_compositor_| and
-    //   its CALayers are kept around so that we will have content to show when
-    //   we are un-occluded.
-    BrowserCompositorSuspended,
-    // Effects:
-    // - |browser_compositor_| has been destroyed and
-    //   |delegated_frame_host_| has been hidden.
-    // Happens when:
-    // - The |render_widget_host_| is hidden or dead, and |cocoa_view_| is not
-    //   attached to a NSWindow.
-    // - This happens for backgrounded tabs.
-    BrowserCompositorDestroyed,
-  };
-  BrowserCompositorViewState browser_compositor_state_;
-
-  // Delegated frame management and compositor.
-  std::unique_ptr<DelegatedFrameHost> delegated_frame_host_;
-  std::unique_ptr<ui::Layer> root_layer_;
-
-  // Container for ui::Compositor the CALayer tree drawn by it.
+  // Delegated frame management and compositor interface.
   std::unique_ptr<BrowserCompositorMac> browser_compositor_;
-
-  // Placeholder that is allocated while browser_compositor_ is NULL,
-  // indicating that a BrowserCompositorViewMac may be allocated. This is to
-  // help in recycling the internals of BrowserCompositorViewMac.
-  std::unique_ptr<BrowserCompositorMacPlaceholder>
-      browser_compositor_placeholder_;
 
   // Set when the currently-displayed frame is the minimum scale. Used to
   // determine if pinch gestures need to be thresholded.
@@ -493,42 +447,27 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
 
   void PauseForPendingResizeOrRepaintsAndDraw();
 
-  // DelegatedFrameHostClient implementation.
-  ui::Layer* DelegatedFrameHostGetLayer() const override;
-  bool DelegatedFrameHostIsVisible() const override;
-  SkColor DelegatedFrameHostGetGutterColor(SkColor color) const override;
-  gfx::Size DelegatedFrameHostDesiredSizeInDIP() const override;
-  bool DelegatedFrameCanCreateResizeLock() const override;
-  std::unique_ptr<ResizeLock> DelegatedFrameHostCreateResizeLock(
-      bool defer_compositor_lock) override;
-  void DelegatedFrameHostResizeLockWasReleased() override;
-  void DelegatedFrameHostSendCompositorSwapAck(
+  // BrowserCompositorMacClient implementation.
+  NSView* BrowserCompositorMacGetNSView() const override;
+  SkColor BrowserCompositorMacGetGutterColor(SkColor color) const override;
+  void BrowserCompositorMacSendCompositorSwapAck(
       int output_surface_id,
       const cc::CompositorFrameAck& ack) override;
-  void DelegatedFrameHostSendReclaimCompositorResources(
+  void BrowserCompositorMacSendReclaimCompositorResources(
       int output_surface_id,
       const cc::CompositorFrameAck& ack) override;
-  void DelegatedFrameHostOnLostCompositorResources() override;
-  void DelegatedFrameHostUpdateVSyncParameters(
+  void BrowserCompositorMacOnLostCompositorResources() override;
+  void BrowserCompositorMacUpdateVSyncParameters(
       const base::TimeTicks& timebase,
       const base::TimeDelta& interval) override;
-  void SetBeginFrameSource(cc::BeginFrameSource* source) override;
-  bool IsAutoResizeEnabled() const override;
-
-  // cc::BeginFrameObserver implementation.
-  void OnBeginFrame(const cc::BeginFrameArgs& args) override;
-  const cc::BeginFrameArgs& LastUsedBeginFrameArgs() const override;
-  void OnBeginFrameSourcePausedChanged(bool paused) override;
+  void BrowserCompositorMacSendBeginFrame(
+      const cc::BeginFrameArgs& args) override;
 
   // AcceleratedWidgetMacNSView implementation.
   NSView* AcceleratedWidgetGetNSView() const override;
   void AcceleratedWidgetGetVSyncParameters(
       base::TimeTicks* timebase, base::TimeDelta* interval) const override;
   void AcceleratedWidgetSwapCompleted() override;
-
-  // Transition from being in the Suspended state to being in the Destroyed
-  // state, if appropriate (see BrowserCompositorViewState for details).
-  void DestroySuspendedBrowserCompositorViewIfNeeded();
 
   // Exposed for testing.
   cc::SurfaceId SurfaceIdForTesting() const override;
@@ -542,16 +481,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // Shuts down the render_widget_host_.  This is a separate function so we can
   // invoke it from the message loop.
   void ShutdownHost();
-
-  // Tear down all components of the browser compositor in an order that will
-  // ensure no dangling references.
-  void ShutdownBrowserCompositor();
-
-  // The state of the the browser compositor and delegated frame host. See
-  // BrowserCompositorViewState for details.
-  void EnsureBrowserCompositorView();
-  void SuspendBrowserCompositorView();
-  void DestroyBrowserCompositorView();
 
   // IPC message handlers.
   void OnGetRenderedTextCompleted(const std::string& text);
@@ -583,9 +512,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // RenderWidgetHostViewGuest.
   bool is_guest_view_hack_;
 
-  // True if gestures are generated for mouse wheel events.
-  bool wheel_gestures_enabled_;
-
   // selected text on the renderer.
   std::string selected_text_;
 
@@ -605,11 +531,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // to SendVSyncParametersToRenderer(), and refreshed regularly thereafter.
   base::TimeTicks vsync_timebase_;
   base::TimeDelta vsync_interval_;
-
-  // The begin frame source being observed.  Null if none.
-  cc::BeginFrameSource* begin_frame_source_;
-  cc::BeginFrameArgs last_begin_frame_args_;
-  bool needs_begin_frames_;
 
   // The current composition character range and its bounds.
   gfx::Range composition_range_;

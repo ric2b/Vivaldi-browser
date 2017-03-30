@@ -46,7 +46,12 @@ Polymer({
      */
     profileName_: String,
 
-    /** @private {!settings.SyncBrowserProxyImpl} */
+    /**
+     * True if the current profile manages supervised users.
+     */
+    profileManagesSupervisedUsers_: Boolean,
+
+    /** @private {!settings.SyncBrowserProxy} */
     syncBrowserProxy_: {
       type: Object,
       value: function() {
@@ -56,18 +61,17 @@ Polymer({
 
 <if expr="chromeos">
     /**
-     * True if Pin Unlock is allowed on this machine.
+     * True if quick unlock settings should be displayed on this machine.
+     * @private
      */
-    pinUnlockAllowed_: {
+    quickUnlockAllowed_: {
       type: Boolean,
-      value: function() {
-        /* TODO(jdufault): Return a real value via quickUnlockPrivate API. */
-        return false;
-      },
+      // TODO(jdufault): Get a real value via quickUnlockPrivate API.
+      value: false,
       readOnly: true,
     },
 
-    /** @private {!settings.EasyUnlockBrowserProxyImpl} */
+    /** @private {!settings.EasyUnlockBrowserProxy} */
     easyUnlockBrowserProxy_: {
       type: Object,
       value: function() {
@@ -112,10 +116,15 @@ Polymer({
 
   /** @override */
   attached: function() {
-    settings.ProfileInfoBrowserProxyImpl.getInstance().getProfileInfo().then(
-        this.handleProfileInfo_.bind(this));
+    var profileInfoProxy = settings.ProfileInfoBrowserProxyImpl.getInstance();
+    profileInfoProxy.getProfileInfo().then(this.handleProfileInfo_.bind(this));
     this.addWebUIListener('profile-info-changed',
                           this.handleProfileInfo_.bind(this));
+
+    profileInfoProxy.getProfileManagesSupervisedUsers().then(
+        this.handleProfileManagesSupervisedUsers_.bind(this));
+    this.addWebUIListener('profile-manages-supervised-users-changed',
+                          this.handleProfileManagesSupervisedUsers_.bind(this));
 
     this.syncBrowserProxy_.getSyncStatus().then(
         this.handleSyncStatus_.bind(this));
@@ -141,6 +150,15 @@ Polymer({
   handleProfileInfo_: function(info) {
     this.profileName_ = info.name;
     this.profileIconUrl_ = info.iconUrl;
+  },
+
+  /**
+   * Handler for when the profile starts or stops managing supervised users.
+   * @private
+   * @param {boolean} managesSupervisedUsers
+   */
+  handleProfileManagesSupervisedUsers_: function(managesSupervisedUsers) {
+    this.profileManagesSupervisedUsers_ = managesSupervisedUsers;
   },
 
   /**
@@ -195,11 +213,17 @@ Polymer({
   },
 
   /** @private */
+  onDisconnectCancel_: function() {
+    this.$.disconnectDialog.close();
+  },
+
+  /** @private */
   onDisconnectConfirm_: function() {
-    var deleteProfile = this.$.deleteProfile && this.$.deleteProfile.checked;
+    var deleteProfile = !!this.syncStatus.domain ||
+        (this.$.deleteProfile && this.$.deleteProfile.checked);
     this.syncBrowserProxy_.signOut(deleteProfile);
 
-    // Dialog automatically closed because button has dialog-confirm attribute.
+    this.$.disconnectDialog.close();
   },
 
   /** @private */
@@ -214,6 +238,11 @@ Polymer({
   },
 
 <if expr="chromeos">
+  /** @private */
+  onQuickUnlockTap_: function() {
+    this.$.pages.setSubpageChain(['quick-unlock-authenticate']);
+  },
+
   /** @private */
   onEasyUnlockSetupTap_: function() {
     this.easyUnlockBrowserProxy_.startTurnOnFlow();
@@ -233,6 +262,40 @@ Polymer({
 <if expr="chromeos">
     this.$.pages.setSubpageChain(['users']);
 </if>
+  },
+
+  /** @private */
+  onManageSupervisedUsers_: function() {
+    window.open(loadTimeData.getString('supervisedUsersUrl'));
+  },
+
+<if expr="not chromeos">
+  /**
+   * @private
+   * @param {string} domain
+   * @return {string}
+   */
+  getDomainHtml_: function(domain) {
+    var innerSpan =
+        '<span id="managed-by-domain-name">' + domain + '</span>';
+    return loadTimeData.getStringF('domainManagedProfile', innerSpan);
+  },
+</if>
+
+  /**
+   * @private
+   * @param {string} domain
+   * @return {string}
+   */
+  getDisconnectExplanationHtml_: function(domain) {
+<if expr="not chromeos">
+    if (domain) {
+      return loadTimeData.getStringF(
+          'syncDisconnectManagedProfileExplanation',
+          '<span id="managed-by-domain-name">' + domain + '</span>');
+    }
+</if>
+    return loadTimeData.getString('syncDisconnectExplanation');
   },
 
   /**

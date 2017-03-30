@@ -18,6 +18,7 @@ class VivaldiRenderViewObserver
  private:
     // RenderViewObserver implementation.
     bool OnMessageReceived(const IPC::Message& message) override;
+    void OnDestruct() override;
     void OnInsertText(const base::string16& text);
     void OnPinchZoom(float scale, int x, int y);
 

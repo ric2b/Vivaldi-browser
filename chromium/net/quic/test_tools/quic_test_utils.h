@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -24,7 +25,8 @@
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_framer.h"
 #include "net/quic/quic_protocol.h"
-#include "net/quic/quic_sent_packet_manager.h"
+#include "net/quic/quic_sent_packet_manager_interface.h"
+#include "net/quic/quic_server_session_base.h"
 #include "net/quic/quic_session.h"
 #include "net/quic/quic_simple_buffer_allocator.h"
 #include "net/quic/test_tools/mock_clock.h"
@@ -32,7 +34,6 @@
 #include "net/spdy/spdy_framer.h"
 #include "net/tools/quic/quic_dispatcher.h"
 #include "net/tools/quic/quic_per_connection_packet_writer.h"
-#include "net/tools/quic/quic_server_session_base.h"
 #include "net/tools/quic/test_tools/mock_quic_server_session_visitor.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -557,6 +558,7 @@ class MockQuicSpdySession : public QuicSpdySession {
   ~MockQuicSpdySession() override;
 
   QuicCryptoStream* GetCryptoStream() override { return crypto_stream_.get(); }
+  const SpdyHeaderBlock& GetWriteHeaders() { return write_headers_; }
 
   // From QuicSession.
   MOCK_METHOD3(OnConnectionClosed,
@@ -604,7 +606,19 @@ class MockQuicSpdySession : public QuicSpdySession {
                     QuicStreamId promised_stream_id,
                     size_t frame_len,
                     const QuicHeaderList& header_list));
-  MOCK_METHOD5(WriteHeaders,
+  // Methods taking non-copyable types like SpdyHeaderBlock by value cannot be
+  // mocked directly.
+  size_t WriteHeaders(
+      QuicStreamId id,
+      SpdyHeaderBlock headers,
+      bool fin,
+      SpdyPriority priority,
+      QuicAckListenerInterface* ack_notifier_delegate) override {
+    write_headers_ = std::move(headers);
+    return WriteHeadersMock(id, write_headers_, fin, priority,
+                            ack_notifier_delegate);
+  }
+  MOCK_METHOD5(WriteHeadersMock,
                size_t(QuicStreamId id,
                       const SpdyHeaderBlock& headers,
                       bool fin,
@@ -616,6 +630,7 @@ class MockQuicSpdySession : public QuicSpdySession {
 
  private:
   std::unique_ptr<QuicCryptoStream> crypto_stream_;
+  SpdyHeaderBlock write_headers_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuicSpdySession);
 };
@@ -637,8 +652,11 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
 
   QuicCryptoServerStream* GetCryptoStream() override;
 
+  MockQuicServerSessionHelper* helper() { return &helper_; }
+
  private:
   MockQuicServerSessionVisitor visitor_;
+  MockQuicServerSessionHelper helper_;
 
   DISALLOW_COPY_AND_ASSIGN(TestQuicSpdyServerSession);
 };
@@ -723,7 +741,7 @@ class MockSendAlgorithm : public SendAlgorithmInterface {
   MOCK_CONST_METHOD2(TimeUntilSend,
                      QuicTime::Delta(QuicTime now,
                                      QuicByteCount bytes_in_flight));
-  MOCK_CONST_METHOD0(PacingRate, QuicBandwidth(void));
+  MOCK_CONST_METHOD1(PacingRate, QuicBandwidth(QuicByteCount));
   MOCK_CONST_METHOD0(BandwidthEstimate, QuicBandwidth(void));
   MOCK_CONST_METHOD0(HasReliableBandwidthEstimate, bool());
   MOCK_METHOD1(OnRttUpdated, void(QuicPacketNumber));
@@ -806,13 +824,14 @@ class MockAckListener : public QuicAckListenerInterface {
 };
 
 class MockNetworkChangeVisitor
-    : public QuicSentPacketManager::NetworkChangeVisitor {
+    : public QuicSentPacketManagerInterface::NetworkChangeVisitor {
  public:
   MockNetworkChangeVisitor();
   ~MockNetworkChangeVisitor() override;
 
   MOCK_METHOD0(OnCongestionChange, void());
   MOCK_METHOD0(OnPathDegrading, void());
+  MOCK_METHOD1(OnPathMtuIncreased, void(QuicPacketLength));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockNetworkChangeVisitor);

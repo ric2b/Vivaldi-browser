@@ -68,6 +68,22 @@ class PasswordManager : public LoginModel {
                 const autofill::PasswordForm& preferred_match,
                 bool wait_for_username) const;
 
+  // Called by a PasswordFormManager when a page initially loads and it decides
+  // that a form can be autofilled on the page, but a menu of account options
+  // should be shown instead. Similar to Autofill() above, but does not fill; it
+  // only shows a selection of accounts.
+  //
+  // Currently used by the fill-on-account-select experiment only. See
+  // https://crbug.com/568713.
+  void ShowInitialPasswordAccountSuggestions(
+      password_manager::PasswordManagerDriver* driver,
+      const autofill::PasswordForm& form_for_autofill,
+      const autofill::PasswordFormMap& best_matches,
+      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+          federated_matches,
+      const autofill::PasswordForm& preferred_match,
+      bool wait_for_username) const;
+
   // Called by a PasswordFormManager when it decides a HTTP auth dialog can be
   // autofilled.
   void AutofillHttpAuth(const autofill::PasswordFormMap& best_matches,
@@ -98,6 +114,11 @@ class PasswordManager : public LoginModel {
       const autofill::PasswordForm& form,
       const base::string16& generation_element,
       bool is_manually_triggered);
+
+  // Saves the outcome of HTML parsing based form classifier to uploaded proto.
+  void SaveGenerationFieldDetectedByClassifier(
+      const autofill::PasswordForm& form,
+      const base::string16& generation_field);
 
   // TODO(isherman): This should not be public, but is currently being used by
   // the LoginPrompt code.

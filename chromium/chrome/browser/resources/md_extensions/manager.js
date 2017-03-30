@@ -2,6 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+/**
+ * The different pages that can be shown at a time.
+ * Note: This must remain in sync with the order in manager.html!
+ * @enum {string}
+ */
+var Page = {
+  ITEM_LIST: '0',
+  DETAIL_VIEW: '1',
+  KEYBOARD_SHORTCUTS: '2',
+};
+
 cr.define('extensions', function() {
   'use strict';
 
@@ -80,8 +91,15 @@ cr.define('extensions', function() {
           /** @type {extensions.Sidebar} */(this.$$('extensions-sidebar'));
       this.listHelper_ = new ListHelper(this);
       this.sidebar.setListDelegate(this.listHelper_);
-      this.$.toolbar.setSearchDelegate(new SearchHelper(this));
       this.readyPromiseResolver.resolve();
+    },
+
+    /**
+     * @param {!CustomEvent} event
+     * @private
+     */
+    onFilterChanged_: function(event) {
+      this.filter = /** @type {string} */ (event.detail);
     },
 
     /**
@@ -174,18 +192,64 @@ cr.define('extensions', function() {
     },
 
     /**
+     * @param {Page} page
+     * @return {!(extensions.KeyboardShortcuts |
+     *            extensions.DetailView |
+     *            extensions.ItemList)}
+     * @private
+     */
+    getPage_: function(page) {
+      switch (page) {
+        case Page.ITEM_LIST:
+          return this.$['items-list'];
+        case Page.DETAIL_VIEW:
+          return this.$['details-view'];
+        case Page.KEYBOARD_SHORTCUTS:
+          return this.$['keyboard-shortcuts'];
+      }
+      assertNotReached();
+    },
+
+    /**
+     * Changes the active page selection.
+     * @param {Page} toPage
+     */
+    changePage: function(toPage) {
+      var fromPage = this.$.pages.selected;
+      if (fromPage == toPage)
+        return;
+      var entry;
+      var exit;
+      if (fromPage == Page.ITEM_LIST && toPage == Page.DETAIL_VIEW) {
+        entry = extensions.Animation.HERO;
+        exit = extensions.Animation.HERO;
+      } else if (toPage == Page.ITEM_LIST) {
+        entry = extensions.Animation.FADE_IN;
+        exit = extensions.Animation.SCALE_DOWN;
+      } else {
+        assert(toPage == Page.DETAIL_VIEW ||
+               toPage == Page.KEYBOARD_SHORTCUTS);
+        entry = extensions.Animation.FADE_IN;
+        exit = extensions.Animation.FADE_OUT;
+      }
+      this.getPage_(fromPage).animationHelper.setExitAnimation(exit);
+      this.getPage_(toPage).animationHelper.setEntryAnimation(entry);
+      this.$.pages.selected = toPage;
+    },
+
+    /**
      * Shows the detailed view for a given item.
      * @param {CustomEvent} e
      * @private
      */
     showItemDetails_: function(e) {
       this.$['details-view'].set('data', assert(e.detail.element.data));
-      this.$.pages.selected = 1;
+      this.changePage(Page.DETAIL_VIEW);
     },
 
     /** @private */
     onDetailsViewClose_: function() {
-      this.$.pages.selected = 0;
+      this.changePage(Page.ITEM_LIST);
     }
   });
 
@@ -210,24 +274,20 @@ cr.define('extensions', function() {
           items = this.manager_.apps;
           break;
       }
+
       this.manager_.$['items-list'].set('items', assert(items));
-    }
-  };
-
-  /**
-   * @param {extensions.Manager} manager
-   * @constructor
-   * @implements {SearchFieldDelegate}
-   */
-  function SearchHelper(manager) {
-    this.manager_ = manager;
-  }
-
-  SearchHelper.prototype = {
-    /** @override */
-    onSearchTermSearch: function(searchTerm) {
-      this.manager_.filter = searchTerm;
+      this.manager_.changePage(Page.ITEM_LIST);
     },
+
+    /** @override */
+    showKeyboardShortcuts: function() {
+      this.manager_.changePage(Page.KEYBOARD_SHORTCUTS);
+    },
+
+    /** @override */
+    showPackDialog: function() {
+      this.manager_.$['pack-dialog'].show();
+    }
   };
 
   return {Manager: Manager};

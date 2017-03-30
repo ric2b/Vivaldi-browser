@@ -22,7 +22,6 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/events/devices/input_device.h"
-#include "ui/events/devices/keyboard_device.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/devices/x11/device_list_cache_x11.h"
 #include "ui/events/event.h"
@@ -73,7 +72,6 @@ ScopedDisableInternalMouseAndKeyboardX11::
       keyboard_device_id_(kDeviceIdNone),
       core_keyboard_device_id_(kDeviceIdNone),
       last_mouse_location_(GetMouseLocationInScreen()) {
-
   ui::DeviceDataManagerX11* device_data_manager =
       ui::DeviceDataManagerX11::GetInstance();
   if (device_data_manager->IsXInput2Available()) {
@@ -98,8 +96,8 @@ ScopedDisableInternalMouseAndKeyboardX11::
       }
     }
 
-    for (const ui::KeyboardDevice& device :
-         device_data_manager->keyboard_devices()) {
+    for (const ui::InputDevice& device :
+         device_data_manager->GetKeyboardDevices()) {
       if (device.type == ui::InputDeviceType::INPUT_DEVICE_INTERNAL) {
         keyboard_device_id_ = device.id;
         device_data_manager->DisableDevice(keyboard_device_id_);
@@ -137,15 +135,13 @@ ScopedDisableInternalMouseAndKeyboardX11::
 }
 
 void ScopedDisableInternalMouseAndKeyboardX11::WillProcessEvent(
-    const ui::PlatformEvent& event) {
-}
+    const ui::PlatformEvent& event) {}
 
 void ScopedDisableInternalMouseAndKeyboardX11::DidProcessEvent(
     const ui::PlatformEvent& event) {
   if (event->type != GenericEvent)
     return;
-  XIDeviceEvent* xievent =
-      static_cast<XIDeviceEvent*>(event->xcookie.data);
+  XIDeviceEvent* xievent = static_cast<XIDeviceEvent*>(event->xcookie.data);
   ui::DeviceDataManagerX11* device_data_manager =
       static_cast<ui::DeviceDataManagerX11*>(
           ui::DeviceDataManager::GetInstance());

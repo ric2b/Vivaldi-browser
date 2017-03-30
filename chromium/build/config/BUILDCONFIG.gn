@@ -111,11 +111,20 @@ if (current_os == "") {
 #   even if the value is overridden, which is wasteful. See first bullet.
 
 declare_args() {
-  # Component build.
+  # Component build. Setting to true compiles targets declared as "components"
+  # as shared libraries loaded dynamically. This speeds up development time.
+  # When false, components will be linked statically.
   is_component_build = false
 
-  # Debug build.
-  is_debug = true
+  # Set to enable the official build level of optimization. This has nothing
+  # to do with branding, but enables an additional level of optimization above
+  # release (!is_debug). This might be better expressed as a tri-state
+  # (debug, release, official) but for historical reasons there are two
+  # separate flags.
+  is_official_build = false
+
+  # Debug build. Enabling official builds automatically sets is_debug to false.
+  is_debug = !is_official_build
 
   # Whether we're a traditional desktop unix.
   is_desktop_linux = current_os == "linux"
@@ -135,6 +144,8 @@ declare_args() {
 
   # DON'T ADD MORE FLAGS HERE. Read the comment above.
 }
+
+assert(!(is_debug && is_official_build), "Can't do official debug builds")
 
 # ==============================================================================
 # TOOLCHAIN SETUP
@@ -170,8 +181,8 @@ if (host_toolchain == "") {
   } else if (host_os == "mac") {
     host_toolchain = "//build/toolchain/mac:clang_$host_cpu"
   } else if (host_os == "win") {
-    # TODO(crbug.com/467159): win cross-compiles don't actually work yet, so
-    # use the target_cpu instead of the host_cpu.
+    # On Windows always use the target CPU for host builds. On the
+    # configurations we support this will always work and it saves build steps.
     if (is_clang) {
       host_toolchain = "//build/toolchain/win:clang_$target_cpu"
     } else {
@@ -202,7 +213,7 @@ if (target_os == "android") {
     _default_toolchain = "//build/toolchain/cros:target"
   }
 } else if (target_os == "ios") {
-  _default_toolchain = "//build/toolchain/mac:ios_clang_arm"
+  _default_toolchain = "//build/toolchain/mac:ios_clang_$target_cpu"
 } else if (target_os == "linux") {
   if (is_clang) {
     _default_toolchain = "//build/toolchain/linux:clang_$target_cpu"
@@ -508,6 +519,8 @@ if (is_win) {
     # that shouldn't use the windows subsystem.
     "//build/config/win:console",
   ]
+} else if (is_mac) {
+  _mac_linker_configs = [ "//build/config/mac:strip_all" ]
 }
 
 # Executable defaults.
@@ -517,9 +530,20 @@ _executable_configs = _native_compiler_configs + [
                       ]
 if (is_win) {
   _executable_configs += _windows_linker_configs
+} else if (is_mac) {
+  _executable_configs += _mac_linker_configs
 }
 set_defaults("executable") {
   configs = _executable_configs
+}
+
+if (is_ios) {
+  set_defaults("ios_app_bundle") {
+    configs = _executable_configs
+  }
+  set_defaults("ios_appex_bundle") {
+    configs = _executable_configs
+  }
 }
 
 # Static library defaults.
@@ -540,6 +564,8 @@ if (is_win) {
   # want this can remove this config.
   _shared_library_configs +=
       [ "//build/config/android:hide_native_jni_exports" ]
+} else if (is_mac) {
+  _shared_library_configs += _mac_linker_configs
 }
 set_defaults("shared_library") {
   configs = _shared_library_configs
@@ -576,6 +602,12 @@ if (!is_component_build) {
   }
 }
 
+# TODO(brettw) move to //build/split_static_library.gni when set_defaults can
+# be practically implemented outside of this file.
+set_defaults("split_static_library") {
+  configs = _native_compiler_configs
+}
+
 # Test defaults.
 set_defaults("test") {
   if (is_android) {
@@ -590,23 +622,33 @@ set_defaults("test") {
 # ==============================================================================
 
 # Defines a component, which equates to a shared_library when
-# is_component_build == true and a source_set / static_library otherwise.
+# is_component_build == true and a static_library otherwise.
 #
-# Arguments are the same as a normal library with this addition:
-#   component_never_use_source_set: Whether to use static_library instead of
-#       source_set for non-component builds. Some targets (e.g. //base) should
-#       use static_library rather than source_set to avoid linking unused object
-#       files.
+# Use static libraries for the static build rather than source sets because
+# many of of our test binaries link many large dependencies but often don't
+# use large portions of them. The static libraries are much more efficient to
+# link in this situation since only the necessary object files are linked.
+#
+# The invoker can override the type of the target in the non-component-build
+# case by setting static_component_type to either "source_set" or
+# "static_library". If unset, the default will be used.
 template("component") {
-  _never_use_source_set = defined(invoker.component_never_use_source_set) &&
-                          invoker.component_never_use_source_set
-  assert(_never_use_source_set || true)  # Mark as used.
   if (is_component_build) {
     _component_mode = "shared_library"
-  } else if (_never_use_source_set) {
-    _component_mode = "static_library"
-  } else {
+  } else if (defined(invoker.static_component_type)) {
+    assert(invoker.static_component_type == "static_library" ||
+           invoker.static_component_type == "source_set")
+    _component_mode = invoker.static_component_type
+  } else if (!defined(invoker.sources) || is_mac) {
+    # When there are no sources defined, use a source set to avoid creating
+    # an empty static library (which generally don't work).
+    #
+    # TODO(brettw) bug 618797: Remove the mac condition. On Mac making these as
+    # static_library causes crashes. Remove the mac condition above when this
+    # is fixed.
     _component_mode = "source_set"
+  } else {
+    _component_mode = "static_library"
   }
   target(_component_mode, target_name) {
     # Explicitly forward visibility, implicitly forward everything else.

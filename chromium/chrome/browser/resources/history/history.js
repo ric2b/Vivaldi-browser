@@ -501,7 +501,7 @@ Visit.prototype.showMoreFromSite_ = function() {
  */
 Visit.prototype.handleKeydown_ = function(e) {
   // Delete or Backspace should delete the entry if allowed.
-  if (e.keyIdentifier == 'U+0008' || e.keyIdentifier == 'U+007F')
+  if (e.key == 'Backspace' || e.key == 'Delete')
     this.removeEntryFromHistory_(e);
 };
 
@@ -1391,8 +1391,9 @@ HistoryView.prototype.getGroupedVisitsDOM_ = function(
   var numberOfVisits = createElementWithClassName('span', 'number-visits');
   var domainElement = document.createElement('span');
 
-  numberOfVisits.textContent = loadTimeData.getStringF('numberVisits',
-                                                       domainVisits.length);
+  numberOfVisits.textContent =
+      loadTimeData.getStringF('numberVisits',
+                              domainVisits.length.toLocaleString());
   siteDomain.appendChild(numberOfVisits);
 
   domainVisits[0].loadFavicon_(siteFavicon);

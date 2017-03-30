@@ -4,8 +4,8 @@
 
 // Implementation of a VideoCaptureDeviceFactory class for Windows platforms.
 
-#ifndef MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_DEVICE_FACTORY_WIN_H_
-#define MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_DEVICE_FACTORY_WIN_H_
+#ifndef MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_FACTORY_WIN_H_
+#define MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_FACTORY_WIN_H_
 
 #include "base/macros.h"
 #include "media/capture/video/video_capture_device_factory.h"
@@ -14,7 +14,7 @@ namespace media {
 
 // Extension of VideoCaptureDeviceFactory to create and manipulate Windows
 // devices, via either DirectShow or MediaFoundation APIs.
-class MEDIA_EXPORT VideoCaptureDeviceFactoryWin
+class CAPTURE_EXPORT VideoCaptureDeviceFactoryWin
     : public VideoCaptureDeviceFactory {
  public:
   static bool PlatformSupportsMediaFoundation();
@@ -39,4 +39,4 @@ class MEDIA_EXPORT VideoCaptureDeviceFactoryWin
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_DEVICE_FACTORY_WIN_H_
+#endif  // MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_FACTORY_WIN_H_

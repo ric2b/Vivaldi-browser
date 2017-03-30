@@ -11,13 +11,13 @@
 #include <memory>
 #include <queue>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_checker.h"
-#include "mojo/public/cpp/bindings/callback.h"
-#include "mojo/public/cpp/bindings/lib/connector.h"
+#include "mojo/public/cpp/bindings/connector.h"
 #include "mojo/public/cpp/bindings/lib/filter_chain.h"
 
 namespace mojo {
@@ -34,14 +34,14 @@ class Router : public MessageReceiverWithResponder {
   ~Router() override;
 
   // Sets the receiver to handle messages read from the message pipe that do
-  // not have the kMessageIsResponse flag set.
+  // not have the Message::kFlagIsResponse flag set.
   void set_incoming_receiver(MessageReceiverWithResponderStatus* receiver) {
     incoming_receiver_ = receiver;
   }
 
   // Sets the error handler to receive notifications when an error is
   // encountered while reading from the pipe or waiting to read from the pipe.
-  void set_connection_error_handler(const Closure& error_handler) {
+  void set_connection_error_handler(const base::Closure& error_handler) {
     error_handler_ = error_handler;
   }
 
@@ -166,7 +166,7 @@ class Router : public MessageReceiverWithResponder {
   // |pending_messages_|.
   bool pending_task_for_messages_;
   bool encountered_error_;
-  Closure error_handler_;
+  base::Closure error_handler_;
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<Router> weak_factory_;
 };

@@ -40,6 +40,7 @@ namespace blink {
 class DOMWindow;
 class EventTarget;
 class ExceptionState;
+class ExecutionContext;
 class Frame;
 class LocalDOMWindow;
 class Location;
@@ -51,6 +52,9 @@ enum SecurityReportingOption {
     ReportSecurityError,
 };
 
+// TODO(yukishiino): Remove the first argument of v8::Isolate*.  These functions
+// just check if it's accessible or not, and never create anything.  So there is
+// no need to pass the isolate.
 class CORE_EXPORT BindingSecurity {
     STATIC_ONLY(BindingSecurity);
 public:
@@ -72,7 +76,9 @@ public:
     static bool shouldAllowAccessTo(v8::Isolate*, const LocalDOMWindow* accessingWindow, const Location* target, ExceptionState&);
     static bool shouldAllowAccessTo(v8::Isolate*, const LocalDOMWindow* accessingWindow, const Location* target, SecurityReportingOption);
     // MainThreadWorkletGlobalScope
-    static bool shouldAllowAccessTo(v8::Isolate*, const LocalDOMWindow* accessingWindow, const MainThreadWorkletGlobalScope* target, SecurityReportingOption);
+    static bool shouldAllowAccessTo(v8::Isolate*, v8::Local<v8::Context>, const ExecutionContext*, const MainThreadWorkletGlobalScope*, SecurityReportingOption);
+
+    static bool shouldAllowAccessTo(v8::Isolate*, v8::Local<v8::Context> calling, v8::Local<v8::Context> target, SecurityReportingOption);
     // Prefer to use the previous overloads instead of falling back to using
     // Frame*.
     static bool shouldAllowAccessToFrame(v8::Isolate*, const LocalDOMWindow* accessingWindow, const Frame* target, SecurityReportingOption); // OBSOLETE

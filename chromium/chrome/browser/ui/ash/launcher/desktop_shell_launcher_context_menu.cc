@@ -5,10 +5,10 @@
 #include "chrome/browser/ui/ash/launcher/desktop_shell_launcher_context_menu.h"
 
 DesktopShellLauncherContextMenu::DesktopShellLauncherContextMenu(
-    ChromeLauncherController* controller,
+    ChromeLauncherControllerImpl* controller,
     const ash::ShelfItem* item,
-    ash::Shelf* shelf)
-    : LauncherContextMenu(controller, item, shelf) {
+    ash::WmShelf* wm_shelf)
+    : LauncherContextMenu(controller, item, wm_shelf) {
   Init();
 }
 

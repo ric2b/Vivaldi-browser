@@ -30,7 +30,6 @@
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
 #include "wtf/HashMap.h"
-#include "wtf/OwnPtr.h"
 
 namespace blink {
 
@@ -124,7 +123,7 @@ public:
     void removeInstanceMapping(SVGElement*);
 
     void setCursorElement(SVGCursorElement*);
-    void setCursorImageValue(CSSCursorImageValue*);
+    void setCursorImageValue(const CSSCursorImageValue*);
 
     SVGElement* correspondingElement() const;
     void setCorrespondingElement(SVGElement*);

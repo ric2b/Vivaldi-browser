@@ -52,7 +52,7 @@
 #endif
 
 #if defined(ENABLE_WEBRTC)
-#include "third_party/libjingle/overrides/init_webrtc.h"
+#include "third_party/webrtc_overrides/init_webrtc.h"
 #endif
 
 #if defined(USE_OZONE)
@@ -90,8 +90,6 @@ int RendererMain(const MainFunctionParams& parameters) {
       kTraceEventRendererProcessSortIndex);
 
   const base::CommandLine& parsed_command_line = parameters.command_line;
-
-  MojoShellConnectionImpl::Create();
 
 #if defined(OS_MACOSX)
   base::mac::ScopedNSAutoreleasePool* pool = parameters.autorelease_pool;
@@ -199,8 +197,6 @@ int RendererMain(const MainFunctionParams& parameters) {
       base::MessageLoop::current()->Run();
       TRACE_EVENT_ASYNC_END0("toplevel", "RendererMain.START_MSG_LOOP", 0);
     }
-
-    MojoShellConnectionImpl::Destroy();
 
 #if defined(LEAK_SANITIZER)
     // Run leak detection before RenderProcessImpl goes out of scope. This helps

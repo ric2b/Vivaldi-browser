@@ -11,8 +11,8 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
-import android.graphics.ColorFilter;
 import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.support.customtabs.CustomTabsIntent;
@@ -35,6 +35,7 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.chrome.browser.util.IntentUtils;
 import org.chromium.sync.PassphraseType;
 import org.chromium.ui.text.SpanApplier;
 import org.chromium.ui.text.SpanApplier.SpanInfo;
@@ -64,7 +65,11 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
     private static final int PASSPHRASE_DIALOG_RESET_LINK = 3;
     private static final int PASSPHRASE_DIALOG_LIMIT = 4;
 
-    private ColorFilter mPasswordEditTextOriginalColorFilter;
+    private EditText mPassphraseEditText;
+    private TextView mVerifyingTextView;
+
+    private Drawable mOriginalBackground;
+    private Drawable mErrorBackground;
 
     /**
      * Create a new instanceof of {@link PassphraseDialogFragment} and set its arguments.
@@ -98,9 +103,11 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
         resetText.setMovementMethod(LinkMovementMethod.getInstance());
         resetText.setVisibility(View.VISIBLE);
 
-        EditText passphrase = (EditText) v.findViewById(R.id.passphrase);
-        passphrase.setHint(R.string.sync_enter_custom_passphrase_hint);
-        passphrase.setOnEditorActionListener(new OnEditorActionListener() {
+        mVerifyingTextView = (TextView) v.findViewById(R.id.verifying);
+
+        mPassphraseEditText = (EditText) v.findViewById(R.id.passphrase);
+        mPassphraseEditText.setHint(R.string.sync_enter_custom_passphrase_hint);
+        mPassphraseEditText.setOnEditorActionListener(new OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 if (actionId == EditorInfo.IME_ACTION_NEXT) {
@@ -109,8 +116,16 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
                 return false;
             }
         });
-        mPasswordEditTextOriginalColorFilter = ApiCompatibilityUtils.getColorFilter(
-                passphrase.getBackground());
+
+        // Create a new background Drawable for the passphrase EditText to use when the user has
+        // entered an invalid potential password.
+        // https://crbug.com/602943 was caused by modifying the Drawable from getBackground()
+        // without taking a copy.
+        mOriginalBackground = mPassphraseEditText.getBackground();
+        mErrorBackground = mOriginalBackground.getConstantState().newDrawable();
+        mErrorBackground.mutate().setColorFilter(
+                ApiCompatibilityUtils.getColor(getResources(), R.color.input_underline_error_color),
+                PorterDuff.Mode.SRC_IN);
 
         final AlertDialog d = new AlertDialog.Builder(getActivity(), R.style.AlertDialogTheme)
                 .setView(v)
@@ -125,6 +140,7 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
                  .setNegativeButton(R.string.cancel, this)
                  .setTitle(R.string.sign_in_google_account)
                  .create();
+
         d.getDelegate().setHandleNativeActionModesEnabled(false);
         d.setOnShowListener(new DialogInterface.OnShowListener() {
             @Override
@@ -146,6 +162,12 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
         if (which == AlertDialog.BUTTON_NEGATIVE) {
             handleCancel();
         }
+    }
+
+    @Override
+    public void onResume() {
+        resetPassphraseBoxColor();
+        super.onResume();
     }
 
     private String getPromptText() {
@@ -179,8 +201,10 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
                         recordPassphraseDialogDismissal(PASSPHRASE_DIALOG_RESET_LINK);
                         Uri syncDashboardUrl = Uri.parse(
                                 context.getText(R.string.sync_dashboard_url).toString());
-                        Intent intent = CustomTabsIntent.getViewIntentWithNoSession(
-                                BuildInfo.getPackageName(context), syncDashboardUrl);
+                        Intent intent = new Intent(Intent.ACTION_VIEW, syncDashboardUrl);
+                        intent.setPackage(BuildInfo.getPackageName(context));
+                        IntentUtils.safePutBinderExtra(
+                                intent, CustomTabsIntent.EXTRA_SESSION, null);
                         context.startActivity(intent);
                     }
                 }));
@@ -190,12 +214,10 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
      * @return whether the incorrect passphrase text is currently visible.
      */
     private boolean isIncorrectPassphraseVisible() {
-        // Check if the verifying TextView is currently showing the incorrect
-        // passphrase text.
-        TextView verifying = (TextView) getDialog().findViewById(R.id.verifying);
-        String incorrectPassphraseMessage = getResources().getString(
-                R.string.sync_passphrase_incorrect);
-        String verifyMessage = verifying.getText().toString();
+        // Check if the verifying TextView is currently showing the incorrect passphrase text.
+        String incorrectPassphraseMessage =
+                getResources().getString(R.string.sync_passphrase_incorrect);
+        String verifyMessage = mVerifyingTextView.getText().toString();
         return verifyMessage.equals(incorrectPassphraseMessage);
     }
 
@@ -208,19 +230,10 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
     }
 
     private void handleSubmit() {
-        TextView verifying = (TextView) getDialog().findViewById(R.id.verifying);
-        verifying.setText(R.string.sync_verifying);
+        resetPassphraseBoxColor();
+        mVerifyingTextView.setText(R.string.sync_verifying);
 
-        EditText passphraseEditText = (EditText) getDialog().findViewById(R.id.passphrase);
-        if (mPasswordEditTextOriginalColorFilter != null) {
-            // If the color filter is null, the EditText underline would possibly remain red from a
-            // previous error submission, but once the password is accepted, we dismiss the dialog
-            // so this really shouldn't be visible beyond some amount of UI lag.
-            passphraseEditText.getBackground().mutate().setColorFilter(
-                    mPasswordEditTextOriginalColorFilter);
-        }
-        String passphrase = passphraseEditText.getText().toString();
-
+        String passphrase = mPassphraseEditText.getText().toString();
         boolean success = getListener().onPassphraseEntered(passphrase);
         if (success) {
             recordPassphraseDialogDismissal(PASSPHRASE_DIALOG_OK);
@@ -241,14 +254,14 @@ public class PassphraseDialogFragment extends DialogFragment implements OnClickL
      * Notify this fragment that the passphrase the user entered is incorrect.
      */
     private void invalidPassphrase() {
-        int errorColor = ApiCompatibilityUtils.getColor(
-                getResources(), R.color.input_underline_error_color);
-        TextView verifying = (TextView) getDialog().findViewById(R.id.verifying);
-        verifying.setText(R.string.sync_passphrase_incorrect);
-        verifying.setTextColor(errorColor);
+        mVerifyingTextView.setText(R.string.sync_passphrase_incorrect);
+        mVerifyingTextView.setTextColor(ApiCompatibilityUtils.getColor(getResources(),
+                R.color.input_underline_error_color));
 
-        EditText passphraseEditText = (EditText) getDialog().findViewById(R.id.passphrase);
-        passphraseEditText.getBackground().mutate().setColorFilter(
-                errorColor, PorterDuff.Mode.SRC_IN);
+        mPassphraseEditText.setBackground(mErrorBackground);
+    }
+
+    private void resetPassphraseBoxColor() {
+        mPassphraseEditText.setBackground(mOriginalBackground);
     }
 }

@@ -1,14 +1,21 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
-<link rel="import" href="chrome://md-settings/on_startup_page/startup_url_dialog.html">
-<link rel="import" href="chrome://md-settings/on_startup_page/startup_url_entry.html">
-<link rel="import" href="chrome://md-settings/on_startup_page/startup_urls_page_browser_proxy.html">
+<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="/on_startup_page/startup_url_dialog.html">
+<link rel="import" href="/on_startup_page/startup_url_entry.html">
+<link rel="import" href="/on_startup_page/startup_urls_page_browser_proxy.html">
 
 <dom-module id="settings-startup-urls-page">
-  <link rel="import" type="css" href="on_startup_shared.css">
   <template>
-    <style include="settings-shared"></style>
+    <style include="settings-shared">
+      paper-radio-button {
+        display: block;
+      }
+
+      .list-button {
+        @apply(--settings-actionable);
+      }
+    </style>
     <div class="list-frame vertical-list">
       <template is="dom-repeat" items="[[startupPages_]]">
         <settings-startup-url-entry model="[[item]]">

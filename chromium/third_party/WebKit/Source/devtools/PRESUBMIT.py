@@ -36,6 +36,29 @@ import sys
 
 compile_note = "Be sure to run your patch by the compile_frontend.py script prior to committing!"
 
+
+def _CheckDevtoolsStyle(input_api, output_api):
+    local_paths = [f.AbsoluteLocalPath() for f in input_api.AffectedFiles() if f.Action() != "D"]
+
+    devtools_root = input_api.PresubmitLocalPath()
+    devtools_front_end = input_api.os_path.join(devtools_root, "front_end")
+    affected_front_end_files = [file_name for file_name in local_paths if devtools_front_end in file_name and file_name.endswith(".js")]
+    affected_front_end_files = [input_api.os_path.relpath(file_name, devtools_root) for file_name in affected_front_end_files]
+    if len(affected_front_end_files) > 0:
+        lint_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
+                                           "scripts", "lint_javascript.py")
+        process = input_api.subprocess.Popen(
+            [input_api.python_executable, lint_path] + affected_front_end_files,
+            stdout=input_api.subprocess.PIPE,
+            stderr=input_api.subprocess.STDOUT)
+        out, _ = process.communicate()
+        if process.returncode != 0:
+            return [output_api.PresubmitError(out)]
+        if "NOTE" in out:
+            return [output_api.PresubmitNotifyResult(out)]
+    return []
+
+
 def _CompileDevtoolsFrontend(input_api, output_api):
     local_paths = [f.LocalPath() for f in input_api.AffectedFiles()]
 
@@ -48,7 +71,8 @@ def _CompileDevtoolsFrontend(input_api, output_api):
     if (any(devtools_front_end in path for path in local_paths) or
         any("protocol.json" in path for path in local_paths) or
         any("compile_frontend.py" in path for path in local_paths) or
-        any("InjectedScriptSource.js" in path for path in local_paths)):
+        any("InjectedScriptSource.js" in path for path in local_paths) or
+        any("DebuggerScript.js" in path for path in local_paths)):
         lint_path = input_api.os_path.join(input_api.PresubmitLocalPath(),
             "scripts", "compile_frontend.py")
         out, _ = input_api.subprocess.Popen(
@@ -129,6 +153,7 @@ def _CheckCSSViolations(input_api, output_api):
 
 def CheckChangeOnUpload(input_api, output_api):
     results = []
+    results.extend(_CheckDevtoolsStyle(input_api, output_api))
     results.extend(_CompileDevtoolsFrontend(input_api, output_api))
     results.extend(_CheckConvertSVGToPNGHashes(input_api, output_api))
     results.extend(_CheckOptimizePNGHashes(input_api, output_api))

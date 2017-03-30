@@ -5,6 +5,7 @@
 #include "ui/gl/gl_surface_egl_x11.h"
 
 #include "ui/events/platform/platform_event_source.h"
+#include "ui/gfx/x/x11_types.h"
 #include "ui/gl/egl_util.h"
 
 extern "C" {
@@ -15,7 +16,7 @@ using ui::GetLastEGLErrorString;
 using ui::PlatformEvent;
 using ui::PlatformEventSource;
 
-namespace gfx {
+namespace gl {
 
 NativeViewGLSurfaceEGLX11::NativeViewGLSurfaceEGLX11(EGLNativeWindowType window)
     : NativeViewGLSurfaceEGL(0),
@@ -177,4 +178,8 @@ NativeViewGLSurfaceEGLX11::~NativeViewGLSurfaceEGLX11() {
   Destroy();
 }
 
-}  // namespace gfx
+EGLNativeDisplayType GetPlatformDefaultEGLNativeDisplay() {
+  return gfx::GetXDisplay();
+}
+
+}  // namespace gl

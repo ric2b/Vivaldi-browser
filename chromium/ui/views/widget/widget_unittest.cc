@@ -7,6 +7,7 @@
 #include <set>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
@@ -45,6 +46,11 @@
 
 #if defined(OS_MACOSX)
 #include "base/mac/mac_util.h"
+#endif
+
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#include "ui/base/x/x11_util_internal.h"  // nogncheck
+#include "ui/gfx/x/x11_switches.h"        // nogncheck
 #endif
 
 namespace views {
@@ -650,7 +656,7 @@ class WidgetWithDestroyedNativeViewTest : public ViewsTestBase {
     widget->Restore();
     widget->IsMaximized();
     widget->IsFullscreen();
-    widget->SetOpacity(0);
+    widget->SetOpacity(0.f);
     widget->FlashFrame(true);
     widget->IsVisible();
     widget->GetThemeProvider();
@@ -888,10 +894,14 @@ TEST_F(WidgetObserverTest, WidgetBoundsChangedNative) {
 
   EXPECT_FALSE(widget_bounds_changed());
 
+  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+
+  // Use an origin within the work area since platforms (e.g. Mac) may move a
+  // window into the work area when showing, triggering a bounds change.
+  params.bounds = gfx::Rect(50, 50, 100, 100);
+
   // Init causes a bounds change, even while not showing. Note some platforms
   // cause a bounds change even when the bounds are empty. Mac does not.
-  Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
-  params.bounds = gfx::Rect(0, 0, 100, 100);
   widget->Init(params);
   EXPECT_TRUE(widget_bounds_changed());
   reset();
@@ -920,6 +930,20 @@ TEST_F(WidgetObserverTest, WidgetBoundsChangedNative) {
 
   // Resize to the same thing while shown does nothing.
   widget->SetSize(gfx::Size(170, 100));
+  EXPECT_FALSE(widget_bounds_changed());
+  reset();
+
+  // Move, but don't change the size.
+  widget->SetBounds(gfx::Rect(110, 110, 170, 100));
+  // Currently fails on Mus. http://crbug.com/622575.
+  if (IsMus())
+    EXPECT_FALSE(widget_bounds_changed());
+  else
+    EXPECT_TRUE(widget_bounds_changed());
+  reset();
+
+  // Moving to the same place does nothing.
+  widget->SetBounds(gfx::Rect(110, 110, 170, 100));
   EXPECT_FALSE(widget_bounds_changed());
   reset();
 
@@ -1315,6 +1339,26 @@ class DesktopAuraTestValidPaintWidget : public views::Widget {
 
   void InitForTest(Widget::InitParams create_params);
 
+  bool ReadReceivedPaintAndReset() {
+    bool result = received_paint_;
+    received_paint_ = false;
+    return result;
+  }
+
+  bool received_paint_while_hidden() const {
+    return received_paint_while_hidden_;
+  }
+
+  void WaitUntilPaint() {
+    if (received_paint_)
+      return;
+    base::RunLoop runloop;
+    quit_closure_ = runloop.QuitClosure();
+    runloop.Run();
+    quit_closure_ = base::Closure();
+  }
+
+  // views::Widget:
   void Show() override {
     expect_paint_ = true;
     views::Widget::Show();
@@ -1336,22 +1380,15 @@ class DesktopAuraTestValidPaintWidget : public views::Widget {
     if (!expect_paint_)
       received_paint_while_hidden_ = true;
     views::Widget::OnNativeWidgetPaint(context);
-  }
-
-  bool ReadReceivedPaintAndReset() {
-    bool result = received_paint_;
-    received_paint_ = false;
-    return result;
-  }
-
-  bool received_paint_while_hidden() const {
-    return received_paint_while_hidden_;
+    if (!quit_closure_.is_null())
+      quit_closure_.Run();
   }
 
  private:
   bool received_paint_;
   bool expect_paint_;
   bool received_paint_while_hidden_;
+  base::Closure quit_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(DesktopAuraTestValidPaintWidget);
 };
@@ -1371,17 +1408,13 @@ void DesktopAuraTestValidPaintWidget::InitForTest(InitParams init_params) {
   Activate();
 }
 
-#if defined(OS_LINUX)
-// Flaky on Linux rel ng: https://crbug.com/596039.
-#define MAYBE_DesktopNativeWidgetNoPaintAfterCloseTest DISABLED_DesktopNativeWidgetNoPaintAfterCloseTest
-#else
-#define MAYBE_DesktopNativeWidgetNoPaintAfterCloseTest DesktopNativeWidgetNoPaintAfterCloseTest
-#endif
-
-TEST_F(WidgetTest, MAYBE_DesktopNativeWidgetNoPaintAfterCloseTest) {
+TEST_F(WidgetTest, DesktopNativeWidgetNoPaintAfterCloseTest) {
+  // TODO(sad): Desktop widgets do not work well in mus https://crbug.com/616551
+  if (IsMus())
+    return;
   DesktopAuraTestValidPaintWidget widget;
   widget.InitForTest(CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS));
-  RunPendingMessages();
+  widget.WaitUntilPaint();
   EXPECT_TRUE(widget.ReadReceivedPaintAndReset());
   widget.SchedulePaintInRect(widget.GetRestoredBounds());
   widget.Close();
@@ -1390,15 +1423,13 @@ TEST_F(WidgetTest, MAYBE_DesktopNativeWidgetNoPaintAfterCloseTest) {
   EXPECT_FALSE(widget.received_paint_while_hidden());
 }
 
-#if defined(OS_LINUX)
-#define MAYBE_DesktopNativeWidgetNoPaintAfterHideTest DISABLED_DesktopNativeWidgetNoPaintAfterHideTest
-#else
-#define MAYBE_DesktopNativeWidgetNoPaintAfterHideTest DesktopNativeWidgetNoPaintAfterHideTest
-#endif
-TEST_F(WidgetTest, MAYBE_DesktopNativeWidgetNoPaintAfterHideTest) {
+TEST_F(WidgetTest, DesktopNativeWidgetNoPaintAfterHideTest) {
+  // TODO(sad): Desktop widgets do not work well in mus https://crbug.com/616551
+  if (IsMus())
+    return;
   DesktopAuraTestValidPaintWidget widget;
   widget.InitForTest(CreateParams(Widget::InitParams::TYPE_WINDOW_FRAMELESS));
-  RunPendingMessages();
+  widget.WaitUntilPaint();
   EXPECT_TRUE(widget.ReadReceivedPaintAndReset());
   widget.SchedulePaintInRect(widget.GetRestoredBounds());
   widget.Hide();
@@ -1488,23 +1519,14 @@ TEST_F(WidgetTest, GestureScrollEventDispatching) {
 
   {
     ui::GestureEvent begin(
-        5,
-        5,
-        0,
-        base::TimeDelta(),
+        5, 5, 0, base::TimeTicks(),
         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN));
     widget->OnGestureEvent(&begin);
     ui::GestureEvent update(
-        25,
-        15,
-        0,
-        base::TimeDelta(),
+        25, 15, 0, base::TimeTicks(),
         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE, 20, 10));
     widget->OnGestureEvent(&update);
-    ui::GestureEvent end(25,
-                         15,
-                         0,
-                         base::TimeDelta(),
+    ui::GestureEvent end(25, 15, 0, base::TimeTicks(),
                          ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_END));
     widget->OnGestureEvent(&end);
 
@@ -1515,23 +1537,14 @@ TEST_F(WidgetTest, GestureScrollEventDispatching) {
 
   {
     ui::GestureEvent begin(
-        65,
-        5,
-        0,
-        base::TimeDelta(),
+        65, 5, 0, base::TimeTicks(),
         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_BEGIN));
     widget->OnGestureEvent(&begin);
     ui::GestureEvent update(
-        85,
-        15,
-        0,
-        base::TimeDelta(),
+        85, 15, 0, base::TimeTicks(),
         ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_UPDATE, 20, 10));
     widget->OnGestureEvent(&update);
-    ui::GestureEvent end(85,
-                         15,
-                         0,
-                         base::TimeDelta(),
+    ui::GestureEvent end(85, 15, 0, base::TimeTicks(),
                          ui::GestureEventDetails(ui::ET_GESTURE_SCROLL_END));
     widget->OnGestureEvent(&end);
 
@@ -2260,10 +2273,7 @@ TEST_F(WidgetTest, MAYBE_DisableTestRootViewHandlersWhenHidden) {
   // Check RootView::gesture_handler_.
   widget->Show();
   EXPECT_EQ(NULL, GetGestureHandler(root_view));
-  ui::GestureEvent tap_down(15,
-                            15,
-                            0,
-                            base::TimeDelta(),
+  ui::GestureEvent tap_down(15, 15, 0, base::TimeTicks(),
                             ui::GestureEventDetails(ui::ET_GESTURE_TAP_DOWN));
   widget->OnGestureEvent(&tap_down);
   EXPECT_EQ(view, GetGestureHandler(root_view));
@@ -2280,11 +2290,11 @@ class GestureEventForTest : public ui::GestureEvent {
       : GestureEvent(x,
                      y,
                      0,
-                     base::TimeDelta(),
+                     base::TimeTicks(),
                      ui::GestureEventDetails(type)) {}
 
   GestureEventForTest(ui::GestureEventDetails details, int x, int y)
-      : GestureEvent(x, y, 0, base::TimeDelta(), details) {}
+      : GestureEvent(x, y, 0, base::TimeTicks(), details) {}
 };
 
 // Tests that the |gesture_handler_| member in RootView is always NULL
@@ -3157,7 +3167,13 @@ class FullscreenAwareFrame : public views::NonClientFrameView {
 
 // Tests that frame Layout is called when a widget goes fullscreen without
 // changing its size or title.
-TEST_F(WidgetTest, FullscreenFrameLayout) {
+// Fails on Mac, but only on bots. http://crbug.com/607403.
+#if defined(OS_MACOSX)
+#define MAYBE_FullscreenFrameLayout DISABLED_FullscreenFrameLayout
+#else
+#define MAYBE_FullscreenFrameLayout FullscreenFrameLayout
+#endif
+TEST_F(WidgetTest, MAYBE_FullscreenFrameLayout) {
   WidgetAutoclosePtr widget(CreateTopLevelPlatformWidget());
   FullscreenAwareFrame* frame = new FullscreenAwareFrame(widget.get());
   widget->non_client_view()->SetFrameView(frame);  // Owns |frame|.
@@ -3643,6 +3659,9 @@ private:
 // under the currently active modal top-level window. In this instance, the
 // remaining top-level windows should be re-enabled.
 TEST_F(WidgetTest, WindowModalOwnerDestroyedEnabledTest) {
+  // Modality etc. are controlled by mus.
+  if (IsMus())
+    return;
   // top_level_widget owns owner_dialog_widget which owns owned_dialog_widget.
   Widget top_level_widget;
   Widget owner_dialog_widget;
@@ -3715,6 +3734,77 @@ TEST_F(WidgetTest, WindowModalOwnerDestroyedEnabledTest) {
 }
 
 #endif  // defined(OS_WIN)
+
+#if !defined(OS_CHROMEOS)
+
+namespace {
+
+void InitializeWidgetForOpacity(
+    Widget& widget,
+    Widget::InitParams init_params,
+    const Widget::InitParams::WindowOpacity opacity) {
+#if defined(USE_X11)
+  // On Linux, transparent visuals is currently not activated by default.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  command_line->AppendSwitch(switches::kEnableTransparentVisuals);
+
+  int depth = 0;
+  ui::ChooseVisualForWindow(NULL, &depth);
+  EXPECT_EQ(depth, 32);
+#endif
+
+  init_params.opacity = opacity;
+  init_params.show_state = ui::SHOW_STATE_NORMAL;
+  init_params.bounds = gfx::Rect(0, 0, 500, 500);
+  init_params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  init_params.native_widget =
+      CreatePlatformDesktopNativeWidgetImpl(init_params, &widget, nullptr);
+  widget.Init(init_params);
+
+#if defined(USE_X11)
+  EXPECT_TRUE(widget.IsTranslucentWindowOpacitySupported());
+#endif
+}
+
+}  // namespace
+
+// Test opacity when compositing is enabled.
+TEST_F(WidgetTest, Transparency_DesktopWidgetInferOpacity) {
+  Widget widget;
+  InitializeWidgetForOpacity(widget,
+                             CreateParams(Widget::InitParams::TYPE_WINDOW),
+                             Widget::InitParams::INFER_OPACITY);
+  EXPECT_EQ(IsNativeWindowTransparent(widget.GetNativeWindow()),
+            widget.ShouldWindowContentsBeTransparent());
+}
+
+TEST_F(WidgetTest, Transparency_DesktopWidgetOpaque) {
+  Widget widget;
+  InitializeWidgetForOpacity(widget,
+                             CreateParams(Widget::InitParams::TYPE_WINDOW),
+                             Widget::InitParams::OPAQUE_WINDOW);
+  EXPECT_EQ(IsNativeWindowTransparent(widget.GetNativeWindow()),
+            widget.ShouldWindowContentsBeTransparent());
+}
+
+// Failing on Mac. http://cbrug.com/623421
+#if defined(OS_MACOSX)
+#define MAYBE_Transparency_DesktopWidgetTranslucent \
+    DISABLED_Transparency_DesktopWidgetTranslucent
+#else
+#define MAYBE_Transparency_DesktopWidgetTranslucent \
+    Transparency_DesktopWidgetTranslucent
+#endif
+TEST_F(WidgetTest, MAYBE_Transparency_DesktopWidgetTranslucent) {
+  Widget widget;
+  InitializeWidgetForOpacity(widget,
+                             CreateParams(Widget::InitParams::TYPE_WINDOW),
+                             Widget::InitParams::TRANSLUCENT_WINDOW);
+  EXPECT_EQ(IsNativeWindowTransparent(widget.GetNativeWindow()),
+            widget.ShouldWindowContentsBeTransparent());
+}
+
+#endif  // !defined(OS_CHROMEOS)
 
 }  // namespace test
 }  // namespace views

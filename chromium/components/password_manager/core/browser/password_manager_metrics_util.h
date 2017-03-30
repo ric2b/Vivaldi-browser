@@ -53,11 +53,6 @@ enum UIDismissalReason {
   AUTO_SIGNIN_TOAST_CLICKED_OBSOLETE,  // obsolete.
   CLICKED_BRAND_NAME,
   NUM_UI_RESPONSES,
-
-  // If we add the omnibox icon _without_ intending to display the bubble,
-  // we actually call Close() after creating the bubble view. We don't want
-  // that to count in the metrics, so we need this placeholder value.
-  NOT_DISPLAYED
 };
 
 enum FormDeserializationStatus {
@@ -135,6 +130,21 @@ enum AccountChooserUserAction {
   ACCOUNT_CHOOSER_ACTION_COUNT
 };
 
+enum SyncSignInUserAction {
+  CHROME_SIGNIN_DISMISSED,
+  CHROME_SIGNIN_OK,
+  CHROME_SIGNIN_CANCEL,
+  CHROME_SIGNIN_ACTION_COUNT
+};
+
+enum AccountChooserUsabilityMetric {
+  ACCOUNT_CHOOSER_LOOKS_OK,
+  ACCOUNT_CHOOSER_EMPTY_USERNAME,
+  ACCOUNT_CHOOSER_DUPLICATES,
+  ACCOUNT_CHOOSER_EMPTY_USERNAME_AND_DUPLICATES,
+  ACCOUNT_CHOOSER_USABILITY_COUNT,
+};
+
 // A version of the UMA_HISTOGRAM_BOOLEAN macro that allows the |name|
 // to vary over the program's runtime.
 void LogUMAHistogramBoolean(const std::string& name, bool sample);
@@ -175,6 +185,12 @@ void LogAutoSigninPromoUserAction(AutoSigninPromoUserAction action);
 // Log a user action on showing the account chooser for one or many accounts.
 void LogAccountChooserUserActionOneAccount(AccountChooserUserAction action);
 void LogAccountChooserUserActionManyAccounts(AccountChooserUserAction action);
+
+// Log a user action on showing the Chrome sign in promo.
+void LogAutoSigninPromoUserAction(SyncSignInUserAction action);
+
+// Log if the account chooser has empty username or duplicate usernames.
+void LogAccountChooserUsability(AccountChooserUsabilityMetric usability);
 
 }  // namespace metrics_util
 

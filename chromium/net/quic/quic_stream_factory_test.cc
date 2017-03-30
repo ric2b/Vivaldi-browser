@@ -5,12 +5,13 @@
 #include "net/quic/quic_stream_factory.h"
 
 #include <ostream>
+#include <utility>
 
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/http/http_response_headers.h"
@@ -26,9 +27,7 @@
 #include "net/quic/crypto/quic_encrypter.h"
 #include "net/quic/crypto/quic_server_info.h"
 #include "net/quic/quic_client_promised_info.h"
-#include "net/quic/quic_http_stream.h"
 #include "net/quic/quic_http_utils.h"
-#include "net/quic/quic_server_id.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/mock_crypto_client_stream_factory.h"
 #include "net/quic/test_tools/mock_random.h"
@@ -43,13 +42,29 @@
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using base::StringPiece;
 using std::string;
 using std::vector;
 
 namespace net {
+
+namespace {
+
+class MockSSLConfigService : public SSLConfigService {
+ public:
+  MockSSLConfigService() {}
+
+  void GetSSLConfig(SSLConfig* config) override { *config = config_; }
+
+ private:
+  ~MockSSLConfigService() override {}
+
+  SSLConfig config_;
+};
+
+}  // namespace
 
 namespace test {
 
@@ -88,8 +103,8 @@ struct TestParams {
   bool enable_connection_racing;
 };
 
-std::vector<TestParams> GetTestParams() {
-  std::vector<TestParams> params;
+vector<TestParams> GetTestParams() {
+  vector<TestParams> params;
   QuicVersionVector all_supported_versions = QuicSupportedVersions();
   for (const QuicVersion version : all_supported_versions) {
     params.push_back(TestParams{version, false});
@@ -127,8 +142,8 @@ struct PoolingTestParams {
   DestinationType destination_type;
 };
 
-std::vector<PoolingTestParams> GetPoolingTestParams() {
-  std::vector<PoolingTestParams> params;
+vector<PoolingTestParams> GetPoolingTestParams() {
+  vector<PoolingTestParams> params;
   QuicVersionVector all_supported_versions = QuicSupportedVersions();
   for (const QuicVersion version : all_supported_versions) {
     params.push_back(PoolingTestParams{version, false, SAME_AS_FIRST});
@@ -215,14 +230,14 @@ class MockNetworkChangeNotifier : public NetworkChangeNotifier {
     NetworkChangeNotifier::NotifyObserversOfSpecificNetworkChange(
         NetworkChangeNotifier::SOON_TO_DISCONNECT, network);
     // Spin the message loop so the notification is delivered.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void NotifyNetworkDisconnected(NetworkChangeNotifier::NetworkHandle network) {
     NetworkChangeNotifier::NotifyObserversOfSpecificNetworkChange(
         NetworkChangeNotifier::DISCONNECTED, network);
     // Spin the message loop so the notification is delivered.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
  private:
@@ -253,7 +268,8 @@ class ScopedMockNetworkChangeNotifier {
 class QuicStreamFactoryTestBase {
  protected:
   QuicStreamFactoryTestBase(QuicVersion version, bool enable_connection_racing)
-      : random_generator_(0),
+      : ssl_config_service_(new MockSSLConfigService),
+        random_generator_(0),
         clock_(new MockClock()),
         runner_(new TestTaskRunner(clock_)),
         version_(version),
@@ -314,12 +330,13 @@ class QuicStreamFactoryTestBase {
   void Initialize() {
     DCHECK(!factory_);
     factory_.reset(new QuicStreamFactory(
-        &host_resolver_, &socket_factory_, http_server_properties_.GetWeakPtr(),
-        cert_verifier_.get(), nullptr, channel_id_service_.get(),
+        net_log_.net_log(), &host_resolver_, ssl_config_service_.get(),
+        &socket_factory_, &http_server_properties_, cert_verifier_.get(),
+        &ct_policy_enforcer_, channel_id_service_.get(),
         &transport_security_state_, cert_transparency_verifier_.get(),
         /*SocketPerformanceWatcherFactory*/ nullptr,
         &crypto_client_stream_factory_, &random_generator_, clock_,
-        kDefaultMaxPacketSize, std::string(), SupportedVersions(version_),
+        kDefaultMaxPacketSize, string(), SupportedVersions(version_),
         enable_port_selection_, always_require_handshake_confirmation_,
         disable_connection_pooling_, load_server_info_timeout_srtt_multiplier_,
         enable_connection_racing_, enable_non_blocking_io_, disable_disk_cache_,
@@ -352,14 +369,14 @@ class QuicStreamFactoryTestBase {
   }
 
   bool HasActiveSession(const HostPortPair& host_port_pair) {
-    return QuicStreamFactoryPeer::HasActiveSession(factory_.get(),
-                                                   host_port_pair);
+    QuicServerId server_id(host_port_pair, PRIVACY_MODE_DISABLED);
+    return QuicStreamFactoryPeer::HasActiveSession(factory_.get(), server_id);
   }
 
   QuicChromiumClientSession* GetActiveSession(
       const HostPortPair& host_port_pair) {
-    return QuicStreamFactoryPeer::GetActiveSession(factory_.get(),
-                                                   host_port_pair);
+    QuicServerId server_id(host_port_pair, PRIVACY_MODE_DISABLED);
+    return QuicStreamFactoryPeer::GetActiveSession(factory_.get(), server_id);
   }
 
   std::unique_ptr<QuicHttpStream> CreateFromSession(
@@ -443,7 +460,7 @@ class QuicStreamFactoryTestBase {
   void NotifyIPAddressChanged() {
     NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
     // Spin the message loop so the notification is delivered.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   std::unique_ptr<QuicEncryptedPacket> ConstructGetRequestPacket(
@@ -458,7 +475,7 @@ class QuicStreamFactoryTestBase {
     size_t spdy_headers_frame_len;
     return client_maker_.MakeRequestHeadersPacket(
         packet_number, stream_id, should_include_version, fin, priority,
-        headers, &spdy_headers_frame_len);
+        std::move(headers), &spdy_headers_frame_len);
   }
 
   std::unique_ptr<QuicEncryptedPacket> ConstructOkResponsePacket(
@@ -469,11 +486,12 @@ class QuicStreamFactoryTestBase {
     SpdyHeaderBlock headers = server_maker_.GetResponseHeaders("200 OK");
     size_t spdy_headers_frame_len;
     return server_maker_.MakeResponseHeadersPacket(
-        packet_number, stream_id, should_include_version, fin, headers,
-        &spdy_headers_frame_len);
+        packet_number, stream_id, should_include_version, fin,
+        std::move(headers), &spdy_headers_frame_len);
   }
 
   MockHostResolver host_resolver_;
+  scoped_refptr<SSLConfigService> ssl_config_service_;
   MockClientSocketFactory socket_factory_;
   MockCryptoClientStreamFactory crypto_client_stream_factory_;
   MockRandom random_generator_;
@@ -487,6 +505,7 @@ class QuicStreamFactoryTestBase {
   std::unique_ptr<ChannelIDService> channel_id_service_;
   TransportSecurityState transport_security_state_;
   std::unique_ptr<CTVerifier> cert_transparency_verifier_;
+  CTPolicyEnforcer ct_policy_enforcer_;
   std::unique_ptr<ScopedMockNetworkChangeNotifier>
       scoped_mock_network_change_notifier_;
   std::unique_ptr<QuicStreamFactory> factory_;
@@ -613,17 +632,10 @@ TEST_P(QuicStreamFactoryTest, CreateZeroRttPost) {
                                            "192.168.0.1", "");
 
   QuicStreamRequest request(factory_.get());
-  // Posts require handshake confirmation, so this will return asynchronously.
-  EXPECT_EQ(ERR_IO_PENDING,
-            request.Request(host_port_pair_, privacy_mode_,
-                            /*cert_verify_flags=*/0, url_, "POST", net_log_,
-                            callback_.callback()));
+  EXPECT_EQ(OK, request.Request(host_port_pair_, privacy_mode_,
+                                /*cert_verify_flags=*/0, url_, "POST", net_log_,
+                                callback_.callback()));
 
-  // Confirm the handshake and verify that the stream is created.
-  crypto_client_stream_factory_.last_stream()->SendOnCryptoHandshakeEvent(
-      QuicSession::HANDSHAKE_CONFIRMED);
-
-  EXPECT_EQ(OK, callback_.WaitForResult());
   std::unique_ptr<QuicHttpStream> stream = request.CreateStream();
   EXPECT_TRUE(stream.get());
   EXPECT_TRUE(socket_data.AllReadDataConsumed());
@@ -1132,7 +1144,7 @@ TEST_P(QuicStreamFactoryTest, MaxOpenStream) {
   socket_factory_.AddSocketDataProvider(&socket_data);
 
   HttpRequestInfo request_info;
-  std::vector<QuicHttpStream*> streams;
+  vector<QuicHttpStream*> streams;
   // The MockCryptoClientStream sets max_open_streams to be
   // kDefaultMaxStreamsPerConnection / 2.
   for (size_t i = 0; i < kDefaultMaxStreamsPerConnection / 2; i++) {
@@ -1254,7 +1266,7 @@ TEST_P(QuicStreamFactoryTest, CreateConsistentEphemeralPort) {
   // default host.  Verify that the default host gets a consistent ephemeral
   // port, that is different from the other host's connection.
 
-  std::string other_server_name = kServer2HostName;
+  string other_server_name = kServer2HostName;
   EXPECT_NE(kDefaultServerHostName, other_server_name);
   HostPortPair host_port_pair2(other_server_name, kDefaultServerPort);
 
@@ -1286,7 +1298,7 @@ TEST_P(QuicStreamFactoryTest, CloseAllSessions) {
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
   std::unique_ptr<QuicEncryptedPacket> rst(ConstructClientRstPacket());
-  std::vector<MockWrite> writes;
+  vector<MockWrite> writes;
   writes.push_back(MockWrite(ASYNC, rst->data(), rst->length(), 1));
   SequencedSocketData socket_data(reads, arraysize(reads),
                                   writes.empty() ? nullptr : &writes[0],
@@ -1342,7 +1354,7 @@ TEST_P(QuicStreamFactoryTest, OnIPAddressChanged) {
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
   std::unique_ptr<QuicEncryptedPacket> rst(ConstructClientRstPacket());
-  std::vector<MockWrite> writes;
+  vector<MockWrite> writes;
   writes.push_back(MockWrite(ASYNC, rst->data(), rst->length(), 1));
   SequencedSocketData socket_data(reads, arraysize(reads),
                                   writes.empty() ? nullptr : &writes[0],
@@ -1419,7 +1431,7 @@ TEST_P(QuicStreamFactoryTest, OnNetworkChangeSoonToDisconnect) {
   // Cause QUIC stream to be created.
   HttpRequestInfo request_info;
   request_info.method = "GET";
-  request_info.url = GURL("https://www.example.org/");
+  request_info.url = url_;
   EXPECT_EQ(OK, stream->InitializeStream(&request_info, DEFAULT_PRIORITY,
                                          net_log_, CompletionCallback()));
 
@@ -1531,7 +1543,7 @@ TEST_P(QuicStreamFactoryTest, OnNetworkChangeDisconnected) {
   // Cause QUIC stream to be created.
   HttpRequestInfo request_info;
   request_info.method = "GET";
-  request_info.url = GURL("https://www.example.org/");
+  request_info.url = url_;
   EXPECT_EQ(OK, stream->InitializeStream(&request_info, DEFAULT_PRIORITY,
                                          net_log_, CompletionCallback()));
 
@@ -2118,7 +2130,7 @@ TEST_P(QuicStreamFactoryTest, MigrateSessionEarly) {
   // Cause QUIC stream to be created.
   HttpRequestInfo request_info;
   request_info.method = "GET";
-  request_info.url = GURL("https://www.example.org/");
+  request_info.url = url_;
   EXPECT_EQ(OK, stream->InitializeStream(&request_info, DEFAULT_PRIORITY,
                                          net_log_, CompletionCallback()));
 
@@ -2385,7 +2397,7 @@ TEST_P(QuicStreamFactoryTest, OnSSLConfigChanged) {
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
   std::unique_ptr<QuicEncryptedPacket> rst(ConstructClientRstPacket());
-  std::vector<MockWrite> writes;
+  vector<MockWrite> writes;
   writes.push_back(MockWrite(ASYNC, rst->data(), rst->length(), 1));
   SequencedSocketData socket_data(reads, arraysize(reads),
                                   writes.empty() ? nullptr : &writes[0],
@@ -2408,7 +2420,7 @@ TEST_P(QuicStreamFactoryTest, OnSSLConfigChanged) {
   EXPECT_EQ(OK, stream->InitializeStream(&request_info, DEFAULT_PRIORITY,
                                          net_log_, CompletionCallback()));
 
-  factory_->OnSSLConfigChanged();
+  ssl_config_service_->NotifySSLConfigChange();
   EXPECT_EQ(ERR_CERT_DATABASE_CHANGED,
             stream->ReadResponseHeaders(callback_.callback()));
   EXPECT_FALSE(factory_->require_confirmation());
@@ -2440,7 +2452,7 @@ TEST_P(QuicStreamFactoryTest, OnCertAdded) {
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
   std::unique_ptr<QuicEncryptedPacket> rst(ConstructClientRstPacket());
-  std::vector<MockWrite> writes;
+  vector<MockWrite> writes;
   writes.push_back(MockWrite(ASYNC, rst->data(), rst->length(), 1));
   SequencedSocketData socket_data(reads, arraysize(reads),
                                   writes.empty() ? nullptr : &writes[0],
@@ -2496,7 +2508,7 @@ TEST_P(QuicStreamFactoryTest, OnCACertChanged) {
 
   MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)};
   std::unique_ptr<QuicEncryptedPacket> rst(ConstructClientRstPacket());
-  std::vector<MockWrite> writes;
+  vector<MockWrite> writes;
   writes.push_back(MockWrite(ASYNC, rst->data(), rst->length(), 1));
   SequencedSocketData socket_data(reads, arraysize(reads),
                                   writes.empty() ? nullptr : &writes[0],
@@ -2642,11 +2654,8 @@ TEST_P(QuicStreamFactoryTest, RacingConnections) {
   alternative_service_info_vector.push_back(
       AlternativeServiceInfo(alternative_service1, expiration));
 
-  url::SchemeHostPort server("https", kDefaultServerHostName,
-                             kDefaultServerPort);
-
   http_server_properties_.SetAlternativeServices(
-      server, alternative_service_info_vector);
+      url::SchemeHostPort(url_), alternative_service_info_vector);
 
   crypto_client_stream_factory_.set_handshake_mode(
       MockCryptoClientStream::ZERO_RTT);
@@ -3660,12 +3669,11 @@ TEST_P(QuicStreamFactoryTest, EnableDelayTcpRace) {
 
   ServerNetworkStats stats1;
   stats1.srtt = base::TimeDelta::FromMicroseconds(10);
-  url::SchemeHostPort server("https", kDefaultServerHostName,
-                             kDefaultServerPort);
-  http_server_properties_.SetServerNetworkStats(server, stats1);
+  http_server_properties_.SetServerNetworkStats(url::SchemeHostPort(url_),
+                                                stats1);
 
   crypto_client_stream_factory_.set_handshake_mode(
-      MockCryptoClientStream::ZERO_RTT);
+      MockCryptoClientStream::COLD_START);
   host_resolver_.set_synchronous_mode(true);
   host_resolver_.rules()->AddIPLiteralRule(host_port_pair_.host(),
                                            "192.168.0.1", "");
@@ -3716,10 +3724,8 @@ TEST_P(QuicStreamFactoryTest, MaybeInitialize) {
   base::Time expiration = base::Time::Now() + base::TimeDelta::FromDays(1);
   alternative_service_info_vector.push_back(
       AlternativeServiceInfo(alternative_service1, expiration));
-  url::SchemeHostPort server("https", kDefaultServerHostName,
-                             kDefaultServerPort);
   http_server_properties_.SetAlternativeServices(
-      server, alternative_service_info_vector);
+      url::SchemeHostPort(url_), alternative_service_info_vector);
 
   HostPortPair host_port_pair2(kServer2HostName, kDefaultServerPort);
   url::SchemeHostPort server2("https", kServer2HostName, kDefaultServerPort);
@@ -3737,8 +3743,7 @@ TEST_P(QuicStreamFactoryTest, MaybeInitialize) {
   QuicServerId quic_server_id(kDefaultServerHostName, 80,
                               PRIVACY_MODE_DISABLED);
   QuicServerInfoFactory* quic_server_info_factory =
-      new PropertiesBasedQuicServerInfoFactory(
-          http_server_properties_.GetWeakPtr());
+      new PropertiesBasedQuicServerInfoFactory(&http_server_properties_);
   factory_->set_quic_server_info_factory(quic_server_info_factory);
 
   std::unique_ptr<QuicServerInfo> quic_server_info(
@@ -3998,18 +4003,18 @@ TEST_P(QuicStreamFactoryTest, ServerPushSessionAffinity) {
 
   EXPECT_EQ(0, QuicStreamFactoryPeer::GetNumPushStreamsCreated(factory_.get()));
 
-  std::string url = "https://www.example.org/";
+  string url = "https://www.example.org/";
 
   QuicChromiumClientSession* session = GetActiveSession(host_port_pair_);
 
-  QuicClientPromisedInfo promised(session, kServerDataStreamId1, url);
+  QuicClientPromisedInfo promised(session, kServerDataStreamId1, kDefaultUrl);
   (*QuicStreamFactoryPeer::GetPushPromiseIndex(factory_.get())
-        ->promised_by_url())[url] = &promised;
+        ->promised_by_url())[kDefaultUrl] = &promised;
 
   QuicStreamRequest request2(factory_.get());
   EXPECT_EQ(OK, request2.Request(host_port_pair_, privacy_mode_,
-                                 /*cert_verify_flags=*/0, GURL(url), "GET",
-                                 net_log_, callback_.callback()));
+                                 /*cert_verify_flags=*/0, url_, "GET", net_log_,
+                                 callback_.callback()));
 
   EXPECT_EQ(1, QuicStreamFactoryPeer::GetNumPushStreamsCreated(factory_.get()));
 }
@@ -4047,27 +4052,27 @@ TEST_P(QuicStreamFactoryTest, ServerPushPrivacyModeMismatch) {
 
   EXPECT_EQ(0, QuicStreamFactoryPeer::GetNumPushStreamsCreated(factory_.get()));
 
-  std::string url = "https://www.example.org/";
+  string url = "https://www.example.org/";
   QuicChromiumClientSession* session = GetActiveSession(host_port_pair_);
 
-  QuicClientPromisedInfo promised(session, kServerDataStreamId1, url);
+  QuicClientPromisedInfo promised(session, kServerDataStreamId1, kDefaultUrl);
 
   QuicClientPushPromiseIndex* index =
       QuicStreamFactoryPeer::GetPushPromiseIndex(factory_.get());
 
-  (*index->promised_by_url())[url] = &promised;
-  EXPECT_EQ(index->GetPromised(url), &promised);
+  (*index->promised_by_url())[kDefaultUrl] = &promised;
+  EXPECT_EQ(index->GetPromised(kDefaultUrl), &promised);
 
   // Doing the request should not use the push stream, but rather
   // cancel it because the privacy modes do not match.
   QuicStreamRequest request2(factory_.get());
   EXPECT_EQ(ERR_IO_PENDING,
             request2.Request(host_port_pair_, PRIVACY_MODE_ENABLED,
-                             /*cert_verify_flags=*/0, GURL(url), "GET",
-                             net_log_, callback_.callback()));
+                             /*cert_verify_flags=*/0, url_, "GET", net_log_,
+                             callback_.callback()));
 
   EXPECT_EQ(0, QuicStreamFactoryPeer::GetNumPushStreamsCreated(factory_.get()));
-  EXPECT_EQ(index->GetPromised(url), nullptr);
+  EXPECT_EQ(index->GetPromised(kDefaultUrl), nullptr);
 
   EXPECT_EQ(OK, callback_.WaitForResult());
   std::unique_ptr<QuicHttpStream> stream2 = request2.CreateStream();
@@ -4170,8 +4175,7 @@ class QuicStreamFactoryWithDestinationTest
   HostPortPair origin1_;
   HostPortPair origin2_;
   MockRead hanging_read_;
-  std::vector<std::unique_ptr<SequencedSocketData>>
-      sequenced_socket_data_vector_;
+  vector<std::unique_ptr<SequencedSocketData>> sequenced_socket_data_vector_;
 };
 
 INSTANTIATE_TEST_CASE_P(Version,
@@ -4269,6 +4273,74 @@ TEST_P(QuicStreamFactoryWithDestinationTest, SharedCertificate) {
   EXPECT_EQ(session1, session2);
 
   EXPECT_EQ(QuicServerId(origin1_, privacy_mode_), session1->server_id());
+
+  EXPECT_TRUE(AllDataConsumed());
+}
+
+// QuicStreamRequest is not pooled if PrivacyMode differs.
+TEST_P(QuicStreamFactoryWithDestinationTest, DifferentPrivacyMode) {
+  Initialize();
+
+  GURL url1("https://www.example.org/");
+  GURL url2("https://mail.example.org/");
+  origin1_ = HostPortPair::FromURL(url1);
+  origin2_ = HostPortPair::FromURL(url2);
+
+  HostPortPair destination = GetDestination();
+
+  scoped_refptr<X509Certificate> cert(
+      ImportCertFromFile(GetTestCertsDirectory(), "wildcard.pem"));
+  bool unused;
+  ASSERT_TRUE(cert->VerifyNameMatch(origin1_.host(), &unused));
+  ASSERT_TRUE(cert->VerifyNameMatch(origin2_.host(), &unused));
+  ASSERT_FALSE(cert->VerifyNameMatch(kDifferentHostname, &unused));
+
+  ProofVerifyDetailsChromium verify_details1;
+  verify_details1.cert_verify_result.verified_cert = cert;
+  verify_details1.cert_verify_result.is_issued_by_known_root = true;
+  crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details1);
+
+  ProofVerifyDetailsChromium verify_details2;
+  verify_details2.cert_verify_result.verified_cert = cert;
+  verify_details2.cert_verify_result.is_issued_by_known_root = true;
+  crypto_client_stream_factory_.AddProofVerifyDetails(&verify_details2);
+
+  AddHangingSocketData();
+  AddHangingSocketData();
+
+  QuicStreamRequest request1(factory_.get());
+  EXPECT_EQ(ERR_IO_PENDING,
+            request1.Request(destination, PRIVACY_MODE_DISABLED,
+                             /*cert_verify_flags=*/0, url1, "GET", net_log_,
+                             callback_.callback()));
+  EXPECT_EQ(OK, callback_.WaitForResult());
+  std::unique_ptr<QuicHttpStream> stream1 = request1.CreateStream();
+  EXPECT_TRUE(stream1.get());
+  EXPECT_TRUE(HasActiveSession(origin1_));
+
+  TestCompletionCallback callback2;
+  QuicStreamRequest request2(factory_.get());
+  EXPECT_EQ(ERR_IO_PENDING,
+            request2.Request(destination, PRIVACY_MODE_ENABLED,
+                             /*cert_verify_flags=*/0, url2, "GET", net_log_,
+                             callback2.callback()));
+  EXPECT_EQ(OK, callback2.WaitForResult());
+  std::unique_ptr<QuicHttpStream> stream2 = request2.CreateStream();
+  EXPECT_TRUE(stream2.get());
+
+  // |request2| does not pool to the first session, because PrivacyMode does not
+  // match.  Instead, another session is opened to the same destination, but
+  // with a different QuicServerId.
+  QuicChromiumClientSession* session1 =
+      QuicHttpStreamPeer::GetSession(stream1.get());
+  QuicChromiumClientSession* session2 =
+      QuicHttpStreamPeer::GetSession(stream2.get());
+  EXPECT_NE(session1, session2);
+
+  EXPECT_EQ(QuicServerId(origin1_, PRIVACY_MODE_DISABLED),
+            session1->server_id());
+  EXPECT_EQ(QuicServerId(origin2_, PRIVACY_MODE_ENABLED),
+            session2->server_id());
 
   EXPECT_TRUE(AllDataConsumed());
 }

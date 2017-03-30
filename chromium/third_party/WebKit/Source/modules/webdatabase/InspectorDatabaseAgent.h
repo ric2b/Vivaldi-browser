@@ -30,22 +30,21 @@
 #define InspectorDatabaseAgent_h
 
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/Database.h"
 #include "modules/ModulesExport.h"
 #include "platform/heap/Handle.h"
 #include "wtf/HashMap.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
 
 class Database;
 class InspectorDatabaseResource;
-class InspectorFrontend;
 class Page;
 
 
-class MODULES_EXPORT InspectorDatabaseAgent final : public InspectorBaseAgent<InspectorDatabaseAgent, protocol::Frontend::Database>, public protocol::Backend::Database {
+class MODULES_EXPORT InspectorDatabaseAgent final : public InspectorBaseAgent<protocol::Database::Metainfo> {
     WTF_MAKE_NONCOPYABLE(InspectorDatabaseAgent);
 public:
     static InspectorDatabaseAgent* create(Page* page)
@@ -61,8 +60,8 @@ public:
 
     // Called from the front-end.
     void enable(ErrorString*) override;
-    void getDatabaseTableNames(ErrorString*, const String& databaseId, OwnPtr<protocol::Array<String>>* names) override;
-    void executeSQL(ErrorString*, const String& databaseId, const String& query, PassOwnPtr<ExecuteSQLCallback>) override;
+    void getDatabaseTableNames(ErrorString*, const String& databaseId, std::unique_ptr<protocol::Array<String>>* names) override;
+    void executeSQL(ErrorString*, const String& databaseId, const String& query, std::unique_ptr<ExecuteSQLCallback>) override;
 
     void didOpenDatabase(blink::Database*, const String& domain, const String& name, const String& version);
 private:

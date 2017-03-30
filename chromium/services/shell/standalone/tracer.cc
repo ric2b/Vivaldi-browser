@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
@@ -42,7 +43,7 @@ void Tracer::Start(const std::string& categories,
         << "Could not parse --trace-startup-duration value "
         << duration_seconds_str;
   }
-  base::MessageLoop::current()->PostDelayedTask(
+  base::MessageLoop::current()->task_runner()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&Tracer::StopAndFlushToFile, base::Unretained(this)),
       base::TimeDelta::FromSeconds(trace_duration_secs));
@@ -86,13 +87,15 @@ void Tracer::StopTracingAndFlushToDisk() {
     // gather as much data as possible on shutdown.
     base::trace_event::TraceLog::GetInstance()->SetDisabled();
     {
-      base::WaitableEvent flush_complete_event(false, false);
+      base::WaitableEvent flush_complete_event(
+          base::WaitableEvent::ResetPolicy::AUTOMATIC,
+          base::WaitableEvent::InitialState::NOT_SIGNALED);
       // TraceLog::Flush requires a message loop but we've already shut ours
       // down.
       // Spin up a new thread to flush things out.
       base::Thread flush_thread("mojo_runner_trace_event_flush");
       flush_thread.Start();
-      flush_thread.message_loop()->PostTask(
+      flush_thread.task_runner()->PostTask(
           FROM_HERE,
           base::Bind(&Tracer::EndTraceAndFlush, base::Unretained(this),
                      trace_filename_,

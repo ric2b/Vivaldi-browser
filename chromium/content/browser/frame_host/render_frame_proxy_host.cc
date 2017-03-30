@@ -193,6 +193,16 @@ bool RenderFrameProxyHost::InitRenderFrameProxy() {
                                       ->current_replication_state()));
 
   render_frame_proxy_created_ = true;
+
+  // For subframes, initialize the proxy's WebFrameOwnerProperties only if they
+  // differ from default values.
+  bool should_send_properties = frame_tree_node_->frame_owner_properties() !=
+                                blink::WebFrameOwnerProperties();
+  if (frame_tree_node_->parent() && should_send_properties) {
+    Send(new FrameMsg_SetFrameOwnerProperties(
+        routing_id_, frame_tree_node_->frame_owner_properties()));
+  }
+
   return true;
 }
 
@@ -253,7 +263,8 @@ void RenderFrameProxyHost::OnOpenURL(
   frame_tree_node_->navigator()->RequestTransferURL(
       current_rfh, validated_url, site_instance_.get(), std::vector<GURL>(),
       params.referrer, ui::PAGE_TRANSITION_LINK, GlobalRequestID(),
-      params.should_replace_current_entry);
+      params.should_replace_current_entry, params.uses_post ? "POST" : "GET",
+      params.resource_request_body);
 }
 
 void RenderFrameProxyHost::OnRouteMessageEvent(

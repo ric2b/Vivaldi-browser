@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Untuk melindungi akses ke komputer ini, gunakan PIN <ph name="BOLD_START" />setidaknya enam digit<ph name="BOLD_END" />. PIN ini akan diperlukan saat menyambung dari lokasi lainnya.</translation>
 <translation id="4176825807642096119">Kode akses</translation>
 <translation id="4207623512727273241">Jalankan pemasang sebelum melanjutkan.</translation>
+<translation id="4227991223508142681">Utilitas Penyediaan Host</translation>
 <translation id="4240294130679914010">Pencopot Pemasangan Host Chromoting</translation>
 <translation id="4277463233460010382">Komputer ini dikonfigurasi untuk mengizinkan satu atau beberapa klien terhubung tanpa memasukkan PIN</translation>
 <translation id="4277736576214464567">Kode akses tidak valid. Harap coba lagi.</translation>
@@ -237,7 +238,7 @@ Desktop Jarak Jauh</translation>
 <translation id="6944854424004126054">Pulihkan jendela</translation>
 <translation id="6965382102122355670">Oke</translation>
 <translation id="6985691951107243942">Yakin ingin menonaktifkan sambungan jarak jauh dengan <ph name="HOSTNAME" />? Jika Anda berubah pikiran, Anda harus mengunjungi komputer tersebut untuk mengaktifkan kembali sambungan.</translation>
-<translation id="6998989275928107238">Ke</translation>
+<translation id="6998989275928107238">Kepada</translation>
 <translation id="7019153418965365059">Kesalahan host tidak dikenal: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Bantuan Jarak Jauh</translation>
 <translation id="7038683108611689168">Bantu kami meningkatkan Chromoting dengan mengizinkan kami mengumpulkan statistik penggunaan dan laporan kerusakan.</translation>
@@ -261,6 +262,7 @@ Desktop Jarak Jauh</translation>
 <translation id="7836926030608666805">Beberapa komponen yang diperlukan tidak ada. Pastikan Anda menjalankan Chrome versi terbaru dan coba lagi.</translation>
 <translation id="7868137160098754906">Masukkan PIN komputer jarak jauh Anda.</translation>
 <translation id="7869445566579231750">Anda tidak memiliki izin untuk menjalankan aplikasi ini.</translation>
+<translation id="7895403300744144251">Kebijakan keamanan di komputer jarak jauh tidak mengizinkan sambungan dari akun Anda.</translation>
 <translation id="7948001860594368197">Opsi layar</translation>
 <translation id="7970576581263377361">Autentikasi gagal. Masuk ke Chromium lagi.</translation>
 <translation id="7981525049612125370">Sesi jarak jauh telah berakhir.</translation>

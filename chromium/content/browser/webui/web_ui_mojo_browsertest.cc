@@ -9,6 +9,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
@@ -22,7 +23,6 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
@@ -31,11 +31,21 @@
 #include "content/test/data/web_ui_test_mojo_bindings.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "mojo/test/test_utils.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "services/shell/public/cpp/interface_registry.h"
 
 namespace content {
 namespace {
+
+base::FilePath GetFilePathForJSResource(const std::string& path) {
+  std::string binding_path = "gen/" + path + ".js";
+#if defined(OS_WIN)
+  base::ReplaceChars(binding_path, "//", "\\", &binding_path);
+#endif
+  base::FilePath exe_dir;
+  PathService::Get(base::DIR_EXE, &exe_dir);
+  return exe_dir.AppendASCII(binding_path);
+}
 
 bool got_message = false;
 
@@ -45,8 +55,7 @@ bool GetResource(const std::string& id,
                  const WebUIDataSource::GotDataCallback& callback) {
   if (id.find(".mojom") != std::string::npos) {
     std::string contents;
-    CHECK(base::ReadFileToString(mojo::test::GetFilePathForJSResource(id),
-                                 &contents))
+    CHECK(base::ReadFileToString(GetFilePathForJSResource(id), &contents))
         << id;
     base::RefCountedString* ref_contents = new base::RefCountedString;
     ref_contents->data() = contents;
@@ -74,7 +83,7 @@ class BrowserTargetImpl : public mojom::BrowserTarget {
   ~BrowserTargetImpl() override {}
 
   // mojom::BrowserTarget overrides:
-  void Start(const mojo::Closure& closure) override {
+  void Start(const StartCallback& closure) override {
     closure.Run();
   }
   void Stop() override {
@@ -121,7 +130,7 @@ class PingTestWebUIController : public TestWebUIController {
 
   // WebUIController overrides:
   void RenderViewCreated(RenderViewHost* render_view_host) override {
-    render_view_host->GetMainFrame()->GetServiceRegistry()->AddService(
+    render_view_host->GetMainFrame()->GetInterfaceRegistry()->AddInterface(
         base::Bind(&PingTestWebUIController::CreateHandler,
                    base::Unretained(this)));
   }
@@ -189,8 +198,7 @@ bool IsGeneratedResourceAvailable(const std::string& resource_path) {
   // files. If the bindings file doesn't exist assume we're on such a bot and
   // pass.
   // TODO(sky): remove this conditional when isolates support copying from gen.
-  const base::FilePath test_file_path(
-      mojo::test::GetFilePathForJSResource(resource_path));
+  const base::FilePath test_file_path(GetFilePathForJSResource(resource_path));
   if (base::PathExists(test_file_path))
     return true;
   LOG(WARNING) << " mojom binding file doesn't exist, assuming on isolate";

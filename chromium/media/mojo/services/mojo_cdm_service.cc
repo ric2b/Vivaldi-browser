@@ -20,7 +20,6 @@
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/services/mojo_cdm_service_context.h"
 #include "mojo/common/common_type_converters.h"
-#include "mojo/common/url_type_converters.h"
 #include "url/gurl.h"
 
 namespace media {
@@ -125,7 +124,7 @@ void MojoCdmService::Initialize(const mojo::String& key_system,
 
 void MojoCdmService::SetServerCertificate(
     mojo::Array<uint8_t> certificate_data,
-    const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) {
+    const SetServerCertificateCallback& callback) {
   DVLOG(2) << __FUNCTION__;
   cdm_->SetServerCertificate(
       certificate_data.storage(),
@@ -136,8 +135,7 @@ void MojoCdmService::CreateSessionAndGenerateRequest(
     mojom::ContentDecryptionModule::SessionType session_type,
     mojom::ContentDecryptionModule::InitDataType init_data_type,
     mojo::Array<uint8_t> init_data,
-    const mojo::Callback<void(mojom::CdmPromiseResultPtr, mojo::String)>&
-        callback) {
+    const CreateSessionAndGenerateRequestCallback& callback) {
   DVLOG(2) << __FUNCTION__;
   cdm_->CreateSessionAndGenerateRequest(
       static_cast<MediaKeys::SessionType>(session_type),
@@ -148,35 +146,31 @@ void MojoCdmService::CreateSessionAndGenerateRequest(
 void MojoCdmService::LoadSession(
     mojom::ContentDecryptionModule::SessionType session_type,
     const mojo::String& session_id,
-    const mojo::Callback<void(mojom::CdmPromiseResultPtr, mojo::String)>&
-        callback) {
+    const LoadSessionCallback& callback) {
   DVLOG(2) << __FUNCTION__;
   cdm_->LoadSession(static_cast<MediaKeys::SessionType>(session_type),
                     session_id.To<std::string>(),
                     base::WrapUnique(new NewSessionMojoCdmPromise(callback)));
 }
 
-void MojoCdmService::UpdateSession(
-    const mojo::String& session_id,
-    mojo::Array<uint8_t> response,
-    const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) {
+void MojoCdmService::UpdateSession(const mojo::String& session_id,
+                                   mojo::Array<uint8_t> response,
+                                   const UpdateSessionCallback& callback) {
   DVLOG(2) << __FUNCTION__;
   cdm_->UpdateSession(
       session_id.To<std::string>(), response.storage(),
       std::unique_ptr<SimpleCdmPromise>(new SimpleMojoCdmPromise(callback)));
 }
 
-void MojoCdmService::CloseSession(
-    const mojo::String& session_id,
-    const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) {
+void MojoCdmService::CloseSession(const mojo::String& session_id,
+                                  const CloseSessionCallback& callback) {
   DVLOG(2) << __FUNCTION__;
   cdm_->CloseSession(session_id.To<std::string>(),
                      base::WrapUnique(new SimpleMojoCdmPromise(callback)));
 }
 
-void MojoCdmService::RemoveSession(
-    const mojo::String& session_id,
-    const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) {
+void MojoCdmService::RemoveSession(const mojo::String& session_id,
+                                   const RemoveSessionCallback& callback) {
   DVLOG(2) << __FUNCTION__;
   cdm_->RemoveSession(session_id.To<std::string>(),
                       base::WrapUnique(new SimpleMojoCdmPromise(callback)));
@@ -231,10 +225,9 @@ void MojoCdmService::OnSessionMessage(const std::string& session_id,
                                       const std::vector<uint8_t>& message,
                                       const GURL& legacy_destination_url) {
   DVLOG(2) << __FUNCTION__ << "(" << message_type << ")";
-  client_->OnSessionMessage(session_id,
-                            static_cast<mojom::CdmMessageType>(message_type),
-                            mojo::Array<uint8_t>::From(message),
-                            mojo::String::From(legacy_destination_url));
+  client_->OnSessionMessage(
+      session_id, static_cast<mojom::CdmMessageType>(message_type),
+      mojo::Array<uint8_t>::From(message), legacy_destination_url);
 }
 
 void MojoCdmService::OnSessionKeysChange(const std::string& session_id,
@@ -244,7 +237,7 @@ void MojoCdmService::OnSessionKeysChange(const std::string& session_id,
            << " has_additional_usable_key=" << has_additional_usable_key;
 
   mojo::Array<mojom::CdmKeyInformationPtr> keys_data;
-  for (const auto& key : keys_info)
+  for (auto* key : keys_info)
     keys_data.push_back(mojom::CdmKeyInformation::From(*key));
   client_->OnSessionKeysChange(session_id, has_additional_usable_key,
                                std::move(keys_data));

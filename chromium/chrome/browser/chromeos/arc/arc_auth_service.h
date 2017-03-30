@@ -12,27 +12,23 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "chrome/browser/chromeos/policy/android_management_client.h"
+#include "base/timer/timer.h"
+#include "chrome/browser/chromeos/arc/arc_android_management_checker_delegate.h"
+#include "chrome/browser/chromeos/arc/arc_auth_context_delegate.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
 #include "components/arc/common/auth.mojom.h"
+#include "components/arc/instance_holder.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/syncable_prefs/pref_service_syncable_observer.h"
 #include "components/syncable_prefs/synced_pref_observer.h"
-#include "google_apis/gaia/ubertoken_fetcher.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 class ArcAppLauncher;
-class GaiaAuthFetcher;
 class Profile;
-class ProfileOAuth2TokenService;
 
-namespace content {
-class StoragePartition;
-}
-
-namespace net {
-class URLRequestContextGetter;
+namespace ash {
+class ShelfDelegate;
 }
 
 namespace user_prefs {
@@ -41,13 +37,18 @@ class PrefRegistrySyncable;
 
 namespace arc {
 
+class ArcAndroidManagementChecker;
+class ArcAuthContext;
+enum class ProvisioningResult : int;
+
 // This class proxies the request from the client to fetch an auth code from
 // LSO.
 class ArcAuthService : public ArcService,
                        public mojom::AuthHost,
                        public ArcBridgeService::Observer,
-                       public UbertokenConsumer,
-                       public GaiaAuthConsumer,
+                       public InstanceHolder<mojom::AuthInstance>::Observer,
+                       public ArcAndroidManagementCheckerDelegate,
+                       public ArcAuthContextDelegate,
                        public syncable_prefs::PrefServiceSyncableObserver,
                        public syncable_prefs::SyncedPrefObserver {
  public:
@@ -59,12 +60,14 @@ class ArcAuthService : public ArcService,
   };
 
   enum class UIPage {
-    NO_PAGE,         // Hide everything.
-    START,           // Initial start page.
-    LSO_PROGRESS,    // LSO loading progress page.
-    LSO,             // LSO page to enter user's credentials.
-    START_PROGRESS,  // Arc starting progress page.
-    ERROR,           // Arc start error page.
+    NO_PAGE,              // Hide everything.
+    TERMS_PROGRESS,       // Terms loading progress page.
+    TERMS,                // Terms content page.
+    LSO_PROGRESS,         // LSO loading progress page.
+    LSO,                  // LSO page to enter user's credentials.
+    START_PROGRESS,       // Arc starting progress page.
+    ERROR,                // Arc start error page.
+    ERROR_WITH_FEEDBACK,  // Arc start error page, plus feedback button.
   };
 
   class Observer {
@@ -85,6 +88,9 @@ class ArcAuthService : public ArcService,
 
     // Called to notify that ARC enabled state has been updated.
     virtual void OnOptInEnabled(bool enabled) {}
+
+    // Called to notify that ARC has been initialized successfully.
+    virtual void OnInitialStart() {}
   };
 
   explicit ArcAuthService(ArcBridgeService* bridge_service);
@@ -96,6 +102,7 @@ class ArcAuthService : public ArcService,
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
 
   static void DisableUIForTesting();
+  static void SetShelfDelegateForTesting(ash::ShelfDelegate* shelf_delegate);
 
   // Checks if OptIn verification was disabled by switch in command line.
   static bool IsOptInVerificationDisabled();
@@ -112,6 +119,7 @@ class ArcAuthService : public ArcService,
   void Shutdown();
 
   Profile* profile() { return profile_; }
+  const Profile* profile() const { return profile_; }
 
   State state() const { return state_; }
 
@@ -122,7 +130,10 @@ class ArcAuthService : public ArcService,
   void RemoveObserver(Observer* observer);
 
   // ArcBridgeService::Observer:
-  void OnAuthInstanceReady() override;
+  void OnBridgeStopped(ArcBridgeService::StopReason reason) override;
+
+  // InstanceHolder<mojom::AuthInstance>::Observer:
+  void OnInstanceReady() override;
 
   // AuthHost:
   // For security reason this code can be used only once and exists for specific
@@ -137,6 +148,8 @@ class ArcAuthService : public ArcService,
   void GetIsAccountManaged(
       const GetIsAccountManagedCallback& callback) override;
 
+  void OnSignInFailedInternal(ProvisioningResult result);
+
   // Called from Arc support platform app to start LSO.
   void StartLso();
 
@@ -146,17 +159,12 @@ class ArcAuthService : public ArcService,
   // Called from Arc support platform app when user cancels signing.
   void CancelAuthCode();
 
+  bool IsArcManaged() const;
   bool IsArcEnabled() const;
+
+  // This requires Arc to be allowed (|IsAllowed|)for current profile.
   void EnableArc();
   void DisableArc();
-
-  // UbertokenConsumer:
-  void OnUbertokenSuccess(const std::string& token) override;
-  void OnUbertokenFailure(const GoogleServiceAuthError& error) override;
-
-  // GaiaAuthConsumer:
-  void OnMergeSessionSuccess(const std::string& data) override;
-  void OnMergeSessionFailure(const GoogleServiceAuthError& error) override;
 
   // syncable_prefs::PrefServiceSyncableObserver
   void OnIsSyncingChanged() override;
@@ -164,14 +172,34 @@ class ArcAuthService : public ArcService,
   // syncable_prefs::SyncedPrefObserver
   void OnSyncedPrefChanged(const std::string& path, bool from_sync) override;
 
+  // ArcAuthContextDelegate:
+  void OnContextReady() override;
+  void OnPrepareContextFailed() override;
+
+  // ArcAndroidManagementCheckerDelegate:
+  void OnAndroidManagementChecked(
+      policy::AndroidManagementClient::Result result) override;
+
+  // Stops ARC without changing ArcEnabled preference.
+  void StopArc();
+
+  // StopArc(), then EnableArc(). Between them data clear may happens.
+  // This is a special method to support enterprise device lost case.
+  // This can be called only when ARC is running.
+  void StopAndEnableArc();
+
+  // Removes the data if ARC is stopped. Otherwise, queue to remove the data
+  // on ARC is stopped.
+  void RemoveArcData();
+
   // Returns current page that has to be shown in OptIn UI.
   UIPage ui_page() const { return ui_page_; }
+
   // Returns current page status, relevant to the specific page.
   const base::string16& ui_page_status() { return ui_page_status_; }
 
  private:
   void StartArc();
-  void PrepareContext();
   void ShowUI(UIPage page, const base::string16& status);
   void CloseUI();
   void SetUIPage(UIPage page, const base::string16& status);
@@ -181,18 +209,14 @@ class ArcAuthService : public ArcService,
   void ShutdownBridgeAndShowUI(UIPage page, const base::string16& status);
   void OnOptInPreferenceChanged();
   void StartUI();
-  void OnPrepareContextFailed();
   void StartAndroidManagementClient();
-  void CheckAndroidManagement();
-  void OnAndroidManagementChecked(
-      policy::AndroidManagementClient::Result result);
+  void CheckAndroidManagement(bool background_mode);
   void StartArcIfSignedIn();
+  void OnArcDataRemoved(bool success);
+  void OnArcSignInTimeout();
 
   // Unowned pointer. Keeps current profile.
   Profile* profile_ = nullptr;
-  // Owned by content::BrowserContent. Used to isolate cookies for auth server
-  // communication and shared with Arc OptIn UI platform app.
-  content::StoragePartition* storage_partition_ = nullptr;
 
   // Registrar used to monitor ARC enabled state.
   PrefChangeRegistrar pref_change_registrar_;
@@ -200,19 +224,21 @@ class ArcAuthService : public ArcService,
   mojo::Binding<AuthHost> binding_;
   State state_ = State::NOT_INITIALIZED;
   base::ObserverList<Observer> observer_list_;
-  std::unique_ptr<GaiaAuthFetcher> merger_fetcher_;
-  std::unique_ptr<UbertokenFetcher> ubertoken_fethcher_;
   std::unique_ptr<ArcAppLauncher> playstore_launcher_;
   std::string auth_code_;
   GetAuthCodeCallback auth_callback_;
   bool initial_opt_in_ = false;
-  bool context_prepared_ = false;
+  bool disable_arc_from_ui_ = false;
   UIPage ui_page_ = UIPage::NO_PAGE;
   base::string16 ui_page_status_;
+  bool clear_required_ = false;
+  bool reenable_arc_ = false;
+  base::OneShotTimer arc_sign_in_timer_;
 
-  ProfileOAuth2TokenService* token_service_;
-  std::string account_id_;
-  std::unique_ptr<policy::AndroidManagementClient> android_management_client_;
+  std::unique_ptr<ArcAuthContext> context_;
+  std::unique_ptr<ArcAndroidManagementChecker> android_management_checker_;
+
+  base::Time sign_in_time_;
 
   base::WeakPtrFactory<ArcAuthService> weak_ptr_factory_;
 

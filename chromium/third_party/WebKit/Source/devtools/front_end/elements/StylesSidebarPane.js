@@ -631,8 +631,7 @@ WebInspector.StylesSidebarPane.createPropertyFilterElement = function(placeholde
      */
     function keydownHandler(event)
     {
-        var Esc = "U+001B";
-        if (event.keyIdentifier !== Esc || !input.value)
+        if (event.key !== "Escape" || !input.value)
             return;
         event.consume(true);
         input.value = "";
@@ -2473,7 +2472,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
         if (isEnterKey(event)) {
             event.preventDefault();
             result = "forward";
-        } else if (event.keyCode === WebInspector.KeyboardShortcut.Keys.Esc.code || event.keyIdentifier === "U+001B")
+        } else if (event.keyCode === WebInspector.KeyboardShortcut.Keys.Esc.code || event.key === "Escape")
             result = "cancel";
         else if (!context.isEditingName && this._newProperty && event.keyCode === WebInspector.KeyboardShortcut.Keys.Backspace.code) {
             // For a new property, when Backspace is pressed at the beginning of new property value, move back to the property name.
@@ -2482,7 +2481,7 @@ WebInspector.StylePropertyTreeElement.prototype = {
                 event.preventDefault();
                 result = "backward";
             }
-        } else if (event.keyIdentifier === "U+0009") { // Tab key.
+        } else if (event.key === "Tab") {
             result = event.shiftKey ? "backward" : "forward";
             event.preventDefault();
         }
@@ -2887,9 +2886,9 @@ WebInspector.StylesSidebarPane.CSSPropertyPrompt.prototype = {
      */
     onKeyDown: function(event)
     {
-        switch (event.keyIdentifier) {
-        case "Up":
-        case "Down":
+        switch (event.key) {
+        case "ArrowUp":
+        case "ArrowDown":
         case "PageUp":
         case "PageDown":
             if (this._handleNameOrValueUpDown(event)) {
@@ -3031,7 +3030,7 @@ WebInspector.StylesSidebarPropertyRenderer = function(rule, node, name, value)
 }
 
 WebInspector.StylesSidebarPropertyRenderer._variableRegex = /(var\(--.*?\))/g;
-WebInspector.StylesSidebarPropertyRenderer._colorRegex = /((?:rgb|hsl)a?\([^)]+\)|#[0-9a-fA-F]{8}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3,4}|\b\w+\b(?!-))/g;
+WebInspector.StylesSidebarPropertyRenderer._colorRegex = /((?:rgb|hsl)a?\([^)]+\)|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3}|\b\w+\b(?!-))/g;
 WebInspector.StylesSidebarPropertyRenderer._bezierRegex = /((cubic-bezier\([^)]+\))|\b(linear|ease-in-out|ease-in|ease-out|ease)\b)/g;
 
 /**
@@ -3107,16 +3106,16 @@ WebInspector.StylesSidebarPropertyRenderer.prototype = {
      */
     _processURL: function(url)
     {
-        var hrefUrl = url;
-        var match = hrefUrl.match(/['"]?([^'"]+)/);
-        if (match)
-            hrefUrl = match[1];
+        var isQuoted = /^'.*'$/.test(url) || /^".*"$/.test(url);
+        if (isQuoted)
+            url = url.substring(1, url.length - 1);
         var container = createDocumentFragment();
         container.createTextChild("url(");
+        var hrefUrl = null;
         if (this._rule && this._rule.resourceURL())
-            hrefUrl = WebInspector.ParsedURL.completeURL(this._rule.resourceURL(), hrefUrl);
+            hrefUrl = WebInspector.ParsedURL.completeURL(this._rule.resourceURL(), url);
         else if (this._node)
-            hrefUrl = this._node.resolveURL(hrefUrl);
+            hrefUrl = this._node.resolveURL(url);
         var hasResource = hrefUrl && !!WebInspector.resourceForURL(hrefUrl);
         // FIXME: WebInspector.linkifyURLAsNode() should really use baseURI.
         container.appendChild(WebInspector.linkifyURLAsNode(hrefUrl || url, url, undefined, !hasResource));

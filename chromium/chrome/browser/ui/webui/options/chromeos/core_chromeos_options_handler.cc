@@ -8,14 +8,17 @@
 #include <string>
 #include <utility>
 
-#include "ash/session/session_state_delegate.h"
-#include "ash/shell.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
@@ -157,33 +160,27 @@ void CoreChromeOSOptionsHandler::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  // The only expected notification for now is this one.
-  DCHECK(type == chrome::NOTIFICATION_OWNERSHIP_STATUS_CHANGED);
+  DCHECK_EQ(chrome::NOTIFICATION_OWNERSHIP_STATUS_CHANGED, type);
 
   // Finish this asynchronously because the notification has to tricle in to all
   // Chrome components before we can reliably read the status on the other end.
-  base::MessageLoop::current()->PostTask(FROM_HERE,
-      base::Bind(&CoreChromeOSOptionsHandler::NotifyOwnershipChanged,
-                 base::Unretained(this)));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&CoreChromeOSOptionsHandler::NotifyOwnershipChanged,
+                            base::Unretained(this)));
 }
 
 void CoreChromeOSOptionsHandler::NotifyOwnershipChanged() {
-  for (SubscriptionMap::iterator it = pref_subscription_map_.begin();
-       it != pref_subscription_map_.end(); ++it) {
-    NotifySettingsChanged(it->first);
-  }
+  for (auto it : pref_subscription_map_)
+    NotifySettingsChanged(it.first);
 }
 
 base::Value* CoreChromeOSOptionsHandler::FetchPref(
     const std::string& pref_name) {
   if (proxy_cros_settings_parser::IsProxyPref(pref_name)) {
-    base::Value *value = NULL;
+    base::Value* value = nullptr;
     proxy_cros_settings_parser::GetProxyPrefValue(
         proxy_config_service_, pref_name, &value);
-    if (!value)
-      return base::Value::CreateNullValue().release();
-
-    return value;
+    return value ? value : base::Value::CreateNullValue().release();
   }
 
   Profile* profile = Profile::FromWebUI(web_ui());
@@ -259,9 +256,8 @@ void CoreChromeOSOptionsHandler::SetPref(const std::string& pref_name,
     proxy_cros_settings_parser::SetProxyPrefValue(
         pref_name, value, &proxy_config_service_);
     base::StringValue proxy_type(pref_name);
-    web_ui()->CallJavascriptFunction(
-        "options.internet.DetailsInternetPage.updateProxySettings",
-        proxy_type);
+    web_ui()->CallJavascriptFunctionUnsafe(
+        "options.internet.DetailsInternetPage.updateProxySettings", proxy_type);
     ProcessUserMetric(value, metric);
     return;
   }
@@ -300,7 +296,7 @@ base::Value* CoreChromeOSOptionsHandler::CreateValueForPref(
         user_prefs->FindPreference(prefs::kEnableAutoScreenLock);
 
     ash::SessionStateDelegate* delegate =
-        ash::Shell::GetInstance()->session_state_delegate();
+        ash::WmShell::Get()->GetSessionStateDelegate();
     if (pref && pref->IsUserModifiable() &&
         delegate->ShouldLockScreenBeforeSuspending()) {
       bool screen_lock = false;

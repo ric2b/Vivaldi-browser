@@ -651,21 +651,21 @@ void FirefoxImporter::LoadRootNodeID(sql::Connection* db,
                                       int* toolbar_folder_id,
                                       int* menu_folder_id,
                                       int* unsorted_folder_id) {
-  static const char kToolbarFolderName[] = "toolbar";
-  static const char kMenuFolderName[] = "menu";
-  static const char kUnsortedFolderName[] = "unfiled";
+  static const char kToolbarFolderGuid[] = "toolbar_____";
+  static const char kMenuFolderGuid[] = "menu________";
+  static const char kUnsortedFolderGuid[] = "unfiled_____";
 
-  const char query[] = "SELECT root_name, folder_id FROM moz_bookmarks_roots";
+  const char query[] = "SELECT guid, id FROM moz_bookmarks";
   sql::Statement s(db->GetUniqueStatement(query));
 
   while (s.Step()) {
     std::string folder = s.ColumnString(0);
     int id = s.ColumnInt(1);
-    if (folder == kToolbarFolderName)
+    if (folder == kToolbarFolderGuid)
       *toolbar_folder_id = id;
-    else if (folder == kMenuFolderName)
+    else if (folder == kMenuFolderGuid)
       *menu_folder_id = id;
-    else if (folder == kUnsortedFolderName)
+    else if (folder == kUnsortedFolderGuid)
       *unsorted_folder_id = id;
   }
 }

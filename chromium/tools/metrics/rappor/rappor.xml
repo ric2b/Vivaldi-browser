@@ -137,6 +137,15 @@ components/rappor/rappor_parameters.h.
 <rappor-metrics>
 <!-- Rappor metric definitions -->
 
+<rappor-metric name="Android.ExternalNavigationNotChosen"
+    type="UMA_RAPPOR_TYPE">
+  <owner>mariakhomenko@chromium.org</owner>
+  <summary>
+    The package name of an application that was given as an alternative choice
+    to handling a URL in Chrome, but wasn't chosen.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="AppBanner.NativeApp.Dismissed" type="ETLD_PLUS_ONE">
   <owner>dfalcantara@chromium.org</owner>
   <summary>
@@ -180,6 +189,40 @@ components/rappor/rappor_parameters.h.
   <owner>dfalcantara@chromium.org</owner>
   <summary>
     The eTLD+1 of a URL that displayed a web app banner.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Autofill.CardUploadNotOfferedConflictingNames"
+    type="ETLD_PLUS_ONE">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL for which there was an attempted upload of a credit card
+    but for which we found conflicting names between the address and the card.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Autofill.CardUploadNotOfferedNoAddress"
+    type="ETLD_PLUS_ONE">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL for which there was an attempted upload of a credit card
+    but for which we couldn't find a recently used address to associate with it.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Autofill.CardUploadNotOfferedNoCvc" type="ETLD_PLUS_ONE">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL for which there was an attempted upload of a credit card
+    but the form data didn't contain the card CVC.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Autofill.CardUploadNotOfferedNoName" type="ETLD_PLUS_ONE">
+  <owner>mathp@chromium.org</owner>
+  <summary>
+    The eTLD+1 of a URL for which there was an attempted upload of a credit card
+    but for which we found no name associated with the address or the card.
   </summary>
 </rappor-metric>
 
@@ -742,6 +785,23 @@ components/rappor/rappor_parameters.h.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="ContentSettings.PermissionRequested.Midi.Url"
+    type="ETLD_PLUS_ONE">
+  <owner>toyoshim@chromium.org</owner>
+  <summary>
+    **DEPRECATED: replaced by ContentSettings.PermissionRequested.Midi.Url2
+    as of M53. The domain that requests using MIDI devices.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="ContentSettings.PermissionRequested.Midi.Url2"
+    type="LOW_FREQUENCY_ETLD_PLUS_ONE">
+  <owner>toyoshim@chromium.org</owner>
+  <summary>
+    The domain that requests using MIDI devices.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="ContentSettings.PermissionRequested.Notifications.Url"
     type="ETLD_PLUS_ONE">
   <owner>miguelg@chromium.org</owner>
@@ -900,6 +960,15 @@ components/rappor/rappor_parameters.h.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="Media.OriginUrl.GpuVideoDecoderInitFailure"
+    type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player but
+    seeing a failure when trying to initialize the GpuVideoDecoder.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="Media.OriginUrl.HLS" type="ETLD_PLUS_ONE">
   <owner>watk@chromium.org</owner>
   <summary>
@@ -948,6 +1017,35 @@ components/rappor/rappor_parameters.h.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="Media.OriginUrl.MSE.VideoCodec.h264" type="ETLD_PLUS_ONE">
+<!--
+We record all codecs (see list in GetCodecName() in video_codecs.cc). But for
+now we are only interested in H264, VP8 and VP9.
+-->
+
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    MSE with H264 video codec.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.MSE.VideoCodec.vp8" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    MSE with VP8 video codec.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.MSE.VideoCodec.vp9" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    MSE with VP9 video codec.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="Media.OriginUrl.SRC" type="ETLD_PLUS_ONE">
   <owner>xhwang@chromium.org</owner>
   <summary>
@@ -961,6 +1059,35 @@ components/rappor/rappor_parameters.h.
   <summary>
     The domain and registry of the URL that loads an HTML5 media player using
     SRC and ends up with an error.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.SRC.VideoCodec.h264" type="ETLD_PLUS_ONE">
+<!--
+We record all codecs (see list in GetCodecName() in video_codecs.cc). But for
+now we are only interested in H264, VP8 and VP9.
+-->
+
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    SRC with H264 video codec.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.SRC.VideoCodec.vp8" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    SRC with VP8 video codec.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="Media.OriginUrl.SRC.VideoCodec.vp9" type="ETLD_PLUS_ONE">
+  <owner>xhwang@chromium.org</owner>
+  <summary>
+    The domain and registry of the URL that loads an HTML5 media player using
+    SRC with VP9 video codec.
   </summary>
 </rappor-metric>
 
@@ -1017,8 +1144,8 @@ components/rappor/rappor_parameters.h.
     The eTLD+1 of the website visited, along with a bitfield representing
     bucket membership in a coarse histogram of time from navigation start to the
     time the first real content (text/image) is painted on the screen (See
-    PageLoad.Timing2.NavigationToFirstContentfulPaint). The bucket's name is the
-    histogram's lower bound. Tracks the same sites that the rest of the
+    PageLoad.PaintTiming.NavigationToFirstContentfulPaint). The bucket's name is
+    the histogram's lower bound. Tracks the same sites that the rest of the
     PageLoad.* histogram metrics track, i.e. http/s, html, main frame
     navigations. Metrics are only recorded for navigations that reached first
     contentful paint entirely in the foreground.
@@ -1413,6 +1540,27 @@ components/rappor/rappor_parameters.h.
   </summary>
 </rappor-metric>
 
+<rappor-metric name="PowerfulFeatureUse.ETLDPlus1.GetUserMedia.Insecure"
+    type="ETLD_PLUS_ONE">
+  <owner>guidou@chromium.org</owner>
+  <owner>grunell@chromium.org</owner>
+  <owner>hta@chromium.org</owner>
+  <summary>
+    The ETLD+1 of the URL that uses the getUserMedia API from an insecure
+    origin.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="PowerfulFeatureUse.ETLDPlus1.GetUserMedia.Secure"
+    type="ETLD_PLUS_ONE">
+  <owner>guidou@chromium.org</owner>
+  <owner>grunell@chromium.org</owner>
+  <owner>hta@chromium.org</owner>
+  <summary>
+    The ETLD+1 of the URL that uses the getUserMedia API from a secure origin.
+  </summary>
+</rappor-metric>
+
 <rappor-metric name="PowerfulFeatureUse.Host.ApplicationCacheAPI.Insecure"
     type="ETLD_PLUS_ONE">
   <owner>jww@chromium.org</owner>
@@ -1469,7 +1617,9 @@ components/rappor/rappor_parameters.h.
     type="ETLD_PLUS_ONE">
   <owner>jww@chromium.org</owner>
   <summary>
-    The host of the URL that uses the getUserMedia API from an insecure origin.
+    **DEPRECATED. No longer reporting as of M53. Replaced by
+    PowerfulFeatureUse.ETLDPlus1.GetUserMedia.Insecure The host of the URL that
+    uses the getUserMedia API from an insecure origin.
   </summary>
 </rappor-metric>
 
@@ -1477,7 +1627,9 @@ components/rappor/rappor_parameters.h.
     type="ETLD_PLUS_ONE">
   <owner>jww@chromium.org</owner>
   <summary>
-    The host of the URL that uses the getUserMedia API from a secure origin.
+    **DEPRECATED. No longer reporting as of M53. Replaced by
+    PowerfulFeatureUse.ETLDPlus1.GetUserMedia.Secure. The host of the URL that
+    uses the getUserMedia API from a secure origin.
   </summary>
 </rappor-metric>
 
@@ -1495,6 +1647,36 @@ components/rappor/rappor_parameters.h.
   <owner>miguelg@chromium.org</owner>
   <summary>
     Push Messages received per Origin.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="RTCPeerConnection.Audio" type="ETLD_PLUS_ONE">
+  <owner>guidou@chromium.org</owner>
+  <owner>hta@chromium.org</owner>
+  <owner>tommi@chromium.org</owner>
+  <summary>
+    The ETLD+1 of the URL with a WebRTC peer connection with at least one audio
+    track.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="RTCPeerConnection.DataChannel" type="ETLD_PLUS_ONE">
+  <owner>guidou@chromium.org</owner>
+  <owner>hta@chromium.org</owner>
+  <owner>tommi@chromium.org</owner>
+  <summary>
+    The ETLD+1 of the URL with a WebRTC peer connection with at least one data
+    channel.
+  </summary>
+</rappor-metric>
+
+<rappor-metric name="RTCPeerConnection.Video" type="ETLD_PLUS_ONE">
+  <owner>guidou@chromium.org</owner>
+  <owner>hta@chromium.org</owner>
+  <owner>tommi@chromium.org</owner>
+  <summary>
+    The ETLD+1 of the URL with a WebRTC peer connection with at least one video
+    track.
   </summary>
 </rappor-metric>
 

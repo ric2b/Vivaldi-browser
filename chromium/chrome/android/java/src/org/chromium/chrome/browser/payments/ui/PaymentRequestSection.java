@@ -7,24 +7,29 @@ package org.chromium.chrome.browser.payments.ui;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Color;
-import android.graphics.drawable.Drawable;
+import android.graphics.Typeface;
 import android.text.SpannableStringBuilder;
 import android.text.TextUtils;
 import android.text.TextUtils.TruncateAt;
 import android.text.style.StyleSpan;
 import android.view.Gravity;
+import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.GridLayout;
+import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.widget.TintedDrawable;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -36,7 +41,7 @@ import javax.annotation.Nullable;
  * .............................................................................................
  * . TITLE                                                          |                |         .
  * .................................................................|                |         .
- * . LEFT SUMMARY TEXT                        |  RIGHT SUMMARY TEXT |    ADD or LOGO | CHEVRON .
+ * . LEFT SUMMARY TEXT                        |  RIGHT SUMMARY TEXT |           LOGO | CHEVRON .
  * .................................................................|                |         .
  * . MAIN SECTION CONTENT                                           |                |         .
  * .............................................................................................
@@ -46,9 +51,9 @@ import javax.annotation.Nullable;
  *    two bits of optional summary text.  Subclasses may extend this class to append more controls
  *    via the {@link #createMainSectionContent} function.
  *
- * 2) ADD or LOGO
+ * 2) LOGO
  *    Displays an optional logo (e.g. a credit card image) that floats to the right of the main
- *    content.  May eventually be used to show an "ADD" button.
+ *    content.
  *
  * 3) CHEVRON
  *    Drawn to indicate that the current section may be expanded.  Displayed only when the view is
@@ -57,13 +62,16 @@ import javax.annotation.Nullable;
  * There are three states that the UI may flip between; see {@link #DISPLAY_MODE_NORMAL},
  * {@link #DISPLAY_MODE_EXPANDABLE}, and {@link #DISPLAY_MODE_FOCUSED} for details.
  *
- * TODO(dfalcantara): Replace this with a RelativeLayout once mocks are finalized.
+ * TODO(dfalcantara): Figure out what kind of Layout we should really be using here now that mocks
+ *                    have stabilized, somewhat.  A RelativeLayout is gross because it doesn't
+ *                    automatically account for Views being removed, meaning we'd have to twiddle
+ *                    with each View's LayoutParams as their visibility was toggled.
  */
 public abstract class PaymentRequestSection extends LinearLayout {
     public static final String TAG = "PaymentRequestUI";
 
-    /** Handles clicking on the widgets. */
-    public static interface PaymentsSectionDelegate extends View.OnClickListener {
+    /** Handles clicks on the widgets and providing data to the PaymentsRequestSection. */
+    public interface SectionDelegate extends View.OnClickListener {
         /**
          * Called when the user selects a radio button option from an {@link OptionSection}.
          *
@@ -72,8 +80,20 @@ public abstract class PaymentRequestSection extends LinearLayout {
          */
         void onPaymentOptionChanged(OptionSection section, PaymentOption option);
 
+        /** Called when the user requests adding a new PaymentOption to a given section. */
+        void onAddPaymentOption(OptionSection section);
+
+        /** Checks whether or not the text should be formatted with a bold label. */
+        boolean isBoldLabelNeeded(OptionSection section);
+
         /** Checks whether or not the user should be allowed to click on controls. */
         boolean isAcceptingUserInput();
+
+        /** Returns any additional text that needs to be displayed. */
+        @Nullable String getAdditionalText(OptionSection section);
+
+        /** Returns true if the additional text should be stylized as a warning instead of info. */
+        boolean isAdditionalTextDisplayingWarning(OptionSection section);
     }
 
     /** Normal mode: White background, displays the item assuming the user accepts it as is. */
@@ -85,7 +105,10 @@ public abstract class PaymentRequestSection extends LinearLayout {
     /** Focused mode: Gray background, more padding, no edit chevron. */
     static final int DISPLAY_MODE_FOCUSED = 2;
 
-    protected final PaymentsSectionDelegate mDelegate;
+    /** Checking mode: Gray background, spinner overlay hides everything except the title. */
+    static final int DISPLAY_MODE_CHECKING = 3;
+
+    protected final SectionDelegate mDelegate;
     protected final int mLargeSpacing;
 
     private final int mVerticalSpacing;
@@ -104,16 +127,16 @@ public abstract class PaymentRequestSection extends LinearLayout {
     private boolean mIsSummaryAllowed = true;
 
     /**
-     * Constructs an PaymentRequestSection.
+     * Constructs a PaymentRequestSection.
      *
      * @param context     Context to pull resources from.
      * @param sectionName Title of the section to display.
      * @param delegate    Delegate to alert when something changes in the dialog.
      */
-    private PaymentRequestSection(
-            Context context, String sectionName, PaymentsSectionDelegate delegate) {
+    private PaymentRequestSection(Context context, String sectionName, SectionDelegate delegate) {
         super(context);
         mDelegate = delegate;
+        setId(R.id.payments_section);
         setOnClickListener(delegate);
         setOrientation(HORIZONTAL);
         setGravity(Gravity.CENTER_VERTICAL);
@@ -125,17 +148,12 @@ public abstract class PaymentRequestSection extends LinearLayout {
                 getResources().getDimensionPixelSize(R.dimen.payments_section_large_spacing);
         mVerticalSpacing =
                 getResources().getDimensionPixelSize(R.dimen.payments_section_vertical_spacing);
-        setPadding(0, mVerticalSpacing, 0, mVerticalSpacing);
-
-        TintedDrawable chevron =
-                TintedDrawable.constructTintedDrawable(getResources(), R.drawable.ic_expanded);
-        chevron.setTint(ApiCompatibilityUtils.getColorStateList(
-                getResources(), R.color.payments_section_chevron));
+        setPadding(mLargeSpacing, mVerticalSpacing, mLargeSpacing, mVerticalSpacing);
 
         // Create the main content.
         mMainSection = prepareMainSection(sectionName);
-        mLogoView = isLogoNecessary() ? createAndAddLogoView(this, 0, 0, mLargeSpacing) : null;
-        mChevronView = createAndAddImageView(this, chevron, 0, mLargeSpacing);
+        mLogoView = isLogoNecessary() ? createAndAddLogoView(this, 0, mLargeSpacing) : null;
+        mChevronView = createAndAddChevron(this);
         setDisplayMode(DISPLAY_MODE_NORMAL);
     }
 
@@ -158,8 +176,9 @@ public abstract class PaymentRequestSection extends LinearLayout {
      */
     public void setDisplayMode(int displayMode) {
         mDisplayMode = displayMode;
-        setBackgroundColor(
-                displayMode == DISPLAY_MODE_FOCUSED ? mFocusedBackgroundColor : Color.WHITE);
+        boolean isExpanded =
+                displayMode == DISPLAY_MODE_FOCUSED || displayMode == DISPLAY_MODE_CHECKING;
+        setBackgroundColor(isExpanded ? mFocusedBackgroundColor : Color.WHITE);
         updateLogoVisibility();
         mChevronView.setVisibility(displayMode == DISPLAY_MODE_EXPANDABLE ? VISIBLE : GONE);
 
@@ -168,8 +187,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
         for (int i = 0; i < mMainSection.getChildCount(); i++) {
             if (mMainSection.getChildAt(i).getVisibility() == VISIBLE) numVisibleMainViews += 1;
         }
-        boolean isTitleMarginNecessary =
-                numVisibleMainViews > 1 && displayMode == DISPLAY_MODE_FOCUSED;
+        boolean isTitleMarginNecessary = numVisibleMainViews > 1 && isExpanded;
         ((ViewGroup.MarginLayoutParams) mTitleView.getLayoutParams()).bottomMargin =
                 isTitleMarginNecessary ? mVerticalSpacing : 0;
     }
@@ -211,9 +229,9 @@ public abstract class PaymentRequestSection extends LinearLayout {
     protected abstract void createMainSectionContent(LinearLayout mainSectionLayout);
 
     /**
-     * Sets whether or not the summary text can be displayed.
+     * Sets whether the summary text can be displayed.
      *
-     * @param isAllowed Whether or not do display the summary text.
+     * @param isAllowed Whether to display the summary text.
      */
     protected void setIsSummaryAllowed(boolean isAllowed) {
         mIsSummaryAllowed = isAllowed;
@@ -231,14 +249,12 @@ public abstract class PaymentRequestSection extends LinearLayout {
      *
      * @param sectionName Title to display for the section.
      */
-    private final LinearLayout prepareMainSection(String sectionName) {
+    private LinearLayout prepareMainSection(String sectionName) {
         // The main section is a vertical linear layout that subclasses can append to.
         LinearLayout mainSectionLayout = new LinearLayout(getContext());
         mainSectionLayout.setOrientation(VERTICAL);
         LinearLayout.LayoutParams mainParams = new LayoutParams(0, LayoutParams.WRAP_CONTENT);
         mainParams.weight = 1;
-        ApiCompatibilityUtils.setMarginStart(mainParams, mLargeSpacing);
-        ApiCompatibilityUtils.setMarginEnd(mainParams, mLargeSpacing);
         addView(mainSectionLayout, mainParams);
 
         // The title is always displayed for the row at the top of the main section.
@@ -251,6 +267,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
 
         // Create the two TextViews for showing the summary text.
         mSummaryLeftTextView = new TextView(getContext());
+        mSummaryLeftTextView.setId(R.id.payments_left_summary_label);
         ApiCompatibilityUtils.setTextAppearance(
                 mSummaryLeftTextView, R.style.PaymentsUiSectionDefaultText);
 
@@ -284,7 +301,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
     }
 
     private static ImageView createAndAddLogoView(
-            ViewGroup parent, int resourceId, int startMargin, int endMargin) {
+            ViewGroup parent, int resourceId, int startMargin) {
         ImageView view = new ImageView(parent.getContext());
         view.setBackgroundResource(R.drawable.payments_ui_logo_bg);
         if (resourceId != 0) view.setImageResource(resourceId);
@@ -294,21 +311,22 @@ public abstract class PaymentRequestSection extends LinearLayout {
                 parent.getResources().getDimensionPixelSize(R.dimen.payments_section_logo_width),
                 parent.getResources().getDimensionPixelSize(R.dimen.payments_section_logo_height));
         ApiCompatibilityUtils.setMarginStart(params, startMargin);
-        ApiCompatibilityUtils.setMarginEnd(params, endMargin);
         parent.addView(view, params);
         return view;
     }
 
-    private static ImageView createAndAddImageView(
-            ViewGroup parent, @Nullable Drawable drawable, int startMargin, int endMargin) {
+    private ImageView createAndAddChevron(ViewGroup parent) {
+        Resources resources = parent.getResources();
+        TintedDrawable chevron = TintedDrawable.constructTintedDrawable(
+                resources, R.drawable.ic_expanded, R.color.payments_section_chevron);
+
         ImageView view = new ImageView(parent.getContext());
-        view.setImageDrawable(drawable);
+        view.setImageDrawable(chevron);
 
         // Wrap whatever image is passed in.
         LayoutParams params =
                 new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-        ApiCompatibilityUtils.setMarginStart(params, startMargin);
-        ApiCompatibilityUtils.setMarginEnd(params, endMargin);
+        ApiCompatibilityUtils.setMarginStart(params, mLargeSpacing);
         parent.addView(view, params);
         return view;
     }
@@ -338,8 +356,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
     public static class ExtraTextSection extends PaymentRequestSection {
         private TextView mExtraTextView;
 
-        public ExtraTextSection(
-                Context context, String sectionName, PaymentsSectionDelegate delegate) {
+        public ExtraTextSection(Context context, String sectionName, SectionDelegate delegate) {
             super(context, sectionName, delegate);
             setExtraText(null);
         }
@@ -350,7 +367,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
 
             mExtraTextView = new TextView(context);
             ApiCompatibilityUtils.setTextAppearance(
-                    mExtraTextView, R.style.PaymentsUiSectionDescriptiveText);
+                    mExtraTextView, R.style.PaymentsUiSectionDescriptiveTextEndAligned);
             mainSectionLayout.addView(mExtraTextView, new LinearLayout.LayoutParams(
                     LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         }
@@ -388,7 +405,7 @@ public abstract class PaymentRequestSection extends LinearLayout {
         private GridLayout mBreakdownLayout;
 
         public LineItemBreakdownSection(
-                Context context, String sectionName, PaymentsSectionDelegate delegate) {
+                Context context, String sectionName, SectionDelegate delegate) {
             super(context, sectionName, delegate);
         }
 
@@ -407,39 +424,34 @@ public abstract class PaymentRequestSection extends LinearLayout {
         }
 
         /**
-         * Updates the breakdown, with the last item representing the full total.
+         * Updates the total and how it's broken down.
          *
-         * @param lineItems List of {@link LineItem}s.  The last item is assumed to be the total,
-         *                  while the others show how the total is broken down.
+         * @param cart The shopping cart contents and the total.
          */
-        public void update(List<LineItem> lineItems) {
+        public void update(ShoppingCart cart) {
             Context context = mBreakdownLayout.getContext();
 
             // Update the summary to display information about the total.
-            CharSequence totalLabel = null;
-            CharSequence totalValue = null;
-            if (lineItems.size() != 0) {
-                LineItem totalItem = lineItems.get(lineItems.size() - 1);
-                totalLabel = totalItem.getLabel();
-                totalValue = createValueString(totalItem.getCurrency(), totalItem.getPrice(), true);
-            }
-            setSummaryText(totalLabel, totalValue);
+            setSummaryText(cart.getTotal().getLabel(), createValueString(
+                    cart.getTotal().getCurrency(), cart.getTotal().getPrice(), true));
+
+            mBreakdownLayout.removeAllViews();
+            if (cart.getContents() == null) return;
 
             // Update the breakdown, using one row per {@link LineItem}.
-            int numItems = lineItems.size() - 1;
-            mBreakdownLayout.removeAllViews();
+            int numItems = cart.getContents().size();
             mBreakdownLayout.setRowCount(numItems);
             for (int i = 0; i < numItems; i++) {
-                LineItem item = lineItems.get(i);
+                LineItem item = cart.getContents().get(i);
 
                 TextView description = new TextView(context);
                 ApiCompatibilityUtils.setTextAppearance(
-                        description, R.style.PaymentsUiSectionDescriptiveText);
+                        description, R.style.PaymentsUiSectionDescriptiveTextEndAligned);
                 description.setText(item.getLabel());
 
                 TextView amount = new TextView(context);
                 ApiCompatibilityUtils.setTextAppearance(
-                        amount, R.style.PaymentsUiSectionDescriptiveText);
+                        amount, R.style.PaymentsUiSectionDescriptiveTextEndAligned);
                 amount.setText(createValueString(item.getCurrency(), item.getPrice(), false));
 
                 // Each item is represented by a row in the GridLayout.
@@ -504,58 +516,209 @@ public abstract class PaymentRequestSection extends LinearLayout {
      * . TITLE                                                          |                |         .
      * .................................................................|                |         .
      * . LEFT SUMMARY TEXT                        |  RIGHT SUMMARY TEXT |                |         .
-     * .................................................................|    ADD or LOGO | CHEVRON .
+     * .................................................................|                |         .
+     * . Descriptive text that spans all three columns because it can.  |                |         .
+     * . ! Warning text that displays a big scary warning and icon.     |           LOGO | CHEVRON .
      * . O Option 1                                              ICON 1 |                |         .
      * . O Option 2                                              ICON 2 |                |         .
      * . O Option 3                                              ICON 3 |                |         .
+     * . + ADD THING                                                    |                |         .
      * .............................................................................................
      */
     public static class OptionSection extends PaymentRequestSection implements OnClickListener {
-        /** Displays a row representing a selectable option. */
-        private class OptionRow extends LinearLayout {
+
+        private static final int INVALID_OPTION_INDEX = -1;
+
+        private final List<TextView> mLabelsForTest = new ArrayList<>();
+        private boolean mCanAddItems = true;
+
+        /**
+         * Displays a row representing either a selectable option or some flavor text.
+         *
+         * + The "button" is on the left and shows either an icon or a radio button to represent th
+         *   row type.
+         * + The "label" is text describing the row.
+         * + The "icon" is a logo representing the option, like a credit card.
+         */
+        public class OptionRow {
+            private static final int OPTION_ROW_TYPE_OPTION = 0;
+            private static final int OPTION_ROW_TYPE_ADD = 1;
+            private static final int OPTION_ROW_TYPE_DESCRIPTION = 2;
+            private static final int OPTION_ROW_TYPE_WARNING = 3;
+
+            private final int mRowType;
             private final PaymentOption mOption;
-            private final RadioButton mRadioButton;
+            private final View mButton;
+            private final TextView mLabel;
+            private final View mIcon;
 
-            public OptionRow(Context context, PaymentOption item, boolean isSelected) {
-                super(context);
-                setGravity(Gravity.CENTER_VERTICAL);
+            public OptionRow(GridLayout parent, int rowIndex, int rowType, PaymentOption item,
+                    boolean isSelected) {
+                boolean iconExists = item != null && item.getDrawableIconId() != 0;
+                boolean isEnabled = item != null && item.isValid();
+                mRowType = rowType;
                 mOption = item;
-
-                // The radio button hugs left.
-                mRadioButton = new RadioButton(context);
-                mRadioButton.setChecked(isSelected);
-                LinearLayout.LayoutParams radioParams = new LinearLayout.LayoutParams(
-                        LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
-                ApiCompatibilityUtils.setMarginEnd(radioParams, mLargeSpacing);
-                addView(mRadioButton, radioParams);
-
-                // The description takes up all leftover space.
-                TextView descriptionView = new TextView(context);
-                descriptionView.setText(convertOptionToString(item));
-                ApiCompatibilityUtils.setTextAppearance(
-                        descriptionView, R.style.PaymentsUiSectionDefaultText);
-                LinearLayout.LayoutParams descriptionParams =
-                        new LinearLayout.LayoutParams(0, LayoutParams.WRAP_CONTENT);
-                descriptionParams.weight = 1;
-                addView(descriptionView, descriptionParams);
-
-                // If there's an icon to display, it floats to the right of everything.
-                int resourceId = item.getDrawableIconId();
-                if (resourceId != 0) createAndAddLogoView(this, resourceId, mLargeSpacing, 0);
-
-                // Making the radio button unclickable makes clicks fall through to the row.
-                mRadioButton.setClickable(false);
-                setOnClickListener(OptionSection.this);
+                mButton = createButton(parent, rowIndex, isSelected, isEnabled);
+                mLabel = createLabel(parent, rowIndex, iconExists, isEnabled);
+                mIcon = iconExists ? createIcon(parent, rowIndex) : null;
             }
 
             /** Sets the selected state of this item, alerting the delegate if selected. */
             public void setChecked(boolean isChecked) {
-                mRadioButton.setChecked(isChecked);
+                if (mOption == null) return;
 
+                ((RadioButton) mButton).setChecked(isChecked);
                 if (isChecked) {
                     updateSelectedItem(mOption);
                     mDelegate.onPaymentOptionChanged(OptionSection.this, mOption);
                 }
+            }
+
+            /** Change the label for the row. */
+            public void setLabel(int stringId) {
+                setLabel(getContext().getString(stringId));
+            }
+
+            /** Change the label for the row. */
+            public void setLabel(CharSequence string) {
+                mLabel.setText(string);
+            }
+
+            /** Set the button identifier for the option. */
+            public void setButtonId(int id) {
+                mButton.setId(id);
+            }
+
+            /** @return the label for the row. */
+            @VisibleForTesting
+            public CharSequence getLabelText() {
+                return mLabel.getText();
+            }
+
+            private View createButton(
+                    GridLayout parent, int rowIndex, boolean isSelected, boolean isEnabled) {
+                if (mRowType == OPTION_ROW_TYPE_DESCRIPTION) return null;
+
+                Context context = parent.getContext();
+                View view;
+
+                if (mRowType == OPTION_ROW_TYPE_OPTION) {
+                    // Show a radio button indicating whether the PaymentOption is selected.
+                    RadioButton button = new RadioButton(context);
+                    button.setChecked(isSelected && isEnabled);
+                    button.setEnabled(isEnabled);
+                    view = button;
+                } else {
+                    // Show an icon representing the row type, defaulting to the add button.
+                    int drawableId;
+                    int drawableTint;
+                    if (mRowType == OPTION_ROW_TYPE_WARNING) {
+                        drawableId = R.drawable.ic_warning_white_24dp;
+                        drawableTint = R.color.error_text_color;
+                    } else {
+                        drawableId = R.drawable.plus;
+                        drawableTint = R.color.light_active_color;
+                    }
+
+                    TintedDrawable tintedDrawable = TintedDrawable.constructTintedDrawable(
+                            context.getResources(), drawableId, drawableTint);
+                    ImageButton button = new ImageButton(context);
+                    button.setBackground(null);
+                    button.setImageDrawable(tintedDrawable);
+                    button.setPadding(0, 0, 0, 0);
+                    view = button;
+                }
+
+                // The button hugs left.
+                GridLayout.LayoutParams buttonParams = new GridLayout.LayoutParams(
+                        GridLayout.spec(rowIndex, 1, GridLayout.CENTER),
+                        GridLayout.spec(0, 1, GridLayout.CENTER));
+                buttonParams.topMargin = mVerticalMargin;
+                ApiCompatibilityUtils.setMarginEnd(buttonParams, mLargeSpacing);
+                parent.addView(view, buttonParams);
+
+                view.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+                view.setOnClickListener(OptionSection.this);
+                return view;
+            }
+
+            private TextView createLabel(
+                    GridLayout parent, int rowIndex, boolean iconExists, boolean isEnabled) {
+                Context context = parent.getContext();
+                Resources resources = context.getResources();
+
+                // By default, the label appears to the right of the "button" in the second column.
+                // + If there is no button and no icon, the label spans the whole row.
+                // + If there is no icon, the label spans two columns.
+                // + Otherwise, the label occupies only its own column.
+                int columnStart = 1;
+                int columnSpan = iconExists ? 1 : 2;
+
+                TextView labelView = new TextView(context);
+                if (mRowType == OPTION_ROW_TYPE_OPTION) {
+                    // Show the string representing the PaymentOption.
+                    ApiCompatibilityUtils.setTextAppearance(labelView, isEnabled
+                            ? R.style.PaymentsUiSectionDefaultText
+                            : R.style.PaymentsUiSectionDisabledText);
+                    labelView.setText(convertOptionToString(
+                            mOption, mDelegate.isBoldLabelNeeded(OptionSection.this)));
+                    labelView.setEnabled(isEnabled);
+                } else if (mRowType == OPTION_ROW_TYPE_ADD) {
+                    // Shows string saying that the user can add a new option, e.g. credit card no.
+                    String typeface = resources.getString(R.string.roboto_medium_typeface);
+                    int textStyle = resources.getInteger(R.integer.roboto_medium_textstyle);
+                    int buttonHeight = resources.getDimensionPixelSize(
+                            R.dimen.payments_section_add_button_height);
+
+                    ApiCompatibilityUtils.setTextAppearance(
+                            labelView, R.style.PaymentsUiSectionAddButtonLabel);
+                    labelView.setMinimumHeight(buttonHeight);
+                    labelView.setGravity(Gravity.CENTER_VERTICAL);
+                    labelView.setTypeface(Typeface.create(typeface, textStyle));
+                } else if (mRowType == OPTION_ROW_TYPE_DESCRIPTION) {
+                    // The description spans all the columns.
+                    columnStart = 0;
+                    columnSpan = 3;
+
+                    ApiCompatibilityUtils.setTextAppearance(
+                            labelView, R.style.PaymentsUiSectionDescriptiveText);
+                } else if (mRowType == OPTION_ROW_TYPE_WARNING) {
+                    // Warnings use two columns.
+                    columnSpan = 2;
+                    ApiCompatibilityUtils.setTextAppearance(
+                            labelView, R.style.PaymentsUiSectionWarningText);
+                }
+
+                // The label spans two columns if no icon exists.  Setting the view width to 0
+                // forces it to stretch.
+                GridLayout.LayoutParams labelParams = new GridLayout.LayoutParams(
+                        GridLayout.spec(rowIndex, 1, GridLayout.CENTER),
+                        GridLayout.spec(columnStart, columnSpan, GridLayout.FILL));
+                labelParams.topMargin = mVerticalMargin;
+                labelParams.width = 0;
+                parent.addView(labelView, labelParams);
+
+                labelView.setOnClickListener(OptionSection.this);
+                return labelView;
+            }
+
+            private View createIcon(GridLayout parent, int rowIndex) {
+                // The icon has a pre-defined width.
+                ImageView icon = new ImageView(parent.getContext());
+                icon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+                icon.setBackgroundResource(R.drawable.payments_ui_logo_bg);
+                icon.setImageResource(mOption.getDrawableIconId());
+                icon.setMaxWidth(mIconMaxWidth);
+
+                // The icon floats to the right of everything.
+                GridLayout.LayoutParams iconParams = new GridLayout.LayoutParams(
+                        GridLayout.spec(rowIndex, 1, GridLayout.CENTER), GridLayout.spec(2, 1));
+                iconParams.topMargin = mVerticalMargin;
+                ApiCompatibilityUtils.setMarginStart(iconParams, mLargeSpacing);
+                parent.addView(icon, iconParams);
+
+                icon.setOnClickListener(OptionSection.this);
+                return icon;
             }
         }
 
@@ -565,8 +728,17 @@ public abstract class PaymentRequestSection extends LinearLayout {
         /** Top and bottom margins for each item. */
         private final int mVerticalMargin;
 
+        /** All the possible PaymentOptions in Layout form, then one row for adding new options. */
+        private final ArrayList<OptionRow> mOptionRows = new ArrayList<>();
+
+        /** Width that the icon takes. */
+        private final int mIconMaxWidth;
+
         /** Layout containing all the {@link OptionRow}s. */
-        private LinearLayout mOptionLayout;
+        private GridLayout mOptionLayout;
+
+        /** A spinner to show when the user selection is being checked. */
+        private View mCheckingProgress;
 
         /**
          * Constructs an OptionSection.
@@ -577,11 +749,13 @@ public abstract class PaymentRequestSection extends LinearLayout {
          * @param delegate    Delegate to alert when something changes in the dialog.
          */
         public OptionSection(Context context, String sectionName, @Nullable CharSequence emptyLabel,
-                PaymentsSectionDelegate delegate) {
+                SectionDelegate delegate) {
             super(context, sectionName, delegate);
             mVerticalMargin = context.getResources().getDimensionPixelSize(
                     R.dimen.payments_section_small_spacing);
             mEmptyLabel = emptyLabel;
+            mIconMaxWidth = context.getResources().getDimensionPixelSize(
+                    R.dimen.payments_section_logo_width);
             setSummaryText(emptyLabel, null);
         }
 
@@ -589,10 +763,28 @@ public abstract class PaymentRequestSection extends LinearLayout {
         public void onClick(View v) {
             if (!mDelegate.isAcceptingUserInput()) return;
 
-            for (int i = 0; i < mOptionLayout.getChildCount(); i++) {
-                OptionRow row = (OptionRow) mOptionLayout.getChildAt(i);
-                row.setChecked(v == row || v == row.mRadioButton);
+            // Handle click on the "ADD THING" button.
+            for (int i = 0; i < mOptionRows.size(); i++) {
+                OptionRow row = mOptionRows.get(i);
+                boolean wasClicked = row.mButton == v || row.mLabel == v || row.mIcon == v;
+                if (row.mOption == null && wasClicked) {
+                    mDelegate.onAddPaymentOption(this);
+                    return;
+                }
             }
+
+            // Update the radio button state: checked/unchecked.
+            for (int i = 0; i < mOptionRows.size(); i++) {
+                OptionRow row = mOptionRows.get(i);
+                boolean wasClicked = row.mButton == v || row.mLabel == v || row.mIcon == v;
+                if (row.mOption != null) row.setChecked(wasClicked);
+            }
+        }
+
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent event) {
+            // Allow touches to propagate to children only if the layout can be interacted with.
+            return !mDelegate.isAcceptingUserInput();
         }
 
         @Override
@@ -603,11 +795,17 @@ public abstract class PaymentRequestSection extends LinearLayout {
         @Override
         protected void createMainSectionContent(LinearLayout mainSectionLayout) {
             Context context = mainSectionLayout.getContext();
+            mCheckingProgress = createLoadingSpinner();
 
-            mOptionLayout = new LinearLayout(context);
-            mOptionLayout.setOrientation(VERTICAL);
+            mOptionLayout = new GridLayout(context);
+            mOptionLayout.setColumnCount(3);
             mainSectionLayout.addView(mOptionLayout, new LinearLayout.LayoutParams(
                     LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        }
+
+        /** @param canAddItems If false, this section will not show [+ ADD THING] button. */
+        public void setCanAddItems(boolean canAddItems) {
+            mCanAddItems = canAddItems;
         }
 
         /** Updates the View to account for the new {@link SectionInformation} being passed in. */
@@ -617,6 +815,39 @@ public abstract class PaymentRequestSection extends LinearLayout {
             updateOptionList(information, selectedItem);
         }
 
+        private View createLoadingSpinner() {
+            ViewGroup spinnyLayout = (ViewGroup) LayoutInflater.from(getContext()).inflate(
+                    R.layout.payment_request_spinny, null);
+
+            TextView textView = (TextView) spinnyLayout.findViewById(R.id.message);
+            textView.setText(getContext().getString(R.string.payments_checking_option));
+
+            return spinnyLayout;
+        }
+
+        private void setSpinnerVisibility(boolean visibility) {
+            if (visibility) {
+                if (mCheckingProgress.getParent() != null) return;
+
+                ViewGroup parent = (ViewGroup) mOptionLayout.getParent();
+                int optionLayoutIndex = parent.indexOfChild(mOptionLayout);
+                parent.addView(mCheckingProgress, optionLayoutIndex);
+
+                MarginLayoutParams params =
+                        (MarginLayoutParams) mCheckingProgress.getLayoutParams();
+                params.width = LayoutParams.MATCH_PARENT;
+                params.height = LayoutParams.WRAP_CONTENT;
+                params.bottomMargin = getContext().getResources().getDimensionPixelSize(
+                        R.dimen.payments_section_checking_spacing);
+                mCheckingProgress.requestLayout();
+            } else {
+                if (mCheckingProgress.getParent() == null) return;
+
+                ViewGroup parent = (ViewGroup) mCheckingProgress.getParent();
+                parent.removeView(mCheckingProgress);
+            }
+        }
+
         @Override
         public void setDisplayMode(int displayMode) {
             super.setDisplayMode(displayMode);
@@ -624,9 +855,15 @@ public abstract class PaymentRequestSection extends LinearLayout {
             if (displayMode == DISPLAY_MODE_FOCUSED) {
                 setIsSummaryAllowed(false);
                 mOptionLayout.setVisibility(VISIBLE);
+                setSpinnerVisibility(false);
+            } else if (displayMode == DISPLAY_MODE_CHECKING) {
+                setIsSummaryAllowed(false);
+                mOptionLayout.setVisibility(GONE);
+                setSpinnerVisibility(true);
             } else {
                 setIsSummaryAllowed(true);
                 mOptionLayout.setVisibility(GONE);
+                setSpinnerVisibility(false);
             }
         }
 
@@ -640,28 +877,98 @@ public abstract class PaymentRequestSection extends LinearLayout {
                 }
             } else {
                 setLogoResource(selectedItem.getDrawableIconId());
-                setSummaryText(convertOptionToString(selectedItem), null);
+                setSummaryText(convertOptionToString(selectedItem, false), null);
             }
         }
 
         private void updateOptionList(SectionInformation information, PaymentOption selectedItem) {
             mOptionLayout.removeAllViews();
-            if (information.isEmpty()) return;
+            mOptionRows.clear();
+            mLabelsForTest.clear();
 
+            // Show any additional text requested by the layout.
+            String additionalText = mDelegate.getAdditionalText(this);
+            if (!TextUtils.isEmpty(additionalText)) {
+                OptionRow descriptionRow = new OptionRow(mOptionLayout,
+                        mOptionRows.size(),
+                        mDelegate.isAdditionalTextDisplayingWarning(this)
+                                ? OptionRow.OPTION_ROW_TYPE_WARNING
+                                : OptionRow.OPTION_ROW_TYPE_DESCRIPTION,
+                                null, false);
+                mOptionRows.add(descriptionRow);
+                descriptionRow.setLabel(additionalText);
+            }
+
+            // List out known payment options.
+            int firstOptionIndex = INVALID_OPTION_INDEX;
             for (int i = 0; i < information.getSize(); i++) {
+                int currentRow = mOptionRows.size();
+                if (firstOptionIndex == INVALID_OPTION_INDEX) firstOptionIndex = currentRow;
+
                 PaymentOption item = information.getItem(i);
-                OptionRow row = new OptionRow(getContext(), item, item == selectedItem);
-                LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-                        LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
-                rowParams.topMargin = mVerticalMargin;
-                rowParams.bottomMargin = mVerticalMargin;
-                mOptionLayout.addView(row, rowParams);
+                OptionRow currentOptionRow = new OptionRow(mOptionLayout, currentRow,
+                        OptionRow.OPTION_ROW_TYPE_OPTION, item, item == selectedItem);
+                mOptionRows.add(currentOptionRow);
+
+                // For testing, keep the labels in a list for easy access.
+                mLabelsForTest.add(currentOptionRow.mLabel);
+            }
+
+            // TODO(crbug.com/627186): Find another way to give access to this resource in tests.
+            // For testing.
+            if (firstOptionIndex != INVALID_OPTION_INDEX) {
+                mOptionRows.get(firstOptionIndex).setButtonId(R.id.payments_first_radio_button);
+            }
+
+            // If the user is allowed to add new options, show the button for it.
+            if (information.getAddStringId() != 0 && mCanAddItems) {
+                OptionRow addRow = new OptionRow(mOptionLayout, mOptionLayout.getChildCount(),
+                        OptionRow.OPTION_ROW_TYPE_ADD, null, false);
+                addRow.setLabel(information.getAddStringId());
+                addRow.setButtonId(R.id.payments_add_option_button);
+                mOptionRows.add(addRow);
             }
         }
 
-        private CharSequence convertOptionToString(PaymentOption item) {
-            if (TextUtils.isEmpty(item.getSublabel())) return item.getLabel();
-            return new StringBuilder(item.getLabel()).append("\n").append(item.getSublabel());
+        private CharSequence convertOptionToString(PaymentOption item, boolean useBoldLabel) {
+            SpannableStringBuilder builder = new SpannableStringBuilder(item.getLabel());
+            if (useBoldLabel) {
+                builder.setSpan(
+                        new StyleSpan(android.graphics.Typeface.BOLD), 0, builder.length(), 0);
+            }
+
+            if (!TextUtils.isEmpty(item.getSublabel())) {
+                if (builder.length() > 0) builder.append("\n");
+                builder.append(item.getSublabel());
+            }
+
+            if (!TextUtils.isEmpty(item.getTertiaryLabel())) {
+                if (builder.length() > 0) builder.append("\n");
+                builder.append(item.getTertiaryLabel());
+            }
+
+            return builder;
+        }
+
+        /**
+         * Returns the label at the specified |labelIndex|. Returns null if there is no label at
+         * that index.
+         */
+        @VisibleForTesting
+        public TextView getOptionLabelsForTest(int labelIndex) {
+            return mLabelsForTest.get(labelIndex);
+        }
+
+        /** Returns the number of option labels. */
+        @VisibleForTesting
+        public int getNumberOfOptionLabelsForTest() {
+            return mLabelsForTest.size();
+        }
+
+        /** Returns the OptionRow at the specified |index|. */
+        @VisibleForTesting
+        public OptionRow getOptionRowAtIndex(int index) {
+            return mOptionRows.get(index);
         }
     }
 

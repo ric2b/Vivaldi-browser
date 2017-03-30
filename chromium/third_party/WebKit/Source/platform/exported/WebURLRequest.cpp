@@ -39,6 +39,8 @@
 #include "public/platform/WebURL.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -54,11 +56,11 @@ public:
 
 private:
     explicit ExtraDataContainer(WebURLRequest::ExtraData* extraData)
-        : m_extraData(adoptPtr(extraData))
+        : m_extraData(wrapUnique(extraData))
     {
     }
 
-    OwnPtr<WebURLRequest::ExtraData> m_extraData;
+    std::unique_ptr<WebURLRequest::ExtraData> m_extraData;
 };
 
 } // namespace
@@ -341,12 +343,12 @@ void WebURLRequest::setUseStreamOnResponse(bool useStreamOnResponse)
     m_private->m_resourceRequest->setUseStreamOnResponse(useStreamOnResponse);
 }
 
-bool WebURLRequest::skipServiceWorker() const
+WebURLRequest::SkipServiceWorker WebURLRequest::skipServiceWorker() const
 {
     return m_private->m_resourceRequest->skipServiceWorker();
 }
 
-void WebURLRequest::setSkipServiceWorker(bool skipServiceWorker)
+void WebURLRequest::setSkipServiceWorker(WebURLRequest::SkipServiceWorker skipServiceWorker)
 {
     m_private->m_resourceRequest->setSkipServiceWorker(skipServiceWorker);
 }

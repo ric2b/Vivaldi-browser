@@ -81,6 +81,7 @@ class _BlinkPerfMeasurement(legacy_page_test.LegacyPageTest):
       self._blink_perf_js = f.read()
 
   def WillNavigateToPage(self, page, tab):
+    del tab  # unused
     page.script_to_evaluate_on_commit = self._blink_perf_js
 
   def CustomizeBrowserOptions(self, options):
@@ -198,7 +199,6 @@ class BlinkPerfCanvas(perf_benchmark.PerfBenchmark):
     return story_set
 
 
-@benchmark.Disabled('win', 'mac', 'linux')  # http://crbug.com/601666
 class BlinkPerfDOM(perf_benchmark.PerfBenchmark):
   tag = 'dom'
   test = _BlinkPerfMeasurement

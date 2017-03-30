@@ -101,8 +101,9 @@ class TabManager : public TabStripModelObserver {
   void DiscardTab();
 
   // Discards a tab with the given unique ID. The tab still exists in the
-  // tab-strip; clicking on it will reload it. Returns true if it successfully
-  // found a tab and discarded it.
+  // tab-strip; clicking on it will reload it. Returns null if the tab cannot
+  // be found or cannot be discarded. Otherwise returns the old web_contents
+  // that got discarded. This value is mostly useful during testing.
   content::WebContents* DiscardTabById(int64_t target_web_contents_id);
 
   // Log memory statistics for the running processes, then discards a tab.
@@ -122,6 +123,7 @@ class TabManager : public TabStripModelObserver {
   TabStatsList GetUnsortedTabStats();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(TabManagerTest, CanOnlyDiscardOnce);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, ChildProcessNotifications);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, Comparator);
   FRIEND_TEST_ALL_PREFIXES(TabManagerTest, DiscardedTabKeepsLastActiveTime);

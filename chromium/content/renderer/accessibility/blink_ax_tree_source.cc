@@ -13,7 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "content/common/accessibility_messages.h"
 #include "content/renderer/accessibility/blink_ax_enum_conversion.h"
-#include "content/renderer/accessibility/renderer_accessibility.h"
+#include "content/renderer/accessibility/render_accessibility_impl.h"
 #include "content/renderer/browser_plugin/browser_plugin.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_frame_proxy.h"
@@ -133,22 +133,20 @@ bool BlinkAXTreeSource::IsInTree(blink::WebAXObject node) const {
   return false;
 }
 
-AXContentTreeData BlinkAXTreeSource::GetTreeData() const {
-  AXContentTreeData tree_data;
-
+bool BlinkAXTreeSource::GetTreeData(AXContentTreeData* tree_data) const {
   blink::WebDocument document = BlinkAXTreeSource::GetMainDocument();
   const blink::WebAXObject& root = GetRoot();
 
-  tree_data.doctype = "html";
-  tree_data.loaded = root.isLoaded();
-  tree_data.loading_progress = root.estimatedLoadingProgress();
-  tree_data.mimetype = document.isXHTMLDocument() ? "text/xhtml" : "text/html";
-  tree_data.title = document.title().utf8();
-  tree_data.url = document.url().string().utf8();
+  tree_data->doctype = "html";
+  tree_data->loaded = root.isLoaded();
+  tree_data->loading_progress = root.estimatedLoadingProgress();
+  tree_data->mimetype = document.isXHTMLDocument() ? "text/xhtml" : "text/html";
+  tree_data->title = document.title().utf8();
+  tree_data->url = document.url().string().utf8();
 
   WebAXObject focus = document.focusedAccessibilityObject();
   if (!focus.isNull())
-    tree_data.focus_id = focus.axID();
+    tree_data->focus_id = focus.axID();
 
   WebAXObject anchor_object, focus_object;
   int anchor_offset, focus_offset;
@@ -157,27 +155,27 @@ AXContentTreeData BlinkAXTreeSource::GetTreeData() const {
       anchor_offset >= 0 && focus_offset >= 0) {
     int32_t anchor_id = anchor_object.axID();
     int32_t focus_id = focus_object.axID();
-    tree_data.sel_anchor_object_id = anchor_id;
-    tree_data.sel_anchor_offset = anchor_offset;
-    tree_data.sel_focus_object_id = focus_id;
-    tree_data.sel_focus_offset = focus_offset;
+    tree_data->sel_anchor_object_id = anchor_id;
+    tree_data->sel_anchor_offset = anchor_offset;
+    tree_data->sel_focus_object_id = focus_id;
+    tree_data->sel_focus_offset = focus_offset;
   }
 
   // Get the tree ID for this frame and the parent frame.
   WebLocalFrame* web_frame = document.frame();
   if (web_frame) {
     RenderFrame* render_frame = RenderFrame::FromWebFrame(web_frame);
-    tree_data.routing_id = render_frame->GetRoutingID();
+    tree_data->routing_id = render_frame->GetRoutingID();
 
     // Get the tree ID for the parent frame.
     blink::WebFrame* parent_web_frame = web_frame->parent();
     if (parent_web_frame) {
-      tree_data.parent_routing_id =
+      tree_data->parent_routing_id =
           GetRoutingIdForFrameOrProxy(parent_web_frame);
     }
   }
 
-  return tree_data;
+  return true;
 }
 
 blink::WebAXObject BlinkAXTreeSource::GetRoot() const {
@@ -445,6 +443,32 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
   if (src.canvasHasFallbackContent())
     dst->AddBoolAttribute(ui::AX_ATTR_CANVAS_HAS_FALLBACK, true);
 
+  // Spelling, grammar and other document markers.
+  WebVector<blink::WebAXMarkerType> src_marker_types;
+  WebVector<int> src_marker_starts;
+  WebVector<int> src_marker_ends;
+  src.markers(src_marker_types, src_marker_starts, src_marker_ends);
+  DCHECK_EQ(src_marker_types.size(), src_marker_starts.size());
+  DCHECK_EQ(src_marker_starts.size(), src_marker_ends.size());
+
+  if (src_marker_types.size()) {
+    std::vector<int32_t> marker_types;
+    std::vector<int32_t> marker_starts;
+    std::vector<int32_t> marker_ends;
+    marker_types.reserve(src_marker_types.size());
+    marker_starts.reserve(src_marker_starts.size());
+    marker_ends.reserve(src_marker_ends.size());
+    for (size_t i = 0; i < src_marker_types.size(); ++i) {
+      marker_types.push_back(
+          static_cast<int32_t>(AXMarkerTypeFromBlink(src_marker_types[i])));
+      marker_starts.push_back(src_marker_starts[i]);
+      marker_ends.push_back(src_marker_ends[i]);
+    }
+    dst->AddIntListAttribute(ui::AX_ATTR_MARKER_TYPES, marker_types);
+    dst->AddIntListAttribute(ui::AX_ATTR_MARKER_STARTS, marker_starts);
+    dst->AddIntListAttribute(ui::AX_ATTR_MARKER_ENDS, marker_ends);
+  }
+
   WebNode node = src.node();
   bool is_iframe = false;
 
@@ -471,7 +495,7 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
 
       WebVector<int> src_line_breaks;
       src.lineBreaks(src_line_breaks);
-      if (src_line_breaks.size() > 0) {
+      if (src_line_breaks.size()) {
         std::vector<int32_t> line_breaks;
         line_breaks.reserve(src_line_breaks.size());
         for (size_t i = 0; i < src_line_breaks.size(); ++i)
@@ -525,6 +549,12 @@ void BlinkAXTreeSource::SerializeNode(blink::WebAXObject src,
     dst->AddStringAttribute(
         ui::AX_ATTR_LIVE_RELEVANT,
         src.liveRegionRelevant().utf8());
+    // If we are not at the root of an atomic live region.
+    if (src.containerLiveRegionAtomic() && !src.liveRegionRoot().isDetached() &&
+        !src.liveRegionAtomic()) {
+      dst->AddIntAttribute(ui::AX_ATTR_MEMBER_OF_ID,
+                           src.liveRegionRoot().axID());
+    }
     dst->AddBoolAttribute(ui::AX_ATTR_CONTAINER_LIVE_ATOMIC,
                           src.containerLiveRegionAtomic());
     dst->AddBoolAttribute(ui::AX_ATTR_CONTAINER_LIVE_BUSY,

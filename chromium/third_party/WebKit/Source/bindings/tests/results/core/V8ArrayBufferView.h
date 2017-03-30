@@ -21,18 +21,17 @@ namespace blink {
 class V8ArrayBufferView {
     STATIC_ONLY(V8ArrayBufferView);
 public:
-    CORE_EXPORT static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
     CORE_EXPORT static TestArrayBufferView* toImpl(v8::Local<v8::Object> object);
     CORE_EXPORT static TestArrayBufferView* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
     CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
-    {
-        visitor->traceWrappers(scriptWrappable->toImpl<TestArrayBufferView>());
-    }
     template<typename VisitorDispatcher>
     static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable)
     {
         visitor->trace(scriptWrappable->toImpl<TestArrayBufferView>());
+    }
+    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
+    {
+        visitor->traceWrappers(scriptWrappable->toImpl<TestArrayBufferView>());
     }
     static const int internalFieldCount = v8DefaultWrapperInternalFieldCount + 0;
     CORE_EXPORT static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate) { }

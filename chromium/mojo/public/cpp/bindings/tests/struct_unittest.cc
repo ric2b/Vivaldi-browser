@@ -50,10 +50,8 @@ MultiVersionStructPtr MakeMultiVersionStruct() {
 
 template <typename U, typename T>
 U SerializeAndDeserialize(T input) {
-  using InputDataType = typename std::remove_pointer<decltype(
-      std::declval<T>().get())>::type::Data_*;
-  using OutputDataType = typename std::remove_pointer<decltype(
-      std::declval<U>().get())>::type::Data_*;
+  using InputDataType = typename mojo::internal::MojomTypeTraits<T>::Data*;
+  using OutputDataType = typename mojo::internal::MojomTypeTraits<U>::Data*;
 
   mojo::internal::SerializationContext context;
   size_t size = mojo::internal::PrepareToSerialize<T>(input, &context);
@@ -487,6 +485,69 @@ TEST_F(StructTest, Serialization_NativeStruct) {
     EXPECT_EQ(2u, output_native->data.size());
     EXPECT_EQ('X', output_native->data[0]);
     EXPECT_EQ('Y', output_native->data[1]);
+  }
+}
+
+TEST_F(StructTest, Serialization_PublicAPI) {
+  {
+    // A null struct pointer.
+    RectPtr null_struct;
+    mojo::Array<uint8_t> data = Rect::Serialize(&null_struct);
+    EXPECT_TRUE(data.empty());
+
+    // Initialize it to non-null.
+    RectPtr output(Rect::New());
+    ASSERT_TRUE(Rect::Deserialize(std::move(data), &output));
+    EXPECT_TRUE(output.is_null());
+  }
+
+  {
+    // A struct with no fields.
+    EmptyStructPtr empty_struct(EmptyStruct::New());
+    mojo::Array<uint8_t> data = EmptyStruct::Serialize(&empty_struct);
+    EXPECT_FALSE(data.empty());
+
+    EmptyStructPtr output;
+    ASSERT_TRUE(EmptyStruct::Deserialize(std::move(data), &output));
+    EXPECT_FALSE(output.is_null());
+  }
+
+  {
+    // A simple struct.
+    RectPtr rect = MakeRect();
+    RectPtr cloned_rect = rect.Clone();
+    mojo::Array<uint8_t> data = Rect::Serialize(&rect);
+
+    RectPtr output;
+    ASSERT_TRUE(Rect::Deserialize(std::move(data), &output));
+    EXPECT_TRUE(output.Equals(cloned_rect));
+  }
+
+  {
+    // A struct containing other objects.
+    NamedRegionPtr region(NamedRegion::New());
+    region->name = "region";
+    region->rects = Array<RectPtr>::New(4);
+    for (size_t i = 0; i < region->rects.size(); ++i)
+      region->rects[i] = MakeRect(static_cast<int32_t>(i) + 1);
+
+    NamedRegionPtr cloned_region = region.Clone();
+    mojo::Array<uint8_t> data = NamedRegion::Serialize(&region);
+
+    // Make sure that the serialized result gets pointers encoded properly.
+    mojo::Array<uint8_t> cloned_data = data.Clone();
+    NamedRegionPtr output;
+    ASSERT_TRUE(NamedRegion::Deserialize(std::move(cloned_data), &output));
+    EXPECT_TRUE(output.Equals(cloned_region));
+  }
+
+  {
+    // Deserialization failure.
+    RectPtr rect = MakeRect();
+    mojo::Array<uint8_t> data = Rect::Serialize(&rect);
+
+    NamedRegionPtr output;
+    EXPECT_FALSE(NamedRegion::Deserialize(std::move(data), &output));
   }
 }
 

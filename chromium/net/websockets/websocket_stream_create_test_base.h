@@ -43,6 +43,7 @@ class WebSocketStreamCreateTestBase {
                               const std::vector<std::string>& sub_protocols,
                               const url::Origin& origin,
                               const GURL& first_party_for_cookies,
+                              const std::string& additional_headers,
                               std::unique_ptr<base::Timer> timer);
 
   static std::vector<HeaderKeyValuePair> RequestHeadersToVector(

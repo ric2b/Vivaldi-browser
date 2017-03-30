@@ -112,8 +112,6 @@ public:
     Node* firstNode() const;
     Node* pastLastNode() const;
 
-    ShadowRoot* shadowRoot() const;
-
     // Not transform-friendly
     void textRects(Vector<IntRect>&, bool useSelectionHeight = false) const;
     IntRect boundingBox() const;
@@ -123,7 +121,6 @@ public:
     void getBorderAndTextQuads(Vector<FloatQuad>&) const;
     FloatRect boundingRect() const;
 
-    void nodeChildrenChanged(ContainerNode*);
     void nodeChildrenWillBeRemoved(ContainerNode&);
     void nodeWillBeRemoved(Node&);
 
@@ -170,6 +167,8 @@ private:
 };
 
 CORE_EXPORT bool areRangesEqual(const Range*, const Range*);
+
+using RangeVector = HeapVector<Member<Range>>;
 
 } // namespace blink
 

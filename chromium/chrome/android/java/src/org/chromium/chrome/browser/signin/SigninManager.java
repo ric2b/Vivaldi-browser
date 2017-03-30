@@ -6,23 +6,22 @@ package org.chromium.chrome.browser.signin;
 
 import android.accounts.Account;
 import android.app.Activity;
-import android.app.DialogFragment;
 import android.content.Context;
 import android.os.Handler;
 
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
-import org.chromium.base.FieldTrialList;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
+import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.VisibleForTesting;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
+import org.chromium.chrome.browser.sync.SyncUserDataWiper;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.sync.signin.ChromeSigninController;
 
@@ -40,12 +39,6 @@ import javax.annotation.Nullable;
  */
 public class SigninManager implements AccountTrackerService.OnSystemAccountsSeededListener {
     private static final String TAG = "SigninManager";
-
-    private static final String CONFIRM_ACCOUNT_CHANGED_DIALOG_TAG =
-            "confirm_account_changed_dialog_tag";
-    @VisibleForTesting
-    public static final String CONFIRM_MANAGED_SIGNIN_DIALOG_TAG =
-            "confirm_managed_signin_dialog_tag";
 
     private static SigninManager sSigninManager;
     private static int sSignInAccessPoint = SigninAccessPoint.UNKNOWN;
@@ -76,6 +69,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     private Runnable mSignOutCallback;
 
     private boolean mSigninAllowedByPolicy;
+
+    private boolean mSignOutInProgress;
 
     /**
      * A SignInStateObserver is notified when the user signs in to or out of Chrome.
@@ -140,11 +135,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         public final Account account;
         public final Activity activity;
         public final SignInCallback callback;
-
-        /**
-         * The dialog currently being displayed to the user, if any.
-         */
-        public DialogFragment displayedDialog = null;
 
         /**
          * If the system accounts need to be seeded, the sign in flow will block for that to occur.
@@ -422,30 +412,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
             return;
         }
 
-        if (!mSignInState.isInteractive()) {
-            // If this is a forced sign-in then don't show the confirmation dialog.
-            // This will call back to onPolicyFetchedBeforeSignIn.
-            nativeFetchPolicyBeforeSignIn(mNativeSigninManagerAndroid);
-            return;
-        }
-
-        // TODO(peconn): Move this and other UI interactions into AccountSigninView.
-        Log.d(TAG, "Account has policy management");
-        mSignInState.displayedDialog = ConfirmManagedSigninFragment.newInstance(managementDomain);
-        mSignInState.displayedDialog.show(
-                mSignInState.activity.getFragmentManager(), CONFIRM_MANAGED_SIGNIN_DIALOG_TAG);
-    }
-
-    /**
-     * Called from ConfirmManagedSigninFragment if the managed account was confirmed.
-     */
-    void progressInteractiveSignInFlowManagedConfirmed() {
-        if (mSignInState == null || mSignInState.displayedDialog == null) {
-            // Stop if sign-in was cancelled or this is a duplicate click event.
-            return;
-        }
-        mSignInState.displayedDialog = null;
-
+        // The user has already been notified that they are signing into a managed account.
         // This will call back to onPolicyFetchedBeforeSignIn.
         nativeFetchPolicyBeforeSignIn(mNativeSigninManagerAndroid);
     }
@@ -495,6 +462,24 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     }
 
     /**
+     * Invokes signOut and returns a {@link Promise} that will be fulfilled on completion.
+     * This is equivalent to calling {@link #signOut(Runnable callback)} with a callback that
+     * fulfills the returned {@link Promise}.
+     */
+    public Promise<Void> signOutPromise() {
+        final Promise<Void> promise = new Promise<Void>();
+
+        signOut(new Runnable(){
+            @Override
+            public void run() {
+                promise.fulfill(null);
+            }
+        });
+
+        return promise;
+    }
+
+    /**
      * Invokes signOut with no callback or wipeDataHooks.
      */
     public void signOut() {
@@ -518,6 +503,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      * @param wipeDataHooks Hooks to call during data wiping in case the account is managed.
      */
     public void signOut(Runnable callback, WipeDataHooks wipeDataHooks) {
+        mSignOutInProgress = true;
         mSignOutCallback = callback;
 
         boolean wipeData = getManagementDomain() != null;
@@ -563,10 +549,6 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         assert signInState != null;
         mSignInState = null;
 
-        if (signInState.displayedDialog != null) {
-            signInState.displayedDialog.dismiss();
-        }
-
         if (signInState.callback != null) {
             signInState.callback.onSignInAborted();
         }
@@ -583,13 +565,33 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         nativeWipeProfileData(mNativeSigninManagerAndroid, hooks);
     }
 
+    /**
+     * Convenience method to return a Promise to be fulfilled when the user's sync data has been
+     * wiped if the parameter is true, or an already fulfilled Promise if the parameter is false.
+     */
+    public static Promise<Void> wipeSyncUserDataIfRequired(boolean required) {
+        if (required) {
+            return SyncUserDataWiper.wipeSyncUserData();
+        } else {
+            return Promise.fulfilled(null);
+        }
+    }
+
     @CalledByNative
     private void onProfileDataWiped(WipeDataHooks hooks) {
         if (hooks != null) hooks.postWipeData();
         onSignOutDone();
     }
 
+    @CalledByNative
+    private void onNativeSignOut() {
+        if (!mSignOutInProgress) {
+            signOut();
+        }
+    }
+
     private void onSignOutDone() {
+        mSignOutInProgress = false;
         if (mSignOutCallback != null) {
             new Handler().post(mSignOutCallback);
             mSignOutCallback = null;
@@ -607,31 +609,43 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         return nativeIsSignedInOnNative(mNativeSigninManagerAndroid);
     }
 
-    /**
-     * @return Experiment group for the android signin promo that the current user falls into.
-     * -1 if the sigin promo experiment is disabled, otherwise an integer between 0 and 7.
-     * TODO(guohui): instead of group names, it is better to use experiment params to control
-     * the variations.
-     */
-    public static int getAndroidSigninPromoExperimentGroup() {
-        String fieldTrialValue = FieldTrialList.findFullName("AndroidSigninPromo");
-        try {
-            return Integer.parseInt(fieldTrialValue);
-        } catch (NumberFormatException ex) {
-            return -1;
-        }
-    }
-
     @CalledByNative
     private void onSigninAllowedByPolicyChanged(boolean newSigninAllowedByPolicy) {
         mSigninAllowedByPolicy = newSigninAllowedByPolicy;
         notifySignInAllowedChanged();
     }
 
+    /**
+     * Performs an asynchronous check to see if the user is a managed user.
+     * @param callback A callback to be called with true if the user is a managed user and false
+     *         otherwise.
+     */
+    public static void isUserManaged(String email, final Callback<Boolean> callback) {
+        if (nativeShouldLoadPolicyForUser(email)) {
+            nativeIsUserManaged(email, callback);
+        } else {
+            // Although we know the result immediately, the caller may not be able to handle the
+            // callback being executed during this method call. So we post the callback on the
+            // looper.
+            ThreadUtils.postOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    callback.onResult(false);
+                }
+            });
+        }
+    }
+
+    public static String extractDomainName(String email) {
+        return nativeExtractDomainName(email);
+    }
+
     // Native methods.
+    private static native String nativeExtractDomainName(String email);
+    private static native boolean nativeShouldLoadPolicyForUser(String username);
+    private static native void nativeIsUserManaged(String username, Callback<Boolean> callback);
     private native long nativeInit();
     private native boolean nativeIsSigninAllowedByPolicy(long nativeSigninManagerAndroid);
-    private native boolean nativeShouldLoadPolicyForUser(String username);
     private native void nativeCheckPolicyBeforeSignIn(
             long nativeSigninManagerAndroid, String username);
     private native void nativeFetchPolicyBeforeSignIn(long nativeSigninManagerAndroid);

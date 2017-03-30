@@ -12,12 +12,13 @@
 #include "public/platform/Platform.h"
 #include "public/platform/modules/push_messaging/WebPushProvider.h"
 #include "public/platform/modules/push_messaging/WebPushSubscription.h"
-#include "wtf/OwnPtr.h"
+#include "wtf/Assertions.h"
 #include "wtf/text/Base64.h"
+#include <memory>
 
 namespace blink {
 
-PushSubscription* PushSubscription::take(ScriptPromiseResolver*, PassOwnPtr<WebPushSubscription> pushSubscription, ServiceWorkerRegistration* serviceWorkerRegistration)
+PushSubscription* PushSubscription::take(ScriptPromiseResolver*, std::unique_ptr<WebPushSubscription> pushSubscription, ServiceWorkerRegistration* serviceWorkerRegistration)
 {
     if (!pushSubscription)
         return nullptr;
@@ -63,7 +64,7 @@ ScriptPromise PushSubscription::unsubscribe(ScriptState* scriptState)
     ScriptPromise promise = resolver->promise();
 
     WebPushProvider* webPushProvider = Platform::current()->pushProvider();
-    ASSERT(webPushProvider);
+    DCHECK(webPushProvider);
 
     webPushProvider->unsubscribe(m_serviceWorkerRegistration->webRegistration(), new CallbackPromiseAdapter<bool, PushError>(resolver));
     return promise;
@@ -71,7 +72,7 @@ ScriptPromise PushSubscription::unsubscribe(ScriptState* scriptState)
 
 ScriptValue PushSubscription::toJSONForBinding(ScriptState* scriptState)
 {
-    ASSERT(m_p256dh);
+    DCHECK(m_p256dh);
 
     V8ObjectBuilder result(scriptState);
     result.addString("endpoint", endpoint());

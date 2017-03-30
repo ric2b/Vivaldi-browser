@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 
+#include "base/macros.h"
 #include "base/strings/string_piece.h"
 #include "net/base/linked_hash_map.h"
 #include "net/base/net_export.h"
@@ -20,6 +21,10 @@ namespace net {
 
 // Allows arg-dependent lookup to work for logging's operator<<.
 using ::operator<<;
+
+namespace test {
+class StringPieceProxyPeer;
+}
 
 // This class provides a key-value map that can be used to store SPDY header
 // names and values. This data structure preserves insertion order.
@@ -48,10 +53,14 @@ class NET_EXPORT SpdyHeaderBlock {
   class StringPieceProxy;
 
   SpdyHeaderBlock();
-  SpdyHeaderBlock(const SpdyHeaderBlock& other);
+  SpdyHeaderBlock(const SpdyHeaderBlock& other) = delete;
+  SpdyHeaderBlock(SpdyHeaderBlock&& other);
   ~SpdyHeaderBlock();
 
-  SpdyHeaderBlock& operator=(const SpdyHeaderBlock& other);
+  SpdyHeaderBlock& operator=(const SpdyHeaderBlock& other) = delete;
+  SpdyHeaderBlock& operator=(SpdyHeaderBlock&& other);
+  SpdyHeaderBlock Clone() const;
+
   bool operator==(const SpdyHeaderBlock& other) const;
   bool operator!=(const SpdyHeaderBlock& other) const;
 
@@ -93,7 +102,14 @@ class NET_EXPORT SpdyHeaderBlock {
   class NET_EXPORT StringPieceProxy {
    public:
     ~StringPieceProxy();
-    StringPieceProxy(const StringPieceProxy& other);
+
+    // Moves are allowed.
+    StringPieceProxy(StringPieceProxy&& other);
+    StringPieceProxy& operator=(StringPieceProxy&& other);
+
+    // Copies are not.
+    StringPieceProxy(const StringPieceProxy& other) = delete;
+    StringPieceProxy& operator=(const StringPieceProxy& other) = delete;
 
     // Assignment modifies the underlying SpdyHeaderBlock.
     StringPieceProxy& operator=(const base::StringPiece other);
@@ -102,15 +118,13 @@ class NET_EXPORT SpdyHeaderBlock {
     // This makes SpdyHeaderBlock::operator[] easy to use with StringPieces.
     operator base::StringPiece() const;
 
-    // Reserves |size| bytes in the underlying storage.
-    void reserve(size_t size);
-
     std::string as_string() const {
       return static_cast<base::StringPiece>(*this).as_string();
     }
 
    private:
     friend class SpdyHeaderBlock;
+    friend class test::StringPieceProxyPeer;
 
     StringPieceProxy(SpdyHeaderBlock::MapType* block,
                      SpdyHeaderBlock::Storage* storage,
@@ -120,9 +134,8 @@ class NET_EXPORT SpdyHeaderBlock {
     SpdyHeaderBlock::MapType* block_;
     SpdyHeaderBlock::Storage* storage_;
     SpdyHeaderBlock::MapType::iterator lookup_result_;
-    const base::StringPiece key_;
-
-    // Contains only POD members; explicitly copyable.
+    base::StringPiece key_;
+    bool valid_;
   };
 
  private:

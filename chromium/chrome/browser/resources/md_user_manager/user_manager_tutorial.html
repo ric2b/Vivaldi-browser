@@ -1,4 +1,4 @@
-<link rel="import" href="chrome://md-user-manager/shared_styles.html">
+<link rel="import" href="/shared_styles.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
@@ -61,19 +61,18 @@
       }
 
       .slide-contents {
+        color: var(--primary-text-color);
         padding: 0 20px;
         text-align: center;
       }
 
       .slide-title {
-        color: black;
         font-size: 20px;
         line-height: 20px;
         margin: 30px 0;
       }
 
       .slide-text {
-        color: var(--google-grey-600);
         font-size: 15px;
         line-height: 20px;
       }
@@ -246,5 +245,5 @@
       </template>
     </template>
   </template>
-  <script src="chrome://md-user-manager/user_manager_tutorial.js"></script>
+  <script src="user_manager_tutorial.js"></script>
 </dom-module>

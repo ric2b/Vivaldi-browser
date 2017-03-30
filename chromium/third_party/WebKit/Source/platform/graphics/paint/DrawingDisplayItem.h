@@ -10,7 +10,6 @@
 #include "platform/geometry/FloatPoint.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "third_party/skia/include/core/SkPicture.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -48,6 +47,8 @@ public:
     const SkPicture* picture() const { return m_picture.get(); }
 
     bool knownToBeOpaque() const { ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled()); return m_knownToBeOpaque; }
+
+    void analyzeForGpuRasterization(SkPictureGpuAnalyzer&) const override;
 
 #if ENABLE(ASSERT)
     UnderInvalidationCheckingMode getUnderInvalidationCheckingMode() const { return m_underInvalidationCheckingMode; }

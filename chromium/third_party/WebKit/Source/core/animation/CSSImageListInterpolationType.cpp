@@ -10,6 +10,8 @@
 #include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSValueList.h"
 #include "core/css/resolver/StyleResolverState.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -17,9 +19,9 @@ class UnderlyingImageListChecker : public InterpolationType::ConversionChecker {
 public:
     ~UnderlyingImageListChecker() final {}
 
-    static PassOwnPtr<UnderlyingImageListChecker> create(const InterpolationValue& underlying)
+    static std::unique_ptr<UnderlyingImageListChecker> create(const InterpolationValue& underlying)
     {
-        return adoptPtr(new UnderlyingImageListChecker(underlying));
+        return wrapUnique(new UnderlyingImageListChecker(underlying));
     }
 
 private:
@@ -62,9 +64,9 @@ class ParentImageListChecker : public InterpolationType::ConversionChecker {
 public:
     ~ParentImageListChecker() final {}
 
-    static PassOwnPtr<ParentImageListChecker> create(CSSPropertyID property, const StyleImageList& inheritedImageList)
+    static std::unique_ptr<ParentImageListChecker> create(CSSPropertyID property, const StyleImageList& inheritedImageList)
     {
-        return adoptPtr(new ParentImageListChecker(property, inheritedImageList));
+        return wrapUnique(new ParentImageListChecker(property, inheritedImageList));
     }
 
 private:
@@ -103,15 +105,15 @@ InterpolationValue CSSImageListInterpolationType::maybeConvertValue(const CSSVal
     CSSValueList* tempList = nullptr;
     if (!value.isBaseValueList()) {
         tempList = CSSValueList::createCommaSeparated();
-        tempList->append(const_cast<CSSValue*>(&value)); // Take ref.
+        tempList->append(value);
     }
     const CSSValueList& valueList = tempList ? *tempList : toCSSValueList(value);
 
     const size_t length = valueList.length();
-    OwnPtr<InterpolableList> interpolableList = InterpolableList::create(length);
+    std::unique_ptr<InterpolableList> interpolableList = InterpolableList::create(length);
     Vector<RefPtr<NonInterpolableValue>> nonInterpolableValues(length);
     for (size_t i = 0; i < length; i++) {
-        InterpolationValue component = CSSImageInterpolationType::maybeConvertCSSValue(*valueList.item(i), false);
+        InterpolationValue component = CSSImageInterpolationType::maybeConvertCSSValue(valueList.item(i), false);
         if (!component)
             return nullptr;
         interpolableList->set(i, std::move(component.interpolableValue));

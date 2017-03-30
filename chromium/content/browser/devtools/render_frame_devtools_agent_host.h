@@ -15,9 +15,19 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/web_contents_observer.h"
 
+#if defined(OS_ANDROID)
+#include "ui/android/view_android.h"
+#endif  // OS_ANDROID
+
 namespace cc {
 class CompositorFrameMetadata;
 }
+
+#if defined(OS_ANDROID)
+namespace device {
+class PowerSaveBlocker;
+}  // namespace device
+#endif
 
 namespace content {
 
@@ -28,11 +38,8 @@ class FrameTreeNode;
 class NavigationHandle;
 class RenderFrameHostImpl;
 
-#if defined(OS_ANDROID)
-class PowerSaveBlockerImpl;
-#endif
-
 namespace devtools {
+namespace browser { class BrowserHandler; }
 namespace dom { class DOMHandler; }
 namespace emulation { class EmulationHandler; }
 namespace input { class InputHandler; }
@@ -59,7 +66,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   static void OnBeforeNavigation(NavigationHandle* navigation_handle);
 
   void SynchronousSwapCompositorFrame(
-      const cc::CompositorFrameMetadata& frame_metadata);
+      cc::CompositorFrameMetadata frame_metadata);
 
   bool HasRenderFrameHost(RenderFrameHost* host);
 
@@ -116,6 +123,9 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
       int error_code,
       const base::string16& error_description,
       bool was_ignored_by_handler) override;
+  void WebContentsDestroyed() override;
+  void WasShown() override;
+  void WasHidden() override;
 
   void AboutToNavigateRenderFrame(RenderFrameHost* old_host,
                                   RenderFrameHost* new_host);
@@ -141,6 +151,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   void OnRequestNewWindow(RenderFrameHost* sender, int new_routing_id);
   void DestroyOnRenderFrameGone();
 
+  void CreatePowerSaveBlocker();
+
   class FrameHostHolder;
 
   std::unique_ptr<FrameHostHolder> current_;
@@ -149,6 +161,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   // Stores per-host state between DisconnectWebContents and ConnectWebContents.
   std::unique_ptr<FrameHostHolder> disconnected_;
 
+  std::unique_ptr<devtools::browser::BrowserHandler> browser_handler_;
   std::unique_ptr<devtools::dom::DOMHandler> dom_handler_;
   std::unique_ptr<devtools::input::InputHandler> input_handler_;
   std::unique_ptr<devtools::inspector::InspectorHandler> inspector_handler_;
@@ -164,7 +177,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   std::unique_ptr<devtools::emulation::EmulationHandler> emulation_handler_;
   std::unique_ptr<DevToolsFrameTraceRecorder> frame_trace_recorder_;
 #if defined(OS_ANDROID)
-  std::unique_ptr<PowerSaveBlockerImpl> power_save_blocker_;
+  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  std::unique_ptr<base::WeakPtrFactory<ui::ViewAndroid>> view_weak_factory_;
 #endif
   std::unique_ptr<DevToolsProtocolHandler> protocol_handler_;
   bool current_frame_crashed_;

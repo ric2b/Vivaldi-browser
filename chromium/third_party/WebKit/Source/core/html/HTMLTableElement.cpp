@@ -30,9 +30,12 @@
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/css/CSSImageValue.h"
-#include "core/css/CSSValuePool.h"
+#include "core/css/CSSInheritedValue.h"
+#include "core/css/CSSPrimitiveValue.h"
+#include "core/css/StylePropertySet.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/ExceptionCode.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/html/HTMLTableCaptionElement.h"
@@ -41,7 +44,6 @@
 #include "core/html/HTMLTableRowsCollection.h"
 #include "core/html/HTMLTableSectionElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/layout/LayoutTable.h"
 #include "platform/weborigin/Referrer.h"
 #include "wtf/StdLibExtras.h"
 
@@ -298,7 +300,7 @@ void HTMLTableElement::collectStyleForPresentationAttribute(const QualifiedName&
         if (!url.isEmpty()) {
             CSSImageValue* imageValue = CSSImageValue::create(url, document().completeURL(url));
             imageValue->setReferrer(Referrer(document().outgoingReferrer(), document().getReferrerPolicy()));
-            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, imageValue));
+            style->setProperty(CSSProperty(CSSPropertyBackgroundImage, *imageValue));
         }
     } else if (name == valignAttr) {
         if (!value.isEmpty())
@@ -374,7 +376,7 @@ void HTMLTableElement::parseAttribute(const QualifiedName& name, const AtomicStr
             m_rulesAttr = AllRules;
     } else if (name == cellpaddingAttr) {
         if (!value.isEmpty())
-            m_padding = max(0, value.toInt());
+            m_padding = std::max(0, value.toInt());
         else
             m_padding = 1;
     } else if (name == colsAttr) {
@@ -455,24 +457,24 @@ StylePropertySet* HTMLTableElement::createSharedCellStyle()
         style->setProperty(CSSPropertyBorderRightWidth, CSSValueThin);
         style->setProperty(CSSPropertyBorderLeftStyle, CSSValueSolid);
         style->setProperty(CSSPropertyBorderRightStyle, CSSValueSolid);
-        style->setProperty(CSSPropertyBorderColor, cssValuePool().createInheritedValue());
+        style->setProperty(CSSPropertyBorderColor, CSSInheritedValue::create());
         break;
     case SolidBordersRowsOnly:
         style->setProperty(CSSPropertyBorderTopWidth, CSSValueThin);
         style->setProperty(CSSPropertyBorderBottomWidth, CSSValueThin);
         style->setProperty(CSSPropertyBorderTopStyle, CSSValueSolid);
         style->setProperty(CSSPropertyBorderBottomStyle, CSSValueSolid);
-        style->setProperty(CSSPropertyBorderColor, cssValuePool().createInheritedValue());
+        style->setProperty(CSSPropertyBorderColor, CSSInheritedValue::create());
         break;
     case SolidBorders:
-        style->setProperty(CSSPropertyBorderWidth, cssValuePool().createValue(1, CSSPrimitiveValue::UnitType::Pixels));
-        style->setProperty(CSSPropertyBorderStyle, cssValuePool().createIdentifierValue(CSSValueSolid));
-        style->setProperty(CSSPropertyBorderColor, cssValuePool().createInheritedValue());
+        style->setProperty(CSSPropertyBorderWidth, CSSPrimitiveValue::create(1, CSSPrimitiveValue::UnitType::Pixels));
+        style->setProperty(CSSPropertyBorderStyle, CSSPrimitiveValue::createIdentifier(CSSValueSolid));
+        style->setProperty(CSSPropertyBorderColor, CSSInheritedValue::create());
         break;
     case InsetBorders:
-        style->setProperty(CSSPropertyBorderWidth, cssValuePool().createValue(1, CSSPrimitiveValue::UnitType::Pixels));
-        style->setProperty(CSSPropertyBorderStyle, cssValuePool().createIdentifierValue(CSSValueInset));
-        style->setProperty(CSSPropertyBorderColor, cssValuePool().createInheritedValue());
+        style->setProperty(CSSPropertyBorderWidth, CSSPrimitiveValue::create(1, CSSPrimitiveValue::UnitType::Pixels));
+        style->setProperty(CSSPropertyBorderStyle, CSSPrimitiveValue::createIdentifier(CSSValueInset));
+        style->setProperty(CSSPropertyBorderColor, CSSInheritedValue::create());
         break;
     case NoBorders:
         // If 'rules=none' then allow any borders set at cell level to take effect.
@@ -480,7 +482,7 @@ StylePropertySet* HTMLTableElement::createSharedCellStyle()
     }
 
     if (m_padding)
-        style->setProperty(CSSPropertyPadding, cssValuePool().createValue(m_padding, CSSPrimitiveValue::UnitType::Pixels));
+        style->setProperty(CSSPropertyPadding, CSSPrimitiveValue::create(m_padding, CSSPrimitiveValue::UnitType::Pixels));
 
     return style;
 }

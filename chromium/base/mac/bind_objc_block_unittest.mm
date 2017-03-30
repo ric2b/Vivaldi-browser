@@ -11,7 +11,15 @@
 #include "base/callback_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+// See bind_objc_block_unittest_arc.mm for why this is necessary. Remove once
+// gyp support is dropped.
+void BindObjcBlockUnittestArcLinkerWorkaround();
+
 namespace {
+
+TEST(BindObjcBlockTest, EnableARCTests) {
+  BindObjcBlockUnittestArcLinkerWorkaround();
+}
 
 TEST(BindObjcBlockTest, TestScopedClosureRunnerExitScope) {
   int run_count = 0;

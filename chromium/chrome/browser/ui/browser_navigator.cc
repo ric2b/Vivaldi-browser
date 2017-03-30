@@ -266,13 +266,11 @@ void LoadURLInContents(WebContents* target_contents,
       params->should_replace_current_entry;
   load_url_params.is_renderer_initiated = params->is_renderer_initiated;
 
-  // Only allows the browser-initiated navigation to use POST.
-  if (params->uses_post && !params->is_renderer_initiated) {
-    load_url_params.load_type =
-        NavigationController::LOAD_TYPE_BROWSER_INITIATED_HTTP_POST;
-    load_url_params.browser_initiated_post_data =
-        params->browser_initiated_post_data;
+  if (params->uses_post) {
+    load_url_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
+    load_url_params.post_data = params->post_data;
   }
+
   target_contents->GetController().LoadURLWithParams(load_url_params);
 }
 
@@ -484,16 +482,20 @@ void Navigate(NavigateParams* params) {
 
   // Determine if the navigation was user initiated. If it was, we need to
   // inform the target WebContents, and we may need to update the UI.
-  ui::PageTransition base_transition =
-      ui::PageTransitionStripQualifier(params->transition);
   bool user_initiated =
       params->transition & ui::PAGE_TRANSITION_FROM_ADDRESS_BAR ||
-      base_transition == ui::PAGE_TRANSITION_TYPED ||
-      base_transition == ui::PAGE_TRANSITION_AUTO_BOOKMARK ||
-      base_transition == ui::PAGE_TRANSITION_GENERATED ||
-      base_transition == ui::PAGE_TRANSITION_AUTO_TOPLEVEL ||
-      base_transition == ui::PAGE_TRANSITION_RELOAD ||
-      base_transition == ui::PAGE_TRANSITION_KEYWORD;
+      ui::PageTransitionCoreTypeIs(params->transition,
+                                   ui::PAGE_TRANSITION_TYPED) ||
+      ui::PageTransitionCoreTypeIs(params->transition,
+                                   ui::PAGE_TRANSITION_AUTO_BOOKMARK) ||
+      ui::PageTransitionCoreTypeIs(params->transition,
+                                   ui::PAGE_TRANSITION_GENERATED) ||
+      ui::PageTransitionCoreTypeIs(params->transition,
+                                   ui::PAGE_TRANSITION_AUTO_TOPLEVEL) ||
+      ui::PageTransitionCoreTypeIs(params->transition,
+                                   ui::PAGE_TRANSITION_RELOAD) ||
+      ui::PageTransitionCoreTypeIs(params->transition,
+                                   ui::PAGE_TRANSITION_KEYWORD);
 
   // Check if this is a singleton tab that already exists
   int singleton_index = chrome::GetIndexOfSingletonTab(params);

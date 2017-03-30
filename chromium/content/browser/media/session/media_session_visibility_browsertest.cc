@@ -3,6 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
+#include "base/location.h"
+#include "base/logging.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/media/session/media_session.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
@@ -92,7 +96,7 @@ class MediaSessionVisibilityBrowserTest
   // MediaRouterIntegrationTests. Move it into a general place.
   void Wait(base::TimeDelta timeout) {
     base::RunLoop run_loop;
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, run_loop.QuitClosure(), timeout);
     run_loop.Run();
   }
@@ -106,63 +110,89 @@ class MediaSessionVisibilityBrowserTest
   void TestSessionInactiveWhenHiddenAfterContentPause() {
     LoadTestPage();
 
+    LOG(INFO) << "Starting player";
     ClearMediaSessionStateLoopRunners();
     RunScript(kStartPlayerScript);
+    LOG(INFO) << "Waiting for Session to be active";
     WaitForMediaSessionState(MediaSession::State::ACTIVE);
 
+    LOG(INFO) << "Pausing player";
     ClearMediaSessionStateLoopRunners();
     RunScript(kPausePlayerScript);
+    LOG(INFO) << "Waiting for Session to be suspended";
     WaitForMediaSessionState(MediaSession::State::SUSPENDED);
 
+    LOG(INFO) << "Hiding the tab";
     ClearMediaSessionStateLoopRunners();
     web_contents_->WasHidden();
+    LOG(INFO) << "Waiting for Session to be inactive";
     WaitForMediaSessionState(MediaSession::State::INACTIVE);
+
+    LOG(INFO) << "Test succeeded";
   }
 
   void TestSessionInactiveWhenHiddenWhilePlaying() {
     LoadTestPage();
 
+    LOG(INFO) << "Starting player";
     ClearMediaSessionStateLoopRunners();
     RunScript(kStartPlayerScript);
+    LOG(INFO) << "Waiting for Session to be active";
     WaitForMediaSessionState(MediaSession::State::ACTIVE);
 
+    LOG(INFO) << "Hiding the tab";
     ClearMediaSessionStateLoopRunners();
     web_contents_->WasHidden();
+    LOG(INFO) << "Waiting for Session to be inactive";
     WaitForMediaSessionState(MediaSession::State::INACTIVE);
+
+    LOG(INFO) << "Test succeeded";
   }
 
   void TestSessionSuspendedWhenHiddenAfterContentPause() {
     LoadTestPage();
 
+    LOG(INFO) << "Starting player";
     ClearMediaSessionStateLoopRunners();
     RunScript(kStartPlayerScript);
+    LOG(INFO) << "Waiting for Session to be active";
     WaitForMediaSessionState(MediaSession::State::ACTIVE);
 
+    LOG(INFO) << "Pausing player";
     ClearMediaSessionStateLoopRunners();
     RunScript(kPausePlayerScript);
+    LOG(INFO) << "Waiting for Session to be suspended";
     WaitForMediaSessionState(MediaSession::State::SUSPENDED);
 
+    LOG(INFO) << "Hiding the tab";
     // Wait for 1 second and check the MediaSession state.
     // No better solution till now.
     web_contents_->WasHidden();
     Wait(base::TimeDelta::FromSeconds(1));
     ASSERT_EQ(media_session_->audio_focus_state_,
               MediaSession::State::SUSPENDED);
+
+    LOG(INFO) << "Test succeeded";
   }
 
   void TestSessionActiveWhenHiddenWhilePlaying() {
     LoadTestPage();
 
+    LOG(INFO) << "Starting player";
     ClearMediaSessionStateLoopRunners();
     RunScript(kStartPlayerScript);
+    LOG(INFO) << "Waiting for Session to be active";
     WaitForMediaSessionState(MediaSession::State::ACTIVE);
 
+    LOG(INFO) << "Hiding the tab";
     // Wait for 1 second and check the MediaSession state.
     // No better solution till now.
     web_contents_->WasHidden();
     Wait(base::TimeDelta::FromSeconds(1));
     ASSERT_EQ(media_session_->audio_focus_state_,
               MediaSession::State::ACTIVE);
+
+    LOG(INFO) << "Test succeeded";
   }
 
   WebContents* web_contents_;
@@ -237,6 +267,8 @@ class MediaSessionVisibilityBrowserTest_AndroidPipeline_SuspendOnHide :
   }
 };
 
+// The following tests are flaky. Re-enabling with logging to see what's
+// happening on the bots. See crbug.com/619096.
 INCLUDE_TEST_FROM_BASE_CLASS(
     MediaSessionVisibilityBrowserTest_AndroidPipeline_SuspendOnHide,
     TestSessionInactiveWhenHiddenAfterContentPause)
@@ -254,12 +286,14 @@ class MediaSessionVisibilityBrowserTest_AndroidPipeline_NosuspendOnHide :
   }
 };
 
+// The following tests are flaky. Re-enabling with logging to see what's
+// happening on the bots. See crbug.com/619096.
 INCLUDE_TEST_FROM_BASE_CLASS(
     MediaSessionVisibilityBrowserTest_AndroidPipeline_NosuspendOnHide,
     TestSessionSuspendedWhenHiddenAfterContentPause)
 INCLUDE_TEST_FROM_BASE_CLASS(
-    MediaSessionVisibilityBrowserTest_AndroidPipeline_NosuspendOnHide,
-    TestSessionActiveWhenHiddenWhilePlaying)
+   MediaSessionVisibilityBrowserTest_AndroidPipeline_NosuspendOnHide,
+   TestSessionActiveWhenHiddenWhilePlaying)
 
 #endif  // defined(OS_ANDROID)
 

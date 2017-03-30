@@ -35,6 +35,15 @@ class CONTENT_EXPORT WebUIMessageHandler {
   WebUIMessageHandler() : javascript_allowed_(false), web_ui_(nullptr) {}
   virtual ~WebUIMessageHandler() {}
 
+  // Call this when a page should not receive JavaScript messages.
+  void DisallowJavascript();
+
+  // Called from tests to toggle JavaScript to catch bugs. If AllowJavascript()
+  // is needed from production code, just publicize AllowJavascript() instead.
+  void AllowJavascriptForTesting();
+
+  bool IsJavascriptAllowed() const;
+
  protected:
   FRIEND_TEST_ALL_PREFIXES(WebUIMessageHandlerTest, ExtractIntegerValue);
   FRIEND_TEST_ALL_PREFIXES(WebUIMessageHandlerTest, ExtractDoubleValue);
@@ -43,11 +52,6 @@ class CONTENT_EXPORT WebUIMessageHandler {
   // Subclasses must call this once the page is ready for JavaScript calls
   // from this handler.
   void AllowJavascript();
-
-  // Call this when a page should not receive JavaScript messages.
-  void DisallowJavascript();
-
-  bool IsJavascriptAllowed() const;
 
   // Helper methods:
 
@@ -77,6 +81,18 @@ class CONTENT_EXPORT WebUIMessageHandler {
   // to deregister or disabled observers that push JavaScript calls to the page.
   virtual void OnJavascriptDisallowed() {}
 
+  // Helper method for responding to Javascript requests initiated with
+  // cr.sendWithPromise() (defined in cr.js) for the case where the returned
+  // promise should be resolved (request succeeded).
+  void ResolveJavascriptCallback(const base::Value& callback_id,
+                                 const base::Value& response);
+
+  // Helper method for responding to Javascript requests initiated with
+  // cr.sendWithPromise() (defined in cr.js), for the case where the returned
+  // promise should be rejected (request failed).
+  void RejectJavascriptCallback(const base::Value& callback_id,
+                                const base::Value& response);
+
   // Call a Javascript function by sending its name and arguments down to
   // the renderer.  This is asynchronous; there's no way to get the result
   // of the call, and should be thought of more like sending a message to
@@ -88,7 +104,9 @@ class CONTENT_EXPORT WebUIMessageHandler {
                               const Values&... values) {
     CHECK(IsJavascriptAllowed()) << "Cannot CallJavascriptFunction before "
                                     "explicitly allowing JavaScript.";
-    web_ui()->CallJavascriptFunction(function_name, values...);
+
+    // The CHECK above makes this call safe.
+    web_ui()->CallJavascriptFunctionUnsafe(function_name, values...);
   }
 
   // Returns the attached WebUI for this handler.
@@ -102,9 +120,6 @@ class CONTENT_EXPORT WebUIMessageHandler {
   // RenderViewReused.
   friend class WebUIImpl;
   friend class ::WebUIBrowserTest;
-
-  // Called when a RenderView is reused to display a page (i.e. reload).
-  void RenderViewReused();
 
   // TODO(dbeam): disallow JavaScript when a renderer process crashes.
   // http://crbug.com/610450

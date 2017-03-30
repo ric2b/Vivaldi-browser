@@ -8,39 +8,42 @@
 {%-   if not kind|is_nullable_kind %}
 {%-     if kind|is_union_kind and union_is_inlined %}
   if (!mojo::internal::ValidateInlinedUnionNonNullable(
-          {{field_expr}}, "null {{name}} field in {{object_name}}")) {
+          {{field_expr}}, "null {{name}} field in {{object_name}}",
+          validation_context)) {
     return false;
   }
 {%-     else %}
   if (!mojo::internal::ValidatePointerNonNullable(
-          {{field_expr}}, "null {{name}} field in {{object_name}}")) {
+          {{field_expr}}, "null {{name}} field in {{object_name}}",
+          validation_context)) {
     return false;
   }
 {%-     endif %}
 {%-   endif %}
 {%-   if kind|is_array_kind or kind|is_string_kind %}
-  const mojo::internal::ArrayValidateParams {{name}}_validate_params(
-      {{kind|get_array_validate_params_ctor_args|indent(6)}});
-  if (!mojo::internal::ValidateArray({{field_expr}}, bounds_checker,
+  const mojo::internal::ContainerValidateParams {{name}}_validate_params(
+      {{kind|get_container_validate_params_ctor_args|indent(6)}});
+  if (!mojo::internal::ValidateArray({{field_expr}}, validation_context,
                                      &{{name}}_validate_params)) {
     return false;
   }
 {%-   elif kind|is_map_kind %}
-  const mojo::internal::ArrayValidateParams {{name}}_validate_params(
-      {{kind.value_kind|get_map_validate_params_ctor_args|indent(6)}});
-  if (!mojo::internal::ValidateMap({{field_expr}}, bounds_checker,
+  const mojo::internal::ContainerValidateParams {{name}}_validate_params(
+      {{kind|get_container_validate_params_ctor_args|indent(6)}});
+  if (!mojo::internal::ValidateMap({{field_expr}}, validation_context,
                                    &{{name}}_validate_params)) {
     return false;
   }
 {%-   elif kind|is_struct_kind %}
-  if (!mojo::internal::ValidateStruct({{field_expr}}, bounds_checker))
+  if (!mojo::internal::ValidateStruct({{field_expr}}, validation_context))
     return false;
 {%-   elif kind|is_union_kind %}
 {%-     if union_is_inlined %}
-  if (!mojo::internal::ValidateInlinedUnion({{field_expr}}, bounds_checker))
+  if (!mojo::internal::ValidateInlinedUnion({{field_expr}}, validation_context))
     return false;
 {%-     else %}
-  if (!mojo::internal::ValidateNonInlinedUnion({{field_expr}}, bounds_checker))
+  if (!mojo::internal::ValidateNonInlinedUnion({{field_expr}},
+                                               validation_context))
     return false;
 {%-     endif %}
 {%-   else %}
@@ -48,65 +51,38 @@
 {%-   endif %}
 {%- endmacro %}
 
-{#- Validates the specified field, which is supposed to be a handle or contain a
-    handle (in the case of interfaces).
+{#- Validates the specified field, which is supposed to be a handle,
+    an interface, an associated interface or an associated interface request.
     This macro is expanded by the Validate() method. #}
-{%- macro validate_handle(field, field_expr, object_name) %}
+{%- macro validate_handle_or_interface(field, field_expr, object_name) %}
 {%-   set name = field.name %}
 {%-   set kind = field.kind %}
-{%-   if kind|is_interface_kind %}
-  const mojo::internal::Handle_Data {{name}}_handle = {{field_expr}}.handle;
-{%-   else %}
-  const mojo::internal::Handle_Data {{name}}_handle = {{field_expr}};
-{%-   endif %}
 {%-   if not kind|is_nullable_kind %}
-  if (!mojo::internal::ValidateHandleNonNullable(
-          {{name}}_handle,
-          "invalid {{name}} field in {{object_name}}")) {
+  if (!mojo::internal::ValidateHandleOrInterfaceNonNullable(
+          {{field_expr}},
+          "invalid {{name}} field in {{object_name}}", validation_context)) {
     return false;
   }
 {%-   endif %}
-  if (!mojo::internal::ValidateHandle({{name}}_handle, bounds_checker))
-    return false;
-{%- endmacro %}
-
-{#- Validates the specified field, which is supposed to be an associated
-    interface or an associated interface request.
-    This macro is expanded by the Validate() method. #}
-{%- macro validate_associated(field, field_expr, object_name) %}
-{%-   set name = field.name %}
-{%-   set kind = field.kind %}
-{%-   if kind|is_associated_interface_kind %}
-  const mojo::internal::InterfaceId {{name}}_interface_id =
-      {{field_expr}}.interface_id;
-{%-   else %}
-  const mojo::internal::InterfaceId {{name}}_interface_id = {{field_expr}};
-{%-   endif %}
-{%-   if not kind|is_nullable_kind %}
-  if (!mojo::internal::ValidateInterfaceIdNonNullable(
-          {{name}}_interface_id,
-          "invalid {{name}} field in {{object_name}}")) {
+  if (!mojo::internal::ValidateHandleOrInterface({{field_expr}},
+                                                 validation_context)) {
     return false;
   }
-{%-   endif %}
-  if (!mojo::internal::ValidateAssociatedInterfaceId({{name}}_interface_id))
-    return false;
 {%- endmacro %}
 
 {#- Validates the specified field, which is supposed to be an enum.
     This macro is expanded by the Validate() method. #}
 {%- macro validate_enum(field, field_expr) %}
-  if (!{{field.kind|get_qualified_name_for_kind(internal=True)}}::Validate({{field_expr}}))
+  if (!{{field.kind|get_qualified_name_for_kind(internal=True)}}
+        ::Validate({{field_expr}}, validation_context))
     return false;
 {%- endmacro %}
 
 {%- macro validate_field(field, field_expr, object_name, union_is_inlined) %}
 {%-   if field.kind|is_object_kind -%}
 {{validate_object(field, field_expr, object_name, union_is_inlined)}}
-{%-   elif field.kind|is_any_handle_kind or field.kind|is_interface_kind -%}
-{{validate_handle(field, field_expr, object_name)}}
-{%-   elif field.kind|is_associated_kind %}
-{{validate_associated(field, field_expr, object_name)}}
+{%-   elif field.kind|is_any_handle_or_interface_kind -%}
+{{validate_handle_or_interface(field, field_expr, object_name)}}
 {%-   elif field.kind|is_enum_kind %}
 {{validate_enum(field, field_expr)}}
 {%-   endif %}

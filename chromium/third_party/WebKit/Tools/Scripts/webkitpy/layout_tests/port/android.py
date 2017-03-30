@@ -120,7 +120,10 @@ HOST_FONT_FILES = [
     [['/usr/share/fonts/truetype/ttf-indic-fonts-core/'], 'lohit_ta.ttf', 'ttf-indic-fonts-core'],
     [['/usr/share/fonts/truetype/ttf-indic-fonts-core/'], 'MuktiNarrow.ttf', 'ttf-indic-fonts-core'],
     [['/usr/share/fonts/truetype/thai/', '/usr/share/fonts/truetype/tlwg/'], 'Garuda.ttf', 'fonts-tlwg-garuda'],
-    [['/usr/share/fonts/truetype/ttf-indic-fonts-core/', '/usr/share/fonts/truetype/ttf-punjabi-fonts/'], 'lohit_pa.ttf', 'ttf-indic-fonts-core'],
+    [['/usr/share/fonts/truetype/ttf-indic-fonts-core/',
+      '/usr/share/fonts/truetype/ttf-punjabi-fonts/'],
+     'lohit_pa.ttf',
+     'ttf-indic-fonts-core'],
 ]
 
 # Test resources that need to be accessed as files directly.
@@ -285,7 +288,7 @@ class AndroidCommands(object):
             path_version = AndroidCommands._determine_adb_version(path_option, executive, debug_logging)
             if not path_version:
                 continue
-            if command_version != None and path_version < command_version:
+            if command_version is not None and path_version < command_version:
                 continue
 
             command_path = path_option
@@ -463,7 +466,8 @@ class AndroidPort(base.Port):
         return self._build_path(MD5SUM_HOST_FILE_NAME)
 
     def additional_driver_flag(self):
-        return super(AndroidPort, self).additional_driver_flag() + self._driver_details.additional_command_line_flags(use_breakpad=not self.get_option('disable_breakpad'))
+        return super(AndroidPort, self).additional_driver_flag() + \
+            self._driver_details.additional_command_line_flags(use_breakpad=not self.get_option('disable_breakpad'))
 
     def default_timeout_ms(self):
         # Android platform has less computing power than desktop platforms.
@@ -487,8 +491,8 @@ class AndroidPort(base.Port):
         # See https://codereview.chromium.org/1158323009/
         return 1
 
-    def check_wdiff(self, logging=True):
-        return self._host_port.check_wdiff(logging)
+    def check_wdiff(self, more_logging=True):
+        return self._host_port.check_wdiff(more_logging)
 
     def check_build(self, needs_http, printer):
         exit_status = super(AndroidPort, self).check_build(needs_http, printer)
@@ -598,7 +602,7 @@ class AndroidPort(base.Port):
             exists = False
             for font_dir in font_dirs:
                 font_path = font_dir + font_file
-                if self._check_file_exists(font_path, '', logging=False):
+                if self._check_file_exists(font_path, '', more_logging=False):
                     exists = True
                     break
             if not exists:
@@ -667,7 +671,7 @@ class AndroidPort(base.Port):
     # Local private methods.
 
     @staticmethod
-    def _android_server_process_constructor(port, server_name, cmd_line, env=None, logging=False):
+    def _android_server_process_constructor(port, server_name, cmd_line, env=None, more_logging=False):
         # We need universal_newlines=True, because 'adb shell' for some unknown reason
         # does newline conversion of unix-style LF into win-style CRLF (and we need
         # to convert that back). This can cause headaches elsewhere because
@@ -675,7 +679,7 @@ class AndroidPort(base.Port):
         # not binary file-like objects like all of the other ports are.
         # FIXME: crbug.com/496983.
         return server_process.ServerProcess(port, server_name, cmd_line, env,
-                                            universal_newlines=True, treat_no_data_as_crash=True, logging=logging)
+                                            universal_newlines=True, treat_no_data_as_crash=True, more_logging=more_logging)
 
 
 class AndroidPerf(SingleFileOutputProfiler):
@@ -725,8 +729,8 @@ http://goto.google.com/cr-android-perf-howto
 """)
 
     def attach_to_pid(self, pid):
-        assert(pid)
-        assert(self._perf_process == None)
+        assert pid
+        assert self._perf_process is None
         # FIXME: This can't be a fixed timeout!
         cmd = self._android_commands.adb_command() + ['shell', 'perf', 'record', '-g', '-p', pid, 'sleep', 30]
         self._perf_process = self._host.executive.popen(cmd)
@@ -872,7 +876,7 @@ class ChromiumAndroidDriver(driver.Driver):
         symfs_library_path = fs.join(symfs_path, "data/app-lib/%s-1/%s" %
                                      (self._driver_details.package_name(), self._driver_details.library_name()))
         built_library_path = self._port._build_path('lib', self._driver_details.library_name())
-        assert(fs.exists(built_library_path))
+        assert fs.exists(built_library_path)
 
         # FIXME: Ideally we'd check the sha1's first and make a soft-link instead
         # of copying (since we probably never care about windows).
@@ -977,7 +981,7 @@ class ChromiumAndroidDriver(driver.Driver):
         driver_host_path = self._port._path_to_driver()
         log_callback("installing apk")
         install_result = self._android_commands.run(['install', driver_host_path])
-        if install_result.find('Success') == -1:
+        if 'Success' not in install_result:
             self._abort('Failed to install %s onto device: %s' % (driver_host_path, install_result))
 
     def _push_fonts(self, log_callback):
@@ -986,7 +990,7 @@ class ChromiumAndroidDriver(driver.Driver):
         for (host_dirs, font_file, package) in HOST_FONT_FILES:
             for host_dir in host_dirs:
                 host_font_path = host_dir + font_file
-                if self._port._check_file_exists(host_font_path, '', logging=False):
+                if self._port._check_file_exists(host_font_path, '', more_logging=False):
                     self._push_file_if_needed(
                         host_font_path, self._driver_details.device_fonts_directory() + font_file, log_callback)
 
@@ -1149,7 +1153,8 @@ class ChromiumAndroidDriver(driver.Driver):
 
         cmd_line_file_path = self._driver_details.command_line_file()
         original_cmd_line_file_path = cmd_line_file_path + '.orig'
-        if self._android_commands.file_exists(cmd_line_file_path) and not self._android_commands.file_exists(original_cmd_line_file_path):
+        if self._android_commands.file_exists(
+                cmd_line_file_path) and not self._android_commands.file_exists(original_cmd_line_file_path):
             # We check for both the normal path and the backup because we do not want to step
             # on the backup. Otherwise, we'd clobber the backup whenever we changed the
             # command line during the run.

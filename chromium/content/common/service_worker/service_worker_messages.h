@@ -90,6 +90,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerResponse)
   IPC_STRUCT_TRAITS_MEMBER(response_time)
   IPC_STRUCT_TRAITS_MEMBER(is_in_cache_storage)
   IPC_STRUCT_TRAITS_MEMBER(cache_storage_cache_name)
+  IPC_STRUCT_TRAITS_MEMBER(cors_exposed_header_names)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::ServiceWorkerObjectInfo)
@@ -243,28 +244,35 @@ IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_DecrementRegistrationRefCount,
 IPC_MESSAGE_CONTROL1(ServiceWorkerHostMsg_TerminateWorker,
                      int /* handle_id */)
 
-// Informs the browser that |provider_id| is associated
-// with a service worker script running context and
-// |version_id| identifies which ServiceWorkerVersion.
-IPC_MESSAGE_CONTROL2(ServiceWorkerHostMsg_SetVersionId,
+// Informs the browser that a service worker is starting up in a provider.
+// |provider_id| identifies the ServiceWorkerProviderHost hosting the service
+// worker. |version_id| identifies the ServiceWorkerVersion and
+// |embedded_worker_id| identifies the EmbeddedWorkerInstance.
+IPC_MESSAGE_CONTROL3(ServiceWorkerHostMsg_SetVersionId,
                      int /* provider_id */,
-                     int64_t /* version_id */)
+                     int64_t /* version_id */,
+                     int /* embedded_worker_id */)
 
 // Informs the browser that event handling has finished.
 // Routed to the target ServiceWorkerVersion.
-IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_InstallEventFinished,
+IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_InstallEventFinished,
                     int /* request_id */,
-                    blink::WebServiceWorkerEventResult)
+                    blink::WebServiceWorkerEventResult,
+                    bool /* has_fetch_event_handler */)
+
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_ActivateEventFinished,
                     int /* request_id */,
                     blink::WebServiceWorkerEventResult)
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_ExtendableMessageEventFinished,
                     int /* request_id */,
                     blink::WebServiceWorkerEventResult)
-IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_FetchEventFinished,
-                    int /* request_id */,
+IPC_MESSAGE_ROUTED3(ServiceWorkerHostMsg_FetchEventResponse,
+                    int /* response_id */,
                     content::ServiceWorkerFetchEventResult,
                     content::ServiceWorkerResponse)
+IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_FetchEventFinished,
+                    int /* event_finish_id */,
+                    blink::WebServiceWorkerEventResult)
 IPC_MESSAGE_ROUTED2(ServiceWorkerHostMsg_NotificationClickEventFinished,
                     int /* request_id */,
                     blink::WebServiceWorkerEventResult)
@@ -474,8 +482,9 @@ IPC_MESSAGE_CONTROL1(ServiceWorkerMsg_ActivateEvent,
 IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_ExtendableMessageEvent,
                      int /* request_id */,
                      ServiceWorkerMsg_ExtendableMessageEvent_Params)
-IPC_MESSAGE_CONTROL2(ServiceWorkerMsg_FetchEvent,
-                     int /* request_id */,
+IPC_MESSAGE_CONTROL3(ServiceWorkerMsg_FetchEvent,
+                     int /* response_id */,
+                     int /* event_finish_id */,
                      content::ServiceWorkerFetchRequest)
 IPC_MESSAGE_CONTROL4(ServiceWorkerMsg_NotificationClickEvent,
                      int /* request_id */,

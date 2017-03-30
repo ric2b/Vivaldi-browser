@@ -22,31 +22,24 @@
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "media/base/audio_converter.h"
+#include "media/base/audio_latency.h"
 #include "media/base/audio_renderer_sink.h"
 #include "url/origin.h"
 
 namespace media {
 
+class AudioRendererMixerPool;
 class AudioRendererMixer;
 
 class MEDIA_EXPORT AudioRendererMixerInput
     : NON_EXPORTED_BASE(public SwitchableAudioRendererSink),
       public AudioConverter::InputCallback {
  public:
-  typedef base::Callback<AudioRendererMixer*(const AudioParameters& params,
-                                             const std::string& device_id,
-                                             const url::Origin& security_origin,
-                                             OutputDeviceStatus* device_status)>
-      GetMixerCB;
-  typedef base::Callback<void(const AudioParameters& params,
-                              const std::string& device_id,
-                              const url::Origin& security_origin)>
-      RemoveMixerCB;
-
-  AudioRendererMixerInput(const GetMixerCB& get_mixer_cb,
-                          const RemoveMixerCB& remove_mixer_cb,
+  AudioRendererMixerInput(AudioRendererMixerPool* mixer_pool,
+                          int owner_id,
                           const std::string& device_id,
-                          const url::Origin& security_origin);
+                          const url::Origin& security_origin,
+                          AudioLatency::LatencyType latency);
 
   // SwitchableAudioRendererSink implementation.
   void Start() override;
@@ -60,6 +53,11 @@ class MEDIA_EXPORT AudioRendererMixerInput
   void SwitchOutputDevice(const std::string& device_id,
                           const url::Origin& security_origin,
                           const OutputDeviceStatusCB& callback) override;
+  // This is expected to be called on the audio rendering thread. The caller
+  // must ensure that this input has been added to a mixer before calling the
+  // function, and that it is not removed from the mixer before this function
+  // returns.
+  bool CurrentThreadIsRenderingThread() override;
 
   // Called by AudioRendererMixer when an error occurs.
   void OnRenderError();
@@ -70,6 +68,9 @@ class MEDIA_EXPORT AudioRendererMixerInput
  private:
   friend class AudioRendererMixerInputTest;
 
+  // Pool to obtain mixers from / return them to.
+  AudioRendererMixerPool* const mixer_pool_;
+
   // Protect |volume_|, accessed by separate threads in ProvideInput() and
   // SetVolume().
   base::Lock volume_lock_;
@@ -79,23 +80,18 @@ class MEDIA_EXPORT AudioRendererMixerInput
   double volume_;
 
   // AudioConverter::InputCallback implementation.
-  double ProvideInput(AudioBus* audio_bus,
-                      base::TimeDelta buffer_delay) override;
-
-  // Callbacks provided during construction which allow AudioRendererMixerInput
-  // to retrieve a mixer during Initialize() and notify when it's done with it.
-  const GetMixerCB get_mixer_cb_;
-  const RemoveMixerCB remove_mixer_cb_;
+  double ProvideInput(AudioBus* audio_bus, uint32_t frames_delayed) override;
 
   // AudioParameters received during Initialize().
   AudioParameters params_;
 
-  // ID of hardware device to use
-  std::string device_id_;
+  const int owner_id_;
+  std::string device_id_;  // ID of hardware device to use
   url::Origin security_origin_;
+  const AudioLatency::LatencyType latency_;
 
-  // AudioRendererMixer provided through |get_mixer_cb_| during Initialize(),
-  // guaranteed to live (at least) until |remove_mixer_cb_| is called.
+  // AudioRendererMixer obtained from mixer pool during Initialize(),
+  // guaranteed to live (at least) until it is returned to the pool.
   AudioRendererMixer* mixer_;
 
   // Source of audio data which is provided to the mixer.

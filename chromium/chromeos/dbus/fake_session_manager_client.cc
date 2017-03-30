@@ -157,8 +157,9 @@ void FakeSessionManagerClient::CheckArcAvailability(
       FROM_HERE, base::Bind(callback, arc_available_));
 }
 
-void FakeSessionManagerClient::StartArcInstance(const std::string& socket_path,
-                                                const ArcCallback& callback) {
+void FakeSessionManagerClient::StartArcInstance(
+    const cryptohome::Identification& cryptohome_id,
+    const ArcCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, arc_available_));
 }
@@ -172,6 +173,15 @@ void FakeSessionManagerClient::GetArcStartTime(
     const GetArcStartTimeCallback& callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(callback, arc_available_, base::TimeTicks::Now()));
+}
+
+void FakeSessionManagerClient::RemoveArcData(
+    const cryptohome::Identification& cryptohome_id,
+    const ArcCallback& callback) {
+  if (!callback.is_null()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(callback, arc_available_));
+  }
 }
 
 const std::string& FakeSessionManagerClient::device_policy() const {

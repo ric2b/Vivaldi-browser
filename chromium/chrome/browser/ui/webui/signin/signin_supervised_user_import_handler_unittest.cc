@@ -175,15 +175,16 @@ TEST_F(SigninSupervisedUserImportHandlerTest, NotAuthenticated) {
 
   // Test the JS -> C++ -> JS callback path.
   base::ListValue list_args;
-  list_args.Append(new base::StringValue(kTestCallbackId));
-  list_args.Append(new base::StringValue(profile()->GetPath().AsUTF16Unsafe()));
+  list_args.AppendString(kTestCallbackId);
+  list_args.AppendString(profile()->GetPath().AsUTF16Unsafe());
   handler()->GetExistingSupervisedUsers(&list_args);
 
   // Expect an error response.
   VerifyResponse(1U, kTestCallbackId, false);
 
-  base::string16 expected_error_message = l10n_util::GetStringUTF16(
-      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR);
+  base::string16 expected_error_message = l10n_util::GetStringFUTF16(
+      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR,
+      base::ASCIIToUTF16(profile()->GetProfileUserName()));
   base::string16 error_message;
   ASSERT_TRUE(web_ui()->call_data()[0]->arg3()->GetAsString(&error_message));
   EXPECT_EQ(expected_error_message, error_message);
@@ -199,15 +200,16 @@ TEST_F(SigninSupervisedUserImportHandlerTest, AuthError) {
 
   // Test the JS -> C++ -> JS callback path.
   base::ListValue list_args;
-  list_args.Append(new base::StringValue(kTestCallbackId));
-  list_args.Append(new base::StringValue(profile()->GetPath().AsUTF16Unsafe()));
+  list_args.AppendString(kTestCallbackId);
+  list_args.AppendString(profile()->GetPath().AsUTF16Unsafe());
   handler()->GetExistingSupervisedUsers(&list_args);
 
   // Expect an error response.
   VerifyResponse(1U, kTestCallbackId, false);
 
-  base::string16 expected_error_message = l10n_util::GetStringUTF16(
-      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR);
+  base::string16 expected_error_message = l10n_util::GetStringFUTF16(
+      IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR,
+      base::ASCIIToUTF16(profile()->GetProfileUserName()));
   base::string16 error_message;
   ASSERT_TRUE(web_ui()->call_data()[0]->arg3()->GetAsString(&error_message));
   EXPECT_EQ(expected_error_message, error_message);
@@ -225,8 +227,8 @@ TEST_F(SigninSupervisedUserImportHandlerTest, CustodianIsSupervised) {
 
   // Test the JS -> C++ -> JS callback path.
   base::ListValue list_args;
-  list_args.Append(new base::StringValue(kTestCallbackId));
-  list_args.Append(new base::StringValue(profile_->GetPath().AsUTF16Unsafe()));
+  list_args.AppendString(kTestCallbackId);
+  list_args.AppendString(profile_->GetPath().AsUTF16Unsafe());
   handler()->GetExistingSupervisedUsers(&list_args);
 
   // Expect to do nothing.
@@ -236,8 +238,8 @@ TEST_F(SigninSupervisedUserImportHandlerTest, CustodianIsSupervised) {
 TEST_F(SigninSupervisedUserImportHandlerTest, SendExistingSupervisedUsers) {
   // Test the JS -> C++ -> JS callback path.
   base::ListValue list_args;
-  list_args.Append(new base::StringValue(kTestCallbackId));
-  list_args.Append(new base::StringValue(profile()->GetPath().AsUTF16Unsafe()));
+  list_args.AppendString(kTestCallbackId);
+  list_args.AppendString(profile()->GetPath().AsUTF16Unsafe());
   handler()->GetExistingSupervisedUsers(&list_args);
 
   // Expect a success response.

@@ -28,6 +28,7 @@
 #include "core/dom/StyleEngine.h"
 
 #include "core/HTMLNames.h"
+#include "core/animation/AnimationTimeline.h"
 #include "core/css/CSSDefaultStyleSheets.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSStyleSheet.h"
@@ -37,6 +38,7 @@
 #include "core/css/resolver/ScopedStyleResolver.h"
 #include "core/dom/DocumentStyleSheetCollector.h"
 #include "core/dom/Element.h"
+#include "core/dom/ElementTraversal.h"
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/ShadowTreeStyleSheetCollection.h"
 #include "core/dom/StyleChangeReason.h"
@@ -255,7 +257,7 @@ void StyleEngine::clearMediaQueryRuleSetOnTreeScopeStyleSheets(UnorderedTreeScop
 {
     for (TreeScope* treeScope : treeScopes) {
         DCHECK(treeScope != m_document);
-        ShadowTreeStyleSheetCollection* collection = static_cast<ShadowTreeStyleSheetCollection*>(styleSheetCollectionFor(*treeScope));
+        ShadowTreeStyleSheetCollection* collection = toShadowTreeStyleSheetCollection(styleSheetCollectionFor(*treeScope));
         DCHECK(collection);
         collection->clearMediaQueryRuleSetStyleSheets();
     }
@@ -280,7 +282,7 @@ void StyleEngine::updateStyleSheetsInImport(DocumentStyleSheetCollector& parentC
 void StyleEngine::updateActiveStyleSheetsInShadow(StyleResolverUpdateMode updateMode, TreeScope* treeScope, UnorderedTreeScopeSet& treeScopesRemoved)
 {
     DCHECK_NE(treeScope, m_document);
-    ShadowTreeStyleSheetCollection* collection = static_cast<ShadowTreeStyleSheetCollection*>(styleSheetCollectionFor(*treeScope));
+    ShadowTreeStyleSheetCollection* collection = toShadowTreeStyleSheetCollection(styleSheetCollectionFor(*treeScope));
     DCHECK(collection);
     collection->updateActiveStyleSheets(*this, updateMode);
     if (!collection->hasStyleSheetCandidateNodes()) {
@@ -527,6 +529,8 @@ CSSStyleSheet* StyleEngine::createSheet(Element* e, const String& text, TextPosi
 
     DCHECK(styleSheet);
     styleSheet->setTitle(e->title());
+    if (!e->isInShadowTree())
+        setPreferredStylesheetSetNameIfNotSet(e->title());
     return styleSheet;
 }
 
@@ -690,6 +694,57 @@ void StyleEngine::pseudoStateChangedForElement(CSSSelector::PseudoType pseudoTyp
     m_styleInvalidator.scheduleInvalidationSetsForElement(invalidationLists, element);
 }
 
+void StyleEngine::scheduleSiblingInvalidationsForElement(Element& element, ContainerNode& schedulingParent)
+{
+    InvalidationLists invalidationLists;
+
+    RuleFeatureSet& ruleFeatureSet = ensureResolver().ensureUpdatedRuleFeatureSet();
+
+    if (element.hasID())
+        ruleFeatureSet.collectSiblingInvalidationSetForId(invalidationLists, element, element.idForStyleResolution());
+
+    if (element.hasClass()) {
+        const SpaceSplitString& classNames = element.classNames();
+        for (size_t i = 0; i < classNames.size(); i++)
+            ruleFeatureSet.collectSiblingInvalidationSetForClass(invalidationLists, element, classNames[i]);
+    }
+
+    for (const Attribute& attribute : element.attributes())
+        ruleFeatureSet.collectSiblingInvalidationSetForAttribute(invalidationLists, element, attribute.name());
+
+    ruleFeatureSet.collectUniversalSiblingInvalidationSet(invalidationLists);
+
+    m_styleInvalidator.scheduleSiblingInvalidationsAsDescendants(invalidationLists, schedulingParent);
+}
+
+void StyleEngine::scheduleInvalidationsForInsertedSibling(Element* beforeElement, Element& insertedElement)
+{
+    unsigned affectedSiblings = insertedElement.parentNode()->childrenAffectedByIndirectAdjacentRules() ? UINT_MAX : m_maxDirectAdjacentSelectors;
+
+    ContainerNode* schedulingParent = insertedElement.parentElementOrShadowRoot();
+    if (!schedulingParent)
+        return;
+
+    scheduleSiblingInvalidationsForElement(insertedElement, *schedulingParent);
+
+    for (unsigned i = 0; beforeElement && i < affectedSiblings; i++, beforeElement = ElementTraversal::previousSibling(*beforeElement))
+        scheduleSiblingInvalidationsForElement(*beforeElement, *schedulingParent);
+}
+
+void StyleEngine::scheduleInvalidationsForRemovedSibling(Element* beforeElement, Element& removedElement, Element& afterElement)
+{
+    unsigned affectedSiblings = afterElement.parentNode()->childrenAffectedByIndirectAdjacentRules() ? UINT_MAX : m_maxDirectAdjacentSelectors;
+
+    ContainerNode* schedulingParent = afterElement.parentElementOrShadowRoot();
+    if (!schedulingParent)
+        return;
+
+    scheduleSiblingInvalidationsForElement(removedElement, *schedulingParent);
+
+    for (unsigned i = 1; beforeElement && i < affectedSiblings; i++, beforeElement = ElementTraversal::previousSibling(*beforeElement))
+        scheduleSiblingInvalidationsForElement(*beforeElement, *schedulingParent);
+}
+
 void StyleEngine::setStatsEnabled(bool enabled)
 {
     if (!enabled) {
@@ -741,6 +796,17 @@ void StyleEngine::ensureFullscreenUAStyle()
         return;
     if (!m_resolver->hasFullscreenUAStyle())
         m_resolver->resetRuleFeatures();
+}
+
+void StyleEngine::keyframesRulesAdded()
+{
+    if (m_hasUnresolvedKeyframesRule) {
+        m_hasUnresolvedKeyframesRule = false;
+        document().setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::StyleSheetChange));
+        return;
+    }
+
+    document().timeline().invalidateKeyframeEffects();
 }
 
 DEFINE_TRACE(StyleEngine)

@@ -9,29 +9,6 @@
 
 namespace cc {
 
-SkColorType ResourceFormatToClosestSkColorType(ResourceFormat format) {
-  // Use kN32_SkColorType if there is no corresponding SkColorType.
-  switch (format) {
-    case RGBA_4444:
-      return kARGB_4444_SkColorType;
-    case RGBA_8888:
-    case BGRA_8888:
-      return kN32_SkColorType;
-    case ALPHA_8:
-      return kAlpha_8_SkColorType;
-    case RGB_565:
-      return kRGB_565_SkColorType;
-    case LUMINANCE_8:
-      return kGray_8_SkColorType;
-    case ETC1:
-    case RED_8:
-    case LUMINANCE_F16:
-      return kN32_SkColorType;
-  }
-  NOTREACHED();
-  return kN32_SkColorType;
-}
-
 int BitsPerPixel(ResourceFormat format) {
   switch (format) {
     case BGRA_8888:
@@ -86,12 +63,37 @@ GLenum GLDataFormat(ResourceFormat format) {
   };
   static_assert(arraysize(format_gl_data_format) == (RESOURCE_FORMAT_MAX + 1),
                 "format_gl_data_format does not handle all cases.");
-
   return format_gl_data_format[format];
 }
 
 GLenum GLInternalFormat(ResourceFormat format) {
+  // In GLES2, the internal format must match the texture format. (It no longer
+  // is true in GLES3, however it still holds for the BGRA extension.)
   return GLDataFormat(format);
+}
+
+GLenum GLCopyTextureInternalFormat(ResourceFormat format) {
+  // In GLES2, valid formats for glCopyTexImage2D are: GL_ALPHA, GL_LUMINANCE,
+  // GL_LUMINANCE_ALPHA, GL_RGB, or GL_RGBA.
+  // Extensions typically used for glTexImage2D do not also work for
+  // glCopyTexImage2D. For instance GL_BGRA_EXT may not be used for
+  // anything but gl(Sub)TexImage2D:
+  // https://www.khronos.org/registry/gles/extensions/EXT/EXT_texture_format_BGRA8888.txt
+  DCHECK_LE(format, RESOURCE_FORMAT_MAX);
+  static const GLenum format_gl_data_format[] = {
+      GL_RGBA,       // RGBA_8888
+      GL_RGBA,       // RGBA_4444
+      GL_RGBA,       // BGRA_8888
+      GL_ALPHA,      // ALPHA_8
+      GL_LUMINANCE,  // LUMINANCE_8
+      GL_RGB,        // RGB_565
+      GL_RGB,        // ETC1
+      GL_LUMINANCE,  // RED_8
+      GL_LUMINANCE,  // LUMINANCE_F16
+  };
+  static_assert(arraysize(format_gl_data_format) == (RESOURCE_FORMAT_MAX + 1),
+                "format_gl_data_format does not handle all cases.");
+  return format_gl_data_format[format];
 }
 
 gfx::BufferFormat BufferFormat(ResourceFormat format) {

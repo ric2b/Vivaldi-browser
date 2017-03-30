@@ -26,7 +26,6 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
  public:
   RemoteMediaPlayerBridge(int player_id,
                           const std::string& user_agent,
-                          bool hide_url_log,
                           RemoteMediaPlayerManager* manager);
   ~RemoteMediaPlayerBridge() override;
 
@@ -36,7 +35,7 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   virtual void Initialize();
 
   // MediaPlayerAndroid implementation.
-  void SetVideoSurface(gfx::ScopedJavaSurface surface) override;
+  void SetVideoSurface(gl::ScopedJavaSurface surface) override;
   void Start() override;
   void Pause(bool is_media_related_action) override;
   void SeekTo(base::TimeDelta timestamp) override;
@@ -126,9 +125,6 @@ class RemoteMediaPlayerBridge : public media::MediaPlayerAndroid {
   int height_;
   base::RepeatingTimer time_update_timer_;
   base::TimeDelta duration_;
-
-  // Hide url log from media player.
-  bool hide_url_log_;
 
   // Url for playback.
   GURL url_;

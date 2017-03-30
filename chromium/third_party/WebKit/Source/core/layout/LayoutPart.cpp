@@ -31,9 +31,7 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/svg/LayoutSVGRoot.h"
-#include "core/paint/BoxPainter.h"
-#include "core/paint/PaintLayer.h"
+#include "core/layout/api/LayoutAPIShim.h"
 #include "core/paint/PartPainter.h"
 #include "core/plugins/PluginView.h"
 
@@ -178,7 +176,7 @@ bool LayoutPart::nodeAtPoint(HitTestResult& result, const HitTestLocation& locat
             HitTestRequest newHitTestRequest(result.hitTestRequest().type() | HitTestRequest::ChildFrameHitTest);
             HitTestResult childFrameResult(newHitTestRequest, newHitTestLocation);
 
-            // The frame's layout and style must be up-to-date if we reach here.
+            // The frame's layout and style must be up to date if we reach here.
             bool isInsideChildFrame = childRootItem.hitTestNoLifecycleUpdate(childFrameResult);
 
             if (result.hitTestRequest().listBased()) {
@@ -360,7 +358,7 @@ void LayoutPart::invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState&
         // |childFrameView| is in another document, which could be
         // missing its LayoutView. TODO(jchaffraix): Ideally we should
         // not need this code.
-        if (LayoutView* childLayoutView = childFrameView->layoutView()) {
+        if (LayoutView* childLayoutView = toLayoutView(LayoutAPIShim::layoutObjectFrom(childFrameView->layoutViewItem()))) {
             PaintInvalidationState childViewPaintInvalidationState(paintInvalidationState, *childLayoutView);
             childFrameView->invalidateTreeIfNeeded(childViewPaintInvalidationState);
         }

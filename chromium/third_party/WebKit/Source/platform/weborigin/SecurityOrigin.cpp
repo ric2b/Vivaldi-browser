@@ -37,10 +37,10 @@
 #include "url/url_canon_ip.h"
 #include "wtf/HexNumber.h"
 #include "wtf/NotFound.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 namespace blink {
 
@@ -502,10 +502,10 @@ AtomicString SecurityOrigin::toRawAtomicString() const
 void SecurityOrigin::buildRawString(StringBuilder& builder, bool includeSuborigin) const
 {
     builder.append(m_protocol);
-    builder.appendLiteral("://");
+    builder.append("://");
     if (includeSuborigin && hasSuborigin()) {
         builder.append(m_suborigin.name());
-        builder.appendLiteral("_");
+        builder.append("_");
     }
     builder.append(m_host);
 
@@ -531,6 +531,12 @@ PassRefPtr<SecurityOrigin> SecurityOrigin::create(const String& protocol, const 
 
 bool SecurityOrigin::isSameSchemeHostPort(const SecurityOrigin* other) const
 {
+    if (this == other)
+        return true;
+
+    if (isUnique() || other->isUnique())
+        return false;
+
     if (m_host != other->m_host)
         return false;
 
@@ -559,16 +565,16 @@ const KURL& SecurityOrigin::urlWithUniqueSecurityOrigin()
     return uniqueSecurityOriginURL;
 }
 
-PassOwnPtr<SecurityOrigin::PrivilegeData> SecurityOrigin::createPrivilegeData() const
+std::unique_ptr<SecurityOrigin::PrivilegeData> SecurityOrigin::createPrivilegeData() const
 {
-    OwnPtr<PrivilegeData> privilegeData = adoptPtr(new PrivilegeData);
+    std::unique_ptr<PrivilegeData> privilegeData = wrapUnique(new PrivilegeData);
     privilegeData->m_universalAccess = m_universalAccess;
     privilegeData->m_canLoadLocalResources = m_canLoadLocalResources;
     privilegeData->m_blockLocalAccessFromLocalOrigin = m_blockLocalAccessFromLocalOrigin;
     return privilegeData;
 }
 
-void SecurityOrigin::transferPrivilegesFrom(PassOwnPtr<PrivilegeData> privilegeData)
+void SecurityOrigin::transferPrivilegesFrom(std::unique_ptr<PrivilegeData> privilegeData)
 {
     m_universalAccess = privilegeData->m_universalAccess;
     m_canLoadLocalResources = privilegeData->m_canLoadLocalResources;

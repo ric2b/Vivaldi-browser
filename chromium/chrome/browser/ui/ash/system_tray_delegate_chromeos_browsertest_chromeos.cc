@@ -6,11 +6,11 @@
 
 #include <string>
 
+#include "ash/common/system/date/date_default_view.h"
+#include "ash/common/system/date/date_view.h"
+#include "ash/common/system/date/tray_date.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
-#include "ash/system/date/date_default_view.h"
-#include "ash/system/date/date_view.h"
-#include "ash/system/date/tray_date.h"
 #include "ash/test/display_manager_test_api.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
@@ -55,7 +55,7 @@ void CreateDefaultView() {
   ash::TrayDate* tray_date = ash::Shell::GetInstance()
                                  ->GetPrimarySystemTray()
                                  ->GetTrayDateForTesting();
-  tray_date->CreateDefaultViewForTesting(ash::user::LOGGED_IN_NONE);
+  tray_date->CreateDefaultViewForTesting(ash::LoginStatus::NOT_LOGGED_IN);
 }
 
 }  // namespace

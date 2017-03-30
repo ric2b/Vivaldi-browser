@@ -50,6 +50,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/network_session_configurator/switches.h"
 #include "components/network_time/network_time_tracker.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_interstitials/core/controller_client.h"
@@ -80,7 +81,6 @@
 #include "content/public/test/test_utils.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_errors.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/cert/x509_certificate.h"
@@ -91,6 +91,7 @@
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "net/test/test_certificate_data.h"
+#include "net/test/test_data_directory.h"
 #include "net/url_request/url_request_context.h"
 
 #if defined(USE_NSS_CERTS)
@@ -202,8 +203,8 @@ void Check(const NavigationEntry& entry, net::CertStatus error) {
     EXPECT_EQ(error, entry.GetSSL().cert_status & error);
     net::CertStatus extra_cert_errors =
         error ^ (entry.GetSSL().cert_status & net::CERT_STATUS_ALL_ERRORS);
-    if (extra_cert_errors)
-      LOG(WARNING) << "Got unexpected cert error: " << extra_cert_errors;
+    EXPECT_FALSE(extra_cert_errors) << "Got unexpected cert error: "
+                                    << extra_cert_errors;
   } else {
     EXPECT_EQ(0U, entry.GetSSL().cert_status & net::CERT_STATUS_ALL_ERRORS);
   }
@@ -212,13 +213,13 @@ void Check(const NavigationEntry& entry, net::CertStatus error) {
 }  // namespace CertError
 
 void CheckSecurityState(WebContents* tab,
-                        net::CertStatus error,
+                        net::CertStatus expected_error,
                         content::SecurityStyle expected_security_style,
                         int expected_authentication_state) {
   ASSERT_FALSE(tab->IsCrashed());
   NavigationEntry* entry = tab->GetController().GetActiveEntry();
   ASSERT_TRUE(entry);
-  CertError::Check(*entry, error);
+  CertError::Check(*entry, expected_error);
   SecurityStyle::Check(*entry, expected_security_style);
   AuthState::Check(*entry, expected_authentication_state);
 }
@@ -413,7 +414,7 @@ class SSLUITest
 
     base::StringPairs replacement_text_frame_left;
     replacement_text_frame_left.push_back(
-        make_pair("REPLACE_WITH_HTTP_PAGE", http_url.spec()));
+        make_pair("REPLACE_WITH_HTTP_PORT", http_url.port()));
     replacement_text_frame_left.push_back(
         make_pair("REPLACE_WITH_GOOD_HTTPS_PAGE", good_https_url.spec()));
     replacement_text_frame_left.push_back(
@@ -811,42 +812,29 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestHTTPSExpiredCertAndProceed) {
       tab, net::CERT_STATUS_DATE_INVALID, AuthState::NONE);
 }
 
-#ifndef NEDBUG
-// Flaky on Windows debug (http://crbug.com/280537).
-#define MAYBE_TestHTTPSExpiredCertAndDontProceed \
-        DISABLED_TestHTTPSExpiredCertAndDontProceed
-#else
-#define MAYBE_TestHTTPSExpiredCertAndDontProceed \
-        TestHTTPSExpiredCertAndDontProceed
-#endif
-
 // Visits a page with https error and don't proceed (and ensure we can still
 // navigate at that point):
-IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestHTTPSExpiredCertAndDontProceed) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestInterstitialCrossSiteNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
-  ASSERT_TRUE(https_server_expired_.Start());
+  ASSERT_TRUE(https_server_mismatched_.Start());
 
   // First navigate to an OK page.
-  ui_test_utils::NavigateToURL(browser(),
-                               https_server_.GetURL("/ssl/google.html"));
+  GURL initial_url = https_server_.GetURL("/ssl/google.html");
+  ASSERT_EQ("127.0.0.1", initial_url.host());
+  ui_test_utils::NavigateToURL(browser(), initial_url);
 
   WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
   NavigationEntry* entry = tab->GetController().GetActiveEntry();
   ASSERT_TRUE(entry);
 
-  GURL cross_site_url = https_server_expired_.GetURL("/ssl/google.html");
-  // Change the host name from 127.0.0.1 to localhost so it triggers a
-  // cross-site navigation so we can test http://crbug.com/5800 is gone.
-  ASSERT_EQ("127.0.0.1", cross_site_url.host());
-  GURL::Replacements replacements;
-  replacements.SetHostStr("localhost");
-  cross_site_url = cross_site_url.ReplaceComponents(replacements);
-
-  // Now go to a bad HTTPS page.
+  // Navigate from 127.0.0.1 to localhost so it triggers a
+  // cross-site navigation to make sure http://crbug.com/5800 is gone.
+  GURL cross_site_url = https_server_mismatched_.GetURL("/ssl/google.html");
+  ASSERT_EQ("localhost", cross_site_url.host());
   ui_test_utils::NavigateToURL(browser(), cross_site_url);
-
   // An interstitial should be showing.
+  WaitForInterstitialAttach(tab);
   CheckAuthenticationBrokenState(tab,
                                  net::CERT_STATUS_COMMON_NAME_INVALID,
                                  AuthState::SHOWING_INTERSTITIAL);
@@ -857,11 +845,12 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, MAYBE_TestHTTPSExpiredCertAndDontProceed) {
   ASSERT_EQ(SSLBlockingPage::kTypeForTesting,
             interstitial_page->GetDelegateForTesting()->GetTypeForTesting());
   interstitial_page->DontProceed();
+  WaitForInterstitialDetach(tab);
 
   // We should be back to the original good page.
   CheckAuthenticatedState(tab, AuthState::NONE);
 
-  // Try to navigate to a new page. (to make sure bug 5800 is fixed).
+  // Navigate to a new page to make sure bug 5800 is fixed.
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/ssl/google.html"));
   CheckUnauthenticatedState(tab, AuthState::NONE);
@@ -1288,7 +1277,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITestWithClientCert, TestWSSClientCert) {
   HostContentSettingsMapFactory::GetForProfile(profile)
       ->SetWebsiteSettingDefaultScope(
           url, GURL(), CONTENT_SETTINGS_TYPE_AUTO_SELECT_CERTIFICATE,
-          std::string(), dict.release());
+          std::string(), std::move(dict));
 
   // Visit a HTTPS page which requires client certs.
   ui_test_utils::NavigateToURL(browser(), url);
@@ -1628,10 +1617,16 @@ IN_PROC_BROWSER_TEST_F(SSLUITest,
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
 
+  host_resolver()->AddRule("example.test",
+                           https_server_.GetURL("/").host());
+
+  net::HostPortPair replacement_pair = embedded_test_server()->host_port_pair();
+  replacement_pair.set_host("example.test");
+
   std::string replacement_path;
   GetFilePathWithHostAndPortReplacement(
       "/ssl/page_with_dynamic_insecure_content.html",
-      embedded_test_server()->host_port_pair(), &replacement_path);
+      replacement_pair, &replacement_path);
   ui_test_utils::NavigateToURL(browser(), https_server_.GetURL(
       replacement_path));
 
@@ -1901,11 +1896,11 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestCloseTabWithUnsafePopup) {
   nav_observer.Wait();
   // Since the popup is showing an interstitial, it shouldn't have a last
   // committed entry.
+  content::WaitForInterstitialAttach(popup);
   EXPECT_FALSE(popup->GetController().GetLastCommittedEntry());
   ASSERT_TRUE(popup->GetController().GetVisibleEntry());
   EXPECT_EQ(https_server_expired_.GetURL("/ssl/bad_iframe.html"),
             popup->GetController().GetVisibleEntry()->GetURL());
-  content::WaitForInterstitialAttach(popup);
   EXPECT_TRUE(popup->ShowingInterstitialPage());
 
   // Add another tab to make sure the browser does not exit when we close
@@ -2130,7 +2125,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestGoodFrameNavigation) {
   CheckAuthenticationBrokenState(
       tab,
       CertError::NONE,
-      AuthState::DISPLAYED_INSECURE_CONTENT | AuthState::RAN_INSECURE_CONTENT);
+      AuthState::RAN_INSECURE_CONTENT);
 
   // Go back, our state should be unchanged.
   {
@@ -2144,7 +2139,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestGoodFrameNavigation) {
   CheckAuthenticationBrokenState(
       tab,
       CertError::NONE,
-      AuthState::DISPLAYED_INSECURE_CONTENT | AuthState::RAN_INSECURE_CONTENT);
+      AuthState::RAN_INSECURE_CONTENT);
 }
 
 // From a bad HTTPS top frame:
@@ -2185,8 +2180,7 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestBadFrameNavigation) {
 
 // From an HTTP top frame, navigate to good and bad HTTPS (security state should
 // stay unauthenticated).
-// Disabled, flakily exceeds test timeout, http://crbug.com/43437.
-IN_PROC_BROWSER_TEST_F(SSLUITest, DISABLED_TestUnauthenticatedFrameNavigation) {
+IN_PROC_BROWSER_TEST_F(SSLUITest, TestUnauthenticatedFrameNavigation) {
   ASSERT_TRUE(embedded_test_server()->Start());
   ASSERT_TRUE(https_server_.Start());
   ASSERT_TRUE(https_server_expired_.Start());
@@ -2995,8 +2989,8 @@ class SSLBlockingPageIDNTest : public SecurityInterstitialIDNTest {
       content::WebContents* contents,
       const GURL& request_url) const override {
     net::SSLInfo ssl_info;
-    ssl_info.cert = new net::X509Certificate(
-        request_url.host(), "CA", base::Time::Max(), base::Time::Max());
+    ssl_info.cert =
+        net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
     return new SSLBlockingPage(
         contents, net::ERR_CERT_CONTAINS_ERRORS, ssl_info, request_url, 0,
         base::Time::NowFromSystemTime(), nullptr, base::Callback<void(bool)>());

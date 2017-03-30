@@ -4,8 +4,8 @@
 
 #include "extensions/browser/api/guest_view/guest_view_internal_api.h"
 
-#include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/profiles/profile.h"
+#include <utility>
+
 #include "components/guest_view/browser/guest_view_base.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/guest_view/browser/guest_view_manager_delegate.h"
@@ -17,6 +17,8 @@
 #include "extensions/common/permissions/permissions_data.h"
 
 #include "app/vivaldi_apptools.h"
+#include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/profiles/profile.h"
 
 using guest_view::GuestViewBase;
 using guest_view::GuestViewManager;
@@ -102,7 +104,7 @@ void GuestViewInternalCreateGuestFunction::CreateGuestCallback(
       new base::DictionaryValue());
   return_params->SetInteger(guest_view::kID, guest_instance_id);
   return_params->SetInteger(guest_view::kContentWindowID, content_window_id);
-  SetResult(return_params.release());
+  SetResult(std::move(return_params));
   SendResponse(true);
 }
 
@@ -125,6 +127,7 @@ bool GuestViewInternalDestroyGuestFunction::RunAsync() {
     // In Vivaldi guests share the |WebContents| with the tabstrip, and
     // can be destroyed when the WebContentsDestroyed is called. So this
     // is not an error.
+    SendResponse(true);
     return true;
   }
 

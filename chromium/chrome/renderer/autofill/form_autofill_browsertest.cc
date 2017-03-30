@@ -8,6 +8,7 @@
 
 #include "base/format_macros.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -1711,8 +1712,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToClickableFormField) {
   expected.value = ASCIIToUTF16("mail");
   expected.form_control_type = "checkbox";
   expected.is_autofilled = true;
-  expected.is_checkable = true;
-  expected.is_checked = true;
+  expected.check_status = FormFieldData::CHECKED;
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, result);
 
   element = GetInputElementById("radio");
@@ -1722,8 +1722,7 @@ TEST_F(FormAutofillTest, WebFormControlElementToClickableFormField) {
   expected.value = ASCIIToUTF16("male");
   expected.form_control_type = "radio";
   expected.is_autofilled = true;
-  expected.is_checkable = true;
-  expected.is_checked = false;
+  expected.check_status = FormFieldData::CHECKABLE_BUT_UNCHECKED;
   EXPECT_FORM_FIELD_DATA_EQUALS(expected, result);
 }
 
@@ -2234,8 +2233,16 @@ TEST_F(FormAutofillTest, WebFormElementConsiderNonControlLabelableElements) {
   EXPECT_EQ(ASCIIToUTF16("firstname"), fields[0].name);
 }
 
+// TODO(crbug.com/616730) Flaky.
+#if defined(OS_CHROMEOS) || defined(OS_MACOSX)
+#define MAYBE_WebFormElementToFormDataTooManyFields \
+  DISABLED_WebFormElementToFormDataTooManyFields
+#else
+#define MAYBE_WebFormElementToFormDataTooManyFields \
+  WebFormElementToFormDataTooManyFields
+#endif
 // We should not be able to serialize a form with too many fillable fields.
-TEST_F(FormAutofillTest, WebFormElementToFormDataTooManyFields) {
+TEST_F(FormAutofillTest, MAYBE_WebFormElementToFormDataTooManyFields) {
   std::string html =
       "<FORM name='TestForm' action='http://cnn.com' method='post'>";
   for (size_t i = 0; i < (kMaxParseableFields + 1); ++i) {
@@ -2321,6 +2328,33 @@ TEST_F(FormAutofillTest, WebFormElementToFormData_AutocompleteOff_OnField) {
   EXPECT_FALSE(form.fields[0].should_autocomplete);
   EXPECT_TRUE(form.fields[1].should_autocomplete);
   EXPECT_TRUE(form.fields[2].should_autocomplete);
+}
+
+// Tests CSS classes are set.
+TEST_F(FormAutofillTest, WebFormElementToFormData_CssClasses) {
+  LoadHTML(
+      "<FORM name='TestForm' id='form' action='http://cnn.com' method='post' "
+      "autocomplete='off'>"
+      "    <INPUT type='text' id='firstname' class='firstname_field' />"
+      "    <INPUT type='text' id='lastname' class='lastname_field' />"
+      "    <INPUT type='text' id='addressline1'  />"
+      "</FORM>");
+
+  WebFrame* frame = GetMainFrame();
+  ASSERT_NE(nullptr, frame);
+
+  WebFormElement web_form =
+      frame->document().getElementById("form").to<WebFormElement>();
+  ASSERT_FALSE(web_form.isNull());
+
+  FormData form;
+  EXPECT_TRUE(WebFormElementToFormData(web_form, WebFormControlElement(),
+                                       EXTRACT_NONE, &form, nullptr));
+
+  EXPECT_EQ(3U, form.fields.size());
+  EXPECT_EQ(ASCIIToUTF16("firstname_field"), form.fields[0].css_classes);
+  EXPECT_EQ(ASCIIToUTF16("lastname_field"), form.fields[1].css_classes);
+  EXPECT_EQ(base::string16(), form.fields[2].css_classes);
 }
 
 TEST_F(FormAutofillTest, ExtractForms) {
@@ -2438,7 +2472,7 @@ TEST_F(FormAutofillTest, OnlyExtractNewForms) {
       "newInput.setAttribute('id', 'telephone');"
       "newInput.value = '12345';"
       "document.getElementById('testform').appendChild(newInput);");
-  msg_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   forms = form_cache.ExtractNewForms();
   ASSERT_EQ(1U, forms.size());
@@ -2494,7 +2528,7 @@ TEST_F(FormAutofillTest, OnlyExtractNewForms) {
       "newForm.appendChild(newLastname);"
       "newForm.appendChild(newEmail);"
       "document.body.appendChild(newForm);");
-  msg_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   web_frame = GetMainFrame();
   forms = form_cache.ExtractNewForms();

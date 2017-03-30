@@ -36,22 +36,27 @@ _log = logging.getLogger(__name__)
 
 class MockBuild(object):
 
-    def __init__(self, build_number, revision, is_green):
+    def __init__(self, builder, build_number, revision, is_green):
+        self._builder = builder
         self._number = build_number
         self._revision = revision
         self._is_green = is_green
 
+    def results_url(self):
+        return "%s/%s" % (self._builder.results_url(), self._number)
+
 
 class MockBuilder(object):
 
-    def __init__(self, name):
-        self._name = name
+    def __init__(self, builder_name, master_name='chromium.mock'):
+        self._name = builder_name
+        self._master_name = master_name
 
     def name(self):
         return self._name
 
     def build(self, build_number):
-        return MockBuild(build_number=build_number, revision=1234, is_green=False)
+        return MockBuild(self, build_number=build_number, revision=1234, is_green=False)
 
     def results_url(self):
         return "http://example.com/builders/%s/results" % self.name()
@@ -63,6 +68,9 @@ class MockBuilder(object):
         return self.accumulated_results_url()
 
     def latest_layout_test_results(self):
+        return self.fetch_layout_test_results(self.latest_layout_test_results_url())
+
+    def fetch_layout_test_results(self, _):
         return LayoutTestResults.results_from_string(layouttestresults_unittest.LayoutTestResultsTest.example_full_results_json)
 
 
@@ -80,8 +88,8 @@ class MockBuildBot(object):
             "activity": "idle",
         }
 
-    def builder_with_name(self, name):
-        return MockBuilder(name)
+    def builder_with_name(self, builder_name, master_name='chromium.mock'):
+        return MockBuilder(builder_name, master_name)
 
     def builder_statuses(self):
         return [

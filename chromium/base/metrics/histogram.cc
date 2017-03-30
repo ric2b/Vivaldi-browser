@@ -64,8 +64,7 @@ bool ReadHistogramArguments(PickleIterator* iter,
   }
 
   // We use the arguments to find or create the local version of the histogram
-  // in this process, so we need to clear the IPC flag.
-  DCHECK(*flags & HistogramBase::kIPCSerializationSourceFlag);
+  // in this process, so we need to clear any IPC flag.
   *flags &= ~HistogramBase::kIPCSerializationSourceFlag;
 
   return true;
@@ -1137,7 +1136,9 @@ bool CustomHistogram::SerializeInfoImpl(Pickle* pickle) const {
 }
 
 double CustomHistogram::GetBucketSize(Count current, uint32_t i) const {
-  return 1;
+  // If this is a histogram of enum values, normalizing the bucket count
+  // by the bucket range is not helpful, so just return the bucket count.
+  return current;
 }
 
 // static

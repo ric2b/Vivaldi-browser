@@ -29,7 +29,6 @@
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
-class ImageSerializationProcessor;
 
 namespace {
 
@@ -58,7 +57,8 @@ scoped_refptr<DisplayItemList> DisplayItemList::Create(
 
 scoped_refptr<DisplayItemList> DisplayItemList::CreateFromProto(
     const proto::DisplayItemList& proto,
-    ImageSerializationProcessor* image_serialization_processor) {
+    ClientPictureCache* client_picture_cache,
+    std::vector<uint32_t>* used_engine_picture_ids) {
   gfx::Rect layer_rect = ProtoToRect(proto.layer_rect());
   scoped_refptr<DisplayItemList> list =
       DisplayItemList::Create(ProtoToRect(proto.layer_rect()),
@@ -67,7 +67,8 @@ scoped_refptr<DisplayItemList> DisplayItemList::CreateFromProto(
   for (int i = 0; i < proto.items_size(); i++) {
     const proto::DisplayItem& item_proto = proto.items(i);
     DisplayItemProtoFactory::AllocateAndConstruct(
-        layer_rect, list.get(), item_proto, image_serialization_processor);
+        layer_rect, list.get(), item_proto, client_picture_cache,
+        used_engine_picture_ids);
   }
 
   list->Finalize();
@@ -100,9 +101,7 @@ DisplayItemList::DisplayItemList(gfx::Rect layer_rect,
 DisplayItemList::~DisplayItemList() {
 }
 
-void DisplayItemList::ToProtobuf(
-    proto::DisplayItemList* proto,
-    ImageSerializationProcessor* image_serialization_processor) {
+void DisplayItemList::ToProtobuf(proto::DisplayItemList* proto) {
   // The flattened SkPicture approach is going away, and the proto
   // doesn't currently support serializing that flattened picture.
   DCHECK(retain_individual_display_items_);
@@ -112,24 +111,38 @@ void DisplayItemList::ToProtobuf(
 
   DCHECK_EQ(0, proto->items_size());
   for (const auto& item : items_)
-    item.ToProtobuf(proto->add_items(), image_serialization_processor);
+    item.ToProtobuf(proto->add_items());
 }
 
 void DisplayItemList::Raster(SkCanvas* canvas,
                              SkPicture::AbortCallback* callback,
                              const gfx::Rect& canvas_target_playback_rect,
                              float contents_scale) const {
+  canvas->save();
+
+  if (!canvas_target_playback_rect.IsEmpty()) {
+    // canvas_target_playback_rect is specified in device space. We can't
+    // use clipRect because canvas CTM will be applied on it. Use clipRegion
+    // instead because it ignores canvas CTM.
+    SkRegion device_clip;
+    device_clip.setRect(gfx::RectToSkIRect(canvas_target_playback_rect));
+    canvas->clipRegion(device_clip);
+  }
+
+  canvas->scale(contents_scale, contents_scale);
+  Raster(canvas, callback);
+  canvas->restore();
+}
+
+void DisplayItemList::Raster(SkCanvas* canvas,
+                             SkPicture::AbortCallback* callback) const {
   if (!settings_.use_cached_picture) {
-    canvas->save();
-    canvas->scale(contents_scale, contents_scale);
     for (const auto& item : items_)
-      item.Raster(canvas, canvas_target_playback_rect, callback);
-    canvas->restore();
+      item.Raster(canvas, callback);
   } else {
     DCHECK(picture_);
 
     canvas->save();
-    canvas->scale(contents_scale, contents_scale);
     canvas->translate(layer_rect_.x(), layer_rect_.y());
     if (callback) {
       // If we have a callback, we need to call |draw()|, |drawPicture()|
@@ -148,7 +161,7 @@ void DisplayItemList::Raster(SkCanvas* canvas,
 void DisplayItemList::ProcessAppendedItem(const DisplayItem* item) {
   if (settings_.use_cached_picture) {
     DCHECK(recorder_);
-    item->Raster(recorder_->getRecordingCanvas(), gfx::Rect(), nullptr);
+    item->Raster(recorder_->getRecordingCanvas(), nullptr);
   }
   if (!retain_individual_display_items_) {
     items_.Clear();
@@ -159,7 +172,7 @@ void DisplayItemList::RasterIntoCanvas(const DisplayItem& item) {
   DCHECK(recorder_);
   DCHECK(!retain_individual_display_items_);
 
-  item.Raster(recorder_->getRecordingCanvas(), gfx::Rect(), nullptr);
+  item.Raster(recorder_->getRecordingCanvas(), nullptr);
 }
 
 bool DisplayItemList::RetainsIndividualDisplayItems() const {

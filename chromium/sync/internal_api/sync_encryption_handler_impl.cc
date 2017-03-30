@@ -14,8 +14,10 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/json/json_string_value_serializer.h"
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/tracked_objects.h"
 #include "sync/internal_api/public/read_node.h"
@@ -212,14 +214,12 @@ SyncEncryptionHandlerImpl::SyncEncryptionHandlerImpl(
     UserShare* user_share,
     Encryptor* encryptor,
     const std::string& restored_key_for_bootstrapping,
-    const std::string& restored_keystore_key_for_bootstrapping,
-    PassphraseTransitionClearDataOption clear_data_option)
+    const std::string& restored_keystore_key_for_bootstrapping)
     : user_share_(user_share),
       vault_unsafe_(encryptor, SensitiveTypes()),
       encrypt_everything_(false),
       passphrase_type_(IMPLICIT_PASSPHRASE),
       nigori_overwrite_count_(0),
-      clear_data_option_(clear_data_option),
       weak_ptr_factory_(this) {
   // Restore the cryptographer's previous keys. Note that we don't add the
   // keystore keys into the cryptographer here, in case a migration was pending.
@@ -658,10 +658,9 @@ void SyncEncryptionHandlerImpl::ApplyNigoriUpdate(
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(trans);
   if (!ApplyNigoriUpdateImpl(nigori, trans)) {
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(&SyncEncryptionHandlerImpl::RewriteNigori,
-                   weak_ptr_factory_.GetWeakPtr()));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&SyncEncryptionHandlerImpl::RewriteNigori,
+                              weak_ptr_factory_.GetWeakPtr()));
   }
 
   FOR_EACH_OBSERVER(
@@ -746,10 +745,9 @@ bool SyncEncryptionHandlerImpl::SetKeystoreKeys(
   // Note that triggering migration will have no effect if we're already
   // properly migrated with the newest keystore keys.
   if (ShouldTriggerMigration(nigori, *cryptographer)) {
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(&SyncEncryptionHandlerImpl::RewriteNigori,
-                   weak_ptr_factory_.GetWeakPtr()));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&SyncEncryptionHandlerImpl::RewriteNigori,
+                              weak_ptr_factory_.GetWeakPtr()));
   }
 
   return true;

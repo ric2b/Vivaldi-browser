@@ -6,8 +6,11 @@
 
 #include <memory>
 
-#include "ash/ash_switches.h"
-#include "ash/display/display_info.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
 #include "ash/display/display_layout_store.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
@@ -15,13 +18,12 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
+#include "ash/test/ash_md_test_base.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
 #include "ash/test/cursor_manager_test_api.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/test_shell_delegate.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_event.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "ui/aura/client/focus_change_observer.h"
@@ -380,7 +382,14 @@ class TestMouseWatcherListener : public views::MouseWatcherListener {
 
 }  // namespace
 
-typedef test::AshTestBase WindowTreeHostManagerTest;
+using WindowTreeHostManagerTest = test::AshMDTestBase;
+
+INSTANTIATE_TEST_CASE_P(
+    /* prefix intentionally left blank due to only one parameterization */,
+    WindowTreeHostManagerTest,
+    testing::Values(MaterialDesignController::NON_MATERIAL,
+                    MaterialDesignController::MATERIAL_NORMAL,
+                    MaterialDesignController::MATERIAL_EXPERIMENTAL));
 
 TEST_F(WindowTreeHostManagerShutdownTest, Shutdown) {
   if (!SupportsMultipleDisplays())
@@ -396,7 +405,7 @@ TEST_F(WindowTreeHostManagerStartupTest, Startup) {
   EXPECT_TRUE(startup_helper()->displays_initialized());
 }
 
-TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
+TEST_P(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -408,7 +417,7 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   UpdateDisplay("500x500,400x400");
   EXPECT_EQ(1, observer.CountAndReset());  // resize and add
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
-  EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
+  EXPECT_EQ(2, observer.GetWorkareaChangedCountAndReset());
   EXPECT_EQ(0, observer.GetFocusChangedCountAndReset());
   EXPECT_EQ(0, observer.GetActivationChangedCountAndReset());
   gfx::Insets insets(5, 5, 5, 5);
@@ -427,7 +436,9 @@ TEST_F(WindowTreeHostManagerTest, SecondaryDisplayLayout) {
   SetSecondaryDisplayLayout(display::DisplayPlacement::BOTTOM);
   EXPECT_EQ(1, observer.CountAndReset());
   EXPECT_EQ(1, observer.GetBoundsChangedCountAndReset());
-  EXPECT_EQ(1, observer.GetWorkareaChangedCountAndReset());
+  // TODO (oshima): work area changes twice because ShelfLayoutManager updates
+  // to its own insets.
+  EXPECT_EQ(2, observer.GetWorkareaChangedCountAndReset());
   EXPECT_EQ(0, observer.GetFocusChangedCountAndReset());
   EXPECT_EQ(0, observer.GetActivationChangedCountAndReset());
   EXPECT_EQ(secondary_display_id, observer.GetChangedDisplayIdAndReset());
@@ -558,7 +569,7 @@ DisplayInfo CreateMirroredDisplayInfo(int64_t id, float device_scale_factor) {
 
 }  // namespace
 
-TEST_F(WindowTreeHostManagerTest, MirrorToDockedWithFullscreen) {
+TEST_P(WindowTreeHostManagerTest, MirrorToDockedWithFullscreen) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -608,7 +619,7 @@ TEST_F(WindowTreeHostManagerTest, MirrorToDockedWithFullscreen) {
   EXPECT_EQ("0,0 500x500", w1->bounds().ToString());
 }
 
-TEST_F(WindowTreeHostManagerTest, BoundsUpdated) {
+TEST_P(WindowTreeHostManagerTest, BoundsUpdated) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -715,7 +726,7 @@ TEST_F(WindowTreeHostManagerTest, BoundsUpdated) {
   EXPECT_EQ(0, observer.GetActivationChangedCountAndReset());
 }
 
-TEST_F(WindowTreeHostManagerTest, FindNearestDisplay) {
+TEST_P(WindowTreeHostManagerTest, FindNearestDisplay) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -777,9 +788,10 @@ TEST_F(WindowTreeHostManagerTest, FindNearestDisplay) {
                 .id());
 }
 
-TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
+TEST_P(WindowTreeHostManagerTest, SwapPrimaryById) {
   if (!SupportsMultipleDisplays())
     return;
+  const int height_offset = GetMdMaximizedWindowHeightOffset();
 
   WindowTreeHostManager* window_tree_host_manager =
       Shell::GetInstance()->window_tree_host_manager();
@@ -813,9 +825,11 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
       display::Screen::GetScreen()->GetDisplayNearestWindow(nullptr).id());
 
   EXPECT_EQ("0,0 200x200", primary_display.bounds().ToString());
-  EXPECT_EQ("0,0 200x153", primary_display.work_area().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 200, 153 + height_offset).ToString(),
+            primary_display.work_area().ToString());
   EXPECT_EQ("200,0 300x300", secondary_display.bounds().ToString());
-  EXPECT_EQ("200,0 300x253", secondary_display.work_area().ToString());
+  EXPECT_EQ(gfx::Rect(200, 0, 300, 253 + height_offset).ToString(),
+            secondary_display.work_area().ToString());
   EXPECT_EQ(
       "id=2200000001, parent=2200000000, right, 50",
       display_manager->GetCurrentDisplayLayout().placement_list[0].ToString());
@@ -845,9 +859,11 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
       display::Screen::GetScreen()->GetPrimaryDisplay();
   display::Display swapped_secondary = ScreenUtil::GetSecondaryDisplay();
   EXPECT_EQ("0,0 300x300", swapped_primary.bounds().ToString());
-  EXPECT_EQ("0,0 300x253", swapped_primary.work_area().ToString());
+  EXPECT_EQ(gfx::Rect(0, 0, 300, 253 + height_offset).ToString(),
+            swapped_primary.work_area().ToString());
   EXPECT_EQ("-200,-50 200x200", swapped_secondary.bounds().ToString());
-  EXPECT_EQ("-200,-50 200x153", swapped_secondary.work_area().ToString());
+  EXPECT_EQ(gfx::Rect(-200, -50, 200, 153 + height_offset).ToString(),
+            swapped_secondary.work_area().ToString());
 
   // Calling the same ID don't do anything.
   window_tree_host_manager->SetPrimaryDisplayId(secondary_display.id());
@@ -919,7 +935,7 @@ TEST_F(WindowTreeHostManagerTest, SwapPrimaryById) {
   EXPECT_TRUE(primary_root->Contains(shelf_window));
 }
 
-TEST_F(WindowTreeHostManagerTest, NoSwapPrimaryWithThreeDisplays) {
+TEST_P(WindowTreeHostManagerTest, NoSwapPrimaryWithThreeDisplays) {
   if (!SupportsMultipleDisplays())
     return;
   int64_t primary = display::Screen::GetScreen()->GetPrimaryDisplay().id();
@@ -930,7 +946,7 @@ TEST_F(WindowTreeHostManagerTest, NoSwapPrimaryWithThreeDisplays) {
   EXPECT_EQ(primary, display::Screen::GetScreen()->GetPrimaryDisplay().id());
 }
 
-TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
+TEST_P(WindowTreeHostManagerTest, OverscanInsets) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -980,7 +996,7 @@ TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
   Shell::GetInstance()->RemovePreTargetHandler(&event_handler);
 }
 
-TEST_F(WindowTreeHostManagerTest, Rotate) {
+TEST_P(WindowTreeHostManagerTest, Rotate) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1063,7 +1079,7 @@ TEST_F(WindowTreeHostManagerTest, Rotate) {
   Shell::GetInstance()->RemovePreTargetHandler(&event_handler);
 }
 
-TEST_F(WindowTreeHostManagerTest, ScaleRootWindow) {
+TEST_P(WindowTreeHostManagerTest, ScaleRootWindow) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1099,7 +1115,7 @@ TEST_F(WindowTreeHostManagerTest, ScaleRootWindow) {
   Shell::GetInstance()->RemovePreTargetHandler(&event_handler);
 }
 
-TEST_F(WindowTreeHostManagerTest, TouchScale) {
+TEST_P(WindowTreeHostManagerTest, TouchScale) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1131,7 +1147,7 @@ TEST_F(WindowTreeHostManagerTest, TouchScale) {
   Shell::GetInstance()->RemovePreTargetHandler(&event_handler);
 }
 
-TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
+TEST_P(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1193,7 +1209,7 @@ TEST_F(WindowTreeHostManagerTest, ConvertHostToRootCoords) {
 
 // Make sure that the compositor based mirroring can switch
 // from/to dock mode.
-TEST_F(WindowTreeHostManagerTest, DockToSingle) {
+TEST_P(WindowTreeHostManagerTest, DockToSingle) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1239,7 +1255,7 @@ TEST_F(WindowTreeHostManagerTest, DockToSingle) {
 
 // Tests if switching two displays at the same time while the primary display
 // is swapped should not cause a crash. (crbug.com/426292)
-TEST_F(WindowTreeHostManagerTest, ReplaceSwappedPrimary) {
+TEST_P(WindowTreeHostManagerTest, ReplaceSwappedPrimary) {
   if (!SupportsMultipleDisplays())
     return;
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
@@ -1302,7 +1318,7 @@ class RootWindowTestObserver : public aura::WindowObserver {
 // 2) both are disconnected and new one with the same size as b) is connected
 // in one configuration event.
 // See crbug.com/547280.
-TEST_F(WindowTreeHostManagerTest, ReplacePrimary) {
+TEST_P(WindowTreeHostManagerTest, ReplacePrimary) {
   if (!SupportsMultipleDisplays())
     return;
   DisplayManager* display_manager = Shell::GetInstance()->display_manager();
@@ -1334,7 +1350,7 @@ TEST_F(WindowTreeHostManagerTest, ReplacePrimary) {
   primary_root->RemoveObserver(&test_observer);
 }
 
-TEST_F(WindowTreeHostManagerTest, UpdateMouseLocationAfterDisplayChange) {
+TEST_P(WindowTreeHostManagerTest, UpdateMouseLocationAfterDisplayChange) {
   if (!SupportsMultipleDisplays())
     return;
 
@@ -1377,7 +1393,7 @@ TEST_F(WindowTreeHostManagerTest, UpdateMouseLocationAfterDisplayChange) {
   EXPECT_EQ("450,10", env->last_mouse_location().ToString());
 }
 
-TEST_F(WindowTreeHostManagerTest,
+TEST_P(WindowTreeHostManagerTest,
        UpdateMouseLocationAfterDisplayChange_2ndOnLeft) {
   if (!SupportsMultipleDisplays())
     return;
@@ -1417,7 +1433,7 @@ TEST_F(WindowTreeHostManagerTest,
 
 // Test that the cursor swaps displays and that its scale factor and rotation
 // are updated when the primary display is swapped.
-TEST_F(WindowTreeHostManagerTest,
+TEST_P(WindowTreeHostManagerTest,
        UpdateMouseLocationAfterDisplayChange_SwapPrimary) {
   if (!SupportsMultipleDisplays())
     return;
@@ -1446,7 +1462,7 @@ TEST_F(WindowTreeHostManagerTest,
 
 // Test that the cursor moves to the other display and that its scale factor
 // and rotation are updated when the primary display is disconnected.
-TEST_F(WindowTreeHostManagerTest,
+TEST_P(WindowTreeHostManagerTest,
        UpdateMouseLocationAfterDisplayChange_PrimaryDisconnected) {
   if (!SupportsMultipleDisplays())
     return;
@@ -1482,7 +1498,7 @@ TEST_F(WindowTreeHostManagerTest,
 
 // GetRootWindowForDisplayId() for removed display::Display during
 // OnDisplayRemoved() should not cause crash. See http://crbug.com/415222
-TEST_F(WindowTreeHostManagerTest,
+TEST_P(WindowTreeHostManagerTest,
        GetRootWindowForDisplayIdDuringDisplayDisconnection) {
   if (!SupportsMultipleDisplays())
     return;

@@ -6,9 +6,13 @@ import fnmatch
 import functools
 import imp
 import logging
+import signal
+import thread
+import threading
 
 from devil import base_error
 from devil.android import device_errors
+from devil.utils import signal_handler
 from pylib import valgrind_tools
 from pylib.base import base_test_result
 from pylib.base import test_run
@@ -67,8 +71,10 @@ def handle_shard_failures_with(on_failure):
       except device_errors.DeviceUnreachableError:
         logging.exception('Shard died: %s(%s)', f.__name__, str(dev))
       except base_error.BaseError:
-        logging.exception('Shard failed: %s(%s)', f.__name__,
-                          str(dev))
+        logging.exception('Shard failed: %s(%s)', f.__name__, str(dev))
+      except SystemExit:
+        logging.exception('Shard killed: %s(%s)', f.__name__, str(dev))
+        raise
       if on_failure:
         on_failure(dev, f.__name__)
       return None
@@ -88,9 +94,14 @@ class LocalDeviceTestRun(test_run.TestRun):
   def RunTests(self):
     tests = self._GetTests()
 
+    exit_now = threading.Event()
+
     @handle_shard_failures
     def run_tests_on_device(dev, tests, results):
       for test in tests:
+        if exit_now.isSet():
+          thread.exit()
+
         result = None
         try:
           result = self._RunTest(dev, test)
@@ -112,65 +123,61 @@ class LocalDeviceTestRun(test_run.TestRun):
 
       logging.info('Finished running tests on this device.')
 
-    tries = 0
-    results = base_test_result.TestRunResults()
-    all_fail_results = {}
-    while tries < self._env.max_tries and tests:
-      logging.info('STARTING TRY #%d/%d', tries + 1, self._env.max_tries)
-      logging.info('Will run %d tests on %d devices: %s',
-                   len(tests), len(self._env.devices),
-                   ', '.join(str(d) for d in self._env.devices))
-      for t in tests:
-        logging.debug('  %s', t)
+    def stop_tests(_signum, _frame):
+      exit_now.set()
 
-      try_results = base_test_result.TestRunResults()
-      if self._ShouldShard():
-        tc = test_collection.TestCollection(self._CreateShards(tests))
-        self._env.parallel_devices.pMap(
-            run_tests_on_device, tc, try_results).pGet(None)
-      else:
-        self._env.parallel_devices.pMap(
-            run_tests_on_device, tests, try_results).pGet(None)
+    with signal_handler.AddSignalHandler(signal.SIGTERM, stop_tests):
+      tries = 0
+      results = []
+      while tries < self._env.max_tries and tests:
+        logging.info('STARTING TRY #%d/%d', tries + 1, self._env.max_tries)
+        logging.info('Will run %d tests on %d devices: %s',
+                     len(tests), len(self._env.devices),
+                     ', '.join(str(d) for d in self._env.devices))
+        for t in tests:
+          logging.debug('  %s', t)
 
-      for result in try_results.GetAll():
-        if result.GetType() in (base_test_result.ResultType.PASS,
-                                base_test_result.ResultType.SKIP):
-          results.AddResult(result)
+        try_results = base_test_result.TestRunResults()
+        if self._ShouldShard():
+          tc = test_collection.TestCollection(self._CreateShards(tests))
+          self._env.parallel_devices.pMap(
+              run_tests_on_device, tc, try_results).pGet(None)
         else:
-          all_fail_results[result.GetName()] = result
+          self._env.parallel_devices.pMap(
+              run_tests_on_device, tests, try_results).pGet(None)
 
-      results_names = set(r.GetName() for r in results.GetAll())
+        results.append(try_results)
+        tries += 1
+        tests = self._GetTestsToRetry(tests, try_results)
 
-      def has_test_result(name):
-        # When specifying a test filter, names can contain trailing wildcards.
-        # See local_device_gtest_run._ExtractTestsFromFilter()
-        if name.endswith('*'):
-          return any(fnmatch.fnmatch(n, name) for n in results_names)
-        return name in results_names
-
-      tests = [t for t in tests if not has_test_result(self._GetTestName(t))]
-      tries += 1
-      logging.info('FINISHED TRY #%d/%d', tries, self._env.max_tries)
-      if tests:
-        logging.info('%d failed tests remain.', len(tests))
-      else:
-        logging.info('All tests completed.')
-
-    all_unknown_test_names = set(self._GetTestName(t) for t in tests)
-    all_failed_test_names = set(all_fail_results.iterkeys())
-
-    unknown_tests = all_unknown_test_names.difference(all_failed_test_names)
-    failed_tests = all_failed_test_names.intersection(all_unknown_test_names)
-
-    if unknown_tests:
-      results.AddResults(
-          base_test_result.BaseTestResult(
-              u, base_test_result.ResultType.UNKNOWN)
-          for u in unknown_tests)
-    if failed_tests:
-      results.AddResults(all_fail_results[f] for f in failed_tests)
+        logging.info('FINISHED TRY #%d/%d', tries, self._env.max_tries)
+        if tests:
+          logging.info('%d failed tests remain.', len(tests))
+        else:
+          logging.info('All tests completed.')
 
     return results
+
+  def _GetTestsToRetry(self, tests, try_results):
+
+    def is_failure(test_result):
+      return (
+          test_result is None
+          or test_result.GetType() not in (
+              base_test_result.ResultType.PASS,
+              base_test_result.ResultType.SKIP))
+
+    all_test_results = {r.GetName(): r for r in try_results.GetAll()}
+
+    def should_retry(name):
+      # When specifying a test filter, names can contain trailing wildcards.
+      # See local_device_gtest_run._ExtractTestsFromFilter()
+      if name.endswith('*'):
+        return any(fnmatch.fnmatch(n, name) and is_failure(t)
+                   for n, t in all_test_results.iteritems())
+      return is_failure(all_test_results.get(name))
+
+    return [t for t in tests if should_retry(self._GetUniqueTestName(t))]
 
   def GetTool(self, device):
     if not str(device) in self._tools:
@@ -182,7 +189,7 @@ class LocalDeviceTestRun(test_run.TestRun):
     raise NotImplementedError
 
   # pylint: disable=no-self-use
-  def _GetTestName(self, test):
+  def _GetUniqueTestName(self, test):
     return test
 
   def _GetTests(self):

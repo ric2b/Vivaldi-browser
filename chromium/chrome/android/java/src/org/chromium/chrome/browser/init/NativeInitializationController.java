@@ -14,7 +14,6 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.content.browser.ChildProcessLauncher;
 
 import java.util.ArrayList;
@@ -73,8 +72,11 @@ class NativeInitializationController {
     /**
      * Start loading the native library in the background. This kicks off the native initialization
      * process.
+     *
+     * @param allocateChildConnection Whether a spare child connection should be allocated. Set to
+     *                                false if you know that no new renderer is needed.
      */
-    public void startBackgroundTasks() {
+    public void startBackgroundTasks(final boolean allocateChildConnection) {
         // TODO(yusufo) : Investigate using an AsyncTask for this.
         new Thread() {
             @Override
@@ -99,8 +101,7 @@ class NativeInitializationController {
                     mActivityDelegate.onStartupFailure();
                     return;
                 }
-                ChromeApplication chrome = (ChromeApplication) mContext;
-                ChildProcessLauncher.warmUp(mContext, chrome.getChildProcessCreationParams());
+                if (allocateChildConnection) ChildProcessLauncher.warmUp(mContext);
                 ThreadUtils.runOnUiThread(new Runnable() {
                     @Override
                     public void run() {

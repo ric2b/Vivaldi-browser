@@ -16,7 +16,6 @@
 
 #include <map>
 #include <memory>
-#include <set>
 #include <string>
 #include <vector>
 
@@ -32,12 +31,7 @@
 #include "content/browser/loader/resource_loader_delegate.h"
 #include "content/browser/loader/resource_scheduler.h"
 #include "content/common/content_export.h"
-#include "content/common/resource_request_body.h"
-#include "content/public/browser/child_process_data.h"
-#include "content/public/browser/download_item.h"
-#include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/global_request_id.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/resource_type.h"
@@ -65,6 +59,7 @@ class AppCacheService;
 class AsyncRevalidationManager;
 class CertStore;
 class FrameTree;
+class LoaderDelegate;
 class NavigationURLLoaderImplCore;
 class RenderFrameHostImpl;
 class ResourceContext;
@@ -74,7 +69,6 @@ class ResourceMessageFilter;
 class ResourceRequestInfoImpl;
 class SaveFileManager;
 class ServiceWorkerNavigationHandleCore;
-class WebContentsImpl;
 struct CommonNavigationParams;
 struct DownloadSaveInfo;
 struct NavigationRequestInfo;
@@ -135,12 +129,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // new requests).  Cancels all pending requests.
   void Shutdown();
 
-  // Notify the ResourceDispatcherHostImpl of a new resource context.
-  void AddResourceContext(ResourceContext* context);
-
-  // Notify the ResourceDispatcherHostImpl of a resource context destruction.
-  void RemoveResourceContext(ResourceContext* context);
-
   // Force cancels any pending requests for the given |context|. This is
   // necessary to ensure that before |context| goes away, all requests
   // for it are dead.
@@ -155,7 +143,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       const Referrer& referrer,
       bool is_content_initiated,
       ResourceContext* context,
-      int child_id,
+      int render_process_id,
       int render_view_route_id,
       int render_frame_route_id,
       bool do_not_prompt_for_login);
@@ -176,7 +164,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Marks the request, with its current |response|, as "parked". This
   // happens if a request is redirected cross-site and needs to be
-  // resumed by a new render view.
+  // resumed by a new process.
   void MarkAsTransferredNavigation(
       const GlobalRequestID& id,
       const scoped_refptr<ResourceResponse>& response);
@@ -185,7 +173,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // navigation was cancelled.
   void CancelTransferringNavigation(const GlobalRequestID& id);
 
-  // Resumes the request without transferring it to a new render view.
+  // Resumes the request without transferring it to a new process.
   void ResumeDeferredNavigation(const GlobalRequestID& id);
 
   // Returns the number of pending requests. This is designed for the unittests
@@ -227,7 +215,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Force cancels any pending requests for the given process.
   void CancelRequestsForProcess(int child_id);
 
-  void OnUserGesture(WebContentsImpl* contents);
+  void OnUserGesture();
 
   // Retrieves a net::URLRequest.  Must be called from the IO thread.
   net::URLRequest* GetURLRequest(const GlobalRequestID& request_id);
@@ -268,8 +256,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Must be called after the ResourceRequestInfo has been created
   // and associated with the request.
-  // |id| should be |content::DownloadItem::kInvalidId| to request automatic
-  // assignment. This is marked virtual so it can be overriden in testing.
+  // This is marked virtual so it can be overriden in testing.
   virtual std::unique_ptr<ResourceHandler> CreateResourceHandlerForDownload(
       net::URLRequest* request,
       bool is_content_initiated,
@@ -308,15 +295,17 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // PlzNavigate: Begins a request for NavigationURLLoader. |loader| is the
   // loader to attach to the leaf resource handler.
-  void BeginNavigationRequest(
-      ResourceContext* resource_context,
-      const NavigationRequestInfo& info,
-      NavigationURLLoaderImplCore* loader,
-      ServiceWorkerNavigationHandleCore* service_worker_handle_core);
+  void BeginNavigationRequest(ResourceContext* resource_context,
+                              const NavigationRequestInfo& info,
+                              NavigationURLLoaderImplCore* loader);
 
   // Turns on stale-while-revalidate support, regardless of command-line flags
   // or experiment status. For unit tests only.
   void EnableStaleWhileRevalidateForTesting();
+
+  // Sets the LoaderDelegate, which must outlive this object. Ownership is not
+  // transferred. The LoaderDelegate should be interacted with on the IO thread.
+  void SetLoaderDelegate(LoaderDelegate* loader_delegate);
 
  private:
   friend class LoaderIOThreadNotifier;
@@ -361,6 +350,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void DidReceiveRedirect(ResourceLoader* loader, const GURL& new_url) override;
   void DidReceiveResponse(ResourceLoader* loader) override;
   void DidFinishLoading(ResourceLoader* loader) override;
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
+      ResourceLoader* loader) override;
 
   // An init helper that runs on the IO thread.
   void OnInit();
@@ -447,10 +438,6 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // done that corresponds to changes that the user might observe, whereas
   // waiting for a host name to resolve implies being stuck.
   static bool LoadInfoIsMoreInteresting(const LoadInfo& a, const LoadInfo& b);
-
-  // Used to marshal calls to LoadStateChanged from the IO to UI threads.  All
-  // are done as a single callback to avoid spamming the UI thread.
-  static void UpdateLoadInfoOnUIThread(std::unique_ptr<LoadInfoMap> info_map);
 
   // Gets the most interesting LoadInfo for each GlobalRoutingID.
   std::unique_ptr<LoadInfoMap> GetLoadInfoForAllRoutes();
@@ -539,7 +526,7 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Returns whether the URLRequest identified by |transferred_request_id| is
   // currently in the process of being transferred to a different renderer.
   // This happens if a request is redirected cross-site and needs to be resumed
-  // by a new render view.
+  // by a new process.
   bool IsTransferredNavigation(
       const GlobalRequestID& transferred_request_id) const;
 
@@ -643,15 +630,13 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   ResourceDispatcherHostDelegate* delegate_;
 
+  LoaderDelegate* loader_delegate_;
+
   bool allow_cross_origin_auth_prompt_;
 
   // AsyncRevalidationManager is non-NULL if and only if
   // stale-while-revalidate is enabled.
   std::unique_ptr<AsyncRevalidationManager> async_revalidation_manager_;
-
-  // http://crbug.com/90971 - Assists in tracking down use-after-frees on
-  // shutdown.
-  std::set<const ResourceContext*> active_resource_contexts_;
 
   typedef std::map<GlobalRequestID,
                    base::ObserverList<ResourceMessageDelegate>*> DelegateMap;

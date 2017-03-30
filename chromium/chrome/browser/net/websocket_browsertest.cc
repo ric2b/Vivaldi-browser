@@ -20,9 +20,9 @@
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
-#include "net/base/test_data_directory.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/test_data_directory.h"
 #include "url/gurl.h"
 
 namespace {
@@ -169,7 +169,16 @@ IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SecureWebSocketSplitRecords) {
   EXPECT_EQ("PASS", WaitAndGetTitle());
 }
 
-IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest, SendCloseFrameWhenTabIsClosed) {
+// Flaky failing on Win10 only.  http://crbug.com/616958
+#if defined(OS_WIN)
+#define MAYBE_SendCloseFrameWhenTabIsClosed \
+    DISABLED_SendCloseFrameWhenTabIsClosed
+#else
+#define MAYBE_SendCloseFrameWhenTabIsClosed SendCloseFrameWhenTabIsClosed
+#endif
+
+IN_PROC_BROWSER_TEST_F(WebSocketBrowserTest,
+                       MAYBE_SendCloseFrameWhenTabIsClosed) {
   // Launch a WebSocket server.
   ASSERT_TRUE(ws_server_.Start());
 

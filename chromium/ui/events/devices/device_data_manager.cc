@@ -41,9 +41,13 @@ void DeviceDataManager::TouchscreenInfo::Reset() {
 // static
 DeviceDataManager* DeviceDataManager::instance_ = nullptr;
 
-DeviceDataManager::DeviceDataManager() {}
+DeviceDataManager::DeviceDataManager() {
+  InputDeviceManager::SetInstance(this);
+}
 
-DeviceDataManager::~DeviceDataManager() {}
+DeviceDataManager::~DeviceDataManager() {
+  InputDeviceManager::ClearInstance();
+}
 
 // static
 DeviceDataManager* DeviceDataManager::instance() { return instance_; }
@@ -130,6 +134,27 @@ void DeviceDataManager::ApplyTouchTransformer(int touch_device_id,
   }
 }
 
+const std::vector<TouchscreenDevice>& DeviceDataManager::GetTouchscreenDevices()
+    const {
+  return touchscreen_devices_;
+}
+
+const std::vector<InputDevice>& DeviceDataManager::GetKeyboardDevices() const {
+  return keyboard_devices_;
+}
+
+const std::vector<InputDevice>& DeviceDataManager::GetMouseDevices() const {
+  return mouse_devices_;
+}
+
+const std::vector<InputDevice>& DeviceDataManager::GetTouchpadDevices() const {
+  return touchpad_devices_;
+}
+
+bool DeviceDataManager::AreDeviceListsComplete() const {
+  return device_lists_complete_;
+}
+
 int64_t DeviceDataManager::GetTargetDisplayForTouchDevice(
     int touch_device_id) const {
   if (IsTouchDeviceIdValid(touch_device_id))
@@ -151,7 +176,7 @@ void DeviceDataManager::OnTouchscreenDevicesUpdated(
 }
 
 void DeviceDataManager::OnKeyboardDevicesUpdated(
-    const std::vector<KeyboardDevice>& devices) {
+    const std::vector<InputDevice>& devices) {
   if (devices.size() == keyboard_devices_.size() &&
       std::equal(devices.begin(),
                  devices.end(),

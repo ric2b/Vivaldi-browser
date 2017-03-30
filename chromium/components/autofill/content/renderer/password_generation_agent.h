@@ -56,9 +56,6 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
   // consider analyzing. Virtual so that it can be overriden during testing.
   virtual bool ShouldAnalyzeDocument() const;
 
-  // RenderViewObserver:
-  bool OnMessageReceived(const IPC::Message& message) override;
-
   // Use to force enable during testing.
   void set_enabled(bool enabled) { enabled_ = enabled; }
 
@@ -77,7 +74,9 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
   typedef std::vector<AccountCreationFormData> AccountCreationFormDataList;
 
   // RenderFrameObserver:
+  bool OnMessageReceived(const IPC::Message& message) override;
   void DidFinishDocumentLoad() override;
+  void DidFinishLoad() override;
   void OnDestruct() override;
 
   // Message handlers.
@@ -107,6 +106,15 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
   // Sets |generation_element_| to the focused password field and shows a
   // generation popup at this field.
   void OnUserTriggeredGeneratePassword();
+
+  // Enables the form classifier.
+  void OnAllowToRunFormClassifier();
+
+  // Runs HTML parsing based classifier and saves its outcome to proto.
+  // TODO(crbug.com/621442): Remove client-side form classifier when server-side
+  // classifier is ready.
+  void RunFormClassifierAndSaveVote(const blink::WebFormElement& web_form,
+                                    const PasswordForm& form);
 
   // Creates a password form to presave a generated password. It copies behavior
   // of CreatePasswordFormFromWebForm/FromUnownedInputElements, but takes
@@ -161,6 +169,9 @@ class PasswordGenerationAgent : public content::RenderFrameObserver {
 
   // If this feature is enabled. Controlled by Finch.
   bool enabled_;
+
+  // If the form classifier should run.
+  bool form_classifier_enabled_;
 
   // Unowned pointer. Used to notify PassowrdAutofillAgent when values
   // in password fields are updated.

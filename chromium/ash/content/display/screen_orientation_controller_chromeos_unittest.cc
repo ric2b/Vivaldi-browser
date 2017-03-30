@@ -7,9 +7,9 @@
 #include <memory>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
 #include "ash/content/shell_content_state.h"
-#include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -138,8 +138,7 @@ ScreenOrientationControllerTest::ScreenOrientationControllerTest() {
   webview_test_helper_.reset(new views::WebViewTestHelper());
 }
 
-ScreenOrientationControllerTest::~ScreenOrientationControllerTest() {
-}
+ScreenOrientationControllerTest::~ScreenOrientationControllerTest() {}
 
 content::WebContents* ScreenOrientationControllerTest::CreateWebContents() {
   return views::ViewsDelegate::GetInstance()->CreateWebContents(
@@ -416,9 +415,7 @@ TEST_F(ScreenOrientationControllerTest, RotationLockPreventsRotation) {
 // triggered by the accelerometer.
 TEST_F(ScreenOrientationControllerTest, BlockRotationNotifications) {
   EnableMaximizeMode(true);
-  test::TestSystemTrayDelegate* tray_delegate =
-      static_cast<test::TestSystemTrayDelegate*>(
-          Shell::GetInstance()->system_tray_delegate());
+  test::TestSystemTrayDelegate* tray_delegate = GetSystemTrayDelegate();
   tray_delegate->set_should_show_display_notification(true);
   test::DisplayManagerTestApi().SetFirstDisplayAsInternalDisplay();
 
@@ -647,14 +644,16 @@ TEST_F(ScreenOrientationControllerTest, RotateInactiveDisplay) {
 
   test::ScopedSetInternalDisplayId set_internal(kInternalDisplayId);
 
-  ASSERT_NE(kNewRotation, display_manager->GetDisplayInfo(kInternalDisplayId)
-                              .GetActiveRotation());
+  ASSERT_NE(
+      kNewRotation,
+      display_manager->GetDisplayInfo(kInternalDisplayId).GetActiveRotation());
 
   Shell::GetInstance()->screen_orientation_controller()->SetDisplayRotation(
       kNewRotation, display::Display::ROTATION_SOURCE_ACTIVE);
 
-  EXPECT_EQ(kNewRotation, display_manager->GetDisplayInfo(kInternalDisplayId)
-                              .GetActiveRotation());
+  EXPECT_EQ(
+      kNewRotation,
+      display_manager->GetDisplayInfo(kInternalDisplayId).GetActiveRotation());
 }
 
 }  // namespace ash

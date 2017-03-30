@@ -11,16 +11,16 @@
 class ChromeLauncherController;
 
 namespace ash {
-class Shelf;
 struct ShelfItem;
+class WmShelf;
 }
 
 // Class for context menu which is shown for Arc app in the shelf.
 class ArcLauncherContextMenu : public LauncherContextMenu {
  public:
-  ArcLauncherContextMenu(ChromeLauncherController* controller,
+  ArcLauncherContextMenu(ChromeLauncherControllerImpl* controller,
                          const ash::ShelfItem* item,
-                         ash::Shelf* shelf);
+                         ash::WmShelf* wm_shelf);
   ~ArcLauncherContextMenu() override;
 
   // ui::SimpleMenuModel::Delegate overrides:

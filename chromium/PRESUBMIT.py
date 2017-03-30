@@ -25,6 +25,7 @@ _EXCLUDED_PATHS = (
     r"^chrome[\\\/]browser[\\\/]resources[\\\/]pdf[\\\/]index.js",
 )
 
+
 # The NetscapePlugIn library is excluded from pan-project as it will soon
 # be deleted together with the rest of the NPAPI and it's not worthwhile to
 # update the coding style until then.
@@ -32,9 +33,11 @@ _TESTRUNNER_PATHS = (
     r"^content[\\\/]shell[\\\/]tools[\\\/]plugin[\\\/].*",
 )
 
+
 # Fragment of a regular expression that matches C++ and Objective-C++
 # implementation files.
 _IMPLEMENTATION_EXTENSIONS = r'\.(cc|cpp|cxx|mm)$'
+
 
 # Regular expression that matches code only used for test binaries
 # (best effort).
@@ -55,6 +58,7 @@ _TEST_CODE_EXCLUDED_PATHS = (
     r'testing[\\\/]iossim[\\\/]iossim\.mm$',
 )
 
+
 _TEST_ONLY_WARNING = (
     'You might be calling functions intended only for testing from\n'
     'production code.  It is OK to ignore this warning if you know what\n'
@@ -66,6 +70,7 @@ _INCLUDE_ORDER_WARNING = (
     'Your #include order seems to be broken. Remember to use the right '
     'collation (LC_COLLATE=C) and check\nhttps://google.github.io/styleguide/'
     'cppguide.html#Names_and_Order_of_Includes')
+
 
 _BANNED_OBJC_FUNCTIONS = (
     (
@@ -189,10 +194,10 @@ _BANNED_CPP_FUNCTIONS = (
       ),
     ),
     (
-      'skia::RefPtr',
+      'setMatrixClip',
       (
-        'The use of skia::RefPtr is prohibited. ',
-        'Please use sk_sp<> instead.'
+        'Overriding setMatrixClip() is prohibited; ',
+        'the base function is deprecated. ',
       ),
       True,
       (),
@@ -291,6 +296,7 @@ _BANNED_CPP_FUNCTIONS = (
     ),
 )
 
+
 _IPC_ENUM_TRAITS_DEPRECATED = (
     'You are using IPC_ENUM_TRAITS() in your code. It has been deprecated.\n'
     'See http://www.chromium.org/Home/chromium-security/education/security-tips-for-ipc')
@@ -322,9 +328,11 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
     'net/tools/testserver/testserver.pydeps',
 ]
 
+
 _GENERIC_PYDEPS_FILES = [
     'build/secondary/tools/swarming_client/isolate.pydeps',
 ]
+
 
 _ALL_PYDEPS_FILES = _ANDROID_SPECIFIC_PYDEPS_FILES + _GENERIC_PYDEPS_FILES
 
@@ -420,10 +428,10 @@ def _CheckDCHECK_IS_ONHasBraces(input_api, output_api):
       continue
     for lnum, line in f.ChangedContents():
       if input_api.re.search(pattern, line):
-          errors.append(output_api.PresubmitError(
-            ('%s:%d: Use of DCHECK_IS_ON() must be written as "#if ' +
-             'DCHECK_IS_ON()", not forgetting the braces.')
-            % (f.LocalPath(), lnum)))
+        errors.append(output_api.PresubmitError(
+          ('%s:%d: Use of DCHECK_IS_ON() must be written as "#if ' +
+           'DCHECK_IS_ON()", not forgetting the braces.')
+          % (f.LocalPath(), lnum)))
   return errors
 
 
@@ -491,6 +499,7 @@ def _CheckUmaHistogramChanges(input_api, output_api):
     'been modified and the associated histogram name has no match in either '
     '%s or the modifications of it:' % (histograms_xml_path),  problems)]
 
+
 def _CheckFlakyTestUsage(input_api, output_api):
   """Check that FlakyTest annotation is our own instead of the android one"""
   pattern = input_api.re.compile(r'import android.test.FlakyTest;')
@@ -505,6 +514,7 @@ def _CheckFlakyTestUsage(input_api, output_api):
       'android.test.FlakyTest',
       files)]
   return []
+
 
 def _CheckNoNewWStrings(input_api, output_api):
   """Checks to make sure we don't introduce use of wstrings."""
@@ -566,51 +576,42 @@ def _CheckNoBannedFunctions(input_api, output_api):
   warnings = []
   errors = []
 
+  def IsBlacklisted(affected_file, blacklist):
+    local_path = affected_file.LocalPath()
+    for item in blacklist:
+      if input_api.re.match(item, local_path):
+        return True
+    return False
+
+  def CheckForMatch(affected_file, line_num, line, func_name, message, error):
+    matched = False
+    if func_name[0:1] == '/':
+      regex = func_name[1:]
+      if input_api.re.search(regex, line):
+        matched = True
+    elif func_name in line:
+      matched = True
+    if matched:
+      problems = warnings
+      if error:
+        problems = errors
+      problems.append('    %s:%d:' % (affected_file.LocalPath(), line_num))
+      for message_line in message:
+        problems.append('      %s' % message_line)
+
   file_filter = lambda f: f.LocalPath().endswith(('.mm', '.m', '.h'))
   for f in input_api.AffectedFiles(file_filter=file_filter):
     for line_num, line in f.ChangedContents():
       for func_name, message, error in _BANNED_OBJC_FUNCTIONS:
-        matched = False
-        if func_name[0:1] == '/':
-          regex = func_name[1:]
-          if input_api.re.search(regex, line):
-            matched = True
-        elif func_name in line:
-            matched = True
-        if matched:
-          problems = warnings;
-          if error:
-            problems = errors;
-          problems.append('    %s:%d:' % (f.LocalPath(), line_num))
-          for message_line in message:
-            problems.append('      %s' % message_line)
+        CheckForMatch(f, line_num, line, func_name, message, error)
 
   file_filter = lambda f: f.LocalPath().endswith(('.cc', '.mm', '.h'))
   for f in input_api.AffectedFiles(file_filter=file_filter):
     for line_num, line in f.ChangedContents():
       for func_name, message, error, excluded_paths in _BANNED_CPP_FUNCTIONS:
-        def IsBlacklisted(affected_file, blacklist):
-          local_path = affected_file.LocalPath()
-          for item in blacklist:
-            if input_api.re.match(item, local_path):
-              return True
-          return False
         if IsBlacklisted(f, excluded_paths):
           continue
-        matched = False
-        if func_name[0:1] == '/':
-          regex = func_name[1:]
-          if input_api.re.search(regex, line):
-            matched = True
-        elif func_name in line:
-            matched = True
-        if matched:
-          problems = warnings;
-          if error:
-            problems = errors;
-          problems.append('    %s:%d:' % (f.LocalPath(), line_num))
-          for message_line in message:
-            problems.append('      %s' % message_line)
+        CheckForMatch(f, line_num, line, func_name, message, error)
 
   result = []
   if (warnings):
@@ -1398,6 +1399,108 @@ def _CheckJavaStyle(input_api, output_api):
       black_list=_EXCLUDED_PATHS + input_api.DEFAULT_BLACK_LIST)
 
 
+def _CheckIpcOwners(input_api, output_api):
+  """Checks that affected files involving IPC have an IPC OWNERS rule.
+
+  Whether or not a file affects IPC is determined by a simple whitelist of
+  filename patterns."""
+  file_patterns = [
+      '*_messages.cc',
+      '*_messages*.h',
+      '*_param_traits*.*',
+      '*.mojom',
+      '*_struct_traits*.*',
+      '*_type_converter*.*',
+      # Blink uses a different file naming convention
+      '*StructTraits*.*',
+      '*TypeConverter*.*',
+  ]
+
+  # Dictionary mapping an OWNERS file path to Patterns.
+  # Patterns is a dictionary mapping glob patterns (suitable for use in per-file
+  # rules ) to a PatternEntry.
+  # PatternEntry is a dictionary with two keys:
+  # - 'files': the files that are matched by this pattern
+  # - 'rules': the per-file rules needed for this pattern
+  # For example, if we expect OWNERS file to contain rules for *.mojom and
+  # *_struct_traits*.*, Patterns might look like this:
+  # {
+  #   '*.mojom': {
+  #     'files': ...,
+  #     'rules': [
+  #       'per-file *.mojom=set noparent',
+  #       'per-file *.mojom=file://ipc/SECURITY_OWNERS',
+  #     ],
+  #   },
+  #   '*_struct_traits*.*': {
+  #     'files': ...,
+  #     'rules': [
+  #       'per-file *_struct_traits*.*=set noparent',
+  #       'per-file *_struct_traits*.*=file://ipc/SECURITY_OWNERS',
+  #     ],
+  #   },
+  # }
+  to_check = {}
+
+  # Iterate through the affected files to see what we actually need to check
+  # for. We should only nag patch authors about per-file rules if a file in that
+  # directory would match that pattern. If a directory only contains *.mojom
+  # files and no *_messages*.h files, we should only nag about rules for
+  # *.mojom files.
+  for f in input_api.change.AffectedFiles(include_deletes=False):
+    for pattern in file_patterns:
+      if input_api.fnmatch.fnmatch(
+          input_api.os_path.basename(f.LocalPath()), pattern):
+        owners_file = input_api.os_path.join(
+            input_api.os_path.dirname(f.LocalPath()), 'OWNERS')
+        if owners_file not in to_check:
+          to_check[owners_file] = {}
+        if pattern not in to_check[owners_file]:
+          to_check[owners_file][pattern] = {
+              'files': [],
+              'rules': [
+                  'per-file %s=set noparent' % pattern,
+                  'per-file %s=file://ipc/SECURITY_OWNERS' % pattern,
+              ]
+          }
+        to_check[owners_file][pattern]['files'].append(f)
+        break
+
+  # Now go through the OWNERS files we collected, filtering out rules that are
+  # already present in that OWNERS file.
+  for owners_file, patterns in to_check.iteritems():
+    try:
+      with file(owners_file) as f:
+        lines = set(f.read().splitlines())
+        for entry in patterns.itervalues():
+          entry['rules'] = [rule for rule in entry['rules'] if rule not in lines
+                           ]
+    except IOError:
+      # No OWNERS file, so all the rules are definitely missing.
+      continue
+
+  # All the remaining lines weren't found in OWNERS files, so emit an error.
+  errors = []
+  for owners_file, patterns in to_check.iteritems():
+    missing_lines = []
+    files = []
+    for pattern, entry in patterns.iteritems():
+      missing_lines.extend(entry['rules'])
+      files.extend(['  %s' % f.LocalPath() for f in entry['files']])
+    if missing_lines:
+      errors.append(
+          '%s is missing the following lines:\n\n%s\n\nfor changed files:\n%s' %
+          (owners_file, '\n'.join(missing_lines), '\n'.join(files)))
+
+  results = []
+  if errors:
+    results.append(output_api.PresubmitError(
+        'Found changes to IPC files without a security OWNER!',
+        long_text='\n\n'.join(errors)))
+
+  return results
+
+
 def _CheckAndroidToastUsage(input_api, output_api):
   """Checks that code uses org.chromium.ui.widget.Toast instead of
      android.widget.Toast (Chromium Toast doesn't force hardware
@@ -1841,8 +1944,6 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckForInvalidOSMacros(input_api, output_api))
   results.extend(_CheckForInvalidIfDefinedMacros(input_api, output_api))
   results.extend(_CheckFlakyTestUsage(input_api, output_api))
-  # TODO(danakj): Remove this when base/move.h is removed.
-  results.extend(_CheckForUsingPass(input_api, output_api))
   results.extend(_CheckAddedDepsHaveTargetApprovals(input_api, output_api))
   results.extend(
       input_api.canned_checks.CheckChangeHasNoTabs(
@@ -1862,6 +1963,8 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckSingletonInHeaders(input_api, output_api))
   results.extend(_CheckNoDeprecatedCompiledResourcesGYP(input_api, output_api))
   results.extend(_CheckPydepsNeedsUpdating(input_api, output_api))
+  results.extend(_CheckJavaStyle(input_api, output_api))
+  results.extend(_CheckIpcOwners(input_api, output_api))
 
   if any('PRESUBMIT.py' == f.LocalPath() for f in input_api.AffectedFiles()):
     results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -1875,9 +1978,6 @@ def _CheckAuthorizedAuthor(input_api, output_api):
   """For non-googler/chromites committers, verify the author's email address is
   in AUTHORS.
   """
-  # TODO(maruel): Add it to input_api?
-  import fnmatch
-
   author = input_api.change.author_email
   if not author:
     input_api.logging.info('No author, skipping AUTHOR check')
@@ -1888,7 +1988,8 @@ def _CheckAuthorizedAuthor(input_api, output_api):
       input_api.re.match(r'[^#]+\s+\<(.+?)\>\s*$', line)
       for line in open(authors_path))
   valid_authors = [item.group(1).lower() for item in valid_authors if item]
-  if not any(fnmatch.fnmatch(author.lower(), valid) for valid in valid_authors):
+  if not any(input_api.fnmatch.fnmatch(author.lower(), valid)
+             for valid in valid_authors):
     input_api.logging.info('Valid authors are %s', ', '.join(valid_authors))
     return [output_api.PresubmitPromptWarning(
         ('%s is not in AUTHORS file. If you are a new contributor, please visit'
@@ -2008,20 +2109,6 @@ def _CheckForInvalidIfDefinedMacros(input_api, output_api):
       bad_macros)]
 
 
-def _CheckForUsingPass(input_api, output_api):
-  """Check all affected files for using side effects of Pass."""
-  errors = []
-  for f in input_api.AffectedFiles():
-    if f.LocalPath().endswith(('.h', '.c', '.cc', '.m', '.mm')):
-      for lnum, line in f.ChangedContents():
-        # Warn on any use of foo.Pass().
-        if input_api.re.search(r'[a-zA-Z0-9_]+\.Pass\(\)', line):
-          errors.append(output_api.PresubmitError(
-              ('%s:%d uses Pass(); please use std::move() instead. ' +
-               'See crbug.com/557422.') % (f.LocalPath(), lnum)))
-  return errors
-
-
 def _CheckForIPCRules(input_api, output_api):
   """Check for same IPC rules described in
   http://www.chromium.org/Home/chromium-security/education/security-tips-for-ipc
@@ -2085,7 +2172,6 @@ def CheckChangeOnUpload(input_api, output_api):
   results = []
   results.extend(_CommonChecks(input_api, output_api))
   results.extend(_CheckValidHostsInDEPS(input_api, output_api))
-  results.extend(_CheckJavaStyle(input_api, output_api))
   results.extend(
       input_api.canned_checks.CheckGNFormatted(input_api, output_api))
   results.extend(_CheckUmaHistogramChanges(input_api, output_api))
@@ -2106,7 +2192,9 @@ def GetTryServerMasterForBot(bot):
   }
   master = master_map.get(bot)
   if not master:
-    if 'linux' in bot or 'android' in bot or 'presubmit' in bot:
+    if 'android' in bot:
+      master = 'tryserver.chromium.android'
+    elif 'linux' in bot or 'presubmit' in bot:
       master = 'tryserver.chromium.linux'
     elif 'win' in bot:
       master = 'tryserver.chromium.win'

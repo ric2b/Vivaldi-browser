@@ -85,6 +85,7 @@ DEFINE_TRACE(ScriptLoader)
     visitor->trace(m_element);
     visitor->trace(m_resource);
     visitor->trace(m_pendingScript);
+    ScriptResourceClient::trace(visitor);
 }
 
 void ScriptLoader::didNotifySubtreeInsertionsToDocument()
@@ -120,7 +121,7 @@ void ScriptLoader::detach()
     m_pendingScript = nullptr;
 }
 
-// Helper function
+// Helper function. Must take a lowercase language as input.
 static bool isLegacySupportedJavaScriptLanguage(const String& language)
 {
     // Mozilla 1.8 accepts javascript1.0 - javascript1.7, but WinIE 7 accepts only javascript1.1 - javascript1.3.
@@ -130,24 +131,19 @@ static bool isLegacySupportedJavaScriptLanguage(const String& language)
     // We want to accept all the values that either of these browsers accept, but not other values.
 
     // FIXME: This function is not HTML5 compliant. These belong in the MIME registry as "text/javascript<version>" entries.
-    typedef HashSet<String, CaseFoldingHash> LanguageSet;
-    DEFINE_STATIC_LOCAL(LanguageSet, languages, ());
-    if (languages.isEmpty()) {
-        languages.add("javascript");
-        languages.add("javascript1.0");
-        languages.add("javascript1.1");
-        languages.add("javascript1.2");
-        languages.add("javascript1.3");
-        languages.add("javascript1.4");
-        languages.add("javascript1.5");
-        languages.add("javascript1.6");
-        languages.add("javascript1.7");
-        languages.add("livescript");
-        languages.add("ecmascript");
-        languages.add("jscript");
-    }
-
-    return languages.contains(language);
+    DCHECK_EQ(language, language.lower());
+    return language == "javascript"
+        || language == "javascript1.0"
+        || language == "javascript1.1"
+        || language == "javascript1.2"
+        || language == "javascript1.3"
+        || language == "javascript1.4"
+        || language == "javascript1.5"
+        || language == "javascript1.6"
+        || language == "javascript1.7"
+        || language == "livescript"
+        || language == "ecmascript"
+        || language == "jscript";
 }
 
 void ScriptLoader::dispatchErrorEvent()
@@ -162,27 +158,28 @@ void ScriptLoader::dispatchLoadEvent()
     setHaveFiredLoadEvent(true);
 }
 
-bool ScriptLoader::isScriptTypeSupported(LegacyTypeSupport supportLegacyTypes) const
+bool ScriptLoader::isValidScriptTypeAndLanguage(const String& type, const String& language, LegacyTypeSupport supportLegacyTypes)
 {
     // FIXME: isLegacySupportedJavaScriptLanguage() is not valid HTML5. It is used here to maintain backwards compatibility with existing layout tests. The specific violations are:
     // - Allowing type=javascript. type= should only support MIME types, such as text/javascript.
     // - Allowing a different set of languages for language= and type=. language= supports Javascript 1.1 and 1.4-1.6, but type= does not.
-
-    String type = client()->typeAttributeValue();
-    String language = client()->languageAttributeValue();
-    if (type.isEmpty() && language.isEmpty())
-        return true; // Assume text/javascript.
     if (type.isEmpty()) {
-        type = "text/" + language.lower();
-        if (MIMETypeRegistry::isSupportedJavaScriptMIMEType(type) || isLegacySupportedJavaScriptLanguage(language))
-            return true;
+        String lowerLanguage = language.lower();
+        return language.isEmpty() // assume text/javascript.
+            || MIMETypeRegistry::isSupportedJavaScriptMIMEType("text/" + lowerLanguage)
+            || isLegacySupportedJavaScriptLanguage(lowerLanguage);
     } else if (RuntimeEnabledFeatures::moduleScriptsEnabled() && type == "module") {
         return true;
-    } else if (MIMETypeRegistry::isSupportedJavaScriptMIMEType(type.stripWhiteSpace()) || (supportLegacyTypes == AllowLegacyTypeInTypeAttribute && isLegacySupportedJavaScriptLanguage(type))) {
+    } else if (MIMETypeRegistry::isSupportedJavaScriptMIMEType(type.stripWhiteSpace()) || (supportLegacyTypes == AllowLegacyTypeInTypeAttribute && isLegacySupportedJavaScriptLanguage(type.lower()))) {
         return true;
     }
 
     return false;
+}
+
+bool ScriptLoader::isScriptTypeSupported(LegacyTypeSupport supportLegacyTypes) const
+{
+    return isValidScriptTypeAndLanguage(client()->typeAttributeValue(), client()->languageAttributeValue(), supportLegacyTypes);
 }
 
 // http://dev.w3.org/html5/spec/Overview.html#prepare-a-script
@@ -299,19 +296,15 @@ bool ScriptLoader::fetchScript(const String& sourceUrl, FetchRequest::DeferOptio
             request.setCrossOriginAccessControl(elementDocument->getSecurityOrigin(), crossOrigin);
         request.setCharset(scriptCharset());
 
-        // Skip fetch-related CSP checks if the script element has a valid nonce, or if dynamically
-        // injected script is whitelisted and this script is not parser-inserted.
+        // Skip fetch-related CSP checks if dynamically injected script is whitelisted and this script is not parser-inserted.
         bool scriptPassesCSPDynamic = (!isParserInserted() && elementDocument->contentSecurityPolicy()->allowDynamic());
-        bool scriptPassesCSPNonce = elementDocument->contentSecurityPolicy()->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr));
 
-        if (scriptPassesCSPDynamic)
+        request.setContentSecurityPolicyNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr));
+
+        if (scriptPassesCSPDynamic) {
             UseCounter::count(elementDocument->frame(), UseCounter::ScriptPassesCSPDynamic);
-
-        if (scriptPassesCSPNonce)
-            UseCounter::count(elementDocument->frame(), UseCounter::ScriptPassesCSPNonce);
-
-        if (scriptPassesCSPDynamic || scriptPassesCSPNonce)
             request.setContentSecurityCheck(DoNotCheckContentSecurityPolicy);
+        }
         request.setDefer(defer);
 
         String integrityAttr = m_element->fastGetAttribute(HTMLNames::integrityAttr);
@@ -347,9 +340,10 @@ bool isSVGScriptLoader(Element* element)
 
 void ScriptLoader::logScriptMimetype(ScriptResource* resource, LocalFrame* frame, String mimetype)
 {
-    bool text = mimetype.lower().startsWith("text/");
-    bool application = mimetype.lower().startsWith("application/");
-    bool expectedJs = MIMETypeRegistry::isSupportedJavaScriptMIMEType(mimetype) || (text && isLegacySupportedJavaScriptLanguage(mimetype.substring(5)));
+    String lowerMimetype = mimetype.lower();
+    bool text = lowerMimetype.startsWith("text/");
+    bool application = lowerMimetype.startsWith("application/");
+    bool expectedJs = MIMETypeRegistry::isSupportedJavaScriptMIMEType(lowerMimetype) || (text && isLegacySupportedJavaScriptLanguage(lowerMimetype.substring(5)));
     bool sameOrigin = m_element->document().getSecurityOrigin()->canRequest(m_resource->url());
     if (expectedJs) {
         return;
@@ -374,11 +368,10 @@ bool ScriptLoader::executeScript(const ScriptSourceCode& sourceCode, double* com
 
     const ContentSecurityPolicy* csp = elementDocument->contentSecurityPolicy();
     bool shouldBypassMainWorldCSP = (frame && frame->script().shouldBypassMainWorldCSP())
-        || csp->allowScriptWithNonce(m_element->fastGetAttribute(HTMLNames::nonceAttr))
         || csp->allowScriptWithHash(sourceCode.source().toString(), ContentSecurityPolicy::InlineType::Block)
         || (!isParserInserted() && csp->allowDynamic());
 
-    if (!m_isExternalScript && (!shouldBypassMainWorldCSP && !csp->allowInlineScript(elementDocument->url(), m_startLineNumber, sourceCode.source().toString()))) {
+    if (!m_isExternalScript && (!shouldBypassMainWorldCSP && !csp->allowInlineScript(elementDocument->url(), m_element->fastGetAttribute(HTMLNames::nonceAttr), m_startLineNumber, sourceCode.source().toString()))) {
         return false;
     }
 
@@ -465,8 +458,10 @@ void ScriptLoader::notifyFinished(Resource* resource)
     DCHECK(!m_willBeParserExecuted);
 
     Document* contextDocument = m_element->document().contextDocument();
-    if (!contextDocument)
+    if (!contextDocument) {
+        detach();
         return;
+    }
 
     ASSERT_UNUSED(resource, resource == m_resource);
 

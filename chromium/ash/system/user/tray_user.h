@@ -6,10 +6,9 @@
 #define ASH_SYSTEM_USER_TRAY_USER_H_
 
 #include "ash/ash_export.h"
-#include "ash/session/session_state_delegate.h"
-#include "ash/system/tray/system_tray_item.h"
-#include "ash/system/user/user_observer.h"
-#include "base/compiler_specific.h"
+#include "ash/common/session/session_types.h"
+#include "ash/common/system/tray/system_tray_item.h"
+#include "ash/common/system/user/user_observer.h"
 #include "base/macros.h"
 
 namespace gfx {
@@ -29,8 +28,7 @@ class RoundedImageView;
 class UserView;
 }
 
-class ASH_EXPORT TrayUser : public SystemTrayItem,
-                            public UserObserver {
+class ASH_EXPORT TrayUser : public SystemTrayItem, public UserObserver {
  public:
   // The given |index| is the user index in a multi profile scenario. Index #0
   // is the active user, the other indices are other logged in users (if there
@@ -41,11 +39,11 @@ class ASH_EXPORT TrayUser : public SystemTrayItem,
 
   // Allows unit tests to see if the item was created.
   enum TestState {
-    HIDDEN,               // The item is hidden.
-    SHOWN,                // The item gets presented to the user.
-    HOVERED,              // The item is hovered and presented to the user.
-    ACTIVE,               // The item was clicked and can add a user.
-    ACTIVE_BUT_DISABLED   // The item was clicked anc cannot add a user.
+    HIDDEN,              // The item is hidden.
+    SHOWN,               // The item gets presented to the user.
+    HOVERED,             // The item is hovered and presented to the user.
+    ACTIVE,              // The item was clicked and can add a user.
+    ACTIVE_BUT_DISABLED  // The item was clicked anc cannot add a user.
   };
   TestState GetStateForTest() const;
 
@@ -57,25 +55,25 @@ class ASH_EXPORT TrayUser : public SystemTrayItem,
   gfx::Rect GetUserPanelBoundsInScreenForTest() const;
 
   // Update the TrayUser as if the current LoginStatus is |status|.
-  void UpdateAfterLoginStatusChangeForTest(user::LoginStatus status);
+  void UpdateAfterLoginStatusChangeForTest(LoginStatus status);
 
   // Use for access inside of tests.
   tray::UserView* user_view_for_test() const { return user_; }
 
  private:
   // Overridden from SystemTrayItem.
-  views::View* CreateTrayView(user::LoginStatus status) override;
-  views::View* CreateDefaultView(user::LoginStatus status) override;
+  views::View* CreateTrayView(LoginStatus status) override;
+  views::View* CreateDefaultView(LoginStatus status) override;
   void DestroyTrayView() override;
   void DestroyDefaultView() override;
-  void UpdateAfterLoginStatusChange(user::LoginStatus status) override;
-  void UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment) override;
+  void UpdateAfterLoginStatusChange(LoginStatus status) override;
+  void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) override;
 
   // Overridden from UserObserver.
   void OnUserUpdate() override;
   void OnUserAddedToSession() override;
 
-  void UpdateAvatarImage(user::LoginStatus status);
+  void UpdateAvatarImage(LoginStatus status);
 
   // Updates the layout of this item.
   void UpdateLayoutOfItem();

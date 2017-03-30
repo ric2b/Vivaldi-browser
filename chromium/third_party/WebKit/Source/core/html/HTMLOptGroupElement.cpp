@@ -57,16 +57,9 @@ bool HTMLOptGroupElement::isDisabledFormControl() const
     return fastHasAttribute(disabledAttr);
 }
 
-void HTMLOptGroupElement::childrenChanged(const ChildrenChange& change)
-{
-    recalcSelectOptions();
-    HTMLElement::childrenChanged(change);
-}
-
 void HTMLOptGroupElement::parseAttribute(const QualifiedName& name, const AtomicString& oldValue, const AtomicString& value)
 {
     HTMLElement::parseAttribute(name, oldValue, value);
-    recalcSelectOptions();
 
     if (name == disabledAttr) {
         pseudoStateChanged(CSSSelector::PseudoDisabled);
@@ -74,13 +67,6 @@ void HTMLOptGroupElement::parseAttribute(const QualifiedName& name, const Atomic
     } else if (name == labelAttr) {
         updateGroupLabel();
     }
-}
-
-void HTMLOptGroupElement::recalcSelectOptions()
-{
-    // TODO(tkent): Should use ownerSelectElement().
-    if (HTMLSelectElement* select = Traversal<HTMLSelectElement>::firstAncestor(*this))
-        select->setRecalcListItems();
 }
 
 void HTMLOptGroupElement::attach(const AttachContext& context)
@@ -109,6 +95,25 @@ bool HTMLOptGroupElement::supportsFocus() const
 bool HTMLOptGroupElement::matchesEnabledPseudoClass() const
 {
     return !isDisabledFormControl();
+}
+
+Node::InsertionNotificationRequest HTMLOptGroupElement::insertedInto(ContainerNode* insertionPoint)
+{
+    HTMLElement::insertedInto(insertionPoint);
+    if (HTMLSelectElement* select = ownerSelectElement()) {
+        if (insertionPoint == select)
+            select->optGroupInsertedOrRemoved(*this);
+    }
+    return InsertionDone;
+}
+
+void HTMLOptGroupElement::removedFrom(ContainerNode* insertionPoint)
+{
+    if (isHTMLSelectElement(*insertionPoint)) {
+        if (!parentNode())
+            toHTMLSelectElement(insertionPoint)->optGroupInsertedOrRemoved(*this);
+    }
+    HTMLElement::removedFrom(insertionPoint);
 }
 
 void HTMLOptGroupElement::updateNonComputedStyle()

@@ -95,11 +95,11 @@ RasterTaskCompletionStatsAsValue(const RasterTaskCompletionStats& stats);
 // created, and unregister from the manager when they are deleted.
 class CC_EXPORT TileManager {
  public:
-  static std::unique_ptr<TileManager> Create(
-      TileManagerClient* client,
-      base::SequencedTaskRunner* task_runner,
-      size_t scheduled_raster_task_limit,
-      bool use_partial_raster);
+  TileManager(TileManagerClient* client,
+              base::SequencedTaskRunner* task_runner,
+              size_t scheduled_raster_task_limit,
+              bool use_partial_raster,
+              int max_preraster_distance_in_screen_pixels);
   virtual ~TileManager();
 
   // Assigns tile memory and schedules work to prepare tiles for drawing.
@@ -120,6 +120,7 @@ class CC_EXPORT TileManager {
   void SetResources(ResourcePool* resource_pool,
                     ImageDecodeController* image_decode_controller,
                     TileTaskManager* tile_task_manager,
+                    RasterBufferProvider* raster_buffer_provider,
                     size_t scheduled_raster_task_limit,
                     bool use_gpu_rasterization);
 
@@ -148,8 +149,7 @@ class CC_EXPORT TileManager {
       TileDrawInfo& draw_info = tiles[i]->draw_info();
       draw_info.resource_ = resource_pool_->AcquireResource(
           tiles[i]->desired_texture_size(),
-          tile_task_manager_->GetRasterBufferProvider()->GetResourceFormat(
-              false));
+          raster_buffer_provider_->GetResourceFormat(false));
     }
   }
 
@@ -167,6 +167,9 @@ class CC_EXPORT TileManager {
 
   void SetTileTaskManagerForTesting(TileTaskManager* tile_task_manager);
 
+  void SetRasterBufferProviderForTesting(
+      RasterBufferProvider* raster_buffer_provider);
+
   void FreeResourcesAndCleanUpReleasedTilesForTesting() {
     FreeResourcesForReleasedTiles();
     CleanUpReleasedTiles();
@@ -174,10 +177,8 @@ class CC_EXPORT TileManager {
 
   std::vector<Tile*> AllTilesForTesting() const {
     std::vector<Tile*> tiles;
-    for (TileMap::const_iterator it = tiles_.begin(); it != tiles_.end();
-         ++it) {
-      tiles.push_back(it->second);
-    }
+    for (auto& tile_pair : tiles_)
+      tiles.push_back(tile_pair.second);
     return tiles;
   }
 
@@ -197,12 +198,12 @@ class CC_EXPORT TileManager {
     return has_scheduled_tile_tasks_;
   }
 
- protected:
-  TileManager(TileManagerClient* client,
-              scoped_refptr<base::SequencedTaskRunner> task_runner,
-              size_t scheduled_raster_task_limit,
-              bool use_partial_raster);
+  void OnRasterTaskCompleted(std::unique_ptr<RasterBuffer> raster_buffer,
+                             Tile* tile,
+                             Resource* resource,
+                             bool was_canceled);
 
+ protected:
   void FreeResourcesForReleasedTiles();
   void CleanUpReleasedTiles();
 
@@ -210,18 +211,6 @@ class CC_EXPORT TileManager {
   // Virtual for testing.
   virtual void Release(Tile* tile);
   Tile::Id GetUniqueTileId() { return ++next_tile_id_; }
-
-  typedef std::vector<PrioritizedTile> PrioritizedTileVector;
-  typedef std::set<Tile*> TileSet;
-
-  // Virtual for test
-  virtual void ScheduleTasks(
-      const PrioritizedTileVector& tiles_that_need_to_be_rasterized);
-
-  void AssignGpuMemoryToTiles(
-      RasterTilePriorityQueue* raster_priority_queue,
-      size_t scheduled_raser_task_limit,
-      PrioritizedTileVector* tiles_that_need_to_be_rasterized);
 
  private:
   class MemoryUsage {
@@ -244,10 +233,27 @@ class CC_EXPORT TileManager {
     int resource_count_;
   };
 
-  void OnRasterTaskCompleted(
-      Tile::Id tile,
-      Resource* resource,
-      bool was_canceled);
+  struct Signals {
+    Signals();
+
+    void reset();
+
+    bool ready_to_activate;
+    bool did_notify_ready_to_activate;
+    bool ready_to_draw;
+    bool did_notify_ready_to_draw;
+    bool all_tile_tasks_completed;
+    bool did_notify_all_tile_tasks_completed;
+  };
+
+  struct PrioritizedWorkToSchedule {
+    PrioritizedWorkToSchedule();
+    PrioritizedWorkToSchedule(PrioritizedWorkToSchedule&& other);
+    ~PrioritizedWorkToSchedule();
+
+    std::vector<PrioritizedTile> tiles_to_raster;
+    std::vector<PrioritizedTile> tiles_to_process_for_images;
+  };
 
   void FreeResourcesForTile(Tile* tile);
   void FreeResourcesForTileAndNotifyClientIfTileWasReadyToDraw(Tile* tile);
@@ -281,21 +287,23 @@ class CC_EXPORT TileManager {
 
   scoped_refptr<TileTask> CreateTaskSetFinishedTask(
       void (TileManager::*callback)());
+  PrioritizedWorkToSchedule AssignGpuMemoryToTiles();
+  void ScheduleTasks(const PrioritizedWorkToSchedule& work_to_schedule);
 
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   ScheduledTasksStateAsValue() const;
 
   TileManagerClient* client_;
-  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  base::SequencedTaskRunner* task_runner_;
   ResourcePool* resource_pool_;
   TileTaskManager* tile_task_manager_;
+  RasterBufferProvider* raster_buffer_provider_;
   GlobalStateThatImpactsTilePriority global_state_;
   size_t scheduled_raster_task_limit_;
   const bool use_partial_raster_;
   bool use_gpu_rasterization_;
 
-  using TileMap = std::unordered_map<Tile::Id, Tile*>;
-  TileMap tiles_;
+  std::unordered_map<Tile::Id, Tile*> tiles_;
 
   bool all_tiles_that_need_to_be_rasterized_are_scheduled_;
   MemoryHistory::Entry memory_stats_from_last_assign_;
@@ -318,18 +326,7 @@ class CC_EXPORT TileManager {
 
   UniqueNotifier more_tiles_need_prepare_check_notifier_;
 
-  struct Signals {
-    Signals();
-
-    void reset();
-
-    bool ready_to_activate;
-    bool did_notify_ready_to_activate;
-    bool ready_to_draw;
-    bool did_notify_ready_to_draw;
-    bool all_tile_tasks_completed;
-    bool did_notify_all_tile_tasks_completed;
-  } signals_;
+  Signals signals_;
 
   UniqueNotifier signals_check_notifier_;
 
@@ -339,6 +336,8 @@ class CC_EXPORT TileManager {
   uint64_t next_tile_id_;
 
   std::unordered_map<Tile::Id, std::vector<DrawImage>> scheduled_draw_images_;
+  const int max_preraster_distance_in_screen_pixels_;
+  std::vector<std::pair<DrawImage, scoped_refptr<TileTask>>> locked_images_;
 
   base::WeakPtrFactory<TileManager> task_set_finished_weak_ptr_factory_;
 

@@ -38,7 +38,8 @@ class CommandBufferImpl : public mojom::CommandBuffer,
 
   // CommandBufferDriver::Client. All called on the GPU thread.
   void DidLoseContext(uint32_t reason) override;
-  void UpdateVSyncParameters(int64_t timebase, int64_t interval) override;
+  void UpdateVSyncParameters(const base::TimeTicks& timebase,
+                             const base::TimeDelta& interval) override;
   void OnGpuCompletedSwapBuffers(gfx::SwapResult result) override;
 
   // mojom::CommandBuffer:
@@ -59,7 +60,7 @@ class CommandBufferImpl : public mojom::CommandBuffer,
   void CreateImage(int32_t id,
                    mojo::ScopedHandle memory_handle,
                    int32_t type,
-                   mojo::SizePtr size,
+                   const gfx::Size& size,
                    int32_t format,
                    int32_t internal_format) override;
   void DestroyImage(int32_t id) override;
@@ -67,7 +68,8 @@ class CommandBufferImpl : public mojom::CommandBuffer,
       uint32_t client_texture_id,
       const mojom::CommandBuffer::CreateStreamTextureCallback& callback
       ) override;
-  void ProduceFrontBuffer(const gpu::Mailbox& mailbox) override;
+  void TakeFrontBuffer(const gpu::Mailbox& mailbox) override;
+  void ReturnFrontBuffer(const gpu::Mailbox& mailbox, bool is_lost) override;
   void SignalQuery(uint32_t query, uint32_t signal_id) override;
   void SignalSyncToken(const gpu::SyncToken& sync_token,
                        uint32_t signal_id) override;
@@ -100,7 +102,7 @@ class CommandBufferImpl : public mojom::CommandBuffer,
   bool CreateImageOnGpuThread(int32_t id,
                               mojo::ScopedHandle memory_handle,
                               int32_t type,
-                              mojo::SizePtr size,
+                              const gfx::Size& size,
                               int32_t format,
                               int32_t internal_format);
   bool DestroyImageOnGpuThread(int32_t id);

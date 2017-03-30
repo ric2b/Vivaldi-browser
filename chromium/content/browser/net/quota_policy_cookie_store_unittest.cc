@@ -15,12 +15,13 @@
 #include "content/browser/net/quota_policy_cookie_store.h"
 #include "content/public/test/mock_special_storage_policy.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "net/base/test_data_directory.h"
 #include "net/cookies/cookie_util.h"
 #include "net/ssl/ssl_client_cert_type.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "sql/statement.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
 
 namespace {
 const base::FilePath::CharType kTestCookiesFilename[] =
@@ -36,9 +37,10 @@ class QuotaPolicyCookieStoreTest : public testing::Test {
  public:
   QuotaPolicyCookieStoreTest()
       : pool_owner_(new base::SequencedWorkerPoolOwner(3, "Background Pool")),
-        loaded_event_(false, false),
-        destroy_event_(false, false) {
-  }
+        loaded_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                      base::WaitableEvent::InitialState::NOT_SIGNALED),
+        destroy_event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                       base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   void OnLoaded(const CanonicalCookieVector& cookies) {
     cookies_ = cookies;
@@ -91,14 +93,15 @@ class QuotaPolicyCookieStoreTest : public testing::Test {
   }
 
   // Adds a persistent cookie to store_.
-  void AddCookie(const std::string& name,
+  void AddCookie(const GURL& url,
+                 const std::string& name,
                  const std::string& value,
                  const std::string& domain,
                  const std::string& path,
                  const base::Time& creation) {
-    store_->AddCookie(net::CanonicalCookie(
-        GURL(), name, value, domain, path, creation, creation, creation, false,
-        false, net::CookieSameSite::DEFAULT_MODE,
+    store_->AddCookie(*net::CanonicalCookie::Create(
+        url, name, value, domain, path, creation, creation, false, false,
+        net::CookieSameSite::DEFAULT_MODE, false,
         net::COOKIE_PRIORITY_DEFAULT));
   }
 
@@ -136,9 +139,9 @@ TEST_F(QuotaPolicyCookieStoreTest, TestPersistence) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie("A", "B", "foo.com", "/", t);
+  AddCookie(GURL("http://foo.com"), "A", "B", std::string(), "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie("A", "B", "persistent.com", "/", t);
+  AddCookie(GURL("http://persistent.com"), "A", "B", std::string(), "/", t);
 
   // Replace the store, which forces the current store to flush data to
   // disk. Then, after reloading the store, confirm that the data was flushed by
@@ -180,11 +183,11 @@ TEST_F(QuotaPolicyCookieStoreTest, TestPolicy) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie("A", "B", "foo.com", "/", t);
+  AddCookie(GURL("http://foo.com"), "A", "B", std::string(), "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie("A", "B", "persistent.com", "/", t);
+  AddCookie(GURL("http://persistent.com"), "A", "B", std::string(), "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie("A", "B", "nonpersistent.com", "/", t);
+  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(), "/", t);
 
   // Replace the store, which forces the current store to flush data to
   // disk. Then, after reloading the store, confirm that the data was flushed by
@@ -203,7 +206,8 @@ TEST_F(QuotaPolicyCookieStoreTest, TestPolicy) {
   EXPECT_EQ(3U, cookies.size());
 
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie("A", "B", "nonpersistent.com", "/second", t);
+  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(),
+            "/second", t);
 
   // Now close the store, and "nonpersistent.com" should be deleted according to
   // policy.
@@ -224,7 +228,7 @@ TEST_F(QuotaPolicyCookieStoreTest, ForceKeepSessionState) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie("A", "B", "foo.com", "/", t);
+  AddCookie(GURL("http://foo.com"), "A", "B", std::string(), "/", t);
 
   // Recreate |store_| with a storage policy that makes "nonpersistent.com"
   // session only, but then instruct the store to forcibly keep all cookies.
@@ -240,9 +244,9 @@ TEST_F(QuotaPolicyCookieStoreTest, ForceKeepSessionState) {
   EXPECT_EQ(1U, cookies.size());
 
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie("A", "B", "persistent.com", "/", t);
+  AddCookie(GURL("http://persistent.com"), "A", "B", std::string(), "/", t);
   t += base::TimeDelta::FromInternalValue(10);
-  AddCookie("A", "B", "nonpersistent.com", "/", t);
+  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(), "/", t);
 
   // Now close the store, but the "nonpersistent.com" cookie should not be
   // deleted.
@@ -269,7 +273,7 @@ TEST_F(QuotaPolicyCookieStoreTest, TestDestroyOnBackgroundThread) {
   ASSERT_EQ(0U, cookies.size());
 
   base::Time t = base::Time::Now();
-  AddCookie("A", "B", "nonpersistent.com", "/", t);
+  AddCookie(GURL("http://nonpersistent.com"), "A", "B", std::string(), "/", t);
 
   // Replace the store, which forces the current store to flush data to
   // disk. Then, after reloading the store, confirm that the data was flushed by

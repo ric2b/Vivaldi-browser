@@ -5,12 +5,15 @@
 #include "content/common/origin_trials/trial_token_validator.h"
 
 #include <memory>
+#include <set>
+#include <string>
 
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/time.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/origin_trial_policy.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebOriginTrialTokenStatus.h"
 #include "url/gurl.h"
@@ -84,14 +87,43 @@ const char kExpiredToken[] =
 
 const char kUnparsableToken[] = "abcde";
 
-class TestContentClient : public ContentClient {
+class TestOriginTrialPolicy : public OriginTrialPolicy {
  public:
-  base::StringPiece GetOriginTrialPublicKey() override {
+  base::StringPiece GetPublicKey() const override {
     return base::StringPiece(reinterpret_cast<const char*>(key_),
                              arraysize(kTestPublicKey));
   }
-  void SetOriginTrialPublicKey(const uint8_t* key) { key_ = key; }
+  bool IsFeatureDisabled(base::StringPiece feature) const override {
+    return disabled_features_.count(feature.as_string()) > 0;
+  }
+
+  // Test setup methods
+  void SetPublicKey(const uint8_t* key) { key_ = key; }
+  void DisableFeature(const std::string& feature) {
+    disabled_features_.insert(feature);
+  }
+
+ private:
   const uint8_t* key_ = nullptr;
+  std::set<std::string> disabled_features_;
+};
+
+class TestContentClient : public ContentClient {
+ public:
+  // ContentRendererClient methods
+  OriginTrialPolicy* GetOriginTrialPolicy() override {
+    return &origin_trial_policy_;
+  }
+  // Test setup methods
+  void SetOriginTrialPublicKey(const uint8_t* key) {
+    origin_trial_policy_.SetPublicKey(key);
+  }
+  void DisableFeature(const std::string& feature) {
+    origin_trial_policy_.DisableFeature(feature);
+  }
+
+ private:
+  TestOriginTrialPolicy origin_trial_policy_;
 };
 
 }  // namespace
@@ -110,6 +142,10 @@ class TrialTokenValidatorTest : public testing::Test {
 
   void SetPublicKey(const uint8_t* key) {
     test_content_client_.SetOriginTrialPublicKey(key);
+  }
+
+  void DisableFeature(const std::string& feature) {
+    test_content_client_.DisableFeature(feature);
   }
 
   const url::Origin appropriate_origin_;
@@ -164,6 +200,19 @@ TEST_F(TrialTokenValidatorTest, ValidateExpiredToken) {
 TEST_F(TrialTokenValidatorTest, ValidateValidTokenWithIncorrectKey) {
   SetPublicKey(kTestPublicKey2);
   EXPECT_EQ(blink::WebOriginTrialTokenStatus::InvalidSignature,
+            TrialTokenValidator::ValidateToken(
+                kSampleToken, appropriate_origin_, kAppropriateFeatureName));
+}
+
+TEST_F(TrialTokenValidatorTest, ValidatorRespectsDisabledFeatures) {
+  // Disable an irrelevant feature; token should still validate
+  DisableFeature(kInappropriateFeatureName);
+  EXPECT_EQ(blink::WebOriginTrialTokenStatus::Success,
+            TrialTokenValidator::ValidateToken(
+                kSampleToken, appropriate_origin_, kAppropriateFeatureName));
+  // Disable the token's feature; it should no longer be valid
+  DisableFeature(kAppropriateFeatureName);
+  EXPECT_EQ(blink::WebOriginTrialTokenStatus::FeatureDisabled,
             TrialTokenValidator::ValidateToken(
                 kSampleToken, appropriate_origin_, kAppropriateFeatureName));
 }

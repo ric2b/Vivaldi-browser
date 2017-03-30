@@ -4,9 +4,8 @@
 
 #include "ash/wm/panels/panel_window_event_handler.h"
 
-#include "ash/metrics/user_metrics_recorder.h"
-#include "ash/shell.h"
-#include "ash/wm/common/window_state.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm_shell.h"
 #include "ash/wm/window_state_aura.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
@@ -15,22 +14,18 @@
 
 namespace ash {
 
-PanelWindowEventHandler::PanelWindowEventHandler() {
-}
+PanelWindowEventHandler::PanelWindowEventHandler() {}
 
-PanelWindowEventHandler::~PanelWindowEventHandler() {
-}
+PanelWindowEventHandler::~PanelWindowEventHandler() {}
 
 void PanelWindowEventHandler::OnMouseEvent(ui::MouseEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
-  if (!event->handled() &&
-      event->type() == ui::ET_MOUSE_PRESSED &&
+  if (!event->handled() && event->type() == ui::ET_MOUSE_PRESSED &&
       event->flags() & ui::EF_IS_DOUBLE_CLICK &&
       event->IsOnlyLeftMouseButton() &&
       target->delegate()->GetNonClientComponent(event->location()) ==
           HTCAPTION) {
-    ash::Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-        ash::UMA_PANEL_MINIMIZE_CAPTION_CLICK);
+    WmShell::Get()->RecordUserMetricsAction(UMA_PANEL_MINIMIZE_CAPTION_CLICK);
     wm::GetWindowState(target)->Minimize();
     event->StopPropagation();
     return;
@@ -39,13 +34,11 @@ void PanelWindowEventHandler::OnMouseEvent(ui::MouseEvent* event) {
 
 void PanelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
-  if (!event->handled() &&
-      event->type() == ui::ET_GESTURE_TAP &&
+  if (!event->handled() && event->type() == ui::ET_GESTURE_TAP &&
       event->details().tap_count() == 2 &&
       target->delegate()->GetNonClientComponent(event->location()) ==
           HTCAPTION) {
-    ash::Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-        ash::UMA_PANEL_MINIMIZE_CAPTION_GESTURE);
+    WmShell::Get()->RecordUserMetricsAction(UMA_PANEL_MINIMIZE_CAPTION_GESTURE);
     wm::GetWindowState(target)->Minimize();
     event->StopPropagation();
     return;

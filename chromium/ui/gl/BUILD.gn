@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/linux/pkg_config.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -11,6 +12,12 @@ use_glx = use_x11
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
+}
+
+if (target_os == "chromeos") {
+  pkg_config("libdrm") {
+    packages = [ "libdrm" ]
+  }
 }
 
 config("gl_config") {
@@ -46,15 +53,12 @@ component("gl") {
     "gl_bindings_autogen_osmesa.h",
     "gl_context.cc",
     "gl_context.h",
-    "gl_context_android.cc",
-    "gl_context_mac.mm",
     "gl_context_osmesa.cc",
     "gl_context_osmesa.h",
     "gl_context_stub.cc",
     "gl_context_stub.h",
     "gl_context_stub_with_extensions.cc",
     "gl_context_stub_with_extensions.h",
-    "gl_context_win.cc",
     "gl_enums.cc",
     "gl_enums.h",
     "gl_enums_implementation_autogen.h",
@@ -92,15 +96,12 @@ component("gl") {
     "gl_state_restorer.h",
     "gl_surface.cc",
     "gl_surface.h",
-    "gl_surface_android.cc",
-    "gl_surface_mac.cc",
     "gl_surface_osmesa.cc",
     "gl_surface_osmesa.h",
     "gl_surface_overlay.cc",
     "gl_surface_overlay.h",
     "gl_surface_stub.cc",
     "gl_surface_stub.h",
-    "gl_surface_win.cc",
     "gl_switches.cc",
     "gl_switches.h",
     "gl_version_info.cc",
@@ -124,10 +125,7 @@ component("gl") {
   configs += [ "//build/config:precompiled_headers" ]
   defines = [ "GL_IMPLEMENTATION" ]
 
-  include_dirs = [
-    "//third_party/swiftshader/include",
-    "//third_party/mesa/src/include",
-  ]
+  include_dirs = [ "//third_party/mesa/src/include" ]
 
   all_dependent_configs = [ ":gl_config" ]
 
@@ -161,6 +159,8 @@ component("gl") {
       "gl_image_egl.h",
       "gl_surface_egl.cc",
       "gl_surface_egl.h",
+      "gl_surface_egl_android.cc",
+      "gl_surface_egl_win.cc",
     ]
   }
   if (is_android || is_linux) {
@@ -169,16 +169,13 @@ component("gl") {
       "gl_implementation_osmesa.h",
     ]
   }
-  if (!is_android) {  # TODO(GYP) Enable on Android when osmesa links.
-    deps += [ "//third_party/mesa:osmesa" ]
-  }
   if (use_x11) {
     sources += [
-      "gl_context_x11.cc",
       "gl_implementation_x11.cc",
       "gl_surface_egl_x11.cc",
       "gl_surface_egl_x11.h",
-      "gl_surface_x11.cc",
+      "gl_surface_osmesa_x11.cc",
+      "gl_surface_osmesa_x11.h",
     ]
 
     data_deps = [
@@ -188,11 +185,10 @@ component("gl") {
   }
   if (use_ozone) {
     sources += [
-      "gl_context_ozone.cc",
       "gl_image_ozone_native_pixmap.cc",
       "gl_image_ozone_native_pixmap.h",
       "gl_implementation_ozone.cc",
-      "gl_surface_ozone.cc",
+      "gl_surface_egl_ozone.cc",
     ]
 
     deps += [ "//ui/ozone" ]
@@ -227,6 +223,8 @@ component("gl") {
       "gl_bindings_autogen_wgl.h",
       "gl_context_wgl.cc",
       "gl_context_wgl.h",
+      "gl_surface_osmesa_win.cc",
+      "gl_surface_osmesa_win.h",
       "gl_surface_wgl.cc",
       "gl_surface_wgl.h",
       "gl_wgl_api_implementation.cc",
@@ -237,6 +235,10 @@ component("gl") {
 
     libs = [ "dwmapi.lib" ]
     ldflags = [ "/DELAYLOAD:dwmapi.dll" ]
+
+    if (is_official_build) {
+      include_dirs += [ "//third_party/swiftshader/include" ]
+    }
 
     data_deps = [
       "//third_party/angle:libEGL",
@@ -339,6 +341,7 @@ test("gl_unittests") {
     "gl_api_unittest.cc",
     "gl_image_ref_counted_memory_unittest.cc",
     "gl_image_shared_memory_unittest.cc",
+    "gl_version_info_unittest.cc",
     "gpu_timing_unittest.cc",
     "test/run_all_unittests.cc",
   ]
@@ -356,6 +359,9 @@ test("gl_unittests") {
 
   if (use_ozone) {
     sources += [ "gl_image_ozone_native_pixmap_unittest.cc" ]
+    if (target_os == "chromeos" && target_cpu != "arm") {
+      sources += [ "gl_image_ozone_native_pixmap_drm_unittest.cc" ]
+    }
   }
 
   if (is_mac) {
@@ -381,6 +387,10 @@ test("gl_unittests") {
     "//ui/gfx/geometry",
     "//ui/gl/init",
   ]
+
+  if (target_os == "chromeos") {
+    configs += [ ":libdrm" ]
+  }
 
   data_deps = [
     "//third_party/mesa:osmesa",

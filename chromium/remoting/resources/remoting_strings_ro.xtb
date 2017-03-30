@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Pentru a proteja accesul la acest computer, alegeți un cod PIN format din <ph name="BOLD_START" />cel puțin șase cifre<ph name="BOLD_END" />. Acest cod PIN va fi necesar când vă conectați din altă locație.</translation>
 <translation id="4176825807642096119">Cod de acces</translation>
 <translation id="4207623512727273241">Rulați programul de instalare înainte de a continua.</translation>
+<translation id="4227991223508142681">Utilitarul de configurare a gazdei</translation>
 <translation id="4240294130679914010">Program de dezinstalare a gazdei Chromoting</translation>
 <translation id="4277463233460010382">Acest computer este configurat să permită conectarea unuia sau a mai multor clienți fără introducerea unui PIN.</translation>
 <translation id="4277736576214464567">Codul de acces este greșit. Încercați din nou.</translation>
@@ -261,6 +262,7 @@ la distanță Chrome</translation>
 <translation id="7836926030608666805">Unele componente necesare lipsesc. Asigură-te că rulezi cea mai recentă versiune Chrome și încearcă din nou.</translation>
 <translation id="7868137160098754906">Introduceți codul PIN pentru computerul la distanță.</translation>
 <translation id="7869445566579231750">Nu ai permisiunea să rulezi această aplicație.</translation>
+<translation id="7895403300744144251">Politicile de securitate de pe computerul la distanță nu permit conexiunile din contul tău.</translation>
 <translation id="7948001860594368197">Opțiuni ecran</translation>
 <translation id="7970576581263377361">Autentificarea nu a reușit. Conectează-te din nou la Chromium.</translation>
 <translation id="7981525049612125370">Sesiunea la distanță a expirat.</translation>

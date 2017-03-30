@@ -7,13 +7,14 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/session/session_state_delegate.h"
-#include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/system_tray_notifier.h"
-#include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_utils.h"
-#include "ash/system/user/rounded_image_view.h"
+#include "ash/common/login_status.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_notifier.h"
+#include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_utils.h"
+#include "ash/common/system/user/rounded_image_view.h"
+#include "ash/common/wm_shell.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/scoped_vector.h"
 #include "base/strings/string16.h"
@@ -39,8 +40,8 @@
 
 #if defined(OS_CHROMEOS)
 #include "ash/ash_view_ids.h"
-#include "ash/media_delegate.h"
-#include "ash/system/tray/media_security/media_capture_observer.h"
+#include "ash/common/media_delegate.h"
+#include "ash/common/system/chromeos/media_security/media_capture_observer.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/layout/fill_layout.h"
 #endif
@@ -71,19 +72,18 @@ class MediaIndicator : public views::View, public MediaCaptureObserver {
     label_->SetFontList(ui::ResourceBundle::GetSharedInstance().GetFontList(
         ui::ResourceBundle::SmallFont));
     OnMediaCaptureChanged();
-    Shell::GetInstance()->system_tray_notifier()->AddMediaCaptureObserver(this);
+    WmShell::Get()->system_tray_notifier()->AddMediaCaptureObserver(this);
     set_id(VIEW_ID_USER_VIEW_MEDIA_INDICATOR);
   }
 
   ~MediaIndicator() override {
-    Shell::GetInstance()->system_tray_notifier()->RemoveMediaCaptureObserver(
-        this);
+    WmShell::Get()->system_tray_notifier()->RemoveMediaCaptureObserver(this);
   }
 
   // MediaCaptureObserver:
   void OnMediaCaptureChanged() override {
     MediaCaptureState state =
-        Shell::GetInstance()->media_delegate()->GetMediaCaptureState(index_);
+        WmShell::Get()->media_delegate()->GetMediaCaptureState(index_);
     int res_id = 0;
     switch (state) {
       case MEDIA_CAPTURE_AUDIO_VIDEO:
@@ -153,28 +153,27 @@ PublicAccountUserDetails::PublicAccountUserDetails(int max_width)
   const int inner_padding =
       kTrayPopupPaddingHorizontal - kTrayPopupPaddingBetweenItems;
   const bool rtl = base::i18n::IsRTL();
-  SetBorder(views::Border::CreateEmptyBorder(kUserDetailsVerticalPadding,
-                                             rtl ? 0 : inner_padding,
-                                             kUserDetailsVerticalPadding,
-                                             rtl ? inner_padding : 0));
+  SetBorder(views::Border::CreateEmptyBorder(
+      kUserDetailsVerticalPadding, rtl ? 0 : inner_padding,
+      kUserDetailsVerticalPadding, rtl ? inner_padding : 0));
 
   // Retrieve the user's display name and wrap it with markers.
   // Note that since this is a public account it always has to be the primary
   // user.
-  base::string16 display_name = Shell::GetInstance()
-                                    ->session_state_delegate()
+  base::string16 display_name = WmShell::Get()
+                                    ->GetSessionStateDelegate()
                                     ->GetUserInfo(0)
                                     ->GetDisplayName();
   base::RemoveChars(display_name, kDisplayNameMark, &display_name);
   display_name = kDisplayNameMark[0] + display_name + kDisplayNameMark[0];
   // Retrieve the domain managing the device and wrap it with markers.
   base::string16 domain = base::UTF8ToUTF16(
-      Shell::GetInstance()->system_tray_delegate()->GetEnterpriseDomain());
+      WmShell::Get()->system_tray_delegate()->GetEnterpriseDomain());
   base::RemoveChars(domain, kDisplayNameMark, &domain);
   base::i18n::WrapStringWithLTRFormatting(&domain);
   // Retrieve the label text, inserting the display name and domain.
-  text_ = l10n_util::GetStringFUTF16(
-      IDS_ASH_STATUS_TRAY_PUBLIC_LABEL, display_name, domain);
+  text_ = l10n_util::GetStringFUTF16(IDS_ASH_STATUS_TRAY_PUBLIC_LABEL,
+                                     display_name, domain);
 
   learn_more_ = new views::Link(l10n_util::GetStringUTF16(IDS_ASH_LEARN_MORE));
   learn_more_->SetUnderline(false);
@@ -195,18 +194,14 @@ void PublicAccountUserDetails::Layout() {
   // Word-wrap the label text.
   const gfx::FontList font_list;
   std::vector<base::string16> lines;
-  gfx::ElideRectangleText(text_,
-                          font_list,
-                          contents_area.width(),
-                          contents_area.height(),
-                          gfx::ELIDE_LONG_WORDS,
+  gfx::ElideRectangleText(text_, font_list, contents_area.width(),
+                          contents_area.height(), gfx::ELIDE_LONG_WORDS,
                           &lines);
   // Loop through the lines, creating a renderer for each.
   gfx::Point position = contents_area.origin();
   gfx::Range display_name(gfx::Range::InvalidRange());
   for (std::vector<base::string16>::const_iterator it = lines.begin();
-       it != lines.end();
-       ++it) {
+       it != lines.end(); ++it) {
     gfx::RenderText* line = gfx::RenderText::CreateInstance();
     line->SetDirectionalityMode(gfx::DIRECTIONALITY_FROM_UI);
     line->SetText(*it);
@@ -264,8 +259,7 @@ gfx::Size PublicAccountUserDetails::GetPreferredSize() const {
 
 void PublicAccountUserDetails::OnPaint(gfx::Canvas* canvas) {
   for (ScopedVector<gfx::RenderText>::const_iterator it = lines_.begin();
-       it != lines_.end();
-       ++it) {
+       it != lines_.end(); ++it) {
     (*it)->Draw(canvas);
   }
   views::View::OnPaint(canvas);
@@ -274,7 +268,7 @@ void PublicAccountUserDetails::OnPaint(gfx::Canvas* canvas) {
 void PublicAccountUserDetails::LinkClicked(views::Link* source,
                                            int event_flags) {
   DCHECK_EQ(source, learn_more_);
-  Shell::GetInstance()->system_tray_delegate()->ShowPublicAccountInfo();
+  WmShell::Get()->system_tray_delegate()->ShowPublicAccountInfo();
 }
 
 void PublicAccountUserDetails::CalculatePreferredSize(int max_allowed_width) {
@@ -296,12 +290,9 @@ void PublicAccountUserDetails::CalculatePreferredSize(int max_allowed_width) {
   while (min_width < max_width) {
     lines.clear();
     const int width = (min_width + max_width) / 2;
-    const bool too_narrow = gfx::ElideRectangleText(text_,
-                                                    font_list,
-                                                    width,
-                                                    INT_MAX,
-                                                    gfx::TRUNCATE_LONG_WORDS,
-                                                    &lines) != 0;
+    const bool too_narrow =
+        gfx::ElideRectangleText(text_, font_list, width, INT_MAX,
+                                gfx::TRUNCATE_LONG_WORDS, &lines) != 0;
     int line_count = lines.size();
     if (!too_narrow && line_count == 3 &&
         width - gfx::GetStringWidth(lines.back(), font_list) <=
@@ -315,8 +306,8 @@ void PublicAccountUserDetails::CalculatePreferredSize(int max_allowed_width) {
 
   // Calculate the corresponding height and set the preferred size.
   lines.clear();
-  gfx::ElideRectangleText(
-      text_, font_list, min_width, INT_MAX, gfx::TRUNCATE_LONG_WORDS, &lines);
+  gfx::ElideRectangleText(text_, font_list, min_width, INT_MAX,
+                          gfx::TRUNCATE_LONG_WORDS, &lines);
   int line_count = lines.size();
   if (min_width - gfx::GetStringWidth(lines.back(), font_list) <=
       space_width + link_size.width()) {
@@ -332,12 +323,12 @@ void PublicAccountUserDetails::CalculatePreferredSize(int max_allowed_width) {
 
 }  // namespace
 
-UserCardView::UserCardView(user::LoginStatus login_status,
+UserCardView::UserCardView(LoginStatus login_status,
                            int max_width,
                            int user_index) {
-  SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0, kTrayPopupPaddingBetweenItems));
-  if (login_status == user::LOGGED_IN_PUBLIC) {
+  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
+                                        kTrayPopupPaddingBetweenItems));
+  if (login_status == LoginStatus::PUBLIC) {
     AddPublicModeUserContent(max_width);
   } else {
     AddUserContent(login_status, user_index);
@@ -355,23 +346,21 @@ void UserCardView::GetAccessibleState(ui::AXViewState* state) {
 }
 
 void UserCardView::AddPublicModeUserContent(int max_width) {
-  views::View* icon = CreateIcon(user::LOGGED_IN_PUBLIC, 0);
+  views::View* icon = CreateIcon(LoginStatus::PUBLIC, 0);
   AddChildView(icon);
   int details_max_width = max_width - icon->GetPreferredSize().width() -
                           kTrayPopupPaddingBetweenItems;
   AddChildView(new PublicAccountUserDetails(details_max_width));
 }
 
-void UserCardView::AddUserContent(user::LoginStatus login_status,
-                                  int user_index) {
+void UserCardView::AddUserContent(LoginStatus login_status, int user_index) {
   views::View* icon = CreateIcon(login_status, user_index);
   AddChildView(icon);
   views::Label* user_name = NULL;
-  SessionStateDelegate* delegate =
-      Shell::GetInstance()->session_state_delegate();
+  SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
   if (!user_index) {
     base::string16 user_name_string =
-        login_status == user::LOGGED_IN_GUEST
+        login_status == LoginStatus::GUEST
             ? l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_GUEST_LABEL)
             : delegate->GetUserInfo(user_index)->GetDisplayName();
     if (!user_name_string.empty()) {
@@ -381,9 +370,8 @@ void UserCardView::AddUserContent(user::LoginStatus login_status,
   }
 
   views::Label* user_email = NULL;
-  if (login_status != user::LOGGED_IN_GUEST) {
-    SystemTrayDelegate* tray_delegate =
-        Shell::GetInstance()->system_tray_delegate();
+  if (login_status != LoginStatus::GUEST) {
+    SystemTrayDelegate* tray_delegate = WmShell::Get()->system_tray_delegate();
     base::string16 user_email_string =
         tray_delegate->IsUserSupervised()
             ? l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL)
@@ -441,20 +429,19 @@ void UserCardView::AddUserContent(user::LoginStatus login_status,
   }
 }
 
-views::View* UserCardView::CreateIcon(user::LoginStatus login_status,
+views::View* UserCardView::CreateIcon(LoginStatus login_status,
                                       int user_index) {
   RoundedImageView* icon =
-      new RoundedImageView(kTrayAvatarCornerRadius, user_index == 0);
-  if (login_status == user::LOGGED_IN_GUEST) {
+      new RoundedImageView(kTrayRoundedBorderRadius, user_index == 0);
+  if (login_status == LoginStatus::GUEST) {
     icon->SetImage(*ui::ResourceBundle::GetSharedInstance()
                         .GetImageNamed(IDR_AURA_UBER_TRAY_GUEST_ICON)
                         .ToImageSkia(),
-                   gfx::Size(kTrayAvatarSize, kTrayAvatarSize));
+                   gfx::Size(kTrayItemSize, kTrayItemSize));
   } else {
-    SessionStateDelegate* delegate =
-        Shell::GetInstance()->session_state_delegate();
+    SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
     icon->SetImage(delegate->GetUserInfo(user_index)->GetImage(),
-                   gfx::Size(kTrayAvatarSize, kTrayAvatarSize));
+                   gfx::Size(kTrayItemSize, kTrayItemSize));
   }
   return icon;
 }

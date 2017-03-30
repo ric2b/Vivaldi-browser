@@ -13,9 +13,11 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -141,15 +143,20 @@ class PasswordStoreWinTest : public testing::Test {
   void TearDown() override {
     if (store_.get())
       store_->ShutdownOnUIThread();
-    wds_->ShutdownOnUIThread();
-    wdbs_->ShutdownDatabase();
-    wds_ = nullptr;
-    wdbs_ = nullptr;
-    base::WaitableEvent done(false, false);
+    if (wds_) {
+      wds_->ShutdownOnUIThread();
+      wds_ = nullptr;
+    }
+    if (wdbs_) {
+      wdbs_->ShutdownDatabase();
+      wdbs_ = nullptr;
+    }
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     BrowserThread::PostTask(BrowserThread::DB, FROM_HERE,
         base::Bind(&base::WaitableEvent::Signal, base::Unretained(&done)));
     done.Wait();
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
     base::MessageLoop::current()->Run();
     db_thread_.Stop();
@@ -208,7 +215,8 @@ TEST_F(PasswordStoreWinTest, DISABLED_ConvertIE7Login) {
 
   // The WDS schedules tasks to run on the DB thread so we schedule yet another
   // task to notify us that it's safe to carry on with the test.
-  WaitableEvent done(false, false);
+  WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                     base::WaitableEvent::InitialState::NOT_SIGNALED);
   BrowserThread::PostTask(BrowserThread::DB, FROM_HERE,
       base::Bind(&WaitableEvent::Signal, base::Unretained(&done)));
   done.Wait();
@@ -264,8 +272,7 @@ TEST_F(PasswordStoreWinTest, DISABLED_ConvertIE7Login) {
   base::MessageLoop::current()->Run();
 }
 
-// Crashy.  http://crbug.com/86558
-TEST_F(PasswordStoreWinTest, DISABLED_OutstandingWDSQueries) {
+TEST_F(PasswordStoreWinTest, OutstandingWDSQueries) {
   store_ = CreatePasswordStore();
   EXPECT_TRUE(store_->Init(syncer::SyncableService::StartSyncFlare()));
 
@@ -290,7 +297,10 @@ TEST_F(PasswordStoreWinTest, DISABLED_OutstandingWDSQueries) {
   // Release the PSW and the WDS before the query can return.
   store_->ShutdownOnUIThread();
   store_ = nullptr;
+  wds_->ShutdownOnUIThread();
   wds_ = nullptr;
+  wdbs_->ShutdownDatabase();
+  wdbs_ = nullptr;
 
   base::MessageLoop::current()->RunUntilIdle();
 }
@@ -305,7 +315,8 @@ TEST_F(PasswordStoreWinTest, DISABLED_MultipleWDSQueriesOnDifferentThreads) {
 
   // The WDS schedules tasks to run on the DB thread so we schedule yet another
   // task to notify us that it's safe to carry on with the test.
-  WaitableEvent done(false, false);
+  WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                     base::WaitableEvent::InitialState::NOT_SIGNALED);
   BrowserThread::PostTask(BrowserThread::DB, FROM_HERE,
       base::Bind(&WaitableEvent::Signal, base::Unretained(&done)));
   done.Wait();

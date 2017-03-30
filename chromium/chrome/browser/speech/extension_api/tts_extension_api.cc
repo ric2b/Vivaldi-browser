@@ -5,10 +5,13 @@
 #include "chrome/browser/speech/extension_api/tts_extension_api.h"
 
 #include <stddef.h>
+
+#include <memory>
 #include <string>
 #include <utility>
 
 #include "base/lazy_instance.h"
+#include "base/memory/ptr_util.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/speech/extension_api/tts_engine_extension_api.h"
@@ -308,8 +311,8 @@ bool TtsResumeFunction::RunSync() {
 }
 
 bool TtsIsSpeakingFunction::RunSync() {
-  SetResult(
-      new base::FundamentalValue(TtsController::GetInstance()->IsSpeaking()));
+  SetResult(base::MakeUnique<base::FundamentalValue>(
+      TtsController::GetInstance()->IsSpeaking()));
   return true;
 }
 
@@ -320,7 +323,8 @@ bool TtsGetVoicesFunction::RunSync() {
   std::unique_ptr<base::ListValue> result_voices(new base::ListValue());
   for (size_t i = 0; i < voices.size(); ++i) {
     const VoiceData& voice = voices[i];
-    base::DictionaryValue* result_voice = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> result_voice(
+        new base::DictionaryValue());
     result_voice->SetString(constants::kVoiceNameKey, voice.name);
     result_voice->SetBoolean(constants::kRemoteKey, voice.remote);
     if (!voice.lang.empty())
@@ -336,14 +340,14 @@ bool TtsGetVoicesFunction::RunSync() {
     for (std::set<TtsEventType>::iterator iter = voice.events.begin();
          iter != voice.events.end(); ++iter) {
       const char* event_name_constant = TtsEventTypeToString(*iter);
-      event_types->Append(new base::StringValue(event_name_constant));
+      event_types->AppendString(event_name_constant);
     }
     result_voice->Set(constants::kEventTypesKey, event_types);
 
-    result_voices->Append(result_voice);
+    result_voices->Append(std::move(result_voice));
   }
 
-  SetResult(result_voices.release());
+  SetResult(std::move(result_voices));
   return true;
 }
 

@@ -5,7 +5,6 @@
 #ifndef CC_IPC_CC_PARAM_TRAITS_MACROS_H_
 #define CC_IPC_CC_PARAM_TRAITS_MACROS_H_
 
-#include "cc/input/selection_bound_type.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/filter_operation.h"
@@ -36,7 +35,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(cc::DrawQuad::Material, cc::DrawQuad::MATERIAL_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(cc::FilterOperation::FilterType,
                           cc::FilterOperation::FILTER_TYPE_LAST)
 IPC_ENUM_TRAITS_MAX_VALUE(cc::ResourceFormat, cc::RESOURCE_FORMAT_MAX)
-IPC_ENUM_TRAITS_MAX_VALUE(cc::SelectionBoundType, cc::SELECTION_BOUND_TYPE_LAST)
 
 // TODO(fsamuel): This trait belongs with skia code.
 IPC_ENUM_TRAITS_MAX_VALUE(SkXfermode::Mode, SkXfermode::kLastMode)
@@ -46,10 +44,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(cc::YUVVideoDrawQuad::ColorSpace,
 IPC_STRUCT_TRAITS_BEGIN(cc::RenderPassId)
   IPC_STRUCT_TRAITS_MEMBER(layer_id)
   IPC_STRUCT_TRAITS_MEMBER(index)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(cc::SurfaceId)
-  IPC_STRUCT_TRAITS_MEMBER(id)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(cc::SurfaceSequence)
@@ -153,7 +147,6 @@ IPC_STRUCT_TRAITS_BEGIN(cc::TransferableResource)
   IPC_STRUCT_TRAITS_MEMBER(mailbox_holder)
   IPC_STRUCT_TRAITS_MEMBER(read_lock_fences_enabled)
   IPC_STRUCT_TRAITS_MEMBER(is_software)
-  IPC_STRUCT_TRAITS_MEMBER(gpu_memory_buffer_id)
   IPC_STRUCT_TRAITS_MEMBER(is_overlay_candidate)
 IPC_STRUCT_TRAITS_END()
 
@@ -164,14 +157,7 @@ IPC_STRUCT_TRAITS_BEGIN(cc::ReturnedResource)
   IPC_STRUCT_TRAITS_MEMBER(lost)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(cc::ViewportSelectionBound)
-  IPC_STRUCT_TRAITS_MEMBER(type)
-  IPC_STRUCT_TRAITS_MEMBER(edge_top)
-  IPC_STRUCT_TRAITS_MEMBER(edge_bottom)
-  IPC_STRUCT_TRAITS_MEMBER(visible)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(cc::ViewportSelection)
+IPC_STRUCT_TRAITS_BEGIN(cc::Selection<gfx::SelectionBound>)
   IPC_STRUCT_TRAITS_MEMBER(start)
   IPC_STRUCT_TRAITS_MEMBER(end)
   IPC_STRUCT_TRAITS_MEMBER(is_editable)
@@ -208,8 +194,6 @@ IPC_STRUCT_TRAITS_BEGIN(cc::CompositorFrameMetadata)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(cc::GLFrameData)
-  IPC_STRUCT_TRAITS_MEMBER(mailbox)
-  IPC_STRUCT_TRAITS_MEMBER(sync_token)
   IPC_STRUCT_TRAITS_MEMBER(size)
   IPC_STRUCT_TRAITS_MEMBER(sub_buffer_rect)
 IPC_STRUCT_TRAITS_END()

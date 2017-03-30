@@ -9,6 +9,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "build/build_config.h"
 #include "media/base/gmock_callback_support.h"
 #include "media/base/mock_filters.h"
@@ -49,7 +50,9 @@ class VideoDecoderSelectorTest : public ::testing::Test {
   };
 
   VideoDecoderSelectorTest()
-      : demuxer_stream_(
+      : media_log_(new MediaLog()),
+        traits_(media_log_),
+        demuxer_stream_(
             new StrictMock<MockDemuxerStream>(DemuxerStream::VIDEO)),
         decoder_1_(new StrictMock<MockVideoDecoder>()),
         decoder_2_(new StrictMock<MockVideoDecoder>()) {
@@ -59,9 +62,7 @@ class VideoDecoderSelectorTest : public ::testing::Test {
     // InitializeDecoderSelector().
   }
 
-  ~VideoDecoderSelectorTest() {
-    message_loop_.RunUntilIdle();
-  }
+  ~VideoDecoderSelectorTest() { base::RunLoop().RunUntilIdle(); }
 
   MOCK_METHOD2(OnDecoderSelected,
                void(VideoDecoder*, DecryptingDemuxerStream*));
@@ -104,19 +105,19 @@ class VideoDecoderSelectorTest : public ::testing::Test {
         all_decoders_.begin() + num_decoders, all_decoders_.end());
 
     decoder_selector_.reset(new VideoDecoderSelector(
-        message_loop_.task_runner(), std::move(all_decoders_), new MediaLog()));
+        message_loop_.task_runner(), std::move(all_decoders_), media_log_));
   }
 
   void SelectDecoder() {
     decoder_selector_->SelectDecoder(
-        demuxer_stream_.get(), cdm_context_.get(),
+        &traits_, demuxer_stream_.get(), cdm_context_.get(),
         base::Bind(&VideoDecoderSelectorTest::MockOnDecoderSelected,
                    base::Unretained(this)),
         base::Bind(&VideoDecoderSelectorTest::FrameReady,
                    base::Unretained(this)),
         base::Bind(&VideoDecoderSelectorTest::OnWaitingForDecryptionKey,
                    base::Unretained(this)));
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void SelectDecoderAndDestroy() {
@@ -124,7 +125,7 @@ class VideoDecoderSelectorTest : public ::testing::Test {
 
     EXPECT_CALL(*this, OnDecoderSelected(IsNull(), IsNull()));
     decoder_selector_.reset();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void FrameReady(const scoped_refptr<VideoFrame>& frame) {
@@ -134,6 +135,11 @@ class VideoDecoderSelectorTest : public ::testing::Test {
   void OnWaitingForDecryptionKey() {
     NOTREACHED();
   }
+
+  scoped_refptr<MediaLog> media_log_;
+
+  // Stream traits specific to video decoding.
+  DecoderStreamTraits<DemuxerStream::VIDEO> traits_;
 
   // Declare |decoder_selector_| after |demuxer_stream_| and |decryptor_| since
   // |demuxer_stream_| and |decryptor_| should outlive |decoder_selector_|.

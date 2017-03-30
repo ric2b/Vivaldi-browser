@@ -11,15 +11,19 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/precache/core/precache_switches.h"
 #include "components/precache/core/proto/precache.pb.h"
+#include "components/precache/core/proto/unfinished_work.pb.h"
 #include "net/base/completion_callback.h"
 #include "net/base/escape.h"
 #include "net/base/io_buffer.h"
@@ -119,6 +123,21 @@ bool ParseProtoFromFetchResponse(const net::URLFetcher& source,
   return true;
 }
 
+// Returns the resource selection bitset from the |manifest| for the given
+// |experiment_id|. By default all resource will be selected if the experiment
+// group is not found.
+uint64_t GetResourceBitset(const PrecacheManifest& manifest,
+                           uint32_t experiment_id) {
+  if (manifest.has_experiments()) {
+    const auto& resource_bitset_map =
+        manifest.experiments().resources_by_experiment_group();
+    const auto& resource_bitset_it = resource_bitset_map.find(experiment_id);
+    if (resource_bitset_it != resource_bitset_map.end())
+      return resource_bitset_it->second.bitset();
+  }
+  return ~0ULL;
+}
+
 // URLFetcherResponseWriter that ignores the response body, in order to avoid
 // the unnecessary memory usage. Use it rather than the default if you don't
 // care about parsing the response body. We use it below as a means to populate
@@ -140,14 +159,18 @@ class URLFetcherNullWriter : public net::URLFetcherResponseWriter {
   }
 };
 
-void AppendManifestURLIfNew(const std::string& prefix,
-                            const std::string& name,
-                            base::hash_set<std::string>* seen_manifest_urls,
-                            std::list<GURL>* unique_manifest_urls) {
+void AppendManifestURLIfValidAndNew(
+    const std::string& prefix,
+    const std::string& name,
+    base::hash_set<std::string>* seen_manifest_urls,
+    std::list<GURL>* unique_manifest_urls) {
   const std::string manifest_url = ConstructManifestURL(prefix, name);
   bool first_seen = seen_manifest_urls->insert(manifest_url).second;
-  if (first_seen)
-    unique_manifest_urls->push_back(GURL(manifest_url));
+  if (first_seen) {
+    GURL url(manifest_url);
+    if (url.is_valid())
+      unique_manifest_urls->push_back(url);
+  }
 }
 
 }  // namespace
@@ -256,22 +279,60 @@ void PrecacheFetcher::Fetcher::OnURLFetchComplete(
   callback_.Run(*this);
 }
 
+// static
+void PrecacheFetcher::RecordCompletionStatistics(
+    const PrecacheUnfinishedWork& unfinished_work,
+    size_t remaining_manifest_urls_to_fetch,
+    size_t remaining_resource_urls_to_fetch) {
+  // These may be unset in tests.
+  if (!unfinished_work.has_start_time())
+    return;
+  base::TimeDelta time_to_fetch =
+      base::Time::Now() -
+      base::Time::FromInternalValue(unfinished_work.start_time());
+  UMA_HISTOGRAM_CUSTOM_TIMES("Precache.Fetch.TimeToComplete", time_to_fetch,
+                             base::TimeDelta::FromSeconds(1),
+                             base::TimeDelta::FromHours(4), 50);
+
+  // Number of manifests for which we have downloaded all resources.
+  int manifests_completed =
+      unfinished_work.num_manifest_urls() - remaining_manifest_urls_to_fetch;
+
+  // If there are resource URLs left to fetch, the last manifest is not yet
+  // completed.
+  if (remaining_resource_urls_to_fetch > 0)
+    --manifests_completed;
+
+  DCHECK_GE(manifests_completed, 0);
+  int percent_completed = unfinished_work.num_manifest_urls() == 0
+                              ? 0
+                              : (static_cast<double>(manifests_completed) /
+                                  unfinished_work.num_manifest_urls() * 100);
+
+  UMA_HISTOGRAM_PERCENTAGE("Precache.Fetch.PercentCompleted",
+                           percent_completed);
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Precache.Fetch.ResponseBytes.Total",
+                                unfinished_work.total_bytes(),
+                                1, kMaxResponseBytes, 100);
+  UMA_HISTOGRAM_CUSTOM_COUNTS("Precache.Fetch.ResponseBytes.Network",
+                              unfinished_work.network_bytes(),
+                              1, kMaxResponseBytes,
+                              100);
+}
+
 PrecacheFetcher::PrecacheFetcher(
-    const std::vector<std::string>& starting_hosts,
     net::URLRequestContextGetter* request_context,
     const GURL& config_url,
     const std::string& manifest_url_prefix,
+    std::unique_ptr<PrecacheUnfinishedWork> unfinished_work,
+    uint32_t experiment_id,
     PrecacheFetcher::PrecacheDelegate* precache_delegate)
-    : starting_hosts_(starting_hosts),
-      request_context_(request_context),
+    : request_context_(request_context),
       config_url_(config_url),
       manifest_url_prefix_(manifest_url_prefix),
       precache_delegate_(precache_delegate),
-      config_(new PrecacheConfigurationSettings),
-      total_response_bytes_(0),
-      network_response_bytes_(0),
-      num_manifest_urls_to_fetch_(0),
-      pool_(kMaxParallelFetches) {
+      pool_(kMaxParallelFetches),
+      experiment_id_(experiment_id) {
   DCHECK(request_context_.get());  // Request context must be non-NULL.
   DCHECK(precache_delegate_);  // Precache delegate must be non-NULL.
 
@@ -279,45 +340,60 @@ PrecacheFetcher::PrecacheFetcher(
       << "Could not determine the precache config settings URL.";
   DCHECK_NE(std::string(), GetDefaultManifestURLPrefix())
       << "Could not determine the default precache manifest URL prefix.";
+  DCHECK(unfinished_work);
+
+  // Copy manifests and resources to member variables as a convenience.
+  // TODO(bengr): Consider accessing these directly from the proto.
+  for (const auto& manifest : unfinished_work->manifest()) {
+    if (manifest.has_url())
+      manifest_urls_to_fetch_.push_back(GURL(manifest.url()));
+  }
+  for (const auto& resource : unfinished_work->resource()) {
+    if (resource.has_url())
+      resource_urls_to_fetch_.push_back(GURL(resource.url()));
+  }
+  unfinished_work_ = std::move(unfinished_work);
 }
 
 PrecacheFetcher::~PrecacheFetcher() {
-  base::TimeDelta time_to_fetch = base::TimeTicks::Now() - start_time_;
-  UMA_HISTOGRAM_CUSTOM_TIMES("Precache.Fetch.TimeToComplete", time_to_fetch,
-                             base::TimeDelta::FromSeconds(1),
-                             base::TimeDelta::FromHours(4), 50);
+}
 
-  // Number of manifests for which we have downloaded all resources.
-  int manifests_completed =
-      num_manifest_urls_to_fetch_ - manifest_urls_to_fetch_.size();
+std::unique_ptr<PrecacheUnfinishedWork> PrecacheFetcher::CancelPrecaching() {
+  // This could get called multiple times, and it should be handled gracefully.
+  if (!unfinished_work_)
+    return nullptr;
 
-  // If there are resource URLs left to fetch, the last manifest is not yet
-  // completed.
-  if (!resource_urls_to_fetch_.empty())
-    --manifests_completed;
-
-  DCHECK_GE(manifests_completed, 0);
-  int percent_completed = num_manifest_urls_to_fetch_ == 0
-                              ? 0
-                              : (static_cast<double>(manifests_completed) /
-                                 num_manifest_urls_to_fetch_ * 100);
-  UMA_HISTOGRAM_PERCENTAGE("Precache.Fetch.PercentCompleted",
-                           percent_completed);
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Precache.Fetch.ResponseBytes.Total",
-                              total_response_bytes_, 1, kMaxResponseBytes, 100);
-  UMA_HISTOGRAM_CUSTOM_COUNTS("Precache.Fetch.ResponseBytes.Network",
-                              network_response_bytes_, 1, kMaxResponseBytes,
-                              100);
+  unfinished_work_->clear_manifest();
+  unfinished_work_->clear_resource();
+  for (const auto& manifest : manifest_urls_to_fetch_)
+    unfinished_work_->add_manifest()->set_url(manifest.spec());
+  for (const auto& resource : resource_urls_to_fetch_)
+    unfinished_work_->add_resource()->set_url(resource.spec());
+  for (const auto& it : pool_.elements()) {
+    const Fetcher* fetcher = it.first;
+    if (fetcher->is_resource_request())
+      unfinished_work_->add_resource()->set_url(fetcher->url().spec());
+    else if (fetcher->url() != config_url_)
+      unfinished_work_->add_manifest()->set_url(fetcher->url().spec());
+  }
+  manifest_urls_to_fetch_.clear();
+  resource_urls_to_fetch_.clear();
+  pool_.DeleteAll();
+  return std::move(unfinished_work_);
 }
 
 void PrecacheFetcher::Start() {
+  if (unfinished_work_->has_config_settings()) {
+    DCHECK(unfinished_work_->has_start_time());
+    DetermineManifests();
+    return;
+  }
+
   GURL config_url =
       config_url_.is_empty() ? GetDefaultConfigURL() : config_url_;
 
   DCHECK(config_url.is_valid()) << "Config URL not valid: "
                                 << config_url.possibly_invalid_spec();
-
-  start_time_ = base::TimeTicks::Now();
 
   // Fetch the precache configuration settings from the server.
   DCHECK(pool_.IsEmpty()) << "All parallel requests should be available";
@@ -330,10 +406,12 @@ void PrecacheFetcher::Start() {
 }
 
 void PrecacheFetcher::StartNextResourceFetch() {
+  DCHECK(unfinished_work_->has_config_settings());
   while (!resource_urls_to_fetch_.empty() && pool_.IsAvailable()) {
     const size_t max_bytes =
-        std::min(config_->max_bytes_per_resource(),
-                 config_->max_bytes_total() - total_response_bytes_);
+        std::min(unfinished_work_->config_settings().max_bytes_per_resource(),
+                 unfinished_work_->config_settings().max_bytes_total() -
+                     unfinished_work_->total_bytes());
     VLOG(3) << "Fetching " << resource_urls_to_fetch_.front();
     pool_.Add(base::WrapUnique(
         new Fetcher(request_context_.get(), resource_urls_to_fetch_.front(),
@@ -346,14 +424,11 @@ void PrecacheFetcher::StartNextResourceFetch() {
 }
 
 void PrecacheFetcher::StartNextManifestFetch() {
-  if (manifest_urls_to_fetch_.empty())
+  if (manifest_urls_to_fetch_.empty() || !pool_.IsAvailable())
     return;
 
   // We only fetch one manifest at a time to keep the size of
   // resource_urls_to_fetch_ as small as possible.
-  DCHECK(pool_.IsAvailable())
-      << "There are no available parallel requests to fetch the next manifest. "
-         "Did you forget to call Delete?";
   VLOG(3) << "Fetching " << manifest_urls_to_fetch_.front();
   pool_.Add(base::WrapUnique(new Fetcher(
       request_context_.get(), manifest_urls_to_fetch_.front(),
@@ -364,19 +439,40 @@ void PrecacheFetcher::StartNextManifestFetch() {
   manifest_urls_to_fetch_.pop_front();
 }
 
+void PrecacheFetcher::NotifyDone(
+    size_t remaining_manifest_urls_to_fetch,
+    size_t remaining_resource_urls_to_fetch) {
+  RecordCompletionStatistics(*unfinished_work_,
+                             remaining_manifest_urls_to_fetch,
+                             remaining_resource_urls_to_fetch);
+  precache_delegate_->OnDone();
+}
+
 void PrecacheFetcher::StartNextFetch() {
+  DCHECK(unfinished_work_->has_config_settings());
   // If over the precache total size cap, then stop prefetching.
-  if (total_response_bytes_ > config_->max_bytes_total()) {
-    precache_delegate_->OnDone();
+  if (unfinished_work_->total_bytes() >
+      unfinished_work_->config_settings().max_bytes_total()) {
+    size_t pending_manifests_in_pool = 0;
+    size_t pending_resources_in_pool = 0;
+    for (const auto& element_pair : pool_.elements()) {
+      const Fetcher* fetcher = element_pair.first;
+      if (fetcher->is_resource_request())
+        pending_resources_in_pool++;
+      else if (fetcher->url() != config_url_)
+        pending_manifests_in_pool++;
+    }
+    pool_.DeleteAll();
+    NotifyDone(manifest_urls_to_fetch_.size() + pending_manifests_in_pool,
+               resource_urls_to_fetch_.size() + pending_resources_in_pool);
     return;
   }
 
   StartNextResourceFetch();
   StartNextManifestFetch();
-
   if (pool_.IsEmpty()) {
     // There are no more URLs to fetch, so end the precache cycle.
-    precache_delegate_->OnDone();
+    NotifyDone(0, 0);
     // OnDone may have deleted this PrecacheFetcher, so don't do anything after
     // it is called.
   }
@@ -389,8 +485,16 @@ void PrecacheFetcher::OnConfigFetchComplete(const Fetcher& source) {
   } else {
     // Attempt to parse the config proto. On failure, continue on with the
     // default configuration.
-    ParseProtoFromFetchResponse(*source.network_url_fetcher(), config_.get());
+    ParseProtoFromFetchResponse(
+        *source.network_url_fetcher(),
+        unfinished_work_->mutable_config_settings());
+    pool_.Delete(source);
+    DetermineManifests();
+  }
+}
 
+void PrecacheFetcher::DetermineManifests() {
+  DCHECK(unfinished_work_->has_config_settings());
     std::string prefix = manifest_url_prefix_.empty()
                              ? GetDefaultManifestURLPrefix()
                              : manifest_url_prefix_;
@@ -403,28 +507,33 @@ void PrecacheFetcher::OnConfigFetchComplete(const Fetcher& source) {
 
     // Attempt to fetch manifests for starting hosts up to the maximum top sites
     // count. If a manifest does not exist for a particular starting host, then
-    // the fetch will fail, and that starting host will be ignored.
-    int64_t rank = 0;
-    for (const std::string& host : starting_hosts_) {
-      ++rank;
-      if (rank > config_->top_sites_count())
-        break;
-      AppendManifestURLIfNew(prefix, host, &seen_manifest_urls,
-                             &manifest_urls_to_fetch_);
+    // the fetch will fail, and that starting host will be ignored. Starting
+    // hosts are not added if this is a continuation from a previous precache
+    // session.
+    if (manifest_urls_to_fetch_.empty() &&
+        resource_urls_to_fetch_.empty()) {
+      int64_t rank = 0;
+      for (const auto& host : unfinished_work_->top_host()) {
+        ++rank;
+        if (rank > unfinished_work_->config_settings().top_sites_count())
+          break;
+        AppendManifestURLIfValidAndNew(prefix, host.hostname(),
+                                       &seen_manifest_urls,
+                                       &manifest_urls_to_fetch_);
+      }
+
+      for (const std::string& host
+          : unfinished_work_->config_settings().forced_site()) {
+        AppendManifestURLIfValidAndNew(prefix, host, &seen_manifest_urls,
+                                       &manifest_urls_to_fetch_);
+      }
     }
-
-    for (const std::string& host : config_->forced_site())
-      AppendManifestURLIfNew(prefix, host, &seen_manifest_urls,
-                             &manifest_urls_to_fetch_);
-
-    num_manifest_urls_to_fetch_ = manifest_urls_to_fetch_.size();
-  }
-  pool_.Delete(source);
-
-  StartNextFetch();
+    unfinished_work_->set_num_manifest_urls(manifest_urls_to_fetch_.size());
+    StartNextFetch();
 }
 
 void PrecacheFetcher::OnManifestFetchComplete(const Fetcher& source) {
+  DCHECK(unfinished_work_->has_config_settings());
   UpdateStats(source.response_bytes(), source.network_response_bytes());
   if (source.network_url_fetcher() == nullptr) {
     pool_.DeleteAll();  // Cancel any other ongoing request.
@@ -433,10 +542,16 @@ void PrecacheFetcher::OnManifestFetchComplete(const Fetcher& source) {
 
     if (ParseProtoFromFetchResponse(*source.network_url_fetcher(), &manifest)) {
       const int32_t len =
-          std::min(manifest.resource_size(), config_->top_resources_count());
+          std::min(manifest.resource_size(),
+                   unfinished_work_->config_settings().top_resources_count());
+      const uint64_t resource_bitset =
+          GetResourceBitset(manifest, experiment_id_);
       for (int i = 0; i < len; ++i) {
-        if (manifest.resource(i).has_url()) {
-          resource_urls_to_fetch_.push_back(GURL(manifest.resource(i).url()));
+        if (((0x1ULL << i) & resource_bitset) &&
+            manifest.resource(i).has_url()) {
+          GURL url(manifest.resource(i).url());
+          if (url.is_valid())
+            resource_urls_to_fetch_.push_back(url);
         }
       }
     }
@@ -456,8 +571,10 @@ void PrecacheFetcher::OnResourceFetchComplete(const Fetcher& source) {
 
 void PrecacheFetcher::UpdateStats(int64_t response_bytes,
                                   int64_t network_response_bytes) {
-  total_response_bytes_ += response_bytes;
-  network_response_bytes_ += network_response_bytes;
+  unfinished_work_->set_total_bytes(
+      unfinished_work_->total_bytes() + response_bytes);
+  unfinished_work_->set_network_bytes(
+      unfinished_work_->network_bytes() + network_response_bytes);
 }
 
 }  // namespace precache

@@ -857,7 +857,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
 
   while (SessionRestore::IsRestoring(profile1) ||
          SessionRestore::IsRestoring(profile2))
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
   // The startup URLs are ignored, and instead the last open sessions are
   // restored.
@@ -953,7 +953,7 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorTest,
          SessionRestore::IsRestoring(profile_home2) ||
          SessionRestore::IsRestoring(profile_last) ||
          SessionRestore::IsRestoring(profile_urls))
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
   Browser* new_browser = NULL;
   // The last open profile (the profile_home1 in this case) will always be
@@ -1548,8 +1548,8 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
           new base::FundamentalValue(SessionStartupPref::kPrefValueURLs)),
       nullptr);
   base::ListValue startup_urls;
-  startup_urls.Append(new base::StringValue(
-      embedded_test_server()->GetURL("/title1.html").spec()));
+  startup_urls.AppendString(
+      embedded_test_server()->GetURL("/title1.html").spec());
   policy_map_.Set(policy::key::kRestoreOnStartupURLs,
                   policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
                   policy::POLICY_SOURCE_CLOUD, startup_urls.CreateDeepCopy(),
@@ -1569,6 +1569,55 @@ IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
 
   // Verify that the URL specified through policy is shown and no sync promo has
   // been added.
+  TabStripModel* tab_strip = new_browser->tab_strip_model();
+  ASSERT_EQ(1, tab_strip->count());
+  EXPECT_EQ("title1.html",
+            tab_strip->GetWebContentsAt(0)->GetURL().ExtractFileName());
+}
+
+#if defined(GOOGLE_CHROME_BUILD) && defined(OS_MACOSX)
+// http://crbug.com/314819
+#define MAYBE_FirstRunTabsWithRestoreSession \
+    DISABLED_FirstRunTabsWithRestoreSession
+#else
+#define MAYBE_FirstRunTabsWithRestoreSession FirstRunTabsWithRestoreSession
+#endif
+IN_PROC_BROWSER_TEST_F(StartupBrowserCreatorFirstRunTest,
+                       MAYBE_FirstRunTabsWithRestoreSession) {
+  // Simulate the following master_preferences:
+  // {
+  //  "first_run_tabs" : [
+  //    "/title1.html"
+  //  ],
+  //  "session" : {
+  //    "restore_on_startup" : 1
+  //   },
+  //   "sync_promo" : {
+  //     "user_skipped" : true
+  //   }
+  // }
+  ASSERT_TRUE(embedded_test_server()->Start());
+  StartupBrowserCreator browser_creator;
+  browser_creator.AddFirstRunTab(
+      embedded_test_server()->GetURL("/title1.html"));
+  browser()->profile()->GetPrefs()->SetInteger(
+      prefs::kRestoreOnStartup, 1);
+  // We switch off the sign-in promo too because it's behavior varies between
+  // platforms too much.
+  browser()->profile()->GetPrefs()->SetBoolean(
+      prefs::kSignInPromoUserSkipped, true);
+
+  // Do a process-startup browser launch.
+  base::CommandLine dummy(base::CommandLine::NO_PROGRAM);
+  StartupBrowserCreatorImpl launch(base::FilePath(), dummy, &browser_creator,
+                                   chrome::startup::IS_FIRST_RUN);
+  ASSERT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(), true));
+
+  // This should have created a new browser window.
+  Browser* new_browser = FindOneOtherBrowser(browser());
+  ASSERT_TRUE(new_browser);
+
+  // Verify that the first-run tab is shown and no other pages are present.
   TabStripModel* tab_strip = new_browser->tab_strip_model();
   ASSERT_EQ(1, tab_strip->count());
   EXPECT_EQ("title1.html",

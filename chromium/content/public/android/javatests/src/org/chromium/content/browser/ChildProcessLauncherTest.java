@@ -12,6 +12,7 @@ import android.test.suitebuilder.annotation.MediumTest;
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
+import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
@@ -27,29 +28,32 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
     // channels that are not being set up in this test.
     private static final String[] sProcessWaitArguments = {
         "_", "--" + BaseSwitches.RENDERER_WAIT_FOR_JAVA_DEBUGGER };
+    private static final String EXTERNAL_APK_PACKAGE_NAME = "org.chromium.external.apk";
+    private static final String DEFAULT_SANDBOXED_PROCESS_SERVICE =
+            "org.chromium.content.app.SandboxedProcessService";
 
     /**
      *  Tests cleanup for a connection that fails to connect in the first place.
      */
     @MediumTest
     @Feature({"ProcessManagement"})
+    @CommandLineFlags.Add(ChildProcessLauncher.SWITCH_NUM_SANDBOXED_SERVICES_FOR_TESTING + "=4")
     public void testServiceFailedToBind() throws InterruptedException, RemoteException {
-        final Context appContext = getInstrumentation().getTargetContext();
-        assertEquals(0, ChildProcessLauncher.allocatedConnectionsCountForTesting(appContext));
+        assertEquals(0, allocatedChromeSandboxedConnectionsCount());
         assertEquals(0, ChildProcessLauncher.connectedServicesCountForTesting());
 
         // Try to allocate a connection to service class in incorrect package. We can do that by
         // using the instrumentation context (getContext()) instead of the app context
         // (getTargetContext()).
         Context context = getInstrumentation().getContext();
-        ChildProcessLauncher.allocateBoundConnectionForTesting(context);
+        ChildProcessLauncher.allocateBoundConnectionForTesting(
+                context, getDefaultChildProcessCreationParams(context.getPackageName()));
 
         // Verify that the connection is not considered as allocated.
         CriteriaHelper.pollInstrumentationThread(Criteria.equals(0, new Callable<Integer>() {
             @Override
             public Integer call() {
-                return ChildProcessLauncher.allocatedConnectionsCountForTesting(
-                        appContext);
+                return allocatedChromeSandboxedConnectionsCount();
             }
         }));
 
@@ -67,13 +71,12 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
     @MediumTest
     @Feature({"ProcessManagement"})
     public void testServiceCrashedBeforeSetup() throws InterruptedException, RemoteException {
-        final Context appContext = getInstrumentation().getTargetContext();
-        assertEquals(0, ChildProcessLauncher.allocatedConnectionsCountForTesting(appContext));
+        assertEquals(0, allocatedChromeSandboxedConnectionsCount());
         assertEquals(0, ChildProcessLauncher.connectedServicesCountForTesting());
 
         // Start and connect to a new service.
         final ChildProcessConnectionImpl connection = startConnection();
-        assertEquals(1, ChildProcessLauncher.allocatedConnectionsCountForTesting(appContext));
+        assertEquals(1, allocatedChromeSandboxedConnectionsCount());
 
         // Verify that the service is not yet set up.
         assertEquals(0, connection.getPid());
@@ -86,8 +89,7 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
         CriteriaHelper.pollInstrumentationThread(Criteria.equals(0, new Callable<Integer>() {
             @Override
             public Integer call() {
-                return ChildProcessLauncher.allocatedConnectionsCountForTesting(
-                        appContext);
+                return allocatedChromeSandboxedConnectionsCount();
             }
         }));
 
@@ -105,12 +107,11 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
     @MediumTest
     @Feature({"ProcessManagement"})
     public void testServiceCrashedAfterSetup() throws InterruptedException, RemoteException {
-        final Context appContext = getInstrumentation().getTargetContext();
-        assertEquals(0, ChildProcessLauncher.allocatedConnectionsCountForTesting(appContext));
+        assertEquals(0, allocatedChromeSandboxedConnectionsCount());
 
         // Start and connect to a new service.
         final ChildProcessConnectionImpl connection = startConnection();
-        assertEquals(1, ChildProcessLauncher.allocatedConnectionsCountForTesting(appContext));
+        assertEquals(1, allocatedChromeSandboxedConnectionsCount());
 
         // Initiate the connection setup.
         triggerConnectionSetup(connection);
@@ -138,8 +139,7 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
         CriteriaHelper.pollInstrumentationThread(Criteria.equals(0, new Callable<Integer>() {
             @Override
             public Integer call() {
-                return ChildProcessLauncher.allocatedConnectionsCountForTesting(
-                        appContext);
+                return allocatedChromeSandboxedConnectionsCount();
             }
         }));
 
@@ -161,16 +161,20 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
     @Feature({"ProcessManagement"})
     public void testPendingSpawnQueue() throws InterruptedException, RemoteException {
         final Context appContext = getInstrumentation().getTargetContext();
-        assertEquals(0, ChildProcessLauncher.allocatedConnectionsCountForTesting(appContext));
+        assertEquals(0, allocatedChromeSandboxedConnectionsCount());
 
         // Start and connect to a new service.
         final ChildProcessConnectionImpl connection = startConnection();
-        assertEquals(1, ChildProcessLauncher.allocatedConnectionsCountForTesting(appContext));
+        assertEquals(1, allocatedChromeSandboxedConnectionsCount());
 
         // Queue up a new spawn request. There is no way to kill the pending connection, leak it
         // until the browser restart.
-        ChildProcessLauncher.enqueuePendingSpawnForTesting(appContext, sProcessWaitArguments);
-        assertEquals(1, ChildProcessLauncher.pendingSpawnsCountForTesting());
+        final String packageName = appContext.getPackageName();
+        final boolean inSandbox = true;
+        ChildProcessLauncher.enqueuePendingSpawnForTesting(appContext, sProcessWaitArguments,
+                getDefaultChildProcessCreationParams(packageName), inSandbox);
+        assertEquals(1, ChildProcessLauncher.pendingSpawnsCountForTesting(appContext, packageName,
+                inSandbox));
 
         // Initiate the connection setup.
         triggerConnectionSetup(connection);
@@ -199,7 +203,8 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
         CriteriaHelper.pollInstrumentationThread(Criteria.equals(0, new Callable<Integer>() {
             @Override
             public Integer call() {
-                return ChildProcessLauncher.pendingSpawnsCountForTesting();
+                return ChildProcessLauncher.pendingSpawnsCountForTesting(appContext, packageName,
+                        inSandbox);
             }
         }));
 
@@ -207,8 +212,7 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
                 Criteria.equals(1, new Callable<Integer>() {
                     @Override
                     public Integer call() {
-                        return ChildProcessLauncher.allocatedConnectionsCountForTesting(
-                                appContext);
+                        return allocatedChromeSandboxedConnectionsCount();
                     }
                 }));
 
@@ -221,11 +225,76 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
         }));
     }
 
+    /**
+     * Tests service number of connections for external APKs and regular tabs are assigned properly,
+     * i.e. from different ChildConnectionAllocators.
+     */
+    @MediumTest
+    @Feature({"ProcessManagement"})
+    @CommandLineFlags.Add({ChildProcessLauncher.SWITCH_NUM_SANDBOXED_SERVICES_FOR_TESTING + "=4",
+            ChildProcessLauncher.SWITCH_SANDBOXED_SERVICES_NAME_FOR_TESTING + "="
+            + DEFAULT_SANDBOXED_PROCESS_SERVICE})
+    public void testServiceNumberAllocation() throws InterruptedException {
+        Context appContext = getInstrumentation().getTargetContext();
+        assertEquals(0, ChildProcessLauncher.allocatedSandboxedConnectionsCountForTesting(
+                                appContext, EXTERNAL_APK_PACKAGE_NAME));
+        assertEquals(0, allocatedChromeSandboxedConnectionsCount());
+
+        // Start and connect to a new service of an external APK.
+        ChildProcessConnectionImpl externalApkConnection =
+                allocateConnection(EXTERNAL_APK_PACKAGE_NAME);
+        // Start and connect to a new service for a regular tab.
+        ChildProcessConnectionImpl tabConnection = allocateConnection(appContext.getPackageName());
+
+        // Verify that one connection is allocated for an external APK and a regular tab
+        // respectively.
+        assertEquals(1, ChildProcessLauncher.allocatedSandboxedConnectionsCountForTesting(
+                                appContext, EXTERNAL_APK_PACKAGE_NAME));
+        assertEquals(1, allocatedChromeSandboxedConnectionsCount());
+
+        // Verify that connections allocated for an external APK and the regular tab are from
+        // different ChildConnectionAllocators, since both ChildConnectionAllocators start
+        // allocating connections from number 0.
+        assertEquals(0, externalApkConnection.getServiceNumber());
+        assertEquals(0, tabConnection.getServiceNumber());
+    }
+
+    /**
+     * Tests that after reaching the maximum allowed connections for an external APK, we can't
+     * allocate a new connection to the APK, but we can still allocate a connection for a regular
+     * tab.
+     */
+    @MediumTest
+    @Feature({"ProcessManagement"})
+    @CommandLineFlags.Add({ChildProcessLauncher.SWITCH_NUM_SANDBOXED_SERVICES_FOR_TESTING + "=1",
+            ChildProcessLauncher.SWITCH_SANDBOXED_SERVICES_NAME_FOR_TESTING + "="
+            + DEFAULT_SANDBOXED_PROCESS_SERVICE})
+    public void testExceedMaximumConnectionNumber() throws InterruptedException, RemoteException {
+        Context appContext = getInstrumentation().getTargetContext();
+        assertEquals(0, ChildProcessLauncher.allocatedSandboxedConnectionsCountForTesting(
+                                appContext, EXTERNAL_APK_PACKAGE_NAME));
+
+        // Setup a connection for an external APK to reach the maximum allowed connection number.
+        ChildProcessConnectionImpl externalApkConnection =
+                allocateConnection(EXTERNAL_APK_PACKAGE_NAME);
+        assertNotNull(externalApkConnection);
+
+        // Verify that there isn't any connection available for the external APK.
+        ChildProcessConnectionImpl exceedNumberExternalApkConnection =
+                allocateConnection(EXTERNAL_APK_PACKAGE_NAME);
+        assertNull(exceedNumberExternalApkConnection);
+
+        // Verify that we can still allocate connection for a regular tab.
+        ChildProcessConnectionImpl tabConnection = allocateConnection(appContext.getPackageName());
+        assertNotNull(tabConnection);
+    }
+
     private ChildProcessConnectionImpl startConnection() throws InterruptedException {
         // Allocate a new connection.
         Context context = getInstrumentation().getTargetContext();
-        final ChildProcessConnectionImpl connection = (ChildProcessConnectionImpl)
-                ChildProcessLauncher.allocateBoundConnectionForTesting(context);
+        final ChildProcessConnectionImpl connection =
+                (ChildProcessConnectionImpl) ChildProcessLauncher.allocateBoundConnectionForTesting(
+                        context, getDefaultChildProcessCreationParams(context.getPackageName()));
 
         // Wait for the service to connect.
         CriteriaHelper.pollInstrumentationThread(
@@ -236,6 +305,32 @@ public class ChildProcessLauncherTest extends InstrumentationTestCase {
                     }
                 });
         return connection;
+    }
+
+    /**
+     * Returns a new connection if it is allocated. Note this function only allocates a connection
+     * but doesn't really start the connection to bind a service. It is for testing whether the
+     * connection is allocated properly for different application packages.
+     */
+    private ChildProcessConnectionImpl allocateConnection(String packageName) {
+        // Allocate a new connection.
+        Context context = getInstrumentation().getTargetContext();
+        return (ChildProcessConnectionImpl) ChildProcessLauncher.allocateConnectionForTesting(
+                        context, getDefaultChildProcessCreationParams(packageName));
+    }
+
+    /**
+     * Returns the number of Chrome's sandboxed connections.
+     */
+    private int allocatedChromeSandboxedConnectionsCount() {
+        Context context = getInstrumentation().getTargetContext();
+        return ChildProcessLauncher.allocatedSandboxedConnectionsCountForTesting(
+                context, context.getPackageName());
+    }
+
+    private ChildProcessCreationParams getDefaultChildProcessCreationParams(String packageName) {
+        return new ChildProcessCreationParams(packageName, 0,
+                LibraryProcessType.PROCESS_CHILD);
     }
 
     private void triggerConnectionSetup(ChildProcessConnectionImpl connection) {

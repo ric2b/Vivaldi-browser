@@ -1047,7 +1047,9 @@ login.createScreen('GaiaSigninScreen', 'gaia-signin', function() {
       this.classList.toggle('whitelist-error', show);
       this.loading = !show;
 
-      if (!show)
+      if (show)
+        $('gaia-whitelist-error').submitButton.focus();
+      else
         Oobe.showSigninUI();
 
       this.updateControlsState();

@@ -9,30 +9,22 @@
 <translation id="1064422015032085147">Máy chủ lưu trữ trang web có thể bị quá tải hoặc đang được bảo trì.
     Để tránh tạo quá nhiều lưu lượng và khiến tình hình tồi tệ hơn,
     tạm thời không cho phép gửi yêu cầu tới URL này</translation>
-<translation id="1066332784716773939">Chẩn đoán lỗi...</translation>
 <translation id="106701514854093668">Dấu trang máy tính</translation>
 <translation id="1080116354587839789">Vừa với chiều rộng</translation>
-<translation id="1090046120949329821">Đã nhận được nhiều tiêu đề Nội dung-Bố trí khác nhau.  Điều này không được phép nhằm
-    bảo vệ chống lại các cuộc tấn công phân nhỏ phản hồi HTTP.</translation>
-<translation id="1091911885099639251">Đang xác minh thẻ</translation>
 <translation id="1103523840287552314">Luôn dịch <ph name="LANGUAGE" /></translation>
 <translation id="1107591249535594099">Nếu được chọn, Chrome sẽ lưu trữ bản sao thẻ của bạn trên thiết bị này để điền biểu mẫu nhanh hơn.</translation>
 <translation id="1113869188872983271">&amp;Hoàn tác sắp xếp lại</translation>
 <translation id="112840717907525620">Bộ nhớ cache chính sách OK</translation>
 <translation id="113188000913989374"><ph name="SITE" /> cho biết:</translation>
 <translation id="1132774398110320017">Cài đặt tự động điền trên Chrome...</translation>
-<translation id="113770840981343808">Nhập CVC gồm 4 chữ số ở mặt trước thẻ của bạn để xác minh</translation>
-<translation id="1146673768181266552">ID sự cố <ph name="CRASH_ID" /> (<ph name="CRASH_LOCAL_ID" />)</translation>
 <translation id="1150979032973867961">Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này không được hệ điều hành máy tính của bạn tin cậy. Điều này có thể do định cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.</translation>
 <translation id="1152921474424827756">Truy cập <ph name="BEGIN_LINK" />bản sao được lưu trong bộ nhớ cache<ph name="END_LINK" /> của <ph name="URL" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> đã bất ngờ đóng kết nối.</translation>
 <translation id="1161325031994447685">Kết nối lại với Wi-Fi</translation>
 <translation id="1175364870820465910">&amp;In...</translation>
 <translation id="1181037720776840403">Xóa</translation>
-<translation id="1195447618553298278">Lỗi chưa biết.</translation>
 <translation id="1201402288615127009">Tiếp theo</translation>
 <translation id="1201895884277373915">Thêm từ trang web này</translation>
-<translation id="1202290638211552064">Cổng hoặc máy chủ proxy đã hết thời gian khi đợi phản hồi từ máy chủ luồng trên.</translation>
 <translation id="121201262018556460">Bạn đã cố truy cập vào <ph name="DOMAIN" /> nhưng máy chủ xuất trình chứng chỉ chứa khóa yếu. Kẻ tấn công có thể đã phá khóa cá nhân và máy chủ đó có thể không phải là máy chủ bạn mong đợi (bạn có thể đang giao tiếp với một kẻ tấn công).</translation>
 <translation id="1219129156119358924">Bảo mật hệ thống</translation>
 <translation id="1227224963052638717">Chính sách không xác định.</translation>
@@ -40,6 +32,7 @@
 <translation id="1228893227497259893">Số nhận dạng tổ chức không đúng</translation>
 <translation id="1232569758102978740">Không tên</translation>
 <translation id="1254117744268754948">Chọn thư mục</translation>
+<translation id="1264126396475825575">Báo cáo sự cố được ghi lại vào <ph name="CRASH_TIME" /> (nhưng chưa tải lên hoặc đã bị bỏ qua)</translation>
 <translation id="1285320974508926690">Không bao giờ dịch trang web này</translation>
 <translation id="129553762522093515">Các tab đã đóng gần đây</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Thử xóa các cookie của bạn<ph name="END_LINK" /></translation>
@@ -53,7 +46,6 @@
 <translation id="1426410128494586442">Có</translation>
 <translation id="1430915738399379752">In</translation>
 <translation id="1442912890475371290">Đã chặn nỗ lực <ph name="BEGIN_LINK" /> truy cập trang trên <ph name="DOMAIN" /><ph name="END_LINK" />.</translation>
-<translation id="1455235771979731432">Đã xảy ra sự cố khi xác minh thẻ của bạn. Hãy kiểm tra kết nối Internet của bạn và thử lại.</translation>
 <translation id="1506687042165942984">Hiển thị bản sao đã lưu (nghĩa là đã lỗi thời) của trang này.</translation>
 <translation id="1519264250979466059">Ngày tạo</translation>
 <translation id="1549470594296187301">Bạn phải bật JavaScript để sử dụng tính năng này.</translation>
@@ -71,18 +63,21 @@
 <translation id="1655462015569774233">{1,plural, =1{Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này đã hết hạn hôm qua. Điều này có thể do cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn. Đồng hồ máy tính của bạn hiện được đặt là <ph name="CURRENT_DATE" />. Ngày này có đúng không? Nếu không đúng, bạn phải sửa lại đồng hồ của hệ thống rồi làm mới trang này.}other{Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này đã hết hạn cách đây # ngày. Điều này có thể do cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn. Đồng hồ máy tính của bạn hiện được đặt là <ph name="CURRENT_DATE" />. Ngày này có đúng không? Nếu không đúng, bạn phải sửa lại đồng hồ của hệ thống rồi làm mới trang này.}}</translation>
 <translation id="1676269943528358898"><ph name="SITE" /> thường sử dụng mã hóa để bảo vệ thông tin của bạn. Khi Google Chrome tìm cách kết nối với <ph name="SITE" /> tại thời điểm này, trang web đã gửi lại thông tin đăng nhập không chính xác và bất thường. Điều này có thể xảy ra khi kẻ tấn công đang cố gắng giả mạo là <ph name="SITE" /> hoặc màn hình đăng nhập Wi-Fi đã làm gián đoạn kết nối. Thông tin của bạn vẫn an toàn do Google Chrome đã ngừng kết nối trước khi bất kỳ dữ liệu nào được trao đổi.</translation>
 <translation id="168841957122794586">Chứng chỉ máy chủ chứa khóa mật mã yếu.</translation>
+<translation id="1701955595840307032">Tải nội dung được đề xuất</translation>
 <translation id="1706954506755087368">{1,plural, =1{Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này được đề từ ngày mai. Điều này có thể do cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.}other{Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này được đề # ngày trong tương lai. Điều này có thể do cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.}}</translation>
 <translation id="1710259589646384581">OS</translation>
 <translation id="1734864079702812349">Amex</translation>
 <translation id="1734878702283171397">Thử liên hệ với quản trị viên hệ thống.</translation>
 <translation id="17513872634828108">Tab đang mở</translation>
 <translation id="1753706481035618306">Số trang</translation>
+<translation id="1761412452051366565">Để nhận nội dung được cá nhân hóa do Google đề xuất, hãy bật đồng bộ hóa.</translation>
 <translation id="1763864636252898013">Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này không được hệ điều hành thiết bị của bạn tin cậy. Điều này có thể do định cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Thử chạy Chẩn đoán mạng của Windows<ph name="END_LINK" />.</translation>
 <translation id="1783075131180517613">Vui lòng cập nhật cụm mật khẩu đồng bộ hóa của bạn.</translation>
 <translation id="1791429645902722292">Google Smart Lock</translation>
 <translation id="1821930232296380041">Yêu cầu hoặc tham số yêu cầu không hợp lệ</translation>
+<translation id="1838667051080421715">Bạn đang xem nguồn của trang web.</translation>
 <translation id="1871208020102129563">Proxy được đặt để sử dụng máy chủ proxy cố định chứ không phải URL tập lệnh .pac.</translation>
-<translation id="1871625979288021266">Đã chặn cổng không an toàn</translation>
 <translation id="1883255238294161206">Thu gọn danh sách</translation>
 <translation id="1898423065542865115">Lọc</translation>
 <translation id="1911837502049945214"><ph name="HOST_NAME" /> không chấp nhận chứng chỉ đăng nhập của bạn hoặc chứng chỉ đăng nhập của bạn có thể đã hết hạn.</translation>
@@ -90,7 +85,6 @@
 <translation id="1962204205936693436">Dấu trang của <ph name="DOMAIN" /></translation>
 <translation id="1973335181906896915">Lỗi nối tiếp hóa</translation>
 <translation id="1974060860693918893">Nâng cao</translation>
-<translation id="201192063813189384">Lỗi đọc dữ liệu từ bộ nhớ cache.</translation>
 <translation id="2025186561304664664">Proxy được đặt thành định cấu hình tự động.</translation>
 <translation id="2030481566774242610">Ý của bạn là <ph name="LINK" />?</translation>
 <translation id="2031925387125903299">Bạn thấy thông báo này vì cha mẹ bạn cần phải phê duyệt các trang web mới vào lần truy cập đầu tiên của bạn.</translation>
@@ -99,20 +93,16 @@
 <translation id="2065985942032347596">Yêu cầu Xác thực</translation>
 <translation id="2079545284768500474">Hoàn tác</translation>
 <translation id="20817612488360358">Cài đặt proxy hệ thống được đặt để sử dụng nhưng cấu hình proxy rõ ràng cũng được chỉ định.</translation>
+<translation id="2086652334978798447">Để nhận nội dung được cá nhân hóa do Google đề xuất, hãy đăng nhập vào Chrome.</translation>
 <translation id="2089090684895656482">Bớt</translation>
 <translation id="2094505752054353250">Miền không khớp</translation>
 <translation id="2096368010154057602">Khu hành chính</translation>
 <translation id="2113977810652731515">Thẻ</translation>
 <translation id="2114841414352855701">Bỏ qua vì đã bị <ph name="POLICY_NAME" /> ghi đè.</translation>
-<translation id="2122434088511736194">Tìm kiếm trên máy tính để bàn sử dụng công cụ tìm kiếm mặc định của bạn (<ph name="DEFAULT_SEARCH_ENGINE_NAME" />).</translation>
 <translation id="2128531968068887769">Native Client</translation>
 <translation id="213826338245044447">Dấu trang di động</translation>
 <translation id="2148716181193084225">Hôm nay</translation>
 <translation id="2149973817440762519">Chỉnh sửa dấu trang</translation>
-<translation id="2153530520610387456">Chuyển tới
-      <ph name="BEGIN_BOLD" />
-      Start &gt; Control Panel &gt; Network and Internet &gt; Network and Sharing Center &gt; Troubleshoot Problems (ở dưới cùng) &gt; Internet Connections.
-      <ph name="END_BOLD" /></translation>
 <translation id="2166049586286450108">Quyền truy cập quản trị đầy đủ</translation>
 <translation id="2166378884831602661">Trang web này không thể cung cấp kết nối an toàn</translation>
 <translation id="2171101176734966184">Bạn đã cố truy cập vào <ph name="DOMAIN" /> nhưng máy chủ xuất trình một chứng chỉ được ký bằng một thuật toán chữ ký yếu. Điều này có nghĩa là giấy ủy nhiệm bảo mật mà máy chủ xuất trình có thể đã bị giả mạo và máy chủ đó có thể không phải là máy chủ mà bạn mong đợi (bạn có thể đang giao tiếp với một kẻ tấn công).</translation>
@@ -123,8 +113,6 @@
 <translation id="2230458221926704099">Sửa kết nối bằng <ph name="BEGIN_LINK" />ứng dụng chẩn đoán<ph name="END_LINK" /></translation>
 <translation id="225207911366869382">Giá trị này không được dùng cho chính sách này nữa.</translation>
 <translation id="2262243747453050782">Lỗi HTTP</translation>
-<translation id="2279770628980885996">Đã xảy ra điều kiện không mong đợi trong khi máy chủ đang cố gắng hoàn thành yêu cầu.</translation>
-<translation id="2282186295770469712">Quản lý cài đặt tìm kiếm</translation>
 <translation id="2282872951544483773">Thử nghiệm không khả dụng</translation>
 <translation id="2292556288342944218">Quyền truy cập Internet của bạn bị chặn</translation>
 <translation id="229702904922032456">Chứng chỉ sơ cấp hoặc trung cấp đã hết hạn.</translation>
@@ -132,8 +120,8 @@
 <translation id="2317259163369394535"><ph name="DOMAIN" /> yêu cầu tên người dùng và mật khẩu.</translation>
 <translation id="2328300916057834155">Đã bỏ qua dấu trang không hợp lệ tại chỉ mục <ph name="ENTRY_INDEX" /></translation>
 <translation id="2354001756790975382">Dấu trang khác</translation>
-<translation id="2357783041215512127">Thanh toán bằng <ph name="CREDIT_CARD" /></translation>
 <translation id="2359808026110333948">Tiếp tục</translation>
+<translation id="2365563543831475020">Báo cáo sự cố được ghi lại vào <ph name="CRASH_TIME" /> chưa được tải lên</translation>
 <translation id="2367567093518048410">Mức độ</translation>
 <translation id="237718015863234333">Không có giao diện người dùng thay thế nào</translation>
 <translation id="2384307209577226199">Đặt mặc định trong môi trường doanh nghiệp</translation>
@@ -141,9 +129,9 @@
 <translation id="2386255080630008482">Chứng chỉ của máy chủ đã bị thu hồi.</translation>
 <translation id="2392959068659972793">Hiển thị chính sách không có giá trị được đặt</translation>
 <translation id="2396249848217231973">&amp;Hoàn tác xóa</translation>
-<translation id="2400837204278978822">Loại tệp không xác định.</translation>
 <translation id="2413528052993050574">Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này có thể đã bị thu hồi. Điều này có thể do định cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.</translation>
 <translation id="2455981314101692989">Trang web này đã vô hiệu hóa tính năng tự động điền cho biểu mẫu này.</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Chạy Chẩn đoán mạng<ph name="END_LINK" /></translation>
 <translation id="2479410451996844060">URL tìm kiếm hợp lệ.</translation>
 <translation id="2491120439723279231">Chứng chỉ của máy chủ có lỗi.</translation>
 <translation id="2495083838625180221">Trình phân tích cú pháp JSON</translation>
@@ -165,11 +153,13 @@
 <translation id="2674170444375937751">Bạn có chắc chắn muốn xóa những trang này khỏi lịch sử duyệt web của mình không?</translation>
 <translation id="2677748264148917807">Rời khỏi</translation>
 <translation id="2704283930420550640">Giá trị không khớp với định dạng.</translation>
+<translation id="2704951214193499422">Chromium không thể xác nhận thẻ của bạn tại thời điểm này. Vui lòng thử lại sau.</translation>
 <translation id="2705137772291741111">Không thể đọc được bản sao đã lưu (đã lưu vào bộ nhớ cache) của trang web này.</translation>
 <translation id="2709516037105925701">Tự động điền</translation>
 <translation id="2712173769900027643">Xin phép</translation>
 <translation id="2721148159707890343">Yêu cầu đã thành công</translation>
 <translation id="2728127805433021124">Chứng chỉ của máy chủ đã được ký bằng thuật toán chữ ký yếu.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Chạy Chẩn đoán kết nối<ph name="END_LINK" /></translation>
 <translation id="2742870351467570537">Xóa các mục đã chọn</translation>
 <translation id="277499241957683684">Thiếu hồ sơ thiết bị</translation>
 <translation id="2778107779445548489">Bạn thấy thông báo này vì cha mẹ bạn đã chặn trang web này.</translation>
@@ -179,40 +169,32 @@
 <translation id="2835170189407361413">Xóa biểu mẫu</translation>
 <translation id="2837049386027881519">Phải thử lại kết nối bằng phiên bản giao thức TLS hoặc SSL cũ hơn. Điều này thường có nghĩa là máy chủ đang sử dụng phần mềm rất cũ và có thể gặp các vấn đề bảo mật khác.</translation>
 <translation id="284702764277384724">Có vẻ như chứng chỉ máy chủ tại <ph name="HOST_NAME" /> là giả mạo.</translation>
-<translation id="2855922900409897335">Xác minh <ph name="CREDIT_CARD" /> của bạn</translation>
 <translation id="2889159643044928134">Không tải lại</translation>
 <translation id="2896499918916051536">Plugin này không được hỗ trợ.</translation>
-<translation id="2897655920961181107">Cổng đã yêu cầu không an toàn và đã bị chặn.</translation>
 <translation id="2909946352844186028">Đã phát hiện thấy thay đổi mạng.</translation>
 <translation id="2915500479781995473">Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này đã hết hạn. Điều này có thể do định cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn. Đồng hồ trên máy tính của bạn hiện được đặt là <ph name="CURRENT_TIME" />. Giờ này có đúng không? Nếu không đúng, bạn phải sửa lại giờ hệ thống rồi làm mới trang này.</translation>
 <translation id="2922350208395188000">Không thể kiểm tra chứng chỉ của máy chủ.</translation>
 <translation id="2941952326391522266">Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này là từ <ph name="DOMAIN2" />. Điều này có thể do định cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.</translation>
 <translation id="2948083400971632585">Bạn có thể tắt mọi proxy được định cấu hình cho kết nối từ trang cài đặt.</translation>
-<translation id="2950186680359523359">Máy chủ đã đóng kết nối mà không gửi bất kỳ dữ liệu nào.</translation>
 <translation id="2955913368246107853">Đóng thanh tìm</translation>
-<translation id="2957518517523241247">Chuyển tới
-      <ph name="BEGIN_BOLD" />
-      Start &gt; Control Panel &gt; Network Connections &gt; New Connection Wizard
-      <ph name="END_BOLD" />
-      để kiểm tra kết nối của bạn.</translation>
 <translation id="2958431318199492670">Cấu hình mạng không tuân thủ tiêu chuẩn ONC. Các bộ phận của cấu hình có thể không được nhập.</translation>
 <translation id="2969319727213777354">Để thiết lập kết nối an toàn, bạn cần đặt thời gian đúng cho đồng hồ. Nguyên nhân là do chứng chỉ mà các trang web dùng để tự nhận dạng chỉ có hiệu lực trong khoảng thời gian cụ thể. Vì đồng hồ trên thiết bị của bạn không đúng nên Chrome không thể xác minh các chứng chỉ này.</translation>
 <translation id="2972581237482394796">&amp;Làm lại</translation>
 <translation id="2985306909656435243">Nếu được bật, Chromium sẽ lưu trữ bản sao thẻ của bạn trên thiết bị này để điền vào biểu mẫu nhanh hơn.</translation>
-<translation id="2989984781570875765">Nhập ngày hết hạn và CVC gồm 3 chữ số ở mặt sau <ph name="CREDIT_CARD" /> của bạn</translation>
 <translation id="2991174974383378012">Chia sẻ với trang web</translation>
 <translation id="3005723025932146533">Hiển thị bản sao đã lưu</translation>
+<translation id="3008447029300691911">Nhập CVC cho <ph name="CREDIT_CARD" />. Sau khi bạn xác nhận, chi tiết thẻ của bạn sẽ được chia sẻ với trang web này.</translation>
 <translation id="3010559122411665027">Mục nhập danh sách "<ph name="ENTRY_INDEX" />": <ph name="ERROR" /></translation>
 <translation id="3024663005179499861">Loại chính sách sai</translation>
 <translation id="3032412215588512954">Bạn có muốn tải lại trang web này không?</translation>
 <translation id="3037605927509011580">Ôi, hỏng! </translation>
 <translation id="3041612393474885105">Thông tin Chứng chỉ</translation>
+<translation id="3063697135517575841">Chrome không thể xác nhận thẻ của bạn tại thời điểm này. Vui lòng thử lại sau.</translation>
 <translation id="3093245981617870298">Bạn đang ngoại tuyến.</translation>
 <translation id="3105172416063519923">ID phần tử:</translation>
 <translation id="3109728660330352905">Bạn không có quyền xem trang này.</translation>
-<translation id="3118046075435288765">Máy chủ đã bất ngờ đóng kết nối.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Thử chạy Chẩn đoán kết nối<ph name="END_LINK" />.</translation>
 <translation id="3145945101586104090">Không thể giải mã phản hồi</translation>
-<translation id="3147485256806412701">Trang web này đang sử dụng miền chung mới cấp cao nhất.</translation>
 <translation id="3150653042067488994">Lỗi máy chủ tạm thời</translation>
 <translation id="3157931365184549694">Khôi phục</translation>
 <translation id="3167968892399408617">Các trang bạn xem trong tab ẩn danh sẽ không bị lưu lại trong lịch sử của trình duyệt, kho cookie hoặc lịch sử tìm kiếm sau khi bạn đóng tất cả các tab ẩn danh của mình. Mọi tệp bạn tải xuống hoặc dấu trang mà bạn tạo sẽ được giữ nguyên.</translation>
@@ -224,10 +206,10 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3202578601642193415">Mới nhất</translation>
 <translation id="3207960819495026254">Đã được đánh dấu trang</translation>
-<translation id="3219579145727097045">Nhập ngày hết hạn và CVC gồm 4 chữ số ở mặt trước thẻ của bạn</translation>
 <translation id="3225919329040284222">Máy chủ đưa ra chứng chỉ không khớp với kỳ vọng được tích hợp sẵn. Các kỳ vọng này có trong một số trang web nhất định, có tính bảo mật cao với mục đích bảo vệ bạn.</translation>
 <translation id="3226128629678568754">Nhấn nút tải lại để gửi lại các dữ liệu cần thiết để tải trang.</translation>
 <translation id="3228969707346345236">Dịch thất bại vì trang đã bằng <ph name="LANGUAGE" />.</translation>
+<translation id="323107829343500871">Nhập CVC cho <ph name="CREDIT_CARD" /></translation>
 <translation id="3254409185687681395">Đánh dấu trang này</translation>
 <translation id="3270847123878663523">&amp;Hoàn tác sắp xếp lại</translation>
 <translation id="3286538390144397061">Khởi động lại Ngay bây giờ</translation>
@@ -237,7 +219,6 @@
 <translation id="3345135638360864351">Không thể gửi yêu cầu truy cập trang web này của bạn tới <ph name="NAME" />. Vui lòng thử lại.</translation>
 <translation id="3355823806454867987">Thay đổi cài đặt proxy...</translation>
 <translation id="3369192424181595722">Lỗi đồng hồ</translation>
-<translation id="3369366829301677151">Cập nhật và xác minh <ph name="CREDIT_CARD" /> của bạn</translation>
 <translation id="337363190475750230">Đã hủy cấp phép</translation>
 <translation id="3377188786107721145">Lỗi phân tích cú pháp chính sách</translation>
 <translation id="3380365263193509176">Lỗi không xác định</translation>
@@ -251,6 +232,7 @@
 <translation id="3452404311384756672">Khoảng thời gian tìm nạp:</translation>
 <translation id="3462200631372590220">Ẩn chi tiết</translation>
 <translation id="3479539252931486093">Trang web này có như bạn mong đợi không? Hãy <ph name="BEGIN_LINK" />cho chúng tôi biết<ph name="END_LINK" /></translation>
+<translation id="348000606199325318">ID sự cố <ph name="CRASH_LOCAL_ID" /> (ID máy chủ: <ph name="CRASH_ID" />)</translation>
 <translation id="3498215018399854026">Chúng tôi không thể liên lạc với cha mẹ của bạn vào thời điểm này. Vui lòng thử lại.</translation>
 <translation id="3527085408025491307">Thư mục</translation>
 <translation id="3528171143076753409">Chứng chỉ của máy chủ không đáng tin cậy.</translation>
@@ -263,15 +245,14 @@
 <translation id="3586931643579894722">Ẩn chi tiết</translation>
 <translation id="3587482841069643663">Tất cả</translation>
 <translation id="3600246354004376029"><ph name="TITLE" />, <ph name="DOMAIN" />, <ph name="TIME" /></translation>
-<translation id="3608308818141211642">Ứng dụng và máy chủ không hỗ trợ bộ mã hóa hoặc phiên bản giao thức SSL thông thường. Vấn đề này có thể xảy ra khi máy chủ cần RC4. Chuẩn này không còn được coi là an toàn nữa.</translation>
 <translation id="3609138628363401169">Máy chủ không hỗ trợ tiện ích đàm phán lại TLS.</translation>
+<translation id="36224234498066874">Xóa Dữ liệu Duyệt web...</translation>
 <translation id="362276910939193118">Hiển thị Toàn bộ Lịch sử</translation>
 <translation id="3623476034248543066">Hiển thị giá trị</translation>
 <translation id="3630155396527302611">Nếu chương trình đã được liệt kê là chương trình được phép truy cập mạng, hãy thử
       xóa chương trình này khỏi danh sách rồi thêm lại.</translation>
 <translation id="3648607100222897006">Các tính năng thử nghiệm này có thể thay đổi, hỏng hoặc biến mất bất kỳ lúc nào. Chúng tôi hoàn toàn không đảm bảo về những điều có thể xảy ra nếu bạn bật một trong các thử nghiệm này và trình duyệt của bạn thậm chí có thể tự động biến mất. Ngoài những điều đã nói, trình duyệt của bạn có thể xóa tất cả dữ liệu của bạn hoặc tính bảo mật và sự riêng tư của bạn có thể bị xâm phạm theo cách không mong đợi. Bất kỳ tính năng thử nghiệm nào mà bạn bật sẽ được bật cho tất cả người dùng của trình duyệt này. Hãy tiến hành một cách thận trọng.</translation>
 <translation id="3650584904733503804">Xác thực thành công</translation>
-<translation id="3651020361689274926">Tài nguyên được yêu cầu không còn tồn tại và không có địa chỉ chuyển tiếp. Tình trạng này dự kiến sẽ còn lâu dài.</translation>
 <translation id="3655670868607891010">Nếu bạn thường xuyên thấy thông báo này, hãy thử các <ph name="HELP_LINK" /> sau.</translation>
 <translation id="3658742229777143148">Bản sửa đổi</translation>
 <translation id="3681007416295224113">Thông tin chứng chỉ</translation>
@@ -284,8 +265,6 @@
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Kiểm tra proxy, tường lửa và cấu hình DNS<ph name="END_LINK" /></translation>
 <translation id="3739623965217189342">Liên kết đã sao chép</translation>
 <translation id="3744899669254331632">Bạn không thể truy cập <ph name="SITE" /> ngay bây giờ vì trang web này đã gửi thông tin đăng nhập hỗn độn mà Chromium không thể xử lý. Lỗi mạng và các cuộc tấn công thường chỉ diễn ra tạm thời nên trang này có thể sẽ hoạt động sau.</translation>
-<translation id="3748071062818261683">Xác minh thẻ</translation>
-<translation id="3748412725338508953">Có quá nhiều lần chuyển hướng.</translation>
 <translation id="375403751935624634">Không thể dịch do lỗi máy chủ.</translation>
 <translation id="3759461132968374835">Bạn không nhận được báo cáo sự cố nào gần đây. Sự cố xảy ra khi báo cáo sự cố đã bị tắt sẽ không xuất hiện ở đây.</translation>
 <translation id="3788090790273268753">Chứng chỉ cho trang web này sẽ hết hạn vào năm 2016, đồng thời, chuỗi chứng chỉ này chứa một chứng chỉ đã ký bằng SHA-1.</translation>
@@ -297,10 +276,7 @@
 <translation id="3884278016824448484">Số nhận dạng thiết bị xung đột</translation>
 <translation id="3885155851504623709">Xã</translation>
 <translation id="3901925938762663762">Thẻ đã hết hạn</translation>
-<translation id="3903912596042358459">Máy chủ từ chối hoàn thành yêu cầu.</translation>
-<translation id="3930850196944737149">Thiết bị của bạn đang ngoại tuyến.</translation>
 <translation id="3934680773876859118">Không thể tải tài liệu PDF</translation>
-<translation id="3950924596163729246">Không thể truy cập mạng.</translation>
 <translation id="3963721102035795474">Chế độ đọc</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> bị chặn</translation>
 <translation id="4021036232240155012">DNS là dịch vụ mạng dịch tên trang web sang địa chỉ Internet.</translation>
@@ -314,7 +290,6 @@
 <translation id="4103763322291513355">Truy cập &lt;strong&gt;chrome://policy&lt;/strong&gt; để xem danh sách các URL bị chặn quyền truy cập và các chính sách khác bị quản trị viên hệ thống buộc phải thực thi.</translation>
 <translation id="4117700440116928470">Phạm vi chính sách không được hỗ trợ.</translation>
 <translation id="4130226655945681476">Kiểm tra cáp mạng, modem và bộ định tuyến</translation>
-<translation id="4147376274874979956">Không thể truy cập tệp.</translation>
 <translation id="4148925816941278100">American Express</translation>
 <translation id="4169947484918424451">Bạn có muốn Chromium lưu thẻ này không?</translation>
 <translation id="4171400957073367226">Chữ ký xác minh không hợp lệ</translation>
@@ -322,10 +297,10 @@
 <translation id="4196861286325780578">&amp;Làm lại di chuyển</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Kiểm tra tường lửa và cấu hình diệt vi-rút<ph name="END_LINK" /></translation>
 <translation id="4220128509585149162">Sự cố</translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Thử chạy Chẩn đoán mạng<ph name="END_LINK" />.</translation>
 <translation id="4250680216510889253">Không</translation>
 <translation id="425582637250725228">Các thay đổi bạn đã thực hiện có thể không được lưu.</translation>
 <translation id="4258748452823770588">Chữ ký không hợp lệ</translation>
-<translation id="4268298190799576220">Chromium không thể xác minh thẻ của bạn vào lúc này. Vui lòng thử lại sau.</translation>
 <translation id="4269787794583293679">(Không có tên người dùng)</translation>
 <translation id="4300246636397505754">Đề xuất chính</translation>
 <translation id="4304224509867189079">Đăng nhập</translation>
@@ -335,7 +310,6 @@
 <translation id="4381091992796011497">Tên Người dùng:</translation>
 <translation id="4394049700291259645">Vô hiệu hóa</translation>
 <translation id="4395129973926795186"><ph name="START_DATE" /> đến <ph name="END_DATE" /></translation>
-<translation id="4405141258442788789">Hết giờ thao tác.</translation>
 <translation id="4406896451731180161">kết quả tìm kiếm</translation>
 <translation id="4424024547088906515">Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này không được Chrome tin cậy. Điều này có thể do định cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.</translation>
 <translation id="443673843213245140">Đã tắt sử dụng proxy nhưng cấu hình proxy rõ ràng được chỉ định.</translation>
@@ -347,8 +321,6 @@
 <translation id="4506599922270137252">Liên hệ với quản trị viên hệ thống</translation>
 <translation id="450710068430902550">Chia sẻ với quản trị viên</translation>
 <translation id="4522570452068850558">Chi tiết</translation>
-<translation id="4535734014498033861">Không thể kết nối với máy chủ proxy.</translation>
-<translation id="4553532082208702698">Nhập CVC gồm 4 chữ số ở mặt trước <ph name="CREDIT_CARD" /> của bạn</translation>
 <translation id="4558551763791394412">Thử tắt tiện ích.</translation>
 <translation id="4587425331216688090">Xóa địa chỉ khỏi Chrome?</translation>
 <translation id="4592951414987517459">Kết nối của bạn tới <ph name="DOMAIN" /> được mã hóa bằng bộ số 0 hiện đại.</translation>
@@ -356,23 +328,21 @@
 <translation id="4668929960204016307">,</translation>
 <translation id="4670097147947922288">Bạn đang xem trang tiện ích.</translation>
 <translation id="467662567472608290">Máy chủ này không chứng minh được rằng đó là <ph name="DOMAIN" />; chứng chỉ bảo mật của máy chủ này có lỗi. Điều này có thể do định cấu hình sai hoặc có kẻ tấn công chặn kết nối của bạn.</translation>
-<translation id="4683417246209150705">Nhập CVC gồm 3 chữ số ở mặt sau <ph name="CREDIT_CARD" /> của bạn</translation>
 <translation id="4697214168136963651"><ph name="URL" /> đã bị chặn</translation>
 <translation id="4701488924964507374"><ph name="SENTENCE1" /> <ph name="SENTENCE2" /></translation>
 <translation id="4708268264240856090">Kết nối của bạn bị gián đoạn</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Chạy Chẩn đoán mạng của Windows<ph name="END_LINK" /></translation>
 <translation id="4726672564094551039">Tải lại chính sách</translation>
 <translation id="4728558894243024398">Nền tảng</translation>
 <translation id="4744603770635761495">Đường dẫn thực thi</translation>
 <translation id="4756388243121344051">&amp;Lịch sử</translation>
 <translation id="4764776831041365478">Trang web tại <ph name="URL" /> có thể tạm thời không hoạt động hay được chuyển vĩnh viễn sang địa chỉ web mới.</translation>
 <translation id="4771973620359291008">Xảy ra lỗi chưa biết.</translation>
-<translation id="477518548916168453">Máy chủ không hỗ trợ chức năng cần thiết để thực hiện yêu cầu.</translation>
 <translation id="4782449893814226250">Bạn đã hỏi cha mẹ mình xem có thể truy cập vào trang này hay không.</translation>
 <translation id="4800132727771399293">Kiểm tra ngày hết hạn và CVC của bạn rồi thử lại</translation>
 <translation id="4807049035289105102">Bạn không thể truy cập <ph name="SITE" /> ngay bây giờ do trang web gửi thông tin đăng nhập đã mã hóa mà Google Chrome không thể xử lý. Lỗi mạng và các cuộc tấn công mạng thường chỉ là tạm thời, do đó trang này có thể sẽ hoạt động lại sau.</translation>
 <translation id="4813512666221746211">Lỗi mạng</translation>
 <translation id="4816492930507672669">Vừa với trang</translation>
-<translation id="4841640898320458950">Đã chặn cổng không an toàn.</translation>
 <translation id="4850886885716139402">Xem</translation>
 <translation id="4880827082731008257">Lịch sử tìm kiếm</translation>
 <translation id="4923417429809017348">Trang này đã được dịch từ một ngôn ngữ không xác định sang <ph name="LANGUAGE_LANGUAGE" /></translation>
@@ -402,7 +372,6 @@
 <translation id="5179510805599951267">Không ở <ph name="ORIGINAL_LANGUAGE" />? Báo cáo lỗi này</translation>
 <translation id="5190835502935405962">Thanh Dấu trang</translation>
 <translation id="5199729219167945352">Thử nghiệm</translation>
-<translation id="5228309736894624122">Lỗi giao thức SSL.</translation>
 <translation id="5251803541071282808">Đám mây</translation>
 <translation id="5299298092464848405">Lỗi phân tích cú pháp chính sách</translation>
 <translation id="5300589172476337783">Hiển thị</translation>
@@ -415,6 +384,7 @@
 <translation id="5430298929874300616">Xóa dấu trang</translation>
 <translation id="5431657950005405462">Không tìm thấy tệp của bạn</translation>
 <translation id="5435775191620395718">Hiển thị lịch sử từ thiết bị này. <ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" />.</translation>
+<translation id="5437003064129843501">Tính năng đề xuất nội dung được cá nhân hóa hiện bị tắt vì dữ liệu đã đồng bộ hóa của bạn được bảo vệ bằng cụm mật khẩu tùy chỉnh.</translation>
 <translation id="5439770059721715174">Lỗi xác thực lược đồ tại "<ph name="ERROR_PATH" />": <ph name="ERROR" /></translation>
 <translation id="5452270690849572955">Không thể tìm thấy trang <ph name="HOST_NAME" /> này</translation>
 <translation id="5455374756549232013">Dấu thời gian chính sách không hợp lệ</translation>
@@ -423,7 +393,6 @@
 <translation id="5492298309214877701">Trang web trên mạng nội bộ của công ty, tổ chức hoặc trường học này có URL tương tự như trang web bên ngoài.
     <ph name="LINE_BREAK" />
     Hãy thử liên hệ với quản trị viên hệ thống của bạn.</translation>
-<translation id="5498951625591520696">Không thể truy cập máy chủ.</translation>
 <translation id="5509780412636533143">Dấu trang được quản lý</translation>
 <translation id="5510766032865166053">Tệp này có thể đã bị di chuyển hoặc xóa.</translation>
 <translation id="5523118979700054094">Tên chính sách</translation>
@@ -439,12 +408,10 @@
 <translation id="5629630648637658800">Không thể tải cài đặt chính sách</translation>
 <translation id="5631439013527180824">Mã thông báo quản lý thiết bị không hợp lệ</translation>
 <translation id="5650551054760837876">Không tìm thấy kết quả tìm kiếm.</translation>
-<translation id="5663999524854166235">Nhập CVC gồm 3 chữ số ở mặt sau thẻ của bạn để xác minh</translation>
 <translation id="5677928146339483299">Bị chặn</translation>
-<translation id="5696590819423335174">Nhập ngày hết hạn và CVC gồm 4 chữ số ở mặt trước <ph name="CREDIT_CARD" /> của bạn</translation>
-<translation id="5699278517904102888">Nhập CVC gồm 3 chữ số ở mặt sau <ph name="CREDIT_CARD" /> của bạn để xác minh</translation>
 <translation id="5710435578057952990">Nhận dạng trang web này chưa được xác minh.</translation>
 <translation id="5720705177508910913">Người dùng hiện tại</translation>
+<translation id="5784606427469807560">Đã xảy ra sự cố khi xác nhận thẻ của bạn. Hãy kiểm tra kết nối Internet của bạn và thử lại.</translation>
 <translation id="5785756445106461925">Ngoài ra, trang này bao gồm các tài nguyên khác không an toàn. Những tài nguyên này có thể bị người khác xem khi đang gửi và có thể bị kẻ tấn công sửa đổi nhằm thay đổi giao diện của trang.</translation>
 <translation id="5810442152076338065">Kết nối của bạn tới <ph name="DOMAIN" /> được mã hóa bằng bộ số 0 đã lỗi thời.</translation>
 <translation id="5813119285467412249">&amp;Làm lại thêm</translation>
@@ -453,22 +420,19 @@
 <translation id="5869405914158311789">Không thể truy cập trang web này</translation>
 <translation id="5869522115854928033">Mật khẩu đã lưu</translation>
 <translation id="5872918882028971132">Đề xuất chính</translation>
-<translation id="5900623698597156974">Giao thức dự phòng TLS 1.0 có thể kết hợp với máy chủ nhưng chúng tôi không chấp nhận giao thức dự phòng TLS 1.0 nữa. Cần cập nhật máy chủ để triển khai đúng cách việc dàn xếp phiên bản và hỗ trợ tốt nhất cho TLS 1.2.</translation>
 <translation id="59107663811261420">Loại thẻ này không được Google Payments hỗ trợ cho người bán này. Vui lòng chọn thẻ khác.</translation>
 <translation id="59174027418879706">Đã bật</translation>
-<translation id="5949910269212525572">Không thể phân giải địa chỉ DNS của máy chủ.</translation>
 <translation id="5966707198760109579">Tuần</translation>
 <translation id="5967867314010545767">Xóa khỏi lịch sử</translation>
 <translation id="5975083100439434680">Thu nhỏ</translation>
 <translation id="5989320800837274978">Cả máy chủ proxy cố định và URL tập lệnh .pac đều chưa được chỉ định.</translation>
 <translation id="5990559369517809815">Tiện ích đã chặn yêu cầu tới máy chủ.</translation>
 <translation id="6008256403891681546">JCB</translation>
+<translation id="6016158022840135739">{COUNT,plural, =1{Trang 1}other{Trang #}}</translation>
 <translation id="6040143037577758943">Đóng</translation>
 <translation id="604124094241169006">Tự động</translation>
 <translation id="6042308850641462728">Thêm</translation>
-<translation id="6044718745395562198">Máy tính của bạn đang ngoại tuyến.</translation>
 <translation id="6060685159320643512">Hãy cẩn thận, thử nghiệm này có thể gây lỗi</translation>
-<translation id="6093795393556121384">Thẻ của bạn đã được xác minh</translation>
 <translation id="6146055958333702838">Kiểm tra mọi dây cáp rồi khởi động lại bộ định tuyến, modem hoặc các thiết bị
     mạng khác mà bạn có thể đang sử dụng.</translation>
 <translation id="614940544461990577">Hãy thử:</translation>
@@ -478,10 +442,7 @@
 <translation id="6165508094623778733">Tìm hiểu thêm</translation>
 <translation id="6203231073485539293">Kiểm tra kết nối Internet của bạn</translation>
 <translation id="6218753634732582820">Bạn muốn xóa địa chỉ khỏi Chromium?</translation>
-<translation id="6232139169545176020">Giao thức URI yêu cầu không được hỗ trợ.</translation>
 <translation id="6259156558325130047">&amp;Làm lại sắp xếp lại</translation>
-<translation id="6262796033958342538">Đã nhận được nhiều tiêu đề Vị trí khác nhau.  Điều này không được phép nhằm bảo vệ
-    chống lại các cuộc tấn công phân nhỏ phản hồi HTTP.</translation>
 <translation id="6263376278284652872">Dấu trang trên <ph name="DOMAIN" /></translation>
 <translation id="6264485186158353794">Quay lại an toàn</translation>
 <translation id="6282194474023008486">Mã bưu chính</translation>
@@ -493,7 +454,6 @@
 <translation id="6355080345576803305">Ghi đè phiên công khai</translation>
 <translation id="6358450015545214790">Những phần này có ý nghĩa gì?</translation>
 <translation id="6387478394221739770">Bạn quan tâm đến các tính năng mới thú vị của Chrome? Hãy dùng thử kênh thử nghiệm beta của chúng tôi tại chrome.com/beta.</translation>
-<translation id="6391832066170725637">Không thể tìm thấy tệp hay thư mục.</translation>
 <translation id="641480858134062906">Không tải được <ph name="URL" /></translation>
 <translation id="6417515091412812850">Không thể kiểm tra liệu chứng chỉ đã bị thu hồi hay chưa.</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> đã từ chối kết nối.</translation>
@@ -502,20 +462,13 @@
 <translation id="6458467102616083041">Bị bỏ qua vì chính sách đã tắt tìm kiếm mặc định.</translation>
 <translation id="647261751007945333">Chính sách thiết bị</translation>
 <translation id="6489534406876378309">Bắt đầu tải lên sự cố</translation>
-<translation id="6500116422101723010">Hiện tại, máy chủ không thể xử lý yêu cầu này. Mã này cho thấy đây là tình trạng tạm thời và máy chủ sẽ hoạt động trở lại sau khi hết gián đoạn.</translation>
-<translation id="6518133107902771759">Xác minh</translation>
 <translation id="6529602333819889595">&amp;Làm lại xóa</translation>
-<translation id="6533019874004191247">URL không được hỗ trợ.</translation>
 <translation id="6550675742724504774">Tùy chọn</translation>
 <translation id="6596325263575161958">Tùy chọn mã hóa</translation>
-<translation id="6610562986279010327">Chrome không thể mở URL này</translation>
 <translation id="662080504995468778">Ở lại</translation>
-<translation id="6626108645084335023">Đang chờ thăm dò DNS.</translation>
 <translation id="6628463337424475685">Tìm kiếm trên <ph name="ENGINE" /></translation>
 <translation id="6634865548447745291">Bạn không thể truy cập <ph name="SITE" /> ngay bây giờ do <ph name="BEGIN_LINK" />chứng chỉ này đã bị thu hồi<ph name="END_LINK" />. Lỗi mạng và các cuộc tấn công mạng thường chỉ là tạm thời, do đó trang này có thể sẽ hoạt động lại sau.</translation>
-<translation id="6637478299472506933">Tải xuống không thành công</translation>
 <translation id="6644283850729428850">Chính sách này không được chấp thuận.</translation>
-<translation id="6646897916597483132">Nhập CVC gồm 4 chữ số ở mặt trước thẻ của bạn</translation>
 <translation id="6656103420185847513">Chỉnh sửa thư mục</translation>
 <translation id="6660210980321319655"><ph name="CRASH_TIME" /> được báo cáo tự động</translation>
 <translation id="6671697161687535275">Bạn muốn xóa đề xuất biểu mẫu khỏi Chromium?</translation>
@@ -524,23 +477,17 @@
 <translation id="6710594484020273272">&lt;Nhập cụm từ tìm kiếm&gt;</translation>
 <translation id="6711464428925977395">Đã xảy ra sự cố với máy chủ proxy hoặc địa chỉ không chính xác.</translation>
 <translation id="674375294223700098">Lỗi chứng chỉ máy chủ không xác định.</translation>
-<translation id="6746710319270251222">Đã nhận được nhiều tiêu đề Độ dài-Nội dung khác nhau.  Điều này không được phép
-    để bảo vệ chống lại các cuộc tấn công phân nhỏ phản hồi HTTP.</translation>
 <translation id="6753269504797312559">Giá trị chính sách</translation>
 <translation id="6757797048963528358">Thiết bị của bạn đã chuyển sang chế độ ngủ.</translation>
-<translation id="6781404225664080496">Yêu cầu tới URL này đã tạm thời bị chặn.</translation>
 <translation id="6820686453637990663">CVC</translation>
 <translation id="6830600606572693159">Trang web tại <ph name="URL" /> hiện không có. Trang này có thể đã bị quá tải hoặc đang ngừng hoạt động để bảo trì.</translation>
 <translation id="6831043979455480757">Dịch</translation>
 <translation id="6839929833149231406">Khu vực</translation>
-<translation id="6851123334996048122">Chuyển tới
-      <ph name="BEGIN_BOLD" />
-      Applications &gt; System Preferences &gt; Network &gt; Assist me
-      <ph name="END_BOLD" />
-      để kiểm tra kết nối của bạn.</translation>
 <translation id="6874604403660855544">&amp;Làm lại thêm</translation>
 <translation id="6891596781022320156">Cấp chính sách không được hỗ trợ.</translation>
+<translation id="6895330447102777224">Thẻ của bạn đã được xác nhận</translation>
 <translation id="6897140037006041989">Tác nhân Người dùng</translation>
+<translation id="6903907808598579934">Bật đồng bộ hóa</translation>
 <translation id="6915804003454593391">Người dùng:</translation>
 <translation id="6957887021205513506">Chứng chỉ của máy chủ dường như giả mạo.</translation>
 <translation id="6965382102122355670">OK</translation>
@@ -551,7 +498,6 @@
 <translation id="7012363358306927923">China UnionPay</translation>
 <translation id="7029809446516969842">Mật khẩu</translation>
 <translation id="7050187094878475250">Bạn đã cố gắng truy cập <ph name="DOMAIN" /> nhưng máy chủ đã hiển thị chứng chỉ có thời gian hiệu lực quá dài để có thể tin cậy.</translation>
-<translation id="7052500709156631672">Cổng vào hoặc máy chủ proxy đã nhận được phản hồi không hợp lệ từ máy chủ luồng trên.</translation>
 <translation id="7087282848513945231">Hạt</translation>
 <translation id="7088615885725309056">Cũ hơn</translation>
 <translation id="7090678807593890770">Tìm kiếm <ph name="LINK" /> trên Google</translation>
@@ -568,17 +514,21 @@
 <translation id="7219179957768738017">Kết nối sử dụng <ph name="SSL_VERSION" />.</translation>
 <translation id="7231308970288859235">Rất tiếc! Bạn cần phải hỏi cha mẹ mình xem có thể truy cập trang này hay không.</translation>
 <translation id="7246609911581847514">Bạn thấy thông báo này vì người quản lý của bạn cần phải phê duyệt các trang web mới vào lần truy cập đầu tiên của bạn.</translation>
+<translation id="724975217298816891">Nhập ngày hết hạn và CVC cho <ph name="CREDIT_CARD" /> để cập nhật chi tiết thẻ của bạn. Sau khi bạn xác nhận, chi tiết thẻ của bạn sẽ được chia sẻ với trang web này.</translation>
 <translation id="725866823122871198">Không thể thiết lập kết nối riêng tư với <ph name="BEGIN_BOLD" /><ph name="DOMAIN" /><ph name="END_BOLD" /> vì ngày và giờ (<ph name="DATE_AND_TIME" />) trên máy tính của bạn không đúng.</translation>
 <translation id="7265986070661382626">Bạn không thể truy cập <ph name="SITE" /> ngay bây giờ do trang web <ph name="BEGIN_LINK" />sử dụng ghim chứng chỉ<ph name="END_LINK" />. Lỗi mạng và các cuộc tấn công mạng thường chỉ là tạm thời do đó trang này có thể sẽ hoạt động lại sau.</translation>
 <translation id="7269802741830436641">Trang web này lặp lại chuyển hướng</translation>
 <translation id="7275334191706090484">Dấu trang được quản lý</translation>
 <translation id="7298195798382681320">Được đề xuất</translation>
+<translation id="7301833672208172928">Bật đồng bộ hóa lịch sử</translation>
 <translation id="7334320624316649418">&amp;Làm lại sắp xếp lại</translation>
+<translation id="733923710415886693">Chứng chỉ của máy chủ đã không được tiết lộ qua Tính minh bạch của chứng chỉ.</translation>
 <translation id="7353601530677266744">Dòng Lệnh</translation>
 <translation id="7372973238305370288">kết quả tìm kiếm</translation>
 <translation id="7377249249140280793"><ph name="RELATIVE_DATE" /> - <ph name="FULL_DATE" /></translation>
 <translation id="7378627244592794276">Không</translation>
 <translation id="7378810950367401542">/</translation>
+<translation id="7390545607259442187">Xác nhận thẻ</translation>
 <translation id="7394102162464064926">Bạn có chắc chắn muốn xóa những trang này khỏi lịch sử của mình không?
 
 Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích vào lần sau.</translation>
@@ -587,7 +537,8 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="7424977062513257142">Trang được nhúng trên trang web này cho biết:</translation>
 <translation id="7441627299479586546">Chủ đề chính sách sai</translation>
 <translation id="7445762425076701745">Không thể xác thực đầy đủ nhận dạng của máy chủ bạn đã kết nối. Bạn đã kết nối vào máy chủ bằng một tên chỉ hợp lệ trong mạng của bạn và đó là tên mà các tổ chức phát hành chứng chỉ bên ngoài không thể xác thực được. Vì một số tổ chức phát hành chứng chỉ sẽ cấp chứng chỉ cho các tên này thay thế, nên không có cách nào đảm bảo bạn được kết nối tới trang web đã chỉ định và không phải là kẻ tấn công.</translation>
-<translation id="7450732239874446337">IO mạng bị treo.</translation>
+<translation id="7451311239929941790"><ph name="BEGIN_LINK" />Tìm hiểu thêm<ph name="END_LINK" /> về sự cố này.</translation>
+<translation id="7469372306589899959">Đang xác nhận thẻ</translation>
 <translation id="7481312909269577407">Chuyển tiếp</translation>
 <translation id="7485870689360869515">Không tìm thấy dữ liệu.</translation>
 <translation id="7514365320538308">Tải xuống</translation>
@@ -606,10 +557,8 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="7610193165460212391">Giá trị nằm ngoài phạm vi <ph name="VALUE" />.</translation>
 <translation id="7613889955535752492">Hết hạn: <ph name="EXPIRATION_MONTH" />/<ph name="EXPIRATION_YEAR" /></translation>
 <translation id="7615602087246926389">Bạn đã có dữ liệu được mã hóa bằng mật khẩu khác của Tài khoản Google. Vui lòng nhập mật khẩu đó bên dưới.</translation>
-<translation id="7633887239437305289">Nhập CVC gồm 4 chữ số ở mặt trước <ph name="CREDIT_CARD" /> của bạn để xác minh</translation>
 <translation id="7634554953375732414">Kết nối của bạn tới trang web này không ở chế độ riêng tư.</translation>
 <translation id="7637571805876720304">Bạn muốn xóa thẻ tín dụng khỏi Chromium?</translation>
-<translation id="7643817847124207232">Kết nối Internet đã bị lỗi.</translation>
 <translation id="765676359832457558">Ẩn cài đặt nâng cao...</translation>
 <translation id="7658239707568436148">Hủy</translation>
 <translation id="7668654391829183341">Thiết bị không xác định</translation>
@@ -619,9 +568,6 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="7733391738235763478">(<ph name="NUMBER_VISITS" />)</translation>
 <translation id="7752995774971033316">Không được quản lý</translation>
 <translation id="7758069387465995638">Tường lửa hoặc phần mềm diệt vi-rút có thể đã chặn kết nối.</translation>
-<translation id="7760914272566804712">Bạn có thể thử chẩn đoán sự cố bằng cách thực hiện các bước sau:
-      <ph name="LINE_BREAK" />
-      <ph name="PLATFORM_TEXT" /></translation>
 <translation id="7761701407923456692">Chứng chỉ của máy chủ không phù hợp với URL.</translation>
 <translation id="777702478322588152">Quận</translation>
 <translation id="778579833039460630">Không nhận được dữ liệu nào</translation>
@@ -631,7 +577,6 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="780301667611848630">Không, cảm ơn</translation>
 <translation id="7805768142964895445">Trạng thái</translation>
 <translation id="7813600968533626083">Xóa đề xuất biểu mẫu khỏi Chrome?</translation>
-<translation id="7825436071901023927">Cổng không an toàn <ph name="SITE" /></translation>
 <translation id="785549533363645510">Tuy nhiên, bạn không ẩn. Việc chuyển sang chế độ ẩn danh sẽ không ẩn thao tác duyệt của bạn với chủ lao động, nhà cung cấp dịch vụ internet hoặc các trang web bạn truy cập.</translation>
 <translation id="7887683347370398519">Kiểm tra CVC của bạn và thử lại</translation>
 <translation id="7894616681410591072">Rất tiếc! Bạn cần sự cho phép của <ph name="NAME" /> để truy cập trang này.</translation>
@@ -643,6 +588,7 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="7951415247503192394">(32 bit)</translation>
 <translation id="7956713633345437162">Dấu trang di động</translation>
 <translation id="7961015016161918242">Chưa bao giờ</translation>
+<translation id="7962083544045318153">ID sự cố <ph name="CRASH_LOCAL_ID" /></translation>
 <translation id="7983301409776629893">Luôn dịch <ph name="ORIGINAL_LANGUAGE" /> sang <ph name="TARGET_LANGUAGE" /></translation>
 <translation id="7995512525968007366">Không chỉ định</translation>
 <translation id="8012647001091218357">Chúng tôi không thể liên lạc với cha mẹ của bạn vào thời điểm này. Vui lòng thử lại.</translation>
@@ -650,25 +596,17 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="8034955203865359138">Không tìm thấy mục nhập lịch sử nào.</translation>
 <translation id="8088680233425245692">Không xem được bài viết.</translation>
 <translation id="8091372947890762290">Kích hoạt đang chờ xử lý trên máy chủ</translation>
+<translation id="8131740175452115882">Xác nhận</translation>
 <translation id="8134994873729925007">Không thể tìm thấy <ph name="BEGIN_ABBR" />địa chỉ DNS<ph name="END_ABBR" /> của máy chủ của <ph name="HOST_NAME" />.</translation>
 <translation id="8149426793427495338">Máy tính của bạn đã chuyển sang chế độ ngủ.</translation>
 <translation id="8150722005171944719">Không thể đọc được tệp tại <ph name="URL" />.  Tệp này có thể đã bị xóa, di chuyển hoặc quyền tệp có thể đang chặn truy cập.</translation>
 <translation id="8194797478851900357">&amp;Hoàn tác di chuyển</translation>
 <translation id="8201077131113104583">URL cập nhật không hợp lệ cho tiện ích có ID "<ph name="EXTENSION_ID" />".</translation>
-<translation id="8204086856545141093">Yêu cầu tới máy chủ đã bị chặn bởi chính sách.</translation>
 <translation id="8218327578424803826">Vị trí được gán:</translation>
 <translation id="8225771182978767009">Người thiết lập máy tính này đã chọn chặn trang web này.</translation>
 <translation id="8241707690549784388">Trang mà bạn đang tìm sử dụng thông tin bạn đã nhập vào. Việc quay lại trang đó có thể lặp lại bất kỳ tác vụ nào bạn đã thực hiện. Bạn có muốn tiếp tục không?</translation>
 <translation id="8249320324621329438">Tìm nạp lần cuối:</translation>
 <translation id="8261506727792406068">Xóa</translation>
-<translation id="8266098793847448402">Nhấp vào
-      <ph name="BEGIN_BOLD" />Start<ph name="END_BOLD" />,
-      nhấp vào
-      <ph name="BEGIN_BOLD" />Run<ph name="END_BOLD" />,
-      nhập
-      <ph name="BEGIN_BOLD" />%windir%\network diagnostic\xpnetdiag.exe<ph name="END_BOLD" />,
-      sau đó nhấp vào
-      <ph name="BEGIN_BOLD" />OK<ph name="END_BOLD" />.</translation>
 <translation id="8279107132611114222">Yêu cầu truy cập trang web này của bạn đã được gửi tới <ph name="NAME" />.</translation>
 <translation id="8289355894181816810">Hãy liên hệ với quản trị viên mạng của bạn nếu bạn không chắc chắn về điều này có ý nghĩa gì.</translation>
 <translation id="8293206222192510085">Thêm Dấu trang</translation>
@@ -683,7 +621,6 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="8428213095426709021">Cài đặt</translation>
 <translation id="8437238597147034694">&amp;Hoàn tác di chuyển</translation>
 <translation id="8488350697529856933">Áp dụng cho</translation>
-<translation id="8494979374722910010">Không kết nối với máy chủ.</translation>
 <translation id="8498891568109133222"><ph name="HOST_NAME" /> mất quá nhiều thời gian để phản hồi.</translation>
 <translation id="8530504477309582336">Google Payments không hỗ trợ loại thẻ này. Vui lòng chọn thẻ khác.</translation>
 <translation id="8550022383519221471">Dịch vụ đồng bộ hóa không khả dụng cho tên miền của bạn.</translation>
@@ -693,8 +630,6 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="8571890674111243710">Đang dịch trang sang <ph name="LANGUAGE" />...</translation>
 <translation id="8591846766485502580">Bạn thấy thông báo này vì cha hoặc mẹ của bạn đã chặn trang web này.</translation>
 <translation id="859285277496340001">Chứng chỉ không ghi rõ cơ chế kiểm tra xem chứng chỉ đã bị thu hồi hay chưa.</translation>
-<translation id="8629916158020966496">Tính năng duyệt Internet bị tắt cho đến khi kiểm tra xác minh đăng ký doanh nghiệp kết thúc.
-    Bạn vẫn có thể sử dụng công cụ chẩn đoán được giới thiệu ở đây để khắc phục sự cố xảy ra với kết nối của mình.</translation>
 <translation id="8647750283161643317">Đặt lại tất cả về mặc định</translation>
 <translation id="8680787084697685621">Chi tiết đăng nhập tài khoản đã lỗi thời.</translation>
 <translation id="8703575177326907206">Kết nối của bạn đến <ph name="DOMAIN" /> không được mã hóa.</translation>
@@ -706,11 +641,10 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="8740359287975076522">Không thể tìm thấy &lt;abbr id="dnsDefinition"&gt;địa chỉ DNS&lt;/abbr&gt; của <ph name="HOST_NAME" />. Đang chẩn đoán sự cố.</translation>
 <translation id="8741995161408053644">Tài khoản Google có thể có các biểu mẫu lịch sử duyệt web khác tại <ph name="BEGIN_LINK" />history.google.com<ph name="END_LINK" />.</translation>
 <translation id="8790007591277257123">&amp;Làm lại xóa</translation>
+<translation id="8790687370365610530">Để nhận nội dung được cá nhân hóa do Google đề xuất, bật đồng bộ hóa lịch sử.</translation>
 <translation id="8798099450830957504">Mặc định</translation>
 <translation id="8804164990146287819">Chính sách bảo mật</translation>
-<translation id="88201174049725495">Việc truy cập URL này của tiện ích tạm thời bị hạn chế.</translation>
 <translation id="8820817407110198400">Dấu trang</translation>
-<translation id="8824019021993735287">Chrome không thể xác minh thẻ của bạn vào lúc này. Vui lòng thử lại sau.</translation>
 <translation id="8834246243508017242">Bật Tự động điền bằng Liên hệ…</translation>
 <translation id="883848425547221593">Dấu trang Khác</translation>
 <translation id="884923133447025588">Không tìm thấy cơ chế thu hồi.</translation>
@@ -719,29 +653,27 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="8866959479196209191">Trang này cho biết:</translation>
 <translation id="8870413625673593573">Các tab đã Đóng gần đây</translation>
 <translation id="8876793034577346603">Không thể phân tích cú pháp cấu hình mạng.</translation>
+<translation id="8877192140621905067">Sau khi bạn xác nhận, chi tiết thẻ của bạn sẽ được chia sẻ với trang web này</translation>
 <translation id="8891727572606052622">Chế độ proxy không hợp lệ.</translation>
 <translation id="889901481107108152">Rất tiếc, thử nghiệm này không sẵn có trên nền tảng của bạn.</translation>
-<translation id="890308499387283275">Chrome không thể tải xuống tệp này.</translation>
 <translation id="8903921497873541725">Phóng to</translation>
 <translation id="8931333241327730545">Bạn có muốn lưu thẻ này vào Tài khoản Google của mình không?</translation>
 <translation id="8932102934695377596">Đồng hồ của bạn chạy chậm</translation>
 <translation id="8954894007019320973">(Tiếp tục)</translation>
 <translation id="8971063699422889582">Chứng chỉ của máy chủ đã hết hạn.</translation>
 <translation id="8987927404178983737">Tháng</translation>
-<translation id="8988760548304185580">Nhập ngày hết hạn và CVC gồm 3 chữ số ở mặt sau thẻ của bạn</translation>
 <translation id="8989148748219918422"><ph name="ORGANIZATION" /> [<ph name="COUNTRY" />]</translation>
+<translation id="8997023839087525404">Máy chủ đã đưa ra chứng chỉ không được tiết lộ công khai theo chính sách Tính minh bạch của chứng chỉ. Đây là yêu cầu đối với một số chứng chỉ, để đảm bảo chúng đáng tin cậy và giúp chống lại những kẻ tấn công.</translation>
 <translation id="9001074447101275817">Proxy <ph name="DOMAIN" /> yêu cầu tên người dùng và mật khẩu.</translation>
-<translation id="9013589315497579992">Chứng chỉ xác thực ứng dụng khách SSL không hợp lệ.</translation>
 <translation id="901974403500617787">Chỉ chủ sở hữu mới có thể đặt cờ áp dụng cho toàn hệ thống: <ph name="OWNER_EMAIL" />.</translation>
-<translation id="9020142588544155172">Máy chủ đã từ chối kết nối.</translation>
 <translation id="9020542370529661692">Trang này đã được dịch sang <ph name="TARGET_LANGUAGE" /></translation>
 <translation id="9038649477754266430">Sử dụng dịch vụ truy vấn dự đoán để tải trang nhanh hơn</translation>
 <translation id="9039213469156557790">Ngoài ra, trang này bao gồm các tài nguyên khác không an toàn. Những tài nguyên này có thể bị người khác xem khi đang gửi và có thể bị kẻ tấn công sửa đổi nhằm thay đổi hành vi của trang.</translation>
 <translation id="9049981332609050619">Bạn đã cố truy cập vào <ph name="DOMAIN" />, nhưng máy chủ cho biết chứng chỉ không hợp lệ.</translation>
 <translation id="9050666287014529139">Cụm mật khẩu</translation>
+<translation id="9065203028668620118">Chỉnh sửa</translation>
 <translation id="9092364396508701805">Trang <ph name="HOST_NAME" /> hiện không hoạt động</translation>
 <translation id="9103872766612412690"><ph name="SITE" /> thường sử dụng mã hóa để bảo vệ thông tin của bạn. Khi Chromium cố gắng kết nối với <ph name="SITE" /> tại thời điểm này, trang web đã gửi lại thông tin đăng nhập không chính xác và bất thường. Điều này có thể xảy ra khi kẻ tấn công đang cố gắng giả mạo là <ph name="SITE" /> hoặc màn hình đăng nhập Wi-Fi đã làm gián đoạn kết nối. Thông tin của bạn vẫn an toàn do Chromium đã ngừng kết nối trước khi bất kỳ dữ liệu nào được trao đổi.</translation>
-<translation id="9125941078353557812">Nhập CVC gồm 3 chữ số ở mặt sau thẻ của bạn</translation>
 <translation id="9137013805542155359">Hiển thị văn bản gốc</translation>
 <translation id="9148507642005240123">&amp;Hoàn tác chỉnh sửa</translation>
 <translation id="9157595877708044936">Đang thiết lập...</translation>
@@ -754,6 +686,7 @@ Lưu ý! Chế độ ẩn danh <ph name="SHORTCUT_KEY" /> có thể hữu ích v
 <translation id="933712198907837967">Diners Club</translation>
 <translation id="935608979562296692">XÓA BIỂU MẪU</translation>
 <translation id="939736085109172342">Thư mục mới</translation>
+<translation id="962701380617707048">Nhập ngày hết hạn và CVC cho <ph name="CREDIT_CARD" /> để cập nhật chi tiết thẻ của bạn</translation>
 <translation id="969892804517981540">Phiên bản Chính thức</translation>
 <translation id="988159990683914416">Phiên bản dành cho Nhà phát triển</translation>
 </translationbundle>

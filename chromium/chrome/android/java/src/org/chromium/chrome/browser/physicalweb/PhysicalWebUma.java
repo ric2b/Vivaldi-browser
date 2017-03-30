@@ -12,6 +12,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.components.location.LocationUtils;
 import org.json.JSONArray;
 import org.json.JSONException;
 
@@ -42,6 +43,7 @@ public class PhysicalWebUma {
     private static final String PREFS_LOCATION_GRANTED_COUNT = "PhysicalWeb.Prefs.LocationGranted";
     private static final String PWS_BACKGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Background";
     private static final String PWS_FOREGROUND_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Foreground";
+    private static final String PWS_REFRESH_RESOLVE_TIMES = "PhysicalWeb.ResolveTime.Refresh";
     private static final String OPT_IN_NOTIFICATION_PRESS_DELAYS =
             "PhysicalWeb.ReferralDelay.OptInNotification";
     private static final String STANDARD_NOTIFICATION_PRESS_DELAYS =
@@ -145,11 +147,21 @@ public class PhysicalWebUma {
     }
 
     /**
-     * Records a response time from PWS for a resolution during a foreground scan.
+     * Records a response time from PWS for a resolution during a foreground scan that is not
+     * explicitly user-initiated through a refresh.
      * @param duration The length of time PWS took to respond.
      */
     public static void onForegroundPwsResolution(Context context, long duration) {
         handleTime(context, PWS_FOREGROUND_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Records a response time from PWS for a resolution during a foreground scan that is explicitly
+     * user-initiated through a refresh.
+     * @param duration The length of time PWS took to respond.
+     */
+    public static void onRefreshPwsResolution(Context context, long duration) {
+        handleTime(context, PWS_REFRESH_RESOLVE_TIMES, duration, TimeUnit.MILLISECONDS);
     }
 
     /**
@@ -215,10 +227,11 @@ public class PhysicalWebUma {
      * - The Physical Web preference status
      */
     public static void recordPhysicalWebState(Context context, String actionName) {
+        LocationUtils locationUtils = LocationUtils.getInstance();
         handleEnum(context, createStateString(LOCATION_SERVICES, actionName),
-                Utils.isLocationServicesEnabled(context) ? 1 : 0, BOOLEAN_BOUNDARY);
+                locationUtils.isSystemLocationSettingEnabled(context) ? 1 : 0, BOOLEAN_BOUNDARY);
         handleEnum(context, createStateString(LOCATION_PERMISSION, actionName),
-                Utils.isLocationPermissionGranted(context) ? 1 : 0, BOOLEAN_BOUNDARY);
+                locationUtils.hasAndroidLocationPermission(context) ? 1 : 0, BOOLEAN_BOUNDARY);
         handleEnum(context, createStateString(BLUETOOTH, actionName),
                 Utils.getBluetoothEnabledStatus(context), TRISTATE_BOUNDARY);
         handleEnum(context, createStateString(DATA_CONNECTION, actionName),
@@ -324,6 +337,7 @@ public class PhysicalWebUma {
             uploadActions(PREFS_LOCATION_GRANTED_COUNT);
             uploadTimes(PWS_BACKGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
             uploadTimes(PWS_FOREGROUND_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
+            uploadTimes(PWS_REFRESH_RESOLVE_TIMES, TimeUnit.MILLISECONDS);
             uploadTimes(STANDARD_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
             uploadTimes(OPT_IN_NOTIFICATION_PRESS_DELAYS, TimeUnit.MILLISECONDS);
             uploadCounts(TOTAL_URLS_INITIAL_COUNTS);

@@ -7,22 +7,24 @@
 
 #include <string>
 
-#include "ash/shell_observer.h"
+#include "ash/common/shell_observer.h"
 #include "base/macros.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
+#include "components/arc/instance_holder.h"
 
 namespace arc {
 
-class ArcWindowManagerBridge : public ArcService,
-                               public ArcBridgeService::Observer,
-                               public ash::ShellObserver {
+class ArcWindowManagerBridge
+    : public ArcService,
+      public InstanceHolder<mojom::WindowManagerInstance>::Observer,
+      public ash::ShellObserver {
  public:
   explicit ArcWindowManagerBridge(ArcBridgeService* bridge_service);
   ~ArcWindowManagerBridge() override;
 
-  // ArcBridgeService::Observer
-  void OnWindowManagerInstanceReady() override;
+  // InstanceHolder<mojom::WindowManagerInstance>::Observer
+  void OnInstanceReady() override;
 
   // Ash::Shell::ShellObserver
   void OnMaximizeModeStarted() override;

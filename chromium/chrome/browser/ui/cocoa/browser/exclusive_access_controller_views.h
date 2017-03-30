@@ -24,7 +24,6 @@ class Browser;
 class BrowserWindow;
 @class BrowserWindowController;
 class ExclusiveAccessBubbleViews;
-@class ExclusiveAccessBubbleWindowController;
 class GURL;
 class NewBackShortcutBubble;
 
@@ -41,9 +40,6 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
 
   const GURL& url() const { return url_; }
   ExclusiveAccessBubbleType bubble_type() const { return bubble_type_; }
-  ExclusiveAccessBubbleWindowController* cocoa_bubble() {
-    return cocoa_bubble_;
-  }
 
   // Shows the bubble once the NSWindow has received -windowDidEnterFullScreen:.
   void Show();
@@ -61,13 +57,10 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
   // ExclusiveAccessContext:
   Profile* GetProfile() override;
   bool IsFullscreen() const override;
-  bool SupportsFullscreenWithToolbar() const override;
-  void UpdateFullscreenWithToolbar(bool with_toolbar) override;
+  void UpdateUIForTabFullscreen(TabFullscreenState state) override;
   void UpdateFullscreenToolbar() override;
-  bool IsFullscreenWithToolbar() const override;
   void EnterFullscreen(const GURL& url,
-                       ExclusiveAccessBubbleType type,
-                       bool with_toolbar) override;
+                       ExclusiveAccessBubbleType type) override;
   void ExitFullscreen() override;
   void UpdateExclusiveAccessExitBubbleContent(
       const GURL& url,
@@ -104,7 +97,6 @@ class ExclusiveAccessController : public ExclusiveAccessContext,
   ExclusiveAccessBubbleType bubble_type_;
 
   std::unique_ptr<ExclusiveAccessBubbleViews> views_bubble_;
-  base::scoped_nsobject<ExclusiveAccessBubbleWindowController> cocoa_bubble_;
 
   // This class also manages the new Back shortcut bubble (which functions the
   // same way as ExclusiveAccessBubbleViews).

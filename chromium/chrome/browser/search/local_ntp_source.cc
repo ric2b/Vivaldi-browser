@@ -29,7 +29,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "grit/browser_resources.h"
@@ -88,8 +87,8 @@ bool DefaultSearchProviderIsGoogle(Profile* profile) {
   const TemplateURL* default_provider =
       template_url_service->GetDefaultSearchProvider();
   return default_provider &&
-      (TemplateURLPrepopulateData::GetEngineType(
-          *default_provider, template_url_service->search_terms_data()) ==
+      (default_provider->GetEngineType(
+          template_url_service->search_terms_data()) ==
        SEARCH_ENGINE_GOOGLE);
 }
 
@@ -233,7 +232,7 @@ void LocalNtpSource::StartDataRequest(
 
   for (size_t i = 0; i < arraysize(kResources); ++i) {
     if (filename == kResources[i].filename) {
-      scoped_refptr<base::RefCountedStaticMemory> response(
+      scoped_refptr<base::RefCountedMemory> response(
           ResourceBundle::GetSharedInstance().LoadDataResourceBytesForScale(
               kResources[i].identifier, scale_factor));
       callback.Run(response.get());
@@ -270,8 +269,8 @@ bool LocalNtpSource::ShouldServiceRequest(
   return false;
 }
 
-std::string LocalNtpSource::GetContentSecurityPolicyFrameSrc() const {
+std::string LocalNtpSource::GetContentSecurityPolicyChildSrc() const {
   // Allow embedding of most visited iframes.
-  return base::StringPrintf("frame-src %s;",
+  return base::StringPrintf("child-src %s;",
                             chrome::kChromeSearchMostVisitedUrl);
 }

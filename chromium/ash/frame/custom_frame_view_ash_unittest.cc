@@ -6,7 +6,8 @@
 
 #include <memory>
 
-#include "ash/ash_layout_constants.h"
+#include "ash/common/ash_layout_constants.h"
+#include "ash/common/wm_shell.h"
 #include "ash/frame/caption_buttons/frame_caption_button.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/shell.h"
@@ -34,9 +35,7 @@ class TestWidgetDelegate : public views::WidgetDelegateView {
     return custom_frame_view_;
   }
 
-  CustomFrameViewAsh* custom_frame_view() const {
-    return custom_frame_view_;
-  }
+  CustomFrameViewAsh* custom_frame_view() const { return custom_frame_view_; }
 
  private:
   // Not owned.
@@ -66,22 +65,19 @@ class TestWidgetConstraintsDelegate : public TestWidgetDelegate {
 
   bool CanMinimize() const override { return true; }
 
-  void set_minimum_size(const gfx::Size& min_size) {
-    minimum_size_ = min_size;
-  }
+  void set_minimum_size(const gfx::Size& min_size) { minimum_size_ = min_size; }
 
-  void set_maximum_size(const gfx::Size& max_size) {
-    maximum_size_ = max_size;
-  }
+  void set_maximum_size(const gfx::Size& max_size) { maximum_size_ = max_size; }
 
   const gfx::Rect& GetFrameCaptionButtonContainerViewBounds() {
-    return custom_frame_view()->GetFrameCaptionButtonContainerViewForTest()->
-        bounds();
+    return custom_frame_view()
+        ->GetFrameCaptionButtonContainerViewForTest()
+        ->bounds();
   }
 
   void EndFrameCaptionButtonContainerViewAnimations() {
-    FrameCaptionButtonContainerView::TestApi test(custom_frame_view()->
-        GetFrameCaptionButtonContainerViewForTest());
+    FrameCaptionButtonContainerView::TestApi test(
+        custom_frame_view()->GetFrameCaptionButtonContainerViewForTest());
     test.EndAnimations();
   }
 
@@ -114,8 +110,8 @@ class CustomFrameViewAshTest : public test::AshTestBase {
   }
 
   test::TestSessionStateDelegate* GetTestSessionStateDelegate() {
-    return static_cast<ash::test::TestSessionStateDelegate*>(
-        Shell::GetInstance()->session_state_delegate());
+    return static_cast<test::TestSessionStateDelegate*>(
+        WmShell::Get()->GetSessionStateDelegate());
   }
 
  private:
@@ -209,19 +205,21 @@ TEST_F(CustomFrameViewAshTest, HeaderViewNotifiedOfChildSizeChange) {
   TestWidgetConstraintsDelegate* delegate = new TestWidgetConstraintsDelegate;
   std::unique_ptr<views::Widget> widget(CreateWidget(delegate));
 
-  const gfx::Rect initial = delegate->
-      GetFrameCaptionButtonContainerViewBounds();
-  Shell::GetInstance()->maximize_mode_controller()->
-      EnableMaximizeModeWindowManager(true);
+  const gfx::Rect initial =
+      delegate->GetFrameCaptionButtonContainerViewBounds();
+  Shell::GetInstance()
+      ->maximize_mode_controller()
+      ->EnableMaximizeModeWindowManager(true);
   delegate->EndFrameCaptionButtonContainerViewAnimations();
-  const gfx::Rect maximize_mode_bounds = delegate->
-      GetFrameCaptionButtonContainerViewBounds();
+  const gfx::Rect maximize_mode_bounds =
+      delegate->GetFrameCaptionButtonContainerViewBounds();
   EXPECT_GT(initial.width(), maximize_mode_bounds.width());
-  Shell::GetInstance()->maximize_mode_controller()->
-      EnableMaximizeModeWindowManager(false);
+  Shell::GetInstance()
+      ->maximize_mode_controller()
+      ->EnableMaximizeModeWindowManager(false);
   delegate->EndFrameCaptionButtonContainerViewAnimations();
-  const gfx::Rect after_restore = delegate->
-      GetFrameCaptionButtonContainerViewBounds();
+  const gfx::Rect after_restore =
+      delegate->GetFrameCaptionButtonContainerViewBounds();
   EXPECT_EQ(initial, after_restore);
 }
 

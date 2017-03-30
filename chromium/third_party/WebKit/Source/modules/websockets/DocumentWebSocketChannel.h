@@ -31,24 +31,23 @@
 #ifndef DocumentWebSocketChannel_h
 #define DocumentWebSocketChannel_h
 
+#include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileError.h"
 #include "modules/ModulesExport.h"
 #include "modules/websockets/WebSocketChannel.h"
 #include "platform/heap/Handle.h"
-#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/modules/websockets/WebSocketHandle.h"
 #include "public/platform/modules/websockets/WebSocketHandleClient.h"
 #include "wtf/Deque.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 #include <stdint.h>
 
 namespace blink {
@@ -68,9 +67,9 @@ public:
     // In the usual case, they are set automatically and you don't have to
     // pass it.
     // Specify handle explicitly only in tests.
-    static DocumentWebSocketChannel* create(Document* document, WebSocketChannelClient* client, const String& sourceURL = String(), unsigned lineNumber = 0, WebSocketHandle *handle = 0)
+    static DocumentWebSocketChannel* create(Document* document, WebSocketChannelClient* client, std::unique_ptr<SourceLocation> location, WebSocketHandle *handle = 0)
     {
-        return new DocumentWebSocketChannel(document, client, sourceURL, lineNumber, handle);
+        return new DocumentWebSocketChannel(document, client, std::move(location), handle);
     }
     ~DocumentWebSocketChannel() override;
 
@@ -79,12 +78,12 @@ public:
     void send(const CString& message) override;
     void send(const DOMArrayBuffer&, unsigned byteOffset, unsigned byteLength) override;
     void send(PassRefPtr<BlobDataHandle>) override;
-    void sendTextAsCharVector(PassOwnPtr<Vector<char>> data) override;
-    void sendBinaryAsCharVector(PassOwnPtr<Vector<char>> data) override;
+    void sendTextAsCharVector(std::unique_ptr<Vector<char>> data) override;
+    void sendBinaryAsCharVector(std::unique_ptr<Vector<char>> data) override;
     // Start closing handshake. Use the CloseEventCodeNotSpecified for the code
     // argument to omit payload.
     void close(int code, const String& reason) override;
-    void fail(const String& reason, MessageLevel, const String&, unsigned lineNumber) override;
+    void fail(const String& reason, MessageLevel, std::unique_ptr<SourceLocation>) override;
     void disconnect() override;
 
     DECLARE_VIRTUAL_TRACE();
@@ -107,11 +106,11 @@ private:
         Vector<char> data;
     };
 
-    DocumentWebSocketChannel(Document*, WebSocketChannelClient*, const String&, unsigned, WebSocketHandle*);
+    DocumentWebSocketChannel(Document*, WebSocketChannelClient*, std::unique_ptr<SourceLocation>, WebSocketHandle*);
     void sendInternal(WebSocketHandle::MessageType, const char* data, size_t totalSize, uint64_t* consumedBufferedAmount);
     void processSendQueue();
     void flowControlIfNecessary();
-    void failAsError(const String& reason) { fail(reason, ErrorMessageLevel, m_sourceURLAtConstruction, m_lineNumberAtConstruction); }
+    void failAsError(const String& reason) { fail(reason, ErrorMessageLevel, m_locationAtConstruction->clone()); }
     void abortAsyncOperations();
     void handleDidClose(bool wasClean, unsigned short code, const String& reason);
     Document* document();
@@ -132,7 +131,7 @@ private:
 
     // m_handle is a handle of the connection.
     // m_handle == 0 means this channel is closed.
-    OwnPtr<WebSocketHandle> m_handle;
+    std::unique_ptr<WebSocketHandle> m_handle;
 
     // m_client can be deleted while this channel is alive, but this class
     // expects that disconnect() is called before the deletion.
@@ -149,8 +148,7 @@ private:
     uint64_t m_receivedDataSizeForFlowControl;
     size_t m_sentSizeOfTopMessage;
 
-    String m_sourceURLAtConstruction;
-    unsigned m_lineNumberAtConstruction;
+    std::unique_ptr<SourceLocation> m_locationAtConstruction;
     RefPtr<WebSocketHandshakeRequest> m_handshakeRequest;
 
     static const uint64_t receivedDataSizeForFlowControlHighWaterMark = 1 << 15;

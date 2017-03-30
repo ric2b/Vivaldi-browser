@@ -166,13 +166,12 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
 
     gfx::Transform scale_transform;
     scale_transform.Scale(ideal_contents_scale, ideal_contents_scale);
-    layer->draw_properties().target_space_transform = scale_transform;
+    layer->draw_properties().screen_space_transform = scale_transform;
     layer->set_is_drawn_render_surface_layer_list_member(true);
     DCHECK_EQ(layer->GetIdealContentsScale(), ideal_contents_scale);
-    layer->draw_properties().maximum_animation_contents_scale =
-        maximum_animation_contents_scale;
-    layer->draw_properties().starting_animation_contents_scale =
-        starting_animation_contents_scale;
+    layer->layer_tree_impl()->property_trees()->SetAnimationScalesForTesting(
+        layer->transform_tree_index(), maximum_animation_contents_scale,
+        starting_animation_contents_scale);
     layer->draw_properties().screen_space_transform_is_animating =
         animating_transform_to_screen;
   }
@@ -339,7 +338,7 @@ TEST_F(PictureLayerImplTest, TileGridAlignment) {
   for (tile_iter = tiles.begin(); tile_iter < tiles.end(); tile_iter++) {
     MockCanvas mock_canvas(1000, 1000);
     const gfx::Rect& content_rect = (*tile_iter)->content_rect();
-    updated_active_raster_source->PlaybackToCanvas(
+    updated_active_raster_source->RasterSource::PlaybackToCanvas(
         &mock_canvas, content_rect, content_rect, 1.0f, playback_settings);
 
     // This test verifies that when drawing the contents of a specific tile
@@ -538,8 +537,6 @@ TEST_F(PictureLayerImplTest, ClonePartialInvalidation) {
   EXPECT_GT(tilings->num_tilings(), 0u);
   for (size_t i = 0; i < tilings->num_tilings(); ++i) {
     const PictureLayerTiling* tiling = tilings->tiling_at(i);
-    gfx::Rect content_invalidation =
-        gfx::ScaleToEnclosingRect(layer_invalidation, tiling->contents_scale());
     auto prioritized_tiles =
         tiling->UpdateAndGetAllPrioritizedTilesForTesting();
     for (PictureLayerTiling::CoverageIterator iter(
@@ -927,8 +924,12 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   float page_scale = 1.f;
 
   SetupDefaultTrees(layer_bounds);
-  EXPECT_EQ(2u, active_layer()->tilings()->num_tilings());
-  EXPECT_EQ(1.f, active_layer()->HighResTiling()->contents_scale());
+  active_layer()->SetHasWillChangeTransformHint(true);
+  EXPECT_FLOAT_EQ(2u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
 
   // Ensure UpdateTiles won't remove any tilings. Note this is unrelated to
   // |used_tilings| variable, and it's here only to ensure that active_layer()
@@ -938,7 +939,11 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   // We only have ideal tilings, so they aren't removed.
   used_tilings.clear();
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
-  EXPECT_EQ(2u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(2u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
 
   host_impl()->PinchGestureBegin();
 
@@ -946,12 +951,20 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   scale = 1.5f;
   page_scale = 1.5f;
   SetContentsScaleOnBothLayers(scale, 1.f, page_scale, 1.f, 0.f, false);
-  EXPECT_EQ(2u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(2u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
 
   // The tilings are still our target scale, so they aren't removed.
   used_tilings.clear();
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(2u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
 
   host_impl()->PinchGestureEnd();
 
@@ -960,8 +973,12 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   page_scale = 1.2f;
   SetContentsScaleOnBothLayers(1.2f, 1.f, page_scale, 1.f, 0.f, false);
   ASSERT_EQ(4u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.2f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
   EXPECT_FLOAT_EQ(1.f,
                   active_layer()->tilings()->tiling_at(1)->contents_scale());
+  EXPECT_FLOAT_EQ(1.2f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(2)->contents_scale());
   EXPECT_FLOAT_EQ(1.f * low_res_factor,
                   active_layer()->tilings()->tiling_at(3)->contents_scale());
 
@@ -974,6 +991,14 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   used_tilings.push_back(active_layer()->tilings()->tiling_at(3));
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(4u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.2f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
+  EXPECT_FLOAT_EQ(1.2f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(2)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(3)->contents_scale());
 
   // Now move the ideal scale to 0.5. Our target stays 1.2.
   SetContentsScaleOnBothLayers(0.5f, 1.f, page_scale, 1.f, 0.f, false);
@@ -983,6 +1008,12 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   used_tilings.clear();
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(3u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.2f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
+  EXPECT_FLOAT_EQ(1.2f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(2)->contents_scale());
 
   // Now move the ideal scale to 1.0. Our target stays 1.2.
   SetContentsScaleOnBothLayers(1.f, 1.f, page_scale, 1.f, 0.f, false);
@@ -992,6 +1023,12 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   used_tilings.clear();
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(3u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.2f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
+  EXPECT_FLOAT_EQ(1.2f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(2)->contents_scale());
 
   // Now move the ideal scale to 1.1 on the active layer. Our target stays 1.2.
   SetupDrawPropertiesAndUpdateTiles(active_layer(), 1.1f, 1.f, page_scale, 1.f,
@@ -1002,6 +1039,12 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   used_tilings.clear();
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(3u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.2f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
+  EXPECT_FLOAT_EQ(1.2f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(2)->contents_scale());
 
   // Move the ideal scale on the pending layer to 1.1 as well. Our target stays
   // 1.2 still.
@@ -1015,12 +1058,22 @@ TEST_F(PictureLayerImplTest, CleanUpTilings) {
   used_tilings.push_back(active_layer()->tilings()->tiling_at(1));
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(3u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.2f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.f,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
+  EXPECT_FLOAT_EQ(1.2f * low_res_factor,
+                  active_layer()->tilings()->tiling_at(2)->contents_scale());
 
   // If we remove it from our used tilings set, it is outside the range to keep
   // so it is deleted.
   used_tilings.clear();
   active_layer()->CleanUpTilingsOnActiveLayer(used_tilings);
   ASSERT_EQ(2u, active_layer()->tilings()->num_tilings());
+  EXPECT_FLOAT_EQ(1.2f,
+                  active_layer()->tilings()->tiling_at(0)->contents_scale());
+  EXPECT_FLOAT_EQ(1.2 * low_res_factor,
+                  active_layer()->tilings()->tiling_at(1)->contents_scale());
 }
 
 TEST_F(PictureLayerImplTest, DontAddLowResDuringAnimation) {
@@ -1146,13 +1199,13 @@ TEST_F(PictureLayerImplTest, DontAddLowResForSmallLayers) {
           host_impl()->pending_tree(), 3, pending_raster_source);
   mask->SetBounds(layer_bounds);
   mask->SetDrawsContent(true);
-  pending_layer()->SetMaskLayer(std::move(mask));
+  pending_layer()->test_properties()->SetMaskLayer(std::move(mask));
   pending_layer()->SetHasRenderSurface(true);
   RebuildPropertyTreesOnPendingTree();
   host_impl()->pending_tree()->UpdateDrawProperties(false);
 
-  FakePictureLayerImpl* mask_raw =
-      static_cast<FakePictureLayerImpl*>(pending_layer()->mask_layer());
+  FakePictureLayerImpl* mask_raw = static_cast<FakePictureLayerImpl*>(
+      pending_layer()->test_properties()->mask_layer);
   // We did an UpdateDrawProperties above, which will set a contents scale on
   // the mask layer, so allow us to reset the contents scale.
   mask_raw->ReleaseResources();
@@ -1179,7 +1232,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
           host_impl()->pending_tree(), 3, valid_raster_source);
   mask_ptr->SetBounds(layer_bounds);
   mask_ptr->SetDrawsContent(true);
-  pending_layer()->SetMaskLayer(std::move(mask_ptr));
+  pending_layer()->test_properties()->SetMaskLayer(std::move(mask_ptr));
   pending_layer()->test_properties()->force_render_surface = true;
 
   RebuildPropertyTreesOnPendingTree();
@@ -1187,8 +1240,8 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   bool update_lcd_text = false;
   host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
 
-  FakePictureLayerImpl* pending_mask =
-      static_cast<FakePictureLayerImpl*>(pending_layer()->mask_layer());
+  FakePictureLayerImpl* pending_mask = static_cast<FakePictureLayerImpl*>(
+      pending_layer()->test_properties()->mask_layer);
 
   EXPECT_EQ(1.f, pending_mask->HighResTiling()->contents_scale());
   EXPECT_EQ(1u, pending_mask->num_tilings());
@@ -1198,8 +1251,8 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
 
   ActivateTree();
 
-  FakePictureLayerImpl* active_mask =
-      static_cast<FakePictureLayerImpl*>(active_layer()->mask_layer());
+  FakePictureLayerImpl* active_mask = static_cast<FakePictureLayerImpl*>(
+      host_impl()->active_tree()->LayerById(pending_mask->id()));
 
   // Mask layers have a tiling with a single tile in it.
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
@@ -1309,7 +1362,7 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
           host_impl()->pending_tree(), 3, valid_raster_source);
   mask_ptr->SetBounds(layer_bounds);
   mask_ptr->SetDrawsContent(true);
-  pending_layer()->SetMaskLayer(std::move(mask_ptr));
+  pending_layer()->test_properties()->SetMaskLayer(std::move(mask_ptr));
   pending_layer()->test_properties()->force_render_surface = true;
 
   RebuildPropertyTreesOnPendingTree();
@@ -1317,8 +1370,8 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
   bool update_lcd_text = false;
   host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
 
-  FakePictureLayerImpl* pending_mask =
-      static_cast<FakePictureLayerImpl*>(pending_layer()->mask_layer());
+  FakePictureLayerImpl* pending_mask = static_cast<FakePictureLayerImpl*>(
+      pending_layer()->test_properties()->mask_layer);
 
   // Masks are scaled, and do not have a low res tiling.
   EXPECT_EQ(1.3f, pending_mask->HighResTiling()->contents_scale());
@@ -1329,8 +1382,8 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
 
   ActivateTree();
 
-  FakePictureLayerImpl* active_mask =
-      static_cast<FakePictureLayerImpl*>(active_layer()->mask_layer());
+  FakePictureLayerImpl* active_mask = static_cast<FakePictureLayerImpl*>(
+      host_impl()->active_tree()->LayerById(pending_mask->id()));
 
   // Mask layers have a tiling with a single tile in it.
   EXPECT_EQ(1u, active_mask->HighResTiling()->AllTilesForTesting().size());
@@ -1640,7 +1693,6 @@ TEST_F(NoLowResPictureLayerImplTest,
   ASSERT_EQ(1.f, pending_layer()->HighResTiling()->contents_scale());
 
   // Set external viewport for tile priority.
-  gfx::Rect viewport = gfx::Rect(layer_bounds);
   gfx::Transform transform;
   gfx::Transform transform_for_tile_priority;
   host_impl()->SetExternalTilePriorityConstraints(
@@ -1832,6 +1884,7 @@ TEST_F(PictureLayerImplTest,
   SetInitialDeviceScaleFactor(2.f);
 
   SetupDefaultTreesWithFixedTileSize(layer_bounds, tile_size, Region());
+  active_layer()->SetHasWillChangeTransformHint(true);
 
   // One ideal tile exists, this will get used when drawing.
   std::vector<Tile*> ideal_tiles;
@@ -2087,7 +2140,8 @@ TEST_F(PictureLayerImplTest, ActivateUninitializedLayer) {
       FakePictureLayerImpl::CreateWithRasterSource(pending_tree, layer_id(),
                                                    pending_raster_source);
   pending_layer->SetDrawsContent(true);
-  pending_tree->SetRootLayer(std::move(pending_layer));
+  pending_tree->SetRootLayerForTesting(std::move(pending_layer));
+  pending_tree->BuildLayerListForTesting();
 
   FakePictureLayerImpl* raw_pending_layer = static_cast<FakePictureLayerImpl*>(
       host_impl()->pending_tree()->LayerById(layer_id()));
@@ -3121,22 +3175,53 @@ TEST_F(PictureLayerImplTest, RasterScaleChangeWithoutAnimation) {
   EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 2.f);
 
   // Changing the source scale without being in an animation will cause
-  // the layer to reset its source scale to 1.f.
+  // the layer to change scale.
   contents_scale = 3.f;
 
   SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
                                maximum_animation_scale,
                                starting_animation_scale, animating_transform);
-  EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 1.f);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 3.f);
 
-  // Further changes to the source scale will no longer be reflected in the
-  // contents scale.
   contents_scale = 0.5f;
 
   SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
                                maximum_animation_scale,
                                starting_animation_scale, animating_transform);
-  EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 1.f);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 0.5f);
+
+  // However, if the layer has a will-change property, then the raster scale
+  // will get fixed at the last value.
+  active_layer()->SetHasWillChangeTransformHint(true);
+  pending_layer()->SetHasWillChangeTransformHint(true);
+
+  contents_scale = 3.f;
+
+  SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
+                               maximum_animation_scale,
+                               starting_animation_scale, animating_transform);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 0.5f);
+
+  // Further changes to the source scale will no longer be reflected in the
+  // contents scale.
+  contents_scale = 1.f;
+
+  SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
+                               maximum_animation_scale,
+                               starting_animation_scale, animating_transform);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 0.5f);
+
+  // Disabling the will-change hint will once again make the raster scale update
+  // with the ideal scale.
+  active_layer()->SetHasWillChangeTransformHint(false);
+  pending_layer()->SetHasWillChangeTransformHint(false);
+
+  contents_scale = 3.f;
+
+  SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
+                               maximum_animation_scale,
+                               starting_animation_scale, animating_transform);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale(), 3.f);
 }
 
 TEST_F(PictureLayerImplTest, LowResReadyToDrawNotEnoughToActivate) {
@@ -3387,6 +3472,7 @@ TEST_F(NoLowResPictureLayerImplTest, CleanUpTilings) {
   float page_scale = 3.2f;
   float scale = 1.f;
 
+  active_layer()->SetHasWillChangeTransformHint(true);
   ResetTilingsAndRasterScales();
 
   SetContentsScaleOnBothLayers(scale, device_scale, page_scale, 1.f, 0.f,
@@ -3696,8 +3782,9 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   EXPECT_EQ(unoccluded_tile_count, 25);
 
   // Partial occlusion.
-  pending_layer()->AddChild(LayerImpl::Create(host_impl()->pending_tree(), 1));
-  LayerImpl* layer1 = pending_layer()->children()[0];
+  pending_layer()->test_properties()->AddChild(
+      LayerImpl::Create(host_impl()->pending_tree(), 1));
+  LayerImpl* layer1 = pending_layer()->test_properties()->children[0];
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -3791,8 +3878,9 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   }
 
   // Partial occlusion.
-  pending_layer()->AddChild(LayerImpl::Create(host_impl()->pending_tree(), 1));
-  LayerImpl* layer1 = pending_layer()->children()[0];
+  pending_layer()->test_properties()->AddChild(
+      LayerImpl::Create(host_impl()->pending_tree(), 1));
+  LayerImpl* layer1 = pending_layer()->test_properties()->children[0];
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -3888,8 +3976,9 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, OcclusionForDifferentScales) {
   SetupPendingTreeWithFixedTileSize(pending_raster_source, tile_size, Region());
   ASSERT_TRUE(pending_layer()->CanHaveTilings());
 
-  pending_layer()->AddChild(LayerImpl::Create(host_impl()->pending_tree(), 1));
-  LayerImpl* layer1 = pending_layer()->children()[0];
+  pending_layer()->test_properties()->AddChild(
+      LayerImpl::Create(host_impl()->pending_tree(), 1));
+  LayerImpl* layer1 = pending_layer()->test_properties()->children[0];
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -3963,8 +4052,9 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, DifferentOcclusionOnTrees) {
   SetupPendingTree(active_raster_source);
 
   // Partially occlude the active layer.
-  pending_layer()->AddChild(LayerImpl::Create(host_impl()->pending_tree(), 2));
-  LayerImpl* layer1 = pending_layer()->children()[0];
+  pending_layer()->test_properties()->AddChild(
+      LayerImpl::Create(host_impl()->pending_tree(), 2));
+  LayerImpl* layer1 = pending_layer()->test_properties()->children[0];
   layer1->SetBounds(layer_bounds);
   layer1->SetDrawsContent(true);
   layer1->SetContentsOpaque(true);
@@ -4057,8 +4147,10 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   SetupPendingTreeWithFixedTileSize(active_raster_source, tile_size, Region());
 
   // Partially occlude the active layer.
-  pending_layer()->AddChild(LayerImpl::Create(host_impl()->pending_tree(), 2));
-  LayerImpl* active_occluding_layer = pending_layer()->children()[0];
+  pending_layer()->test_properties()->AddChild(
+      LayerImpl::Create(host_impl()->pending_tree(), 2));
+  LayerImpl* active_occluding_layer =
+      pending_layer()->test_properties()->children[0];
   active_occluding_layer->SetBounds(layer_bounds);
   active_occluding_layer->SetDrawsContent(true);
   active_occluding_layer->SetContentsOpaque(true);
@@ -4072,8 +4164,10 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
                                     invalidation_rect);
 
   // Partially occlude the pending layer in a different way.
-  pending_layer()->AddChild(LayerImpl::Create(host_impl()->pending_tree(), 3));
-  LayerImpl* pending_occluding_layer = pending_layer()->children()[0];
+  pending_layer()->test_properties()->AddChild(
+      LayerImpl::Create(host_impl()->pending_tree(), 3));
+  LayerImpl* pending_occluding_layer =
+      pending_layer()->test_properties()->children[0];
   pending_occluding_layer->SetBounds(layer_bounds);
   pending_occluding_layer->SetDrawsContent(true);
   pending_occluding_layer->SetContentsOpaque(true);
@@ -4208,7 +4302,7 @@ TEST_F(PictureLayerImplTest, PendingOrActiveTwinLayer) {
 
   // Make an empty pending tree.
   host_impl()->CreatePendingTree();
-  host_impl()->pending_tree()->ClearLayers();
+  host_impl()->pending_tree()->DetachLayers();
   EXPECT_FALSE(active_layer()->GetPendingOrActiveTwinLayer());
 }
 
@@ -4550,7 +4644,7 @@ TEST_F(PictureLayerImplTest, UpdateLCDInvalidatesPendingTree) {
     EXPECT_EQ(pending_layer()->raster_source(),
               prioritized_tiles[tile].raster_source());
 
-  pending_layer()->draw_properties().can_use_lcd_text = false;
+  pending_layer()->SetContentsOpaque(false);
   pending_layer()->UpdateCanUseLCDTextAfterCommit();
 
   EXPECT_FALSE(pending_layer()->RasterSourceUsesLCDText());
@@ -4660,8 +4754,8 @@ TEST_F(TileSizeTest, TileSizes) {
   result = layer->CalculateTileSize(gfx::Size(10000, 10000));
   EXPECT_EQ(result.width(),
             MathUtil::UncheckedRoundUp(
-                2000 + 2 * PictureLayerTiling::kBorderTexels, 4));
-  EXPECT_EQ(result.height(), 504);  // 500 + 2, 4-byte aligned.
+                2000 + 2 * PictureLayerTiling::kBorderTexels, 32));
+  EXPECT_EQ(result.height(), 512);  // 500 + 2, 32-byte aligned.
 
   // Clamp and round-up, when smaller than viewport.
   // Tile-height doubles to 50% when width shrinks to <= 50%.
@@ -4669,7 +4763,7 @@ TEST_F(TileSizeTest, TileSizes) {
   layer->set_gpu_raster_max_texture_size(host_impl()->device_viewport_size());
   result = layer->CalculateTileSize(gfx::Size(447, 10000));
   EXPECT_EQ(result.width(), 448);
-  EXPECT_EQ(result.height(), 504);  // 500 + 2, 4-byte aliged.
+  EXPECT_EQ(result.height(), 512);  // 500 + 2, 32-byte aliged.
 
   // Largest layer is 50% of viewport width (rounded up), and
   // 50% of viewport in height.
@@ -4678,7 +4772,7 @@ TEST_F(TileSizeTest, TileSizes) {
   EXPECT_EQ(result.height(), 448);
   result = layer->CalculateTileSize(gfx::Size(500, 499));
   EXPECT_EQ(result.width(), 512);
-  EXPECT_EQ(result.height(), 504);  // 500 + 2, 4-byte aligned.
+  EXPECT_EQ(result.height(), 512);  // 500 + 2, 32-byte aligned.
 }
 
 TEST_F(NoLowResPictureLayerImplTest, LowResWasHighResCollision) {
@@ -4765,6 +4859,150 @@ TEST_F(PictureLayerImplTest, HighResWasLowResCollision) {
   // This tiling will be high res now, it won't contain low res content since it
   // was all destroyed.
   EXPECT_FALSE(tilings->tiling_at(1)->may_contain_low_resolution_tiles());
+}
+
+TEST_F(PictureLayerImplTest, CompositedImageCalculateContentsScale) {
+  gfx::Size layer_bounds(400, 400);
+  scoped_refptr<FakeRasterSource> pending_raster_source =
+      FakeRasterSource::CreateFilled(layer_bounds);
+
+  host_impl()->CreatePendingTree();
+  LayerTreeImpl* pending_tree = host_impl()->pending_tree();
+
+  std::unique_ptr<FakePictureLayerImpl> pending_layer =
+      FakePictureLayerImpl::CreateWithRasterSource(pending_tree, layer_id(),
+                                                   pending_raster_source);
+  pending_layer->set_is_directly_composited_image(true);
+  pending_layer->SetDrawsContent(true);
+  FakePictureLayerImpl* pending_layer_ptr = pending_layer.get();
+  pending_tree->SetRootLayerForTesting(std::move(pending_layer));
+  pending_tree->BuildLayerListAndPropertyTreesForTesting();
+
+  SetupDrawPropertiesAndUpdateTiles(pending_layer_ptr, 2.f, 3.f, 4.f, 1.f, 1.f,
+                                    false);
+  EXPECT_FLOAT_EQ(1.f, pending_layer_ptr->MaximumTilingContentsScale());
+}
+
+TEST_F(PictureLayerImplTest, CompositedImageIgnoreIdealContentsScale) {
+  gfx::Size layer_bounds(400, 400);
+  scoped_refptr<FakeRasterSource> pending_raster_source =
+      FakeRasterSource::CreateFilled(layer_bounds);
+
+  host_impl()->SetViewportSize(layer_bounds);
+  host_impl()->CreatePendingTree();
+  LayerTreeImpl* pending_tree = host_impl()->pending_tree();
+
+  std::unique_ptr<FakePictureLayerImpl> pending_layer =
+      FakePictureLayerImpl::CreateWithRasterSource(pending_tree, layer_id(),
+                                                   pending_raster_source);
+  pending_layer->set_is_directly_composited_image(true);
+  pending_layer->SetDrawsContent(true);
+  FakePictureLayerImpl* pending_layer_ptr = pending_layer.get();
+  pending_tree->SetRootLayerForTesting(std::move(pending_layer));
+  pending_tree->BuildLayerListAndPropertyTreesForTesting();
+
+  // Set PictureLayerImpl::ideal_contents_scale_ to 2.f.
+  const float suggested_ideal_contents_scale = 2.f;
+  const float device_scale_factor = 3.f;
+  const float page_scale_factor = 4.f;
+  const float animation_contents_scale = 1.f;
+  const bool animating_transform_to_screen = false;
+  SetupDrawPropertiesAndUpdateTiles(
+      pending_layer_ptr, suggested_ideal_contents_scale, device_scale_factor,
+      page_scale_factor, animation_contents_scale, animation_contents_scale,
+      animating_transform_to_screen);
+  EXPECT_EQ(1.f, pending_layer_ptr->tilings()->tiling_at(0)->contents_scale());
+
+  // Push to active layer.
+  host_impl()->ActivateSyncTree();
+
+  FakePictureLayerImpl* active_layer = static_cast<FakePictureLayerImpl*>(
+      host_impl()->active_tree()->root_layer_for_testing());
+  SetupDrawPropertiesAndUpdateTiles(
+      active_layer, suggested_ideal_contents_scale, device_scale_factor,
+      page_scale_factor, animation_contents_scale, animation_contents_scale,
+      animating_transform_to_screen);
+  EXPECT_EQ(1.f, active_layer->tilings()->tiling_at(0)->contents_scale());
+  active_layer->set_visible_layer_rect(gfx::Rect(layer_bounds));
+
+  // Create resources for the tiles.
+  host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(
+      active_layer->tilings()->tiling_at(0)->AllTilesForTesting());
+
+  // Draw.
+  std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
+  AppendQuadsData data;
+  active_layer->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
+  active_layer->AppendQuads(render_pass.get(), &data);
+  active_layer->DidDraw(nullptr);
+
+  ASSERT_FALSE(render_pass->quad_list.empty());
+  EXPECT_EQ(DrawQuad::TILED_CONTENT, render_pass->quad_list.front()->material);
+
+  // Tiles are ready at correct scale, so should not set had_incomplete_tile.
+  EXPECT_EQ(0, data.num_incomplete_tiles);
+}
+
+TEST_F(PictureLayerImplTest, CompositedImageRasterScaleChanges) {
+  gfx::Size layer_bounds(400, 400);
+  scoped_refptr<FakeRasterSource> pending_raster_source =
+      FakeRasterSource::CreateFilled(layer_bounds);
+
+  host_impl()->CreatePendingTree();
+  LayerTreeImpl* pending_tree = host_impl()->pending_tree();
+
+  std::unique_ptr<FakePictureLayerImpl> pending_layer =
+      FakePictureLayerImpl::CreateWithRasterSource(pending_tree, layer_id(),
+                                                   pending_raster_source);
+  pending_layer->set_is_directly_composited_image(true);
+  pending_layer->SetDrawsContent(true);
+  FakePictureLayerImpl* pending_layer_ptr = pending_layer.get();
+  pending_tree->SetRootLayerForTesting(std::move(pending_layer));
+  pending_tree->BuildLayerListAndPropertyTreesForTesting();
+
+  float expected_contents_scale = 0.25f;
+  for (int i = 1; i < 30; ++i) {
+    float ideal_contents_scale = 0.1f * i - 1e-6;
+    switch (i) {
+      // Scale 0.3.
+      case 3:
+        expected_contents_scale = 0.5f;
+        break;
+      // Scale 0.6.
+      case 6:
+        expected_contents_scale = 1.f;
+        break;
+    }
+    SetupDrawPropertiesAndUpdateTiles(pending_layer_ptr, ideal_contents_scale,
+                                      1.f, 1.f, 1.f, 1.f, false);
+    EXPECT_FLOAT_EQ(expected_contents_scale,
+                    pending_layer_ptr->picture_layer_tiling_set()
+                        ->FindTilingWithResolution(HIGH_RESOLUTION)
+                        ->contents_scale())
+        << "ideal_contents_scale: " << ideal_contents_scale;
+  }
+
+  expected_contents_scale = 1.f;
+  for (int i = 30; i >= 1; --i) {
+    float ideal_contents_scale = 0.1f * i - 1e-6;
+    switch (i) {
+      // Scale 0.2.
+      case 2:
+        expected_contents_scale = 0.5f;
+        break;
+      // Scale 0.1.
+      case 1:
+        expected_contents_scale = 0.25f;
+        break;
+    }
+    SetupDrawPropertiesAndUpdateTiles(pending_layer_ptr, ideal_contents_scale,
+                                      1.f, 1.f, 1.f, 1.f, false);
+    EXPECT_FLOAT_EQ(expected_contents_scale,
+                    pending_layer_ptr->picture_layer_tiling_set()
+                        ->FindTilingWithResolution(HIGH_RESOLUTION)
+                        ->contents_scale())
+        << "ideal_contents_scale: " << ideal_contents_scale;
+  }
 }
 
 }  // namespace

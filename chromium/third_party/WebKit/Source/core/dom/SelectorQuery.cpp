@@ -36,6 +36,8 @@
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/shadow/ElementShadow.h"
 #include "core/dom/shadow/ShadowRoot.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -259,8 +261,8 @@ void SelectorDataList::findTraverseRootsAndExecute(ContainerNode& rootNode, type
     bool startFromParent = false;
 
     for (const CSSSelector* selector = m_selectors[0]; selector; selector = selector->tagHistory()) {
-        if (selector->match() == CSSSelector::Id && !rootNode.treeScope().containsMultipleElementsWithId(selector->value())) {
-            Element* element = rootNode.treeScope().getElementById(selector->value());
+        if (selector->match() == CSSSelector::Id && rootNode.isInTreeScope() && !rootNode.containingTreeScope().containsMultipleElementsWithId(selector->value())) {
+            Element* element = rootNode.containingTreeScope().getElementById(selector->value());
             ContainerNode* adjustedNode = &rootNode;
             if (element && (isTreeScopeRoot(rootNode) || element->isDescendantOf(&rootNode)))
                 adjustedNode = element;
@@ -425,7 +427,7 @@ static ContainerNode* nextTraversingShadowTree(const ContainerNode& node, const 
             return youngerShadowRoot;
         }
 
-        current = shadowRoot->host();
+        current = &shadowRoot->host();
     }
     return nullptr;
 }
@@ -525,9 +527,9 @@ void SelectorDataList::execute(ContainerNode& rootNode, typename SelectorQueryTr
     findTraverseRootsAndExecute<SelectorQueryTrait>(rootNode, output);
 }
 
-PassOwnPtr<SelectorQuery> SelectorQuery::adopt(CSSSelectorList selectorList)
+std::unique_ptr<SelectorQuery> SelectorQuery::adopt(CSSSelectorList selectorList)
 {
-    return adoptPtr(new SelectorQuery(std::move(selectorList)));
+    return wrapUnique(new SelectorQuery(std::move(selectorList)));
 }
 
 SelectorQuery::SelectorQuery(CSSSelectorList selectorList)
@@ -558,7 +560,7 @@ Element* SelectorQuery::queryFirst(ContainerNode& rootNode) const
 
 SelectorQuery* SelectorQueryCache::add(const AtomicString& selectors, const Document& document, ExceptionState& exceptionState)
 {
-    HashMap<AtomicString, OwnPtr<SelectorQuery>>::iterator it = m_entries.find(selectors);
+    HashMap<AtomicString, std::unique_ptr<SelectorQuery>>::iterator it = m_entries.find(selectors);
     if (it != m_entries.end())
         return it->value.get();
 

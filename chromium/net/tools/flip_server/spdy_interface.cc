@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
 
 #include "net/spdy/spdy_framer.h"
 #include "net/spdy/spdy_protocol.h"
@@ -239,18 +240,6 @@ void SpdySM::OnStreamPadding(SpdyStreamId stream_id, size_t len) {
           << ", [" << len << "])";
 }
 
-SpdyHeadersHandlerInterface* SpdySM::OnHeaderFrameStart(
-    SpdyStreamId stream_id) {
-  LOG(FATAL) << ACCEPTOR_CLIENT_IDENT
-             << "SpdySM::OnHeaderFrameStart() not implemented.";
-  return nullptr;
-}
-
-void SpdySM::OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) {
-  LOG(FATAL) << ACCEPTOR_CLIENT_IDENT
-             << "SpdySM::OnHeaderFrameEnd() not implemented.";
-}
-
 void SpdySM::OnSynStream(SpdyStreamId stream_id,
                          SpdyStreamId associated_stream_id,
                          SpdyPriority priority,
@@ -297,7 +286,7 @@ void SpdySM::OnSynReply(SpdyStreamId stream_id,
 
 void SpdySM::OnHeaders(SpdyStreamId stream_id,
                        bool has_priority,
-                       SpdyPriority priority,
+                       int weight,
                        SpdyStreamId parent_stream_id,
                        bool exclusive,
                        bool fin,
@@ -484,7 +473,7 @@ size_t SpdySM::SendSynStreamImpl(uint32_t stream_id,
 
   DCHECK(buffered_spdy_framer_);
   SpdySerializedFrame* fsrcf = buffered_spdy_framer_->CreateSynStream(
-      stream_id, 0, 0, CONTROL_FLAG_NONE, &block);
+      stream_id, 0, 0, CONTROL_FLAG_NONE, std::move(block));
   size_t df_size = fsrcf->size();
   EnqueueDataFrame(new SpdyFrameDataFrame(fsrcf));
 
@@ -503,7 +492,7 @@ size_t SpdySM::SendSynReplyImpl(uint32_t stream_id,
 
   DCHECK(buffered_spdy_framer_);
   SpdySerializedFrame* fsrcf = buffered_spdy_framer_->CreateSynReply(
-      stream_id, CONTROL_FLAG_NONE, &block);
+      stream_id, CONTROL_FLAG_NONE, std::move(block));
   size_t df_size = fsrcf->size();
   EnqueueDataFrame(new SpdyFrameDataFrame(fsrcf));
 

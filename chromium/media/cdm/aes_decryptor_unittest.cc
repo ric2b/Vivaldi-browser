@@ -13,6 +13,7 @@
 #include "base/debug/leak_annotations.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/values.h"
 #include "media/base/cdm_callback_promise.h"
 #include "media/base/cdm_config.h"
@@ -264,7 +265,7 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
                      base::Unretained(this)),
           base::Bind(&AesDecryptorTest::OnCdmCreated, base::Unretained(this)));
 
-      message_loop_.RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
     }
   }
 
@@ -385,7 +386,7 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
   }
 
   bool KeysInfoContains(std::vector<uint8_t> expected) {
-    for (const auto& key_id : keys_info_) {
+    for (auto* key_id : keys_info_) {
       if (key_id->key_id == expected)
         return true;
     }

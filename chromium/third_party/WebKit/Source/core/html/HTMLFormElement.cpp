@@ -36,6 +36,7 @@
 #include "core/events/ScopedEventQueue.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/RemoteFrame.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLCollection.h"
@@ -47,12 +48,13 @@
 #include "core/html/RadioNodeList.h"
 #include "core/html/forms/FormController.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/layout/LayoutTextControl.h"
+#include "core/loader/FormSubmission.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/loader/NavigationScheduler.h"
 #include "platform/UserGestureIndicator.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "wtf/text/AtomicString.h"
 #include <limits>
 
@@ -420,9 +422,15 @@ void HTMLFormElement::scheduleFormSubmission(FormSubmission* submission)
     if (MixedContentChecker::isMixedFormAction(document().frame(), submission->action()))
         UseCounter::count(document().frame(), UseCounter::MixedContentFormsSubmitted);
 
-    // FIXME: Plumb form submission for remote frames.
-    if (targetFrame->isLocalFrame())
+    // TODO(lukasza): Investigate if the code below can uniformly handle remote
+    // and local frames (i.e. by calling virtual Frame::navigate from a timer).
+    // See also https://goo.gl/95d2KA.
+    if (targetFrame->isLocalFrame()) {
         toLocalFrame(targetFrame)->navigationScheduler().scheduleFormSubmission(&document(), submission);
+    } else {
+        FrameLoadRequest frameLoadRequest = submission->createFrameLoadRequest(&document());
+        toRemoteFrame(targetFrame)->navigate(frameLoadRequest);
+    }
 }
 
 void HTMLFormElement::reset()
@@ -453,13 +461,13 @@ void HTMLFormElement::parseAttribute(const QualifiedName& name, const AtomicStri
         m_attributes.parseAction(value);
         logUpdateAttributeIfIsolatedWorldAndInDocument("form", actionAttr, oldValue, value);
 
-        if (document().getInsecureRequestsPolicy() != SecurityContext::InsecureRequestsUpgrade) {
-            // If we're not upgrading insecure requests, and the new action attribute is pointing to
-            // an insecure "action" location from a secure page it is marked as "passive" mixed content.
-            KURL actionURL = document().completeURL(m_attributes.action().isEmpty() ? document().url().getString() : m_attributes.action());
-            if (MixedContentChecker::isMixedFormAction(document().frame(), actionURL))
-                UseCounter::count(document().frame(), UseCounter::MixedContentFormPresent);
-        }
+        // If we're not upgrading insecure requests, and the new action attribute is pointing to
+        // an insecure "action" location from a secure page it is marked as "passive" mixed content.
+        if (document().getInsecureRequestPolicy() & kUpgradeInsecureRequests)
+            return;
+        KURL actionURL = document().completeURL(m_attributes.action().isEmpty() ? document().url().getString() : m_attributes.action());
+        if (MixedContentChecker::isMixedFormAction(document().frame(), actionURL))
+            UseCounter::count(document().frame(), UseCounter::MixedContentFormPresent);
     } else if (name == targetAttr) {
         m_attributes.setTarget(value);
     } else if (name == methodAttr) {

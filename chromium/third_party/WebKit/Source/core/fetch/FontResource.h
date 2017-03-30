@@ -30,7 +30,8 @@
 #include "core/fetch/ResourceClient.h"
 #include "platform/Timer.h"
 #include "platform/fonts/FontOrientation.h"
-#include "wtf/OwnPtr.h"
+#include "platform/heap/Handle.h"
+#include <memory>
 
 namespace blink {
 
@@ -83,7 +84,7 @@ private:
 
     enum LoadLimitState { UnderLimit, ShortLimitExceeded, LongLimitExceeded };
 
-    OwnPtr<FontCustomPlatformData> m_fontData;
+    std::unique_ptr<FontCustomPlatformData> m_fontData;
     String m_otsParsingMessage;
     LoadLimitState m_loadLimitState;
     bool m_corsFailed;
@@ -95,13 +96,15 @@ private:
 
 DEFINE_RESOURCE_TYPE_CASTS(Font);
 
-class FontResourceClient : public ResourceClient {
+class FontResourceClient : public GarbageCollectedMixin, public ResourceClient {
 public:
     ~FontResourceClient() override {}
     static bool isExpectedType(ResourceClient* client) { return client->getResourceClientType() == FontType; }
     ResourceClientType getResourceClientType() const final { return FontType; }
     virtual void fontLoadShortLimitExceeded(FontResource*) {}
     virtual void fontLoadLongLimitExceeded(FontResource*) {}
+
+    DEFINE_INLINE_VIRTUAL_TRACE() {}
 };
 
 } // namespace blink

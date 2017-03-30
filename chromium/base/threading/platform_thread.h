@@ -142,8 +142,8 @@ class BASE_EXPORT PlatformThread {
   // Sleeps for the specified duration.
   static void Sleep(base::TimeDelta duration);
 
-  // Sets the thread name visible to debuggers/tools. This has no effect
-  // otherwise.
+  // Sets the thread name visible to debuggers/tools. This will try to
+  // initialize the context for current thread unless it's a WorkerThread.
   static void SetName(const std::string& name);
 
   // Gets the thread name, if previously set by SetName.
@@ -179,6 +179,10 @@ class BASE_EXPORT PlatformThread {
   // the caller until the designated thread exits.  This will invalidate
   // |thread_handle|.
   static void Join(PlatformThreadHandle thread_handle);
+
+  // Detaches and releases the thread handle. The thread is no longer joinable
+  // and |thread_handle| is invalidated after this call.
+  static void Detach(PlatformThreadHandle thread_handle);
 
   // Toggles the current thread's priority at runtime. A thread may not be able
   // to raise its priority back up after lowering it if the process does not

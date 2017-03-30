@@ -178,6 +178,7 @@
       'dependencies': [
         'chrome_internal_resources_gen',
         'chrome_web_ui_mojo_bindings.gyp:web_ui_mojo_bindings',
+        '../url/url.gyp:url_interfaces_mojom',
         '<(VIVALDI)/app/vivaldi_resources.gyp:vivaldi_combined_resources',
       ],
       'actions': [
@@ -322,7 +323,8 @@
           'variables' : {
             'script_file':'browser/resources/safe_browsing/gen_file_type_proto.py',
             'asciipb_file' : 'browser/resources/safe_browsing/download_file_types.asciipb',
-            'output_file' : '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/safe_browsing/download_file_types.pb',
+            'output_dir' : '<(SHARED_INTERMEDIATE_DIR)/chrome/browser/resources/safe_browsing',
+            'output_basename' : 'download_file_types.pb',
             'conditions': [
               ['OS=="android"', {
                 'platform': 'android'
@@ -345,14 +347,15 @@
             '<(asciipb_file)',
           ],
           'outputs': [
-            '<(output_file)',
+            '<(output_dir)/<(output_basename)',
           ],
           'action': [
             'python',
             '<(script_file)',
             '-w',
             '-i', '<(asciipb_file)',
-            '-o', '<(output_file)',
+            '-d', '<(output_dir)',
+            '-o', '<(output_basename)',
             '-t', '<(platform)',
             '-p', '<(PRODUCT_DIR)/pyproto',
             '-p', '<(PRODUCT_DIR)/pyproto/chrome/common/safe_browsing',
@@ -559,12 +562,6 @@
         {
           'includes': ['chrome_repack_chrome_200_percent.gypi']
         },
-        {
-          'includes': ['chrome_repack_chrome_material_100_percent.gypi']
-        },
-        {
-          'includes': ['chrome_repack_chrome_material_200_percent.gypi']
-        },
       ],
       'conditions': [  # GN version: chrome_repack_locales.gni template("_repack_one_locale")
         ['OS != "ios"', {
@@ -588,7 +585,6 @@
           'dependencies': [  # Update duplicate logic in repack_locales.py
              '<(DEPTH)/ash/ash_resources.gyp:ash_resources',
              '<(DEPTH)/ash/ash_strings.gyp:ash_strings',
-            '../ash/wm/common/ash_wm_common_resources.gyp:ash_wm_common_resources',
           ],
         }],
         ['toolkit_views==1', {
@@ -616,6 +612,16 @@
         ['enable_app_list==1', {
           'dependencies': [
              '<(DEPTH)/ui/app_list/resources/app_list_resources.gyp:app_list_resources',
+          ],
+        }],
+        ['OS == "mac"', {
+          'actions': [
+            {
+              'includes': ['chrome_repack_chrome_material_100_percent.gypi']
+            },
+            {
+              'includes': ['chrome_repack_chrome_material_200_percent.gypi']
+            },
           ],
         }],
         ['OS != "mac" and OS != "ios"', {
@@ -668,26 +674,6 @@
                   'destination': '<(PRODUCT_DIR)',
                   'files': [
                     '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_200_percent.pak',
-                  ],
-                },
-              ],
-            }],
-            ['enable_topchrome_md == 1', {
-              'copies': [
-                {
-                  'destination': '<(PRODUCT_DIR)',
-                  'files': [
-                    '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_material_100_percent.pak',
-                  ],
-                },
-              ],
-            }],
-            ['enable_hidpi == 1 and enable_topchrome_md == 1', {
-              'copies': [
-                {
-                  'destination': '<(PRODUCT_DIR)',
-                  'files': [
-                    '<(SHARED_INTERMEDIATE_DIR)/repack/vivaldi_material_200_percent.pak',
                   ],
                 },
               ],

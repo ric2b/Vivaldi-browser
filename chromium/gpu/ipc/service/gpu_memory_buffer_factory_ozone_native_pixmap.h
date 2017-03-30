@@ -5,7 +5,10 @@
 #ifndef GPU_IPC_SERVICE_GPU_MEMORY_BUFFER_FACTORY_OZONE_NATIVE_PIXMAP_H_
 #define GPU_IPC_SERVICE_GPU_MEMORY_BUFFER_FACTORY_OZONE_NATIVE_PIXMAP_H_
 
-#include "base/containers/hash_tables.h"
+#include <unordered_map>
+#include <utility>
+
+#include "base/hash.h"
 #include "base/macros.h"
 #include "base/synchronization/lock.h"
 #include "gpu/command_buffer/service/image_factory.h"
@@ -34,12 +37,6 @@ class GPU_EXPORT GpuMemoryBufferFactoryOzoneNativePixmap
       gfx::BufferUsage usage,
       int client_id,
       SurfaceHandle surface_handle) override;
-  gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferFromHandle(
-      const gfx::GpuMemoryBufferHandle& handle,
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      int client_id) override;
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                               int client_id) override;
   ImageFactory* AsImageFactory() override;
@@ -50,12 +47,16 @@ class GPU_EXPORT GpuMemoryBufferFactoryOzoneNativePixmap
       const gfx::Size& size,
       gfx::BufferFormat format,
       unsigned internalformat,
-      int client_id) override;
+      int client_id,
+      SurfaceHandle surface_handle) override;
 
  private:
   using NativePixmapMapKey = std::pair<int, int>;
+  using NativePixmapMapKeyHash = base::IntPairHash<NativePixmapMapKey>;
   using NativePixmapMap =
-      base::hash_map<NativePixmapMapKey, scoped_refptr<ui::NativePixmap>>;
+      std::unordered_map<NativePixmapMapKey,
+                         scoped_refptr<ui::NativePixmap>,
+                         NativePixmapMapKeyHash>;
   NativePixmapMap native_pixmaps_;
   base::Lock native_pixmaps_lock_;
 

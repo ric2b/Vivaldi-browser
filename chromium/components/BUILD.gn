@@ -60,6 +60,7 @@ test("components_unittests") {
     "//components/auto_login_parser:unit_tests",
     "//components/autofill/core/browser:unit_tests",
     "//components/autofill/core/common:unit_tests",
+    "//components/base32:unit_tests",
     "//components/bookmarks/browser:unit_tests",
     "//components/bookmarks/managed:unit_tests",
     "//components/browser_sync/browser:unit_tests",
@@ -86,6 +87,7 @@ test("components_unittests") {
     "//components/google/core/browser:unit_tests",
     "//components/history/core/browser:unit_tests",
     "//components/history/core/common:unit_tests",
+    "//components/image_fetcher:unit_tests",
     "//components/json_schema:unit_tests",
     "//components/keyed_service/core:unit_tests",
     "//components/language_usage_metrics:unit_tests",
@@ -95,6 +97,7 @@ test("components_unittests") {
     "//components/metrics:unit_tests",
     "//components/mime_util:unit_tests",
     "//components/net_log:unit_tests",
+    "//components/network_session_configurator:unit_tests",
     "//components/network_time:unit_tests",
     "//components/ntp_snippets:unit_tests",
     "//components/offline_pages:unit_tests",
@@ -118,6 +121,8 @@ test("components_unittests") {
     "//components/signin/core/browser:unit_tests",
     "//components/ssl_config:unit_tests",
     "//components/ssl_errors:unit_tests",
+    "//components/subresource_filter/core/browser:unit_tests",
+    "//components/subresource_filter/core/common:unit_tests",
     "//components/suggestions:unit_tests",
     "//components/supervised_user_error_page:unit_tests",
     "//components/sync_bookmarks:unit_tests",
@@ -157,13 +162,14 @@ test("components_unittests") {
       "//components/translate/ios/browser:unit_tests",
     ]
 
-    if (target_cpu != "arm") {
+    if (current_cpu != "arm") {
       # TODO(GYP): iOS arm builds of libwebp don't work yet.
       deps += [ "//components/webp_transcode:unit_tests" ]
     }
   } else {  # !iOS
     deps += [
       "//components/autofill/content/browser:unit_tests",
+      "//components/autofill/content/public/cpp:unit_tests",
       "//components/autofill/content/renderer:unit_tests",
       "//components/cast_certificate:unit_tests",
       "//components/certificate_transparency:unit_tests",
@@ -183,8 +189,10 @@ test("components_unittests") {
       "//components/invalidation/impl:unit_tests",
       "//components/keyed_service/content:unit_tests",
       "//components/link_header_util:unit_tests",
+      "//components/memory_coordinator/child:unit_tests",
       "//components/navigation_interception:unit_tests",
       "//components/network_hints/renderer:unit_tests",
+      "//components/ntp_tiles:unit_tests",
       "//components/packed_ct_ev_whitelist:unit_tests",
       "//components/page_load_metrics/browser:unit_tests",
       "//components/page_load_metrics/renderer:unit_tests",
@@ -194,13 +202,14 @@ test("components_unittests") {
       "//components/safe_browsing_db:unit_tests",
       "//components/safe_json:unit_tests",
       "//components/scheduler:unit_tests",
+      "//components/subresource_filter/content/browser:unit_tests",
       "//components/test_runner:test_runner",
       "//components/tracing:unit_tests",
-      "//components/ui/zoom:unit_tests",
       "//components/visitedlink/test:unit_tests",
       "//components/wallpaper:unit_tests",
       "//components/web_cache/browser:unit_tests",
       "//components/webcrypto:unit_tests",
+      "//components/zoom:unit_tests",
 
       # These are the deps required by the code in this target.
       "//components/policy:policy_component",
@@ -267,11 +276,15 @@ test("components_unittests") {
   if (enable_rlz_support) {
     deps += [ "//components/rlz:unit_tests" ]
   }
+
   if (is_chromeos) {
     deps += [
       "//components/arc:unit_tests",
       "//components/ownership:unit_tests",
+      "//components/pairing:unit_tests",
+      "//components/timers:unit_tests",
       "//components/user_manager:unit_tests",
+      "//components/wifi_sync:unit_tests",
     ]
   }
 
@@ -283,9 +296,7 @@ test("components_unittests") {
   }
 
   if (toolkit_views) {
-    # TODO bug 522654 Enable this when the undefined symbol is fixed in
-    # web_modal such that this links.
-    #deps += [ "//components/constrained_window:unit_tests" ]
+    deps += [ "//components/constrained_window:unit_tests" ]
   }
 
   if (is_win) {
@@ -342,6 +353,7 @@ if (is_android) {
     deps = [
       ":components_browsertests_resources",
       "//base:base_java",
+      "//base:base_java_test_support",
       "//content/public/test/android:content_java_test_support",
       "//content/shell/android:content_shell_browsertests_java",
       "//testing/android/native_test:native_test_java",
@@ -384,7 +396,7 @@ if (!is_ios) {
       "dom_distiller/content/browser/distiller_page_web_contents_browsertest.cc",
       "dom_distiller/content/browser/test/dom_distiller_js_browsertest.cc",
       "password_manager/content/renderer/credential_manager_client_browsertest.cc",
-      "tracing/child_trace_message_filter_browsertest.cc",
+      "tracing/child/child_trace_message_filter_browsertest.cc",
     ]
 
     data = [
@@ -416,6 +428,7 @@ if (!is_ios) {
       "//device/bluetooth",
       "//ipc:test_support",
       "//net:test_support",
+      "//services/shell/public/cpp",
       "//testing/gmock",
       "//testing/gtest",
       "//ui/base",
@@ -441,10 +454,10 @@ if (!is_ios) {
       ]
       use_default_launcher = false
       android_manifest = "${target_gen_dir}/components_browsertests_manifest/AndroidManifest.xml"
+      android_manifest_dep = ":components_browsertests_manifest"
       deps += [
         ":components_browsertests_assets",
         ":components_browsertests_java",
-        ":components_browsertests_manifest",
       ]
     }
 

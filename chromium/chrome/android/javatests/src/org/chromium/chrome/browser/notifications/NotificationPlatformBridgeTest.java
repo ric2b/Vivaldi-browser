@@ -13,12 +13,16 @@ import android.os.Build;
 import android.test.suitebuilder.annotation.LargeTest;
 import android.test.suitebuilder.annotation.MediumTest;
 
+import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.website.ContentSetting;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 import org.chromium.chrome.test.util.browser.notifications.MockNotificationManagerProxy.NotificationEntry;
+import org.chromium.content.browser.test.util.Criteria;
+import org.chromium.content.browser.test.util.CriteriaHelper;
 
 import java.util.List;
 
@@ -80,8 +84,7 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
     }
 
     /**
-     * Verifies that notifications created with the "silent" flag do not inherit system defaults
-     * in regards to their sound, vibration and light indicators.
+     * Verifies that the ONLY_ALERT_ONCE flag is not set when renotify is true.
      */
     @MediumTest
     @Feature({"Browser", "Notifications"})
@@ -92,7 +95,6 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         Notification notification =
                 showAndGetNotification("MyNotification", "{ tag: 'myTag', renotify: true }");
 
-        // Zero indicates that no defaults should be inherited from the system.
         assertEquals(0, notification.flags & Notification.FLAG_ONLY_ALERT_ONCE);
     }
 
@@ -110,6 +112,80 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
 
         // Zero indicates that no defaults should be inherited from the system.
         assertEquals(0, notification.defaults);
+    }
+
+    private void verifyVibrationNotRequestedWhenDisabledInPrefs(String notificationOptions)
+            throws Exception {
+        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
+        setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
+
+        // Disable notification vibration in preferences.
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                PrefServiceBridge.getInstance().setNotificationsVibrateEnabled(false);
+            }
+        });
+
+        Notification notification = showAndGetNotification("MyNotification", notificationOptions);
+
+        // Vibration should not be in the defaults.
+        assertEquals(
+                Notification.DEFAULT_ALL & ~Notification.DEFAULT_VIBRATE, notification.defaults);
+
+        // There should be a custom no-op vibration pattern.
+        assertEquals(1, notification.vibrate.length);
+        assertEquals(0L, notification.vibrate[0]);
+    }
+
+    /**
+     * Verifies that when notification vibration is disabled in preferences and no custom pattern is
+     * specified, no vibration is requested from the framework.
+     */
+    @MediumTest
+    @Feature({"Browser", "Notifications"})
+    public void testNotificationVibratePreferenceDisabledDefault() throws Exception {
+        verifyVibrationNotRequestedWhenDisabledInPrefs("{}");
+    }
+
+    /**
+     * Verifies that when notification vibration is disabled in preferences and a custom pattern is
+     * specified, no vibration is requested from the framework.
+     */
+    @MediumTest
+    @Feature({"Browser", "Notifications"})
+    public void testNotificationVibratePreferenceDisabledCustomPattern() throws Exception {
+        verifyVibrationNotRequestedWhenDisabledInPrefs("{ vibrate: 42 }");
+    }
+
+    /**
+     * Verifies that by default the notification vibration preference is enabled, and a custom
+     * pattern is passed along.
+     */
+    @MediumTest
+    @Feature({"Browser", "Notifications"})
+    public void testNotificationVibrateCustomPattern() throws Exception {
+        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
+        setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
+
+        // By default, vibration is enabled in notifications.
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                assertTrue(PrefServiceBridge.getInstance().isNotificationsVibrateEnabled());
+            }
+        });
+
+        Notification notification = showAndGetNotification("MyNotification", "{ vibrate: 42 }");
+
+        // Vibration should not be in the defaults, a custom pattern was provided.
+        assertEquals(
+                Notification.DEFAULT_ALL & ~Notification.DEFAULT_VIBRATE, notification.defaults);
+
+        // The custom pattern should have been passed along.
+        assertEquals(2, notification.vibrate.length);
+        assertEquals(0L, notification.vibrate[0]);
+        assertEquals(42L, notification.vibrate[1]);
     }
 
     /**
@@ -236,6 +312,40 @@ public class NotificationPlatformBridgeTest extends NotificationTestBase {
         // event. This will eventually bubble up to a call to cancel() in the NotificationManager.
         waitForNotificationManagerMutation();
         assertTrue(getNotificationEntries().isEmpty());
+    }
+
+    /**
+     * Verifies that starting the PendingIntent stored as the notification's content intent will
+     * start up the associated Service Worker, where the JavaScript code will create a new tab for
+     * displaying the notification's event to the user.
+     */
+    @LargeTest
+    @Feature({"Browser", "Notifications"})
+    public void testNotificationContentIntentCreatesTab() throws Exception {
+        loadUrl(getTestServer().getURL(NOTIFICATION_TEST_PAGE));
+        setNotificationContentSettingForCurrentOrigin(ContentSetting.ALLOW);
+
+        assertEquals("Expected the notification test page to be the sole tab in the current model",
+                1, getActivity().getCurrentTabModel().getCount());
+
+        Notification notification =
+                showAndGetNotification("MyNotification", "{ data: 'ACTION_CREATE_TAB' }");
+
+        // Sending the PendingIntent resembles activating the notification.
+        assertNotNull(notification.contentIntent);
+        notification.contentIntent.send();
+
+        // The Service Worker, upon receiving the notificationclick event, will create a new tab
+        // after which it closes the notification.
+        waitForNotificationManagerMutation();
+        assertTrue(getNotificationEntries().isEmpty());
+
+        CriteriaHelper.pollInstrumentationThread(new Criteria("Expected a new tab to be created") {
+            @Override
+            public boolean isSatisfied() {
+                return 2 == getActivity().getCurrentTabModel().getCount();
+            }
+        });
     }
 
     /**

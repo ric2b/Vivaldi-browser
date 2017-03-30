@@ -207,6 +207,7 @@ void WebSocketBridge::connect(const WebURL& url,
                               const WebVector<WebString>& protocols,
                               const WebSecurityOrigin& origin,
                               const WebURL& first_party_for_cookies,
+                              const WebString& user_agent_override,
                               WebSocketHandleClient* client) {
   DCHECK_EQ(kInvalidChannelId, channel_id_);
   WebSocketDispatcher* dispatcher =
@@ -227,8 +228,10 @@ void WebSocketBridge::connect(const WebURL& url,
   params.requested_protocols = protocols_to_pass;
   params.origin = origin;
   params.first_party_for_cookies = first_party_for_cookies;
+  params.user_agent_override = user_agent_override.latin1();
   params.render_frame_id = render_frame_id_;
 
+  // Headers (ie: User-Agent) are ISO Latin 1.
   ChildThreadImpl::current()->Send(new WebSocketHostMsg_AddChannelRequest(
       channel_id_, params));
 }

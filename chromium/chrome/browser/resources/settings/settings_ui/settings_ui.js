@@ -25,33 +25,41 @@ Polymer({
       observer: 'directionDelegateChanged_',
       type: Object,
     },
+
+    appealClosed_: {
+      type: Boolean,
+      value: function() {
+        return !!(sessionStorage.appealClosed_ || localStorage.appealClosed_);
+      },
+    },
   },
 
   listeners: {
-    'iron-select': 'onIronSelect_',
-    'paper-responsive-change': 'onPaperResponsiveChange_',
+    'sideNav.iron-activate': 'onIronActivate_',
+  },
+
+  /** @private */
+  onCloseAppealTap_: function() {
+    sessionStorage.appealClosed_ = this.appealClosed_ = true;
   },
 
   /**
-   * @param {!CustomEvent} e
+   * @param {Event} event
    * @private
    */
-  onIronSelect_: function(e) {
-    if (Polymer.dom(e).path.indexOf(this.$.panel) >= 0)
-      this.classList.remove('narrowing');
+  onIronActivate_: function(event) {
+    if (event.detail.item.id != 'advancedPage')
+      this.$$('app-drawer').close();
   },
 
-  /**
-   * @param {!CustomEvent} e
-   * @private
-   */
-  onPaperResponsiveChange_: function(e) {
-    if (Polymer.dom(e).rootTarget == this.$.panel)
-      this.classList.toggle('narrowing', e.detail.narrow);
+  /** @private */
+  onMenuButtonTap_: function() {
+    this.$$('app-drawer').toggle();
   },
 
   /** @private */
   directionDelegateChanged_: function() {
-    this.$.panel.rightDrawer = this.directionDelegate.isRtl();
+    this.$$('app-drawer').align = this.directionDelegate.isRtl() ?
+        'right' : 'left';
   },
 });

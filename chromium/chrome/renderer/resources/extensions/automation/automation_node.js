@@ -92,6 +92,13 @@ var GetChildIDAtIndex = requireNative('automationInternal').GetChildIDAtIndex;
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
+ * @return {?Object} An object mapping html attributes to values.
+ */
+var GetHtmlAttributes = requireNative('automationInternal').GetHtmlAttributes;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
  * @return {?number} The index of this node in its parent, or undefined if
  *     the tree or node or node parent wasn't found.
  */
@@ -220,10 +227,16 @@ AutomationNodeImpl.prototype = {
   },
 
   get parent() {
+    if (!this.rootImpl)
+      return undefined;
     if (this.hostNode_)
       return this.hostNode_;
     var parentID = GetParentID(this.treeID, this.id);
     return this.rootImpl.get(parentID);
+  },
+
+  get htmlAttributes() {
+    return GetHtmlAttributes(this.treeID, this.id) || {};
   },
 
   get state() {
@@ -253,6 +266,8 @@ AutomationNodeImpl.prototype = {
   },
 
   get firstChild() {
+    if (!this.rootImpl)
+      return undefined;
     if (this.childTree)
       return this.childTree;
     if (!GetChildCount(this.treeID, this.id))
@@ -262,6 +277,8 @@ AutomationNodeImpl.prototype = {
   },
 
   get lastChild() {
+    if (!this.rootImpl)
+      return undefined;
     if (this.childTree)
       return this.childTree;
     var count = GetChildCount(this.treeID, this.id);
@@ -272,6 +289,9 @@ AutomationNodeImpl.prototype = {
   },
 
   get children() {
+    if (!this.rootImpl)
+      return [];
+
     if (this.childTree)
       return [this.childTree];
 
@@ -327,6 +347,8 @@ AutomationNodeImpl.prototype = {
   },
 
   domQuerySelector: function(selector, callback) {
+    if (!this.rootImpl)
+      callback();
     automationInternal.querySelector(
       { treeID: this.rootImpl.treeID,
         automationNodeID: this.id,
@@ -449,6 +471,9 @@ AutomationNodeImpl.prototype = {
 
   fireEventListeners_: function(node, event) {
     var nodeImpl = privates(node).impl;
+    if (!nodeImpl.rootImpl)
+      return;
+
     var listeners = nodeImpl.listeners[event.type];
     if (!listeners)
       return;
@@ -469,6 +494,9 @@ AutomationNodeImpl.prototype = {
   },
 
   performAction_: function(actionType, opt_args) {
+    if (!this.rootImpl)
+      return;
+
     // Not yet initialized.
     if (this.rootImpl.treeID === undefined ||
         this.id === undefined) {
@@ -491,7 +519,7 @@ AutomationNodeImpl.prototype = {
     // resultAutomationNodeID could be zero or undefined or (unlikely) null;
     // they all amount to the same thing here, which is that no node was
     // returned.
-    if (!resultAutomationNodeID) {
+    if (!resultAutomationNodeID || !this.rootImpl) {
       userCallback(null);
       return;
     }
@@ -708,7 +736,7 @@ $Array.forEach(nodeRefAttributes, function(params) {
     __proto__: null,
     get: function() {
       var id = GetIntAttribute(this.treeID, this.id, srcAttributeName);
-      if (id)
+      if (id && this.rootImpl)
         return this.rootImpl.get(id);
       else
         return undefined;
@@ -734,7 +762,7 @@ $Array.forEach(nodeRefListAttributes, function(params) {
     __proto__: null,
     get: function() {
       var ids = GetIntListAttribute(this.treeID, this.id, srcAttributeName);
-      if (!ids)
+      if (!ids || !this.rootImpl)
         return undefined;
       var result = [];
       for (var i = 0; i < ids.length; ++i) {
@@ -994,6 +1022,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
       'location',
       'indexInParent',
       'root',
+      'htmlAttributes',
   ]),
 });
 

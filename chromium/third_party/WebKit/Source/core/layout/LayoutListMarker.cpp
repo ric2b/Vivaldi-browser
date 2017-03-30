@@ -30,12 +30,16 @@
 #include "core/layout/ListMarkerText.h"
 #include "core/layout/api/LineLayoutBlockFlow.h"
 #include "core/paint/ListMarkerPainter.h"
-#include "core/paint/PaintLayer.h"
 #include "platform/fonts/Font.h"
 
 namespace blink {
 
 const int cMarkerPaddingPx = 7;
+
+// TODO(glebl): Move to WebKit/Source/core/css/html.css after
+// Blink starts to support ::marker crbug.com/457718
+// Recommended UA margin for list markers.
+const int cUAMarkerMarginEm = 1;
 
 LayoutListMarker::LayoutListMarker(LayoutListItem* item)
     : LayoutBox(nullptr)
@@ -204,7 +208,7 @@ LayoutUnit LayoutListMarker::getWidthOfTextWithSuffix() const
     if (m_text.isEmpty())
         return LayoutUnit();
     const Font& font = style()->font();
-    LayoutUnit itemWidth = LayoutUnit(font.width(m_text));
+    LayoutUnit itemWidth = LayoutUnit(font.width(TextRun(m_text)));
     // TODO(wkorman): Look into constructing a text run for both text and suffix
     // and painting them together.
     UChar suffix[2] = { ListMarkerText::suffix(style()->listStyleType(), m_listItem->value()), ' ' };
@@ -262,7 +266,7 @@ void LayoutListMarker::updateMargins()
             switch (getListStyleCategory()) {
             case ListStyleCategory::Symbol:
                 marginStart = LayoutUnit(-1);
-                marginEnd = fontMetrics.ascent() - minPreferredLogicalWidth() + 1;
+                marginEnd = fontMetrics.ascent() - minPreferredLogicalWidth() + 1 + LayoutUnit(cUAMarkerMarginEm * style()->computedFontSize());
                 break;
             default:
                 break;

@@ -4,7 +4,7 @@
 
 #include "ash/touch/touch_observer_hud.h"
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "ash/display/display_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
@@ -221,11 +221,13 @@ class TouchHudDebugTest : public TouchHudTestBase {
     EXPECT_EQ(GetInternalRootWindow(),
               GetRootWindowForTouchHud(GetInternalTouchHudDebug()));
     EXPECT_EQ(GetInternalRootWindow(),
-              GetWidgetForTouchHud(GetInternalTouchHudDebug())->
-                  GetNativeView()->GetRootWindow());
+              GetWidgetForTouchHud(GetInternalTouchHudDebug())
+                  ->GetNativeView()
+                  ->GetRootWindow());
     EXPECT_EQ(GetInternalDisplay().size(),
-              GetWidgetForTouchHud(GetInternalTouchHudDebug())->
-                  GetWindowBoundsInScreen().size());
+              GetWidgetForTouchHud(GetInternalTouchHudDebug())
+                  ->GetWindowBoundsInScreen()
+                  .size());
   }
 
   void CheckExternalDisplay() {
@@ -234,11 +236,13 @@ class TouchHudDebugTest : public TouchHudTestBase {
     EXPECT_EQ(GetExternalRootWindow(),
               GetRootWindowForTouchHud(GetExternalTouchHudDebug()));
     EXPECT_EQ(GetExternalRootWindow(),
-              GetWidgetForTouchHud(GetExternalTouchHudDebug())->
-                  GetNativeView()->GetRootWindow());
+              GetWidgetForTouchHud(GetExternalTouchHudDebug())
+                  ->GetNativeView()
+                  ->GetRootWindow());
     EXPECT_EQ(GetExternalDisplay().size(),
-              GetWidgetForTouchHud(GetExternalTouchHudDebug())->
-                  GetWindowBoundsInScreen().size());
+              GetWidgetForTouchHud(GetExternalTouchHudDebug())
+                  ->GetWindowBoundsInScreen()
+                  .size());
   }
 
  private:
@@ -293,7 +297,7 @@ class TouchHudProjectionTest : public TouchHudTestBase {
   }
 
  private:
-  base::TimeDelta event_time;
+  base::TimeTicks event_time;
 
   DISALLOW_COPY_AND_ASSIGN(TouchHudProjectionTest);
 };

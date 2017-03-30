@@ -111,10 +111,12 @@ WebInspector.NetworkConfigView.createUserAgentSelectAndInput = function()
     otherUserAgentElement.type = "text";
     otherUserAgentElement.value = userAgentSetting.get();
     otherUserAgentElement.title = userAgentSetting.get();
+    otherUserAgentElement.placeholder = WebInspector.UIString("Enter a custom user agent");
+    otherUserAgentElement.required = true;
 
     settingChanged();
     userAgentSelectElement.addEventListener("change", userAgentSelected, false);
-    otherUserAgentElement.addEventListener("input", textChanged, false);
+    otherUserAgentElement.addEventListener("input", applyOtherUserAgent, false);
 
     function userAgentSelected()
     {
@@ -145,7 +147,7 @@ WebInspector.NetworkConfigView.createUserAgentSelectAndInput = function()
             userAgentSelectElement.selectedIndex = 0;
     }
 
-    function textChanged()
+    function applyOtherUserAgent()
     {
         if (userAgentSetting.get() !== otherUserAgentElement.value) {
             userAgentSetting.set(otherUserAgentElement.value);

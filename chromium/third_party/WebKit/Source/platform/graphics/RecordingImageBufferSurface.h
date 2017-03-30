@@ -10,8 +10,8 @@
 #include "public/platform/WebThread.h"
 #include "wtf/Allocator.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 class SkCanvas;
 class SkPicture;
@@ -26,7 +26,7 @@ class RecordingImageBufferFallbackSurfaceFactory {
     USING_FAST_MALLOC(RecordingImageBufferFallbackSurfaceFactory);
     WTF_MAKE_NONCOPYABLE(RecordingImageBufferFallbackSurfaceFactory);
 public:
-    virtual PassOwnPtr<ImageBufferSurface> createSurface(const IntSize&, OpacityMode) = 0;
+    virtual std::unique_ptr<ImageBufferSurface> createSurface(const IntSize&, OpacityMode) = 0;
     virtual ~RecordingImageBufferFallbackSurfaceFactory() { }
 protected:
     RecordingImageBufferFallbackSurfaceFactory() { }
@@ -39,7 +39,7 @@ public:
     // for one frame and should not be used for any operations which need a
     // raster surface, (i.e. writePixels).
     // Only #getPicture should be used to access the resulting frame.
-    RecordingImageBufferSurface(const IntSize&, PassOwnPtr<RecordingImageBufferFallbackSurfaceFactory> fallbackFactory = nullptr, OpacityMode = NonOpaque);
+    RecordingImageBufferSurface(const IntSize&, std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> fallbackFactory = nullptr, OpacityMode = NonOpaque);
     ~RecordingImageBufferSurface() override;
 
     // Implementation of ImageBufferSurface interfaces
@@ -65,6 +65,7 @@ public:
     bool isAccelerated() const override;
     void setIsHidden(bool) override;
 
+    // This enum is used in a UMA histogram.
     enum FallbackReason {
         FallbackReasonUnknown = 0, // This value should never appear in production histograms
         FallbackReasonCanvasNotClearedBetweenFrames = 1,
@@ -85,6 +86,11 @@ public:
         FallbackReasonDrawImageOfVideo = 16,
         FallbackReasonDrawImageOfAnimated2dCanvas = 17,
         FallbackReasonSubPixelTextAntiAliasingSupport = 18,
+        FallbackReasonDrawImageWithTextureBackedSourceImage = 19,
+        FallbackReasonSnapshotForTransferToImageBitmap = 20,
+        FallbackReasonSnapshotForUnitTests = 21, // This value should never appear in production histograms
+        FallbackReasonSnapshotGetCopiedImage = 22,
+        FallbackReasonSnapshotWebGLDrawImageIntoBuffer = 23,
         FallbackReasonCount,
     };
 private:
@@ -94,9 +100,9 @@ private:
     bool finalizeFrameInternal(FallbackReason*);
     int approximateOpCount();
 
-    OwnPtr<SkPictureRecorder> m_currentFrame;
+    std::unique_ptr<SkPictureRecorder> m_currentFrame;
     RefPtr<SkPicture> m_previousFrame;
-    OwnPtr<ImageBufferSurface> m_fallbackSurface;
+    std::unique_ptr<ImageBufferSurface> m_fallbackSurface;
     ImageBuffer* m_imageBuffer;
     int m_initialSaveCount;
     int m_currentFramePixelCount;
@@ -105,7 +111,7 @@ private:
     bool m_didRecordDrawCommandsInCurrentFrame;
     bool m_currentFrameHasExpensiveOp;
     bool m_previousFrameHasExpensiveOp;
-    OwnPtr<RecordingImageBufferFallbackSurfaceFactory> m_fallbackFactory;
+    std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> m_fallbackFactory;
 };
 
 } // namespace blink

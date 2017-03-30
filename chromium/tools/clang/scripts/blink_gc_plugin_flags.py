@@ -5,6 +5,9 @@
 
 # This script returns the flags that should be passed to clang.
 
+# TODO(sof): the script can be removed when/once gyp support is retired;
+# unused with gn.
+
 import os
 import sys
 
@@ -23,6 +26,9 @@ for arg in sys.argv[1:]:
     FLAGS += PREFIX + 'warn-unneeded-finalizer'
   elif arg.startswith('custom_clang_lib_path='):
     CLANG_LIB_PATH = arg[len('custom_clang_lib_path='):]
+  elif arg == 'target_os=ios':
+    sys.stderr.write('error: blink is unsupported on iOS\n')
+    sys.exit(1)
 
 if not sys.platform in ['win32', 'cygwin']:
   LIBSUFFIX = 'dylib' if sys.platform == 'darwin' else 'so'

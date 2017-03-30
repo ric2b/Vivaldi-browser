@@ -7,8 +7,12 @@ package org.chromium.blimp;
 import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
 import android.text.TextUtils;
+import android.view.View;
+import android.widget.TextView;
 
+import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.SuppressFBWarnings;
 import org.chromium.base.library_loader.ProcessInitException;
@@ -21,6 +25,7 @@ import org.chromium.blimp.session.BlimpClientSession;
 import org.chromium.blimp.session.EngineInfo;
 import org.chromium.blimp.session.TabControlFeature;
 import org.chromium.blimp.toolbar.Toolbar;
+import org.chromium.blimp.toolbar.ToolbarMenu;
 import org.chromium.ui.widget.Toast;
 
 /**
@@ -29,9 +34,14 @@ import org.chromium.ui.widget.Toast;
  */
 public class BlimpRendererActivity
         extends Activity implements BlimpLibraryLoader.Callback, TokenSource.Callback,
-                                    BlimpClientSession.ConnectionObserver {
+                                    BlimpClientSession.ConnectionObserver,
+                                    ToolbarMenu.ToolbarMenuDelegate, Toolbar.ToolbarDelegate {
     private static final int ACCOUNT_CHOOSER_INTENT_REQUEST_CODE = 100;
     private static final String TAG = "BlimpRendererActivity";
+
+    // Refresh interval for the debug view in milliseconds.
+    private static final int DEBUG_VIEW_REFRESH_INTERVAL = 1000;
+    private static final int BYTES_PER_KILO = 1024;
 
     /** Provides user authentication tokens that can be used to query for engine assignments.  This
      *  can potentially query GoogleAuthUtil for an OAuth2 authentication token with userinfo.email
@@ -44,22 +54,26 @@ public class BlimpRendererActivity
     private TabControlFeature mTabControlFeature;
     private WebInputBox mWebInputBox;
 
+    private Handler mHandler = new Handler();
+
     private boolean mFirstUrlLoadDone = false;
+
+    // Flag to record the base value of the metrics when the debug view is turned on.
+    private boolean mStatsBaseRecorded = false;
+    private int mSentBase;
+    private int mReceivedBase;
+    private int mCommitsBase;
+    private int mSent;
+    private int mReceived;
+    private int mCommits;
+    private String mToken = null;
 
     @Override
     @SuppressFBWarnings("DM_EXIT")  // FindBugs doesn't like System.exit().
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // Build a TokenSource that will internally retry accessing the underlying TokenSourceImpl.
-        // This will exponentially backoff while it tries to get the access token.  See
-        // {@link RetryingTokenSource} for more information.  The underlying
-        // TokenSourceImpl will attempt to query GoogleAuthUtil, but might fail if there is no
-        // account selected, in which case it will ask this Activity to show an account chooser and
-        // notify it of the selection result.
-        mTokenSource = new RetryingTokenSource(new TokenSourceImpl(this));
-        mTokenSource.setCallback(this);
-        mTokenSource.getToken();
+        buildAndTriggerTokenSourceIfNeeded();
 
         try {
             BlimpLibraryLoader.startAsync(this, this);
@@ -83,9 +97,6 @@ public class BlimpRendererActivity
         }
 
         if (mToolbar != null) {
-            if (mBlimpClientSession != null) {
-                mBlimpClientSession.removeObserver(mToolbar);
-            }
             mToolbar.destroy();
             mToolbar = null;
         }
@@ -153,8 +164,7 @@ public class BlimpRendererActivity
         mBlimpView.initializeRenderer(mBlimpClientSession);
 
         mToolbar = (Toolbar) findViewById(R.id.toolbar);
-        mToolbar.initialize(mBlimpClientSession);
-        mBlimpClientSession.addObserver(mToolbar);
+        mToolbar.initialize(mBlimpClientSession, this);
 
         mWebInputBox = (WebInputBox) findViewById(R.id.editText);
         mWebInputBox.initialize(mBlimpClientSession);
@@ -162,6 +172,43 @@ public class BlimpRendererActivity
         mTabControlFeature = new TabControlFeature(mBlimpClientSession, mBlimpView);
 
         handleUrlFromIntent(getIntent());
+
+        // If Blimp client has command line flag "engine-ip", client will use the command line token
+        // to connect. See GetAssignmentFromCommandLine() in
+        // blimp/client/session/assignment_source.cc
+        // In normal cases, where client uses the engine ip given by the Assigner,
+        // connection to the engine is triggered by the successful retrieval of a token as
+        // TokenSource.Callback.
+        if (CommandLine.getInstance().hasSwitch(BlimpClientSwitches.ENGINE_IP)) {
+            mBlimpClientSession.connect(null);
+        } else {
+            if (mToken != null) {
+                mBlimpClientSession.connect(mToken);
+                mToken = null;
+            }
+        }
+    }
+
+    // ToolbarMenu.ToolbarMenuDelegate implementation.
+    @Override
+    public void showDebugView(boolean show) {
+        View debugView = findViewById(R.id.debug_stats);
+        debugView.setVisibility(show ? View.VISIBLE : View.INVISIBLE);
+        if (show) {
+            Runnable debugStatsRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (mToolbar.getToolbarMenu().isDebugInfoEnabled()) {
+                        int[] metrics = mBlimpClientSession.getDebugStats();
+                        updateDebugStats(metrics);
+                        mHandler.postDelayed(this, DEBUG_VIEW_REFRESH_INTERVAL);
+                    }
+                }
+            };
+            debugStatsRunnable.run();
+        } else {
+            mStatsBaseRecorded = false;
+        }
     }
 
     @Override
@@ -206,7 +253,11 @@ public class BlimpRendererActivity
     // TokenSource.Callback implementation.
     @Override
     public void onTokenReceived(String token) {
-        if (mBlimpClientSession != null) mBlimpClientSession.connect(token);
+        if (mBlimpClientSession != null) {
+            mBlimpClientSession.connect(token);
+        } else {
+            mToken = token;
+        }
     }
 
     @Override
@@ -233,11 +284,63 @@ public class BlimpRendererActivity
         Toast.makeText(this, R.string.network_connected, Toast.LENGTH_SHORT).show();
     }
 
+    /**
+     * Displays debug metrics up to one decimal place.
+     */
+    @Override
+    public void updateDebugStatsUI(int received, int sent, int commits) {
+        TextView tv = (TextView) findViewById(R.id.bytes_received_client);
+        tv.setText(String.format("%.1f", (float) received / BYTES_PER_KILO));
+        tv = (TextView) findViewById(R.id.bytes_sent_client);
+        tv.setText(String.format("%.1f", (float) sent / BYTES_PER_KILO));
+        tv = (TextView) findViewById(R.id.commit_count);
+        tv.setText(String.valueOf(commits));
+    }
+
+    private void updateDebugStats(int[] metrics) {
+        assert metrics.length == 3;
+        mReceived = metrics[0];
+        mSent = metrics[1];
+        mCommits = metrics[2];
+        if (!mStatsBaseRecorded) {
+            mReceivedBase = mReceived;
+            mSentBase = mSent;
+            mCommitsBase = mCommits;
+            mStatsBaseRecorded = true;
+        }
+        updateDebugStatsUI(mReceived - mReceivedBase, mSent - mSentBase, mCommits - mCommitsBase);
+    }
+
+    // Toolbar.ToolbarDelegate interface.
+    @Override
+    public void resetDebugStats() {
+        mReceivedBase = mReceived;
+        mSentBase = mSent;
+        mCommitsBase = mCommits;
+    }
+
     @Override
     public void onDisconnected(String reason) {
         Toast.makeText(this,
                      String.format(getResources().getString(R.string.network_disconnected), reason),
                      Toast.LENGTH_LONG)
                 .show();
+    }
+
+    private void buildAndTriggerTokenSourceIfNeeded() {
+        // If Blimp client is given the engine ip by the command line, then there is no need to
+        // build a TokenSource, because token, engine ip, engine port, and transport protocol are
+        // all given by command line.
+        if (CommandLine.getInstance().hasSwitch(BlimpClientSwitches.ENGINE_IP)) return;
+
+        // Build a TokenSource that will internally retry accessing the underlying
+        // TokenSourceImpl. This will exponentially backoff while it tries to get the access
+        // token.  See {@link RetryingTokenSource} for more information.  The underlying
+        // TokenSourceImpl will attempt to query GoogleAuthUtil, but might fail if there is no
+        // account selected, in which case it will ask this Activity to show an account chooser
+        // and notify it of the selection result.
+        mTokenSource = new RetryingTokenSource(new TokenSourceImpl(this));
+        mTokenSource.setCallback(this);
+        mTokenSource.getToken();
     }
 }

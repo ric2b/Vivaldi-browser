@@ -13,7 +13,7 @@
 #include "blimp/client/feature/settings_feature.h"
 #include "blimp/client/feature/tab_control_feature.h"
 #include "blimp/client/session/assignment_source.h"
-#include "blimp/common/protocol_version.h"
+#include "components/version_info/version_info.h"
 #include "jni/BlimpClientSession_jni.h"
 #include "net/base/net_errors.h"
 
@@ -58,6 +58,10 @@ BlimpClientSessionAndroid::BlimpClientSessionAndroid(
           base::android::ConvertJavaStringToUTF8(jassigner_url))) {
   java_obj_.Reset(env, jobj);
 
+  // Send OS info before creating any tab.
+  GetSettingsFeature()->SendUserAgentOSVersionInfo(
+      GetOSVersionInfoForUserAgent());
+
   // Create a single tab's WebContents.
   // TODO(kmarshall): Remove this once we add tab-literacy to Blimp.
   GetTabControlFeature()->CreateTab(kDummyTabId);
@@ -81,9 +85,6 @@ BlimpClientSessionAndroid::~BlimpClientSessionAndroid() {}
 void BlimpClientSessionAndroid::OnConnected() {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_BlimpClientSession_onConnected(env, java_obj_.obj());
-
-  GetSettingsFeature()->SendUserAgentOSVersionInfo(
-      GetOSVersionInfoForUserAgent());
 }
 
 void BlimpClientSessionAndroid::OnDisconnected(int result) {
@@ -108,9 +109,23 @@ void BlimpClientSessionAndroid::OnAssignmentConnectionAttempted(
   Java_BlimpClientSession_onAssignmentReceived(
       env, java_obj_.obj(), static_cast<jint>(result),
       base::android::ConvertUTF8ToJavaString(env, engine_ip).obj(),
-      base::android::ConvertUTF8ToJavaString(env, blimp::kEngineVersion).obj());
+      base::android::ConvertUTF8ToJavaString(env,
+                                             version_info::GetVersionNumber())
+          .obj());
 
   BlimpClientSession::OnAssignmentConnectionAttempted(result, assignment);
+}
+
+base::android::ScopedJavaLocalRef<jintArray>
+BlimpClientSessionAndroid::GetDebugInfo(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jobj) {
+  BlimpConnectionStatistics* stats =
+      BlimpClientSession::GetBlimpConnectionStatistics();
+  int metrics[] = {stats->Get(BlimpConnectionStatistics::BYTES_RECEIVED),
+                   stats->Get(BlimpConnectionStatistics::BYTES_SENT),
+                   stats->Get(BlimpConnectionStatistics::COMMIT)};
+  return base::android::ToJavaIntArray(env, metrics, arraysize(metrics));
 }
 
 }  // namespace client

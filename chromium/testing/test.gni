@@ -63,10 +63,12 @@ template("_gen_isolate") {
 # set.
 # Variable:
 #   use_raw_android_executable: Use executable() rather than android_apk().
+#   use_native_activity: Test implements ANativeActivity_onCreate().
 template("test") {
   if (is_android) {
     import("//build/config/android/config.gni")
     import("//build/config/android/rules.gni")
+    import("//build/config/sanitizers/sanitizers.gni")
 
     _use_raw_android_executable = defined(invoker.use_raw_android_executable) &&
                                   invoker.use_raw_android_executable
@@ -109,6 +111,8 @@ template("test") {
         apply_device_filters = true
       }
     }
+
+    assert(_use_raw_android_executable || enable_java_templates)
 
     if (_use_raw_android_executable) {
       _exec_target = "${target_name}__exec"
@@ -157,9 +161,13 @@ template("test") {
       _apk_target = "${target_name}_apk"
       _apk_specific_vars = [
         "android_manifest",
+        "android_manifest_dep",
         "enable_multidex",
+        "proguard_configs",
+        "proguard_enabled",
         "use_default_launcher",
         "write_asset_list",
+        "use_native_activity",
       ]
       shared_library(_library_target) {
         # Configs will always be defined since we set_defaults in BUILDCONFIG.gn.
@@ -180,14 +188,12 @@ template("test") {
       }
       unittest_apk(_apk_target) {
         forward_variables_from(invoker, _apk_specific_vars + [ "deps" ])
-        unittests_dep = ":$_library_target"
+        shared_library = ":$_library_target"
         apk_name = invoker.target_name
         if (defined(invoker.output_name)) {
           apk_name = invoker.output_name
-          unittests_binary = "lib${apk_name}.so"
           install_script_name = "install_${invoker.output_name}"
         }
-        deps += [ ":$_library_target" ]
 
         # TODO(agrieve): Remove this data_dep once bots don't build the _apk
         #     target (post-GYP).
@@ -260,7 +266,7 @@ template("test") {
       }
     }
 
-    # TODO(GYP): Delete this after we've converted everything to GN.
+    # TODO(GYP_GONE): Delete this after we've converted everything to GN.
     # The _run targets exist only for compatibility w/ GYP.
     group("${target_name}_apk_run") {
       testonly = true
@@ -288,19 +294,30 @@ template("test") {
     }
 
     ios_app_bundle(_test_target) {
-      # TODO(GYP): Make this configurable and only provide a default
-      # that can be overridden.
-      info_plist = "//testing/gtest_ios/unittest-Info.plist"
-      app_name = target_name
-      entitlements_path = "//testing/gtest_ios"
-      code_signing_identity = ""
       testonly = true
-      extra_substitutions = [ "BUNDLE_ID_TEST_NAME=$app_name" ]
 
       # See above call.
       set_sources_assignment_filter([])
+      forward_variables_from(invoker, "*", [ "testonly" ])
 
-      forward_variables_from(invoker, "*")
+      # Provide sensible defaults in case invoker did not define any of those
+      # required variables.
+      if (!defined(info_plist) && !defined(info_plist_target)) {
+        info_plist = "//testing/gtest_ios/unittest-Info.plist"
+      }
+
+      # TODO(crbug.com/603102): remove this once gyp support is dropped and all
+      # application uses the target name as value for BUNDLE_ID_TEST_NAME.
+      if (defined(invoker.app_name)) {
+        app_name = invoker.app_name
+      } else {
+        app_name = target_name
+      }
+
+      if (!defined(extra_substitutions)) {
+        extra_substitutions = []
+      }
+      extra_substitutions += [ "BUNDLE_ID_TEST_NAME=$app_name" ]
 
       if (!defined(deps)) {
         deps = []
@@ -329,7 +346,7 @@ template("test") {
       ]
     }
 
-    # TODO(GYP): Delete this after we've converted everything to GN.
+    # TODO(GYP_GONE): Delete this after we've converted everything to GN.
     # The _run targets exist only for compatibility with GYP.
     group("${target_name}_run") {
       testonly = true

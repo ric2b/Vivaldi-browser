@@ -7,22 +7,6 @@
  * information for ChromeOS.
  */
 
-(function() {
-
-/**
- * @param {!BrowserChannel} channel
- * @return {string}
- */
-function browserChannelToI18nId(channel) {
-  switch (channel) {
-    case BrowserChannel.BETA: return 'aboutChannelBeta';
-    case BrowserChannel.DEV: return 'aboutChannelDev';
-    case BrowserChannel.STABLE: return 'aboutChannelStable';
-  }
-
-  assertNotReached();
-}
-
 Polymer({
   is: 'settings-detailed-build-info',
 
@@ -34,6 +18,17 @@ Polymer({
 
     /** @private */
     currentlyOnChannelText_: String,
+
+    /** @private */
+    showChannelSwitcherDialog_: Boolean,
+
+    /** @private */
+    canChangeChannel_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('aboutCanChangeChannel');
+      },
+    },
   },
 
   /** @override */
@@ -47,7 +42,7 @@ Polymer({
     browserProxy.getCurrentChannel().then(function(channel) {
       this.currentlyOnChannelText_ = this.i18n(
           'aboutCurrentlyOnChannel',
-          this.i18n(browserChannelToI18nId(channel)));
+          this.i18n(settings.browserChannelToI18nId(channel)));
     }.bind(this));
   },
 
@@ -59,6 +54,19 @@ Polymer({
   shouldShowVersion_: function(version) {
     return version.length > 0;
   },
-});
 
-})();
+  /** @private */
+  onChangeChannelTap_: function() {
+    this.showChannelSwitcherDialog_ = true;
+    // Async to wait for dialog to appear in the DOM.
+    this.async(function() {
+      var dialog = this.$$('settings-channel-switcher-dialog');
+      // Register listener to detect when the dialog is closed. Flip the boolean
+      // once closed to force a restamp next time it is shown such that the
+      // previous dialog's contents are cleared.
+      dialog.addEventListener('iron-overlay-closed', function() {
+        this.showChannelSwitcherDialog_ = false;
+      }.bind(this));
+    }.bind(this));
+  },
+});

@@ -14,7 +14,6 @@
 #include "ui/gfx/skia_util.h"
 
 namespace cc {
-class ImageSerializationProcessor;
 
 FloatClipDisplayItem::FloatClipDisplayItem(const gfx::RectF& clip_rect) {
   SetNew(clip_rect);
@@ -36,9 +35,7 @@ void FloatClipDisplayItem::SetNew(const gfx::RectF& clip_rect) {
   clip_rect_ = clip_rect;
 }
 
-void FloatClipDisplayItem::ToProtobuf(
-    proto::DisplayItem* proto,
-    ImageSerializationProcessor* image_serialization_processor) const {
+void FloatClipDisplayItem::ToProtobuf(proto::DisplayItem* proto) const {
   proto->set_type(proto::DisplayItem::Type_FloatClip);
 
   proto::FloatClipDisplayItem* details = proto->mutable_float_clip_item();
@@ -46,7 +43,6 @@ void FloatClipDisplayItem::ToProtobuf(
 }
 
 void FloatClipDisplayItem::Raster(SkCanvas* canvas,
-                                  const gfx::Rect& canvas_target_playback_rect,
                                   SkPicture::AbortCallback* callback) const {
   canvas->save();
   canvas->clipRect(gfx::RectFToSkRect(clip_rect_));
@@ -74,15 +70,12 @@ EndFloatClipDisplayItem::EndFloatClipDisplayItem(
 EndFloatClipDisplayItem::~EndFloatClipDisplayItem() {
 }
 
-void EndFloatClipDisplayItem::ToProtobuf(
-    proto::DisplayItem* proto,
-    ImageSerializationProcessor* image_serialization_processor) const {
+void EndFloatClipDisplayItem::ToProtobuf(proto::DisplayItem* proto) const {
   proto->set_type(proto::DisplayItem::Type_EndFloatClip);
 }
 
 void EndFloatClipDisplayItem::Raster(
     SkCanvas* canvas,
-    const gfx::Rect& canvas_target_playback_rect,
     SkPicture::AbortCallback* callback) const {
   canvas->restore();
 }

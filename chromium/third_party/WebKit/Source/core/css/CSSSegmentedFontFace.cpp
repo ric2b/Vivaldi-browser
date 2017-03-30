@@ -40,6 +40,7 @@ CSSSegmentedFontFace::CSSSegmentedFontFace(CSSFontSelector* fontSelector, FontTr
     : m_fontSelector(fontSelector)
     , m_traits(traits)
     , m_firstNonCssConnectedFace(m_fontFaces.end())
+    , m_approximateCharacterCount(0)
 {
 }
 
@@ -124,7 +125,10 @@ PassRefPtr<FontData> CSSSegmentedFontFace::getFontData(const FontDescription& fo
             continue;
         if (RefPtr<SimpleFontData> faceFontData = (*it)->cssFontFace()->getFontData(requestedFontDescription)) {
             ASSERT(!faceFontData->isSegmented());
-            fontData->appendFace(FontDataForRangeSet(faceFontData.release(), (*it)->cssFontFace()->ranges()));
+            if (faceFontData->isCustomFont())
+                fontData->appendFace(adoptRef(new FontDataForRangeSet(faceFontData.release(), (*it)->cssFontFace()->ranges())));
+            else
+                fontData->appendFace(adoptRef(new FontDataForRangeSetFromCache(faceFontData.release(), (*it)->cssFontFace()->ranges())));
         }
     }
     if (fontData->numFaces())
@@ -133,12 +137,13 @@ PassRefPtr<FontData> CSSSegmentedFontFace::getFontData(const FontDescription& fo
     return nullptr;
 }
 
-void CSSSegmentedFontFace::willUseFontData(const FontDescription& fontDescription, UChar32 character)
+void CSSSegmentedFontFace::willUseFontData(const FontDescription& fontDescription, const String& text)
 {
+    m_approximateCharacterCount += text.length();
     for (FontFaceList::reverse_iterator it = m_fontFaces.rbegin(); it != m_fontFaces.rend(); ++it) {
         if ((*it)->loadStatus() != FontFace::Unloaded)
             break;
-        if ((*it)->cssFontFace()->maybeScheduleFontLoad(fontDescription, character))
+        if ((*it)->cssFontFace()->maybeLoadFont(fontDescription, text))
             break;
     }
 }
@@ -150,7 +155,7 @@ void CSSSegmentedFontFace::willUseRange(const blink::FontDescription& fontDescri
     // https://drafts.csswg.org/css-fonts/#composite-fonts
     for (FontFaceList::reverse_iterator it = m_fontFaces.rbegin(); it != m_fontFaces.rend(); ++it) {
         CSSFontFace* cssFontFace = (*it)->cssFontFace();
-        if (cssFontFace->maybeScheduleFontLoad(fontDescription, rangeSet))
+        if (cssFontFace->maybeLoadFont(fontDescription, rangeSet))
             break;
     }
 }

@@ -20,11 +20,11 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/strings/string_piece.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
-#include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/lib/control_message_handler.h"
@@ -32,6 +32,7 @@
 #include "mojo/public/cpp/bindings/lib/serialization.h"
 #include "mojo/public/cpp/bindings/map.h"
 #include "mojo/public/cpp/bindings/message_filter.h"
+#include "mojo/public/cpp/bindings/native_enum.h"
 #include "mojo/public/cpp/bindings/native_struct.h"
 #include "mojo/public/cpp/bindings/no_interface.h"
 #include "mojo/public/cpp/bindings/struct_ptr.h"
@@ -49,31 +50,12 @@
 #include "mojo/public/cpp/bindings/string.h"
 {%- else %}
 #include "mojo/public/cpp/bindings/wtf_array.h"
+#include "mojo/public/cpp/bindings/wtf_map.h"
 #include "third_party/WebKit/Source/wtf/text/WTFString.h"
 {%- endif %}
 
 {%- for header in extra_public_headers %}
 #include "{{header}}"
-{%- endfor %}
-
-{#--- Struct Serialization Helpers -#}
-{%  for struct in structs %}
-{%-   if struct|is_native_only_kind and struct|is_typemapped_kind %}
-{# This helps the array serializer understand how to serialize arrays of this
-   native-only type. #}
-
-namespace mojo {
-namespace internal {
-
-template <>
-struct GetDataTypeAsArrayElement<{{struct|cpp_wrapper_type}}> {
-  using Data = NativeStruct_Data*;
-};
-
-}  // namespace internal
-}  // namespace mojo
-
-{%-   endif %}
 {%- endfor %}
 
 {%- for namespace in namespaces_as_array %}
@@ -88,9 +70,13 @@ namespace {{variant}} {
 {% from "enum_macros.tmpl" import enum_stream_operator -%}
 {% from "enum_macros.tmpl" import is_known_enum_value -%}
 {%- for enum in enums %}
-  {{enum_decl(enum)}}
-  {{enum_stream_operator(enum)}}
-  {{is_known_enum_value(enum)}}
+{%-   if enum|is_native_only_kind %}
+using {{enum.name}} = mojo::NativeEnum;
+{%-   else %}
+{{enum_decl(enum)}}
+{{enum_stream_operator(enum)}}
+{{is_known_enum_value(enum)}}
+{%-   endif %}
 {%- endfor %}
 
 {#--- Constants #}
@@ -169,14 +155,8 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%    include "interface_response_validator_declaration.tmpl" %}
 {%- endfor %}
 
-{#--- Unions must be declared first because they can be members of structs #}
-{#--- Unions #}
-{%  for union in unions %}
-{%    include "wrapper_union_class_declaration.tmpl" %}
-{%- endfor %}
-
-{#--- NOTE: Non-inlined structs may have pointers to inlined structs, so we  #}
-{#---       need to fully define inlined structs ahead of the others.        #}
+{#--- NOTE: Unions and non-inlined structs may have pointers to inlined structs,
+      so we need to fully define inlined structs ahead of the others. #}
 
 {#--- Inlined structs #}
 {%  for struct in structs %}
@@ -184,6 +164,13 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%      include "wrapper_class_declaration.tmpl" %}
 {%      include "struct_data_view_declaration.tmpl" %}
 {%    endif %}
+{%- endfor %}
+
+{#--- Unions must be declared before non-inlined structs because they can be
+      members of structs. #}
+{#--- Unions #}
+{%  for union in unions %}
+{%    include "wrapper_union_class_declaration.tmpl" %}
 {%- endfor %}
 
 {#--- Non-inlined structs #}
@@ -194,17 +181,29 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%    endif %}
 {%- endfor %}
 
+{%- for union in unions %}
+{%    include "wrapper_union_class_template_definition.tmpl" %}
+{%- endfor %}
+
 {%- for struct in structs %}
+{%-   if not struct|is_native_only_kind %}
+{%      include "wrapper_class_template_definition.tmpl" %}
+{%-   endif %}
+
 {%-   for enum in struct.enums %}
+{%-     if not enum|is_native_only_kind %}
 {{enum_stream_operator(enum)}}
 {{is_known_enum_value(enum)}}
+{%-     endif %}
 {%-   endfor %}
 {%- endfor %}
 
 {%- for interface in interfaces %}
 {%-   for enum in interface.enums %}
+{%-     if not enum|is_native_only_kind %}
 {{enum_stream_operator(enum)}}
 {{is_known_enum_value(enum)}}
+{%-     endif %}
 {%-   endfor %}
 {%- endfor %}
 
@@ -216,6 +215,29 @@ typedef mojo::StructPtr<{{union.name}}> {{union.name}}Ptr;
 {%- endfor %}
 
 namespace mojo {
+
+{#--- Enum Serialization Helpers -#}
+{%- for enum in enums %}
+{%-   if not enum|is_native_only_kind %}
+{%      include "enum_serialization_declaration.tmpl" %}
+{%-   endif %}
+{%- endfor %}
+
+{%- for struct in structs %}
+{%-   for enum in struct.enums %}
+{%-     if not enum|is_native_only_kind %}
+{%        include "enum_serialization_declaration.tmpl" %}
+{%-     endif %}
+{%-   endfor %}
+{%- endfor %}
+
+{%- for interface in interfaces %}
+{%-   for enum in interface.enums %}
+{%-     if not enum|is_native_only_kind %}
+{%        include "enum_serialization_declaration.tmpl" %}
+{%-     endif %}
+{%-   endfor %}
+{%- endfor %}
 
 {#--- Struct Serialization Helpers -#}
 {%  for struct in structs %}

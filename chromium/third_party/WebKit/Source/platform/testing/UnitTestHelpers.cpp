@@ -29,6 +29,7 @@
 #include "base/files/file_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "platform/SharedBuffer.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
@@ -45,7 +46,7 @@ namespace testing {
 
 void runPendingTasks()
 {
-    Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&exitRunLoop));
+    Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&exitRunLoop));
 
     // We forbid GC in the tasks. Otherwise the registered GCTaskObserver tries
     // to run GC with NoHeapPointerOnStack.
@@ -56,7 +57,7 @@ void runPendingTasks()
 
 void runDelayedTasks(double delayMs)
 {
-    Platform::current()->currentThread()->getWebTaskRunner()->postDelayedTask(BLINK_FROM_HERE, bind(&exitRunLoop), delayMs);
+    Platform::current()->currentThread()->getWebTaskRunner()->postDelayedTask(BLINK_FROM_HERE, WTF::bind(&exitRunLoop), delayMs);
     enterRunLoop();
 }
 
@@ -79,7 +80,7 @@ PassRefPtr<SharedBuffer> readFromFile(const String& path)
 
 void enterRunLoop()
 {
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
 }
 
 void exitRunLoop()

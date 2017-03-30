@@ -16,6 +16,10 @@ VivaldiRenderViewObserver::VivaldiRenderViewObserver(
 VivaldiRenderViewObserver::~VivaldiRenderViewObserver() {
 }
 
+void VivaldiRenderViewObserver::OnDestruct() {
+  delete this;
+}
+
 bool VivaldiRenderViewObserver::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(VivaldiRenderViewObserver, message)

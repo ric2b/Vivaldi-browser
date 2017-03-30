@@ -382,6 +382,11 @@ void EventGeneratorDelegateMac::OnTouchEvent(ui::TouchEvent* event) {
 void EventGeneratorDelegateMac::SetContext(ui::test::EventGenerator* owner,
                                            gfx::NativeWindow root_window,
                                            gfx::NativeWindow window) {
+  // Mac doesn't use a |root_window|. Assume that if a single-argument
+  // constructor was used, it should be the actual |window|.
+  if (!window)
+    window = root_window;
+
   swizzle_pressed_.reset();
   swizzle_location_.reset();
   swizzle_current_event_.reset();
@@ -423,7 +428,9 @@ gfx::Point EventGeneratorDelegateMac::CenterOfTarget(
 gfx::Point EventGeneratorDelegateMac::CenterOfWindow(
     gfx::NativeWindow window) const {
   DCHECK_EQ(window, window_);
-  return gfx::ScreenRectFromNSRect([window frame]).CenterPoint();
+  // Assume the window is at the top-left of the coordinate system (even if
+  // AppKit has moved it into the work area) see ConvertRootPointToTarget().
+  return gfx::Point(NSWidth([window frame]) / 2, NSHeight([window frame]) / 2);
 }
 
 // Return the current owner of the EventGeneratorDelegate. May be null.

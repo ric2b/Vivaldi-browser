@@ -4,10 +4,10 @@
 
 #include "ash/shelf/shelf_navigator.h"
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/shelf/shelf_item_types.h"
+#include "ash/common/shelf/shelf_model.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_item_types.h"
-#include "ash/shelf/shelf_model.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -53,7 +53,7 @@ class ShelfNavigatorTest : public testing::Test {
 
     // Set the focused item.
     if (focused_index >= 0) {
-      ShelfItem focused_item =model_->items()[focused_index];
+      ShelfItem focused_item = model_->items()[focused_index];
       if (focused_item.type == TYPE_PLATFORM_APP) {
         focused_item.status = STATUS_ACTIVE;
         model_->Set(focused_index, focused_item);
@@ -74,7 +74,8 @@ class ShelfNavigatorTest : public testing::Test {
 TEST_F(ShelfNavigatorTest, BasicCycle) {
   // An app shortcut and three platform apps.
   ShelfItemType types[] = {
-    TYPE_APP_SHORTCUT, TYPE_PLATFORM_APP, TYPE_PLATFORM_APP, TYPE_PLATFORM_APP,
+      TYPE_APP_SHORTCUT, TYPE_PLATFORM_APP, TYPE_PLATFORM_APP,
+      TYPE_PLATFORM_APP,
   };
   // ShelfModel automatically adds BROWSER_SHORTCUT item at the
   // beginning, so '3' refers the first TYPE_PLATFORM_APP item.
@@ -89,7 +90,8 @@ TEST_F(ShelfNavigatorTest, BasicCycle) {
 
 TEST_F(ShelfNavigatorTest, WrapToBeginning) {
   ShelfItemType types[] = {
-    TYPE_APP_SHORTCUT, TYPE_PLATFORM_APP, TYPE_PLATFORM_APP, TYPE_PLATFORM_APP,
+      TYPE_APP_SHORTCUT, TYPE_PLATFORM_APP, TYPE_PLATFORM_APP,
+      TYPE_PLATFORM_APP,
   };
   SetupMockShelfModel(types, arraysize(types), 5);
 
@@ -117,7 +119,7 @@ TEST_F(ShelfNavigatorTest, SingleEntry) {
 
 TEST_F(ShelfNavigatorTest, NoActive) {
   ShelfItemType types[] = {
-    TYPE_PLATFORM_APP, TYPE_PLATFORM_APP,
+      TYPE_PLATFORM_APP, TYPE_PLATFORM_APP,
   };
   // Special case: no items are 'STATUS_ACTIVE'.
   SetupMockShelfModel(types, arraysize(types), -1);

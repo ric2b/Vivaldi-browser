@@ -11,6 +11,10 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
+#include "content/browser/renderer_host/render_process_host_impl.h"
+#include "content/common/frame_messages.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
 #include "content/public/test/browser_test_utils.h"
@@ -18,16 +22,71 @@
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
+#include "net/base/filename_util.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/web/WebFindOptions.h"
+#include "third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h"
 
 using testing::ContainsRegex;
 using testing::HasSubstr;
 using testing::Not;
 
 namespace content {
+
+namespace {
+
+// A dummy WebContentsDelegate which tracks the results of a find operation.
+class FindTrackingDelegate : public WebContentsDelegate {
+ public:
+  FindTrackingDelegate(const std::string& search)
+      : search_(search), matches_(-1) {}
+
+  // Returns number of results.
+  int Wait(WebContents* web_contents) {
+    WebContentsDelegate* old_delegate = web_contents->GetDelegate();
+    web_contents->SetDelegate(this);
+
+    blink::WebFindOptions options;
+    options.matchCase = false;
+
+    web_contents->Find(global_request_id++, base::UTF8ToUTF16(search_),
+                       options);
+    run_loop_.Run();
+
+    web_contents->SetDelegate(old_delegate);
+
+    return matches_;
+  }
+
+  void FindReply(WebContents* web_contents,
+                 int request_id,
+                 int number_of_matches,
+                 const gfx::Rect& selection_rect,
+                 int active_match_ordinal,
+                 bool final_update) override {
+    if (final_update) {
+      matches_ = number_of_matches;
+      run_loop_.Quit();
+    }
+  }
+
+  static int global_request_id;
+
+ private:
+  std::string search_;
+  int matches_;
+  base::RunLoop run_loop_;
+
+  DISALLOW_COPY_AND_ASSIGN(FindTrackingDelegate);
+};
+
+// static
+int FindTrackingDelegate::global_request_id = 0;
+
+}  // namespace
 
 class MHTMLGenerationTest : public ContentBrowserTest {
  public:
@@ -46,7 +105,10 @@ class MHTMLGenerationTest : public ContentBrowserTest {
 
   void GenerateMHTML(const MHTMLGenerationParams& params, const GURL& url) {
     NavigateToURL(shell(), url);
+    GenerateMHTMLForCurrentPage(params);
+  }
 
+  void GenerateMHTMLForCurrentPage(const MHTMLGenerationParams& params) {
     base::RunLoop run_loop;
 
     shell()->web_contents()->GenerateMHTML(
@@ -63,6 +125,68 @@ class MHTMLGenerationTest : public ContentBrowserTest {
     int64_t file_size;
     if (!base::GetFileSize(path, &file_size)) return -1;
     return file_size;
+  }
+
+  void TestOriginalVsSavedPage(
+      const GURL& url,
+      const MHTMLGenerationParams params,
+      int expected_number_of_frames,
+      const std::vector<std::string>& expected_substrings,
+      const std::vector<std::string>& forbidden_substrings_in_saved_page,
+      bool skip_verification_of_original_page = false) {
+    // Navigate to the test page and verify if test expectations
+    // are met (this is mostly a sanity check - a failure to meet
+    // expectations would probably mean that there is a test bug
+    // (i.e. that we got called with wrong expected_foo argument).
+    NavigateToURL(shell(), url);
+    if (!skip_verification_of_original_page) {
+      AssertExpectationsAboutCurrentTab(expected_number_of_frames,
+                                        expected_substrings,
+                                        std::vector<std::string>());
+    }
+
+    GenerateMHTML(params, url);
+    ASSERT_FALSE(HasFailure());
+
+    // Stop the test server (to make sure the locally saved page
+    // is self-contained / won't try to open original resources).
+    ASSERT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
+
+    // Open the saved page and verify if test expectations are
+    // met (i.e. if the same expectations are met for "after"
+    // [saved version of the page] as for the "before"
+    // [the original version of the page].
+    NavigateToURL(shell(), net::FilePathToFileURL(params.file_path));
+    AssertExpectationsAboutCurrentTab(expected_number_of_frames,
+                                      expected_substrings,
+                                      forbidden_substrings_in_saved_page);
+  }
+
+  void AssertExpectationsAboutCurrentTab(
+      int expected_number_of_frames,
+      const std::vector<std::string>& expected_substrings,
+      const std::vector<std::string>& forbidden_substrings) {
+    int actual_number_of_frames =
+        shell()->web_contents()->GetAllFrames().size();
+    EXPECT_EQ(expected_number_of_frames, actual_number_of_frames);
+
+    for (const auto& expected_substring : expected_substrings) {
+      FindTrackingDelegate delegate(expected_substring);
+      int actual_number_of_matches = delegate.Wait(shell()->web_contents());
+      EXPECT_EQ(1, actual_number_of_matches)
+          << "Verifying that \"" << expected_substring << "\" appears "
+          << "exactly once in the text of web contents of "
+          << shell()->web_contents()->GetURL().spec();
+    }
+
+    for (const auto& forbidden_substring : forbidden_substrings) {
+      FindTrackingDelegate delegate(forbidden_substring);
+      int actual_number_of_matches = delegate.Wait(shell()->web_contents());
+      EXPECT_EQ(0, actual_number_of_matches)
+          << "Verifying that \"" << forbidden_substring << "\" doesn't "
+          << "appear in the text of web contents of "
+          << shell()->web_contents()->GetURL().spec();
+    }
   }
 
   bool has_mhtml_callback_run() const { return has_mhtml_callback_run_; }
@@ -100,6 +224,121 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTML) {
   ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
   EXPECT_THAT(mhtml,
               HasSubstr("Content-Transfer-Encoding: quoted-printable"));
+}
+
+class GenerateMHTMLAndExitRendererMessageFilter : public BrowserMessageFilter {
+ public:
+  GenerateMHTMLAndExitRendererMessageFilter(
+      RenderProcessHostImpl* render_process_host)
+      : BrowserMessageFilter(FrameMsgStart),
+        render_process_host_(render_process_host) {}
+
+ protected:
+  ~GenerateMHTMLAndExitRendererMessageFilter() override {}
+
+ private:
+  bool OnMessageReceived(const IPC::Message& message) override {
+    if (message.type() == FrameHostMsg_SerializeAsMHTMLResponse::ID) {
+      // After |return false| below, this IPC message will be handled by the
+      // product code as illustrated below.  (1), (2), (3) depict points in time
+      // when product code runs on UI and FILE threads.  (X), (Y), (Z) depict
+      // when we want test-injected tasks to run - for the repro, (Z) has to
+      // happen between (1) and (3).  (Y?) and (Z?) depict when test tasks can
+      // theoretically happen and ruin the repro.
+      //
+      //     IO thread       UI thread           FILE thread
+      //     ---------       ---------           -----------
+      //        |                |                     |
+      //    WE ARE HERE          |                     |
+      //        |                |                     |
+      // after |return false|    |                     |
+      //        +--------------->+                     |
+      //        |                |                     |
+      //        |               (X)                    |
+      //        |                |                     |
+      //        |                |                    (Y?)
+      //        |               (Z?)                   |
+      //        |                |                     |
+      // (1)    |      MHTMLGenerationManager          |
+      //        |      ::OnSerializeAsMHTMLResponse    |
+      //        |                +-------------------->+
+      //        |                |                     |
+      //        |                |                    (Y)
+      //        |                |                     |
+      // (2)    |                |          MHTMLGenerationManager::Job
+      //        |                |          ::CloseFileOnFileThread
+      //        |                |                     |
+      //        |               (Z)                    |
+      //        |         test needs to inject         |
+      //        |        fast renderer shutdown        |
+      //        |      HERE - between (1) and (3)      |
+      //        |                |                     |
+      //        |                |                     |
+      //        |                +<--------------------+
+      //        |                |                     |
+      // (3)    |      MHTMLGenerationManager          |
+      //        |      ::OnFileClosed                  |
+      //        |                |                     |
+      //
+      // We hope that (Z) happens between (1) and (3) by doing the following:
+      // - From here post TaskX to UI thread.  (X) is guaranteed to happen
+      //   before timepoint (1) (because posting of (1) happens after
+      //   |return false| / before we post TaskX below).
+      // - From (X) post TaskY to FILE thread.  Because this posting is done
+      //   before (1), we can guarantee that (Y) will happen before (2).
+      // - From (Y) post TaskZ to UI thread.  Because this posting is done
+      //   before (2), we can guarantee that (Z) will happen before (3).
+      // - We cannot really guarantee that (Y) and (Z) happen *after* (1) - i.e.
+      //   execution at (Y?) and (Z?) instead is possible.  In practice,
+      //   bouncing off of UI and FILE thread does mean (Z) happens after (1).
+      BrowserThread::PostTask(
+          BrowserThread::UI, FROM_HERE, base::Bind(
+              &GenerateMHTMLAndExitRendererMessageFilter::TaskX,
+              base::Unretained(this)));
+    }
+
+    return false;
+  };
+
+  void TaskX() {
+    BrowserThread::PostTask(
+        BrowserThread::FILE, FROM_HERE, base::Bind(
+            &GenerateMHTMLAndExitRendererMessageFilter::TaskY,
+            base::Unretained(this)));
+  }
+
+  void TaskY() {
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE, base::Bind(
+            &GenerateMHTMLAndExitRendererMessageFilter::TaskZ,
+            base::Unretained(this)));
+  }
+
+  void TaskZ() {
+    render_process_host_->FastShutdownIfPossible();
+  }
+
+  RenderProcessHostImpl* render_process_host_;
+
+  DISALLOW_COPY_AND_ASSIGN(GenerateMHTMLAndExitRendererMessageFilter);
+};
+
+// Regression test for the crash/race from https://crbug.com/612098.
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLAndExitRenderer) {
+  NavigateToURL(shell(), embedded_test_server()->GetURL("/simple_page.html"));
+
+  RenderProcessHostImpl* render_process_host =
+      static_cast<RenderProcessHostImpl*>(
+          shell()->web_contents()->GetRenderProcessHost());
+  scoped_refptr<BrowserMessageFilter> filter =
+      new GenerateMHTMLAndExitRendererMessageFilter(render_process_host);
+  render_process_host->AddFilter(filter.get());
+
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+  GenerateMHTMLForCurrentPage(MHTMLGenerationParams(path));
+
+  EXPECT_GT(ReadFileSizeFromDisk(path), 100);  // Verify the actual file size.
 }
 
 IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, InvalidPath) {
@@ -161,7 +400,7 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLIgnoreNoStore) {
 
   GURL url(embedded_test_server()->GetURL("/nostore.html"));
 
-  // Generate MHTML without specifying the FAIL_FOR_NO_STORE_MAIN_FRAME policy.
+  // Generate MHTML without specifying the FailForNoStoreMainFrame policy.
   GenerateMHTML(path, url);
 
   // We expect that there wasn't an error (file size -1 indicates an error.)
@@ -183,10 +422,10 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreMainFrame) {
 
   GURL url(embedded_test_server()->GetURL("/nostore.html"));
 
-  // Generate MHTML, specifying the FAIL_FOR_NO_STORE_MAIN_FRAME policy.
+  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
   MHTMLGenerationParams params(path);
   params.cache_control_policy =
-      content::MHTMLCacheControlPolicy::FAIL_FOR_NO_STORE_MAIN_FRAME;
+      blink::WebFrameSerializerCacheControlPolicy::FailForNoStoreMainFrame;
 
   GenerateMHTML(params, url);
   // We expect that there was an error (file size -1 indicates an error.)
@@ -197,6 +436,114 @@ IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreMainFrame) {
 
   // Make sure the contents are missing.
   EXPECT_THAT(mhtml, Not(HasSubstr("test body")));
+}
+
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
+                       GenerateMHTMLIgnoreNoStoreSubFrame) {
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+
+  GURL url(embedded_test_server()->GetURL("/page_with_nostore_iframe.html"));
+
+  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
+  MHTMLGenerationParams params(path);
+  params.cache_control_policy =
+      blink::WebFrameSerializerCacheControlPolicy::FailForNoStoreMainFrame;
+
+  GenerateMHTML(params, url);
+  // We expect that there was no error (file size -1 indicates an error.)
+  EXPECT_LT(0, file_size());
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+
+  EXPECT_THAT(mhtml, HasSubstr("Main Frame"));
+  // Make sure that no-store subresources exist in this mode.
+  EXPECT_THAT(mhtml, HasSubstr("no-store test body"));
+  EXPECT_THAT(mhtml, ContainsRegex("Content-Location:.*nostore.jpg"));
+}
+
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest, GenerateMHTMLObeyNoStoreSubFrame) {
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+
+  GURL url(embedded_test_server()->GetURL("/page_with_nostore_iframe.html"));
+
+  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
+  MHTMLGenerationParams params(path);
+  params.cache_control_policy = blink::WebFrameSerializerCacheControlPolicy::
+      SkipAnyFrameOrResourceMarkedNoStore;
+
+  GenerateMHTML(params, url);
+  // We expect that there was no error (file size -1 indicates an error.)
+  EXPECT_LT(0, file_size());
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(path, &mhtml));
+
+  EXPECT_THAT(mhtml, HasSubstr("Main Frame"));
+  // Make sure the contents are missing.
+  EXPECT_THAT(mhtml, Not(HasSubstr("no-store test body")));
+  // This image comes from a resource marked no-store.
+  EXPECT_THAT(mhtml, Not(ContainsRegex("Content-Location:.*nostore.jpg")));
+}
+
+// TODO(crbug.com/615291): These fail on Android under some circumstances.
+#if defined(OS_ANDROID)
+#define MAYBE_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy \
+    DISABLED_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy
+#define MAYBE_ViewedMHTMLDoesNotContainNoStoreContent \
+    DISABLED_ViewedMHTMLDoesNotContainNoStoreContent
+#else
+#define MAYBE_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy \
+    ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy
+#define MAYBE_ViewedMHTMLDoesNotContainNoStoreContent \
+    ViewedMHTMLDoesNotContainNoStoreContent
+#endif
+
+IN_PROC_BROWSER_TEST_F(
+    MHTMLGenerationTest,
+    MAYBE_ViewedMHTMLContainsNoStoreContentIfNoCacheControlPolicy) {
+  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+  MHTMLGenerationParams params(path);
+
+  // No special cache control options so we should see both frames.
+  std::vector<std::string> expectations = {
+      "Main Frame, normal headers.", "Cache-Control: no-store test body",
+  };
+  std::vector<std::string> forbidden;
+  TestOriginalVsSavedPage(
+      embedded_test_server()->GetURL("/page_with_nostore_iframe.html"), params,
+      2 /* expected number of frames */, expectations, forbidden);
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
+}
+
+IN_PROC_BROWSER_TEST_F(MHTMLGenerationTest,
+                       MAYBE_ViewedMHTMLDoesNotContainNoStoreContent) {
+  // Generate MHTML, specifying the FailForNoStoreMainFrame policy.
+  base::FilePath path(temp_dir_.path());
+  path = path.Append(FILE_PATH_LITERAL("test.mht"));
+  MHTMLGenerationParams params(path);
+  params.cache_control_policy = blink::WebFrameSerializerCacheControlPolicy::
+      SkipAnyFrameOrResourceMarkedNoStore;
+
+  // No special cache control options so we should see both frames.
+  std::vector<std::string> expectations = {
+      "Main Frame, normal headers.",
+  };
+  std::vector<std::string> forbidden = {
+      "Cache-Control: no-store test body",
+  };
+  TestOriginalVsSavedPage(
+      embedded_test_server()->GetURL("/page_with_nostore_iframe.html"), params,
+      2 /* expected number of frames */, expectations, forbidden);
+
+  std::string mhtml;
+  ASSERT_TRUE(base::ReadFileToString(params.file_path, &mhtml));
 }
 
 // Test suite that allows testing --site-per-process against cross-site frames.

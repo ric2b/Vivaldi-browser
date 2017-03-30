@@ -37,6 +37,7 @@
 #include "platform/animation/CompositorScrollOffsetAnimationCurve.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/scroll/ScrollAnimatorBase.h"
+#include <memory>
 
 namespace blink {
 
@@ -58,7 +59,8 @@ public:
     // ScrollAnimatorCompositorCoordinator implementation.
     void tickAnimation(double monotonicTime) override;
     void cancelAnimation() override;
-    void takeoverCompositorAnimation() override;
+    void adjustAnimationAndSetScrollPosition(IntSize adjustment, ScrollType) override;
+    void takeOverCompositorAnimation() override;
     void resetAnimationState() override;
     void updateCompositorAnimations() override;
     void notifyCompositorAnimationFinished(int groupId) override;
@@ -76,7 +78,7 @@ protected:
         double animationStartTime,
         std::unique_ptr<cc::AnimationCurve>) override;
 
-    OwnPtr<CompositorScrollOffsetAnimationCurve> m_animationCurve;
+    std::unique_ptr<CompositorScrollOffsetAnimationCurve> m_animationCurve;
     double m_startTime;
     WTF::TimeFunction m_timeFunction;
 
@@ -86,6 +88,7 @@ private:
     // immediately to the target and returns false.
     bool registerAndScheduleAnimation();
 
+    void createAnimationCurve();
     void postAnimationCleanupAndReset();
 
     void addMainThreadScrollingReason();

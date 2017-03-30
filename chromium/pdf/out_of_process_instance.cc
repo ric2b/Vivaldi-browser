@@ -13,8 +13,6 @@
 #include <math.h>
 #include <list>
 
-#include "base/json/json_reader.h"
-#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -50,11 +48,6 @@ namespace chrome_pdf {
 const char kChromePrint[] = "chrome://print/";
 const char kChromeExtension[] =
     "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai";
-
-// Dictionary Value key names for the document accessibility info
-const char kAccessibleNumberOfPages[] = "numberOfPages";
-const char kAccessibleLoaded[] = "loaded";
-const char kAccessibleCopyable[] = "copyable";
 
 // Constants used in handling postMessage() messages.
 const char kType[] = "type";
@@ -106,12 +99,6 @@ const char kJSPreviewPageIndex[] = "index";
 const char kJSSetScrollPositionType[] = "setScrollPosition";
 const char kJSPositionX[] = "x";
 const char kJSPositionY[] = "y";
-// Request accessibility JSON data (Page -> Plugin)
-const char kJSGetAccessibilityJSONType[] = "getAccessibilityJSON";
-const char kJSAccessibilityPageNumber[] = "page";
-// Reply with accessibility JSON data (Plugin -> Page)
-const char kJSGetAccessibilityJSONReplyType[] = "getAccessibilityJSONReply";
-const char kJSAccessibilityJSON[] = "json";
 // Cancel the stream URL request (Plugin -> Page)
 const char kJSCancelStreamUrlType[] = "cancelStreamUrl";
 // Navigate to the given URL (Plugin -> Page)
@@ -152,6 +139,10 @@ const char kJSFieldFocusType[] = "formFocusChange";
 const char kJSFieldFocus[] = "focused";
 
 const int kFindResultCooldownMs = 100;
+
+// A delay to wait between each accessibility page to keep the system
+// responsive.
+const int kAccessibilityPageDelayMs = 100;
 
 const double kMinZoom = 0.01;
 
@@ -206,10 +197,20 @@ PP_Bool GetPrintPresetOptionsFromDocument(
   return PP_TRUE;
 }
 
+void EnableAccessibility(PP_Instance instance) {
+  void* object = pp::Instance::GetPerInstanceObject(instance, kPPPPdfInterface);
+  if (object) {
+    OutOfProcessInstance* obj_instance =
+        static_cast<OutOfProcessInstance*>(object);
+    return obj_instance->EnableAccessibility();
+  }
+}
+
 const PPP_Pdf ppp_private = {
   &GetLinkAtPosition,
   &Transform,
-  &GetPrintPresetOptionsFromDocument
+  &GetPrintPresetOptionsFromDocument,
+  &EnableAccessibility,
 };
 
 int ExtractPrintPreviewPageIndex(const std::string& src_url) {
@@ -288,7 +289,8 @@ OutOfProcessInstance::OutOfProcessInstance(PP_Instance instance)
       did_call_start_loading_(false),
       stop_scrolling_(false),
       background_color_(0),
-      top_toolbar_height_(0) {
+      top_toolbar_height_(0),
+      accessibility_state_(ACCESSIBILITY_STATE_OFF) {
   loader_factory_.Initialize(this);
   timer_factory_.Initialize(this);
   form_factory_.Initialize(this);
@@ -446,27 +448,6 @@ void OutOfProcessInstance::HandleMessage(const pp::Var& message) {
              dict.Get(pp::Var(kJSPreviewPageIndex)).is_int()) {
     ProcessPreviewPageInfo(dict.Get(pp::Var(kJSPreviewPageUrl)).AsString(),
                            dict.Get(pp::Var(kJSPreviewPageIndex)).AsInt());
-  } else if (type == kJSGetAccessibilityJSONType) {
-    pp::VarDictionary reply;
-    reply.Set(pp::Var(kType), pp::Var(kJSGetAccessibilityJSONReplyType));
-    if (dict.Get(pp::Var(kJSAccessibilityPageNumber)).is_int()) {
-      int page = dict.Get(pp::Var(kJSAccessibilityPageNumber)).AsInt();
-      reply.Set(pp::Var(kJSAccessibilityJSON),
-                        pp::Var(engine_->GetPageAsJSON(page)));
-    } else {
-      base::DictionaryValue node;
-      node.SetInteger(kAccessibleNumberOfPages, engine_->GetNumberOfPages());
-      node.SetBoolean(kAccessibleLoaded,
-                      document_load_state_ != LOAD_STATE_LOADING);
-      bool has_permissions =
-          engine_->HasPermission(PDFEngine::PERMISSION_COPY) ||
-          engine_->HasPermission(PDFEngine::PERMISSION_COPY_ACCESSIBLE);
-      node.SetBoolean(kAccessibleCopyable, has_permissions);
-      std::string json;
-      base::JSONWriter::Write(node, &json);
-      reply.Set(pp::Var(kJSAccessibilityJSON), pp::Var(json));
-    }
-    PostMessage(reply);
   } else if (type == kJSStopScrollingType) {
     stop_scrolling_ = true;
   } else if (type == kJSGetSelectedTextType) {
@@ -612,6 +593,109 @@ void OutOfProcessInstance::GetPrintPresetOptionsFromDocument(
   options->is_page_size_uniform =
       PP_FromBool(engine_->GetPageSizeAndUniformity(&uniform_page_size));
   options->uniform_page_size = uniform_page_size;
+}
+
+void OutOfProcessInstance::EnableAccessibility() {
+  if (accessibility_state_ == ACCESSIBILITY_STATE_LOADED)
+    return;
+
+  if (accessibility_state_ == ACCESSIBILITY_STATE_OFF)
+    accessibility_state_ = ACCESSIBILITY_STATE_PENDING;
+
+  if (document_load_state_ == LOAD_STATE_COMPLETE)
+    LoadAccessibility();
+}
+
+void OutOfProcessInstance::LoadAccessibility() {
+  accessibility_state_ = ACCESSIBILITY_STATE_LOADED;
+  PP_PrivateAccessibilityDocInfo doc_info;
+  doc_info.page_count = engine_->GetNumberOfPages();
+  doc_info.text_accessible = PP_FromBool(
+      engine_->HasPermission(PDFEngine::PERMISSION_COPY_ACCESSIBLE));
+  doc_info.text_copyable = PP_FromBool(
+      engine_->HasPermission(PDFEngine::PERMISSION_COPY));
+
+  pp::PDF::SetAccessibilityDocInfo(GetPluginInstance(), &doc_info);
+
+  // If the document contents isn't accessible, don't send anything more.
+  if (!(engine_->HasPermission(PDFEngine::PERMISSION_COPY) ||
+        engine_->HasPermission(PDFEngine::PERMISSION_COPY_ACCESSIBLE))) {
+    return;
+  }
+
+  PP_PrivateAccessibilityViewportInfo viewport_info;
+  viewport_info.scroll.x = 0;
+  viewport_info.scroll.y = -top_toolbar_height_ * device_scale_;
+  viewport_info.offset = available_area_.point();
+  viewport_info.zoom = zoom_ * device_scale_;
+  pp::PDF::SetAccessibilityViewportInfo(GetPluginInstance(), &viewport_info);
+
+  // Schedule loading the first page.
+  pp::CompletionCallback callback = timer_factory_.NewCallback(
+      &OutOfProcessInstance::SendNextAccessibilityPage);
+  pp::Module::Get()->core()->CallOnMainThread(kAccessibilityPageDelayMs,
+                                              callback, 0);
+}
+
+void OutOfProcessInstance::SendNextAccessibilityPage(int32_t page_index) {
+  int page_count = engine_->GetNumberOfPages();
+  if (page_index < 0 || page_index >= page_count)
+    return;
+
+  int char_count = engine_->GetCharCount(page_index);
+  PP_PrivateAccessibilityPageInfo page_info;
+  page_info.page_index = page_index;
+  page_info.bounds = engine_->GetPageBoundsRect(page_index);
+  page_info.char_count = char_count;
+
+  std::vector<PP_PrivateAccessibilityCharInfo> chars(page_info.char_count);
+  for (uint32_t i = 0; i < page_info.char_count; ++i) {
+    chars[i].unicode_character = engine_->GetCharUnicode(page_index, i);
+  }
+
+  std::vector<PP_PrivateAccessibilityTextRunInfo> text_runs;
+  int char_index = 0;
+  while (char_index < char_count) {
+    PP_PrivateAccessibilityTextRunInfo text_run_info;
+    pp::FloatRect bounds;
+    engine_->GetTextRunInfo(page_index, char_index, &text_run_info.len,
+                            &text_run_info.font_size, &bounds);
+    DCHECK_LE(char_index + text_run_info.len,
+              static_cast<uint32_t>(char_count));
+    text_run_info.direction = PP_PRIVATEDIRECTION_LTR;
+    text_run_info.bounds = bounds;
+    text_runs.push_back(text_run_info);
+
+    // We need to provide enough information to draw a bounding box
+    // around any arbitrary text range, but the bounding boxes of characters
+    // we get from PDFium don't necessarily "line up". Walk through the
+    // characters in each text run and let the width of each character be
+    // the difference between the x coordinate of one character and the
+    // x coordinate of the next. The rest of the bounds of each character
+    // can be computed from the bounds of the text run.
+    pp::FloatRect char_bounds = engine_->GetCharBounds(page_index, char_index);
+    for (uint32_t i = 0; i < text_run_info.len - 1; i++) {
+      DCHECK_LT(char_index + i + 1,
+                static_cast<uint32_t>(char_count));
+      pp::FloatRect next_char_bounds = engine_->GetCharBounds(
+          page_index, char_index + i + 1);
+      chars[char_index + i].char_width = next_char_bounds.x() - char_bounds.x();
+      char_bounds = next_char_bounds;
+    }
+    chars[char_index + text_run_info.len - 1].char_width = char_bounds.width();
+
+    char_index += text_run_info.len;
+  }
+
+  page_info.text_run_count = text_runs.size();
+  pp::PDF::SetAccessibilityPageInfo(GetPluginInstance(), &page_info,
+                                    text_runs.data(), chars.data());
+
+  // Schedule loading the next page.
+  pp::CompletionCallback callback = timer_factory_.NewCallback(
+      &OutOfProcessInstance::SendNextAccessibilityPage);
+  pp::Module::Get()->core()->CallOnMainThread(kAccessibilityPageDelayMs,
+                                              callback, page_index + 1);
 }
 
 pp::Var OutOfProcessInstance::GetLinkAtPosition(
@@ -1164,6 +1248,9 @@ void OutOfProcessInstance::DocumentLoadComplete(int page_count) {
   pp::PDF::SetContentRestriction(this, content_restrictions);
 
   uma_.HistogramCustomCounts("PDF.PageCount", page_count, 1, 1000000, 50);
+
+  if (accessibility_state_ == ACCESSIBILITY_STATE_PENDING)
+    LoadAccessibility();
 }
 
 void OutOfProcessInstance::RotateClockwise() {
@@ -1324,7 +1411,7 @@ void OutOfProcessInstance::OnGeometryChanged(double old_zoom,
   engine_->PageOffsetUpdated(available_area_.point());
   engine_->PluginSizeUpdated(available_area_.size());
 
-  if (!document_size_.GetArea())
+  if (document_size_.IsEmpty())
     return;
   paint_manager_.InvalidateRect(pp::Rect(pp::Point(), plugin_size_));
 }

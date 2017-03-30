@@ -38,16 +38,17 @@ void RenderThreadImplBrowserIPCTestHelper::SetupIpcThread() {
 void RenderThreadImplBrowserIPCTestHelper::SetupMojo() {
   InitializeMojo();
 
-  ipc_support_.reset(new IPC::ScopedIPCSupport(ipc_thread_->task_runner()));
-  mojo_application_host_.reset(new MojoApplicationHost());
-  mojo_application_token_ = mojo_application_host_->GetToken();
+  std::string child_token = mojo::edk::GenerateRandomToken();
+  ipc_support_.reset(
+      new mojo::edk::test::ScopedIPCSupport(ipc_thread_->task_runner()));
+  mojo_application_token_ = mojo::edk::GenerateRandomToken();
 
   mojo_ipc_token_ = mojo::edk::GenerateRandomToken();
 
   mojo::MessagePipe pipe;
   channel_ = IPC::ChannelProxy::Create(
       IPC::ChannelMojo::CreateServerFactory(
-          mojo::edk::CreateParentMessagePipe(mojo_ipc_token_)),
+          mojo::edk::CreateParentMessagePipe(mojo_ipc_token_, child_token)),
       dummy_listener_.get(), ipc_thread_->task_runner());
 }
 

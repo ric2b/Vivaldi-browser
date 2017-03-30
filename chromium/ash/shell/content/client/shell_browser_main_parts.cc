@@ -4,7 +4,9 @@
 
 #include "ash/shell/content/client/shell_browser_main_parts.h"
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/login_status.h"
+#include "ash/common/material_design/material_design_controller.h"
 #include "ash/content/shell_content_state.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/shell.h"
@@ -12,7 +14,6 @@
 #include "ash/shell/shell_delegate_impl.h"
 #include "ash/shell/window_watcher.h"
 #include "ash/shell_init_params.h"
-#include "ash/system/user/login_status.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/i18n/icu_util.h"
@@ -101,6 +102,7 @@ void ShellBrowserMainParts::PostMainMessageLoopStart() {
 }
 
 void ShellBrowserMainParts::ToolkitInitialized() {
+  ash::MaterialDesignController::Initialize();
   wm_state_.reset(new ::wm::WMState);
 }
 
@@ -135,7 +137,7 @@ void ShellBrowserMainParts::PreMainMessageLoopRun() {
   init_params.blocking_pool = content::BrowserThread::GetBlockingPool();
   ash::Shell::CreateInstance(init_params);
   ash::Shell::GetInstance()->CreateShelf();
-  ash::Shell::GetInstance()->UpdateAfterLoginStatusChange(user::LOGGED_IN_USER);
+  ash::Shell::GetInstance()->UpdateAfterLoginStatusChange(LoginStatus::USER);
 
   window_watcher_.reset(new ash::shell::WindowWatcher);
   display::Screen::GetScreen()->AddObserver(window_watcher_.get());

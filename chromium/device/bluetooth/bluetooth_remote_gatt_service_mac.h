@@ -9,17 +9,20 @@
 
 #include <vector>
 
+#include "base/containers/scoped_ptr_hash_map.h"
 #include "base/mac/scoped_nsobject.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
 
+@class CBCharacteristic;
+@class CBPeripheral;
 @class CBService;
 
 namespace device {
 
+class BluetoothAdapterMac;
 class BluetoothDevice;
-class BluetoothGattCharacteristic;
+class BluetoothRemoteGattCharacteristicMac;
 class BluetoothLowEnergyDeviceMac;
-class BluetoothTestMac;
 
 class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceMac
     : public BluetoothRemoteGattService {
@@ -42,21 +45,53 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothRemoteGattServiceMac
       const std::string& identifier) const override;
 
  private:
-  friend BluetoothLowEnergyDeviceMac;
-  friend BluetoothTestMac;
+  friend class BluetoothLowEnergyDeviceMac;
+  friend class BluetoothRemoteGattCharacteristicMac;
+  friend class BluetoothTestMac;
 
+  // Starts discovering characteristics by calling CoreBluetooth.
+  void DiscoverCharacteristics();
+  // Called by the BluetoothLowEnergyDeviceMac instance when the characteristics
+  // has been discovered.
+  void DidDiscoverCharacteristics();
+  // Called by the BluetoothLowEnergyDeviceMac instance when the
+  // characteristics value has been read.
+  void DidUpdateValue(CBCharacteristic* characteristic, NSError* error);
+  // Called by the BluetoothLowEnergyDeviceMac instance when the
+  // characteristics value has been written.
+  void DidWriteValue(CBCharacteristic* characteristic, NSError* error);
+  // Called by the BluetoothLowEnergyDeviceMac instance when the notify session
+  // has been started or failed.
+  void DidUpdateNotificationState(CBCharacteristic* characteristic,
+                                  NSError* error);
+  // Returns true if the characteristics has been discovered.
+  bool IsDiscoveryComplete();
+
+  // Returns the mac adapter.
+  BluetoothAdapterMac* GetMacAdapter() const;
+  // Returns CBPeripheral.
+  CBPeripheral* GetCBPeripheral() const;
   // Returns CBService.
   CBService* GetService() const;
+  // Returns a remote characteristic based on the CBCharacteristic.
+  BluetoothRemoteGattCharacteristicMac* GetBluetoothRemoteGattCharacteristicMac(
+      CBCharacteristic* characteristic) const;
 
   // bluetooth_device_mac_ owns instances of this class.
   BluetoothLowEnergyDeviceMac* bluetooth_device_mac_;
   // A service from CBPeripheral.services.
   base::scoped_nsobject<CBService> service_;
+  // Map of characteristics, keyed by characteristic identifier.
+  std::unordered_map<std::string,
+                     std::unique_ptr<BluetoothRemoteGattCharacteristicMac>>
+      gatt_characteristic_macs_;
   bool is_primary_;
   // Service identifier.
   std::string identifier_;
   // Service UUID.
   BluetoothUUID uuid_;
+  // Is true if the characteristics has been discovered.
+  bool is_discovery_complete_;
 
   DISALLOW_COPY_AND_ASSIGN(BluetoothRemoteGattServiceMac);
 };

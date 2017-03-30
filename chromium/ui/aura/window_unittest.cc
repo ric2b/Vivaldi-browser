@@ -291,7 +291,7 @@ class GestureTrackPositionDelegate : public TestWindowDelegate {
   DISALLOW_COPY_AND_ASSIGN(GestureTrackPositionDelegate);
 };
 
-base::TimeDelta getTime() {
+base::TimeTicks getTime() {
   return ui::EventTimeForNow();
 }
 
@@ -563,7 +563,7 @@ TEST_F(WindowTest, GetEventHandlerForPoint) {
 }
 
 TEST_F(WindowTest, GetEventHandlerForPointWithOverride) {
-  // If our child is flush to our top-left corner he gets events just inside the
+  // If our child is flush to our top-left corner it gets events just inside the
   // window edges.
   std::unique_ptr<Window> parent(CreateTestWindow(
       SK_ColorWHITE, 1, gfx::Rect(10, 20, 400, 500), root_window()));
@@ -935,7 +935,7 @@ TEST_F(WindowTest, TouchCaptureDoesntCancelCapturedTouches) {
   CaptureWindowDelegateImpl delegate;
   std::unique_ptr<Window> window(CreateTestWindowWithDelegate(
       &delegate, 0, gfx::Rect(0, 0, 50, 50), root_window()));
-  base::TimeDelta time = getTime();
+  base::TimeTicks time = getTime();
   const int kTimeDelta = 100;
 
   ui::TouchEvent press(
@@ -2196,8 +2196,6 @@ TEST_F(WindowTest, VisibilityClientIsVisible) {
 // Tests the mouse events seen by WindowDelegates in a Window hierarchy when
 // changing the properties of a leaf Window.
 TEST_F(WindowTest, MouseEventsOnLeafWindowChange) {
-  gfx::Size size = host()->GetBounds().size();
-
   ui::test::EventGenerator generator(root_window());
   generator.MoveMouseTo(50, 50);
 
@@ -2297,8 +2295,6 @@ TEST_F(WindowTest, MouseEventsOnLeafWindowChange) {
 // Tests the mouse events seen by WindowDelegates in a Window hierarchy when
 // deleting a non-leaf Window.
 TEST_F(WindowTest, MouseEventsOnNonLeafWindowDelete) {
-  gfx::Size size = host()->GetBounds().size();
-
   ui::test::EventGenerator generator(root_window());
   generator.MoveMouseTo(50, 50);
 

@@ -84,8 +84,10 @@ int EventFlagsFromNative(const base::NativeEvent& native_event) {
   return EventFlagsFromXEvent(*native_event);
 }
 
-base::TimeDelta EventTimeFromNative(const base::NativeEvent& native_event) {
-  return EventTimeFromXEvent(*native_event);
+base::TimeTicks EventTimeFromNative(const base::NativeEvent& native_event) {
+  base::TimeTicks timestamp = EventTimeFromXEvent(*native_event);
+  ValidateEventTimeClock(&timestamp);
+  return timestamp;
 }
 
 gfx::Point EventLocationFromNative(const base::NativeEvent& native_event) {

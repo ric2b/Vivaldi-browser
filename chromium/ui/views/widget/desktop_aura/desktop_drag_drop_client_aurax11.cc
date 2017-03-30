@@ -128,7 +128,7 @@ const int kRepeatMouseMoveTimeoutMs = 350;
 const uint32_t kMinAlpha = 32;
 
 // |drag_widget_|'s opacity.
-const unsigned char kDragWidgetOpacity = 0xc0;
+const float kDragWidgetOpacity = .75f;
 
 static base::LazyInstance<
     std::map< ::Window, views::DesktopDragDropClientAuraX11*> >::Leaky
@@ -769,11 +769,15 @@ void DesktopDragDropClientAuraX11::OnWindowDestroyed(aura::Window* window) {
 void DesktopDragDropClientAuraX11::OnMouseMovement(
     const gfx::Point& screen_point,
     int flags,
-    base::TimeDelta event_time) {
+    base::TimeTicks event_time) {
   if (drag_widget_.get()) {
+    display::Display display =
+        display::Screen::GetScreen()->GetDisplayNearestWindow(
+            drag_widget_->GetNativeWindow());
+    gfx::Point scaled_point = gfx::ScaleToRoundedPoint(
+        screen_point, 1.f / display.device_scale_factor());
     drag_widget_->SetBounds(
-        gfx::Rect(screen_point - drag_widget_offset_,
-                  drag_widget_->GetWindowBoundsInScreen().size()));
+        gfx::Rect(scaled_point - drag_widget_offset_, drag_image_size_));
     drag_widget_->StackAtTop();
   }
 
@@ -785,7 +789,8 @@ void DesktopDragDropClientAuraX11::OnMouseMovement(
   current_modifier_state_ = flags & kModifiers;
 
   repeat_mouse_move_timer_.Stop();
-  ProcessMouseMove(screen_point, event_time.InMilliseconds());
+  ProcessMouseMove(screen_point,
+                   (event_time - base::TimeTicks()).InMilliseconds());
 }
 
 void DesktopDragDropClientAuraX11::OnMouseReleased() {
@@ -1200,9 +1205,10 @@ void DesktopDragDropClientAuraX11::CreateDragWidget(
   widget->SetOpacity(kDragWidgetOpacity);
   widget->GetNativeWindow()->SetName("DragWindow");
 
+  drag_image_size_ = image.size();
   ImageView* image_view = new ImageView();
   image_view->SetImage(image);
-  image_view->SetBounds(0, 0, image.width(), image.height());
+  image_view->SetBoundsRect(gfx::Rect(drag_image_size_));
   widget->SetContentsView(image_view);
   widget->Show();
   widget->GetNativeWindow()->layer()->SetFillsBoundsOpaquely(false);

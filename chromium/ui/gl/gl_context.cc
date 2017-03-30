@@ -22,7 +22,7 @@
 #include "ui/gl/gl_version_info.h"
 #include "ui/gl/gpu_timing.h"
 
-namespace gfx {
+namespace gl {
 
 namespace {
 base::LazyInstance<base::ThreadLocalPointer<GLContext> >::Leaky
@@ -92,7 +92,7 @@ std::string GLContext::GetGLRenderer() {
   return std::string(renderer ? renderer : "");
 }
 
-gl::YUVToRGBConverter* GLContext::GetYUVToRGBConverter() {
+YUVToRGBConverter* GLContext::GetYUVToRGBConverter() {
   return nullptr;
 }
 
@@ -107,7 +107,7 @@ bool GLContext::HasExtension(const char* name) {
 }
 
 const GLVersionInfo* GLContext::GetVersionInfo() {
-  if(!version_info_) {
+  if (!version_info_) {
     std::string version = GetGLVersion();
     std::string renderer = GetGLRenderer();
     version_info_ = base::WrapUnique(new GLVersionInfo(
@@ -213,7 +213,7 @@ void GLContext::SetRealGLApi() {
 GLContextReal::GLContextReal(GLShareGroup* share_group)
     : GLContext(share_group) {}
 
-scoped_refptr<gfx::GPUTimingClient> GLContextReal::CreateGPUTimingClient() {
+scoped_refptr<GPUTimingClient> GLContextReal::CreateGPUTimingClient() {
   if (!gpu_timing_) {
     gpu_timing_.reset(GPUTiming::CreateGPUTiming(this));
   }
@@ -230,4 +230,12 @@ void GLContextReal::SetCurrent(GLSurface* surface) {
   current_real_context_.Pointer()->Set(surface ? this : nullptr);
 }
 
-}  // namespace gfx
+scoped_refptr<GLContext> InitializeGLContext(scoped_refptr<GLContext> context,
+                                             GLSurface* compatible_surface,
+                                             GpuPreference gpu_preference) {
+  if (!context->Initialize(compatible_surface, gpu_preference))
+    return nullptr;
+  return context;
+}
+
+}  // namespace gl

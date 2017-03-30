@@ -18,14 +18,12 @@ include_rules = [
   "+components/metrics/client_info.h",
   "+components/metrics/metrics_pref_names.h",
   "+components/nacl/common",
+  "+components/network_session_configurator/switches.h",
   "+components/offline_pages/offline_page_feature.h",
   "+components/password_manager/core/common",
   "+components/policy/core/common",
   "+components/printing/common",
   "+components/signin/core/common",
-  # TODO(fdoray): Remove this once the PreRead field trial has expired.
-  # crbug.com/577698
-  "+components/startup_metric_utils/common",
   "+components/strings/grit",
   "+components/translate/core/common",
   "+components/url_formatter",

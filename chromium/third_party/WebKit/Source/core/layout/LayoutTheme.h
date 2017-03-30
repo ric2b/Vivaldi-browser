@@ -23,10 +23,15 @@
 #ifndef LayoutTheme_h
 #define LayoutTheme_h
 
+#include "core/CSSValueKeywords.h"
 #include "core/CoreExport.h"
-#include "core/layout/LayoutObject.h"
 #include "platform/ThemeTypes.h"
+#include "platform/fonts/Font.h"
+#include "platform/fonts/FontDescription.h"
+#include "platform/fonts/FontTraits.h"
+#include "platform/graphics/Color.h"
 #include "platform/scroll/ScrollTypes.h"
+#include "platform/text/PlatformLocale.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
@@ -37,6 +42,7 @@ class ComputedStyle;
 class Element;
 class FileList;
 class HTMLInputElement;
+class LayoutObject;
 class Theme;
 class ThemePainter;
 
@@ -143,7 +149,6 @@ public:
     virtual int popupInternalPaddingRight(const ComputedStyle&) const { return 0; }
     virtual int popupInternalPaddingTop(const ComputedStyle&) const { return 0; }
     virtual int popupInternalPaddingBottom(const ComputedStyle&) const { return 0; }
-    virtual bool popupOptionSupportsTextIndent() const { return false; }
 
     virtual ScrollbarControlSize scrollbarControlSizeForPart(ControlPart) { return RegularScrollbar; }
 
@@ -210,8 +215,6 @@ protected:
     virtual void adjustSliderThumbStyle(ComputedStyle&) const;
     virtual void adjustSearchFieldStyle(ComputedStyle&) const;
     virtual void adjustSearchFieldCancelButtonStyle(ComputedStyle&) const;
-    virtual void adjustSearchFieldDecorationStyle(ComputedStyle&) const;
-    virtual void adjustSearchFieldResultsDecorationStyle(ComputedStyle&) const;
     void adjustStyleUsingFallbackTheme(ComputedStyle&);
     void adjustCheckboxStyleUsingFallbackTheme(ComputedStyle&) const;
     void adjustRadioStyleUsingFallbackTheme(ComputedStyle&) const;

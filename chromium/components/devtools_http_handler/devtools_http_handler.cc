@@ -178,11 +178,11 @@ void TerminateOnUI(base::Thread* thread,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (server_wrapper) {
     DCHECK(thread);
-    thread->message_loop()->DeleteSoon(FROM_HERE, server_wrapper);
+    thread->task_runner()->DeleteSoon(FROM_HERE, server_wrapper);
   }
   if (socket_factory) {
     DCHECK(thread);
-    thread->message_loop()->DeleteSoon(FROM_HERE, socket_factory);
+    thread->task_runner()->DeleteSoon(FROM_HERE, socket_factory);
   }
   if (thread) {
     BrowserThread::DeleteSoon(BrowserThread::FILE, FROM_HERE, thread);
@@ -210,7 +210,7 @@ void StartServerOnHandlerThread(
     const base::FilePath& output_directory,
     const base::FilePath& frontend_dir,
     bool bundles_resources) {
-  DCHECK_EQ(thread->message_loop(), base::MessageLoop::current());
+  DCHECK(thread->task_runner()->BelongsToCurrentThread());
   ServerWrapper* server_wrapper = nullptr;
   std::unique_ptr<net::ServerSocket> server_socket =
       server_socket_factory->CreateForHttpServer();
@@ -277,7 +277,7 @@ class DevToolsAgentHostClientImpl : public DevToolsAgentHostClient {
   ~DevToolsAgentHostClientImpl() override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (agent_host_.get())
-      agent_host_->DetachClient();
+      agent_host_->DetachClient(this);
   }
 
   void AgentHostClosed(DevToolsAgentHost* agent_host,
@@ -312,7 +312,7 @@ class DevToolsAgentHostClientImpl : public DevToolsAgentHostClient {
   void OnMessage(const std::string& message) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (agent_host_.get())
-      agent_host_->DispatchProtocolMessage(message);
+      agent_host_->DispatchProtocolMessage(this, message);
   }
 
  private:

@@ -85,13 +85,13 @@ class TestURLRequestContext : public URLRequestContext {
     context_storage_.set_sdch_manager(std::move(sdch_manager));
   }
 
-  CTPolicyEnforcer* ct_policy_enforcer() { return ct_policy_enforcer_; }
-  void set_ct_policy_enforcer(CTPolicyEnforcer* ct_policy_enforcer) {
-    ct_policy_enforcer_ = ct_policy_enforcer;
+  void SetCTPolicyEnforcer(
+      std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer) {
+    context_storage_.set_ct_policy_enforcer(std::move(ct_policy_enforcer));
   }
 
  private:
-  bool initialized_;
+  bool initialized_ = false;
 
   // Optional parameters to override default values.  Note that values that
   // point to other objects the TestURLRequestContext creates will be
@@ -99,11 +99,9 @@ class TestURLRequestContext : public URLRequestContext {
   std::unique_ptr<HttpNetworkSession::Params> http_network_session_params_;
 
   // Not owned:
-  ClientSocketFactory* client_socket_factory_;
+  ClientSocketFactory* client_socket_factory_ = nullptr;
 
-  ProxyDelegate* proxy_delegate_;
-
-  CTPolicyEnforcer* ct_policy_enforcer_;
+  ProxyDelegate* proxy_delegate_ = nullptr;
 
  protected:
   URLRequestContextStorage context_storage_;
@@ -296,10 +294,13 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
     cancel_request_with_policy_violating_referrer_ = val;
   }
 
-  int observed_before_proxy_headers_sent_callbacks() const {
-    return observed_before_proxy_headers_sent_callbacks_;
+  int before_send_headers_with_proxy_count() const {
+    return before_send_headers_with_proxy_count_;
   }
-  int before_send_headers_count() const { return before_send_headers_count_; }
+  int before_start_transaction_count() const {
+    return before_start_transaction_count_;
+  }
+
   int headers_received_count() const { return headers_received_count_; }
   int64_t total_network_bytes_received() const {
     return total_network_bytes_received_;
@@ -320,14 +321,15 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   int OnBeforeURLRequest(URLRequest* request,
                          const CompletionCallback& callback,
                          GURL* new_url) override;
-  int OnBeforeSendHeaders(URLRequest* request,
-                          const CompletionCallback& callback,
-                          HttpRequestHeaders* headers) override;
-  void OnBeforeSendProxyHeaders(URLRequest* request,
-                                const ProxyInfo& proxy_info,
-                                HttpRequestHeaders* headers) override;
-  void OnSendHeaders(URLRequest* request,
-                     const HttpRequestHeaders& headers) override;
+  int OnBeforeStartTransaction(URLRequest* request,
+                               const CompletionCallback& callback,
+                               HttpRequestHeaders* headers) override;
+  void OnBeforeSendHeaders(URLRequest* request,
+                           const ProxyInfo& proxy_info,
+                           const ProxyRetryInfoMap& proxy_retry_info,
+                           HttpRequestHeaders* headers) override;
+  void OnStartTransaction(URLRequest* request,
+                          const HttpRequestHeaders& headers) override;
   int OnHeadersReceived(
       URLRequest* request,
       const CompletionCallback& callback,
@@ -377,8 +379,8 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   int blocked_get_cookies_count_;
   int blocked_set_cookie_count_;
   int set_cookie_count_;
-  int observed_before_proxy_headers_sent_callbacks_;
-  int before_send_headers_count_;
+  int before_send_headers_with_proxy_count_;
+  int before_start_transaction_count_;
   int headers_received_count_;
   int64_t total_network_bytes_received_;
   int64_t total_network_bytes_sent_;
@@ -386,7 +388,7 @@ class TestNetworkDelegate : public NetworkDelegateImpl {
   HostPortPair last_observed_proxy_;
 
   // NetworkDelegate callbacks happen in a particular order (e.g.
-  // OnBeforeURLRequest is always called before OnBeforeSendHeaders).
+  // OnBeforeURLRequest is always called before OnBeforeStartTransaction).
   // This bit-set indicates for each request id (key) what events may be sent
   // next.
   std::map<int, int> next_states_;

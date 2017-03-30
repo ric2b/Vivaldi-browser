@@ -15,7 +15,7 @@
 #include "base/observer_list.h"
 #include "ui/events/devices/device_hotplug_event_observer.h"
 #include "ui/events/devices/events_devices_export.h"
-#include "ui/events/devices/keyboard_device.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/events/devices/touchscreen_device.h"
 #include "ui/gfx/transform.h"
 
@@ -29,7 +29,8 @@ class InputDeviceEventObserver;
 
 // Keeps track of device mappings and event transformations.
 class EVENTS_DEVICES_EXPORT DeviceDataManager
-    : public DeviceHotplugEventObserver {
+    : public InputDeviceManager,
+      public DeviceHotplugEventObserver {
  public:
   static const int kMaxDeviceNum = 128;
   ~DeviceDataManager() override;
@@ -51,29 +52,18 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
   void UpdateTouchRadiusScale(int touch_device_id, double scale);
   void ApplyTouchRadiusScale(int touch_device_id, double* radius);
 
-  const std::vector<TouchscreenDevice>& touchscreen_devices() const {
-    return touchscreen_devices_;
-  }
-
-  const std::vector<KeyboardDevice>& keyboard_devices() const {
-    return keyboard_devices_;
-  }
-
-  const std::vector<InputDevice>& mouse_devices() const {
-    return mouse_devices_;
-  }
-
-  const std::vector<InputDevice>& touchpad_devices() const {
-    return touchpad_devices_;
-  }
-
-  bool device_lists_complete() const { return device_lists_complete_; }
-
-  void AddObserver(InputDeviceEventObserver* observer);
-  void RemoveObserver(InputDeviceEventObserver* observer);
-
   void SetTouchscreensEnabled(bool enabled);
-  bool AreTouchscreensEnabled() const;
+
+  // InputDeviceManager:
+  const std::vector<TouchscreenDevice>& GetTouchscreenDevices() const override;
+  const std::vector<InputDevice>& GetKeyboardDevices() const override;
+  const std::vector<InputDevice>& GetMouseDevices() const override;
+  const std::vector<InputDevice>& GetTouchpadDevices() const override;
+  bool AreDeviceListsComplete() const override;
+  bool AreTouchscreensEnabled() const override;
+
+  void AddObserver(InputDeviceEventObserver* observer) override;
+  void RemoveObserver(InputDeviceEventObserver* observer) override;
 
  protected:
   DeviceDataManager();
@@ -86,7 +76,7 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
   void OnTouchscreenDevicesUpdated(
       const std::vector<TouchscreenDevice>& devices) override;
   void OnKeyboardDevicesUpdated(
-      const std::vector<KeyboardDevice>& devices) override;
+      const std::vector<InputDevice>& devices) override;
   void OnMouseDevicesUpdated(
       const std::vector<InputDevice>& devices) override;
   void OnTouchpadDevicesUpdated(
@@ -117,7 +107,7 @@ class EVENTS_DEVICES_EXPORT DeviceDataManager
   void NotifyObserversDeviceListsComplete();
 
   std::vector<TouchscreenDevice> touchscreen_devices_;
-  std::vector<KeyboardDevice> keyboard_devices_;
+  std::vector<InputDevice> keyboard_devices_;
   std::vector<InputDevice> mouse_devices_;
   std::vector<InputDevice> touchpad_devices_;
   bool device_lists_complete_ = false;

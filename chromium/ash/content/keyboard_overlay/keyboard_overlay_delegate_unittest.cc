@@ -4,7 +4,8 @@
 
 #include "ash/content/keyboard_overlay/keyboard_overlay_delegate.h"
 
-#include "ash/shelf/shelf_types.h"
+#include "ash/common/shelf/shelf_types.h"
+#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "base/strings/utf_string_conversions.h"
@@ -17,14 +18,14 @@ namespace ash {
 
 class KeyboardOverlayDelegateTest
     : public test::AshTestBase,
-      public testing::WithParamInterface<wm::ShelfAlignment> {
+      public testing::WithParamInterface<ShelfAlignment> {
  public:
   KeyboardOverlayDelegateTest() : shelf_alignment_(GetParam()) {}
   virtual ~KeyboardOverlayDelegateTest() {}
-  wm::ShelfAlignment shelf_alignment() const { return shelf_alignment_; }
+  ShelfAlignment shelf_alignment() const { return shelf_alignment_; }
 
  private:
-  wm::ShelfAlignment shelf_alignment_;
+  ShelfAlignment shelf_alignment_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyboardOverlayDelegateTest);
 };
@@ -35,8 +36,7 @@ TEST_P(KeyboardOverlayDelegateTest, ShowAndClose) {
     return;
 
   UpdateDisplay("500x400,300x200");
-  ash::Shell* shell = ash::Shell::GetInstance();
-  shell->SetShelfAlignment(shelf_alignment(), shell->GetPrimaryRootWindow());
+  Shelf::ForPrimaryDisplay()->SetAlignment(shelf_alignment());
   KeyboardOverlayDelegate delegate(base::ASCIIToUTF16("Title"),
                                    GURL("chrome://keyboardoverlay/"));
   // Showing the dialog creates a widget.
@@ -61,9 +61,9 @@ TEST_P(KeyboardOverlayDelegateTest, ShowAndClose) {
 // Tests run three times - for all possible values of shelf alignment
 INSTANTIATE_TEST_CASE_P(ShelfAlignmentAny,
                         KeyboardOverlayDelegateTest,
-                        testing::Values(wm::SHELF_ALIGNMENT_BOTTOM,
-                                        wm::SHELF_ALIGNMENT_LEFT,
-                                        wm::SHELF_ALIGNMENT_RIGHT,
-                                        wm::SHELF_ALIGNMENT_BOTTOM_LOCKED));
+                        testing::Values(SHELF_ALIGNMENT_BOTTOM,
+                                        SHELF_ALIGNMENT_LEFT,
+                                        SHELF_ALIGNMENT_RIGHT,
+                                        SHELF_ALIGNMENT_BOTTOM_LOCKED));
 
 }  // namespace ash

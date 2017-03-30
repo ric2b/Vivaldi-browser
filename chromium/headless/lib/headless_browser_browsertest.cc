@@ -4,11 +4,16 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "content/public/test/browser_test.h"
+#include "headless/public/domains/page.h"
 #include "headless/public/headless_browser.h"
+#include "headless/public/headless_devtools_client.h"
+#include "headless/public/headless_devtools_target.h"
 #include "headless/public/headless_web_contents.h"
 #include "headless/test/headless_browser_test.h"
+#include "headless/test/test_protocol_handler.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
@@ -17,7 +22,7 @@ namespace headless {
 
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateAndDestroyWebContents) {
   HeadlessWebContents* web_contents =
-      browser()->CreateWebContents(GURL("about:blank"), gfx::Size(800, 600));
+      browser()->CreateWebContentsBuilder().Build();
   EXPECT_TRUE(web_contents);
 
   EXPECT_EQ(static_cast<size_t>(1), browser()->GetAllWebContents().size());
@@ -31,7 +36,7 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateAndDestroyWebContents) {
 IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, CreateWithBadURL) {
   GURL bad_url("not_valid");
   HeadlessWebContents* web_contents =
-      browser()->CreateWebContents(bad_url, gfx::Size(800, 600));
+      browser()->CreateWebContentsBuilder().SetInitialURL(bad_url).Build();
   EXPECT_FALSE(web_contents);
   EXPECT_TRUE(browser()->GetAllWebContents().empty());
 }
@@ -70,8 +75,11 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTestWithProxy, SetProxyServer) {
   //
   // TODO(altimin): Currently this construction does not serve hello.html
   // from headless/test/data as expected. We should fix this.
-  HeadlessWebContents* web_contents = browser()->CreateWebContents(
-      GURL("http://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("http://not-an-actual-domain.tld/hello.html"))
+          .Build();
   EXPECT_TRUE(WaitForLoad(web_contents));
   EXPECT_EQ(static_cast<size_t>(1), browser()->GetAllWebContents().size());
   EXPECT_EQ(web_contents, browser()->GetAllWebContents()[0]);
@@ -89,9 +97,66 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, SetHostResolverRules) {
 
   // Load a page which doesn't actually exist, but which is turned into a valid
   // address by our host resolver rules.
-  HeadlessWebContents* web_contents = browser()->CreateWebContents(
-      GURL("http://not-an-actual-domain.tld/hello.html"), gfx::Size(800, 600));
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("http://not-an-actual-domain.tld/hello.html"))
+          .Build();
   EXPECT_TRUE(WaitForLoad(web_contents));
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, HttpProtocolHandler) {
+  const std::string kResponseBody = "<p>HTTP response body</p>";
+  ProtocolHandlerMap protocol_handlers;
+  protocol_handlers[url::kHttpScheme] =
+      base::WrapUnique(new TestProtocolHandler(kResponseBody));
+
+  HeadlessBrowser::Options::Builder builder;
+  builder.SetProtocolHandlers(std::move(protocol_handlers));
+  SetBrowserOptions(builder.Build());
+
+  // Load a page which doesn't actually exist, but which is fetched by our
+  // custom protocol handler.
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("http://not-an-actual-domain.tld/hello.html"))
+          .Build();
+  EXPECT_TRUE(WaitForLoad(web_contents));
+
+  std::string inner_html;
+  EXPECT_TRUE(EvaluateScript(web_contents, "document.body.innerHTML")
+                  ->GetResult()
+                  ->GetValue()
+                  ->GetAsString(&inner_html));
+  EXPECT_EQ(kResponseBody, inner_html);
+}
+
+IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, HttpsProtocolHandler) {
+  const std::string kResponseBody = "<p>HTTPS response body</p>";
+  ProtocolHandlerMap protocol_handlers;
+  protocol_handlers[url::kHttpsScheme] =
+      base::WrapUnique(new TestProtocolHandler(kResponseBody));
+
+  HeadlessBrowser::Options::Builder builder;
+  builder.SetProtocolHandlers(std::move(protocol_handlers));
+  SetBrowserOptions(builder.Build());
+
+  // Load a page which doesn't actually exist, but which is fetched by our
+  // custom protocol handler.
+  HeadlessWebContents* web_contents =
+      browser()
+          ->CreateWebContentsBuilder()
+          .SetInitialURL(GURL("https://not-an-actual-domain.tld/hello.html"))
+          .Build();
+  EXPECT_TRUE(WaitForLoad(web_contents));
+
+  std::string inner_html;
+  EXPECT_TRUE(EvaluateScript(web_contents, "document.body.innerHTML")
+                  ->GetResult()
+                  ->GetValue()
+                  ->GetAsString(&inner_html));
+  EXPECT_EQ(kResponseBody, inner_html);
 }
 
 }  // namespace headless

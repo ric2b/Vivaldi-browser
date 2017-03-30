@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "base/location.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -77,6 +78,7 @@ IN_PROC_BROWSER_TEST_F(ActivityLogPrerenderTest, TestScriptInjected) {
   ASSERT_TRUE(ext);
 
   ActivityLog* activity_log = ActivityLog::GetInstance(profile());
+  activity_log->SetWatchdogAppActiveForTesting(true);
   ASSERT_TRUE(activity_log);
 
   // Disable rate limiting in PrerenderManager
@@ -124,7 +126,7 @@ IN_PROC_BROWSER_TEST_F(ActivityLogPrerenderTest, TestScriptInjected) {
           ActivityLogPrerenderTest::Prerender_Arguments, ext->id(), port));
 
   // Allow invocation of Prerender_Arguments
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 }  // namespace extensions

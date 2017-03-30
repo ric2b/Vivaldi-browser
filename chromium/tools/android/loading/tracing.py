@@ -4,19 +4,12 @@
 
 """Monitor tracing events on chrome via chrome remote debugging."""
 
-import bisect
 import itertools
 import logging
 import operator
 
+import clovis_constants
 import devtools_monitor
-
-
-_DISABLED_CATEGORIES = ('cc',) # Contains a lot of events, none of which we use.
-INITIAL_CATEGORIES = (
-    ('toplevel', 'blink', 'v8', 'java', 'devtools.timeline',
-     'blink.user_timing', 'blink.net', 'disabled-by-default-blink.debug.layout')
-    + tuple('-' + cat for cat in _DISABLED_CATEGORIES))
 
 
 class TracingTrack(devtools_monitor.Track):
@@ -24,16 +17,14 @@ class TracingTrack(devtools_monitor.Track):
 
   See https://goo.gl/Qabkqk for details on the protocol.
   """
-  def __init__(self, connection, additional_categories=None,
-               fetch_stream=False):
+  def __init__(self, connection, categories, fetch_stream=False):
     """Initialize this TracingTrack.
 
     Args:
       connection: a DevToolsConnection.
-      additional_categories: ([str] or None) If set, a list of additional
-                             categories to add. This cannot be used to re-enable
-                             a category which is disabled by default (see
-                             INITIAL_CATEGORIES), nor to disable a category.
+      categories: ([str] or None) If set, a list of categories to enable or
+                  disable in Chrome tracing. Categories prefixed with '-' are
+                  disabled.
       fetch_stream: if true, use a websocket stream to fetch tracing data rather
         than dataCollected events. It appears based on very limited testing that
         a stream is slower than the default reporting as dataCollected events.
@@ -41,13 +32,8 @@ class TracingTrack(devtools_monitor.Track):
     super(TracingTrack, self).__init__(connection)
     if connection:
       connection.RegisterListener('Tracing.dataCollected', self)
-    extra_categories = additional_categories or []
-    assert not (set(extra_categories) & set(_DISABLED_CATEGORIES)), (
-        'Cannot enable a disabled category')
-    assert not any(cat.startswith('-') for cat in extra_categories), (
-        'Cannot disable a category')
-    self._categories = set(
-        itertools.chain(INITIAL_CATEGORIES, extra_categories))
+
+    self._categories = set(categories)
     params = {}
     params['categories'] = ','.join(self._categories)
     if fetch_stream:
@@ -84,6 +70,7 @@ class TracingTrack(devtools_monitor.Track):
     return self._base_msec
 
   def GetEvents(self):
+    """Returns a list of tracing.Event. Not sorted."""
     return self._events
 
   def GetMatchingEvents(self, category, name):
@@ -98,6 +85,13 @@ class TracingTrack(devtools_monitor.Track):
     matching_events = self.GetMatchingEvents(category, name)
     return [e for e in matching_events
         if 'frame' in e.args and e.args['frame'] == self.GetMainFrameID()]
+
+  def GetMainFrameRoutingID(self):
+    """Returns the main frame routing ID."""
+    for event in self.GetMatchingEvents(
+        'navigation', 'RenderFrameImpl::OnNavigate'):
+      return event.args['id']
+    assert False
 
   def GetMainFrameID(self):
     """Returns the main frame ID."""
@@ -147,7 +141,7 @@ class TracingTrack(devtools_monitor.Track):
       events = filter(
           lambda e : set(e.category.split(',')).intersection(categories),
           events)
-    tracing_track = TracingTrack(None)
+    tracing_track = TracingTrack(None, clovis_constants.DEFAULT_CATEGORIES)
     tracing_track._events = events
     tracing_track._categories = self._categories
     if categories is not None:
@@ -164,7 +158,7 @@ class TracingTrack(devtools_monitor.Track):
       return None
     assert 'events' in json_dict
     events = [Event(e) for e in json_dict['events']]
-    tracing_track = TracingTrack(None)
+    tracing_track = TracingTrack(None, clovis_constants.DEFAULT_CATEGORIES)
     tracing_track._categories = set(json_dict.get('categories', []))
     tracing_track._events = events
     tracing_track._base_msec = events[0].start_msec if events else 0
@@ -237,6 +231,19 @@ class TracingTrack(devtools_monitor.Track):
   def _GetEvents(self):
     self._IndexEvents()
     return self._interval_tree.GetEvents()
+
+  def HasLoadingSucceeded(self):
+    """Returns whether the loading has succeed at recording time."""
+    main_frame_id = self.GetMainFrameRoutingID()
+    for event in self.GetMatchingEvents(
+        'navigation', 'RenderFrameImpl::didFailProvisionalLoad'):
+      if event.args['id'] == main_frame_id:
+        return False
+    for event in self.GetMatchingEvents(
+        'navigation', 'RenderFrameImpl::didFailLoad'):
+      if event.args['id'] == main_frame_id:
+        return False
+    return True
 
   class _SpanningEvents(object):
     def __init__(self):

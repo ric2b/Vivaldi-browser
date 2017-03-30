@@ -45,7 +45,7 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
       // Message size in bytes, including the header.
       uint32_t num_bytes;
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
       // Old message wire format for ChromeOS and Android.
       // Number of attached handles.
       uint16_t num_handles;
@@ -64,7 +64,7 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
       MessageType message_type;
 
       char padding[6];
-#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#endif  // defined(MOJO_EDK_LEGACY_PROTOCOL)
     };
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -91,6 +91,14 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
     };
     static_assert(sizeof(MachPortsExtraHeader) == 2,
                   "sizeof(MachPortsExtraHeader) must be 2 bytes");
+#elif defined(OS_WIN)
+    struct HandleEntry {
+      // The windows HANDLE. HANDLEs are guaranteed to fit inside 32-bits.
+      // See: https://msdn.microsoft.com/en-us/library/aa384203(VS.85).aspx
+      uint32_t handle;
+    };
+    static_assert(sizeof(HandleEntry) == 4,
+                  "sizeof(HandleEntry) must be 4 bytes");
 #endif
 #pragma pack(pop)
 
@@ -108,7 +116,7 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
     const void* data() const { return data_; }
     size_t data_num_bytes() const { return size_; }
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(MOJO_EDK_LEGACY_PROTOCOL)
     void* mutable_payload() { return static_cast<void*>(header_ + 1); }
     const void* payload() const {
       return static_cast<const void*>(header_ + 1);
@@ -124,11 +132,10 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
     void* mutable_payload() { return data_ + header_->num_header_bytes; }
     const void* payload() const { return data_ + header_->num_header_bytes; }
     size_t payload_size() const;
-#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#endif  // defined(MOJO_EDK_LEGACY_PROTOCOL)
 
     size_t num_handles() const { return header_->num_handles; }
     bool has_handles() const { return header_->num_handles > 0; }
-    PlatformHandle* handles();
 #if defined(OS_MACOSX) && !defined(OS_IOS)
     bool has_mach_ports() const;
 #endif
@@ -151,8 +158,7 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
     // duplication.
     static bool RewriteHandles(base::ProcessHandle from_process,
                                base::ProcessHandle to_process,
-                               PlatformHandle* handles,
-                               size_t num_handles);
+                               PlatformHandleVector* handles);
 #endif
 
    private:
@@ -161,14 +167,12 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
     char* data_;
     Header* header_;
 
+    ScopedPlatformHandleVectorPtr handle_vector_;
+
 #if defined(OS_WIN)
     // On Windows, handles are serialised into the extra header section.
-    PlatformHandle* handles_ = nullptr;
-#else
-    ScopedPlatformHandleVectorPtr handle_vector_;
-#endif
-
-#if defined(OS_MACOSX) && !defined(OS_IOS)
+    HandleEntry* handles_ = nullptr;
+#elif defined(OS_MACOSX) && !defined(OS_IOS)
     // On OSX, handles are serialised into the extra header section.
     MachPortsExtraHeader* mach_ports_header_ = nullptr;
 #endif
@@ -220,6 +224,10 @@ class Channel : public base::RefCountedThreadSafe<Channel> {
   // eventually be written or will fail to write and trigger
   // Delegate::OnChannelError.
   virtual void Write(MessagePtr message) = 0;
+
+  // Causes the platform handle to leak when this channel is shut down instead
+  // of closing it.
+  virtual void LeakHandle() = 0;
 
  protected:
   explicit Channel(Delegate* delegate);

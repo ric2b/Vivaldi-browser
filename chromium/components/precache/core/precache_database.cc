@@ -12,6 +12,9 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "components/history/core/browser/history_constants.h"
+#include "components/precache/core/proto/unfinished_work.pb.h"
+#include "net/http/http_response_headers.h"
+#include "net/http/http_response_info.h"
 #include "sql/connection.h"
 #include "sql/transaction.h"
 #include "url/gurl.h"
@@ -51,7 +54,8 @@ bool PrecacheDatabase::Init(const base::FilePath& db_path) {
     return false;
   }
 
-  if (!precache_url_table_.Init(db_.get())) {
+  if (!precache_url_table_.Init(db_.get()) ||
+      !precache_session_table_.Init(db_.get())) {
     // Raze and close the database connection to indicate that it's not usable,
     // and so that the database will be created anew next time, in case it's
     // corrupted.
@@ -91,8 +95,8 @@ void PrecacheDatabase::ClearHistory() {
 void PrecacheDatabase::RecordURLPrefetch(const GURL& url,
                                          const base::TimeDelta& latency,
                                          const base::Time& fetch_time,
-                                         int64_t size,
-                                         bool was_cached) {
+                                         const net::HttpResponseInfo& info,
+                                         int64_t size) {
   UMA_HISTOGRAM_TIMES("Precache.Latency.Prefetch", latency);
 
   if (!IsDatabaseAccessible()) {
@@ -106,15 +110,27 @@ void PrecacheDatabase::RecordURLPrefetch(const GURL& url,
     Flush();
   }
 
-  if (was_cached && !precache_url_table_.HasURL(url)) {
+  DCHECK(info.headers) << "The headers are required to get the freshness.";
+  if (info.headers) {
+    UMA_HISTOGRAM_CUSTOM_COUNTS(
+        "Precache.Freshness.Prefetch",
+        info.headers->GetFreshnessLifetimes(info.response_time)
+            .freshness.InSeconds(),
+        base::TimeDelta::FromMinutes(5).InSeconds() /* min */,
+        base::TimeDelta::FromDays(356).InSeconds() /* max */,
+        100 /* bucket_count */);
+  }
+
+  if (info.was_cached && !precache_url_table_.HasURL(url)) {
     // Since the precache came from the cache, and there's no entry in the URL
     // table for the URL, this means that the resource was already in the cache
-    // because of user browsing. Thus, this precache had no effect, so ignore
-    // it.
+    // because of user browsing. Therefore, this precache won't be considered as
+    // precache-motivated since it had no significant effect (besides a possible
+    // revalidation and a change in the cache LRU priority).
     return;
   }
 
-  if (!was_cached) {
+  if (!info.was_cached) {
     // The precache only counts as overhead if it was downloaded over the
     // network.
     UMA_HISTOGRAM_COUNTS("Precache.DownloadedPrecacheMotivated",
@@ -134,11 +150,14 @@ void PrecacheDatabase::RecordURLPrefetch(const GURL& url,
 void PrecacheDatabase::RecordURLNonPrefetch(const GURL& url,
                                             const base::TimeDelta& latency,
                                             const base::Time& fetch_time,
+                                            const net::HttpResponseInfo& info,
                                             int64_t size,
-                                            bool was_cached,
                                             int host_rank,
                                             bool is_connection_cellular) {
   UMA_HISTOGRAM_TIMES("Precache.Latency.NonPrefetch", latency);
+  UMA_HISTOGRAM_ENUMERATION("Precache.CacheStatus.NonPrefetch",
+                            info.cache_entry_status,
+                            net::HttpResponseInfo::CacheEntryStatus::ENTRY_MAX);
 
   if (host_rank != history::kMaxTopHosts) {
     // The resource was loaded on a page that could have been affected by
@@ -161,14 +180,14 @@ void PrecacheDatabase::RecordURLNonPrefetch(const GURL& url,
     Flush();
   }
 
-  if (was_cached && !precache_url_table_.HasURL(url)) {
+  if (info.was_cached && !precache_url_table_.HasURL(url)) {
     // Ignore cache hits that precache can't take credit for.
     return;
   }
 
   base::HistogramBase::Sample size_sample =
       static_cast<base::HistogramBase::Sample>(size);
-  if (!was_cached) {
+  if (!info.was_cached) {
     // The fetch was served over the network during user browsing, so count it
     // as downloaded non-precache bytes.
     UMA_HISTOGRAM_COUNTS("Precache.DownloadedNonPrecache", size_sample);
@@ -176,7 +195,7 @@ void PrecacheDatabase::RecordURLNonPrefetch(const GURL& url,
       UMA_HISTOGRAM_COUNTS("Precache.DownloadedNonPrecache.Cellular",
                            size_sample);
     }
-  } else {
+  } else {  // info.was_cached.
     // The fetch was served from the cache, and since there's an entry for this
     // URL in the URL table, this means that the resource was served from the
     // cache only because precaching put it there. Thus, precaching was helpful,
@@ -184,6 +203,18 @@ void PrecacheDatabase::RecordURLNonPrefetch(const GURL& url,
     UMA_HISTOGRAM_COUNTS("Precache.Saved", size_sample);
     if (is_connection_cellular) {
       UMA_HISTOGRAM_COUNTS("Precache.Saved.Cellular", size_sample);
+    }
+
+    DCHECK(info.headers) << "The headers are required to get the freshness.";
+    if (info.headers) {
+      // TODO(jamartin): Maybe report stale_while_validate as well.
+      UMA_HISTOGRAM_CUSTOM_COUNTS(
+          "Precache.Saved.Freshness",
+          info.headers->GetFreshnessLifetimes(info.response_time)
+              .freshness.InSeconds(),
+          base::TimeDelta::FromMinutes(5).InSeconds() /* min */,
+          base::TimeDelta::FromDays(356).InSeconds() /* max */,
+          100 /* bucket_count */);
     }
   }
 
@@ -257,6 +288,28 @@ void PrecacheDatabase::MaybePostFlush() {
                             weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(1));
   is_flush_posted_ = true;
+}
+
+std::unique_ptr<PrecacheUnfinishedWork>
+PrecacheDatabase::GetUnfinishedWork() {
+  std::unique_ptr<PrecacheUnfinishedWork> unfinished_work =
+      precache_session_table_.GetUnfinishedWork();
+  precache_session_table_.DeleteUnfinishedWork();
+  return unfinished_work;
+}
+
+void PrecacheDatabase::SaveUnfinishedWork(
+    std::unique_ptr<PrecacheUnfinishedWork> unfinished_work) {
+  precache_session_table_.SaveUnfinishedWork(
+      std::move(unfinished_work));
+}
+
+void PrecacheDatabase::DeleteUnfinishedWork() {
+  precache_session_table_.DeleteUnfinishedWork();
+}
+
+base::WeakPtr<PrecacheDatabase> PrecacheDatabase::GetWeakPtr() {
+  return weak_factory_.GetWeakPtr();
 }
 
 }  // namespace precache

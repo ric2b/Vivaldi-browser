@@ -34,6 +34,7 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
+#include "core/CoreExport.h"
 #include "core/editing/Position.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/WritingDirection.h"
@@ -57,7 +58,7 @@ class QualifiedName;
 class ComputedStyle;
 class StylePropertySet;
 
-class EditingStyle final : public GarbageCollected<EditingStyle> {
+class CORE_EXPORT EditingStyle final : public GarbageCollected<EditingStyle> {
 public:
 
     enum PropertiesToInclude { AllProperties, OnlyEditingInheritableProperties, EditingPropertiesInEffect };
@@ -135,7 +136,7 @@ public:
     float fontSizeDelta() const { return m_fontSizeDelta; }
     bool hasFontSizeDelta() const { return m_fontSizeDelta != NoFontDelta; }
 
-    static EditingStyle* styleAtSelectionStart(const VisibleSelection&, bool shouldUseBackgroundColorInEffect = false);
+    static EditingStyle* styleAtSelectionStart(const VisibleSelection&, bool shouldUseBackgroundColorInEffect = false, MutableStylePropertySet* styleToCheck = nullptr);
     static WritingDirection textDirectionForSelection(const VisibleSelection&, EditingStyle* typingStyle, bool& hasNestedOrMultipleEmbeddings);
     static bool isEmbedOrIsolate(CSSValueID unicodeBidi)
     {
@@ -145,7 +146,7 @@ public:
     DECLARE_TRACE();
 
 private:
-    EditingStyle();
+    EditingStyle() = default;
     EditingStyle(ContainerNode*, PropertiesToInclude);
     EditingStyle(const Position&, PropertiesToInclude);
     explicit EditingStyle(const StylePropertySet*);
@@ -161,8 +162,9 @@ private:
     void mergeStyle(const StylePropertySet*, CSSPropertyOverrideMode);
 
     Member<MutableStylePropertySet> m_mutableStyle;
-    bool m_isMonospaceFont;
-    float m_fontSizeDelta;
+    bool m_isMonospaceFont = false;
+    float m_fontSizeDelta = NoFontDelta;
+    bool m_isVerticalAlign = false;
 
     friend class HTMLElementEquivalent;
     friend class HTMLAttributeEquivalent;

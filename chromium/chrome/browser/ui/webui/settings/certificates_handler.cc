@@ -88,13 +88,16 @@ struct DictionaryIdComparator {
   explicit DictionaryIdComparator(icu::Collator* collator)
       : collator_(collator) {}
 
-  bool operator()(const base::Value* a, const base::Value* b) const {
+  bool operator()(const std::unique_ptr<base::Value>& a,
+                  const std::unique_ptr<base::Value>& b) const {
     DCHECK(a->GetType() == base::Value::TYPE_DICTIONARY);
     DCHECK(b->GetType() == base::Value::TYPE_DICTIONARY);
-    const base::DictionaryValue* a_dict =
-        reinterpret_cast<const base::DictionaryValue*>(a);
-    const base::DictionaryValue* b_dict =
-        reinterpret_cast<const base::DictionaryValue*>(b);
+    const base::DictionaryValue* a_dict;
+    bool a_is_dictionary = a->GetAsDictionary(&a_dict);
+    DCHECK(a_is_dictionary);
+    const base::DictionaryValue* b_dict;
+    bool b_is_dictionary = b->GetAsDictionary(&b_dict);
+    DCHECK(b_is_dictionary);
     base::string16 a_str;
     base::string16 b_str;
     a_dict->GetString(kNameField, &a_str);
@@ -1039,7 +1042,7 @@ void CertificatesHandler::PopulateTree(
     for (CertificateManagerModel::OrgGroupingMap::iterator i = map.begin();
          i != map.end(); ++i) {
       // Populate first level (org name).
-      base::DictionaryValue* dict = new base::DictionaryValue;
+      std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
       dict->SetString(kKeyField, OrgNameToId(i->first));
       dict->SetString(kNameField, i->first);
 
@@ -1047,7 +1050,8 @@ void CertificatesHandler::PopulateTree(
       base::ListValue* subnodes = new base::ListValue;
       for (net::CertificateList::const_iterator org_cert_it = i->second.begin();
            org_cert_it != i->second.end(); ++org_cert_it) {
-        base::DictionaryValue* cert_dict = new base::DictionaryValue;
+        std::unique_ptr<base::DictionaryValue> cert_dict(
+            new base::DictionaryValue);
         net::X509Certificate* cert = org_cert_it->get();
         cert_dict->SetString(kKeyField, cert_id_map_->CertToId(cert));
         cert_dict->SetString(
@@ -1071,12 +1075,12 @@ void CertificatesHandler::PopulateTree(
             kExtractableField,
             !certificate_manager_model_->IsHardwareBacked(cert));
         // TODO(mattm): Other columns.
-        subnodes->Append(cert_dict);
+        subnodes->Append(std::move(cert_dict));
       }
       std::sort(subnodes->begin(), subnodes->end(), comparator);
 
       dict->Set(kSubnodesField, subnodes);
-      nodes->Append(dict);
+      nodes->Append(std::move(dict));
     }
     std::sort(nodes->begin(), nodes->end(), comparator);
 
@@ -1124,11 +1128,11 @@ void CertificatesHandler::RejectCallbackWithImportError(
       base::WrapUnique(new base::ListValue());
   for (size_t i = 0; i < not_imported.size(); ++i) {
     const net::NSSCertDatabase::ImportCertFailure& failure = not_imported[i];
-    base::DictionaryValue* dict = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
     dict->SetString(kNameField,
                     failure.certificate->subject().GetDisplayName());
     dict->SetString(kErrorField, NetErrorToString(failure.net_error));
-    cert_error_list->Append(dict);
+    cert_error_list->Append(std::move(dict));
   }
 
   std::unique_ptr<base::DictionaryValue> error_info(new base::DictionaryValue);

@@ -262,12 +262,15 @@ void ManagePasswordsUIController::OnBubbleShown() {
 }
 
 void ManagePasswordsUIController::OnBubbleHidden() {
+  bool update_icon = (bubble_status_ == SHOWN_PENDING_ICON_UPDATE);
   bubble_status_ = NOT_SHOWN;
   if (GetState() == password_manager::ui::CONFIRMATION_STATE ||
       GetState() == password_manager::ui::AUTO_SIGNIN_STATE) {
     passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
-    UpdateBubbleAndIconVisibility();
+    update_icon = true;
   }
+  if (update_icon)
+    UpdateBubbleAndIconVisibility();
 }
 
 void ManagePasswordsUIController::OnNoInteractionOnUpdate() {
@@ -299,7 +302,9 @@ void ManagePasswordsUIController::SavePassword() {
   DCHECK_EQ(password_manager::ui::PENDING_PASSWORD_STATE, GetState());
   SavePasswordInternal();
   passwords_data_.TransitionToState(password_manager::ui::MANAGE_STATE);
-  UpdateBubbleAndIconVisibility();
+  // The icon is to be updated after the bubble (either "Save password" or "Sign
+  // in to Chrome") is closed.
+  bubble_status_ = SHOWN_PENDING_ICON_UPDATE;
 }
 
 void ManagePasswordsUIController::UpdatePassword(
@@ -345,6 +350,14 @@ void ManagePasswordsUIController::NavigateToPasswordManagerSettingsPage() {
       chrome::kPasswordManagerSubPage);
 }
 
+void ManagePasswordsUIController::NavigateToChromeSignIn() {
+  Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
+  browser->window()->ShowAvatarBubbleFromAvatarButton(
+      BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN,
+      signin::ManageAccountsParams(),
+      signin_metrics::AccessPoint::ACCESS_POINT_PASSWORD_BUBBLE);
+}
+
 void ManagePasswordsUIController::OnDialogHidden() {
   dialog_controller_.reset();
   if (GetState() == password_manager::ui::CREDENTIAL_REQUEST_STATE) {
@@ -358,8 +371,7 @@ void ManagePasswordsUIController::SavePasswordInternal() {
       GetPasswordStore(web_contents());
   password_manager::PasswordFormManager* form_manager =
       passwords_data_.form_manager();
-  for (const autofill::PasswordForm* form :
-       form_manager->blacklisted_matches()) {
+  for (const auto& form : form_manager->blacklisted_matches()) {
     password_store->RemoveLogin(*form);
   }
 
@@ -415,7 +427,7 @@ void ManagePasswordsUIController::DidNavigateMainFrame(
 
   // It is possible that the user was not able to interact with the password
   // bubble.
-  if (bubble_status_ == SHOWN)
+  if (bubble_status_ == SHOWN || bubble_status_ == SHOWN_PENDING_ICON_UPDATE)
     return;
 
   // Otherwise, reset the password manager.

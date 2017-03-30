@@ -18,8 +18,10 @@
 
 namespace cc {
 
-template <typename LayerType>
-void SynchronizeTreesInternal(LayerType* layer_root, LayerTreeImpl* tree_impl) {
+template <typename LayerTreeType>
+void SynchronizeTreesInternal(LayerTreeType* source_tree,
+                              LayerTreeImpl* tree_impl,
+                              PropertyTrees* property_trees) {
   DCHECK(tree_impl);
 
   TRACE_EVENT0("cc", "TreeSynchronizer::SynchronizeTrees");
@@ -29,31 +31,33 @@ void SynchronizeTreesInternal(LayerType* layer_root, LayerTreeImpl* tree_impl) {
   for (auto& it : *old_layers)
     old_layer_map[it->id()] = std::move(it);
 
-  SynchronizeTreesRecursive(&old_layer_map, layer_root, tree_impl);
+  PushLayerList(&old_layer_map, source_tree, tree_impl);
 
-  for (auto& it : old_layer_map) {
-    if (it.second) {
-      // Need to ensure that layer destruction doesn't tear down other layers
-      // linked to this LayerImpl that have been used in the new tree.
-      it.second->ClearLinksToOtherLayers();
-    }
+  for (int id : property_trees->effect_tree.mask_replica_layer_ids()) {
+    std::unique_ptr<LayerImpl> layer_impl(ReuseOrCreateLayerImpl(
+        &old_layer_map, source_tree->LayerById(id), tree_impl));
+    tree_impl->AddLayer(std::move(layer_impl));
   }
 }
 
 void TreeSynchronizer::SynchronizeTrees(Layer* layer_root,
                                         LayerTreeImpl* tree_impl) {
-  if (!layer_root)
-    tree_impl->ClearLayers();
-  else
-    SynchronizeTreesInternal(layer_root, tree_impl);
+  if (!layer_root) {
+    tree_impl->DetachLayers();
+  } else {
+    SynchronizeTreesInternal(layer_root->layer_tree_host(), tree_impl,
+                             layer_root->layer_tree_host()->property_trees());
+  }
 }
 
-void TreeSynchronizer::SynchronizeTrees(LayerImpl* layer_root,
-                                        LayerTreeImpl* tree_impl) {
-  if (!layer_root)
-    tree_impl->ClearLayers();
-  else
-    SynchronizeTreesInternal(layer_root, tree_impl);
+void TreeSynchronizer::SynchronizeTrees(LayerTreeImpl* pending_tree,
+                                        LayerTreeImpl* active_tree) {
+  if (pending_tree->LayerListIsEmpty()) {
+    active_tree->DetachLayers();
+  } else {
+    SynchronizeTreesInternal(pending_tree, active_tree,
+                             pending_tree->property_trees());
+  }
 }
 
 template <typename LayerType>
@@ -68,60 +72,19 @@ std::unique_ptr<LayerImpl> ReuseOrCreateLayerImpl(OwnedLayerImplMap* old_layers,
   return layer_impl;
 }
 
-template <typename LayerType>
-std::unique_ptr<LayerImpl> SynchronizeTreesRecursiveInternal(
-    OwnedLayerImplMap* old_layers,
-    LayerType* layer,
-    LayerTreeImpl* tree_impl) {
-  if (!layer)
-    return nullptr;
+template <typename LayerTreeType>
+void PushLayerList(OwnedLayerImplMap* old_layers,
+                   LayerTreeType* host,
+                   LayerTreeImpl* tree_impl) {
+  tree_impl->ClearLayerList();
+  for (auto* layer : *host) {
+    std::unique_ptr<LayerImpl> layer_impl(
+        ReuseOrCreateLayerImpl(old_layers, layer, tree_impl));
 
-  std::unique_ptr<LayerImpl> layer_impl(
-      ReuseOrCreateLayerImpl(old_layers, layer, tree_impl));
-
-  layer_impl->children().clear();
-  for (size_t i = 0; i < layer->children().size(); ++i) {
-    layer_impl->AddChild(SynchronizeTreesRecursiveInternal(
-        old_layers, layer->child_at(i), tree_impl));
+    tree_impl->AddToLayerList(layer_impl.get());
+    tree_impl->AddLayer(std::move(layer_impl));
   }
-
-  std::unique_ptr<LayerImpl> mask_layer = SynchronizeTreesRecursiveInternal(
-      old_layers, layer->mask_layer(), tree_impl);
-  if (layer_impl->mask_layer() && mask_layer &&
-      layer_impl->mask_layer() == mask_layer.get()) {
-    // In this case, we only need to update the ownership, as we're essentially
-    // just resetting the mask layer.
-    tree_impl->AddLayer(std::move(mask_layer));
-  } else {
-    layer_impl->SetMaskLayer(std::move(mask_layer));
-  }
-
-  std::unique_ptr<LayerImpl> replica_layer = SynchronizeTreesRecursiveInternal(
-      old_layers, layer->replica_layer(), tree_impl);
-  if (layer_impl->replica_layer() && replica_layer &&
-      layer_impl->replica_layer() == replica_layer.get()) {
-    // In this case, we only need to update the ownership, as we're essentially
-    // just resetting the replica layer.
-    tree_impl->AddLayer(std::move(replica_layer));
-  } else {
-    layer_impl->SetReplicaLayer(std::move(replica_layer));
-  }
-
-  return layer_impl;
-}
-
-void SynchronizeTreesRecursive(OwnedLayerImplMap* old_layers,
-                               Layer* old_root,
-                               LayerTreeImpl* tree_impl) {
-  tree_impl->SetRootLayer(
-      SynchronizeTreesRecursiveInternal(old_layers, old_root, tree_impl));
-}
-
-void SynchronizeTreesRecursive(OwnedLayerImplMap* old_layers,
-                               LayerImpl* old_root,
-                               LayerTreeImpl* tree_impl) {
-  tree_impl->SetRootLayer(
-      SynchronizeTreesRecursiveInternal(old_layers, old_root, tree_impl));
+  tree_impl->OnCanDrawStateChangedForTree();
 }
 
 template <typename LayerType>

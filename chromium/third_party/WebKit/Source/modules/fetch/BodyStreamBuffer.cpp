@@ -20,6 +20,7 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
+#include <memory>
 
 namespace blink {
 
@@ -97,7 +98,7 @@ private:
     Member<FetchDataLoader::Client> m_client;
 };
 
-BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, PassOwnPtr<FetchDataConsumerHandle> handle)
+BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, std::unique_ptr<FetchDataConsumerHandle> handle)
     : UnderlyingSourceBase(scriptState)
     , m_scriptState(scriptState)
     , m_handle(std::move(handle))
@@ -105,7 +106,6 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, PassOwnPtr<FetchDat
     , m_madeFromReadableStream(false)
 {
     if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
-        ScriptState::Scope scope(scriptState);
         if (isTerminating(scriptState)) {
             m_reader = nullptr;
             m_handle = nullptr;
@@ -140,7 +140,6 @@ BodyStreamBuffer::BodyStreamBuffer(ScriptState* scriptState, ScriptValue stream)
     , m_scriptState(scriptState)
     , m_madeFromReadableStream(true)
 {
-    ScriptState::Scope scope(scriptState);
     DCHECK(RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled());
     DCHECK(ReadableStreamOperations::isReadableStream(scriptState, stream));
     if (isTerminating(scriptState))
@@ -214,7 +213,7 @@ void BodyStreamBuffer::startLoading(FetchDataLoader* loader, FetchDataLoader::Cl
 {
     ASSERT(!m_loader);
     ASSERT(m_scriptState->contextIsValid());
-    OwnPtr<FetchDataConsumerHandle> handle = releaseHandle();
+    std::unique_ptr<FetchDataConsumerHandle> handle = releaseHandle();
     m_loader = loader;
     loader->start(handle.get(), new LoaderClient(m_scriptState->getExecutionContext(), this, client));
 }
@@ -227,15 +226,14 @@ void BodyStreamBuffer::tee(BodyStreamBuffer** branch1, BodyStreamBuffer** branch
     *branch2 = nullptr;
 
     if (m_madeFromReadableStream) {
-        ScriptState::Scope scope(m_scriptState.get());
         ScriptValue stream1, stream2;
         ReadableStreamOperations::tee(m_scriptState.get(), stream(), &stream1, &stream2);
         *branch1 = new BodyStreamBuffer(m_scriptState.get(), stream1);
         *branch2 = new BodyStreamBuffer(m_scriptState.get(), stream2);
         return;
     }
-    OwnPtr<FetchDataConsumerHandle> handle = releaseHandle();
-    OwnPtr<FetchDataConsumerHandle> handle1, handle2;
+    std::unique_ptr<FetchDataConsumerHandle> handle = releaseHandle();
+    std::unique_ptr<FetchDataConsumerHandle> handle1, handle2;
     DataConsumerTee::create(m_scriptState->getExecutionContext(), std::move(handle), &handle1, &handle2);
     *branch1 = new BodyStreamBuffer(m_scriptState.get(), std::move(handle1));
     *branch2 = new BodyStreamBuffer(m_scriptState.get(), std::move(handle2));
@@ -273,7 +271,7 @@ ScriptPromise BodyStreamBuffer::cancel(ScriptState* scriptState, ScriptValue rea
 
 void BodyStreamBuffer::didGetReadable()
 {
-    if (!m_reader)
+    if (!m_reader || !getExecutionContext() || getExecutionContext()->activeDOMObjectsAreStopped())
         return;
 
     if (!m_streamNeedsMore) {
@@ -449,7 +447,7 @@ void BodyStreamBuffer::stopLoading()
     m_loader = nullptr;
 }
 
-PassOwnPtr<FetchDataConsumerHandle> BodyStreamBuffer::releaseHandle()
+std::unique_ptr<FetchDataConsumerHandle> BodyStreamBuffer::releaseHandle()
 {
     DCHECK(!isStreamLocked());
     DCHECK(!isStreamDisturbed());
@@ -469,7 +467,7 @@ PassOwnPtr<FetchDataConsumerHandle> BodyStreamBuffer::releaseHandle()
     // We need to call these before calling closeAndLockAndDisturb.
     const bool isClosed = isStreamClosed();
     const bool isErrored = isStreamErrored();
-    OwnPtr<FetchDataConsumerHandle> handle = std::move(m_handle);
+    std::unique_ptr<FetchDataConsumerHandle> handle = std::move(m_handle);
 
     closeAndLockAndDisturb();
 

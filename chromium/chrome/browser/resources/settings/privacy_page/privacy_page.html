@@ -2,20 +2,22 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
-<link rel="import" href="chrome://md-settings/clear_browsing_data_dialog/clear_browsing_data_dialog.html">
-<link rel="import" href="chrome://md-settings/controls/settings_checkbox.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_subpage.html">
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
-<link rel="import" href="chrome://md-settings/site_settings/all_sites.html">
-<link rel="import" href="chrome://md-settings/site_settings/constants.html">
-<link rel="import" href="chrome://md-settings/site_settings_page/site_settings_page.html">
+<link rel="import" href="/clear_browsing_data_dialog/clear_browsing_data_dialog.html">
+<link rel="import" href="/controls/settings_checkbox.html">
+<link rel="import" href="/settings_main/settings_main_rendered.html">
+<link rel="import" href="/settings_page/settings_animated_pages.html">
+<link rel="import" href="/settings_page/settings_subpage.html">
+<link rel="import" href="/settings_shared_css.html">
+<link rel="import" href="/site_settings/all_sites.html">
+<link rel="import" href="/site_settings/constants.html">
+<link rel="import" href="/site_settings/media_picker.html">
+<link rel="import" href="/site_settings_page/site_settings_page.html">
 
 <if expr="use_nss_certs">
-<link rel="import" href="chrome://md-settings/certificate_manager_page/certificate_manager_page.html">
+<link rel="import" href="/certificate_manager_page/certificate_manager_page.html">
 </if>
 <if expr="is_win or is_macosx">
-<link rel="import" href="chrome://md-settings/privacy_page/privacy_page_browser_proxy.html">
+<link rel="import" href="/privacy_page/privacy_page_browser_proxy.html">
 </if>
 
 <dom-module id="settings-privacy-page">
@@ -80,24 +82,19 @@
 </if>
         </div>
 <if expr="use_nss_certs or is_win or is_macosx">
-        <div id="manageCertificates" class="settings-box two-line"
+        <div id="manageCertificates" class="settings-box two-line" actionable
             on-tap="onManageCertificatesTap_">
           <div class="start">
             <div>$i18n{manageCertificates}</div>
-            <div class="secondary">
-              <!-- TODO(dschuyler): replace this placeholder text -->
-              Contrary to popular belief, Lorem Ipsum is not simply random text.
-            </div>
+            <div class="secondary">$i18n{manageCertificatesDescription}</div>
           </div>
         </div>
 </if>
-        <div class="settings-box two-line" on-tap="onSiteSettingsTap_">
+        <div class="settings-box two-line" on-tap="onSiteSettingsTap_"
+            actionable>
           <div class="start">
             <div>$i18n{siteSettings}</div>
-            <div class="secondary">
-              <!-- TODO(dschuyler): replace this placeholder text -->
-              Contrary to popular belief, Lorem Ipsum is not simply random text.
-            </div>
+            <div class="secondary">$i18n{siteSettingsDescription}</div>
           </div>
         </div>
         <div class="settings-box">
@@ -131,12 +128,31 @@
           </all-sites>
         </settings-subpage>
       </template>
+      <template is="dom-if" name="site-settings-category-automatic-downloads">
+        <settings-subpage page-title="$i18n{siteSettingsAutomaticDownloads}">
+          <site-settings-category
+              selected-site="{{selectedSite}}"
+              current-route="{{currentRoute}}"
+              category="{{ContentSettingsTypes.AUTOMATIC_DOWNLOADS}}">
+          </site-settings-category>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" name="site-settings-category-background-sync">
+        <settings-subpage page-title="$i18n{siteSettingsBackgroundSync}">
+          <site-settings-category
+              selected-site="{{selectedSite}}"
+              current-route="{{currentRoute}}"
+              category="{{ContentSettingsTypes.BACKGROUND_SYNC}}">
+          </site-settings-category>
+        </settings-subpage>
+      </template>
       <template is="dom-if" name="site-settings-category-camera">
         <settings-subpage page-title="$i18n{siteSettingsCategoryCamera}">
           <site-settings-category
               selected-site="{{selectedSite}}"
               current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.CAMERA}}">
+            <media-picker type="camera" class="media-picker"></media-picker>
           </site-settings-category>
         </settings-subpage>
       </template>
@@ -146,6 +162,13 @@
               selected-site="{{selectedSite}}"
               current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.COOKIES}}">
+            <div class="settings-box cookie-controls">
+              <settings-checkbox class="start"
+                  label="$i18n{thirdPartyCookie}"
+                  sub-label="$i18n{thirdPartyCookieSublabel}"
+                  pref="{{prefs.profile.block_third_party_cookies}}">
+              </settings-checkbox>
+            </div>
           </site-settings-category>
         </settings-subpage>
       </template>
@@ -187,6 +210,15 @@
           </site-settings-category>
         </settings-subpage>
       </template>
+      <template is="dom-if" name="site-settings-category-keygen">
+        <settings-subpage page-title="$i18n{siteSettingsKeygen}">
+          <site-settings-category
+              selected-site="{{selectedSite}}"
+              current-route="{{currentRoute}}"
+              category="{{ContentSettingsTypes.KEYGEN}}">
+          </site-settings-category>
+        </settings-subpage>
+      </template>
       <template is="dom-if" name="site-settings-category-microphone">
         <settings-subpage
             page-title="$i18n{siteSettingsCategoryMicrophone}">
@@ -194,6 +226,7 @@
               selected-site="{{selectedSite}}"
               current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.MIC}}">
+            <media-picker type="mic" class="media-picker"></media-picker>
           </site-settings-category>
         </settings-subpage>
       </template>
@@ -207,12 +240,30 @@
           </site-settings-category>
         </settings-subpage>
       </template>
+      <template is="dom-if" name="site-settings-category-plugins">
+        <settings-subpage page-title="$i18n{siteSettingsPlugins}">
+          <site-settings-category
+              selected-site="{{selectedSite}}"
+              current-route="{{currentRoute}}"
+              category="{{ContentSettingsTypes.PLUGINS}}">
+          </site-settings-category>
+        </settings-subpage>
+      </template>
       <template is="dom-if" name="site-settings-category-popups">
         <settings-subpage page-title="$i18n{siteSettingsCategoryPopups}">
           <site-settings-category
               selected-site="{{selectedSite}}"
               current-route="{{currentRoute}}"
               category="{{ContentSettingsTypes.POPUPS}}">
+          </site-settings-category>
+        </settings-subpage>
+      </template>
+      <template is="dom-if" name="site-settings-category-unsandboxed-plugins">
+        <settings-subpage page-title="$i18n{siteSettingsUnsandboxedPlugins}">
+          <site-settings-category
+              selected-site="{{selectedSite}}"
+              current-route="{{currentRoute}}"
+              category="{{ContentSettingsTypes.UNSANDBOXED_PLUGINS}}">
           </site-settings-category>
         </settings-subpage>
       </template>

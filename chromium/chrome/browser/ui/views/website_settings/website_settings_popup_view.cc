@@ -12,7 +12,6 @@
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/certificate_viewer.h"
@@ -42,6 +41,7 @@
 #include "grit/components_strings.h"
 #include "grit/theme_resources.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/canvas.h"
@@ -154,16 +154,16 @@ class PopupHeaderView : public views::View {
   DISALLOW_COPY_AND_ASSIGN(PopupHeaderView);
 };
 
-// Website Settings are not supported for internal Chrome pages. Instead of the
-// |WebsiteSettingsPopupView|, the |InternalPageInfoPopupView| is
-// displayed.
+// Website Settings are not supported for internal Chrome pages and extension
+// pages. Instead of the |WebsiteSettingsPopupView|, the
+// |InternalPageInfoPopupView| is displayed.
 class InternalPageInfoPopupView : public views::BubbleDialogDelegateView {
  public:
   // If |anchor_view| is nullptr, or has no Widget, |parent_window| may be
   // provided to ensure this bubble is closed when the parent closes.
   InternalPageInfoPopupView(views::View* anchor_view,
                             gfx::NativeView parent_window,
-                            bool is_extension_page);
+                            const GURL& url);
   ~InternalPageInfoPopupView() override;
 
   // views::BubbleDialogDelegateView:
@@ -286,7 +286,8 @@ void PopupHeaderView::SetSecuritySummary(
 
     views::StyledLabel::RangeStyleInfo link_style =
         views::StyledLabel::RangeStyleInfo::CreateForLink();
-    link_style.font_style |= gfx::Font::FontStyle::UNDERLINE;
+    if (!ui::MaterialDesignController::IsSecondaryUiMaterial())
+      link_style.font_style |= gfx::Font::FontStyle::UNDERLINE;
     link_style.disable_line_wrapping = false;
 
     status_->AddStyleRange(details_range, link_style);
@@ -324,9 +325,22 @@ void PopupHeaderView::AddResetDecisionsButton() {
 InternalPageInfoPopupView::InternalPageInfoPopupView(
     views::View* anchor_view,
     gfx::NativeView parent_window,
-    bool is_extension_page)
+    const GURL& url)
     : BubbleDialogDelegateView(anchor_view, views::BubbleBorder::TOP_LEFT) {
   set_parent_window(parent_window);
+
+  int text = IDS_PAGE_INFO_INTERNAL_PAGE;
+  int icon = IDR_PRODUCT_LOGO_16;
+  if (url.SchemeIs(extensions::kExtensionScheme)) {
+    text = IDS_PAGE_INFO_EXTENSION_PAGE;
+    icon = IDR_PLUGINS_FAVICON;
+  } else if (url.SchemeIs(content::kViewSourceScheme)) {
+    text = IDS_PAGE_INFO_VIEW_SOURCE_PAGE;
+    // view-source scheme uses the same icon as chrome:// pages.
+    icon = IDR_PRODUCT_LOGO_16;
+  } else if (!url.SchemeIs(content::kChromeUIScheme)) {
+    NOTREACHED();
+  }
 
   // Compensate for built-in vertical padding in the anchor view's image.
   set_anchor_view_insets(gfx::Insets(
@@ -338,13 +352,10 @@ InternalPageInfoPopupView::InternalPageInfoPopupView(
   set_margins(gfx::Insets());
   views::ImageView* icon_view = new views::ImageView();
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
-  icon_view->SetImage(rb.GetImageSkiaNamed(
-      is_extension_page ? IDR_PLUGINS_FAVICON : IDR_PRODUCT_LOGO_16));
+  icon_view->SetImage(rb.GetImageSkiaNamed(icon));
   AddChildView(icon_view);
 
-  views::Label* label = new views::Label(l10n_util::GetStringUTF16(
-      is_extension_page ? IDS_PAGE_INFO_EXTENSION_PAGE
-                        : IDS_PAGE_INFO_INTERNAL_PAGE));
+  views::Label* label = new views::Label(l10n_util::GetStringUTF16(text));
   label->SetMultiLine(true);
   label->SetAllowCharacterBreak(true);
   label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -393,10 +404,11 @@ void WebsiteSettingsPopupView::ShowPopup(
   gfx::NativeView parent_window =
       anchor_view ? nullptr : web_contents->GetNativeView();
   if (url.SchemeIs(content::kChromeUIScheme) ||
-      url.SchemeIs(extensions::kExtensionScheme)) {
+      url.SchemeIs(extensions::kExtensionScheme) ||
+      url.SchemeIs(content::kViewSourceScheme)) {
     // Use the concrete type so that |SetAnchorRect| can be called as a friend.
-    InternalPageInfoPopupView* popup = new InternalPageInfoPopupView(
-        anchor_view, parent_window, url.SchemeIs(extensions::kExtensionScheme));
+    InternalPageInfoPopupView* popup =
+        new InternalPageInfoPopupView(anchor_view, parent_window, url);
     if (!anchor_view)
       popup->SetAnchorRect(anchor_rect);
     popup->GetWidget()->Show();
@@ -572,13 +584,11 @@ void WebsiteSettingsPopupView::SetCookieInfo(
   base::string16 third_party_label_text;
   for (const auto& i : cookie_info_list) {
     if (i.is_first_party) {
-      first_party_label_text =
-          l10n_util::GetStringFUTF16(IDS_WEBSITE_SETTINGS_FIRST_PARTY_SITE_DATA,
-                                     base::IntToString16(i.allowed));
+      first_party_label_text = l10n_util::GetPluralStringFUTF16(
+          IDS_WEBSITE_SETTINGS_FIRST_PARTY_SITE_DATA, i.allowed);
     } else {
-      third_party_label_text =
-          l10n_util::GetStringFUTF16(IDS_WEBSITE_SETTINGS_THIRD_PARTY_SITE_DATA,
-                                     base::IntToString16(i.allowed));
+      third_party_label_text = l10n_util::GetPluralStringFUTF16(
+          IDS_WEBSITE_SETTINGS_THIRD_PARTY_SITE_DATA, i.allowed);
     }
   }
 

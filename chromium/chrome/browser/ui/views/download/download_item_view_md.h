@@ -31,12 +31,10 @@
 #include "content/public/browser/download_manager.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/font_list.h"
-#include "ui/views/animation/button_ink_drop_delegate.h"
 #include "ui/views/animation/ink_drop_host_view.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
 
-class BarControlButton;
 class DownloadShelfView;
 class DownloadShelfContextMenuView;
 
@@ -107,7 +105,8 @@ class DownloadItemViewMd : public views::InkDropHostView,
   // Overridden from view::InkDropHostView:
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<views::InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
+      const override;
 
   // Overridden from ui::EventHandler:
   void OnGestureEvent(ui::GestureEvent* event) override;
@@ -131,6 +130,7 @@ class DownloadItemViewMd : public views::InkDropHostView,
 
  private:
   enum State { NORMAL = 0, HOT, PUSHED };
+  class DropDownButton;
 
   enum Mode {
     NORMAL_MODE = 0,  // Showing download item.
@@ -278,8 +278,6 @@ class DownloadItemViewMd : public views::InkDropHostView,
   // Animation for download complete.
   std::unique_ptr<gfx::SlideAnimation> complete_animation_;
 
-  views::ButtonInkDropDelegate ink_drop_delegate_;
-
   // Progress animation
   base::RepeatingTimer progress_timer_;
 
@@ -288,7 +286,7 @@ class DownloadItemViewMd : public views::InkDropHostView,
   views::LabelButton* discard_button_;
 
   // The drop down button.
-  BarControlButton* dropdown_button_;
+  DropDownButton* dropdown_button_;
 
   // Dangerous mode label.
   views::Label* dangerous_download_label_;

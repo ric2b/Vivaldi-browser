@@ -15,6 +15,7 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "media/gpu/v4l2_image_processor.h"
 
@@ -53,8 +54,8 @@ V4L2ImageProcessor::JobRecord::JobRecord() : output_buffer_index(-1) {}
 V4L2ImageProcessor::JobRecord::~JobRecord() {}
 
 V4L2ImageProcessor::V4L2ImageProcessor(const scoped_refptr<V4L2Device>& device)
-    : input_format_(media::PIXEL_FORMAT_UNKNOWN),
-      output_format_(media::PIXEL_FORMAT_UNKNOWN),
+    : input_format_(PIXEL_FORMAT_UNKNOWN),
+      output_format_(PIXEL_FORMAT_UNKNOWN),
       input_memory_type_(V4L2_MEMORY_USERPTR),
       input_format_fourcc_(0),
       output_format_fourcc_(0),
@@ -96,8 +97,8 @@ void V4L2ImageProcessor::NotifyErrorOnChildThread(
   error_cb_.Run();
 }
 
-bool V4L2ImageProcessor::Initialize(media::VideoPixelFormat input_format,
-                                    media::VideoPixelFormat output_format,
+bool V4L2ImageProcessor::Initialize(VideoPixelFormat input_format,
+                                    VideoPixelFormat output_format,
                                     v4l2_memory input_memory_type,
                                     gfx::Size input_visible_size,
                                     gfx::Size input_allocated_size,
@@ -155,9 +156,8 @@ bool V4L2ImageProcessor::Initialize(media::VideoPixelFormat input_format,
                  base::Unretained(this)));
 
   DVLOG(1) << "V4L2ImageProcessor initialized for "
-           << " input_format:" << media::VideoPixelFormatToString(input_format)
-           << ", output_format:"
-           << media::VideoPixelFormatToString(output_format)
+           << " input_format:" << VideoPixelFormatToString(input_format)
+           << ", output_format:" << VideoPixelFormatToString(output_format)
            << ", input_visible_size: " << input_visible_size.ToString()
            << ", input_allocated_size: " << input_allocated_size_.ToString()
            << ", input_planes_count: " << input_planes_count_
@@ -218,7 +218,7 @@ bool V4L2ImageProcessor::TryOutputFormat(uint32_t pixelformat,
   return true;
 }
 
-void V4L2ImageProcessor::Process(const scoped_refptr<media::VideoFrame>& frame,
+void V4L2ImageProcessor::Process(const scoped_refptr<VideoFrame>& frame,
                                  int output_buffer_index,
                                  const FrameReadyCB& cb) {
   DVLOG(3) << __func__ << ": ts=" << frame->timestamp().InMilliseconds();
@@ -236,7 +236,7 @@ void V4L2ImageProcessor::Process(const scoped_refptr<media::VideoFrame>& frame,
 void V4L2ImageProcessor::ProcessTask(std::unique_ptr<JobRecord> job_record) {
   int index = job_record->output_buffer_index;
   DVLOG(3) << __func__ << ": Reusing output buffer, index=" << index;
-  DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
 
   EnqueueOutput(index);
   input_queue_.push(make_linked_ptr(job_record.release()));
@@ -265,7 +265,7 @@ void V4L2ImageProcessor::Destroy() {
 }
 
 void V4L2ImageProcessor::DestroyTask() {
-  DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
 
   // Stop streaming and the device_poll_thread_.
   StopDevicePoll();
@@ -419,7 +419,7 @@ void V4L2ImageProcessor::DestroyOutputBuffers() {
 }
 
 void V4L2ImageProcessor::DevicePollTask(bool poll_device) {
-  DCHECK_EQ(device_poll_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_poll_thread_.task_runner()->BelongsToCurrentThread());
 
   bool event_pending;
   if (!device_->Poll(poll_device, &event_pending)) {
@@ -435,7 +435,7 @@ void V4L2ImageProcessor::DevicePollTask(bool poll_device) {
 }
 
 void V4L2ImageProcessor::ServiceDeviceTask() {
-  DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
   // ServiceDeviceTask() should only ever be scheduled from DevicePollTask(),
   // so either:
   // * device_poll_thread_ is running normally
@@ -451,7 +451,7 @@ void V4L2ImageProcessor::ServiceDeviceTask() {
     return;
 
   bool poll_device =
-      (input_buffer_queued_count_ > 0 && output_buffer_queued_count_ > 0);
+      (input_buffer_queued_count_ > 0 || output_buffer_queued_count_ > 0);
 
   device_poll_thread_.message_loop()->PostTask(
       FROM_HERE, base::Bind(&V4L2ImageProcessor::DevicePollTask,
@@ -466,7 +466,7 @@ void V4L2ImageProcessor::ServiceDeviceTask() {
 }
 
 void V4L2ImageProcessor::EnqueueInput() {
-  DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
 
   const int old_inputs_queued = input_buffer_queued_count_;
   while (!input_queue_.empty() && !free_input_buffers_.empty()) {
@@ -488,7 +488,7 @@ void V4L2ImageProcessor::EnqueueInput() {
 }
 
 void V4L2ImageProcessor::EnqueueOutput(int index) {
-  DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
 
   const int old_outputs_queued = output_buffer_queued_count_;
   if (!EnqueueOutputRecord(index))
@@ -509,7 +509,7 @@ void V4L2ImageProcessor::EnqueueOutput(int index) {
 }
 
 void V4L2ImageProcessor::Dequeue() {
-  DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
 
   // Dequeue completed input (VIDEO_OUTPUT) buffers,
   // and recycle to the free list.
@@ -599,8 +599,8 @@ bool V4L2ImageProcessor::EnqueueInputRecord() {
   qbuf.length = input_planes_count_;
   for (size_t i = 0; i < input_planes_count_; ++i) {
     qbuf.m.planes[i].bytesused =
-        media::VideoFrame::PlaneSize(input_record.frame->format(), i,
-                                     input_allocated_size_)
+        VideoFrame::PlaneSize(input_record.frame->format(), i,
+                              input_allocated_size_)
             .GetArea();
     qbuf.m.planes[i].length = qbuf.m.planes[i].bytesused;
     if (input_memory_type_ == V4L2_MEMORY_USERPTR) {
@@ -645,7 +645,7 @@ bool V4L2ImageProcessor::EnqueueOutputRecord(int index) {
 
 bool V4L2ImageProcessor::StartDevicePoll() {
   DVLOG(3) << __func__ << ": starting device poll";
-  DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
   DCHECK(!device_poll_thread_.IsRunning());
 
   // Start up the device poll thread and schedule its first DevicePollTask().
@@ -666,7 +666,7 @@ bool V4L2ImageProcessor::StartDevicePoll() {
 bool V4L2ImageProcessor::StopDevicePoll() {
   DVLOG(3) << __func__ << ": stopping device poll";
   if (device_thread_.IsRunning())
-    DCHECK_EQ(device_thread_.message_loop(), base::MessageLoop::current());
+    DCHECK(device_thread_.task_runner()->BelongsToCurrentThread());
 
   // Signal the DevicePollTask() to stop, and stop the device poll thread.
   if (!device_->SetDevicePollInterrupt())

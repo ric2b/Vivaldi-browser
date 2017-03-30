@@ -33,19 +33,18 @@
 #include "content/common/navigation_gesture.h"
 #include "content/common/page_message_enums.h"
 #include "content/common/view_message_enums.h"
+#include "content/public/common/drop_data.h"
 #include "content/public/common/page_zoom.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/renderer_preferences.h"
 #include "content/public/common/top_controls_state.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/render_view.h"
-#include "content/renderer/mouse_lock_dispatcher.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_widget.h"
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/stats_collection_observer.h"
 #include "ipc/ipc_platform_file.h"
-#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebConsoleMessage.h"
@@ -121,7 +120,6 @@ namespace content {
 
 class HistoryController;
 class HistoryEntry;
-class MouseLockDispatcher;
 class PageState;
 class RenderViewImplTest;
 class RenderViewObserver;
@@ -130,7 +128,6 @@ class RendererDateTimePicker;
 class RendererWebColorChooserImpl;
 class SpeechRecognitionDispatcher;
 class WebPluginDelegateProxy;
-struct DropData;
 struct FaviconURL;
 struct FileChooserParams;
 struct FileChooserFileInfo;
@@ -192,10 +189,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   void set_send_content_state_immediately(bool value) {
     send_content_state_immediately_ = value;
-  }
-
-  MouseLockDispatcher* mouse_lock_dispatcher() {
-    return mouse_lock_dispatcher_;
   }
 
   HistoryController* history_controller() {
@@ -293,9 +286,6 @@ class CONTENT_EXPORT RenderViewImpl
   // Most methods are handled by RenderWidget.
   void didFocus() override;
   void show(blink::WebNavigationPolicy policy) override;
-  bool requestPointerLock() override;
-  void requestPointerUnlock() override;
-  bool isPointerLocked() override;
   void didHandleGestureEvent(const blink::WebGestureEvent& event,
                              bool event_cancelled) override;
   void onMouseDown(const blink::WebNode& mouse_down_node) override;
@@ -347,12 +337,8 @@ class CONTENT_EXPORT RenderViewImpl
   bool enumerateChosenDirectory(
       const blink::WebString& path,
       blink::WebFileChooserCompletion* chooser_completion) override;
-  void saveImageFromDataURL(const blink::WebString& data_url) override;
   void didCancelCompositionOnSelectionChange() override;
   bool handleCurrentKeyboardEvent() override;
-  bool runFileChooser(
-      const blink::WebFileChooserParams& params,
-      blink::WebFileChooserCompletion* chooser_completion) override;
   void SetValidationMessageDirection(base::string16* main_text,
                                      blink::WebTextDirection main_text_hint,
                                      base::string16* sub_text,
@@ -395,7 +381,6 @@ class CONTENT_EXPORT RenderViewImpl
   void pageScaleFactorChanged() override;
   virtual double zoomLevelToZoomFactor(double zoom_level) const;
   virtual double zoomFactorToZoomLevel(double factor) const;
-  blink::WebPageVisibilityState visibilityState() const override;
   void draggableRegionsChanged() override;
   void pageImportanceSignalsChanged() override;
 
@@ -428,7 +413,6 @@ class CONTENT_EXPORT RenderViewImpl
   bool ShouldDisplayScrollbars(int width, int height) const override;
   int GetEnabledBindings() const override;
   bool GetContentStateImmediately() const override;
-  blink::WebPageVisibilityState GetVisibilityState() const override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   void Repaint(const gfx::Size& size) override;
@@ -461,9 +445,6 @@ class CONTENT_EXPORT RenderViewImpl
   void Close() override;
   void OnResize(const ResizeParams& params) override;
   void OnSetFocus(bool enable) override;
-  void OnWasHidden() override;
-  void OnWasShown(bool needs_repainting,
-                  const ui::LatencyInfo& latency_info) override;
   GURL GetURLForGraphicsContext3D() override;
   void OnImeSetComposition(
       const base::string16& text,
@@ -620,8 +601,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   void OnShowContextMenu(ui::MenuSourceType source_type,
                          const gfx::Point& location);
-  void OnCopyImageAt(int x, int y);
-  void OnSaveImageAt(int x, int y);
   void OnLoadImageAt(int x, int y);
   void OnDeterminePageLanguage();
   void OnDisableScrollbarsForSmallWindows(
@@ -630,14 +609,17 @@ class CONTENT_EXPORT RenderViewImpl
                          const gfx::Point& screen_point,
                          blink::WebDragOperation drag_operation);
   void OnDragSourceSystemDragEnded();
-  void OnDragTargetDrop(const gfx::Point& client_pt,
+  void OnDragTargetDrop(const DropData& drop_data,
+                        const gfx::Point& client_pt,
                         const gfx::Point& screen_pt,
                         int key_modifiers);
-  void OnDragTargetDragEnter(const DropData& drop_data,
-                             const gfx::Point& client_pt,
-                             const gfx::Point& screen_pt,
-                             blink::WebDragOperationsMask operations_allowed,
-                             int key_modifiers);
+  // Real data that is dragged is not included at DragEnter time.
+  void OnDragTargetDragEnter(
+      const std::vector<DropData::Metadata>& drop_meta_data,
+      const gfx::Point& client_pt,
+      const gfx::Point& screen_pt,
+      blink::WebDragOperationsMask operations_allowed,
+      int key_modifiers);
   void OnDragTargetDragLeave();
   void OnDragTargetDragOver(const gfx::Point& client_pt,
                             const gfx::Point& screen_pt,
@@ -648,8 +630,6 @@ class CONTENT_EXPORT RenderViewImpl
   void OnDisableAutoResize(const gfx::Size& new_size);
   void OnEnumerateDirectoryResponse(int id,
                                     const std::vector<base::FilePath>& paths);
-  void OnFileChooserResponse(
-      const std::vector<content::FileChooserFileInfo>& files);
   void OnMediaPlayerActionAt(const gfx::Point& location,
                              const blink::WebMediaPlayerAction& action);
   void OnPluginActionAt(const gfx::Point& location,
@@ -687,6 +667,8 @@ class CONTENT_EXPORT RenderViewImpl
   // Page message handlers -----------------------------------------------------
   void OnUpdateWindowScreenRect(gfx::Rect window_screen_rect);
   void OnSetZoomLevel(PageMsg_SetZoomLevel_Command command, double zoom_level);
+  void OnPageWasHidden();
+  void OnPageWasShown();
 
   void ApplyVivaldiSpecificPreferences();
 
@@ -696,9 +678,6 @@ class CONTENT_EXPORT RenderViewImpl
   // Misc private functions ----------------------------------------------------
   // Check whether the preferred size has changed.
   void CheckPreferredSize();
-
-  // Gets the currently focused element, if any.
-  blink::WebElement GetFocusedElement() const;
 
 #if defined(OS_ANDROID)
   // Launch an Android content intent with the given URL.
@@ -907,9 +886,6 @@ class CONTENT_EXPORT RenderViewImpl
   // initialized.
   SpeechRecognitionDispatcher* speech_recognition_dispatcher_;
 
-  // Mouse Lock dispatcher attached to this view.
-  MouseLockDispatcher* mouse_lock_dispatcher_;
-
   std::unique_ptr<HistoryController> history_controller_;
 
 #if defined(OS_ANDROID)
@@ -929,13 +905,6 @@ class CONTENT_EXPORT RenderViewImpl
 
   // Misc ----------------------------------------------------------------------
 
-  // The current and pending file chooser completion objects. If the queue is
-  // nonempty, the first item represents the currently running file chooser
-  // callback, and the remaining elements are the other file chooser completion
-  // still waiting to be run (in order).
-  struct PendingFileChooser;
-  std::deque<std::unique_ptr<PendingFileChooser>> file_chooser_completions_;
-
   // The current directory enumeration callback
   std::map<int, blink::WebFileChooserCompletion*> enumeration_completions_;
   int enumeration_completion_id_;
@@ -952,9 +921,6 @@ class CONTENT_EXPORT RenderViewImpl
   // All the registered observers.  We expect this list to be small, so vector
   // is fine.
   base::ObserverList<RenderViewObserver> observers_;
-
-  // Wraps the |webwidget_| as a MouseLockDispatcher::LockTarget interface.
-  std::unique_ptr<MouseLockDispatcher::LockTarget> webwidget_mouse_lock_target_;
 
   // This field stores drag/drop related info for the event that is currently
   // being handled. If the current event results in starting a drag/drop

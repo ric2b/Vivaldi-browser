@@ -4,13 +4,14 @@
 
 #include "media/base/mime_util_internal.h"
 
+#include "base/command_line.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "media/base/media.h"
+#include "media/base/media_switches.h"
 #include "media/base/video_codecs.h"
-#include "media/media_features.h"
 
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/filters/ffmpeg_glue.h"
@@ -169,7 +170,11 @@ static bool ParseVp9CodecID(const std::string& mime_type_lower_case,
     return false;
   }
 
-#if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableVp9InMp4)) {
+    return false;
+  }
+
   std::vector<std::string> fields = base::SplitString(
       codec_id, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
   if (fields.size() < 1)
@@ -238,9 +243,6 @@ static bool ParseVp9CodecID(const std::string& mime_type_lower_case,
     return false;
 
   return true;
-#else
-  return false;
-#endif  // #if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
 }
 
 MimeUtil::MimeUtil() : allow_proprietary_codecs_(false) {
@@ -368,11 +370,9 @@ void MimeUtil::AddSupportedMediaFormats() {
 #if BUILDFLAG(ENABLE_HEVC_DEMUXING)
   mp4_video_codecs.insert(HEVC);
 #endif  // BUILDFLAG(ENABLE_HEVC_DEMUXING)
-#if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
   // Only VP9 with valid codec string vp09.xx.xx.xx.xx.xx.xx.xx is supported.
   // See ParseVp9CodecID for details.
   mp4_video_codecs.insert(VP9);
-#endif  // BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
   CodecSet mp4_codecs(mp4_audio_codecs);
   mp4_codecs.insert(mp4_video_codecs.begin(), mp4_video_codecs.end());
 #endif  // defined(USE_PROPRIETARY_CODECS)
@@ -621,6 +621,11 @@ bool MimeUtil::IsCodecSupportedOnPlatform(
       return true;
 
     case VP9: {
+      if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kReportVp9AsAnUnsupportedMimeType)) {
+        return false;
+      }
+
       // If clear, the unified pipeline can always decode VP9 in software.
       if (!is_encrypted && platform_info.is_unified_media_pipeline_enabled)
         return true;

@@ -22,7 +22,6 @@ class VersionUpdaterCros : public VersionUpdater,
   // VersionUpdater implementation.
   void CheckForUpdate(const StatusCallback& callback,
                       const PromoteCallback&) override;
-  void RelaunchBrowser() const override;
   void SetChannel(const std::string& channel,
                   bool is_powerwash_allowed) override;
   void GetChannel(bool get_current_channel,
@@ -30,6 +29,8 @@ class VersionUpdaterCros : public VersionUpdater,
 
   // Gets the last update status, without triggering a new check or download.
   void GetUpdateStatus(const StatusCallback& callback);
+
+  void GetEolStatus(const EolStatusCallback& callback) override;
 
  protected:
   friend class VersionUpdater;

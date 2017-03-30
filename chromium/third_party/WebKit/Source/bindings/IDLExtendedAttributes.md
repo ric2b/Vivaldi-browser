@@ -108,10 +108,6 @@ Extended attributes on partial interface members work as normal. However, only t
 * If different members should be controlled by different flags, this must be specified individually.
 * If a flag obviously applies to only one member of a single-member interface (i.e., it is named after that member), the extended attribute should be on the member.
 
-*** note
-**FIXME:** Currently, `[OriginTrialEnabled]` doesn't work for partial interfaces, see [Bug 585656](https://crbug.com/585656).
-***
-
 The remaining extended attribute, `[ImplementedAs]`, allows the implementation of the partial interface to be different than the implementation of the main interface; for members of the partial interface, this acts as if this `[ImplementedAs=...]` were specified on the interface, for only these members (overriding any existing value). This is stored internally via `[PartialInterfaceImplementedAs]` (see below).
 
 ### implements
@@ -139,6 +135,16 @@ These are defined in the [ECMAScript-specific extended attributes](http://heycam
 *** note
 Unsupported: `[ArrayClass]`, `[ImplicitThis]`, `[LenientThis]`, `[NamedPropertiesObject]`, `[TreatNonCallableAsNull]`
 ***
+
+### [CEReactions] _(m, a)_
+
+Standard: [CEReactions](https://html.spec.whatwg.org/multipage/scripting.html#cereactions)
+
+Summary: `[CEReactoins]` indicates that
+[custom element reactions](https://html.spec.whatwg.org/multipage/scripting.html#concept-custom-element-reaction)
+are triggered for this method or attribute.
+
+Usage: `[CEReactions]` takes no arguments.
 
 ### [Clamp] _(a, p)_
 
@@ -269,7 +275,7 @@ Standard: [NewObject](https://heycam.github.io/webidl/#NewObject)
 
 Summary: Signals that a method that returns an object type always returns a new object.
 
-This attribute has no effect on code generation and should simply be used in Blink IDL files if the specification uses it.
+Generates a test in debug mode to ensure that no wrapper object for the returned DOM object exists yet. Also see `[DoNotTestNewObject]`.
 
 ### [NoInterfaceObject] _(i)_
 
@@ -412,13 +418,13 @@ window.screenX; // Evaluates to 0. 0 remains.
 
 Whether `[Replaceable]` should be specified or not depends on the spec of each attribute.
 
-### [SameObject] _(m)_
+### [SameObject] _(a)_
 
 Standard: [SameObject](http://heycam.github.io/webidl/#SameObject)
 
 Summary: Signals that a `readonly` attribute that returns an object type always returns the same object.
 
-This attribute has no effect on code generation and should simply be used in Blink IDL files if the specification uses it.
+This attribute has no effect on code generation and should simply be used in Blink IDL files if the specification uses it. If you want the binding layer to cache the resulting object, use `[SaveSameObject]`.
 
 ### [TreatNullAs] _(a,p)_, [TreatUndefinedAs] _(a,p)_
 
@@ -854,6 +860,11 @@ void V8XXX::visitDOMWrapper(DOMDataStore* store, void* object, v8::Persistent<v8
 
 Summary: Wraps the method/accessor with a Custom Elements "callback delivery scope" which will dispatch Custom Element callbacks (createdCallback, attributeChangedCallback, etc.) before returning to script.
 
+*** note
+This attribute is only for Custom Elements V0,
+and is superceded by `[CEReactions]` for V1.
+***
+
 If the method/accessor creates elements or modifies DOM nodes in any way, it should be tagged with this extended attribute. Even if you're not a Node, this may apply to you! For example [DOMTokenList.toggle](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/dom/DOMTokenList.idl&l=34) can be reflected in the attribute of its associated element, so it needs to be tagged with CustomElementCallbacks. If the method/accessor only calls something that may modify the DOM (for example, it runs user script as a callback) you don't need to tag your method with `[CustomElementCallbacks]`; that is the responsibility of the binding that actually modifies the DOM. In general over-applying this extended attribute is safe, with one caveat:
 
 * This extended attribute MUST NOT be used on members that operate on non-main threads, because the callback delivery scope accesses statics.
@@ -922,6 +933,12 @@ Usage: `[DeprecateAs]` can be specified on methods, attributes, and constants.
 ```
 
 The deprecation message show on the console can be specified via the [UseCounter::deprecationMessage](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/frame/UseCounter.cpp&q=UseCounter::deprecationMessage&l=615) method.
+
+### [DoNotTestNewObject] _(m)_
+
+Summary: Does not generate a test for `[NewObject]` in the binding layer.
+
+When specified, does not generate a test for `[NewObject]`. Some implementation creates a new DOM object and its wrapper before passing through the binding layer. In that case, the generated test doesn't make sense. See Text.splitText() for example.
 
 ### [Iterable] _(i)_
 
@@ -1029,6 +1046,10 @@ When there is an active origin trial for the current execution context, the feat
 `[OriginTrialEnabled]` has similar semantics to `[RuntimeEnabled]`, and is intended as a drop-in replacement. For example, `[OriginTrialEnabled]` _cannot_ be applied to arguments, see `[RuntimeEnabled]` for reasoning. The key implementation difference is that `[OriginTrialEnabled]` wraps the generated code with `if (OriginTrials::FeatureNameEnabled(...)) { ...code... }`.
 
 For more information, see [RuntimeEnabledFeatures](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/platform/RuntimeEnabledFeatures.in) and [OriginTrialContext](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/core/origin_trials/OriginTrialContext.h).
+
+*** note
+**FIXME:** Currently, `[OriginTrialEnabled]` can only be applied to interfaces, attributes, and constants. Methods (including those generated by `iterable`, `setlike`, `maplike`, `serializer` and `stringifier`) are not supported. See [Bug 621641](https://crbug.com/621641).
+***
 
 ### [PostMessage] _(m)_
 
@@ -1240,6 +1261,12 @@ foo(long x);
 ```
 
 For more information, see [RuntimeEnabledFeatures](https://code.google.com/p/chromium/codesearch#chromium/src/third_party/WebKit/Source/platform/RuntimeEnabledFeatures.in).
+
+### [SaveSameObject] _(a)_
+
+Summary: Caches the resulting object and always returns the same object.
+
+When specified, caches the resulting object and returns it in later calls so that the attribute always returns the same object. Must be accompanied with `[SameObject]`.
 
 ### [SetWrapperReferenceFrom=xxx] _(i)_
 

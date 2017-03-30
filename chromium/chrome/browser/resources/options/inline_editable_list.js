@@ -327,7 +327,7 @@ cr.define('options', function() {
       var textEl = null;
       if (!this.isPlaceholder) {
         textEl = this.ownerDocument.createElement('div');
-        textEl.className = 'static-text';
+        textEl.className = 'static-text overruleable';
         textEl.textContent = text;
         textEl.setAttribute('displaymode', 'static');
         container.appendChild(textEl);
@@ -480,8 +480,8 @@ cr.define('options', function() {
 
       var endEdit = false;
       var handledKey = true;
-      switch (e.keyIdentifier) {
-        case 'U+001B':  // Esc
+      switch (e.key) {
+        case 'Escape':
           this.editCancelled_ = true;
           endEdit = true;
           break;

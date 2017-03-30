@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include "ash/shell_window_ids.h"
+#include "ash/common/shell_window_ids.h"
 #include "ash/wm/screen_dimmer.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -57,6 +57,7 @@
 #include "chrome/browser/ui/webui/chromeos/login/user_board_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_image_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/wrong_hwid_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/network_ui.h"
 #include "chrome/browser/ui/webui/options/chromeos/user_image_source.h"
 #include "chrome/browser/ui/webui/test_files_request_filter.h"
 #include "chrome/browser/ui/webui/theme_source.h"
@@ -110,10 +111,6 @@ const char kEnrollmentHTMLPath[] = "enrollment.html";
 const char kEnrollmentCSSPath[] = "enrollment.css";
 const char kEnrollmentJSPath[] = "enrollment.js";
 
-// Shared parameter with JS that enables or disables the PIN screen. This needs
-// to stay synchronized with the JS definition.
-const char kShowPinKey[] = "showPin";
-
 // Creates a WebUIDataSource for chrome://oobe
 content::WebUIDataSource* CreateOobeUIDataSource(
     const base::DictionaryValue& localized_strings,
@@ -139,9 +136,6 @@ content::WebUIDataSource* CreateOobeUIDataSource(
                             IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
     source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
                             IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
-
-    // TODO(jdufault): Dynamically show pin when it is enabled.
-    source->AddBoolean(kShowPinKey, false);
   } else {
     source->SetDefaultResource(IDR_LOGIN_HTML);
     source->AddResourcePath(kLoginJSPath, IDR_LOGIN_JS);
@@ -151,9 +145,9 @@ content::WebUIDataSource* CreateOobeUIDataSource(
                             IDR_CUSTOM_ELEMENTS_LOGIN_JS);
   }
   source->AddResourcePath(kKeyboardUtilsJSPath, IDR_KEYBOARD_UTILS_JS);
-  source->OverrideContentSecurityPolicyFrameSrc(
+  source->OverrideContentSecurityPolicyChildSrc(
       base::StringPrintf(
-          "frame-src chrome://terms/ %s/;",
+          "child-src chrome://terms/ %s/;",
           extensions::kGaiaAuthExtensionOrigin));
   source->OverrideContentSecurityPolicyObjectSrc("object-src *;");
   source->AddResourcePath("gaia_auth_host.js",
@@ -193,6 +187,11 @@ std::string GetDisplayType(const GURL& url) {
     return OobeUI::kLoginDisplay;
   }
   return path;
+}
+
+bool UseMDOobe() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kEnableMdOobe);
 }
 
 }  // namespace
@@ -500,6 +499,8 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
 
   bool new_kiosk_ui = KioskAppMenuHandler::EnableNewKioskUI();
   localized_strings->SetString("newKioskUI", new_kiosk_ui ? "on" : "off");
+
+  localized_strings->SetString("newOobeUI", UseMDOobe() ? "on" : "off");
 }
 
 void OobeUI::AddScreenHandler(BaseScreenHandler* handler) {

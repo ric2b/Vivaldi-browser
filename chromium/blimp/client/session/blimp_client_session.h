@@ -11,8 +11,10 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread.h"
+#include "blimp/client/feature/compositor/blob_image_serialization_processor.h"
 #include "blimp/client/session/assignment_source.h"
 #include "blimp/common/proto/blimp_message.pb.h"
+#include "blimp/net/blimp_connection_statistics.h"
 #include "blimp/net/blimp_message_processor.h"
 
 namespace net {
@@ -23,8 +25,10 @@ namespace blimp {
 
 class BlimpMessageProcessor;
 class BlimpMessageThreadPipe;
+class BlobChannelReceiver;
 class BrowserConnectionHandler;
 class ClientConnectionManager;
+class HeliumBlobReceiverDelegate;
 class ThreadPipeManager;
 
 namespace client {
@@ -53,7 +57,9 @@ class NetworkEventObserver {
 // This session glues together the feature proxy components and the network
 // layer.  The network components must be interacted with on the IO thread.  The
 // feature proxies must be interacted with on the UI thread.
-class BlimpClientSession : public NetworkEventObserver {
+class BlimpClientSession
+    : public NetworkEventObserver,
+      public BlobImageSerializationProcessor::ErrorDelegate {
  public:
   explicit BlimpClientSession(const GURL& assigner_endpoint);
 
@@ -69,6 +75,8 @@ class BlimpClientSession : public NetworkEventObserver {
   ImeFeature* GetImeFeature() const;
   RenderWidgetFeature* GetRenderWidgetFeature() const;
   SettingsFeature* GetSettingsFeature() const;
+
+  BlimpConnectionStatistics* GetBlimpConnectionStatistics() const;
 
   // The AssignmentCallback for when an assignment is ready. This will trigger
   // a connection to the engine.
@@ -90,7 +98,20 @@ class BlimpClientSession : public NetworkEventObserver {
   void OnConnected() override;
   void OnDisconnected(int result) override;
 
+  // BlobImageSerializationProcessor::ErrorDelegate implementation.
+  void OnImageDecodeError() override;
+
   base::Thread io_thread_;
+
+  // Receives blob BlimpMessages and relays them to BlobChannelReceiver.
+  // Owned by BlobChannelReceiver, therefore stored as a raw pointer here.
+  HeliumBlobReceiverDelegate* blob_delegate_ = nullptr;
+
+  // Retrieves and decodes image data from |blob_receiver_|. Must outlive
+  // |blob_receiver_|.
+  BlobImageSerializationProcessor blob_image_processor_;
+
+  std::unique_ptr<BlobChannelReceiver> blob_receiver_;
   std::unique_ptr<TabControlFeature> tab_control_feature_;
   std::unique_ptr<NavigationFeature> navigation_feature_;
   std::unique_ptr<ImeFeature> ime_feature_;
@@ -100,6 +121,10 @@ class BlimpClientSession : public NetworkEventObserver {
   // The AssignmentSource is used when the user of BlimpClientSession calls
   // Connect() to get a valid assignment and later connect to the engine.
   std::unique_ptr<AssignmentSource> assignment_source_;
+
+  // Collects details of network, such as number of commits and bytes
+  // transferred over network. Ownership is maintained on the IO thread.
+  BlimpConnectionStatistics* blimp_connection_statistics_;
 
   // Container struct for network components.
   // Must be deleted on the IO thread.

@@ -31,11 +31,13 @@
 #ifndef GCTaskRunner_h
 #define GCTaskRunner_h
 
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/heap/ThreadState.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -48,7 +50,7 @@ public:
         // GCTask has an empty run() method. Its only purpose is to guarantee
         // that MessageLoop will have a task to process which will result
         // in GCTaskRunner::didProcessTask being executed.
-        m_taskRunner->postTask(BLINK_FROM_HERE, threadSafeBind(&runGCTask));
+        m_taskRunner->postTask(BLINK_FROM_HERE, crossThreadBind(&runGCTask));
     }
 
 private:
@@ -100,11 +102,11 @@ class GCTaskRunner final {
     USING_FAST_MALLOC(GCTaskRunner);
 public:
     explicit GCTaskRunner(WebThread* thread)
-        : m_gcTaskObserver(adoptPtr(new GCTaskObserver))
+        : m_gcTaskObserver(wrapUnique(new GCTaskObserver))
         , m_thread(thread)
     {
         m_thread->addTaskObserver(m_gcTaskObserver.get());
-        ThreadState::current()->addInterruptor(adoptPtr(new MessageLoopInterruptor(thread->getWebTaskRunner())));
+        ThreadState::current()->addInterruptor(wrapUnique(new MessageLoopInterruptor(thread->getWebTaskRunner())));
     }
 
     ~GCTaskRunner()
@@ -113,7 +115,7 @@ public:
     }
 
 private:
-    OwnPtr<GCTaskObserver> m_gcTaskObserver;
+    std::unique_ptr<GCTaskObserver> m_gcTaskObserver;
     WebThread* m_thread;
 };
 

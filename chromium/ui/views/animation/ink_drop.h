@@ -19,7 +19,6 @@
 namespace ui {
 class Layer;
 }
-
 namespace views {
 
 // Pure virtual base class that manages the lifetime and state of an ink drop
@@ -30,10 +29,6 @@ class VIEWS_EXPORT InkDrop {
 
   // Gets the target state of the ink drop.
   virtual InkDropState GetTargetInkDropState() const = 0;
-
-  // Returns true when the ripple is visible, including when animating to
-  // HIDDEN.
-  virtual bool IsVisible() const = 0;
 
   // Animates from the current InkDropState to |ink_drop_state|.
   virtual void AnimateToState(InkDropState ink_drop_state) = 0;
@@ -46,6 +41,9 @@ class VIEWS_EXPORT InkDrop {
 
   // Enables or disables the hover state.
   virtual void SetHovered(bool is_hovered) = 0;
+
+  // Enables or disables the focus state.
+  virtual void SetFocused(bool is_focused) = 0;
 
  protected:
   InkDrop() {}

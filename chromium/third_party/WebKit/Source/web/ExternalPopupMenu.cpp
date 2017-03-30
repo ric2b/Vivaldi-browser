@@ -50,6 +50,7 @@
 #include "public/web/WebPopupMenuInfo.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -111,7 +112,7 @@ void ExternalPopupMenu::show()
 #if OS(MACOSX)
     const WebInputEvent* currentEvent = WebViewImpl::currentInputEvent();
     if (currentEvent && currentEvent->type == WebInputEvent::MouseDown) {
-        m_syntheticEvent = adoptPtr(new WebMouseEvent);
+        m_syntheticEvent = wrapUnique(new WebMouseEvent);
         *m_syntheticEvent = *static_cast<const WebMouseEvent*>(currentEvent);
         m_syntheticEvent->type = WebInputEvent::MouseUp;
         m_dispatchEventTimer.startOneShot(0, BLINK_FROM_HERE);
@@ -126,7 +127,7 @@ void ExternalPopupMenu::show()
 void ExternalPopupMenu::dispatchEvent(Timer<ExternalPopupMenu>*)
 {
     m_webView.handleInputEvent(*m_syntheticEvent);
-    m_syntheticEvent.clear();
+    m_syntheticEvent.reset();
 }
 
 void ExternalPopupMenu::hide()
@@ -147,7 +148,7 @@ void ExternalPopupMenu::updateFromElement(UpdateReason reason)
         if (m_needsUpdate)
             return;
         m_needsUpdate = true;
-        m_ownerElement->document().postTask(BLINK_FROM_HERE, createSameThreadTask(&ExternalPopupMenu::update, this));
+        m_ownerElement->document().postTask(BLINK_FROM_HERE, createSameThreadTask(&ExternalPopupMenu::update, wrapPersistent(this)));
         break;
 
     case ByStyleChange:

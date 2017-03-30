@@ -25,7 +25,7 @@
 #include "core/dom/StaticNodeList.h"
 #include "core/events/EventDispatchMediator.h"
 #include "core/events/EventTarget.h"
-#include "core/frame/OriginsUsingFeatures.h"
+#include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/UseCounter.h"
 #include "core/svg/SVGElement.h"
 #include "core/timing/DOMWindowPerformance.h"
@@ -34,9 +34,12 @@
 
 namespace blink {
 
-static bool defaultScopedFromEventType(const AtomicString& eventType)
+static bool isEventTypeScopedInV0(const AtomicString& eventType)
 {
-    return (eventType == EventTypeNames::abort
+    // WebKit never allowed selectstart event to cross the the shadow DOM boundary.
+    // Changing this breaks existing sites.
+    // See https://bugs.webkit.org/show_bug.cgi?id=52195 for details.
+    return eventType == EventTypeNames::abort
         || eventType == EventTypeNames::change
         || eventType == EventTypeNames::error
         || eventType == EventTypeNames::load
@@ -45,46 +48,31 @@ static bool defaultScopedFromEventType(const AtomicString& eventType)
         || eventType == EventTypeNames::scroll
         || eventType == EventTypeNames::select
         || eventType == EventTypeNames::selectstart
-        || eventType == EventTypeNames::slotchange);
+        || eventType == EventTypeNames::slotchange;
 }
 
 Event::Event()
-    : Event("", false, false, false)
+    : Event("", false, false)
 {
     m_wasInitialized = false;
 }
 
-Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg)
-    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), false, monotonicallyIncreasingTime())
-{
-}
-
-Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, EventTarget* relatedTarget)
-    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), relatedTarget ? true : false, monotonicallyIncreasingTime())
-{
-}
-
 Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, double platformTimeStamp)
-    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), false, platformTimeStamp)
+    : Event(eventType, canBubbleArg, cancelableArg, ComposedMode::Scoped, platformTimeStamp)
 {
 }
 
-Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, EventTarget* relatedTarget, double platformTimeStamp)
-    : Event(eventType, canBubbleArg, cancelableArg, defaultScopedFromEventType(eventType), relatedTarget ? true : false, platformTimeStamp)
+Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, ComposedMode composedMode)
+    : Event(eventType, canBubbleArg, cancelableArg, composedMode, monotonicallyIncreasingTime())
 {
 }
 
-Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, bool scoped)
-    : Event(eventType, canBubbleArg, cancelableArg, scoped, false, monotonicallyIncreasingTime())
-{
-}
-
-Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, bool scoped, bool relatedTargetScoped, double platformTimeStamp)
+Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableArg, ComposedMode composedMode, double platformTimeStamp)
     : m_type(eventType)
     , m_canBubble(canBubbleArg)
     , m_cancelable(cancelableArg)
-    , m_scoped(scoped)
-    , m_relatedTargetScoped(relatedTargetScoped)
+    , m_composed(composedMode == ComposedMode::Composed)
+    , m_isEventTypeScopedInV0(isEventTypeScopedInV0(eventType))
     , m_propagationStopped(false)
     , m_immediatePropagationStopped(false)
     , m_defaultPrevented(false)
@@ -101,12 +89,17 @@ Event::Event(const AtomicString& eventType, bool canBubbleArg, bool cancelableAr
 }
 
 Event::Event(const AtomicString& eventType, const EventInit& initializer)
-    : Event(eventType, initializer.bubbles(), initializer.cancelable(), initializer.scoped(), initializer.relatedTargetScoped(), monotonicallyIncreasingTime())
+    : Event(eventType, initializer.bubbles(), initializer.cancelable(), initializer.composed() ? ComposedMode::Composed : ComposedMode::Scoped, monotonicallyIncreasingTime())
 {
 }
 
 Event::~Event()
 {
+}
+
+bool Event::isScopedInV0() const
+{
+    return isTrusted() && m_isEventTypeScopedInV0;
 }
 
 void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool cancelableArg)
@@ -128,8 +121,6 @@ void Event::initEvent(const AtomicString& eventTypeArg, bool canBubbleArg, bool 
     m_type = eventTypeArg;
     m_canBubble = canBubbleArg;
     m_cancelable = cancelableArg;
-
-    m_relatedTargetScoped = relatedTarget ? true : false;
 }
 
 bool Event::legacyReturnValue(ExecutionContext* executionContext) const
@@ -281,7 +272,7 @@ HeapVector<Member<EventTarget>> Event::path(ScriptState* scriptState) const
     return pathInternal(scriptState, NonEmptyAfterDispatch);
 }
 
-HeapVector<Member<EventTarget>> Event::deepPath(ScriptState* scriptState) const
+HeapVector<Member<EventTarget>> Event::composedPath(ScriptState* scriptState) const
 {
     return pathInternal(scriptState, EmptyAfterDispatch);
 }
@@ -289,7 +280,7 @@ HeapVector<Member<EventTarget>> Event::deepPath(ScriptState* scriptState) const
 HeapVector<Member<EventTarget>> Event::pathInternal(ScriptState* scriptState, EventPathMode mode) const
 {
     if (m_target)
-        OriginsUsingFeatures::countOriginOrIsolatedWorldHumanReadableName(scriptState, *m_target, OriginsUsingFeatures::Feature::EventPath);
+        HostsUsingFeatures::countHostOrIsolatedWorldHumanReadableName(scriptState, *m_target, HostsUsingFeatures::Feature::EventPath);
 
     if (!m_currentTarget) {
         ASSERT(m_eventPhase == Event::NONE);

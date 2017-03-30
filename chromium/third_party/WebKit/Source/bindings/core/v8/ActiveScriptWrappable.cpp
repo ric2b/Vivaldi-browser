@@ -28,11 +28,13 @@ void ActiveScriptWrappable::traceActiveScriptWrappables(v8::Isolate* isolate, Sc
     }
 
     for (auto activeWrappable : *activeScriptWrappables) {
-        if (!activeWrappable->hasPendingActivity())
+        if (!activeWrappable->hasPendingActivity()) {
             continue;
+        }
 
-        ScriptWrappable* wrappable = activeWrappable->toScriptWrappable();
-        wrappable->wrapperTypeInfo()->traceWrappers(visitor, wrappable);
+        auto scriptWrappable = activeWrappable->toScriptWrappable();
+        auto wrapperTypeInfo = const_cast<WrapperTypeInfo*>(scriptWrappable->wrapperTypeInfo());
+        visitor->RegisterV8Reference(std::make_pair(wrapperTypeInfo, scriptWrappable));
     }
 }
 

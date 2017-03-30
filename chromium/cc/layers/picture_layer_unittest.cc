@@ -8,12 +8,15 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "cc/animation/animation_host.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/empty_content_layer_client.h"
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/playback/display_item_list_settings.h"
 #include "cc/proto/layer.pb.h"
+#include "cc/test/fake_client_picture_cache.h"
+#include "cc/test/fake_engine_picture_cache.h"
 #include "cc/test/fake_image_serialization_processor.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_output_surface.h"
@@ -26,6 +29,7 @@
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/single_thread_proxy.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -60,30 +64,53 @@ class TestSerializationPictureLayer : public PictureLayer {
     nearest_neighbor_ = nearest_neighbor;
   }
 
-  void ValidateSerialization() {
+  void ValidateSerialization(
+      ImageSerializationProcessor* image_serialization_processor,
+      LayerTreeHost* host) {
+    std::vector<uint32_t> engine_picture_ids = GetPictureIds();
     proto::LayerProperties proto;
     LayerSpecificPropertiesToProto(&proto);
 
-    FakeLayerTreeHostClient host_client(FakeLayerTreeHostClient::DIRECT_3D);
-    TestTaskGraphRunner task_graph_runner;
-    LayerTreeSettings settings;
-    std::unique_ptr<FakeImageSerializationProcessor>
-        fake_image_serialization_processor =
-            base::WrapUnique(new FakeImageSerializationProcessor);
-    std::unique_ptr<FakeLayerTreeHost> host =
-        FakeLayerTreeHost::Create(&host_client, &task_graph_runner, settings,
-                                  CompositorMode::SINGLE_THREADED,
-                                  fake_image_serialization_processor.get());
+    FakeEnginePictureCache* engine_picture_cache =
+        static_cast<FakeEnginePictureCache*>(host->engine_picture_cache());
+    EXPECT_THAT(engine_picture_ids,
+                testing::UnorderedElementsAreArray(
+                    engine_picture_cache->GetAllUsedPictureIds()));
+
     scoped_refptr<TestSerializationPictureLayer> layer =
         TestSerializationPictureLayer::Create(recording_source_viewport_);
     host->SetRootLayer(layer);
+
     layer->FromLayerSpecificPropertiesProto(proto);
+
+    FakeClientPictureCache* client_picture_cache =
+        static_cast<FakeClientPictureCache*>(host->client_picture_cache());
+    EXPECT_THAT(engine_picture_ids,
+                testing::UnorderedElementsAreArray(
+                    client_picture_cache->GetAllUsedPictureIds()));
 
     // Validate that the PictureLayer specific fields are properly set.
     EXPECT_TRUE(recording_source()->EqualsTo(*layer->recording_source()));
     EXPECT_EQ(update_source_frame_number_, layer->update_source_frame_number_);
     EXPECT_EQ(is_mask_, layer->is_mask_);
     EXPECT_EQ(nearest_neighbor_, layer->nearest_neighbor_);
+  }
+
+  std::vector<uint32_t> GetPictureIds() {
+    std::vector<uint32_t> ids;
+    const DisplayItemList* display_list =
+        recording_source()->GetDisplayItemList();
+    if (!display_list)
+      return ids;
+
+    for (auto it = display_list->begin(); it != display_list->end(); ++it) {
+      sk_sp<const SkPicture> picture = it->GetPicture();
+      if (!picture)
+        continue;
+
+      ids.push_back(picture->uniqueID());
+    }
+    return ids;
   }
 
  private:
@@ -112,6 +139,7 @@ TEST(PictureLayerTest, TestSetAllPropsSerializationDeserialization) {
       FakeLayerTreeHost::Create(&host_client, &task_graph_runner, settings,
                                 CompositorMode::SINGLE_THREADED,
                                 fake_image_serialization_processor.get());
+  host->InitializePictureCacheForTesting();
 
   gfx::Size recording_source_viewport(256, 256);
   scoped_refptr<TestSerializationPictureLayer> layer =
@@ -130,7 +158,8 @@ TEST(PictureLayerTest, TestSetAllPropsSerializationDeserialization) {
       gfx::Rect(recording_source_viewport));
   layer->recording_source()->SetGenerateDiscardableImagesMetadata(true);
   layer->recording_source()->Rerecord();
-  layer->ValidateSerialization();
+  layer->ValidateSerialization(fake_image_serialization_processor.get(),
+                               host.get());
 }
 
 TEST(PictureLayerTest, TestSerializationDeserialization) {
@@ -143,6 +172,8 @@ TEST(PictureLayerTest, TestSerializationDeserialization) {
       &host_client, &task_graph_runner, LayerTreeSettings(),
       CompositorMode::SINGLE_THREADED,
       fake_image_serialization_processor.get());
+  host->InitializePictureCacheForTesting();
+
   gfx::Size recording_source_viewport(256, 256);
   scoped_refptr<TestSerializationPictureLayer> layer =
       TestSerializationPictureLayer::Create(recording_source_viewport);
@@ -155,20 +186,28 @@ TEST(PictureLayerTest, TestSerializationDeserialization) {
       gfx::Rect(recording_source_viewport));
   layer->recording_source()->SetGenerateDiscardableImagesMetadata(true);
   layer->recording_source()->Rerecord();
-  layer->ValidateSerialization();
+  layer->ValidateSerialization(fake_image_serialization_processor.get(),
+                               host.get());
 }
 
 TEST(PictureLayerTest, TestEmptySerializationDeserialization) {
+  std::unique_ptr<FakeImageSerializationProcessor>
+      fake_image_serialization_processor =
+          base::WrapUnique(new FakeImageSerializationProcessor);
   FakeLayerTreeHostClient host_client(FakeLayerTreeHostClient::DIRECT_3D);
   TestTaskGraphRunner task_graph_runner;
-  std::unique_ptr<FakeLayerTreeHost> host =
-      FakeLayerTreeHost::Create(&host_client, &task_graph_runner);
+  std::unique_ptr<FakeLayerTreeHost> host = FakeLayerTreeHost::Create(
+      &host_client, &task_graph_runner, LayerTreeSettings(),
+      CompositorMode::SINGLE_THREADED,
+      fake_image_serialization_processor.get());
+  host->InitializePictureCacheForTesting();
 
   gfx::Size recording_source_viewport(256, 256);
   scoped_refptr<TestSerializationPictureLayer> layer =
       TestSerializationPictureLayer::Create(recording_source_viewport);
   host->SetRootLayer(layer);
-  layer->ValidateSerialization();
+  layer->ValidateSerialization(fake_image_serialization_processor.get(),
+                               host.get());
 }
 
 TEST(PictureLayerTest, NoTilesIfEmptyBounds) {
@@ -248,10 +287,10 @@ TEST(PictureLayerTest, InvalidateRasterAfterUpdate) {
   host_impl.SetVisible(true);
   host_impl.InitializeRenderer(output_surface.get());
   host_impl.CreatePendingTree();
-  host_impl.pending_tree()->SetRootLayer(
+  host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
   FakePictureLayerImpl* layer_impl = static_cast<FakePictureLayerImpl*>(
-      host_impl.pending_tree()->root_layer());
+      host_impl.pending_tree()->root_layer_for_testing());
   layer->PushPropertiesTo(layer_impl);
 
   EXPECT_EQ(invalidation_bounds,
@@ -290,10 +329,10 @@ TEST(PictureLayerTest, InvalidateRasterWithoutUpdate) {
   host_impl.SetVisible(true);
   host_impl.InitializeRenderer(output_surface.get());
   host_impl.CreatePendingTree();
-  host_impl.pending_tree()->SetRootLayer(
+  host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
   FakePictureLayerImpl* layer_impl = static_cast<FakePictureLayerImpl*>(
-      host_impl.pending_tree()->root_layer());
+      host_impl.pending_tree()->root_layer_for_testing());
   layer->PushPropertiesTo(layer_impl);
 
   EXPECT_EQ(gfx::Rect(), layer_impl->GetPendingInvalidation()->bounds());
@@ -337,11 +376,12 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   EXPECT_TRUE(host_impl.InitializeRenderer(output_surface.get()));
 
   host_impl.CreatePendingTree();
-  host_impl.pending_tree()->SetRootLayer(
+  host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
+  host_impl.pending_tree()->BuildLayerListForTesting();
 
   FakePictureLayerImpl* layer_impl = static_cast<FakePictureLayerImpl*>(
-      host_impl.pending_tree()->root_layer());
+      host_impl.pending_tree()->root_layer_for_testing());
 
   layer->PushPropertiesTo(layer_impl);
 
@@ -349,12 +389,13 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   EXPECT_EQ(2, host->source_frame_number());
 
   host_impl.ActivateSyncTree();
+  host_impl.active_tree()->SetRootLayerFromLayerListForTesting();
 
   // By updating the draw proprties on the active tree, we will set the viewport
   // rect for tile priorities to something non-empty.
   const bool can_use_lcd_text = false;
   host_impl.active_tree()->property_trees()->needs_rebuild = true;
-  host_impl.active_tree()->BuildPropertyTreesForTesting();
+  host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
   host_impl.active_tree()->UpdateDrawProperties(can_use_lcd_text);
 
   layer->SetBounds(gfx::Size(11, 11));
@@ -362,7 +403,7 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
 
   host_impl.CreatePendingTree();
   layer_impl = static_cast<FakePictureLayerImpl*>(
-      host_impl.pending_tree()->root_layer());
+      host_impl.pending_tree()->root_layer_for_testing());
 
   // We should now have invalid contents and should therefore clear the
   // recording source.
@@ -372,9 +413,11 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
 
   std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
   AppendQuadsData data;
-  host_impl.active_tree()->root_layer()->WillDraw(DRAW_MODE_SOFTWARE, nullptr);
-  host_impl.active_tree()->root_layer()->AppendQuads(render_pass.get(), &data);
-  host_impl.active_tree()->root_layer()->DidDraw(nullptr);
+  host_impl.active_tree()->root_layer_for_testing()->WillDraw(
+      DRAW_MODE_SOFTWARE, nullptr);
+  host_impl.active_tree()->root_layer_for_testing()->AppendQuads(
+      render_pass.get(), &data);
+  host_impl.active_tree()->root_layer_for_testing()->DidDraw(nullptr);
 }
 
 TEST(PictureLayerTest, SuitableForGpuRasterization) {
@@ -434,14 +477,24 @@ TEST(PictureLayerTest, NonMonotonicSourceFrameNumber) {
   params.settings = &settings;
   params.task_graph_runner = &task_graph_runner;
   params.main_task_runner = base::ThreadTaskRunnerHandle::Get();
+  params.animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<LayerTreeHost> host1 =
       LayerTreeHost::CreateSingleThreaded(&host_client1, &params);
   host1->SetVisible(true);
   host_client1.SetLayerTreeHost(host1.get());
 
-  params.client = &host_client2;
+  // TODO(sad): InitParams will be movable.
+  LayerTreeHost::InitParams params2;
+  params2.client = &host_client1;
+  params2.shared_bitmap_manager = &shared_bitmap_manager;
+  params2.settings = &settings;
+  params2.task_graph_runner = &task_graph_runner;
+  params2.main_task_runner = base::ThreadTaskRunnerHandle::Get();
+  params2.client = &host_client2;
+  params2.animation_host =
+      AnimationHost::CreateForTesting(ThreadInstance::MAIN);
   std::unique_ptr<LayerTreeHost> host2 =
-      LayerTreeHost::CreateSingleThreaded(&host_client2, &params);
+      LayerTreeHost::CreateSingleThreaded(&host_client2, &params2);
   host2->SetVisible(true);
   host_client2.SetLayerTreeHost(host2.get());
 

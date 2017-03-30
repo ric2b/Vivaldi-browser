@@ -27,27 +27,11 @@ FilteringNetworkManager::FilteringNetworkManager(
 
   // If the feature is not enabled, just return ALLOWED as it's requested.
   if (!media_permission_) {
-    initialized_ = true;
+    started_permission_check_ = true;
     set_enumeration_permission(ENUMERATION_ALLOWED);
     VLOG(3) << "media_permission is not passed, granting permission";
     return;
   }
-}
-
-void FilteringNetworkManager::Initialize() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!initialized_);
-
-  initialized_ = true;
-  pending_permission_checks_ = 2;
-
-  // Request for media permission asynchronously.
-  media_permission_->HasPermission(
-      media::MediaPermission::AUDIO_CAPTURE, requesting_origin_,
-      base::Bind(&FilteringNetworkManager::OnPermissionStatus, GetWeakPtr()));
-  media_permission_->HasPermission(
-      media::MediaPermission::VIDEO_CAPTURE, requesting_origin_,
-      base::Bind(&FilteringNetworkManager::OnPermissionStatus, GetWeakPtr()));
 }
 
 FilteringNetworkManager::~FilteringNetworkManager() {
@@ -61,9 +45,15 @@ base::WeakPtr<FilteringNetworkManager> FilteringNetworkManager::GetWeakPtr() {
   return weak_ptr_factory_.GetWeakPtr();
 }
 
+void FilteringNetworkManager::Initialize() {
+  rtc::NetworkManagerBase::Initialize();
+  if (media_permission_)
+    CheckPermission();
+}
+
 void FilteringNetworkManager::StartUpdating() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(initialized_);
+  DCHECK(started_permission_check_);
 
   if (start_updating_time_.is_null()) {
     start_updating_time_ = base::TimeTicks::Now();
@@ -99,6 +89,22 @@ bool FilteringNetworkManager::GetDefaultLocalAddress(
     int family,
     rtc::IPAddress* ipaddress) const {
   return network_manager_->GetDefaultLocalAddress(family, ipaddress);
+}
+
+void FilteringNetworkManager::CheckPermission() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(!started_permission_check_);
+
+  started_permission_check_ = true;
+  pending_permission_checks_ = 2;
+
+  // Request for media permission asynchronously.
+  media_permission_->HasPermission(
+      media::MediaPermission::AUDIO_CAPTURE, requesting_origin_,
+      base::Bind(&FilteringNetworkManager::OnPermissionStatus, GetWeakPtr()));
+  media_permission_->HasPermission(
+      media::MediaPermission::VIDEO_CAPTURE, requesting_origin_,
+      base::Bind(&FilteringNetworkManager::OnPermissionStatus, GetWeakPtr()));
 }
 
 void FilteringNetworkManager::OnPermissionStatus(bool granted) {

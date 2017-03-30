@@ -1,0 +1,42 @@
+<!-- Copyright 2016 The Chromium Authors. All rights reserved.
+  -- Use of this source code is governed by a BSD-style license that can be
+  -- found in the LICENSE file.
+-->
+
+<link rel="import" href="chrome://resources/polymer/v1_0/polymer/polymer.html">
+
+<dom-module id="files-metadata-box">
+  <style>
+    :host {
+      display: block;
+    }
+    #box {
+      overflow: auto;
+      width: 200px;
+    }
+    .category {
+      color: gray;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    .type {
+      color: white;
+    }
+    .value {
+      --webkit-margin-start: 100px;
+      color: white;
+    }
+  </style>
+  <template>
+    <div id="box">
+      <!-- TODO(oka): update appearance to match mocks. -->
+      <div class="category" i18n-content="METADATA_BOX_GENERAL_INFO"></div>
+      <div class="type" i18n-content="METADATA_BOX_FILE_SIZE"></div>
+      <div class="value">[[size]]</div>
+      <div class="type" i18n-content="METADATA_BOX_MODIFICATION_TIME"></div>
+      <div class="value">[[modificationTime]]</div>
+    </div>
+  </template>
+</dom-module>
+
+<script src="files_metadata_box.js"></script>

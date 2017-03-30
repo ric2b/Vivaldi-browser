@@ -6,17 +6,19 @@
 
 #include <string>
 
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/wm_shelf.h"
+#include "ash/common/wm_shell.h"
 #include "ash/desktop_background/user_wallpaper_delegate.h"
-#include "ash/metrics/user_metrics_recorder.h"
-#include "ash/session/session_state_delegate.h"
-#include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "build/build_config.h"
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/ash/launcher/arc_launcher_context_menu.h"
-#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_impl.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller_util.h"
 #include "chrome/browser/ui/ash/launcher/desktop_shell_launcher_context_menu.h"
 #include "chrome/browser/ui/ash/launcher/extension_launcher_context_menu.h"
 #include "chrome/common/pref_names.h"
@@ -38,34 +40,34 @@ bool CanUserModifyShelfAutoHideBehavior(const Profile* profile) {
 
 // static
 LauncherContextMenu* LauncherContextMenu::Create(
-    ChromeLauncherController* controller,
+    ChromeLauncherControllerImpl* controller,
     const ash::ShelfItem* item,
-    ash::Shelf* shelf) {
+    ash::WmShelf* wm_shelf) {
   DCHECK(controller);
-  DCHECK(shelf);
+  DCHECK(wm_shelf);
   // Create DesktopShellLauncherContextMenu if no item is selected.
   if (!item || item->id == 0)
-    return new DesktopShellLauncherContextMenu(controller, item, shelf);
+    return new DesktopShellLauncherContextMenu(controller, item, wm_shelf);
 
-// Create ArcLauncherContextMenu if the item is an Arc app.
+  // Create ArcLauncherContextMenu if the item is an Arc app.
   const std::string& app_id = controller->GetAppIDForShelfID(item->id);
-  ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(controller->profile());
-  DCHECK(arc_prefs);
-  if (arc_prefs->IsRegistered(app_id))
-    return new ArcLauncherContextMenu(controller, item, shelf);
+  ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(controller->GetProfile());
+  if (arc_prefs && arc_prefs->IsRegistered(app_id))
+    return new ArcLauncherContextMenu(controller, item, wm_shelf);
 
   // Create ExtensionLauncherContextMenu for the item.
-  return new ExtensionLauncherContextMenu(controller, item, shelf);
+  return new ExtensionLauncherContextMenu(controller, item, wm_shelf);
 }
 
-LauncherContextMenu::LauncherContextMenu(ChromeLauncherController* controller,
-                                         const ash::ShelfItem* item,
-                                         ash::Shelf* shelf)
+LauncherContextMenu::LauncherContextMenu(
+    ChromeLauncherControllerImpl* controller,
+    const ash::ShelfItem* item,
+    ash::WmShelf* wm_shelf)
     : ui::SimpleMenuModel(nullptr),
       controller_(controller),
       item_(item ? *item : ash::ShelfItem()),
-      shelf_alignment_menu_(shelf),
-      shelf_(shelf) {
+      shelf_alignment_menu_(wm_shelf),
+      wm_shelf_(wm_shelf) {
   set_delegate(this);
 }
 
@@ -83,7 +85,7 @@ base::string16 LauncherContextMenu::GetLabelForCommandId(int command_id) const {
 
 bool LauncherContextMenu::IsCommandIdChecked(int command_id) const {
   if (command_id == MENU_AUTO_HIDE) {
-    return shelf_->GetAutoHideBehavior() ==
+    return wm_shelf_->GetAutoHideBehavior() ==
            ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS;
   }
   DCHECK(command_id < MENU_ITEM_COUNT);
@@ -99,7 +101,7 @@ bool LauncherContextMenu::IsCommandIdEnabled(int command_id) const {
           ->user_wallpaper_delegate()
           ->CanOpenSetWallpaperPage();
     case MENU_AUTO_HIDE:
-      return CanUserModifyShelfAutoHideBehavior(controller_->profile());
+      return CanUserModifyShelfAutoHideBehavior(controller_->GetProfile());
     default:
       DCHECK(command_id < MENU_ITEM_COUNT);
       return true;
@@ -129,17 +131,18 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
         // TODO(simonhong): Use ShelfItemDelegate::Close().
         controller_->Close(item_.id);
       }
-      ash::Shell::GetInstance()->metrics()->RecordUserMetricsAction(
+      ash::WmShell::Get()->RecordUserMetricsAction(
           ash::UMA_CLOSE_THROUGH_CONTEXT_MENU);
       break;
     case MENU_PIN:
       controller_->TogglePinned(item_.id);
       break;
     case MENU_AUTO_HIDE:
-      shelf_->SetAutoHideBehavior(shelf_->GetAutoHideBehavior() ==
-                                          ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS
-                                      ? ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER
-                                      : ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+      wm_shelf_->SetAutoHideBehavior(
+          wm_shelf_->GetAutoHideBehavior() ==
+                  ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS
+              ? ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER
+              : ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
       break;
     case MENU_ALIGNMENT_MENU:
       break;
@@ -157,7 +160,7 @@ void LauncherContextMenu::AddPinMenu() {
   DCHECK(item_.id);
   int menu_pin_string_id;
   const std::string app_id = controller_->GetAppIDForShelfID(item_.id);
-  switch (controller_->GetPinnable(app_id)) {
+  switch (GetPinnableForAppID(app_id, controller_->GetProfile())) {
     case AppListControllerDelegate::PIN_EDITABLE:
       menu_pin_string_id = controller_->IsPinned(item_.id)
                                ? IDS_LAUNCHER_CONTEXT_MENU_UNPIN
@@ -181,17 +184,17 @@ void LauncherContextMenu::AddShelfOptionsMenu() {
   // while in fullscreen because it is confusing when the preference appears
   // not to apply.
   if (!IsFullScreenMode() &&
-      CanUserModifyShelfAutoHideBehavior(controller_->profile())) {
+      CanUserModifyShelfAutoHideBehavior(controller_->GetProfile())) {
     AddCheckItemWithStringId(MENU_AUTO_HIDE,
                              IDS_ASH_SHELF_CONTEXT_MENU_AUTO_HIDE);
   }
   if (ash::ShelfWidget::ShelfAlignmentAllowed() &&
-      !ash::Shell::GetInstance()->session_state_delegate()->IsScreenLocked()) {
+      !ash::WmShell::Get()->GetSessionStateDelegate()->IsScreenLocked()) {
     AddSubMenuWithStringId(MENU_ALIGNMENT_MENU,
                            IDS_ASH_SHELF_CONTEXT_MENU_POSITION,
                            &shelf_alignment_menu_);
   }
-  if (!controller_->IsLoggedInAsGuest())
+  if (!controller_->GetProfile()->IsGuestSession())
     AddItemWithStringId(MENU_CHANGE_WALLPAPER, IDS_AURA_SET_DESKTOP_WALLPAPER);
 }
 

@@ -113,7 +113,11 @@ void SetCreditCardInfo(CreditCard* credit_card,
 // TODO(isherman): We should do this automatically for all tests, not manually
 // on a per-test basis: http://crbug.com/57221
 // Disables or mocks out code that would otherwise reach out to system services.
+// Revert this configuration with |ReenableSystemServices|.
 void DisableSystemServices(PrefService* prefs);
+
+// Undoes the mocking set up by |DisableSystemServices|
+void ReenableSystemServices();
 
 // Sets |cards| for |table|. |cards| may contain full, unmasked server cards,
 // whereas AutofillTable::SetServerCreditCards can only contain masked cards.
@@ -129,7 +133,8 @@ void FillUploadField(AutofillUploadContents::Field* field,
                      const char* control_type,
                      const char* label,
                      const char* autocomplete,
-                     unsigned autofill_type);
+                     unsigned autofill_type,
+                     const char* css_classes);
 
 // Fills the query form |field| with the information passed by parameter. If the
 // value of a const char* parameter is NULL, the corresponding attribute won't

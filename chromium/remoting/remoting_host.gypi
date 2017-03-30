@@ -68,6 +68,10 @@
                     '../build/linux/system.gyp:xrandr',
                     '../build/linux/system.gyp:xtst',
                   ],
+                }, {
+                'sources!' : [
+                  'host/linux/unicode_to_keysym.cc',
+                ],
                 }],
                 ['chromeos==0 and use_ozone==0', {
                   'dependencies': [
@@ -105,7 +109,6 @@
                 ['use_ash==1', {
                   'dependencies': [
                     '../ash/ash.gyp:ash',
-                    '../ash/wm/common/ash_wm_common.gyp:ash_wm_common',
                   ],
                 }],
                 ['use_ozone==0', {
@@ -317,19 +320,6 @@
             ],
           }],
         },  # end of target 'remoting_native_messaging_manifests'
-        {
-          # GN target: //remoting/host:remoting_start_host
-          'target_name': 'remoting_start_host',
-          'type': 'executable',
-          'dependencies': [
-            'remoting_host_setup_base',
-          ],
-          'sources': [
-            'host/setup/host_starter.cc',
-            'host/setup/host_starter.h',
-            'host/setup/start_host.cc',
-          ],
-        },  # end of target 'remoting_start_host'
         {
           # GN: //remoting/host:remoting_infoplist_strings
           'target_name': 'remoting_infoplist_strings',
@@ -623,6 +613,24 @@
     }], # end of OS!="win" and enable_me2me_host==1
 
     ['OS!="win" and enable_remoting_host==1', {
+      'targets': [
+        {
+          # GN target: //remoting/host:remoting_start_host
+          'target_name': 'remoting_start_host',
+          'type': 'executable',
+          'variables': { 'enable_wexit_time_destructors': 1, },
+          'dependencies': [
+            'remoting_host_setup_base',
+          ],
+          'sources': [
+            'host/setup/host_starter.cc',
+            'host/setup/host_starter.h',
+            'host/setup/start_host_entry_point.cc',
+            'host/setup/start_host_main.cc',
+            'host/setup/start_host_main.h',
+          ],
+        },  # end of target 'remoting_start_host'
+      ],
       'conditions': [
         ['chromeos==0', {
           'targets': [

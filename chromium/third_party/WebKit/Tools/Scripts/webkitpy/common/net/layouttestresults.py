@@ -31,56 +31,49 @@ import logging
 
 from webkitpy.common.memoized import memoized
 from webkitpy.layout_tests.layout_package import json_results_generator
-from webkitpy.layout_tests.models import test_expectations
-from webkitpy.layout_tests.models.test_expectations import TestExpectations
 
 _log = logging.getLogger(__name__)
 
 
-# These are helper functions for navigating the results json structure.
-def for_each_test(tree, handler, prefix=''):
-    for key in tree:
-        new_prefix = (prefix + '/' + key) if prefix else key
-        if 'actual' not in tree[key]:
-            for_each_test(tree[key], handler, new_prefix)
-        else:
-            handler(new_prefix, tree[key])
-
-
-def result_for_test(tree, test):
-    parts = test.split('/')
-    for part in parts:
-        if part not in tree:
-            return None
-        tree = tree[part]
-    return tree
-
-
-class JSONTestResult(object):
+class LayoutTestResult(object):
 
     def __init__(self, test_name, result_dict):
         self._test_name = test_name
         self._result_dict = result_dict
 
+    def result_dict(self):
+        return self._result_dict
+
+    def test_name(self):
+        return self._test_name
+
     def did_pass_or_run_as_expected(self):
         return self.did_pass() or self.did_run_as_expected()
 
     def did_pass(self):
-        return test_expectations.PASS in self._actual_as_tokens()
+        return 'PASS' in self.actual_results()
 
     def did_run_as_expected(self):
         return 'is_unexpected' not in self._result_dict
 
-    def _tokenize(self, results_string):
-        tokens = map(TestExpectations.expectation_from_string, results_string.split(' '))
-        if None in tokens:
-            _log.warning("Unrecognized result in %s" % results_string)
-        return set(tokens)
+    def is_missing_image(self):
+        return 'is_missing_image' in self._result_dict
 
-    @memoized
-    def _actual_as_tokens(self):
-        actual_results = self._result_dict['actual']
-        return self._tokenize(actual_results)
+    def is_missing_text(self):
+        return 'is_missing_text' in self._result_dict
+
+    def is_missing_audio(self):
+        return 'is_missing_audio' in self._result_dict
+
+    def actual_results(self):
+        return self._result_dict['actual']
+
+    def expected_results(self):
+        return self._result_dict['expected']
+
+    def has_mismatch_result(self):
+        last_retry_result = self.actual_results().split()[-1]
+        return last_retry_result in ('TEXT', 'IMAGE', 'IMAGE+TEXT', 'AUDIO')
 
 
 # FIXME: This should be unified with ResultsSummary or other NRWT layout tests code
@@ -89,7 +82,17 @@ class JSONTestResult(object):
 class LayoutTestResults(object):
 
     @classmethod
-    def results_from_string(cls, string):
+    def results_from_string(cls, string, chromium_revision=None):
+        """Creates a LayoutTestResults object from a test result JSON string.
+
+        Args:
+            string: JSON string containg layout test result.
+            chromium_revision: If given, it will override the chromium_revision
+                field in json, to indicate the last revision that has completed
+                uploading onto the storage server. chromium_revision can be a
+                git hash or position number.
+        """
+
         if not string:
             return None
 
@@ -97,10 +100,12 @@ class LayoutTestResults(object):
         json_dict = json.loads(content_string)
         if not json_dict:
             return None
-        return cls(json_dict)
 
-    def __init__(self, parsed_json):
+        return cls(json_dict, chromium_revision)
+
+    def __init__(self, parsed_json, chromium_revision=None):
         self._results = parsed_json
+        self._chromium_revision = chromium_revision
 
     def run_was_interrupted(self):
         return self._results["interrupted"]
@@ -108,11 +113,49 @@ class LayoutTestResults(object):
     def builder_name(self):
         return self._results["builder_name"]
 
-    def chromium_revision(self):
-        return int(self._results["chromium_revision"])
+    @memoized
+    def chromium_revision(self, scm=None):
+        """Returns the revision of the results in commit position number format."""
+        revision = self._chromium_revision or self._results["chromium_revision"]
+        if not revision.isdigit():
+            assert scm, "scm is required if the original revision is a git hash."
+            revision = scm.commit_position_from_git_commit(revision)
+        return int(revision)
 
-    def actual_results(self, test):
-        result = result_for_test(self._results["tests"], test)
-        if result:
-            return result["actual"]
-        return ""
+    def result_for_test(self, test):
+        parts = test.split("/")
+        tree = self._test_result_tree()
+        for part in parts:
+            if part not in tree:
+                return None
+            tree = tree[part]
+        return LayoutTestResult(test, tree)
+
+    def for_each_test(self, handler):
+        LayoutTestResults._for_each_test(self._test_result_tree(), handler, '')
+
+    @staticmethod
+    def _for_each_test(tree, handler, prefix=''):
+        for key in tree:
+            new_prefix = (prefix + '/' + key) if prefix else key
+            if 'actual' not in tree[key]:
+                LayoutTestResults._for_each_test(tree[key], handler, new_prefix)
+            else:
+                handler(LayoutTestResult(new_prefix, tree[key]))
+
+    def _test_result_tree(self):
+        return self._results['tests']
+
+    def _filter_tests(self, result_filter):
+        """Returns LayoutTestResult objects for tests which pass the given filter."""
+        results = []
+
+        def add_if_passes(result):
+            if result_filter(result):
+                results.append(result)
+
+        LayoutTestResults._for_each_test(self._test_result_tree(), add_if_passes)
+        return sorted(results, key=lambda r: r.test_name())
+
+    def unexpected_mismatch_results(self):
+        return self._filter_tests(lambda r: r.has_mismatch_result() and not r.did_run_as_expected())

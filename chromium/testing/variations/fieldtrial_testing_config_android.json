@@ -51,10 +51,7 @@
     ],
     "ChromotingQUIC": [
         {
-            "group_name": "Enabled",
-            "params": {
-                "delay_tcp_race": "true"
-            }
+            "group_name": "Enabled"
         }
     ],
     "ContextualSearch": [
@@ -68,17 +65,6 @@
     "CreditCardScan": [
         {
             "group_name": "Enabled"
-        }
-    ],
-    "CustomTabs": [
-        {
-            "group_name": "Enabled"
-        },
-        {
-            "group_name": "DisablePrerender"
-        },
-        {
-            "group_name": "Disabled"
         }
     ],
     "DataCompressionProxyDevRollout": [
@@ -106,6 +92,14 @@
     "DataReductionProxyFREPromo": [
         {
             "group_name": "Enabled"
+        }
+    ],
+    "DataReductionProxyServerExperiments": [
+        {
+            "group_name": "TamperDetection_enabled",
+            "params": {
+                "exp": "ctd"
+            }
         }
     ],
     "DataReductionProxyUseQuic": [
@@ -189,10 +183,7 @@
     ],
     "NTPPopularSites": [
         {
-            "group_name": "Enabled5",
-            "params": {
-                "version": "5"
-            }
+            "group_name": "Enabled"
         }
     ],
     "NetworkQualityEstimator": [
@@ -225,6 +216,30 @@
                 "NetworkTimeServiceQuerying"
             ],
             "group_name": "NetworkTimeQueriesEnabled"
+        }
+    ],
+    "NewAudioRenderingMixingStrategy": [
+        {
+            "enable_features": [
+                "NewAudioRenderingMixingStrategy"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "NonValidatingReloadOnRefreshContent": [
+        {
+            "enable_features": [
+                "NonValidatingReloadOnRefreshContent"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
+    "NonValidatingReloadOnRefreshContentV2": [
+        {
+            "enable_features": [
+                "NonValidatingReloadOnRefreshContentV2"
+            ],
+            "group_name": "Enabled"
         }
     ],
     "OfferUploadCreditCards": [
@@ -286,6 +301,17 @@
     ],
     "QUIC": [
         {
+            "group_name": "Enabled",
+            "params": {
+                "delay_tcp_race": "true"
+            }
+        }
+    ],
+    "ReadItLater": [
+        {
+            "enable_features": [
+                "ReadItLaterInMenu"
+            ],
             "group_name": "Enabled"
         }
     ],
@@ -332,14 +358,6 @@
         },
         {
             "group_name": "DontShowAndDontSend"
-        }
-    ],
-    "ResourcePriorities": [
-        {
-            "group_name": "Launch50pct_11011_1_1_10"
-        },
-        {
-            "group_name": "Control50pct"
         }
     ],
     "SafeBrowsingAndroid": [
@@ -485,15 +503,10 @@
             }
         }
     ],
-    "UsePredictorDNSQueue": [
-        {
-            "disable_features": [
-                "UsePredictorDNSQueue"
-            ],
-            "group_name": "Disabled"
-        }
-    ],
     "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "default"
+        },
         {
             "group_name": "none"
         },
@@ -510,11 +523,6 @@
             "params": {
                 "fetch_period_min": "30"
             }
-        }
-    ],
-    "WebFontsIntervention": [
-        {
-            "group_name": "Enabled"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

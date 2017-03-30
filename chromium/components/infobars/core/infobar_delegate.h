@@ -73,7 +73,7 @@ class InfoBarDelegate {
     ANDROID_DOWNLOAD_MANAGER_OVERWRITE_INFOBAR_DELEGATE = 3,
     CHROME_DOWNLOAD_MANAGER_OVERWRITE_INFOBAR_DELEGATE = 4,
     DOWNLOAD_REQUEST_INFOBAR_DELEGATE_ANDROID = 5,
-    FULLSCREEN_INFOBAR_DELEGATE = 6,
+    // Removed: FULLSCREEN_INFOBAR_DELEGATE = 6,
     HUNG_PLUGIN_INFOBAR_DELEGATE = 7,
     HUNG_RENDERER_INFOBAR_DELEGATE = 8,
     MEDIA_STREAM_INFOBAR_DELEGATE_ANDROID = 9,
@@ -89,7 +89,7 @@ class InfoBarDelegate {
     MIDI_PERMISSION_INFOBAR_DELEGATE_ANDROID = 19,
     PROTECTED_MEDIA_IDENTIFIER_INFOBAR_DELEGATE_ANDROID = 20,
     NACL_INFOBAR_DELEGATE = 21,
-    DATA_REDUCTION_PROXY_INFOBAR_DELEGATE_ANDROID = 22,
+    // Removed: DATA_REDUCTION_PROXY_INFOBAR_DELEGATE_ANDROID = 22,
     NOTIFICATION_PERMISSION_INFOBAR_DELEGATE = 23,
     AUTO_SIGNIN_FIRST_RUN_INFOBAR_DELEGATE = 24,
     GENERATED_PASSWORD_SAVED_INFOBAR_DELEGATE_ANDROID = 25,
@@ -129,8 +129,9 @@ class InfoBarDelegate {
     UPGRADE_INFOBAR_DELEGATE = 59,
     CHROME_WINDOW_ERROR = 60,
     CONFIRM_DANGEROUS_DOWNLOAD = 61,
-    DESKTOP_SEARCH_REDIRECTION_INFOBAR_DELEGATE = 62,
+    // Removed: DESKTOP_SEARCH_REDIRECTION_INFOBAR_DELEGATE = 62,
     UPDATE_PASSWORD_INFOBAR_DELEGATE = 63,
+    DATA_REDUCTION_PROMO_INFOBAR_DELEGATE_ANDROID = 64,
   };
 
   // Describes navigation events, used to decide whether infobars should be
@@ -192,8 +193,7 @@ class InfoBarDelegate {
   // Returns true if the InfoBar should be closed automatically after the page
   // is navigated. By default this returns true if the navigation is to a new
   // page (not including reloads).  Subclasses wishing to change this behavior
-  // can override either this function or ShouldExpireInternal(), depending on
-  // what level of control they need.
+  // can override this function.
   virtual bool ShouldExpire(const NavigationDetails& details) const;
 
   // Called when the user clicks on the close button to dismiss the infobar.

@@ -5,6 +5,9 @@
 #include "components/browsing_data/conditional_cache_deletion_helper.h"
 
 #include "base/callback.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace {
@@ -62,10 +65,15 @@ ConditionalCacheDeletionHelper::~ConditionalCacheDeletionHelper() {
 
 void ConditionalCacheDeletionHelper::IterateOverEntries(int error) {
   while (error != net::ERR_IO_PENDING) {
-    // Delete the entry obtained in the previous iteration. The iterator is
-    // already one step forward, so it won't be invalidated.
-    if (previous_entry_ && condition_.Run(previous_entry_))
+    // If the entry obtained in the previous iteration matches the condition,
+    // mark it for deletion. The iterator is already one step forward, so it
+    // won't be invalidated. Always close the previous entry so it does not
+    // leak.
+    if (previous_entry_) {
+      if (condition_.Run(previous_entry_))
         previous_entry_->Doom();
+      previous_entry_->Close();
+    }
 
     if (error == net::ERR_FAILED) {
       // The iteration finished successfuly or we can no longer iterate
@@ -73,7 +81,7 @@ void ConditionalCacheDeletionHelper::IterateOverEntries(int error) {
       // but we know that there is nothing more that we can do, so we return OK.
       base::MessageLoop::current()->task_runner()->PostTask(
           FROM_HERE, base::Bind(completion_callback_, net::OK));
-      base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+      base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
       return;
     }
 

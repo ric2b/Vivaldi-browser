@@ -74,8 +74,6 @@ public:
     };
 
     // FrameOwner overrides:
-    bool isLocal() const override { return true; }
-    bool isRemote() const override { return false; }
     void setContentFrame(Frame&) override;
     void clearContentFrame() override;
     void dispatchLoad() override;
@@ -84,6 +82,8 @@ public:
     ScrollbarMode scrollingMode() const override { return ScrollbarAuto; }
     int marginWidth() const override { return -1; }
     int marginHeight() const override { return -1; }
+    bool allowFullscreen() const override { return false; }
+    const WebVector<WebPermissionType>& delegatedPermissions() const override;
 
     DECLARE_VIRTUAL_TRACE();
 
@@ -93,7 +93,14 @@ protected:
 
     bool loadOrRedirectSubframe(const KURL&, const AtomicString& frameName, bool replaceCurrentItem);
 
+    void disposeWidgetSoon(Widget*);
+
 private:
+    // Intentionally private to prevent redundant checks when the type is
+    // already HTMLFrameOwnerElement.
+    bool isLocal() const override { return true; }
+    bool isRemote() const override { return false; }
+
     bool isKeyboardFocusable() const override;
     bool isFrameOwnerElement() const final { return true; }
 
@@ -136,7 +143,9 @@ public:
     }
 
 private:
-    CORE_EXPORT static HeapHashCountedSet<Member<Node>>& disabledSubtreeRoots();
+    using SubtreeRootSet = HeapHashCountedSet<Member<Node>>;
+
+    CORE_EXPORT static SubtreeRootSet& disabledSubtreeRoots();
 
     Member<Node> m_root;
 };

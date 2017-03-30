@@ -31,7 +31,7 @@ class SkBitmap;
 namespace base {
 class File;
 class Lock;
-class RefCountedStaticMemory;
+class RefCountedMemory;
 }
 
 namespace ui {
@@ -49,6 +49,8 @@ class UI_BASE_EXPORT ResourceBundle {
   static const int kSmallFontDelta = -1;
   static const int kMediumFontDelta = 3;
   static const int kLargeFontDelta = 8;
+
+  static constexpr const char* CUSTOM_GZIP_HEADER = "\xff\x1f\x8b";
 
   // Legacy font style mappings. TODO(tapted): Phase these out in favour of
   // client code providing their own constant with the desired font size delta.
@@ -96,9 +98,9 @@ class UI_BASE_EXPORT ResourceBundle {
     // default resource.
     virtual gfx::Image GetNativeImageNamed(int resource_id) = 0;
 
-    // Return a static memory resource or NULL to attempt retrieval of the
+    // Return a ref counted memory resource or NULL to attempt retrieval of the
     // default resource.
-    virtual base::RefCountedStaticMemory* LoadDataResourceBytes(
+    virtual base::RefCountedMemory* LoadDataResourceBytes(
         int resource_id,
         ScaleFactor scale_factor) = 0;
 
@@ -216,19 +218,19 @@ class UI_BASE_EXPORT ResourceBundle {
   gfx::Image& GetNativeImageNamed(int resource_id);
 
   // Loads the raw bytes of a scale independent data resource.
-  base::RefCountedStaticMemory* LoadDataResourceBytes(int resource_id) const;
+  base::RefCountedMemory* LoadDataResourceBytes(int resource_id) const;
 
   // Loads the raw bytes of a data resource nearest the scale factor
   // |scale_factor| into |bytes|, without doing any processing or
   // interpretation of the resource. Use ResourceHandle::SCALE_FACTOR_NONE
   // for scale independent image resources (such as wallpaper).
   // Returns NULL if we fail to read the resource.
-  base::RefCountedStaticMemory* LoadDataResourceBytesForScale(
+  base::RefCountedMemory* LoadDataResourceBytesForScale(
       int resource_id,
       ScaleFactor scale_factor) const;
 
   // Return the contents of a scale independent resource in a
-  // StringPiece given the resource id
+  // StringPiece given the resource id.
   base::StringPiece GetRawDataResource(int resource_id) const;
 
   // Return the contents of a resource in a StringPiece given the resource id
@@ -246,12 +248,14 @@ class UI_BASE_EXPORT ResourceBundle {
   // The result is always cached and exists for the lifetime of the process.
   const gfx::FontList& GetFontListWithDelta(
       int size_delta,
-      gfx::Font::FontStyle style = gfx::Font::NORMAL);
+      gfx::Font::FontStyle style = gfx::Font::NORMAL,
+      gfx::Font::Weight weight = gfx::Font::Weight::NORMAL);
 
   // Returns the primary font from the FontList given by GetFontListWithDelta().
   const gfx::Font& GetFontWithDelta(
       int size_delta,
-      gfx::Font::FontStyle style = gfx::Font::NORMAL);
+      gfx::Font::FontStyle style = gfx::Font::NORMAL,
+      gfx::Font::Weight weight = gfx::Font::Weight::NORMAL);
 
   // Deprecated. Returns fonts using hard-coded size deltas implied by |style|.
   const gfx::FontList& GetFontList(FontStyle style);
@@ -313,6 +317,8 @@ class UI_BASE_EXPORT ResourceBundle {
 
   class ResourceBundleImageSource;
   friend class ResourceBundleImageSource;
+
+  struct FontKey;
 
   typedef base::hash_map<int, base::string16> IdToStringMap;
 
@@ -382,6 +388,15 @@ class UI_BASE_EXPORT ResourceBundle {
                   SkBitmap* bitmap,
                   bool* fell_back_to_1x) const;
 
+  // Loads the raw bytes of a data resource nearest the scale factor
+  // |scale_factor| into |bytes|, without doing any processing or
+  // interpretation of the resource. Use ResourceHandle::SCALE_FACTOR_NONE
+  // for scale independent image resources (such as wallpaper).
+  // Returns NULL if we fail to read the resource.
+  base::StringPiece GetRawDataResourceForScaleImpl(
+      int resource_id,
+      ScaleFactor scale_factor) const;
+
   // Returns true if missing scaled resources should be visually indicated when
   // drawing the fallback (e.g., by tinting the image).
   static bool ShouldHighlightMissingScaledResources();
@@ -433,7 +448,7 @@ class UI_BASE_EXPORT ResourceBundle {
   // platform base font size, plus style, to the FontList. Cached to avoid
   // repeated GDI creation/destruction and font derivation.
   // Must be accessed only while holding |images_and_fonts_lock_|.
-  std::map<std::pair<int, gfx::Font::FontStyle>, gfx::FontList> font_cache_;
+  std::map<FontKey, gfx::FontList> font_cache_;
 
   base::FilePath overridden_pak_path_;
 

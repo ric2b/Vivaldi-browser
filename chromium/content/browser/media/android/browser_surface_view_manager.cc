@@ -37,8 +37,7 @@ BrowserSurfaceViewManager::BrowserSurfaceViewManager(
 
 BrowserSurfaceViewManager::~BrowserSurfaceViewManager() {}
 
-void BrowserSurfaceViewManager::SetVideoSurface(
-    gfx::ScopedJavaSurface surface) {
+void BrowserSurfaceViewManager::SetVideoSurface(gl::ScopedJavaSurface surface) {
   TRACE_EVENT0("media", "BrowserSurfaceViewManager::SetVideoSurface");
   if (surface.IsEmpty()) {
     DCHECK_NE(surface_id_, media::SurfaceManager::kNoSurfaceID);
@@ -107,7 +106,8 @@ void BrowserSurfaceViewManager::SendDestroyingVideoSurfaceIfRequired(
   if (base::android::BuildInfo::GetInstance()->sdk_int() >= 18)
     return;
 
-  base::WaitableEvent waiter(false, false);
+  base::WaitableEvent waiter(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
   // Unretained is okay because we're waiting on the callback.
   if (BrowserThread::PostTask(
           BrowserThread::IO, FROM_HERE,

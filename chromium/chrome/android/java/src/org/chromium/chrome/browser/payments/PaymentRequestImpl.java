@@ -11,39 +11,51 @@ import android.text.TextUtils;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Log;
+import org.chromium.base.VisibleForTesting;
+import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.favicon.FaviconHelper;
+import org.chromium.chrome.browser.payments.ui.Completable;
 import org.chromium.chrome.browser.payments.ui.LineItem;
 import org.chromium.chrome.browser.payments.ui.PaymentInformation;
 import org.chromium.chrome.browser.payments.ui.PaymentOption;
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.browser.payments.ui.SectionInformation;
+import org.chromium.chrome.browser.payments.ui.ShoppingCart;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.components.safejson.JsonSanitizer;
 import org.chromium.content.browser.ContentViewCore;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.mojo.system.MojoException;
+import org.chromium.mojom.payments.PaymentComplete;
 import org.chromium.mojom.payments.PaymentDetails;
+import org.chromium.mojom.payments.PaymentErrorReason;
 import org.chromium.mojom.payments.PaymentItem;
+import org.chromium.mojom.payments.PaymentMethodData;
 import org.chromium.mojom.payments.PaymentOptions;
 import org.chromium.mojom.payments.PaymentRequest;
 import org.chromium.mojom.payments.PaymentRequestClient;
 import org.chromium.mojom.payments.PaymentResponse;
-import org.chromium.mojom.payments.ShippingOption;
+import org.chromium.mojom.payments.PaymentShippingOption;
 import org.chromium.ui.base.WindowAndroid;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 /**
  * Android implementation of the PaymentRequest service defined in
@@ -51,35 +63,97 @@ import java.util.regex.Pattern;
  */
 public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Client,
         PaymentApp.InstrumentsCallback, PaymentInstrument.DetailsCallback {
+
     /**
-     * The size for the favicon in density-independent pixels.
+     * A test-only observer for the PaymentRequest service implementation.
      */
-    private static final int FAVICON_SIZE_DP = 24;
+    public interface PaymentRequestServiceObserverForTest {
+        /**
+         * Called when an abort request was denied.
+         */
+        void onPaymentRequestServiceUnableToAbort();
+
+        /**
+         * Called when the controller is notified of billing address change, but does not alter the
+         * editor UI.
+         */
+        void onPaymentRequestServiceBillingAddressChangeProcessed();
+
+        /**
+         * Called when a show request failed. This can happen when:
+         * <ul>
+         *   <li>The merchant requests only unsupported payment methods.</li>
+         *   <li>The merchant requests only payment methods that don't have instruments and are not
+         *       able to add instruments from PaymentRequest UI.</li>
+         * </ul>
+         */
+        void onPaymentRequestServiceShowFailed();
+    }
 
     private static final String TAG = "cr_PaymentRequest";
+    private static final int SUGGESTIONS_LIMIT = 4;
+    private static final Comparator<Completable> COMPLETENESS_COMPARATOR =
+            new Comparator<Completable>() {
+                @Override
+                public int compare(Completable a, Completable b) {
+                    return (b.isComplete() ? 1 : 0) - (a.isComplete() ? 1 : 0);
+                }
+            };
+
+    private static PaymentRequestServiceObserverForTest sObserverForTest;
+
+    private final Handler mHandler = new Handler();
+
     private Activity mContext;
     private String mMerchantName;
     private String mOrigin;
     private Bitmap mFavicon;
     private List<PaymentApp> mApps;
     private PaymentRequestClient mClient;
-    private Set<String> mSupportedMethods;
-    private List<LineItem> mLineItems;
-    private List<PaymentItem> mPaymentItems;
-    private List<ShippingOption> mShippingOptions;
-    private SectionInformation mShippingOptionsSection;
-    private JSONObject mData;
+
+    /**
+     * The raw total amount being charged, as it was received from the website. This data is passed
+     * to the payment app.
+     */
+    private PaymentItem mRawTotal;
+
+    /**
+     * The raw items in the shopping cart, as they were received from the website. This data is
+     * passed to the payment app.
+     */
+    private List<PaymentItem> mRawLineItems;
+
+    /**
+     * The UI model of the shopping cart, including the total. Each item includes a label and a
+     * price string. This data is passed to the UI.
+     */
+    private ShoppingCart mUiShoppingCart;
+
+    /**
+     * The UI model for the shipping options. Includes the label and sublabel for each shipping
+     * option. Also keeps track of the selected shipping option. This data is passed to the UI.
+     */
+    private SectionInformation mUiShippingOptions;
+
+    private Map<String, JSONObject> mMethodData;
     private SectionInformation mShippingAddressesSection;
+    private SectionInformation mContactSection;
     private List<PaymentApp> mPendingApps;
     private List<PaymentInstrument> mPendingInstruments;
+    private List<PaymentInstrument> mPendingAutofillInstruments;
     private SectionInformation mPaymentMethodsSection;
     private PaymentRequestUI mUI;
     private Callback<PaymentInformation> mPaymentInformationCallback;
-    private Pattern mRegionCodePattern;
     private boolean mMerchantNeedsShippingAddress;
+    private boolean mPaymentAppRunning;
+    private boolean mMerchantSupportsAutofillPaymentInstruments;
+    private AddressEditor mAddressEditor;
+    private CardEditor mCardEditor;
+    private ContactEditor mContactEditor;
+    private boolean mHasRecordedAbortReason;
 
     /**
-     * Builds the dialog.
+     * Builds the PaymentRequest service implementation.
      *
      * @param webContents The web contents that have invoked the PaymentRequest API.
      */
@@ -100,9 +174,9 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         mOrigin = UrlUtilities.formatUrlForSecurityDisplay(webContents.getVisibleUrl(), false);
 
         final FaviconHelper faviconHelper = new FaviconHelper();
-        float scale = mContext.getResources().getDisplayMetrics().density;
         faviconHelper.getLocalFaviconImageForURL(Profile.getLastUsedProfile(),
-                webContents.getVisibleUrl(), (int) (FAVICON_SIZE_DP * scale + 0.5f),
+                webContents.getVisibleUrl(),
+                mContext.getResources().getDimensionPixelSize(R.dimen.payments_favicon_size),
                 new FaviconHelper.FaviconImageCallback() {
                     @Override
                     public void onFaviconAvailable(Bitmap bitmap, String iconUrl) {
@@ -117,7 +191,11 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
                 });
 
         mApps = PaymentAppFactory.create(webContents);
-        mRegionCodePattern = Pattern.compile(AutofillAddress.REGION_CODE_PATTERN);
+
+        mAddressEditor = new AddressEditor();
+        mCardEditor = new CardEditor(webContents, mAddressEditor, sObserverForTest);
+
+        recordSuccessFunnelHistograms("Initiated");
     }
 
     /**
@@ -133,6 +211,12 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
 
         if (mContext == null) {
             disconnectFromClientWithDebugMessage("Web contents don't have associated activity");
+            return;
+        }
+
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_PAYMENTS)) {
+            disconnectFromClientWithDebugMessage(
+                    "Web payments API is disabled", PaymentErrorReason.NOT_SUPPORTED);
         }
     }
 
@@ -140,78 +224,210 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      * Called by the merchant website to show the payment request to the user.
      */
     @Override
-    public void show(String[] supportedMethods, PaymentDetails details, PaymentOptions options,
-            String stringifiedData) {
+    public void show(PaymentMethodData[] methodData, PaymentDetails details,
+            PaymentOptions options) {
         if (mClient == null) return;
 
-        if (mSupportedMethods != null) {
+        if (mMethodData != null) {
             disconnectFromClientWithDebugMessage("PaymentRequest.show() called more than once.");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
             return;
         }
 
-        mSupportedMethods = getValidatedSupportedMethods(supportedMethods);
-        if (mSupportedMethods == null) {
-            disconnectFromClientWithDebugMessage("Invalid payment methods");
+        mMethodData = getValidatedMethodData(methodData, mCardEditor);
+        if (mMethodData == null) {
+            disconnectFromClientWithDebugMessage("Invalid payment methods or data");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
             return;
         }
 
-        if (!setLineItemsAndShippingOptionsOrDisconnectFromClient(details)) return;
+        if (!parseAndValidateDetailsOrDisconnectFromClient(details)) return;
 
-        // If the merchant requests shipping and does not provide shipping options here, then the
-        // merchant needs the shipping address to calculate shipping price and availability.
+        if (!getMatchingPaymentInstruments()) {
+            disconnectFromClientWithDebugMessage("Requested payment methods are not supported",
+                    PaymentErrorReason.NOT_SUPPORTED);
+            if (sObserverForTest != null) sObserverForTest.onPaymentRequestServiceShowFailed();
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_NO_SUPPORTED_PAYMENT_METHOD);
+            return;
+        }
+
+        // If the merchant requests shipping and does not provide a selected shipping option, then
+        // the merchant needs the shipping address to calculate the shipping price and availability.
         boolean requestShipping = options != null && options.requestShipping;
-        mMerchantNeedsShippingAddress = requestShipping && mShippingOptionsSection.isEmpty();
+        mMerchantNeedsShippingAddress =
+                requestShipping && mUiShippingOptions.getSelectedItem() == null;
 
-        mData = getValidatedData(mSupportedMethods, stringifiedData);
-        if (mData == null) {
-            disconnectFromClientWithDebugMessage("Invalid payment method specific data");
-            return;
+        boolean requestPayerPhone = options != null && options.requestPayerPhone;
+        boolean requestPayerEmail = options != null && options.requestPayerEmail;
+
+        List<AutofillProfile> profiles = null;
+        if (requestShipping || requestPayerPhone || requestPayerEmail) {
+            profiles = PersonalDataManager.getInstance().getProfilesToSuggest();
         }
 
-        List<AutofillAddress> addresses = new ArrayList<>();
-        List<AutofillProfile> profiles = PersonalDataManager.getInstance().getAddressOnlyProfiles();
-        for (int i = 0; i < profiles.size(); i++) {
-            AutofillProfile profile = profiles.get(i);
-            if (profile.getCountryCode() != null
-                    && mRegionCodePattern.matcher(profile.getCountryCode()).matches()
-                    && profile.getStreetAddress() != null && profile.getRegion() != null
-                    && profile.getLocality() != null && profile.getDependentLocality() != null
-                    && profile.getPostalCode() != null && profile.getSortingCode() != null
-                    && profile.getCompanyName() != null && profile.getFullName() != null) {
-                addresses.add(new AutofillAddress(profile));
+        if (requestShipping) {
+            List<AutofillAddress> addresses = new ArrayList<>();
+
+            for (int i = 0; i < profiles.size(); i++) {
+                AutofillProfile profile = profiles.get(i);
+                mAddressEditor.addPhoneNumberIfValid(profile.getPhoneNumber());
+
+                boolean isComplete = mAddressEditor.isProfileComplete(profile);
+                addresses.add(new AutofillAddress(profile, isComplete));
             }
-        }
 
-        if (addresses.isEmpty()) {
-            mShippingAddressesSection = new SectionInformation();
-        } else if (mShippingOptionsSection.getSelectedItem() != null) {
-            mShippingAddressesSection = new SectionInformation(0, addresses);
-        } else {
+            // Suggest complete addresses first.
+            Collections.sort(addresses, COMPLETENESS_COMPARATOR);
+
+            // Limit the number of suggestions.
+            addresses = addresses.subList(0, Math.min(addresses.size(), SUGGESTIONS_LIMIT));
+
+            // Automatically select the first address if one is complete and if the merchant does
+            // not require a shipping address to calculate shipping costs.
+            int firstCompleteAddressIndex = SectionInformation.NO_SELECTION;
+            if (!mMerchantNeedsShippingAddress && !addresses.isEmpty()
+                    && addresses.get(0).isComplete()) {
+                firstCompleteAddressIndex = 0;
+            }
+
             mShippingAddressesSection =
-                    new SectionInformation(SectionInformation.NO_SELECTION, addresses);
+                    new SectionInformation(PaymentRequestUI.TYPE_SHIPPING_ADDRESSES,
+                            firstCompleteAddressIndex, addresses);
         }
 
+        if (requestPayerPhone || requestPayerEmail) {
+            Set<String> uniqueContactInfos = new HashSet<>();
+            mContactEditor = new ContactEditor(requestPayerPhone, requestPayerEmail);
+            List<AutofillContact> contacts = new ArrayList<>();
+
+            for (int i = 0; i < profiles.size(); i++) {
+                AutofillProfile profile = profiles.get(i);
+                String phone = requestPayerPhone && !TextUtils.isEmpty(profile.getPhoneNumber())
+                        ? profile.getPhoneNumber() : null;
+                String email = requestPayerEmail && !TextUtils.isEmpty(profile.getEmailAddress())
+                        ? profile.getEmailAddress() : null;
+                mContactEditor.addPhoneNumberIfValid(phone);
+                mContactEditor.addEmailAddressIfValid(email);
+
+                if (phone != null || email != null) {
+                    // Different profiles can have identical contact info. Do not add the same
+                    // contact info to the list twice.
+                    String uniqueContactInfo = phone + email;
+                    if (!uniqueContactInfos.contains(uniqueContactInfo)) {
+                        uniqueContactInfos.add(uniqueContactInfo);
+
+                        boolean isComplete =
+                                mContactEditor.isContactInformationComplete(phone, email);
+                        contacts.add(new AutofillContact(profile, phone, email, isComplete));
+                    }
+                }
+            }
+
+            // Suggest complete contact infos first.
+            Collections.sort(contacts, COMPLETENESS_COMPARATOR);
+
+            // Limit the number of suggestions.
+            contacts = contacts.subList(0, Math.min(contacts.size(), SUGGESTIONS_LIMIT));
+
+            // Automatically select the first address if it is complete.
+            int firstCompleteContactIndex = SectionInformation.NO_SELECTION;
+            if (!contacts.isEmpty() && contacts.get(0).isComplete()) {
+                firstCompleteContactIndex = 0;
+            }
+
+            mContactSection = new SectionInformation(
+                    PaymentRequestUI.TYPE_CONTACT_DETAILS, firstCompleteContactIndex, contacts);
+        }
+
+        mUI = new PaymentRequestUI(mContext, this, requestShipping,
+                requestPayerPhone || requestPayerEmail, mMerchantSupportsAutofillPaymentInstruments,
+                mMerchantName, mOrigin);
+
+        if (mFavicon != null) mUI.setTitleBitmap(mFavicon);
+        mFavicon = null;
+
+        mAddressEditor.setEditorView(mUI.getEditorView());
+        mCardEditor.setEditorView(mUI.getCardEditorView());
+        if (mContactEditor != null) mContactEditor.setEditorView(mUI.getEditorView());
+
+        recordSuccessFunnelHistograms("Shown");
+        PaymentRequestMetrics.recordRequestedInformationHistogram(requestPayerEmail,
+                requestPayerPhone, requestShipping);
+    }
+
+    private static Map<String, JSONObject> getValidatedMethodData(
+            PaymentMethodData[] methodData, CardEditor paymentMethodsCollector) {
+        // Payment methodData are required.
+        if (methodData == null || methodData.length == 0) return null;
+        Map<String, JSONObject> result = new HashMap<>();
+        for (int i = 0; i < methodData.length; i++) {
+            JSONObject data = null;
+            if (!TextUtils.isEmpty(methodData[i].stringifiedData)) {
+                try {
+                    data = new JSONObject(JsonSanitizer.sanitize(methodData[i].stringifiedData));
+                } catch (JSONException | IOException | IllegalStateException e) {
+                    // Payment method specific data should be a JSON object.
+                    // According to the payment request spec[1], for each method data,
+                    // if the data field is supplied but is not a JSON-serializable object,
+                    // then should throw a TypeError. So, we should return null here even if
+                    // only one is bad.
+                    // [1] https://w3c.github.io/browser-payment-api/
+                    return null;
+                }
+            }
+
+            String[] methods = methodData[i].supportedMethods;
+
+            // Payment methods are required.
+            if (methods == null || methods.length == 0) return null;
+
+            for (int j = 0; j < methods.length; j++) {
+                // Payment methods should be non-empty.
+                if (TextUtils.isEmpty(methods[j])) return null;
+                result.put(methods[j], data);
+            }
+
+            paymentMethodsCollector.addAcceptedPaymentMethodsIfRecognized(methods);
+        }
+        return result;
+    }
+
+    /**
+     * Queries the installed payment apps for their instruments that merchant supports.
+     *
+     * @return True if any of the requested payment methods are supported.
+     */
+    private boolean getMatchingPaymentInstruments() {
         mPendingApps = new ArrayList<>(mApps);
         mPendingInstruments = new ArrayList<>();
-        boolean isGettingInstruments = false;
+        mPendingAutofillInstruments = new ArrayList<>();
+        boolean arePaymentMethodsSupported = false;
 
+        Map<PaymentApp, JSONObject> queryApps = new HashMap<>();
         for (int i = 0; i < mApps.size(); i++) {
             PaymentApp app = mApps.get(i);
             Set<String> appMethods = app.getSupportedMethodNames();
-            appMethods.retainAll(mSupportedMethods);
+            appMethods.retainAll(mMethodData.keySet());
             if (appMethods.isEmpty()) {
                 mPendingApps.remove(app);
             } else {
-                isGettingInstruments = true;
-                app.getInstruments(mPaymentItems, this);
+                arePaymentMethodsSupported = true;
+                mMerchantSupportsAutofillPaymentInstruments |= app instanceof AutofillPaymentApp;
+                queryApps.put(app, mMethodData.get(appMethods.iterator().next()));
             }
         }
 
-        if (!isGettingInstruments) mPaymentMethodsSection = new SectionInformation();
+        // Query instruments after mMerchantSupportsAutofillPaymentInstruments has been initialized,
+        // so a fast response from a non-autofill payment app at the front of the app list does not
+        // cause NOT_SUPPORTED payment rejection.
+        for (Map.Entry<PaymentApp, JSONObject> q : queryApps.entrySet()) {
+            q.getKey().getInstruments(q.getValue(), this);
+        }
 
-        mUI = PaymentRequestUI.show(mContext, this, requestShipping, mMerchantName, mOrigin);
-        if (mFavicon != null) mUI.setTitleBitmap(mFavicon);
-        mFavicon = null;
+        return arePaymentMethodsSupported;
     }
 
     /**
@@ -225,168 +441,192 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         if (mUI == null) {
             disconnectFromClientWithDebugMessage(
                     "PaymentRequestUpdateEvent.updateWith() called without PaymentRequest.show()");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
             return;
         }
 
-        if (!setLineItemsAndShippingOptionsOrDisconnectFromClient(details)) return;
+        if (!parseAndValidateDetailsOrDisconnectFromClient(details)) return;
 
         // Empty shipping options means the merchant cannot ship to the user's selected shipping
         // address.
-        if (mShippingOptionsSection.isEmpty() && !mMerchantNeedsShippingAddress) {
-            disconnectFromClientWithDebugMessage("Merchant indicates inablity to ship although "
+        if (mUiShippingOptions.isEmpty() && !mMerchantNeedsShippingAddress) {
+            disconnectFromClientWithDebugMessage("Merchant indicates inability to ship although "
                     + "originally indicated that can ship anywhere");
+            recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_OTHER);
+            return;
         }
 
-        mUI.updateOrderSummarySection(mLineItems);
-        mUI.updateShippingOptionsSection(mShippingOptionsSection);
+        if (mUiShippingOptions.isEmpty() && mShippingAddressesSection.getSelectedItem() != null) {
+            mShippingAddressesSection.getSelectedItem().setInvalid();
+            mShippingAddressesSection.setSelectedItemIndex(SectionInformation.INVALID_SELECTION);
+        }
+
+        if (mPaymentInformationCallback != null) {
+            providePaymentInformation();
+        } else {
+            mUI.updateOrderSummarySection(mUiShoppingCart);
+            mUI.updateSection(PaymentRequestUI.TYPE_SHIPPING_OPTIONS, mUiShippingOptions);
+        }
     }
 
-    private boolean setLineItemsAndShippingOptionsOrDisconnectFromClient(PaymentDetails details) {
-        mLineItems = getValidatedLineItems(details);
-        if (mLineItems == null) {
-            disconnectFromClientWithDebugMessage("Invalid line items");
+    /**
+     * Sets the total, display line items, and shipping options based on input and returns the
+     * status boolean. That status is true for valid data, false for invalid data. If the input is
+     * invalid, disconnects from the client. Both raw and UI versions of data are updated.
+     *
+     * @param details The total, line items, and shipping options to parse, validate, and save in
+     *                member variables.
+     * @return True if the data is valid. False if the data is invalid.
+     */
+    private boolean parseAndValidateDetailsOrDisconnectFromClient(PaymentDetails details) {
+        if (details == null) {
+            disconnectFromClientWithDebugMessage("Payment details required");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
             return false;
         }
-        mPaymentItems = Arrays.asList(details.items);
 
-        mShippingOptionsSection =
-                getValidatedShippingOptions(details.items[0].amount.currencyCode, details);
-        if (mShippingOptionsSection == null) {
-            disconnectFromClientWithDebugMessage("Invalid shipping options");
+        if (!hasAllPaymentItemFields(details.total)) {
+            disconnectFromClientWithDebugMessage("Invalid total");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
             return false;
         }
-        mShippingOptions = Arrays.asList(details.shippingOptions);
+
+        String totalCurrency = details.total.amount.currency;
+        CurrencyStringFormatter formatter =
+                new CurrencyStringFormatter(totalCurrency, Locale.getDefault());
+
+        if (!formatter.isValidAmountCurrencyCode(details.total.amount.currency)) {
+            disconnectFromClientWithDebugMessage("Invalid total amount currency");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
+            return false;
+        }
+
+        if (!formatter.isValidAmountValue(details.total.amount.value)
+                || details.total.amount.value.startsWith("-")) {
+            disconnectFromClientWithDebugMessage("Invalid total amount value");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
+            return false;
+        }
+
+        LineItem uiTotal = new LineItem(
+                details.total.label, totalCurrency, formatter.format(details.total.amount.value));
+
+        List<LineItem> uiLineItems = getValidatedLineItems(details.displayItems, totalCurrency,
+                formatter);
+        if (uiLineItems == null) {
+            disconnectFromClientWithDebugMessage("Invalid line items");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
+            return false;
+        }
+
+        mUiShoppingCart = new ShoppingCart(uiTotal, uiLineItems);
+        mRawTotal = details.total;
+        mRawLineItems = Arrays.asList(details.displayItems);
+
+        mUiShippingOptions = getValidatedShippingOptions(details.shippingOptions, totalCurrency,
+                formatter);
+        if (mUiShippingOptions == null) {
+            disconnectFromClientWithDebugMessage("Invalid shipping options");
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_INVALID_DATA_FROM_RENDERER);
+            return false;
+        }
 
         return true;
     }
 
-    private HashSet<String> getValidatedSupportedMethods(String[] methods) {
-        // Payment methods are required.
-        if (methods == null || methods.length == 0) return null;
-
-        HashSet<String> result = new HashSet<>();
-        for (int i = 0; i < methods.length; i++) {
-            // Payment methods should be non-empty.
-            if (TextUtils.isEmpty(methods[i])) return null;
-            result.add(methods[i]);
-        }
-
-        return result;
+    /**
+     * Returns true if all fields in the payment item are non-null and non-empty.
+     *
+     * @param item The payment item to examine.
+     * @return True if all fields are present and non-empty.
+     */
+    private static boolean hasAllPaymentItemFields(PaymentItem item) {
+        // "label", "currency", and "value" should be non-empty.
+        return item != null && !TextUtils.isEmpty(item.label) && item.amount != null
+                && !TextUtils.isEmpty(item.amount.currency)
+                && !TextUtils.isEmpty(item.amount.value);
     }
 
-    private List<LineItem> getValidatedLineItems(PaymentDetails details) {
-        // Line items are required.
-        if (details == null || details.items == null || details.items.length == 0) return null;
+    /**
+     * Validates a list of payment items and returns their parsed representation or null if invalid.
+     *
+     * @param items The payment items to parse and validate.
+     * @param totalCurrency The currency code for the total amount of payment.
+     * @param formatter A formatter and validator for the currency amount value.
+     * @return A list of valid line items or null if invalid.
+     */
+    private static List<LineItem> getValidatedLineItems(
+            PaymentItem[] items, String totalCurrency, CurrencyStringFormatter formatter) {
+        // Line items are optional.
+        if (items == null) return new ArrayList<>();
 
-        for (int i = 0; i < details.items.length; i++) {
-            PaymentItem item = details.items[i];
-            // "id", "label", "currencyCode", and "value" should be non-empty.
-            if (item == null || TextUtils.isEmpty(item.id) || TextUtils.isEmpty(item.label)
-                    || item.amount == null || TextUtils.isEmpty(item.amount.currencyCode)
-                    || TextUtils.isEmpty(item.amount.value)) {
-                return null;
-            }
-        }
+        List<LineItem> result = new ArrayList<>(items.length);
+        for (int i = 0; i < items.length; i++) {
+            PaymentItem item = items[i];
 
-        CurrencyStringFormatter formatter = new CurrencyStringFormatter(
-                details.items[0].amount.currencyCode, Locale.getDefault());
+            if (!hasAllPaymentItemFields(item)) return null;
 
-        // Currency codes should be in correct format.
-        if (!formatter.isValidAmountCurrencyCode(details.items[0].amount.currencyCode)) return null;
-
-        List<LineItem> result = new ArrayList<>(details.items.length);
-        for (int i = 0; i < details.items.length; i++) {
-            PaymentItem item = details.items[i];
-
-            // All currency codes must match.
-            if (!item.amount.currencyCode.equals(details.items[0].amount.currencyCode)) return null;
+            // All currencies must match.
+            if (!item.amount.currency.equals(totalCurrency)) return null;
 
             // Value should be in correct format.
             if (!formatter.isValidAmountValue(item.amount.value)) return null;
 
-            result.add(new LineItem(item.label,
-                    i == details.items.length - 1 ? item.amount.currencyCode : "",
-                    formatter.format(item.amount.value)));
+            result.add(new LineItem(item.label, "", formatter.format(item.amount.value)));
         }
 
         return result;
     }
 
-    private SectionInformation getValidatedShippingOptions(
-            String itemsCurrencyCode, PaymentDetails details) {
+    /**
+     * Validates a list of shipping options and returns their parsed representation or null if
+     * invalid.
+     *
+     * @param options The raw shipping options to parse and validate.
+     * @param totalCurrency The currency code for the total amount of payment.
+     * @param formatter A formatter and validator for the currency amount value.
+     * @return The UI representation of the shipping options or null if invalid.
+     */
+    private static SectionInformation getValidatedShippingOptions(PaymentShippingOption[] options,
+            String totalCurrency, CurrencyStringFormatter formatter) {
         // Shipping options are optional.
-        if (details.shippingOptions == null || details.shippingOptions.length == 0) {
-            return new SectionInformation();
+        if (options == null || options.length == 0) {
+            return new SectionInformation(PaymentRequestUI.TYPE_SHIPPING_OPTIONS);
         }
 
-        CurrencyStringFormatter formatter =
-                new CurrencyStringFormatter(itemsCurrencyCode, Locale.getDefault());
+        for (int i = 0; i < options.length; i++) {
+            PaymentShippingOption option = options[i];
 
-        for (int i = 0; i < details.shippingOptions.length; i++) {
-            ShippingOption option = details.shippingOptions[i];
-
-            // Each "id", "label", "currencyCode", and "value" should be non-empty.
+            // Each "id", "label", "currency", and "value" should be non-empty.
             // Each "value" should be a valid amount value.
-            // Each "currencyCode" should match the line items' currency codes.
+            // Each "currency" should match the total currency.
             if (option == null || TextUtils.isEmpty(option.id) || TextUtils.isEmpty(option.label)
-                    || option.amount == null || TextUtils.isEmpty(option.amount.currencyCode)
+                    || option.amount == null || TextUtils.isEmpty(option.amount.currency)
                     || TextUtils.isEmpty(option.amount.value)
-                    || !itemsCurrencyCode.equals(option.amount.currencyCode)
+                    || !totalCurrency.equals(option.amount.currency)
                     || !formatter.isValidAmountValue(option.amount.value)) {
                 return null;
             }
         }
 
-        boolean isSameAsCurrentOptions = true;
-        if (mShippingOptions == null || mShippingOptions.size() != details.shippingOptions.length) {
-            isSameAsCurrentOptions = false;
-        } else {
-            for (int i = 0; i < details.shippingOptions.length; i++) {
-                ShippingOption newOption = details.shippingOptions[i];
-                ShippingOption currentOption = mShippingOptions.get(i);
-                if (!newOption.id.equals(currentOption.id)
-                        || !newOption.label.equals(currentOption.label)
-                        || !newOption.amount.currencyCode.equals(currentOption.amount.currencyCode)
-                        || !newOption.amount.value.equals(currentOption.amount.value)) {
-                    isSameAsCurrentOptions = false;
-                    break;
-                }
-            }
-        }
-        if (isSameAsCurrentOptions) return mShippingOptionsSection;
-
         List<PaymentOption> result = new ArrayList<>();
-        for (int i = 0; i < details.shippingOptions.length; i++) {
-            ShippingOption option = details.shippingOptions[i];
+        int selectedItemIndex = SectionInformation.NO_SELECTION;
+        for (int i = 0; i < options.length; i++) {
+            PaymentShippingOption option = options[i];
             result.add(new PaymentOption(option.id, option.label,
                     formatter.format(option.amount.value), PaymentOption.NO_ICON));
+            if (option.selected) selectedItemIndex = i;
         }
 
-        return new SectionInformation(result.size() == 1 ? 0 : SectionInformation.NO_SELECTION,
+        return new SectionInformation(PaymentRequestUI.TYPE_SHIPPING_OPTIONS, selectedItemIndex,
                 result);
-    }
-
-    private JSONObject getValidatedData(Set<String> supportedMethods, String stringifiedData) {
-        if (TextUtils.isEmpty(stringifiedData)) return new JSONObject();
-
-        JSONObject result;
-        try {
-            result = new JSONObject(stringifiedData);
-        } catch (JSONException e) {
-            // Payment method specific data should be a JSON object.
-            return null;
-        }
-
-        Iterator<String> it = result.keys();
-        while (it.hasNext()) {
-            String name = it.next();
-            // Each key should be one of the supported payment methods.
-            if (!supportedMethods.contains(name)) return null;
-            // Each value should be a JSON object.
-            if (result.optJSONObject(name) == null) return null;
-        }
-
-        return result;
     }
 
     /**
@@ -398,98 +638,228 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
 
         if (mPaymentMethodsSection == null) return;
 
-        new Handler().post(new Runnable() {
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
-                provideDefaultPaymentInformation();
+                providePaymentInformation();
             }
         });
     }
 
-    private void provideDefaultPaymentInformation() {
-        mPaymentInformationCallback.onResult(new PaymentInformation(
-                mLineItems.get(mLineItems.size() - 1), mShippingAddressesSection.getSelectedItem(),
-                mShippingOptionsSection.getSelectedItem(),
-                mPaymentMethodsSection.getSelectedItem()));
+    private void providePaymentInformation() {
+        mPaymentInformationCallback.onResult(
+                new PaymentInformation(mUiShoppingCart, mShippingAddressesSection,
+                        mUiShippingOptions, mContactSection, mPaymentMethodsSection));
         mPaymentInformationCallback = null;
     }
 
     @Override
-    public void getLineItems(final Callback<List<LineItem>> callback) {
-        new Handler().post(new Runnable() {
+    public void getShoppingCart(final Callback<ShoppingCart> callback) {
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
-                callback.onResult(mLineItems);
+                callback.onResult(mUiShoppingCart);
             }
         });
     }
 
     @Override
-    public void getShippingAddresses(final Callback<SectionInformation> callback) {
-        new Handler().post(new Runnable() {
+    public void getSectionInformation(@PaymentRequestUI.DataType final int optionType,
+            final Callback<SectionInformation> callback) {
+        mHandler.post(new Runnable() {
             @Override
             public void run() {
-                callback.onResult(mShippingAddressesSection);
+                if (optionType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
+                    callback.onResult(mShippingAddressesSection);
+                } else if (optionType == PaymentRequestUI.TYPE_SHIPPING_OPTIONS) {
+                    callback.onResult(mUiShippingOptions);
+                } else if (optionType == PaymentRequestUI.TYPE_CONTACT_DETAILS) {
+                    callback.onResult(mContactSection);
+                } else if (optionType == PaymentRequestUI.TYPE_PAYMENT_METHODS) {
+                    assert mPaymentMethodsSection != null;
+                    callback.onResult(mPaymentMethodsSection);
+                }
             }
         });
     }
 
     @Override
-    public void getShippingOptions(final Callback<SectionInformation> callback) {
-        new Handler().post(new Runnable() {
-            @Override
-            public void run() {
-                callback.onResult(mShippingOptionsSection);
-            }
-        });
-    }
+    @PaymentRequestUI.SelectionResult public int onSectionOptionSelected(
+            @PaymentRequestUI.DataType int optionType, PaymentOption option,
+            Callback<PaymentInformation> callback) {
+        if (optionType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
+            assert option instanceof AutofillAddress;
+            AutofillAddress address = (AutofillAddress) option;
+            @PaymentRequestUI.SelectionResult int result = PaymentRequestUI.SELECTION_RESULT_NONE;
 
-    @Override
-    public void getPaymentMethods(final Callback<SectionInformation> callback) {
-        assert mPaymentMethodsSection != null;
-        new Handler().post(new Runnable() {
-            @Override
-            public void run() {
-                callback.onResult(mPaymentMethodsSection);
-            }
-        });
-    }
+            if (address.isComplete()) {
+                mShippingAddressesSection.setSelectedItem(option);
 
-    @Override
-    public void onShippingAddressChanged(PaymentOption selectedShippingAddress) {
-        assert selectedShippingAddress instanceof AutofillAddress;
-        mShippingAddressesSection.setSelectedItem(selectedShippingAddress);
-        if (mMerchantNeedsShippingAddress) {
-            mClient.onShippingAddressChange(
-                    ((AutofillAddress) selectedShippingAddress).toShippingAddress());
+                // This updates the line items and the shipping options asynchronously.
+                if (mMerchantNeedsShippingAddress) {
+                    mClient.onShippingAddressChange(address.toPaymentAddress());
+                }
+            } else {
+                editAddress(address);
+                result = PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+            }
+
+            if (mMerchantNeedsShippingAddress) {
+                mPaymentInformationCallback = callback;
+                result = PaymentRequestUI.SELECTION_RESULT_ASYNCHRONOUS_VALIDATION;
+            }
+
+            return result;
+        } else if (optionType == PaymentRequestUI.TYPE_SHIPPING_OPTIONS) {
+            // This may update the line items.
+            mUiShippingOptions.setSelectedItem(option);
+            mClient.onShippingOptionChange(option.getIdentifier());
+            mPaymentInformationCallback = callback;
+            return PaymentRequestUI.SELECTION_RESULT_ASYNCHRONOUS_VALIDATION;
+        } else if (optionType == PaymentRequestUI.TYPE_CONTACT_DETAILS) {
+            assert option instanceof AutofillContact;
+            AutofillContact contact = (AutofillContact) option;
+
+            if (contact.isComplete()) {
+                mContactSection.setSelectedItem(option);
+            } else {
+                editContact(contact);
+                return PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+            }
+        } else if (optionType == PaymentRequestUI.TYPE_PAYMENT_METHODS) {
+            assert option instanceof PaymentInstrument;
+            if (option instanceof AutofillPaymentInstrument) {
+                AutofillPaymentInstrument card = (AutofillPaymentInstrument) option;
+
+                if (!card.isComplete()) {
+                    editCard(card);
+                    return PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+                }
+            }
+
+            mPaymentMethodsSection.setSelectedItem(option);
         }
+
+        return PaymentRequestUI.SELECTION_RESULT_NONE;
     }
 
     @Override
-    public void onShippingOptionChanged(PaymentOption selectedShippingOption) {
-        mShippingOptionsSection.setSelectedItem(selectedShippingOption);
-        mClient.onShippingOptionChange(selectedShippingOption.getIdentifier());
+    @PaymentRequestUI.SelectionResult public int onSectionAddOption(
+            @PaymentRequestUI.DataType int optionType, Callback<PaymentInformation> callback) {
+        if (optionType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
+            editAddress(null);
+
+            if (mMerchantNeedsShippingAddress) {
+                mPaymentInformationCallback = callback;
+                return PaymentRequestUI.SELECTION_RESULT_ASYNCHRONOUS_VALIDATION;
+            } else {
+                return PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+            }
+        } else if (optionType == PaymentRequestUI.TYPE_CONTACT_DETAILS) {
+            editContact(null);
+            return PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+        } else if (optionType == PaymentRequestUI.TYPE_PAYMENT_METHODS) {
+            editCard(null);
+            return PaymentRequestUI.SELECTION_RESULT_EDITOR_LAUNCH;
+        }
+
+        return PaymentRequestUI.SELECTION_RESULT_NONE;
+    }
+
+    private void editAddress(final AutofillAddress toEdit) {
+        mAddressEditor.edit(toEdit, new Callback<AutofillAddress>() {
+            @Override
+            public void onResult(AutofillAddress completeAddress) {
+                if (mUI == null) return;
+
+                if (completeAddress == null) {
+                    mShippingAddressesSection.setSelectedItemIndex(SectionInformation.NO_SELECTION);
+                } else if (toEdit == null) {
+                    mShippingAddressesSection.addAndSelectItem(completeAddress);
+                }
+
+                if (mMerchantNeedsShippingAddress) {
+                    if (completeAddress == null) {
+                        providePaymentInformation();
+                    } else {
+                        mClient.onShippingAddressChange(completeAddress.toPaymentAddress());
+                    }
+                    return;
+                }
+
+                mUI.updateSection(
+                        PaymentRequestUI.TYPE_SHIPPING_ADDRESSES, mShippingAddressesSection);
+            }
+        });
+    }
+
+    private void editContact(final AutofillContact toEdit) {
+        mContactEditor.edit(toEdit, new Callback<AutofillContact>() {
+            @Override
+            public void onResult(AutofillContact completeContact) {
+                if (mUI == null) return;
+
+                if (completeContact == null) {
+                    mContactSection.setSelectedItemIndex(SectionInformation.NO_SELECTION);
+                } else if (toEdit == null) {
+                    mContactSection.addAndSelectItem(completeContact);
+                }
+
+                mUI.updateSection(PaymentRequestUI.TYPE_CONTACT_DETAILS, mContactSection);
+            }
+        });
+    }
+
+    private void editCard(final AutofillPaymentInstrument toEdit) {
+        mCardEditor.edit(toEdit, new Callback<AutofillPaymentInstrument>() {
+            @Override
+            public void onResult(AutofillPaymentInstrument completeCard) {
+                if (mUI == null) return;
+
+                if (completeCard == null) {
+                    mPaymentMethodsSection.setSelectedItemIndex(SectionInformation.NO_SELECTION);
+                } else if (toEdit == null) {
+                    mPaymentMethodsSection.addAndSelectItem(completeCard);
+                }
+
+                mUI.updateSection(PaymentRequestUI.TYPE_PAYMENT_METHODS, mPaymentMethodsSection);
+            }
+        });
     }
 
     @Override
-    public void onPaymentMethodChanged(PaymentOption selectedPaymentMethod) {
-        assert selectedPaymentMethod instanceof PaymentInstrument;
-        mPaymentMethodsSection.setSelectedItem(selectedPaymentMethod);
-    }
-
-    @Override
-    public void onPayClicked(PaymentOption selectedShippingAddress,
+    public boolean onPayClicked(PaymentOption selectedShippingAddress,
             PaymentOption selectedShippingOption, PaymentOption selectedPaymentMethod) {
         assert selectedPaymentMethod instanceof PaymentInstrument;
         PaymentInstrument instrument = (PaymentInstrument) selectedPaymentMethod;
-        instrument.getDetails(mMerchantName, mOrigin, mPaymentItems,
-                mData.optJSONObject(instrument.getMethodName()), this);
+        mPaymentAppRunning = true;
+        instrument.getDetails(mMerchantName, mOrigin, mRawTotal, mRawLineItems,
+                mMethodData.get(instrument.getMethodName()), this);
+        recordSuccessFunnelHistograms("PayClicked");
+        return !(instrument instanceof AutofillPaymentInstrument);
     }
 
     @Override
     public void onDismiss() {
         disconnectFromClientWithDebugMessage("Dialog dismissed");
-        closeUI(false);
+        closeUI(true);
+        recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_ABORTED_BY_USER);
+    }
+
+    private void disconnectFromClientWithDebugMessage(String debugMessage) {
+        disconnectFromClientWithDebugMessage(debugMessage, PaymentErrorReason.USER_CANCEL);
+    }
+
+    private void disconnectFromClientWithDebugMessage(String debugMessage, int reason) {
+        Log.d(TAG, debugMessage);
+        if (mClient != null) mClient.onError(reason);
+        closeClient();
+        closeUI(true);
+    }
+
+    @Override
+    public boolean merchantNeedsShippingAddress() {
+        return mMerchantNeedsShippingAddress;
     }
 
     /**
@@ -497,16 +867,25 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      */
     @Override
     public void abort() {
-        closeClient();
-        closeUI(false);
+        if (mClient == null) return;
+        mClient.onAbort(!mPaymentAppRunning);
+        if (mPaymentAppRunning) {
+            if (sObserverForTest != null) sObserverForTest.onPaymentRequestServiceUnableToAbort();
+        } else {
+            closeClient();
+            closeUI(true);
+            recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_ABORTED_BY_MERCHANT);
+        }
     }
 
     /**
      * Called when the merchant website has processed the payment.
      */
     @Override
-    public void complete(boolean success) {
-        closeUI(success);
+    public void complete(int result) {
+        if (mClient == null) return;
+        recordSuccessFunnelHistograms("Completed");
+        closeUI(PaymentComplete.FAIL != result);
     }
 
     /**
@@ -514,8 +893,10 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      */
     @Override
     public void close() {
+        if (mClient == null) return;
         closeClient();
-        closeUI(false);
+        closeUI(true);
+        recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_MOJO_RENDERER_CLOSING);
     }
 
     /**
@@ -523,8 +904,10 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      */
     @Override
     public void onConnectionError(MojoException e) {
+        if (mClient == null) return;
         closeClient();
-        closeUI(false);
+        closeUI(true);
+        recordAbortReasonHistogram(PaymentRequestMetrics.ABORT_REASON_MOJO_CONNECTION_ERROR);
     }
 
     /**
@@ -532,28 +915,87 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      */
     @Override
     public void onInstrumentsReady(PaymentApp app, List<PaymentInstrument> instruments) {
+        if (mClient == null) return;
         mPendingApps.remove(app);
 
+        // Place the instruments into either "autofill" or "non-autofill" list to be displayed when
+        // all apps have responded.
         if (instruments != null) {
             for (int i = 0; i < instruments.size(); i++) {
                 PaymentInstrument instrument = instruments.get(i);
-                if (mSupportedMethods.contains(instrument.getMethodName())) {
-                    mPendingInstruments.add(instrument);
+                if (mMethodData.containsKey(instrument.getMethodName())) {
+                    addPendingInstrument(instrument);
                 } else {
                     instrument.dismiss();
                 }
             }
         }
 
-        if (mPendingApps.isEmpty()) {
-            if (mPendingInstruments.isEmpty()) {
-                mPaymentMethodsSection = new SectionInformation();
-            } else {
-                mPaymentMethodsSection = new SectionInformation(0, mPendingInstruments);
-                mPendingInstruments.clear();
-            }
+        // Some payment apps still have not responded. Continue waiting for them.
+        if (!mPendingApps.isEmpty()) return;
 
-            if (mPaymentInformationCallback != null) provideDefaultPaymentInformation();
+        if (mPendingInstruments.isEmpty() && !mMerchantSupportsAutofillPaymentInstruments) {
+            // All payment apps have responded, but none of them have instruments. It's possible to
+            // add credit cards, but the merchant does not support them either. The payment request
+            // must be rejected.
+            disconnectFromClientWithDebugMessage("Requested payment methods have no instruments",
+                    PaymentErrorReason.NOT_SUPPORTED);
+            if (sObserverForTest != null) sObserverForTest.onPaymentRequestServiceShowFailed();
+            recordAbortReasonHistogram(
+                    PaymentRequestMetrics.ABORT_REASON_NO_MATCHING_PAYMENT_METHOD);
+            return;
+        }
+
+        // List order:
+        // > Non-autofill instruments.
+        // > Complete autofill instruments.
+        // > Incomplete autofill instruments.
+        Collections.sort(mPendingAutofillInstruments, COMPLETENESS_COMPARATOR);
+        mPendingInstruments.addAll(mPendingAutofillInstruments);
+
+        mPendingAutofillInstruments.clear();
+        mPendingAutofillInstruments = null;
+
+        // Pre-select the first instrument on the list, if it is complete.
+        int selection = SectionInformation.NO_SELECTION;
+        if (!mPendingInstruments.isEmpty()) {
+            PaymentInstrument first = mPendingInstruments.get(0);
+            if (!(first instanceof AutofillPaymentInstrument)
+                    || ((AutofillPaymentInstrument) first).isComplete()) {
+                selection = 0;
+            }
+        }
+
+        // The list of payment instruments is ready to display.
+        mPaymentMethodsSection = new SectionInformation(PaymentRequestUI.TYPE_PAYMENT_METHODS,
+                selection, mPendingInstruments);
+
+        mPendingInstruments.clear();
+        mPendingInstruments = null;
+
+        // UI has requested the full list of payment instruments. Provide it now.
+        if (mPaymentInformationCallback != null) providePaymentInformation();
+    }
+
+    /**
+     * Saves the given instrument in either "autofill" or "non-autofill" list. The separation
+     * enables placing autofill instruments on the bottom of the list.
+     *
+     * Autofill instruments are also checked for completeness. A complete autofill instrument can be
+     * sent to the merchant as-is, without editing first. Such instruments should be displayed
+     * higher in the list.
+     *
+     * @param instrument The instrument to add to either "autofill" or "non-autofill" list.
+     */
+    private void addPendingInstrument(PaymentInstrument instrument) {
+        if (instrument instanceof AutofillPaymentInstrument) {
+            AutofillPaymentInstrument autofillInstrument = (AutofillPaymentInstrument) instrument;
+            if (mCardEditor.isCardComplete(autofillInstrument.getCard())) {
+                autofillInstrument.setIsComplete();
+            }
+            mPendingAutofillInstruments.add(instrument);
+        } else {
+            mPendingInstruments.add(instrument);
         }
     }
 
@@ -566,21 +1008,50 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
         response.methodName = methodName;
         response.stringifiedDetails = stringifiedDetails;
 
-        PaymentOption selectedShippingAddress = mShippingAddressesSection.getSelectedItem();
-        if (selectedShippingAddress != null) {
-            // Shipping addresses are created in show(). The should all be instances of
-            // AutofillAddress.
-            assert selectedShippingAddress instanceof AutofillAddress;
-            response.shippingAddress =
-                    ((AutofillAddress) selectedShippingAddress).toShippingAddress();
+        if (mContactSection != null) {
+            PaymentOption selectedContact = mContactSection.getSelectedItem();
+            if (selectedContact != null) {
+                // Contacts are created in show(). These should all be instances of AutofillContact.
+                assert selectedContact instanceof AutofillContact;
+                response.payerPhone = ((AutofillContact) selectedContact).getPayerPhone();
+                response.payerEmail = ((AutofillContact) selectedContact).getPayerEmail();
+            }
         }
 
-        PaymentOption selectedShippingOption = mShippingOptionsSection.getSelectedItem();
-        if (selectedShippingOption != null && selectedShippingOption.getIdentifier() != null) {
-            response.shippingOptionId = selectedShippingOption.getIdentifier();
+        if (mShippingAddressesSection != null) {
+            PaymentOption selectedShippingAddress = mShippingAddressesSection.getSelectedItem();
+            if (selectedShippingAddress != null) {
+                // Shipping addresses are created in show(). These should all be instances of
+                // AutofillAddress.
+                assert selectedShippingAddress instanceof AutofillAddress;
+                AutofillAddress selectedAutofillAddress = (AutofillAddress) selectedShippingAddress;
+
+                // Record the use of the profile.
+                PersonalDataManager.getInstance().recordAndLogProfileUse(
+                        selectedAutofillAddress.getProfile().getGUID());
+
+                response.shippingAddress = selectedAutofillAddress.toPaymentAddress();
+            }
         }
 
+        if (mUiShippingOptions != null) {
+            PaymentOption selectedShippingOption = mUiShippingOptions.getSelectedItem();
+            if (selectedShippingOption != null && selectedShippingOption.getIdentifier() != null) {
+                response.shippingOption = selectedShippingOption.getIdentifier();
+            }
+        }
+
+        // If the payment method was an Autofill credit card with an identifier, record its use.
+        if (mPaymentMethodsSection.getSelectedItem() instanceof AutofillPaymentInstrument
+                && !mPaymentMethodsSection.getSelectedItem().getIdentifier().isEmpty()) {
+            PersonalDataManager.getInstance().recordAndLogCreditCardUse(
+                    mPaymentMethodsSection.getSelectedItem().getIdentifier());
+        }
+
+        mUI.showProcessingMessage();
         mClient.onPaymentResponse(response);
+
+        recordSuccessFunnelHistograms("ReceivedInstrumentDetails");
     }
 
     /**
@@ -588,22 +1059,24 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
      */
     @Override
     public void onInstrumentDetailsError() {
-        disconnectFromClientWithDebugMessage("Failed to retrieve payment instrument details");
-        closeUI(false);
-    }
-
-    private void disconnectFromClientWithDebugMessage(String debugMessage) {
-        Log.d(TAG, debugMessage);
-        mClient.onError();
-        closeClient();
+        mUI.onPayButtonProcessingCancelled();
+        mPaymentAppRunning = false;
     }
 
     /**
      * Closes the UI. If the client is still connected, then it's notified of UI hiding.
+     *
+     * @param immediateClose If true, then UI immediately closes. If false, the UI shows the error
+     *                       message "There was an error processing your order." This message
+     *                       implies that the merchant attempted to process the order, failed, and
+     *                       called complete("fail") to notify the user. Therefore, this parameter
+     *                       may be "false" only when called from
+     *                       PaymentRequestImpl.complete(int result) method. All other callers
+     *                       should always pass "true."
      */
-    private void closeUI(boolean paymentSuccess) {
+    private void closeUI(boolean immediateClose) {
         if (mUI != null) {
-            mUI.close(paymentSuccess, new Runnable() {
+            mUI.close(immediateClose, new Runnable() {
                 @Override
                 public void run() {
                     if (mClient != null) mClient.onComplete();
@@ -626,5 +1099,33 @@ public class PaymentRequestImpl implements PaymentRequest, PaymentRequestUI.Clie
     private void closeClient() {
         if (mClient != null) mClient.close();
         mClient = null;
+    }
+
+    @VisibleForTesting
+    public static void setObserverForTest(PaymentRequestServiceObserverForTest observerForTest) {
+        sObserverForTest = observerForTest;
+    }
+
+    /**
+     * Records specific histograms related to the different steps of a successful checkout.
+     */
+    private void recordSuccessFunnelHistograms(String funnelPart) {
+        RecordHistogram.recordBooleanHistogram(
+                "PaymentRequest.CheckoutFunnel." + funnelPart, true);
+    }
+
+    /**
+     * Adds an entry to the aborted Payment Request histogram in the bucket corresponding to the
+     * reason for aborting. Only records the initial reason for aborting, as some closing code calls
+     * other closing code that can log too.
+     */
+    private void recordAbortReasonHistogram(int abortReason) {
+        assert abortReason < PaymentRequestMetrics.ABORT_REASON_MAX;
+        if (mHasRecordedAbortReason) return;
+
+        mHasRecordedAbortReason = true;
+        RecordHistogram.recordEnumeratedHistogram(
+                "PaymentRequest.CheckoutFunnel.Aborted", abortReason,
+                PaymentRequestMetrics.ABORT_REASON_MAX);
     }
 }

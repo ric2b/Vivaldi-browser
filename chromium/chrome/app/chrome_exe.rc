@@ -1,6 +1,7 @@
 // Microsoft Visual C++ generated resource script.
 //
 #include "chrome_exe_resource.h"
+#include "app/vivaldi_icon.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -46,7 +47,7 @@ IDR_MAINFRAME_4         ICON                    "theme\\google_chrome\\win\\plac
 // identify it.
 IDR_SXS                 ICON                    "theme\\google_chrome\\win\\chrome_sxs.ico"
 #else
-IDR_MAINFRAME           ICON                    "../../app/resources/theme/vivaldi/vivaldi.ico"
+IDR_MAINFRAME           ICON                    VIVALDI_RELEASE_ICON
 #endif
 
 // Start a naming scheme to keep icons in order. A leading X is used to keep

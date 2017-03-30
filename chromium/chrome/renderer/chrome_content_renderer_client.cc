@@ -75,7 +75,9 @@
 #include "components/pdf/renderer/pepper_pdf_host.h"
 #include "components/plugins/renderer/mobile_youtube_plugin.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "components/startup_metric_utils/common/startup_metric_messages.h"
+#include "components/startup_metric_utils/common/startup_metric.mojom.h"
+#include "components/subresource_filter/content/renderer/ruleset_dealer.h"
+#include "components/subresource_filter/content/renderer/subresource_filter_agent.h"
 #include "components/version_info/version_info.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_cache/renderer/web_cache_impl.h"
@@ -92,6 +94,7 @@
 #include "net/base/net_errors.h"
 #include "ppapi/c/private/ppb_pdf.h"
 #include "ppapi/shared_impl/ppapi_switches.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/URLConversion.h"
 #include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
@@ -126,10 +129,6 @@
 #include "extensions/common/switches.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/renderer_extension_registry.h"
-#endif
-
-#if defined(ENABLE_IPC_FUZZER)
-#include "chrome/common/external_ipc_dumper.h"
 #endif
 
 #if defined(ENABLE_PLUGINS)
@@ -296,6 +295,7 @@ class MediaLoadDeferrer : public content::RenderFrameObserver {
     continue_loading_cb_.Run();
     delete this;
   }
+  void OnDestruct() override { delete this; }
 
   const base::Closure continue_loading_cb_;
 
@@ -330,8 +330,11 @@ ChromeContentRendererClient::~ChromeContentRendererClient() {
 void ChromeContentRendererClient::RenderThreadStarted() {
   RenderThread* thread = RenderThread::Get();
 
-  thread->Send(new StartupMetricHostMsg_RecordRendererMainEntryTime(
-      main_entry_time_));
+  {
+    startup_metric_utils::mojom::StartupMetricHostPtr startup_metric_host;
+    thread->GetRemoteInterfaces()->GetInterface(&startup_metric_host);
+    startup_metric_host->RecordRendererMainEntryTime(main_entry_time_);
+  }
 
   chrome_observer_.reset(new ChromeRenderThreadObserver());
   web_cache_impl_.reset(new web_cache::WebCacheImpl());
@@ -355,6 +358,8 @@ void ChromeContentRendererClient::RenderThreadStarted() {
   phishing_classifier_.reset(safe_browsing::PhishingClassifierFilter::Create());
 #endif
   prerender_dispatcher_.reset(new prerender::PrerenderDispatcher());
+  subresource_filter_ruleset_dealer_.reset(
+      new subresource_filter::RulesetDealer());
 #if defined(ENABLE_WEBRTC)
   webrtc_logging_message_filter_ = new WebRtcLoggingMessageFilter(
       thread->GetIOMessageLoopProxy());
@@ -366,6 +371,7 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #endif
   thread->AddObserver(visited_link_slave_.get());
   thread->AddObserver(prerender_dispatcher_.get());
+  thread->AddObserver(subresource_filter_ruleset_dealer_.get());
   thread->AddObserver(SearchBouncer::GetInstance());
 
 #if defined(ENABLE_WEBRTC)
@@ -406,16 +412,6 @@ void ChromeContentRendererClient::RenderThreadStarted() {
 #if defined(OS_ANDROID)
   WebSecurityPolicy::registerURLSchemeAsAllowedForReferrer(
       WebString::fromUTF8(chrome::kAndroidAppScheme));
-#endif
-
-#if defined(ENABLE_IPC_FUZZER)
-  if (command_line->HasSwitch(switches::kIpcDumpDirectory)) {
-    base::FilePath dump_directory =
-        command_line->GetSwitchValuePath(switches::kIpcDumpDirectory);
-    IPC::ChannelProxy::OutgoingMessageFilter* filter =
-        LoadExternalIPCDumper(dump_directory);
-    thread->GetChannel()->set_outgoing_message_filter(filter);
-  }
 #endif
 
   // chrome-search: pages should not be accessible by bookmarklets
@@ -516,6 +512,9 @@ void ChromeContentRendererClient::RenderFrameCreated(
       new PasswordGenerationAgent(render_frame, password_autofill_agent);
   new AutofillAgent(render_frame, password_autofill_agent,
                     password_generation_agent);
+
+  new subresource_filter::SubresourceFilterAgent(
+      render_frame, subresource_filter_ruleset_dealer_.get());
 }
 
 void ChromeContentRendererClient::RenderViewCreated(
@@ -771,8 +770,15 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
         PowerSaverInfo power_saver_info =
             PowerSaverInfo::Get(render_frame, power_saver_setting_on, params,
                                 info, frame->document().url());
+        // Prevent small plugins from loading by using a placeholder until
+        // we can determine the unobscured size of the object.
+        bool blocked_for_tinyness =
+            ChromePluginPlaceholder::IsSmallContentFilterEnabled() &&
+            power_saver_info.power_saver_enabled;
+
         if (power_saver_info.blocked_for_background_tab || is_prerendering ||
-            !power_saver_info.poster_attribute.empty()) {
+            !power_saver_info.poster_attribute.empty() ||
+            blocked_for_tinyness) {
           placeholder = ChromePluginPlaceholder::CreateBlockedPlugin(
               render_frame, frame, params, info, identifier, group_name,
               power_saver_info.poster_attribute.empty()
@@ -781,24 +787,12 @@ WebPlugin* ChromeContentRendererClient::CreatePlugin(
               l10n_util::GetStringFUTF16(IDS_PLUGIN_BLOCKED, group_name),
               power_saver_info);
           placeholder->set_blocked_for_prerendering(is_prerendering);
+          placeholder->set_blocked_for_tinyness(blocked_for_tinyness);
           placeholder->AllowLoading();
           break;
         }
 
         std::unique_ptr<content::PluginInstanceThrottler> throttler;
-
-        // Small content filter requires routing through a placeholder.
-        // TODO(groby): Verify this actually only triggers if PPS on.
-        if (ChromePluginPlaceholder::IsSmallContentFilterEnabled()) {
-          // The feature only applies to flash plugins.
-          if (power_saver_info.is_eligible) {
-            placeholder = ChromePluginPlaceholder::CreateDelayedPlugin(
-                render_frame, frame, params, info, identifier, group_name,
-                power_saver_info);
-            break;
-          }
-        }
-
         if (power_saver_info.power_saver_enabled) {
           throttler = PluginInstanceThrottler::Create();
           // PluginPreroller manages its own lifetime.
@@ -1359,22 +1353,26 @@ void ChromeContentRendererClient::RunScriptsAtDocumentEnd(
 #endif
 }
 
-void
-ChromeContentRendererClient::DidInitializeServiceWorkerContextOnWorkerThread(
-    v8::Local<v8::Context> context,
-    const GURL& url) {
+void ChromeContentRendererClient::
+    DidInitializeServiceWorkerContextOnWorkerThread(
+        v8::Local<v8::Context> context,
+        int embedded_worker_id,
+        const GURL& url) {
 #if defined(ENABLE_EXTENSIONS)
-  extensions::Dispatcher::DidInitializeServiceWorkerContextOnWorkerThread(
-      context, url);
+  ChromeExtensionsRendererClient::GetInstance()
+      ->extension_dispatcher()
+      ->DidInitializeServiceWorkerContextOnWorkerThread(
+          context, embedded_worker_id, url);
 #endif
 }
 
 void ChromeContentRendererClient::WillDestroyServiceWorkerContextOnWorkerThread(
     v8::Local<v8::Context> context,
+    int embedded_worker_id,
     const GURL& url) {
 #if defined(ENABLE_EXTENSIONS)
-  extensions::Dispatcher::WillDestroyServiceWorkerContextOnWorkerThread(context,
-                                                                        url);
+  extensions::Dispatcher::WillDestroyServiceWorkerContextOnWorkerThread(
+      context, embedded_worker_id, url);
 #endif
 }
 

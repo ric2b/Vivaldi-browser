@@ -5,9 +5,11 @@
 #include "chrome/browser/chromeos/policy/policy_cert_verifier.h"
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/base/net_errors.h"
+#include "net/cert/caching_cert_verifier.h"
 #include "net/cert/cert_verify_proc.h"
 #include "net/cert/multi_threaded_cert_verifier.h"
 
@@ -56,10 +58,8 @@ void PolicyCertVerifier::InitializeOnIOThread(
     LOG(WARNING)
         << "Additional trust anchors not supported on the current platform!";
   }
-  net::MultiThreadedCertVerifier* verifier =
-      new net::MultiThreadedCertVerifier(verify_proc.get());
-  verifier->SetCertTrustAnchorProvider(this);
-  delegate_.reset(verifier);
+  delegate_ = base::MakeUnique<net::CachingCertVerifier>(
+      base::MakeUnique<net::MultiThreadedCertVerifier>(verify_proc.get()));
 }
 
 void PolicyCertVerifier::SetTrustAnchors(
@@ -69,10 +69,7 @@ void PolicyCertVerifier::SetTrustAnchors(
 }
 
 int PolicyCertVerifier::Verify(
-    net::X509Certificate* cert,
-    const std::string& hostname,
-    const std::string& ocsp_response,
-    int flags,
+    const RequestParams& params,
     net::CRLSet* crl_set,
     net::CertVerifyResult* verify_result,
     const net::CompletionCallback& completion_callback,
@@ -85,9 +82,15 @@ int PolicyCertVerifier::Verify(
                  anchor_used_callback_,
                  completion_callback,
                  verify_result);
-  int error =
-      delegate_->Verify(cert, hostname, ocsp_response, flags, crl_set,
-                        verify_result, wrapped_callback, out_req, net_log);
+
+  net::CertificateList merged_trust_anchors(params.additional_trust_anchors());
+  merged_trust_anchors.insert(merged_trust_anchors.begin(),
+                              trust_anchors_.begin(), trust_anchors_.end());
+  net::CertVerifier::RequestParams new_params(
+      params.certificate(), params.hostname(), params.flags(),
+      params.ocsp_response(), merged_trust_anchors);
+  int error = delegate_->Verify(new_params, crl_set, verify_result,
+                                wrapped_callback, out_req, net_log);
   MaybeSignalAnchorUse(error, anchor_used_callback_, *verify_result);
   return error;
 }
@@ -95,11 +98,6 @@ int PolicyCertVerifier::Verify(
 bool PolicyCertVerifier::SupportsOCSPStapling() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   return delegate_->SupportsOCSPStapling();
-}
-
-const net::CertificateList& PolicyCertVerifier::GetAdditionalTrustAnchors() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  return trust_anchors_;
 }
 
 }  // namespace policy

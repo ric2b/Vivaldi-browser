@@ -101,19 +101,23 @@ ContentSettingsType kPermissionType[] = {
     CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,
     CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
     CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-    CONTENT_SETTINGS_TYPE_IMAGES,
-    CONTENT_SETTINGS_TYPE_JAVASCRIPT,
-    CONTENT_SETTINGS_TYPE_POPUPS,
-    CONTENT_SETTINGS_TYPE_FULLSCREEN,
-    CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
-    CONTENT_SETTINGS_TYPE_PLUGINS,
-    CONTENT_SETTINGS_TYPE_MOUSELOCK,
-    CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
 #if defined(OS_ANDROID)
     CONTENT_SETTINGS_TYPE_PUSH_MESSAGING,
 #endif
-    CONTENT_SETTINGS_TYPE_KEYGEN,
+    CONTENT_SETTINGS_TYPE_JAVASCRIPT,
+#if !defined(OS_ANDROID)
+    CONTENT_SETTINGS_TYPE_PLUGINS,
+    CONTENT_SETTINGS_TYPE_IMAGES,
+#endif
+    CONTENT_SETTINGS_TYPE_POPUPS,
     CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
+    CONTENT_SETTINGS_TYPE_KEYGEN,
+    CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
+#if !defined(OS_ANDROID)
+    CONTENT_SETTINGS_TYPE_MOUSELOCK,
+#endif
+    CONTENT_SETTINGS_TYPE_FULLSCREEN,
+    CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
 };
 
 // Determines whether to show permission |type| in the Website Settings UI. Only
@@ -730,16 +734,12 @@ void WebsiteSettings::PresentSiteData() {
 
   // Add first party cookie and site data counts.
   WebsiteSettingsUI::CookieInfo cookie_info;
-  cookie_info.cookie_source =
-      l10n_util::GetStringUTF8(IDS_WEBSITE_SETTINGS_FIRST_PARTY_SITE_DATA);
   cookie_info.allowed = allowed_objects.GetObjectCountForDomain(site_url_);
   cookie_info.blocked = blocked_objects.GetObjectCountForDomain(site_url_);
   cookie_info.is_first_party = true;
   cookie_info_list.push_back(cookie_info);
 
   // Add third party cookie counts.
-  cookie_info.cookie_source = l10n_util::GetStringUTF8(
-     IDS_WEBSITE_SETTINGS_THIRD_PARTY_SITE_DATA);
   cookie_info.allowed = allowed_objects.GetObjectCount() - cookie_info.allowed;
   cookie_info.blocked = blocked_objects.GetObjectCount() - cookie_info.blocked;
   cookie_info.is_first_party = false;

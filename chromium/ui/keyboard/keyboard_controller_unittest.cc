@@ -206,11 +206,8 @@ class KeyboardControllerTest : public testing::Test,
 
   void MockRotateScreen() {
     const gfx::Rect root_bounds = root_window()->bounds();
-    controller_->OnWindowBoundsChanged(root_window(), gfx::Rect(),
-                                       gfx::Rect(0,
-                                                 0,
-                                                 root_bounds.height(),
-                                                 root_bounds.width()));
+    root_window()->SetBounds(
+        gfx::Rect(0, 0, root_bounds.height(), root_bounds.width()));
   }
 
  protected:
@@ -275,7 +272,6 @@ TEST_F(KeyboardControllerTest, KeyboardSize) {
   ASSERT_EQ(gfx::Rect(), initial_bounds);
   VerifyKeyboardWindowSize(container, keyboard);
 
-
   // In FULL_WIDTH mode, attempt to change window width or move window up from
   // the bottom are ignored. Changing window height is supported.
   gfx::Rect expected_bounds(0,
@@ -305,7 +301,6 @@ TEST_F(KeyboardControllerTest, KeyboardSize) {
 TEST_F(KeyboardControllerTest, FloatingKeyboardSize) {
   aura::Window* container(controller()->GetContainerWindow());
   aura::Window* keyboard(ui()->GetKeyboardWindow());
-  gfx::Rect screen_bounds = root_window()->bounds();
   root_window()->AddChild(container);
   controller()->SetKeyboardMode(FLOATING);
   container->AddChild(keyboard);
@@ -642,6 +637,24 @@ TEST_F(KeyboardControllerTest, FloatingKeyboardShowOnFirstTap) {
   ASSERT_EQ(new_bounds, container->bounds());
   EXPECT_TRUE(keyboard->IsVisible());
   EXPECT_TRUE(container->IsVisible());
+}
+
+TEST_F(KeyboardControllerTest, DisplayChangeShouldNotifyBoundsChange) {
+  ui::DummyTextInputClient input_client(ui::TEXT_INPUT_TYPE_TEXT);
+
+  aura::Window* container(controller()->GetContainerWindow());
+  root_window()->AddChild(container);
+
+  keyboard::SetTouchKeyboardEnabled(true);
+  controller()->SetKeyboardMode(FULL_WIDTH);
+  SetFocus(&input_client);
+  gfx::Rect new_bounds(0, 0, 1280, 800);
+  ASSERT_NE(new_bounds, root_window()->bounds());
+  EXPECT_EQ(1, number_of_calls());
+  root_window()->SetBounds(new_bounds);
+  EXPECT_EQ(2, number_of_calls());
+  MockRotateScreen();
+  EXPECT_EQ(3, number_of_calls());
 }
 
 }  // namespace keyboard

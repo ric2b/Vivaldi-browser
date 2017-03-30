@@ -9,11 +9,10 @@
 #include <string>
 
 #include "base/compiler_specific.h"
-#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
-#include "base/process/process.h"
+#include "chrome/common/variations/child_process_field_trial_syncer.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "content/public/renderer/render_thread_observer.h"
 
@@ -33,7 +32,7 @@ class ResourceDispatcherDelegate;
 // happen.  If a few messages are related, they should probably have their own
 // observer.
 class ChromeRenderThreadObserver : public content::RenderThreadObserver,
-                                    public base::FieldTrialList::Observer {
+                                   public base::FieldTrialList::Observer {
  public:
   ChromeRenderThreadObserver();
   ~ChromeRenderThreadObserver() override;
@@ -61,14 +60,13 @@ class ChromeRenderThreadObserver : public content::RenderThreadObserver,
       const GURL& url, const ContentSettings& content_settings);
   void OnSetContentSettingRules(const RendererContentSettingRules& rules);
   void OnGetCacheResourceStats();
-  void OnSetFieldTrialGroup(const std::string& fiel_trial_name,
-                            const std::string& group_name,
-                            base::ProcessId sender_pid,
-                            int32_t debug_token);
+  void OnSetFieldTrialGroup(const std::string& trial_name,
+                            const std::string& group_name);
 
   static bool is_incognito_process_;
   std::unique_ptr<content::ResourceDispatcherDelegate> resource_delegate_;
   RendererContentSettingRules content_setting_rules_;
+  chrome_variations::ChildProcessFieldTrialSyncer field_trial_syncer_;
 
   base::WeakPtrFactory<ChromeRenderThreadObserver> weak_factory_;
 

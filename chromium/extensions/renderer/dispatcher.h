@@ -85,6 +85,8 @@ class Dispatcher : public content::RenderThreadObserver,
 
   const std::string& webview_partition_id() { return webview_partition_id_; }
 
+  bool activity_logging_enabled() const { return activity_logging_enabled_; }
+
   void OnRenderFrameCreated(content::RenderFrame* render_frame);
 
   bool IsExtensionActive(const std::string& extension_id) const;
@@ -94,9 +96,11 @@ class Dispatcher : public content::RenderThreadObserver,
                               int extension_group,
                               int world_id);
 
-  // Runs on a different thread and should not use any member variables.
-  static void DidInitializeServiceWorkerContextOnWorkerThread(
+  // Runs on a different thread and should only use thread safe member
+  // variables.
+  void DidInitializeServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> v8_context,
+      int embedded_worker_id,
       const GURL& url);
 
   void WillReleaseScriptContext(blink::WebLocalFrame* frame,
@@ -106,6 +110,7 @@ class Dispatcher : public content::RenderThreadObserver,
   // Runs on a different thread and should not use any member variables.
   static void WillDestroyServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> v8_context,
+      int embedded_worker_id,
       const GURL& url);
 
   // This method is not allowed to run JavaScript code in the frame.
@@ -133,8 +138,6 @@ class Dispatcher : public content::RenderThreadObserver,
                                 const base::ListValue& args,
                                 bool user_gesture);
 
-  void ClearPortData(int port_id);
-
   // Returns a list of (module name, resource id) pairs for the JS modules to
   // add to the source map.
   static std::vector<std::pair<std::string, int> > GetJsResources();
@@ -160,7 +163,9 @@ class Dispatcher : public content::RenderThreadObserver,
 
   void OnActivateExtension(const std::string& extension_id);
   void OnCancelSuspend(const std::string& extension_id);
-  void OnDeliverMessage(int target_port_id, const Message& message);
+  void OnDeliverMessage(int target_port_id,
+                        int source_tab_id,
+                        const Message& message);
   void OnDispatchOnConnect(int target_port_id,
                            const std::string& channel_name,
                            const ExtensionMsg_TabConnectionInfo& source,
@@ -195,6 +200,7 @@ class Dispatcher : public content::RenderThreadObserver,
       bool update_origin_whitelist,
       int tab_id);
   void OnUsingWebRequestAPI(bool webrequest_used);
+  void OnSetActivityLoggingEnabled(bool enabled);
 
   // UserScriptSetManager::Observer implementation.
   void OnUserScriptsUpdated(const std::set<HostID>& changed_hosts,
@@ -223,7 +229,9 @@ class Dispatcher : public content::RenderThreadObserver,
   void RegisterBinding(const std::string& api_name, ScriptContext* context);
 
   void RegisterNativeHandlers(ModuleSystem* module_system,
-                              ScriptContext* context);
+                              ScriptContext* context,
+                              RequestSender* request_sender,
+                              V8SchemaRegistry* v8_schema_registry);
 
   // Determines if a ScriptContext can connect to any externally_connectable-
   // enabled extension.
@@ -241,11 +249,12 @@ class Dispatcher : public content::RenderThreadObserver,
 
   // Gets |field| from |object| or creates it as an empty object if it doesn't
   // exist.
-  v8::Local<v8::Object> GetOrCreateObject(const v8::Local<v8::Object>& object,
-                                          const std::string& field,
-                                          v8::Isolate* isolate);
+  static v8::Local<v8::Object> GetOrCreateObject(
+      const v8::Local<v8::Object>& object,
+      const std::string& field,
+      v8::Isolate* isolate);
 
-  v8::Local<v8::Object> GetOrCreateBindObjectIfAvailable(
+  static v8::Local<v8::Object> GetOrCreateBindObjectIfAvailable(
       const std::string& api_name,
       std::string* bind_name,
       ScriptContext* context);
@@ -294,9 +303,6 @@ class Dispatcher : public content::RenderThreadObserver,
   std::string system_font_family_;
   std::string system_font_size_;
 
-  // Mapping of port IDs to tabs. If there is no tab, the value would be -1.
-  std::map<int, int> port_to_tab_id_map_;
-
   // It is important for this to come after the ScriptInjectionManager, so that
   // the observer is destroyed before the UserScriptSet.
   ScopedObserver<UserScriptSetManager, UserScriptSetManager::Observer>
@@ -304,6 +310,9 @@ class Dispatcher : public content::RenderThreadObserver,
 
   // Status of webrequest usage.
   bool webrequest_used_;
+
+  // Whether or not extension activity is enabled.
+  bool activity_logging_enabled_;
 
   // The WebView partition ID associated with this process's storage partition,
   // if this renderer is a WebView guest render process. Otherwise, this will be

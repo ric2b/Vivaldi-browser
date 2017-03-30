@@ -92,6 +92,11 @@ constexpr SkColor kDefaultColorBookmarkText = SK_ColorBLACK;
 constexpr SkColor kDefaultColorBookmarkTextIncognito[] = {
     kDefaultColorBookmarkText, SK_ColorWHITE};
 
+const SkColor kDefaultColorBookmarkInstructionsText[] = {
+    SK_ColorBLACK, SkColorSetRGB(0x64, 0x64, 0x64)};
+const SkColor kDefaultColorBookmarkInstructionsTextIncognito[] = {
+    SK_ColorBLACK, SkColorSetARGB(0x8A, 0xFF, 0xFF, 0xFF)};
+
 #if defined(OS_WIN)
 const SkColor kDefaultColorNTPBackground =
     color_utils::GetSysSkColor(COLOR_WINDOW);
@@ -200,11 +205,6 @@ constexpr int kToolbarButtonIDs[] = {
     IDR_STOP_D,
     IDR_STOP_H,
     IDR_STOP_P,
-#if defined(OS_MACOSX)
-    IDR_BROWSER_ACTIONS_OVERFLOW,
-    IDR_BROWSER_ACTIONS_OVERFLOW_H,
-    IDR_BROWSER_ACTIONS_OVERFLOW_P,
-#endif
     IDR_TOOLS,
     IDR_TOOLS_H,
     IDR_TOOLS_P,
@@ -363,6 +363,9 @@ SkColor ThemeProperties::GetDefaultColor(int id, bool otr) {
     // Properties not stored in theme pack.
     case COLOR_CONTROL_BACKGROUND:
       return kDefaultColorControlBackground;
+    case COLOR_BOOKMARK_BAR_INSTRUCTIONS_TEXT:
+      return otr ? kDefaultColorBookmarkInstructionsTextIncognito[mode]
+                 : kDefaultColorBookmarkInstructionsText[mode];
     case COLOR_TOOLBAR_BOTTOM_SEPARATOR:
     case COLOR_DETACHED_BOOKMARK_BAR_SEPARATOR:
       return otr ? kDefaultDetachedBookmarkBarSeparatorIncognito[mode]

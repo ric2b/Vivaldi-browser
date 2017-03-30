@@ -67,6 +67,10 @@ class MediaLog;
 class RendererFactory;
 }
 
+namespace shell {
+class InterfaceRegistry;
+}
+
 namespace content {
 class BrowserPluginDelegate;
 class DocumentState;
@@ -332,12 +336,14 @@ class CONTENT_EXPORT ContentRendererClient {
   // is called from the worker thread.
   virtual void DidInitializeServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context,
+      int embedded_worker_id,
       const GURL& url) {}
 
   // Notifies that a service worker context will be destroyed. This function
   // is called from the worker thread.
   virtual void WillDestroyServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context,
+      int embedded_worker_id,
       const GURL& url) {}
 
   // Whether this renderer should enforce preferences related to the WebRTC
@@ -348,6 +354,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // from the worker thread.
   virtual void DidInitializeWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context) {}
+
+  // Allows the client to expose interfaces from the renderer process to the
+  // browser process via |registry|.
+  virtual void ExposeInterfacesToBrowser(
+      shell::InterfaceRegistry* interface_registry) {}
 };
 
 }  // namespace content

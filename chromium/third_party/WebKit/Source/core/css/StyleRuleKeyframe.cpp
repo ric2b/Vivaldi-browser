@@ -7,10 +7,11 @@
 #include "core/css/StylePropertySet.h"
 #include "core/css/parser/CSSParser.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 namespace blink {
 
-StyleRuleKeyframe::StyleRuleKeyframe(PassOwnPtr<Vector<double>> keys, StylePropertySet* properties)
+StyleRuleKeyframe::StyleRuleKeyframe(std::unique_ptr<Vector<double>> keys, StylePropertySet* properties)
 : StyleRuleBase(Keyframe)
 , m_properties(properties)
 , m_keys(*keys)
@@ -24,7 +25,7 @@ String StyleRuleKeyframe::keyText() const
     StringBuilder keyText;
     for (unsigned i = 0; i < m_keys.size(); ++i) {
         if (i)
-            keyText.appendLiteral(", ");
+            keyText.append(", ");
         keyText.appendNumber(m_keys.at(i) * 100);
         keyText.append('%');
     }
@@ -36,7 +37,7 @@ bool StyleRuleKeyframe::setKeyText(const String& keyText)
 {
     ASSERT(!keyText.isNull());
 
-    OwnPtr<Vector<double>> keys = CSSParser::parseKeyframeKeyList(keyText);
+    std::unique_ptr<Vector<double>> keys = CSSParser::parseKeyframeKeyList(keyText);
     if (!keys || keys->isEmpty())
         return false;
 
@@ -60,7 +61,7 @@ String StyleRuleKeyframe::cssText() const
 {
     StringBuilder result;
     result.append(keyText());
-    result.appendLiteral(" { ");
+    result.append(" { ");
     String decls = m_properties->asText();
     result.append(decls);
     if (!decls.isEmpty())

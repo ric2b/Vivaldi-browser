@@ -17,6 +17,7 @@
 #include "cc/quads/render_pass.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/trees/occlusion.h"
+#include "cc/trees/property_tree.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/transform.h"
@@ -24,6 +25,7 @@
 namespace cc {
 
 class DamageTracker;
+class FilterOperations;
 class Occlusion;
 class RenderPassId;
 class RenderPassSink;
@@ -141,6 +143,17 @@ class CC_EXPORT RenderSurfaceImpl {
   int OwningLayerId() const;
   bool HasReplica() const;
   const LayerImpl* ReplicaLayer() const;
+  LayerImpl* ReplicaLayer();
+
+  LayerImpl* MaskLayer();
+  bool HasMask() const;
+
+  LayerImpl* ReplicaMaskLayer();
+  bool HasReplicaMask() const;
+
+  const FilterOperations& BackgroundFilters() const;
+
+  bool HasCopyRequest() const;
 
   void ResetPropertyChangedFlag() { surface_property_changed_ = false; }
   bool SurfacePropertyChanged() const;
@@ -167,6 +180,8 @@ class CC_EXPORT RenderSurfaceImpl {
  private:
   void SetContentRect(const gfx::Rect& content_rect);
   gfx::Rect CalculateClippedAccumulatedContentRect();
+
+  const EffectNode* OwningEffectNode() const;
 
   LayerImpl* owning_layer_;
 

@@ -86,17 +86,7 @@ class GpuMemoryBufferVideoFramePool::PoolImpl
   struct FrameResources {
     explicit FrameResources(const gfx::Size& size) : size(size) {}
     void SetIsInUse(bool in_use) { in_use_ = in_use; }
-    bool IsInUse() const {
-      if (in_use_)
-        return true;
-      for (const PlaneResource& plane_resource : plane_resources) {
-        if (plane_resource.gpu_memory_buffer &&
-            plane_resource.gpu_memory_buffer->IsInUseByMacOSWindowServer()) {
-          return true;
-        }
-      }
-      return false;
-    }
+    bool IsInUse() const { return in_use_; }
 
     const gfx::Size size;
     PlaneResource plane_resources[VideoFrame::kMaxPlanes];
@@ -594,10 +584,15 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::
   auto release_mailbox_callback = BindToCurrentLoop(
       base::Bind(&PoolImpl::MailboxHoldersReleased, this, frame_resources));
 
+  // Consumers should sample from NV12 textures as if they're XRGB.
+  VideoPixelFormat frame_format =
+      output_format_ == PIXEL_FORMAT_NV12 ? PIXEL_FORMAT_XRGB : output_format_;
+  DCHECK_EQ(VideoFrame::NumPlanes(frame_format) * planes_per_copy, num_planes);
+
   // Create the VideoFrame backed by native textures.
   gfx::Size visible_size = video_frame->visible_rect().size();
   scoped_refptr<VideoFrame> frame = VideoFrame::WrapNativeTextures(
-      output_format_, mailbox_holders, release_mailbox_callback, coded_size,
+      frame_format, mailbox_holders, release_mailbox_callback, coded_size,
       gfx::Rect(visible_size), video_frame->natural_size(),
       video_frame->timestamp());
 

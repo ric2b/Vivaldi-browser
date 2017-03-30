@@ -34,6 +34,7 @@
 #include "platform/audio/Panner.h"
 #include "platform/geometry/FloatPoint3D.h"
 #include "wtf/HashMap.h"
+#include <memory>
 
 namespace blink {
 
@@ -152,7 +153,7 @@ private:
     // This Persistent doesn't make a reference cycle including the owner
     // PannerNode.
     Persistent<AudioListener> m_listener;
-    OwnPtr<Panner> m_panner;
+    std::unique_ptr<Panner> m_panner;
     unsigned m_panningModel;
     unsigned m_distanceModel;
 
@@ -206,7 +207,7 @@ private:
 class PannerNode final : public AudioNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static PannerNode* create(AbstractAudioContext&, float sampleRate);
+    static PannerNode* create(AbstractAudioContext&, ExceptionState&);
     PannerHandler& pannerHandler() const;
 
     DECLARE_VIRTUAL_TRACE();
@@ -241,7 +242,7 @@ public:
     void setConeOuterGain(double);
 
 private:
-    PannerNode(AbstractAudioContext&, float sampleRate);
+    PannerNode(AbstractAudioContext&);
 
     Member<AudioParam> m_positionX;
     Member<AudioParam> m_positionY;

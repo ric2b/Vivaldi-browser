@@ -24,23 +24,18 @@
 #define LayoutBlock_h
 
 #include "core/CoreExport.h"
-#include "core/layout/FloatingObjects.h"
-#include "core/layout/GapRects.h"
 #include "core/layout/LayoutBox.h"
-#include "core/style/ShapeValue.h"
-#include "platform/text/TextBreakIterator.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
-class LineLayoutState;
 struct PaintInfo;
-class LayoutInline;
+class LineLayoutBox;
 class WordMeasurement;
 
 typedef WTF::ListHashSet<LayoutBox*, 16> TrackedLayoutBoxListHashSet;
-typedef WTF::HashMap<const LayoutBlock*, OwnPtr<TrackedLayoutBoxListHashSet>> TrackedDescendantsMap;
+typedef WTF::HashMap<const LayoutBlock*, std::unique_ptr<TrackedLayoutBoxListHashSet>> TrackedDescendantsMap;
 typedef WTF::HashMap<const LayoutBox*, LayoutBlock*> TrackedContainerMap;
 typedef Vector<WordMeasurement, 64> WordMeasurements;
 
@@ -103,9 +98,6 @@ enum ContainingBlockState { NewContainingBlock, SameContainingBlock };
 //     ...
 // }
 class CORE_EXPORT LayoutBlock : public LayoutBox {
-public:
-    friend class LineLayoutState;
-
 protected:
     explicit LayoutBlock(ContainerNode*);
     ~LayoutBlock() override;
@@ -195,12 +187,6 @@ public:
 
     void setSelectionState(SelectionState) override;
 
-    LayoutBoxModelObject* virtualContinuation() const final { return continuation(); }
-    bool isAnonymousBlockContinuation() const { return continuation() && isAnonymousBlock(); }
-
-    using LayoutBoxModelObject::continuation;
-    using LayoutBoxModelObject::setContinuation;
-
     static LayoutBlock* createAnonymousWithParentAndDisplay(const LayoutObject*, EDisplay = BLOCK);
     LayoutBlock* createAnonymousBlock(EDisplay display = BLOCK) const { return createAnonymousWithParentAndDisplay(this, display); }
 
@@ -242,6 +228,7 @@ public:
 
 protected:
     bool recalcNormalFlowChildOverflowIfNeeded(LayoutObject*);
+    bool recalcPositionedDescendantsOverflowAfterStyleChange();
 public:
     virtual bool recalcChildOverflowAfterStyleChange();
     bool recalcOverflowAfterStyleChange();
@@ -279,7 +266,7 @@ protected:
     void layoutPositionedObjects(bool relayoutChildren, PositionedLayoutBehavior = DefaultLayout);
     void markFixedPositionObjectForLayoutIfNeeded(LayoutObject* child, SubtreeLayoutScope&);
 
-    LayoutUnit marginIntrinsicLogicalWidthForChild(LayoutBox& child) const;
+    LayoutUnit marginIntrinsicLogicalWidthForChild(const LayoutBox& child) const;
 
     int beforeMarginInLineDirection(LineDirectionMode) const;
 
@@ -307,24 +294,6 @@ protected:
     bool hitTestOverflowControl(HitTestResult&, const HitTestLocation&, const LayoutPoint& adjustedLocation) override;
     bool hitTestChildren(HitTestResult&, const HitTestLocation& locationInContainer, const LayoutPoint& accumulatedOffset, HitTestAction) override;
     void updateHitTestResult(HitTestResult&, const LayoutPoint&) override;
-
-    // Delay update scrollbar until finishDelayUpdateScrollInfo() will be
-    // called. This function is used when a flexbox is laying out its
-    // descendant. If multiple calls are made to startDelayUpdateScrollInfo(),
-    // finishDelayUpdateScrollInfo() will do nothing until finishDelayUpdateScrollInfo()
-    // is called the same number of times.
-    // finishDelayUpdateScrollInfo returns true when it marked something for layout.
-    // It will also return a map of saved scroll positions that the caller should restore
-    // on the given scrollable areas after performing the layout.
-    // This can be necessary because Flexbox's multi-pass layout can lose the scroll position.
-    // TODO(cbiesinger): This is a temporary hack. The right solution is to delay the scroll
-    // clamping that currently happens in PaintLayerScrollableArea::updateAfterLayout to only
-    // happen after all layout is done, i.e. during updateLayerPositionsAfterLayout. However,
-    // that currently fails a layout test. To fix this bug in time for M50, we use this temporary
-    // hack. The real fix is tracked in crbug.com/600036
-    typedef PersistentHeapHashMap<Member<PaintLayerScrollableArea>, DoublePoint> ScrollPositionMap;
-    static void startDelayUpdateScrollInfo();
-    static bool finishDelayUpdateScrollInfo(SubtreeLayoutScope*, ScrollPositionMap*);
 
     void updateAfterLayout();
 

@@ -6,8 +6,8 @@
 // DirectShow is used for capturing. DirectShow provide its own threads
 // for capturing.
 
-#ifndef MEDIA_VIDEO_CAPTURE_WIN_VIDEO_CAPTURE_DEVICE_MF_WIN_H_
-#define MEDIA_VIDEO_CAPTURE_WIN_VIDEO_CAPTURE_DEVICE_MF_WIN_H_
+#ifndef MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_MF_WIN_H_
+#define MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_MF_WIN_H_
 
 #include <mfidl.h>
 #include <mfreadwrite.h>
@@ -19,7 +19,7 @@
 #include "base/synchronization/lock.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/win/scoped_comptr.h"
-#include "media/base/media_export.h"
+#include "media/capture/capture_export.h"
 #include "media/capture/video/video_capture_device.h"
 
 interface IMFSourceReader;
@@ -35,8 +35,8 @@ class MFReaderCallback;
 const DWORD kFirstVideoStream =
     static_cast<DWORD>(MF_SOURCE_READER_FIRST_VIDEO_STREAM);
 
-class MEDIA_EXPORT VideoCaptureDeviceMFWin : public base::NonThreadSafe,
-                                             public VideoCaptureDevice {
+class CAPTURE_EXPORT VideoCaptureDeviceMFWin : public base::NonThreadSafe,
+                                               public VideoCaptureDevice {
  public:
   static bool FormatFromGuid(const GUID& guid, VideoPixelFormat* format);
 
@@ -56,7 +56,8 @@ class MEDIA_EXPORT VideoCaptureDeviceMFWin : public base::NonThreadSafe,
   void OnIncomingCapturedData(const uint8_t* data,
                               int length,
                               int rotation,
-                              const base::TimeTicks& time_stamp);
+                              base::TimeTicks reference_time,
+                              base::TimeDelta timestamp);
 
  private:
   void OnError(const tracked_objects::Location& from_here, HRESULT hr);
@@ -76,4 +77,4 @@ class MEDIA_EXPORT VideoCaptureDeviceMFWin : public base::NonThreadSafe,
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_WIN_VIDEO_CAPTURE_DEVICE_MF_WIN_H_
+#endif  // MEDIA_CAPTURE_VIDEO_WIN_VIDEO_CAPTURE_DEVICE_MF_WIN_H_

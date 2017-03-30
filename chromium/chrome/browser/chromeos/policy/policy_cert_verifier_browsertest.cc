@@ -18,13 +18,12 @@
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_test_nss_chromeos_user.h"
 #include "net/base/test_completion_callback.h"
-#include "net/base/test_data_directory.h"
-#include "net/cert/cert_trust_anchor_provider.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/nss_cert_database_chromeos.h"
 #include "net/cert/x509_certificate.h"
 #include "net/log/net_log.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace policy {
@@ -71,9 +70,12 @@ class PolicyCertVerifierTest : public testing::Test {
       const net::TestCompletionCallback& test_callback,
       net::CertVerifyResult* verify_result,
       std::unique_ptr<net::CertVerifier::Request>* request) {
-    return cert_verifier_->Verify(
-        test_server_cert_.get(), "127.0.0.1", std::string(), 0, NULL,
-        verify_result, test_callback.callback(), request, net::BoundNetLog());
+    return cert_verifier_->Verify(net::CertVerifier::RequestParams(
+                                      test_server_cert_.get(), "127.0.0.1", 0,
+                                      std::string(), net::CertificateList()),
+                                  nullptr, verify_result,
+                                  test_callback.callback(), request,
+                                  net::BoundNetLog());
   }
 
   bool SupportsAdditionalTrustAnchors() {

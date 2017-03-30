@@ -9,6 +9,9 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/location.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "google_apis/gaia/fake_oauth2_token_service.h"
@@ -128,13 +131,10 @@ void MockOAuth2TokenService::FetchOAuth2Token(
     const std::string& client_id,
     const std::string& client_secret,
     const ScopeSet& scopes) {
-  base::MessageLoop::current()->PostTask(
-      FROM_HERE,
-      base::Bind(&OAuth2TokenService::RequestImpl::InformConsumer,
-                 request->AsWeakPtr(),
-                 response_error_,
-                 response_access_token_,
-                 response_expiration_));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(&OAuth2TokenService::RequestImpl::InformConsumer,
+                            request->AsWeakPtr(), response_error_,
+                            response_access_token_, response_expiration_));
 }
 
 void MockOAuth2TokenService::InvalidateAccessTokenImpl(
@@ -185,7 +185,7 @@ void OAuth2TokenServiceRequestTest::SetUp() {
 
 void OAuth2TokenServiceRequestTest::TearDown() {
   // Run the loop to execute any pending tasks that may free resources.
-  ui_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 OAuth2TokenServiceRequestTest::Provider::Provider(
@@ -214,7 +214,7 @@ TEST_F(OAuth2TokenServiceRequestTest, CreateAndStart_Failure) {
   std::unique_ptr<OAuth2TokenServiceRequest> request(
       OAuth2TokenServiceRequest::CreateAndStart(provider_.get(), kAccountId,
                                                 scopes_, &consumer_));
-  ui_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, consumer_.num_get_token_success_);
   EXPECT_EQ(1, consumer_.num_get_token_failure_);
   EXPECT_EQ(GoogleServiceAuthError::SERVICE_UNAVAILABLE,
@@ -226,7 +226,7 @@ TEST_F(OAuth2TokenServiceRequestTest, CreateAndStart_Success) {
   std::unique_ptr<OAuth2TokenServiceRequest> request(
       OAuth2TokenServiceRequest::CreateAndStart(provider_.get(), kAccountId,
                                                 scopes_, &consumer_));
-  ui_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(1, consumer_.num_get_token_success_);
   EXPECT_EQ(0, consumer_.num_get_token_failure_);
   EXPECT_EQ(kAccessToken, consumer_.last_token_);
@@ -239,7 +239,7 @@ TEST_F(OAuth2TokenServiceRequestTest,
       OAuth2TokenServiceRequest::CreateAndStart(provider_.get(), kAccountId,
                                                 scopes_, &consumer_));
   request.reset();
-  ui_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, consumer_.num_get_token_success_);
   EXPECT_EQ(0, consumer_.num_get_token_failure_);
   EXPECT_EQ(0, oauth2_service_->num_invalidate_token());
@@ -250,7 +250,7 @@ TEST_F(OAuth2TokenServiceRequestTest,
   std::unique_ptr<OAuth2TokenServiceRequest> request(
       OAuth2TokenServiceRequest::CreateAndStart(provider_.get(), kAccountId,
                                                 scopes_, &consumer_));
-  ui_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   request.reset();
   EXPECT_EQ(1, consumer_.num_get_token_success_);
   EXPECT_EQ(0, consumer_.num_get_token_failure_);
@@ -261,7 +261,7 @@ TEST_F(OAuth2TokenServiceRequestTest,
 TEST_F(OAuth2TokenServiceRequestTest, InvalidateToken) {
   OAuth2TokenServiceRequest::InvalidateToken(
       provider_.get(), kAccountId, scopes_, kAccessToken);
-  ui_loop_.RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0, consumer_.num_get_token_success_);
   EXPECT_EQ(0, consumer_.num_get_token_failure_);
   EXPECT_EQ(kAccessToken, oauth2_service_->last_token_invalidated());

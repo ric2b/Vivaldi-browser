@@ -54,6 +54,7 @@ config("base_flags") {
 
 config("base_implementation") {
   defines = [ "BASE_IMPLEMENTATION" ]
+  configs = [ "//build/config/compiler:wexit_time_destructors" ]
 }
 
 if (is_win) {
@@ -124,12 +125,14 @@ config("android_system_libs") {
 # test code (test support and anything in the test directory) which should use
 # source_set as is recommended for GN targets).
 component("base") {
-  # TODO(phosek) bug 570839: If field_trial.cc is in a static library,
-  # hacl_helper_nonsfi doesn't link properly on Linux in debug builds. The
-  # reasons for this seem to involve obscure toolchain bugs. This should be
-  # fixed and this target should always be a static_library in the
-  # non-component case.
-  component_never_use_source_set = !is_nacl_nonsfi
+  if (is_nacl_nonsfi) {
+    # TODO(phosek) bug 570839: If field_trial.cc is in a static library,
+    # nacl_helper_nonsfi doesn't link properly on Linux in debug builds. The
+    # reasons for this seem to involve obscure toolchain bugs. This should be
+    # fixed and this target should always be a static_library in the
+    # non-component case.
+    static_component_type = "source_set"
+  }
 
   sources = [
     "allocator/allocator_check.cc",
@@ -148,6 +151,8 @@ component("base") {
     "android/base_jni_registrar.h",
     "android/build_info.cc",
     "android/build_info.h",
+    "android/callback_android.cc",
+    "android/callback_android.h",
     "android/command_line_android.cc",
     "android/command_line_android.h",
     "android/content_uri_utils.cc",
@@ -392,6 +397,7 @@ component("base") {
     "mac/call_with_eh_frame.cc",
     "mac/call_with_eh_frame.h",
     "mac/call_with_eh_frame_asm.S",
+    "mac/close_nocancel.cc",
     "mac/cocoa_protocols.h",
     "mac/dispatch_source_mach.cc",
     "mac/dispatch_source_mach.h",
@@ -431,6 +437,7 @@ component("base") {
     "mac/scoped_nsautorelease_pool.h",
     "mac/scoped_nsautorelease_pool.mm",
     "mac/scoped_nsobject.h",
+    "mac/scoped_nsobject.mm",
     "mac/scoped_objc_class_swizzler.h",
     "mac/scoped_objc_class_swizzler.mm",
     "mac/scoped_sending_event.h",
@@ -540,7 +547,6 @@ component("base") {
     "metrics/user_metrics.cc",
     "metrics/user_metrics.h",
     "metrics/user_metrics_action.h",
-    "move.h",
     "native_library.h",
     "native_library_ios.mm",
     "native_library_mac.mm",
@@ -675,9 +681,8 @@ component("base") {
     "sequenced_task_runner.cc",
     "sequenced_task_runner.h",
     "sequenced_task_runner_helpers.h",
+    "sha1.cc",
     "sha1.h",
-    "sha1_portable.cc",
-    "sha1_win.cc",
     "single_thread_task_runner.h",
     "stl_util.h",
     "strings/latin1_string_conversions.cc",
@@ -730,6 +735,10 @@ component("base") {
     "synchronization/lock_impl.h",
     "synchronization/lock_impl_posix.cc",
     "synchronization/lock_impl_win.cc",
+    "synchronization/read_write_lock.h",
+    "synchronization/read_write_lock_nacl.cc",
+    "synchronization/read_write_lock_posix.cc",
+    "synchronization/read_write_lock_win.cc",
     "synchronization/spin_wait.h",
     "synchronization/waitable_event.h",
     "synchronization/waitable_event_posix.cc",
@@ -767,13 +776,13 @@ component("base") {
     "task_scheduler/scheduler_lock_impl.h",
     "task_scheduler/scheduler_service_thread.cc",
     "task_scheduler/scheduler_service_thread.h",
-    "task_scheduler/scheduler_thread_pool.h",
-    "task_scheduler/scheduler_thread_pool_impl.cc",
-    "task_scheduler/scheduler_thread_pool_impl.h",
-    "task_scheduler/scheduler_worker_thread.cc",
-    "task_scheduler/scheduler_worker_thread.h",
-    "task_scheduler/scheduler_worker_thread_stack.cc",
-    "task_scheduler/scheduler_worker_thread_stack.h",
+    "task_scheduler/scheduler_worker.cc",
+    "task_scheduler/scheduler_worker.h",
+    "task_scheduler/scheduler_worker_pool.h",
+    "task_scheduler/scheduler_worker_pool_impl.cc",
+    "task_scheduler/scheduler_worker_pool_impl.h",
+    "task_scheduler/scheduler_worker_stack.cc",
+    "task_scheduler/scheduler_worker_stack.h",
     "task_scheduler/sequence.cc",
     "task_scheduler/sequence.h",
     "task_scheduler/sequence_sort_key.cc",
@@ -897,6 +906,8 @@ component("base") {
     "trace_event/memory_dump_request_args.h",
     "trace_event/memory_dump_session_state.cc",
     "trace_event/memory_dump_session_state.h",
+    "trace_event/memory_infra_background_whitelist.cc",
+    "trace_event/memory_infra_background_whitelist.h",
     "trace_event/process_memory_dump.cc",
     "trace_event/process_memory_dump.h",
     "trace_event/process_memory_maps.cc",
@@ -1122,6 +1133,7 @@ component("base") {
       "process/process_posix.cc",
       "scoped_native_library.cc",
       "sync_socket_posix.cc",
+      "synchronization/read_write_lock_posix.cc",
       "sys_info.cc",
       "sys_info_posix.cc",
       "trace_event/trace_event_system_stats_monitor.cc",
@@ -1156,6 +1168,7 @@ component("base") {
       "os_compat_nacl.cc",
       "os_compat_nacl.h",
       "rand_util_nacl.cc",
+      "synchronization/read_write_lock_nacl.cc",
     ]
   }
 
@@ -1169,13 +1182,12 @@ component("base") {
     sources -= [
       "message_loop/message_pump_libevent.cc",
       "strings/string16.cc",
-
-      # Not using sha1_win.cc because it may have caused a
-      # regression to page cycler moz.
-      "sha1_win.cc",
     ]
 
-    deps += [ "//base/trace_event/etw_manifest:chrome_events_win" ]
+    deps += [
+      "//base/trace_event/etw_manifest:chrome_events_win",
+      "//base/win:base_win_features",
+    ]
 
     if (is_component_build) {
       # Copy the VS runtime DLLs into the isolate so that they don't have to be
@@ -1254,7 +1266,6 @@ component("base") {
 
     libs = [
       "cfgmgr32.lib",
-      "netapi32.lib",
       "powrprof.lib",
       "setupapi.lib",
       "userenv.lib",
@@ -1395,6 +1406,7 @@ component("base") {
       "mac/mach_logging.h",
       "mac/objc_property_releaser.h",
       "mac/objc_property_releaser.mm",
+      "mac/scoped_block.h",
       "mac/scoped_mach_port.cc",
       "mac/scoped_mach_port.h",
       "mac/scoped_mach_vm.cc",
@@ -1402,8 +1414,10 @@ component("base") {
       "mac/scoped_nsautorelease_pool.h",
       "mac/scoped_nsautorelease_pool.mm",
       "mac/scoped_nsobject.h",
+      "mac/scoped_nsobject.mm",
       "mac/scoped_objc_class_swizzler.h",
       "mac/scoped_objc_class_swizzler.mm",
+      "mac/scoped_typeref.h",
       "memory/shared_memory_posix.cc",
       "message_loop/message_pump_mac.h",
       "message_loop/message_pump_mac.mm",
@@ -1629,10 +1643,11 @@ if (is_win) {
     ]
     deps = [
       ":base",
+      "//base/win:base_win_features",
     ]
   }
 
-  if (target_cpu == "x64") {
+  if (current_cpu == "x64") {
     # Must be a shared library so that it can be unloaded during testing.
     shared_library("base_profiler_test_support_library") {
       sources = [
@@ -1674,6 +1689,23 @@ bundle_data("base_unittests_bundle_data") {
     "{{bundle_resources_dir}}/" +
         "{{source_root_relative_dir}}/{{source_file_part}}",
   ]
+}
+
+if (is_ios || is_mac) {
+  source_set("base_unittests_arc") {
+    testonly = true
+    set_sources_assignment_filter([])
+    sources = [
+      "mac/bind_objc_block_unittest_arc.mm",
+      "mac/scoped_nsobject_unittest_arc.mm",
+    ]
+    set_sources_assignment_filter(sources_assignment_filter)
+    configs += [ "//build/config/compiler:enable_arc" ]
+    deps = [
+      ":base",
+      "//testing/gtest",
+    ]
+  }
 }
 
 test("base_unittests") {
@@ -1720,7 +1752,7 @@ test("base_unittests") {
     "deferred_sequenced_task_runner_unittest.cc",
     "environment_unittest.cc",
     "feature_list_unittest.cc",
-    "file_version_info_unittest.cc",
+    "file_version_info_win_unittest.cc",
     "files/dir_reader_posix_unittest.cc",
     "files/file_locking_unittest.cc",
     "files/file_path_unittest.cc",
@@ -1825,6 +1857,7 @@ test("base_unittests") {
     "profiler/stack_sampling_profiler_unittest.cc",
     "profiler/tracked_time_unittest.cc",
     "rand_util_unittest.cc",
+    "run_loop_unittest.cc",
     "scoped_clear_errno_unittest.cc",
     "scoped_generic_unittest.cc",
     "scoped_native_library_unittest.cc",
@@ -1852,8 +1885,10 @@ test("base_unittests") {
     "synchronization/cancellation_flag_unittest.cc",
     "synchronization/condition_variable_unittest.cc",
     "synchronization/lock_unittest.cc",
+    "synchronization/read_write_lock_unittest.cc",
     "synchronization/waitable_event_unittest.cc",
     "synchronization/waitable_event_watcher_unittest.cc",
+    "sys_byteorder_unittest.cc",
     "sys_info_unittest.cc",
     "system_monitor/system_monitor_unittest.cc",
     "task/cancelable_task_tracker_unittest.cc",
@@ -1862,9 +1897,9 @@ test("base_unittests") {
     "task_scheduler/priority_queue_unittest.cc",
     "task_scheduler/scheduler_lock_unittest.cc",
     "task_scheduler/scheduler_service_thread_unittest.cc",
-    "task_scheduler/scheduler_thread_pool_impl_unittest.cc",
-    "task_scheduler/scheduler_worker_thread_stack_unittest.cc",
-    "task_scheduler/scheduler_worker_thread_unittest.cc",
+    "task_scheduler/scheduler_worker_pool_impl_unittest.cc",
+    "task_scheduler/scheduler_worker_stack_unittest.cc",
+    "task_scheduler/scheduler_worker_unittest.cc",
     "task_scheduler/sequence_sort_key_unittest.cc",
     "task_scheduler/sequence_unittest.cc",
     "task_scheduler/task_scheduler_impl_unittest.cc",
@@ -1959,6 +1994,10 @@ test("base_unittests") {
     "//third_party/icu",
   ]
 
+  if (is_ios || is_mac) {
+    deps += [ ":base_unittests_arc" ]
+  }
+
   public_deps = [
     ":base_unittests_bundle_data",
   ]
@@ -2019,8 +2058,6 @@ test("base_unittests") {
   }
 
   if (is_linux) {
-    sources -= [ "file_version_info_unittest.cc" ]
-
     if (is_desktop_linux) {
       sources += [ "nix/xdg_util_unittest.cc" ]
     }
@@ -2058,7 +2095,7 @@ test("base_unittests") {
 
   if (is_win) {
     deps += [ "//base:scoped_handle_test_dll" ]
-    if (target_cpu == "x64") {
+    if (current_cpu == "x64") {
       sources += [ "profiler/win32_stack_frame_unwinder_unittest.cc" ]
       deps += [ ":base_profiler_test_support_library" ]
     }
@@ -2132,6 +2169,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/ApkAssets.java",
       "android/java/src/org/chromium/base/ApplicationStatus.java",
       "android/java/src/org/chromium/base/BuildInfo.java",
+      "android/java/src/org/chromium/base/Callback.java",
       "android/java/src/org/chromium/base/CommandLine.java",
       "android/java/src/org/chromium/base/ContentUriUtils.java",
       "android/java/src/org/chromium/base/ContextUtils.java",
@@ -2213,6 +2251,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/PerfTraceEvent.java",
       "android/java/src/org/chromium/base/PowerMonitor.java",
       "android/java/src/org/chromium/base/PowerStatusReceiver.java",
+      "android/java/src/org/chromium/base/Promise.java",
       "android/java/src/org/chromium/base/ResourceExtractor.java",
       "android/java/src/org/chromium/base/SecureRandomInitializer.java",
       "android/java/src/org/chromium/base/StreamUtil.java",
@@ -2277,6 +2316,7 @@ if (is_android) {
     ]
     java_files = [
       "test/android/javatests/src/org/chromium/base/test/BaseActivityInstrumentationTestCase.java",
+      "test/android/javatests/src/org/chromium/base/test/BaseChromiumInstrumentationTestRunner.java",
       "test/android/javatests/src/org/chromium/base/test/BaseInstrumentationTestRunner.java",
       "test/android/javatests/src/org/chromium/base/test/BaseTestResult.java",
       "test/android/javatests/src/org/chromium/base/test/util/AdvancedMockContext.java",
@@ -2297,6 +2337,7 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/PerfTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/Restriction.java",
       "test/android/javatests/src/org/chromium/base/test/util/RestrictionSkipCheck.java",
+      "test/android/javatests/src/org/chromium/base/test/util/RetryOnFailure.java",
       "test/android/javatests/src/org/chromium/base/test/util/ScalableTimeout.java",
       "test/android/javatests/src/org/chromium/base/test/util/SkipCheck.java",
       "test/android/javatests/src/org/chromium/base/test/util/TestFileUtil.java",
@@ -2330,6 +2371,7 @@ if (is_android) {
     java_files = [
       "android/junit/src/org/chromium/base/BaseChromiumApplicationTest.java",
       "android/junit/src/org/chromium/base/LogTest.java",
+      "android/junit/src/org/chromium/base/PromiseTest.java",
       "test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java",
       "test/android/junit/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheckTest.java",
       "test/android/junit/src/org/chromium/base/test/util/RestrictionSkipCheckTest.java",
@@ -2361,6 +2403,11 @@ if (is_android) {
       "android/java/templates/BuildConfig.template",
     ]
     package_name = "org/chromium/base"
+
+    defines = []
+    if (!is_java_debug) {
+      defines += [ "NDEBUG" ]
+    }
   }
 
   # GYP: //base/base.gyp:base_native_libraries_gen

@@ -4,8 +4,7 @@
 
 #include "ash/system/chromeos/supervised/tray_supervised_user.h"
 
-#include "ash/shell.h"
-#include "ash/system/user/login_status.h"
+#include "ash/common/login_status.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_system_tray_delegate.h"
 #include "ui/message_center/message_center.h"
@@ -33,7 +32,8 @@ message_center::Notification* TraySupervisedUserTest::GetPopup() {
   NotificationList::PopupNotifications popups =
       message_center::MessageCenter::Get()->GetPopupNotifications();
   for (NotificationList::PopupNotifications::const_iterator iter =
-           popups.begin(); iter != popups.end(); ++iter) {
+           popups.begin();
+       iter != popups.end(); ++iter) {
     if ((*iter)->id() == TraySupervisedUser::kNotificationId)
       return *iter;
   }
@@ -53,8 +53,7 @@ class TraySupervisedUserInitialTest : public TraySupervisedUserTest {
 };
 
 void TraySupervisedUserInitialTest::SetUp() {
-  test::TestSystemTrayDelegate::SetInitialLoginStatus(
-      user::LOGGED_IN_SUPERVISED);
+  test::TestSystemTrayDelegate::SetInitialLoginStatus(LoginStatus::SUPERVISED);
   test::AshTestBase::SetUp();
 }
 
@@ -64,10 +63,8 @@ void TraySupervisedUserInitialTest::TearDown() {
 }
 
 TEST_F(TraySupervisedUserTest, SupervisedUserHasNotification) {
-  test::TestSystemTrayDelegate* delegate =
-      static_cast<test::TestSystemTrayDelegate*>(
-          ash::Shell::GetInstance()->system_tray_delegate());
-  delegate->SetLoginStatus(user::LOGGED_IN_SUPERVISED);
+  test::TestSystemTrayDelegate* delegate = GetSystemTrayDelegate();
+  delegate->SetLoginStatus(LoginStatus::SUPERVISED);
 
   message_center::Notification* notification = GetPopup();
   ASSERT_NE(static_cast<message_center::Notification*>(NULL), notification);
@@ -84,4 +81,4 @@ TEST_F(TraySupervisedUserInitialTest, SupervisedUserNoCrash) {
             notification->rich_notification_data().priority);
 }
 
-}  // namespace
+}  // namespace ash

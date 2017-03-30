@@ -32,7 +32,6 @@ source_set("child") {
 
   public_deps = [
     "//gpu/ipc/client:client",
-    "//mojo/edk/system",
   ]
 
   deps = [
@@ -48,10 +47,11 @@ source_set("child") {
     "//content/public/common:common_sources",
     "//crypto:platform",
     "//gpu/command_buffer/client",
-    "//ipc/mojo",
     "//media",
     "//mojo/common",
+    "//mojo/edk/system",
     "//net",
+    "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
     "//services/shell/runner/common",
     "//skia",

@@ -28,6 +28,7 @@
         '../../skia/skia.gyp:skia',
         '../../testing/gmock.gyp:gmock',
         '../../testing/gtest.gyp:gtest',
+        '../../third_party/google_toolbox_for_mac/google_toolbox_for_mac.gyp:google_toolbox_for_mac',
         '../../third_party/ocmock/ocmock.gyp:ocmock',
         '../../ui/gfx/gfx.gyp:gfx',
         '../../ui/gfx/gfx.gyp:gfx_test_support',
@@ -69,9 +70,10 @@
         'browser/snapshots/lru_cache_unittest.mm',
         'browser/snapshots/snapshot_cache_unittest.mm',
         'browser/snapshots/snapshots_util_unittest.mm',
+        'browser/ssl/ios_ssl_error_handler_unittest.mm',
         'browser/translate/translate_service_ios_unittest.cc',
         'browser/ui/commands/set_up_for_testing_command_unittest.mm',
-        'browser/ui/context_menu/context_menu_controller_unittest.mm',
+        'browser/ui/context_menu/context_menu_coordinator_unittest.mm',
         'browser/ui/keyboard/UIKeyCommand+ChromeTest.mm',
         'browser/ui/keyboard/hardware_keyboard_watcher_unittest.mm',
         'browser/ui/native_content_controller_unittest.mm',
@@ -80,12 +82,14 @@
         'browser/update_client/ios_chrome_update_query_params_delegate_unittest.cc',
         'browser/web_resource/web_resource_util_unittest.cc',
         'common/string_util_unittest.mm',
+        'test/google_toolbox_unittest.mm',
       ],
       'actions': [
         {
           'action_name': 'copy_ios_chrome_test_data',
           'variables': {
             'test_data_files': [
+              '../../net/data/ssl/certificates/',
               'test/data/webdata/bookmarkimages',
             ],
             'test_data_prefix': 'ios/chrome',

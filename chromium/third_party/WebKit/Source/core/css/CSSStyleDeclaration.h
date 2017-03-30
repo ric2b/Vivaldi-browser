@@ -26,6 +26,7 @@
 #include "core/CoreExport.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
+#include "wtf/text/WTFString.h"
 
 namespace blink {
 
@@ -64,7 +65,8 @@ public:
     // CSSPropertyID versions of the CSSOM functions to support bindings and editing.
     // Use the non-virtual methods in the concrete subclasses when possible.
     // The CSSValue returned by this function should not be exposed to the web as it may be used by multiple documents at the same time.
-    virtual CSSValue* getPropertyCSSValueInternal(CSSPropertyID) = 0;
+    virtual const CSSValue* getPropertyCSSValueInternal(CSSPropertyID) = 0;
+    virtual const CSSValue* getPropertyCSSValueInternal(AtomicString customPropertyName) = 0;
     virtual String getPropertyValueInternal(CSSPropertyID) = 0;
     virtual void setPropertyInternal(CSSPropertyID, const String& propertyValue, const String& value, bool important, ExceptionState&) = 0;
 
@@ -72,6 +74,8 @@ public:
     virtual CSSStyleSheet* parentStyleSheet() const { return 0; }
 
     DEFINE_INLINE_VIRTUAL_TRACE() { }
+
+    DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
 protected:
     CSSStyleDeclaration() { }

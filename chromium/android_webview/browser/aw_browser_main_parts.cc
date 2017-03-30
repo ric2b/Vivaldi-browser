@@ -6,7 +6,6 @@
 
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_dev_tools_discovery_provider.h"
-#include "android_webview/browser/aw_media_client_android.h"
 #include "android_webview/browser/aw_result_codes.h"
 #include "android_webview/browser/deferred_gpu_command_service.h"
 #include "android_webview/browser/net/aw_network_change_notifier_factory.h"
@@ -27,7 +26,6 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
-#include "media/base/android/media_client_android.h"
 #include "net/android/network_change_notifier_factory_android.h"
 #include "net/base/network_change_notifier.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -91,9 +89,6 @@ void AwBrowserMainParts::PreMainMessageLoopRun() {
   browser_context_->PreMainMessageLoopRun();
 
   AwDevToolsDiscoveryProvider::Install();
-
-  media::SetMediaClientAndroid(
-      new AwMediaClientAndroid(AwResource::GetConfigKeySystemUuidMapping()));
 
   content::RenderFrameHost::AllowInjectingJavaScriptForAndroidWebView();
 }

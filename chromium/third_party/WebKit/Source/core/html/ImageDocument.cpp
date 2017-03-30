@@ -122,7 +122,7 @@ static String imageTitle(const String& filename, const IntSize& size)
 {
     StringBuilder result;
     result.append(filename);
-    result.appendLiteral(" (");
+    result.append(" (");
     // FIXME: Localize numbers. Safari/OSX shows localized numbers with group
     // separaters. For example, "1,920x1,080".
     result.appendNumber(size.width());
@@ -208,8 +208,6 @@ void ImageDocument::createDocumentStructure()
     appendChild(rootElement);
     rootElement->insertedByParser();
 
-    frame()->loader().dispatchDocumentElementAvailable();
-    frame()->loader().runScriptsAtDocumentElementAvailable();
     if (isStopped())
         return; // runScriptsAtDocumentElementAvailable can detach the frame.
 
@@ -220,7 +218,10 @@ void ImageDocument::createDocumentStructure()
     head->appendChild(meta);
 
     HTMLBodyElement* body = HTMLBodyElement::create(*this);
-    body->setAttribute(styleAttr, "margin: 0px;");
+    body->setAttribute(styleAttr, "margin: 0px;\
+                                   display: -webkit-box;\
+                                   text-align: -webkit-center;\
+                                   -webkit-box-align: center;");
 
     willInsertBody();
 
@@ -297,8 +298,14 @@ void ImageDocument::imageClicked(int x, int y)
 
         double scale = this->scale();
 
-        double scrollX = x / scale - static_cast<double>(frame()->view()->width()) / 2;
-        double scrollY = y / scale - static_cast<double>(frame()->view()->height()) / 2;
+        double frameWidth = static_cast<double>(frame()->view()->width());
+        double frameHeight = static_cast<double>(frame()->view()->height());
+
+        double xOffset = (frameWidth - scale * m_imageElement->width()) / 2;
+        double yOffset = (frameHeight - scale * m_imageElement->height()) / 2;
+
+        double scrollX = (x - xOffset) / scale - frameWidth / 2;
+        double scrollY = (y - yOffset) / scale - frameHeight / 2;
 
         frame()->view()->setScrollPosition(DoublePoint(scrollX, scrollY), ProgrammaticScroll);
     }

@@ -472,11 +472,11 @@ bool Font::computeCanShapeWordByWord() const
     return !platformData.hasSpaceInLigaturesOrKerning(features);
 };
 
-void Font::willUseFontData(UChar32 character) const
+void Font::willUseFontData(const String& text) const
 {
     const FontFamily& family = getFontDescription().family();
     if (m_fontFallbackList && m_fontFallbackList->getFontSelector() && !family.familyIsEmpty())
-        m_fontFallbackList->getFontSelector()->willUseFontData(getFontDescription(), family.family(), character);
+        m_fontFallbackList->getFontSelector()->willUseFontData(getFontDescription(), family.family(), text);
 }
 
 static inline GlyphData glyphDataForNonCJKCharacterWithGlyphOrientation(UChar32 character, bool isUpright, GlyphData& data, unsigned pageNumber)
@@ -777,7 +777,7 @@ Vector<CharacterRange> Font::individualCharacterRanges(const TextRun& run) const
     // (OSX10.9.5) we are seeing cases in the upper end of the unicode range
     // where this is not true (see: crbug.com/620952). To catch these cases on
     // more popular platforms, and to protect users, we are using a CHECK here.
-    CHECK_EQ(ranges.size(), static_cast<unsigned>(run.length()));
+    CHECK_EQ(ranges.size(), run.length());
     return ranges;
 }
 

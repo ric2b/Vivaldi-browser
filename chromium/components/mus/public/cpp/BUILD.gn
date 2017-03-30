@@ -5,8 +5,12 @@
 source_set("cpp") {
   sources = [
     "context_provider.h",
+    "gles2_context.h",
     "input_event_handler.h",
+    "lib/command_buffer_client_impl.cc",
+    "lib/command_buffer_client_impl.h",
     "lib/context_provider.cc",
+    "lib/gles2_context.cc",
     "lib/in_flight_change.cc",
     "lib/in_flight_change.h",
     "lib/output_surface.cc",
@@ -17,9 +21,8 @@ source_set("cpp") {
     "lib/window_private.cc",
     "lib/window_private.h",
     "lib/window_surface.cc",
-    "lib/window_tree_client_impl.cc",
-    "lib/window_tree_client_impl.h",
-    "lib/window_tree_delegate.cc",
+    "lib/window_tree_client.cc",
+    "lib/window_tree_client_delegate.cc",
     "lib/window_tree_host_factory.cc",
     "output_surface.h",
     "property_type_converters.h",
@@ -31,41 +34,41 @@ source_set("cpp") {
     "window_surface.h",
     "window_surface_client.h",
     "window_tracker.h",
-    "window_tree_connection.h",
-    "window_tree_connection_observer.h",
-    "window_tree_delegate.h",
+    "window_tree_client.h",
+    "window_tree_client_delegate.h",
+    "window_tree_client_observer.h",
     "window_tree_host_factory.h",
   ]
 
   public_deps = [
-    "../interfaces",
-  ]
-
-  deps = [
     "//base",
     "//cc",
     "//cc/surfaces",
     "//cc/surfaces:surface_id",
     "//components/mus/common:mus_common",
-    "//mojo/converters/geometry",
-    "//mojo/converters/input_events",
-    "//mojo/converters/surfaces",
-    "//mojo/gles2",
-    "//mojo/gpu:mojo_gles2_implementation",
-    "//mojo/public/cpp/bindings:bindings",
+    "//components/mus/public/interfaces",
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/common",
+    "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
-    "//services/shell/public/cpp",
     "//services/shell/public/interfaces",
+  ]
+
+  deps = [
+    "//components/mus/gles2:lib",
+    "//components/mus/public/interfaces",
+    "//gpu/command_buffer/client:gles2_cmd_helper",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/ipc/client",
+    "//services/shell/public/cpp",
+    "//ui/display",
+    "//ui/display/mojo",
     "//ui/events",
     "//ui/gfx/geometry",
-    "//ui/mojo/geometry:interfaces",
   ]
 
   data_deps = [
     "//components/mus",
   ]
-
-  if (is_component_build) {
-    deps += [ "//mojo/gles2" ]
-  }
 }

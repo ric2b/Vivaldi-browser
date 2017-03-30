@@ -4,14 +4,16 @@
 
 #include "android_webview/browser/parent_output_surface.h"
 
+#include "android_webview/browser/aw_render_thread_context_provider.h"
+#include "cc/output/compositor_frame.h"
 #include "cc/output/output_surface_client.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 
 namespace android_webview {
 
 ParentOutputSurface::ParentOutputSurface(
-    scoped_refptr<cc::ContextProvider> context_provider)
-    : cc::OutputSurface(context_provider) {
+    scoped_refptr<AwRenderThreadContextProvider> context_provider)
+    : cc::OutputSurface(std::move(context_provider), nullptr, nullptr) {
   stencil_state_.stencil_test_enabled = false;
 }
 
@@ -25,12 +27,13 @@ void ParentOutputSurface::DidLoseOutputSurface() {
 
 void ParentOutputSurface::Reshape(const gfx::Size& size,
                                   float scale_factor,
+                                  const gfx::ColorSpace& color_space,
                                   bool has_alpha) {
   DCHECK_EQ(1.f, scale_factor);
   surface_size_ = size;
 }
 
-void ParentOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
+void ParentOutputSurface::SwapBuffers(cc::CompositorFrame frame) {
   context_provider_->ContextGL()->ShallowFlushCHROMIUM();
   client_->DidSwapBuffers();
 }
@@ -52,6 +55,11 @@ void ParentOutputSurface::ApplyExternalStencil() {
   gl->StencilOpSeparate(GL_BACK, stencil_state_.stencil_back_fail_op,
                         stencil_state_.stencil_back_z_fail_op,
                         stencil_state_.stencil_back_z_pass_op);
+}
+
+uint32_t ParentOutputSurface::GetFramebufferCopyTextureFormat() {
+  auto* gl = static_cast<AwRenderThreadContextProvider*>(context_provider());
+  return gl->GetCopyTextureInternalFormat();
 }
 
 void ParentOutputSurface::SetGLState(const ScopedAppGLStateRestore& gl_state) {

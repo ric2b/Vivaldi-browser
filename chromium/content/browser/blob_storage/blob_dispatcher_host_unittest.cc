@@ -5,17 +5,18 @@
 #include "content/browser/blob_storage/blob_dispatcher_host.h"
 
 #include <memory>
+#include <tuple>
 #include <vector>
 
 #include "base/command_line.h"
 #include "base/memory/shared_memory.h"
 #include "base/run_loop.h"
-#include "base/tuple.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/common/fileapi/webblob_messages.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_file_system_context.h"
 #include "ipc/ipc_sender.h"
 #include "ipc/ipc_test_sink.h"
 #include "ipc/message_filter.h"
@@ -59,11 +60,16 @@ void ConstructionCompletePopulator(bool* succeeded_pointer,
   *reason_pointer = reason;
 }
 
+// TODO(dmurph): Create file test that verifies security policy.
 class TestableBlobDispatcherHost : public BlobDispatcherHost {
  public:
   TestableBlobDispatcherHost(ChromeBlobStorageContext* blob_storage_context,
+                             storage::FileSystemContext* file_system_context,
                              IPC::TestSink* sink)
-      : BlobDispatcherHost(blob_storage_context), sink_(sink) {
+      : BlobDispatcherHost(0 /* process_id */,
+                           make_scoped_refptr(blob_storage_context),
+                           make_scoped_refptr(file_system_context)),
+        sink_(sink) {
     this->SetMemoryConstantsForTesting(kTestBlobStorageIPCThresholdBytes,
                                        kTestBlobStorageMaxSharedMemoryBytes,
                                        kTestBlobStorageMaxFileSizeBytes);
@@ -91,8 +97,10 @@ class BlobDispatcherHostTest : public testing::Test {
   BlobDispatcherHostTest()
       : chrome_blob_storage_context_(
             ChromeBlobStorageContext::GetFor(&browser_context_)) {
-    host_ =
-        new TestableBlobDispatcherHost(chrome_blob_storage_context_, &sink_);
+    file_system_context_ =
+        CreateFileSystemContextForTesting(NULL, base::FilePath());
+    host_ = new TestableBlobDispatcherHost(chrome_blob_storage_context_,
+                                           file_system_context_.get(), &sink_);
   }
   ~BlobDispatcherHostTest() override {}
 
@@ -185,13 +193,13 @@ class BlobDispatcherHostTest : public testing::Test {
     const IPC::Message* message =
         sink_.GetUniqueMessageMatching(BlobStorageMsg_RequestMemoryItem::ID);
     ASSERT_TRUE(message);
-    base::Tuple<std::string, std::vector<storage::BlobItemBytesRequest>,
-                std::vector<base::SharedMemoryHandle>,
-                std::vector<IPC::PlatformFileForTransit>>
+    std::tuple<std::string, std::vector<storage::BlobItemBytesRequest>,
+               std::vector<base::SharedMemoryHandle>,
+               std::vector<IPC::PlatformFileForTransit>>
         args;
     BlobStorageMsg_RequestMemoryItem::Read(message, &args);
-    EXPECT_EQ(expected_uuid, base::get<0>(args));
-    std::vector<BlobItemBytesRequest> requests = base::get<1>(args);
+    EXPECT_EQ(expected_uuid, std::get<0>(args));
+    std::vector<BlobItemBytesRequest> requests = std::get<1>(args);
     ASSERT_EQ(requests.size(), expected_requests.size());
     for (size_t i = 0; i < expected_requests.size(); ++i) {
       EXPECT_EQ(expected_requests[i], requests[i]);
@@ -209,18 +217,18 @@ class BlobDispatcherHostTest : public testing::Test {
     const IPC::Message* message =
         sink_.GetUniqueMessageMatching(BlobStorageMsg_RequestMemoryItem::ID);
     ASSERT_TRUE(message);
-    base::Tuple<std::string, std::vector<storage::BlobItemBytesRequest>,
-                std::vector<base::SharedMemoryHandle>,
-                std::vector<IPC::PlatformFileForTransit>>
+    std::tuple<std::string, std::vector<storage::BlobItemBytesRequest>,
+               std::vector<base::SharedMemoryHandle>,
+               std::vector<IPC::PlatformFileForTransit>>
         args;
     BlobStorageMsg_RequestMemoryItem::Read(message, &args);
-    EXPECT_EQ(expected_uuid, base::get<0>(args));
-    std::vector<BlobItemBytesRequest> requests = base::get<1>(args);
+    EXPECT_EQ(expected_uuid, std::get<0>(args));
+    std::vector<BlobItemBytesRequest> requests = std::get<1>(args);
     ASSERT_EQ(requests.size(), expected_requests.size());
     for (size_t i = 0; i < expected_requests.size(); ++i) {
       EXPECT_EQ(expected_requests[i], requests[i]);
     }
-    *shared_memory_handles = std::move(base::get<2>(args));
+    *shared_memory_handles = std::move(std::get<2>(args));
   }
 
   void ExpectCancel(const std::string& expected_uuid,
@@ -232,10 +240,10 @@ class BlobDispatcherHostTest : public testing::Test {
     const IPC::Message* message =
         sink_.GetUniqueMessageMatching(BlobStorageMsg_CancelBuildingBlob::ID);
     ASSERT_TRUE(message);
-    base::Tuple<std::string, IPCBlobCreationCancelCode> args;
+    std::tuple<std::string, IPCBlobCreationCancelCode> args;
     BlobStorageMsg_CancelBuildingBlob::Read(message, &args);
-    EXPECT_EQ(expected_uuid, base::get<0>(args));
-    EXPECT_EQ(code, base::get<1>(args));
+    EXPECT_EQ(expected_uuid, std::get<0>(args));
+    EXPECT_EQ(code, std::get<1>(args));
   }
 
   void ExpectDone(const std::string& expected_uuid) {
@@ -245,9 +253,9 @@ class BlobDispatcherHostTest : public testing::Test {
         sink_.GetFirstMessageMatching(BlobStorageMsg_CancelBuildingBlob::ID));
     const IPC::Message* message =
         sink_.GetUniqueMessageMatching(BlobStorageMsg_DoneBuildingBlob::ID);
-    base::Tuple<std::string> args;
+    std::tuple<std::string> args;
     BlobStorageMsg_DoneBuildingBlob::Read(message, &args);
-    EXPECT_EQ(expected_uuid, base::get<0>(args));
+    EXPECT_EQ(expected_uuid, std::get<0>(args));
   }
 
   bool IsBeingBuiltInHost(const std::string& uuid) {
@@ -259,6 +267,7 @@ class BlobDispatcherHostTest : public testing::Test {
   TestBrowserContext browser_context_;
   ChromeBlobStorageContext* chrome_blob_storage_context_;
   BlobStorageContext* context_ = nullptr;
+  scoped_refptr<storage::FileSystemContext> file_system_context_;
   scoped_refptr<TestableBlobDispatcherHost> host_;
 };
 
@@ -915,7 +924,8 @@ TEST_F(BlobDispatcherHostTest, DeferenceBlobOnDifferentHost) {
   std::vector<BlobItemBytesResponse> responses = {response};
 
   scoped_refptr<TestableBlobDispatcherHost> host2(
-      new TestableBlobDispatcherHost(chrome_blob_storage_context_, &sink_));
+      new TestableBlobDispatcherHost(chrome_blob_storage_context_,
+                                     file_system_context_.get(), &sink_));
 
   // Delete host with another host having a referencing, then dereference on
   // second host. Verify we're still building it on first host, and then
@@ -998,7 +1008,8 @@ TEST_F(BlobDispatcherHostTest, BuildingReferenceChain) {
   std::set<std::string> referenced_blobs_set = {kId};
 
   scoped_refptr<TestableBlobDispatcherHost> host2(
-      new TestableBlobDispatcherHost(chrome_blob_storage_context_, &sink_));
+      new TestableBlobDispatcherHost(chrome_blob_storage_context_,
+                                     file_system_context_.get(), &sink_));
 
   // We want to have a blob referencing another blob that is building, both on
   // the same host and a different host. We should successfully build all blobs
@@ -1061,7 +1072,8 @@ TEST_F(BlobDispatcherHostTest, BuildingReferenceChainWithCancel) {
   std::set<std::string> referenced_blobs_set = {kId};
 
   scoped_refptr<TestableBlobDispatcherHost> host2(
-      new TestableBlobDispatcherHost(chrome_blob_storage_context_, &sink_));
+      new TestableBlobDispatcherHost(chrome_blob_storage_context_,
+                                     file_system_context_.get(), &sink_));
 
   // We want to have a blob referencing another blob that is building, both on
   // the same host and a different host. After we cancel the first blob, the
@@ -1121,7 +1133,8 @@ TEST_F(BlobDispatcherHostTest, BuildingReferenceChainWithSourceDeath) {
   std::set<std::string> referenced_blobs_set = {kId};
 
   scoped_refptr<TestableBlobDispatcherHost> host2(
-      new TestableBlobDispatcherHost(chrome_blob_storage_context_, &sink_));
+      new TestableBlobDispatcherHost(chrome_blob_storage_context_,
+                                     file_system_context_.get(), &sink_));
 
   // We want to have a blob referencing another blob that is building, both on
   // the same host and a different host. When we destroy the host, the other

@@ -42,10 +42,11 @@ class ContextMenuClientImpl final : public ContextMenuClient {
 public:
     explicit ContextMenuClientImpl(WebViewImpl* webView) : m_webView(webView) { }
     ~ContextMenuClientImpl() override {}
-    void showContextMenu(const ContextMenu*) override;
+    bool showContextMenu(const ContextMenu*, bool fromTouch) override;
     void clearContextMenu() override;
 private:
     void populateCustomMenuItems(const ContextMenu*, WebContextMenuData*);
+    bool shouldShowContextMenuFromTouch(const blink::WebContextMenuData&);
     WebViewImpl* m_webView;
 };
 

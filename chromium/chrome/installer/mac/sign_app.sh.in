@@ -90,4 +90,4 @@ codesign --verify --deep --no-strict -vvvvvv "${browser_app}"
 #
 #temp_browser_app="${temp_dir}/$(basename "${browser_app}")"
 #rsync -a "${browser_app}/" "${temp_browser_app}"
-# spctl --assess -vv "${browser_app}"
+#spctl --assess -vv "${temp_browser_app}"

@@ -7,18 +7,24 @@ package org.chromium.chrome.browser.externalnav;
 import android.content.IntentFilter;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ResolveInfo;
-import android.test.InstrumentationTestCase;
 import android.test.suitebuilder.annotation.SmallTest;
+
+import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-
 /**
  * Instrumentation tests for {@link ExternalNavigationHandler}.
  */
-public class ExternalNavigationDelegateImplTest extends InstrumentationTestCase {
+public class ExternalNavigationDelegateImplTest extends ChromeActivityTestCaseBase<ChromeActivity> {
+
+    public ExternalNavigationDelegateImplTest() {
+        super(ChromeActivity.class);
+    }
 
     private static List<ResolveInfo> makeResolveInfos(ResolveInfo... infos) {
         return Arrays.asList(infos);
@@ -28,8 +34,8 @@ public class ExternalNavigationDelegateImplTest extends InstrumentationTestCase 
     public void testIsPackageSpecializedHandler_NoResolveInfo() {
         String packageName = "";
         List<ResolveInfo> resolveInfos = new ArrayList<ResolveInfo>();
-        assertFalse(ExternalNavigationDelegateImpl
-                .isPackageSpecializedHandler(resolveInfos, packageName));
+        assertEquals(0, ExternalNavigationDelegateImpl.getSpecializedHandlersWithFilter(
+                                resolveInfos, packageName).size());
     }
 
     @SmallTest
@@ -38,8 +44,8 @@ public class ExternalNavigationDelegateImplTest extends InstrumentationTestCase 
         ResolveInfo info = new ResolveInfo();
         info.filter = new IntentFilter();
         List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        assertFalse(ExternalNavigationDelegateImpl
-                .isPackageSpecializedHandler(resolveInfos, packageName));
+        assertEquals(0, ExternalNavigationDelegateImpl.getSpecializedHandlersWithFilter(
+                                resolveInfos, packageName).size());
     }
 
     @SmallTest
@@ -49,8 +55,8 @@ public class ExternalNavigationDelegateImplTest extends InstrumentationTestCase 
         info.filter = new IntentFilter();
         info.filter.addDataPath("somepath", 2);
         List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        assertTrue(ExternalNavigationDelegateImpl
-                .isPackageSpecializedHandler(resolveInfos, packageName));
+        assertEquals(1, ExternalNavigationDelegateImpl.getSpecializedHandlersWithFilter(
+                                resolveInfos, packageName).size());
     }
 
     @SmallTest
@@ -60,8 +66,8 @@ public class ExternalNavigationDelegateImplTest extends InstrumentationTestCase 
         info.filter = new IntentFilter();
         info.filter.addDataAuthority("http://www.google.com", "80");
         List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        assertTrue(ExternalNavigationDelegateImpl
-                .isPackageSpecializedHandler(resolveInfos, packageName));
+        assertEquals(1, ExternalNavigationDelegateImpl.getSpecializedHandlersWithFilter(
+                                resolveInfos, packageName).size());
     }
 
     @SmallTest
@@ -73,8 +79,8 @@ public class ExternalNavigationDelegateImplTest extends InstrumentationTestCase 
         info.activityInfo = new ActivityInfo();
         info.activityInfo.packageName = packageName;
         List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        assertTrue(ExternalNavigationDelegateImpl
-                .isPackageSpecializedHandler(resolveInfos, packageName));
+        assertEquals(1, ExternalNavigationDelegateImpl.getSpecializedHandlersWithFilter(
+                                resolveInfos, packageName).size());
     }
 
     @SmallTest
@@ -86,7 +92,38 @@ public class ExternalNavigationDelegateImplTest extends InstrumentationTestCase 
         info.activityInfo = new ActivityInfo();
         info.activityInfo.packageName = "com.foo.bar";
         List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        assertFalse(ExternalNavigationDelegateImpl
-                .isPackageSpecializedHandler(resolveInfos, packageName));
+        assertEquals(0, ExternalNavigationDelegateImpl.getSpecializedHandlersWithFilter(
+                                resolveInfos, packageName).size());
+    }
+
+    @SmallTest
+    @CommandLineFlags.Add({"disable-features=SystemDownloadManager"})
+    public void testIsDownload_noSystemDownloadManager() throws Exception {
+        ExternalNavigationDelegateImpl delegate = new ExternalNavigationDelegateImpl(
+                getActivity().getActivityTab());
+        assertTrue("pdf should be a download, no viewer in Android Chrome",
+                delegate.isPdfDownload("http://somesampeleurldne.com/file.pdf"));
+        assertFalse("URL is not a file, but web page",
+                delegate.isPdfDownload("http://somesampleurldne.com/index.html"));
+        assertFalse("URL is not a file url",
+                delegate.isPdfDownload("http://somesampeleurldne.com/not.a.real.extension"));
+        assertFalse("URL is an image, can be viewed in Chrome",
+                delegate.isPdfDownload("http://somesampleurldne.com/image.jpg"));
+        assertFalse("URL is a text file can be viewed in Chrome",
+                delegate.isPdfDownload("http://somesampleurldne.com/copy.txt"));
+    }
+
+    @SmallTest
+    @CommandLineFlags.Add({"enable-features=SystemDownloadManager"})
+    public void testIsDownload_withSystemDownloadManager() throws Exception {
+        ExternalNavigationDelegateImpl delegate = new ExternalNavigationDelegateImpl(
+                getActivity().getActivityTab());
+        assertFalse("isDownload should return false with SystemDownloadManager enabled",
+                delegate.isPdfDownload("http://somesampeleurldne.com/file.pdf"));
+    }
+
+    @Override
+    public void startMainActivity() throws InterruptedException {
+        startMainActivityOnBlankPage();
     }
 }

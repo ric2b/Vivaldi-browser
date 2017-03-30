@@ -55,9 +55,9 @@ DEFINE_TRACE(InspectorDatabaseResource)
     visitor->trace(m_database);
 }
 
-void InspectorDatabaseResource::bind(protocol::Frontend::Database* frontend)
+void InspectorDatabaseResource::bind(protocol::Database::Frontend* frontend)
 {
-    OwnPtr<protocol::Database::Database> jsonObject = protocol::Database::Database::create()
+    std::unique_ptr<protocol::Database::Database> jsonObject = protocol::Database::Database::create()
         .setId(m_id)
         .setDomain(m_domain)
         .setName(m_name)

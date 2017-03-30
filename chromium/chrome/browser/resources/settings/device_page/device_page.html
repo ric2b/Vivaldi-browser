@@ -1,16 +1,16 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
-<link rel="import" href="chrome://md-settings/controls/settings_dropdown_menu.html">
-<link rel="import" href="chrome://md-settings/device_page/device_page_browser_proxy.html">
-<link rel="import" href="chrome://md-settings/device_page/display.html">
-<link rel="import" href="chrome://md-settings/device_page/keyboard.html">
-<link rel="import" href="chrome://md-settings/device_page/touchpad.html">
-<link rel="import" href="chrome://md-settings/icons.html">
-<link rel="import" href="chrome://md-settings/prefs/prefs.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_subpage.html">
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
+<link rel="import" href="/controls/settings_dropdown_menu.html">
+<link rel="import" href="/device_page/device_page_browser_proxy.html">
+<link rel="import" href="/device_page/display.html">
+<link rel="import" href="/device_page/keyboard.html">
+<link rel="import" href="/device_page/touchpad.html">
+<link rel="import" href="/icons.html">
+<link rel="import" href="/prefs/prefs.html">
+<link rel="import" href="/settings_page/settings_animated_pages.html">
+<link rel="import" href="/settings_page/settings_subpage.html">
+<link rel="import" href="/settings_shared_css.html">
 
 <dom-module id="settings-device-page">
   <template>
@@ -19,16 +19,18 @@
         current-route="{{currentRoute}}">
       <neon-animatable id="main">
         <div id="touchpadRow" class="settings-box first"
-            on-tap="onTouchpadTap_">
+            on-tap="onTouchpadTap_" actionable>
           <!-- TODO(michaelpg): Get a touchpad icon. -->
           <iron-icon icon="settings:brightness-1"></iron-icon>
           <div class="middle">$i18n{touchpadTitle}</div>
         </div>
-        <div id="keyboardRow" class="settings-box" on-tap="onKeyboardTap_">
+        <div id="keyboardRow" class="settings-box" on-tap="onKeyboardTap_"
+            actionable>
           <iron-icon icon="settings:keyboard"></iron-icon>
           <div class="middle">$i18n{keyboardTitle}</div>
         </div>
-        <div id="displayRow" class="settings-box" on-tap="onDisplayTap_">
+        <div id="displayRow" class="settings-box" on-tap="onDisplayTap_"
+            actionable>
           <iron-icon icon="settings:desktop-windows"></iron-icon>
           <div class="middle">$i18n{displayTitle}</div>
         </div>

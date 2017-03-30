@@ -22,7 +22,7 @@ class ProprietaryMediaGpuChannel : public GpuChannel
   ProprietaryMediaGpuChannel(GpuChannelManager* gpu_channel_manager,
              SyncPointManager* sync_point_manager,
              GpuWatchdog* watchdog,
-             gfx::GLShareGroup* share_group,
+             gl::GLShareGroup* share_group,
              gles2::MailboxManager* mailbox_manager,
              PreemptionFlag* preempting_flag,
              PreemptionFlag* preempted_flag,

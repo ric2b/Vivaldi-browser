@@ -6,7 +6,6 @@
 <include src="../../../../ui/login/bubble.js">
 <include src="../../../../ui/login/login_ui_tools.js">
 <include src="../../../../ui/login/display_manager.js">
-<include src="../../../../ui/login/account_picker/user_pod_template.js">
 <include src="../../../../ui/login/account_picker/screen_account_picker.js">
 <include src="../../../../ui/login/account_picker/user_pod_row.js">
 
@@ -40,9 +39,15 @@ cr.define('cr.ui', function() {
     newDesktopUserManager: true,
 
     /**
+     * Indicates whether the user pods page is visible.
+     * @type {boolean}
+     */
+    userPodsPageVisible: true,
+
+    /**
      * @override
      * Overrides clientAreaSize in DisplayManager. When a new profile is created
-     * the #outer-container page may not be visible yet, so user-pods cannot be
+     * the user pods page may not be visible yet, so user-pods cannot be
      * placed correctly. Therefore, we use dimensions of the #animated-pages.
      * @type {{width: number, height: number}}
      */
@@ -57,6 +62,19 @@ cr.define('cr.ui', function() {
   };
 
   /**
+   * Listens for the page change event to see if the user pods page is visible.
+   * Updates userPodsPageVisible property accordingly and if the page is visible
+   * re-arranges the user pods.
+   * @param {!Event} event The event containing ID of the selected page.
+   */
+  UserManager.onPageChanged_ = function(event) {
+    var userPodsPageVisible = event.detail.page == 'user-pods-page';
+    cr.ui.UserManager.getInstance().userPodsPageVisible = userPodsPageVisible;
+    if (userPodsPageVisible)
+      $('pod-row').rebuildPods();
+  };
+
+  /**
    * Initializes the UserManager.
    */
   UserManager.initialize = function() {
@@ -66,6 +84,7 @@ cr.define('cr.ui', function() {
 
     signin.ProfileBrowserProxyImpl.getInstance().initializeUserManager(
         window.location.hash);
+    cr.addWebUIListener('show-error-dialog', cr.ui.UserManager.showErrorDialog);
   };
 
   /**
@@ -132,6 +151,14 @@ cr.define('cr.ui', function() {
     DisplayManager.clearErrors();
   };
 
+  /**
+   * Shows the error dialog populated with the given message.
+   * @param {string} message Error message to show.
+   */
+  UserManager.showErrorDialog = function(message) {
+    document.querySelector('error-dialog').show(message);
+  };
+
   // Export
   return {
     UserManager: UserManager
@@ -151,3 +178,5 @@ disableTextSelectAndDrag(function(e) {
 });
 
 document.addEventListener('DOMContentLoaded', cr.ui.UserManager.initialize);
+
+document.addEventListener('change-page', cr.ui.UserManager.onPageChanged_);

@@ -43,7 +43,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/prefs/pref_service.h"
-#include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/user_prefs/user_prefs.h"
 #include "content/public/browser/browser_thread.h"
@@ -68,10 +67,6 @@
 #include "ui/app_list/speech_ui_model.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/webview/webview.h"
-
-#if defined(TOOLKIT_VIEWS)
-#include "ui/views/controls/webview/webview.h"
-#endif
 
 #if defined(USE_AURA)
 #include "ui/keyboard/keyboard_util.h"
@@ -260,6 +255,8 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
     model_ = NULL;
   }
 
+  template_url_service_observer_.RemoveAll();
+
   profile_ = new_profile;
   if (!profile_) {
     speech_ui_->SetSpeechRecognitionState(app_list::SPEECH_RECOGNITION_OFF,
@@ -279,7 +276,6 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
     tracked_objects::ScopedTracker tracking_profile(
         FROM_HERE_WITH_EXPLICIT_FUNCTION(
             "431326 AppListViewDelegate TemplateURL etc."));
-    template_url_service_observer_.RemoveAll();
     if (app_list::switches::IsExperimentalAppListEnabled()) {
       TemplateURLService* template_url_service =
           TemplateURLServiceFactory::GetForProfile(profile_);
@@ -833,8 +829,8 @@ void AppListViewDelegate::OnTemplateURLServiceChanged() {
   const TemplateURL* default_provider =
       template_url_service->GetDefaultSearchProvider();
   bool is_google =
-      TemplateURLPrepopulateData::GetEngineType(
-          *default_provider, template_url_service->search_terms_data()) ==
+      default_provider->GetEngineType(
+          template_url_service->search_terms_data()) ==
       SEARCH_ENGINE_GOOGLE;
 
   model_->SetSearchEngineIsGoogle(is_google);
@@ -848,19 +844,15 @@ void AppListViewDelegate::OnTemplateURLServiceChanged() {
 void AppListViewDelegate::Observe(int type,
                                   const content::NotificationSource& source,
                                   const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_APP_TERMINATING:
-      FOR_EACH_OBSERVER(
-          app_list::AppListViewDelegateObserver, observers_, OnShutdown());
+  DCHECK_EQ(chrome::NOTIFICATION_APP_TERMINATING, type);
 
-      SetProfile(NULL);  // Ensures launcher page web contents are torn down.
+  FOR_EACH_OBSERVER(app_list::AppListViewDelegateObserver, observers_,
+                    OnShutdown());
 
-      // SigninManagerFactory is not a leaky singleton (unlike this class), and
-      // its destructor will check that it has no remaining observers.
-      scoped_observer_.RemoveAll();
-      SigninManagerFactory::GetInstance()->RemoveObserver(this);
-      break;
-    default:
-      NOTREACHED();
-  }
+  SetProfile(nullptr);  // Ensures launcher page web contents are torn down.
+
+  // SigninManagerFactory is not a leaky singleton (unlike this class), and
+  // its destructor will check that it has no remaining observers.
+  scoped_observer_.RemoveAll();
+  SigninManagerFactory::GetInstance()->RemoveObserver(this);
 }

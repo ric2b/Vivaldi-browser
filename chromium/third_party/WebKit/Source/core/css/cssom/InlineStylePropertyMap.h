@@ -16,12 +16,10 @@ public:
     explicit InlineStylePropertyMap(Element* ownerElement)
         : m_ownerElement(ownerElement) { }
 
-    StyleValueVector getAll(CSSPropertyID) override;
-    bool has(CSSPropertyID) override;
     Vector<String> getProperties() override;
 
-    void set(CSSPropertyID, StyleValueOrStyleValueSequenceOrString&, ExceptionState&) override;
-    void append(CSSPropertyID, StyleValueOrStyleValueSequenceOrString&, ExceptionState&) override;
+    void set(CSSPropertyID, CSSStyleValueOrCSSStyleValueSequenceOrString&, ExceptionState&) override;
+    void append(CSSPropertyID, CSSStyleValueOrCSSStyleValueSequenceOrString&, ExceptionState&) override;
     void remove(CSSPropertyID, ExceptionState&) override;
 
     DEFINE_INLINE_VIRTUAL_TRACE()
@@ -29,6 +27,12 @@ public:
         visitor->trace(m_ownerElement);
         MutableStylePropertyMap::trace(visitor);
     }
+
+protected:
+    CSSStyleValueVector getAllInternal(CSSPropertyID) override;
+    CSSStyleValueVector getAllInternal(AtomicString customPropertyName) override;
+
+    HeapVector<StylePropertyMapEntry> getIterationEntries() override;
 
 private:
     Member<Element> m_ownerElement;

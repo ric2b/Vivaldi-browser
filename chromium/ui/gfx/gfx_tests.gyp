@@ -38,7 +38,6 @@
         'codec/jpeg_codec_unittest.cc',
         'codec/png_codec_unittest.cc',
         'color_analysis_unittest.cc',
-        'color_profile_mac_unittest.mm',
         'color_utils_unittest.cc',
         'font_fallback_mac_unittest.cc',
         'font_list_unittest.cc',
@@ -67,6 +66,7 @@
         'range/range_unittest.cc',
         'range/range_win_unittest.cc',
         'render_text_unittest.cc',
+        'selection_bound_unittest.cc',
         'sequential_id_generator_unittest.cc',
         'shadow_value_unittest.cc',
         'skbitmap_operations_unittest.cc',
@@ -91,6 +91,10 @@
         ['OS == "ios"', {
           'sources': ['<@(_common_sources)'],
         }, {  # OS != "ios"
+          'dependencies': [
+            '../../mojo/mojo_edk.gyp:mojo_common_test_support',
+            '../../mojo/mojo_public.gyp:mojo_cpp_bindings',
+          ],
           'sources': ['<@(_all_sources)'],
         }],
         ['OS != "mac" and OS != "ios"', {
@@ -126,12 +130,12 @@
         }],
         ['OS == "win"', {
           'sources': [
-            'color_profile_win_unittest.cc',
             'font_fallback_win_unittest.cc',
             'icon_util_unittest.cc',
             'icon_util_unittests.rc',
             'path_win_unittest.cc',
             'platform_font_win_unittest.cc',
+            'win/text_analysis_source_unittest.cc',
           ],
           'msvs_settings': {
             'VCLinkerTool': {

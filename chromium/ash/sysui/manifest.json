@@ -1,0 +1,20 @@
+{
+  "manifest_version":  1,
+  "name": "mojo:ash_sysui",
+  "display_name": "System UI",
+  "capabilities": {
+    "required": {
+      "*": { "classes": [ "app" ] },
+      "mojo:ash": {
+        "interfaces": [
+          "ash::mojom::ShelfLayout",
+          "ash::mojom::UserWindowController"
+        ]
+      },
+      "exe:chrome" : {
+        "interfaces": [ "ash::sysui::mojom::WallpaperManager" ],
+        "classes": [ "app_list:presenter" ]
+      }
+    }
+  }
+}

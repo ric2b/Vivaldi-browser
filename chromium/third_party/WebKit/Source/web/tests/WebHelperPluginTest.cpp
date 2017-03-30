@@ -52,19 +52,19 @@ protected:
 
     void destroyHelperPlugin()
     {
-        m_plugin.clear();
+        m_plugin.reset();
         // WebHelperPlugin is destroyed by a task posted to the message loop.
         testing::runPendingTasks();
     }
 
     FrameTestHelpers::WebViewHelper m_helper;
     WebHelperPluginFrameClient m_frameClient;
-    OwnPtr<WebHelperPlugin> m_plugin;
+    WebHelperPluginUniquePtr m_plugin;
 };
 
 TEST_F(WebHelperPluginTest, CreateAndDestroyAfterWebViewDestruction)
 {
-    m_plugin = adoptPtr(WebHelperPlugin::create("hello", m_helper.webView()->mainFrame()->toWebLocalFrame()));
+    m_plugin.reset(WebHelperPlugin::create("hello", m_helper.webView()->mainFrame()->toWebLocalFrame()));
     EXPECT_TRUE(m_plugin);
     EXPECT_TRUE(m_plugin->getPlugin());
 
@@ -74,7 +74,7 @@ TEST_F(WebHelperPluginTest, CreateAndDestroyAfterWebViewDestruction)
 
 TEST_F(WebHelperPluginTest, CreateAndDestroyBeforeWebViewDestruction)
 {
-    m_plugin = adoptPtr(WebHelperPlugin::create("hello", m_helper.webView()->mainFrame()->toWebLocalFrame()));
+    m_plugin.reset(WebHelperPlugin::create("hello", m_helper.webView()->mainFrame()->toWebLocalFrame()));
     EXPECT_TRUE(m_plugin);
     EXPECT_TRUE(m_plugin->getPlugin());
 
@@ -86,7 +86,7 @@ TEST_F(WebHelperPluginTest, CreateFailsWithPlaceholder)
 {
     m_frameClient.setCreatePlaceholder(true);
 
-    m_plugin = adoptPtr(WebHelperPlugin::create("hello", m_helper.webView()->mainFrame()->toWebLocalFrame()));
+    m_plugin.reset(WebHelperPlugin::create("hello", m_helper.webView()->mainFrame()->toWebLocalFrame()));
     EXPECT_EQ(0, m_plugin.get());
 }
 

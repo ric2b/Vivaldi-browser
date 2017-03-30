@@ -6,9 +6,10 @@
 #define MEDIA_MOJO_SERVICES_MOJO_RENDERER_SERVICE_H_
 
 #include <stdint.h>
-
 #include <memory>
 
+#include "base/callback.h"
+#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -17,6 +18,7 @@
 #include "media/base/pipeline_status.h"
 #include "media/base/renderer_client.h"
 #include "media/mojo/interfaces/renderer.mojom.h"
+#include "media/mojo/services/media_mojo_export.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
 namespace media {
@@ -28,7 +30,9 @@ class Renderer;
 
 // A mojom::Renderer implementation that use a media::Renderer to render
 // media streams.
-class MojoRendererService : public mojom::Renderer, public RendererClient {
+class MEDIA_MOJO_EXPORT MojoRendererService
+    : NON_EXPORTED_BASE(public mojom::Renderer),
+      public RendererClient {
  public:
   // |mojo_cdm_service_context| can be used to find the CDM to support
   // encrypted media. If null, encrypted media is not supported.
@@ -42,12 +46,12 @@ class MojoRendererService : public mojom::Renderer, public RendererClient {
   void Initialize(mojom::RendererClientPtr client,
                   mojom::DemuxerStreamPtr audio,
                   mojom::DemuxerStreamPtr video,
-                  const mojo::Callback<void(bool)>& callback) final;
-  void Flush(const mojo::Closure& callback) final;
+                  const InitializeCallback& callback) final;
+  void Flush(const FlushCallback& callback) final;
   void StartPlayingFrom(int64_t time_delta_usec) final;
   void SetPlaybackRate(double playback_rate) final;
   void SetVolume(float volume) final;
-  void SetCdm(int32_t cdm_id, const mojo::Callback<void(bool)>& callback) final;
+  void SetCdm(int32_t cdm_id, const SetCdmCallback& callback) final;
 
  private:
   enum State {
@@ -69,10 +73,10 @@ class MojoRendererService : public mojom::Renderer, public RendererClient {
 
   // Called when the DemuxerStreamProviderShim is ready to go (has a config,
   // pipe handle, etc) and can be handed off to a renderer for use.
-  void OnStreamReady(const mojo::Callback<void(bool)>& callback);
+  void OnStreamReady(const base::Callback<void(bool)>& callback);
 
   // Called when |audio_renderer_| initialization has completed.
-  void OnRendererInitializeDone(const mojo::Callback<void(bool)>& callback,
+  void OnRendererInitializeDone(const base::Callback<void(bool)>& callback,
                                 PipelineStatus status);
 
   // Periodically polls the media time from the renderer and notifies the client
@@ -83,11 +87,11 @@ class MojoRendererService : public mojom::Renderer, public RendererClient {
   void SchedulePeriodicMediaTimeUpdates();
 
   // Callback executed once Flush() completes.
-  void OnFlushCompleted(const mojo::Closure& callback);
+  void OnFlushCompleted(const FlushCallback& callback);
 
   // Callback executed once SetCdm() completes.
   void OnCdmAttached(scoped_refptr<MediaKeys> cdm,
-                     const mojo::Callback<void(bool)>& callback,
+                     const base::Callback<void(bool)>& callback,
                      bool success);
 
   mojo::StrongBinding<mojom::Renderer> binding_;

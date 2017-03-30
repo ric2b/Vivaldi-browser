@@ -14,10 +14,8 @@
 #include "content/public/browser/web_contents_delegate.h"
 
 #if defined(OS_ANDROID)
-#include "content/public/browser/android/download_controller_android.h"
+#include "chrome/browser/android/download/download_controller_base.h"
 #include "content/public/browser/render_view_host.h"
-
-using content::DownloadControllerAndroid;
 #endif
 
 using content::BrowserThread;
@@ -58,7 +56,7 @@ void CanDownloadOnUIThread(
 #if defined(OS_ANDROID)
   content::WebContents* contents = info->web_contents_getter.Run();
   if (contents) {
-    content::DownloadControllerAndroid::Get()->AcquireFileAccessPermission(
+    DownloadControllerBase::Get()->AcquireFileAccessPermission(
         contents, base::Bind(&OnAcquireFileAccessPermissionDone,
                              base::Passed(std::move(info))));
   } else {

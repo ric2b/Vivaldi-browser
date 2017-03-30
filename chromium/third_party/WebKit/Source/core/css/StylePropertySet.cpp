@@ -24,8 +24,8 @@
 
 #include "core/StylePropertyShorthand.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPropertyMetadata.h"
-#include "core/css/CSSValuePool.h"
 #include "core/css/StylePropertySerializer.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/css/parser/CSSParser.h"
@@ -77,7 +77,7 @@ ImmutableStylePropertySet::ImmutableStylePropertySet(const CSSProperty* properti
     : StylePropertySet(cssParserMode, length)
 {
     StylePropertyMetadata* metadataArray = const_cast<StylePropertyMetadata*>(this->metadataArray());
-    Member<CSSValue>* valueArray = const_cast<Member<CSSValue>*>(this->valueArray());
+    Member<const CSSValue>* valueArray = const_cast<Member<const CSSValue>*>(this->valueArray());
     for (unsigned i = 0; i < m_arraySize; ++i) {
         metadataArray[i] = properties[i].metadata();
         valueArray[i] = properties[i].value();
@@ -132,7 +132,7 @@ template CORE_EXPORT int ImmutableStylePropertySet::findPropertyIndex(AtomicStri
 
 DEFINE_TRACE_AFTER_DISPATCH(ImmutableStylePropertySet)
 {
-    const Member<CSSValue>* values = valueArray();
+    const Member<const CSSValue>* values = valueArray();
     for (unsigned i = 0; i < m_arraySize; i++)
         visitor->trace(values[i]);
     StylePropertySet::traceAfterDispatch(visitor);
@@ -290,6 +290,8 @@ bool StylePropertySet::isPropertyImplicit(CSSPropertyID propertyID) const
 
 bool MutableStylePropertySet::setProperty(CSSPropertyID unresolvedProperty, const String& value, bool important, StyleSheetContents* contextStyleSheet)
 {
+    DCHECK_GE(unresolvedProperty, firstCSSProperty);
+
     // Setting the value to an empty string just removes the property in both IE and Gecko.
     // Setting it to null seems to produce less consistent results, but we treat it just the same.
     if (value.isEmpty())
@@ -311,14 +313,14 @@ void MutableStylePropertySet::setProperty(CSSPropertyID propertyID, CSSValue* va
 {
     StylePropertyShorthand shorthand = shorthandForProperty(propertyID);
     if (!shorthand.length()) {
-        setProperty(CSSProperty(propertyID, value, important));
+        setProperty(CSSProperty(propertyID, *value, important));
         return;
     }
 
     removePropertiesInSet(shorthand.properties(), shorthand.length());
 
     for (unsigned i = 0; i < shorthand.length(); ++i)
-        m_propertyVector.append(CSSProperty(shorthand.properties()[i], value, important));
+        m_propertyVector.append(CSSProperty(shorthand.properties()[i], *value, important));
 }
 
 bool MutableStylePropertySet::setProperty(const CSSProperty& property, CSSProperty* slot)
@@ -340,7 +342,7 @@ bool MutableStylePropertySet::setProperty(const CSSProperty& property, CSSProper
 
 bool MutableStylePropertySet::setProperty(CSSPropertyID propertyID, CSSValueID identifier, bool important)
 {
-    setProperty(CSSProperty(propertyID, cssValuePool().createIdentifierValue(identifier), important));
+    setProperty(CSSProperty(propertyID, *CSSPrimitiveValue::createIdentifier(identifier), important));
     return true;
 }
 
@@ -503,7 +505,7 @@ MutableStylePropertySet* StylePropertySet::copyPropertiesInSet(const Vector<CSSP
     for (unsigned i = 0; i < properties.size(); ++i) {
         CSSValue* value = getPropertyCSSValue(properties[i]);
         if (value)
-            list.append(CSSProperty(properties[i], value, false));
+            list.append(CSSProperty(properties[i], *value, false));
     }
     return MutableStylePropertySet::create(list.data(), list.size());
 }

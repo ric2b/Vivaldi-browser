@@ -225,7 +225,7 @@ void SpellcheckService::LoadHunspellDictionaries() {
   const base::ListValue* dictionary_values =
       prefs->GetList(prefs::kSpellCheckDictionaries);
 
-  for (const base::Value* dictionary_value : *dictionary_values) {
+  for (const auto& dictionary_value : *dictionary_values) {
     std::string dictionary;
     dictionary_value->GetAsString(&dictionary);
     hunspell_dictionaries_.push_back(new SpellcheckHunspellDictionary(
@@ -262,10 +262,8 @@ bool SpellcheckService::UnloadExternalDictionary(
 void SpellcheckService::Observe(int type,
                                 const content::NotificationSource& source,
                                 const content::NotificationDetails& details) {
-  DCHECK(type == content::NOTIFICATION_RENDERER_PROCESS_CREATED);
-  content::RenderProcessHost* process =
-      content::Source<content::RenderProcessHost>(source).ptr();
-  InitForRenderer(process);
+  DCHECK_EQ(content::NOTIFICATION_RENDERER_PROCESS_CREATED, type);
+  InitForRenderer(content::Source<content::RenderProcessHost>(source).ptr());
 }
 
 void SpellcheckService::OnCustomDictionaryLoaded() {

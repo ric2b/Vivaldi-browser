@@ -16,12 +16,9 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 
-namespace gfx {
-class SurfaceTexture;
-}
-
 namespace gl {
 class GLImage;
+class SurfaceTexture;
 }
 
 namespace gpu {
@@ -41,12 +38,6 @@ class GPU_EXPORT GpuMemoryBufferFactorySurfaceTexture
       gfx::BufferUsage usage,
       int client_id,
       SurfaceHandle surface_handle) override;
-  gfx::GpuMemoryBufferHandle CreateGpuMemoryBufferFromHandle(
-      const gfx::GpuMemoryBufferHandle& handle,
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      int client_id) override;
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                               int client_id) override;
   ImageFactory* AsImageFactory() override;
@@ -57,12 +48,14 @@ class GPU_EXPORT GpuMemoryBufferFactorySurfaceTexture
       const gfx::Size& size,
       gfx::BufferFormat format,
       unsigned internalformat,
-      int client_id) override;
+      int client_id,
+      SurfaceHandle surface_handle) override;
 
  private:
   typedef std::pair<int, int> SurfaceTextureMapKey;
   typedef base::hash_map<SurfaceTextureMapKey,
-                         scoped_refptr<gfx::SurfaceTexture>> SurfaceTextureMap;
+                         scoped_refptr<gl::SurfaceTexture>>
+      SurfaceTextureMap;
   SurfaceTextureMap surface_textures_;
   base::Lock surface_textures_lock_;
 };

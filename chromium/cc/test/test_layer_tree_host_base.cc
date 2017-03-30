@@ -105,7 +105,7 @@ void TestLayerTreeHostBase::SetupPendingTree(
       host_impl()->active_tree()->device_scale_factor());
 
   // Steal from the recycled tree if possible.
-  LayerImpl* pending_root = pending_tree->root_layer();
+  LayerImpl* pending_root = pending_tree->root_layer_for_testing();
   std::unique_ptr<FakePictureLayerImpl> pending_layer;
   DCHECK(!pending_root || pending_root->id() == root_id_);
   if (!pending_root) {
@@ -117,10 +117,11 @@ void TestLayerTreeHostBase::SetupPendingTree(
     pending_layer->SetDrawsContent(true);
     pending_layer->SetScrollClipLayer(new_pending_root->id());
     pending_root = new_pending_root.get();
-    pending_tree->SetRootLayer(std::move(new_pending_root));
+    pending_tree->SetRootLayerForTesting(std::move(new_pending_root));
   } else {
     pending_layer.reset(static_cast<FakePictureLayerImpl*>(
-        pending_root->RemoveChildForTesting(pending_root->children()[0])
+        pending_root->test_properties()
+            ->RemoveChild(pending_root->test_properties()->children[0])
             .release()));
     if (!tile_size.IsEmpty())
       pending_layer->set_fixed_tile_size(tile_size);
@@ -130,10 +131,10 @@ void TestLayerTreeHostBase::SetupPendingTree(
   pending_layer->SetBounds(raster_source->GetSize());
   pending_layer->SetRasterSourceOnPending(raster_source, invalidation);
 
-  pending_root->AddChild(std::move(pending_layer));
-  pending_tree->SetViewportLayersFromIds(Layer::INVALID_ID,
-                                         pending_tree->root_layer()->id(),
-                                         Layer::INVALID_ID, Layer::INVALID_ID);
+  pending_root->test_properties()->AddChild(std::move(pending_layer));
+  pending_tree->SetViewportLayersFromIds(
+      Layer::INVALID_ID, pending_tree->root_layer_for_testing()->id(),
+      Layer::INVALID_ID, Layer::INVALID_ID);
 
   pending_layer_ = static_cast<FakePictureLayerImpl*>(
       host_impl()->pending_tree()->LayerById(id_));
@@ -160,7 +161,7 @@ void TestLayerTreeHostBase::ActivateTree() {
 
 void TestLayerTreeHostBase::RebuildPropertyTreesOnPendingTree() {
   host_impl()->pending_tree()->property_trees()->needs_rebuild = true;
-  host_impl()->pending_tree()->BuildPropertyTreesForTesting();
+  host_impl()->pending_tree()->BuildLayerListAndPropertyTreesForTesting();
 }
 
 void TestLayerTreeHostBase::SetInitialTreePriority() {

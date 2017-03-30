@@ -6,6 +6,10 @@ import("//testing/test.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
 
+config("headless_implementation") {
+  defines = [ "HEADLESS_IMPLEMENTATION" ]
+}
+
 group("headless") {
   deps = [
     "//headless:headless_lib",
@@ -56,9 +60,11 @@ grit("headless_lib_resources_grit") {
 
 action("gen_devtools_client_api") {
   script = "//headless/lib/browser/client_api_generator.py"
-
+  deps = [
+    "//third_party/WebKit/Source/core/inspector:protocol_version",
+  ]
   inputs = [
-    "//third_party/WebKit/Source/devtools/protocol.json",
+    "$root_gen_dir/blink/core/inspector/protocol.json",
   ]
 
   outputs = [
@@ -204,8 +210,8 @@ static_library("headless_lib") {
     "$target_gen_dir/public/domains/types.h",
     "$target_gen_dir/public/domains/worker.cc",
     "$target_gen_dir/public/domains/worker.h",
-    "lib/browser/headless_browser_context.cc",
-    "lib/browser/headless_browser_context.h",
+    "lib/browser/headless_browser_context_impl.cc",
+    "lib/browser/headless_browser_context_impl.h",
     "lib/browser/headless_browser_impl.cc",
     "lib/browser/headless_browser_impl.h",
     "lib/browser/headless_browser_main_parts.cc",
@@ -234,6 +240,7 @@ static_library("headless_lib") {
     "lib/utility/headless_content_utility_client.h",
     "public/headless_browser.cc",
     "public/headless_browser.h",
+    "public/headless_browser_context.h",
     "public/headless_devtools_client.h",
     "public/headless_devtools_host.h",
     "public/headless_devtools_target.h",
@@ -264,6 +271,8 @@ static_library("headless_lib") {
     "//ui/ozone",
     "//url",
   ]
+
+  configs += [ ":headless_implementation" ]
 }
 
 group("headless_tests") {
@@ -310,11 +319,16 @@ action("client_api_generator_tests") {
 test("headless_browsertests") {
   sources = [
     "lib/headless_browser_browsertest.cc",
+    "lib/headless_browser_context_browsertest.cc",
     "lib/headless_devtools_client_browsertest.cc",
     "lib/headless_web_contents_browsertest.cc",
     "test/headless_browser_test.cc",
     "test/headless_browser_test.h",
     "test/headless_test_launcher.cc",
+    "test/test_protocol_handler.cc",
+    "test/test_protocol_handler.h",
+    "test/test_url_request_job.cc",
+    "test/test_url_request_job.h",
   ]
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]

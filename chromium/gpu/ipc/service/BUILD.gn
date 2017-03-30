@@ -78,8 +78,9 @@ source_set("ipc_service_sources") {
     deps += [ "//ui/accelerated_widget_mac" ]
     lib_dirs = [ "$mac_sdk_path/usr/lib" ]
     libs += [
-      "QuartzCore.framework",
+      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreGraphics.framework",
+      "QuartzCore.framework",
     ]
   }
   if (is_android) {
@@ -136,13 +137,13 @@ test("gpu_ipc_service_unittests") {
     ":service",
     ":test_support",
     "//base",
-    "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//gpu/command_buffer/common",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/command_buffer/service",
     "//gpu/config",
     "//gpu/ipc/common",
+    "//ipc:run_all_unittests",
     "//ipc:test_support",
     "//skia",
     "//testing/gmock",

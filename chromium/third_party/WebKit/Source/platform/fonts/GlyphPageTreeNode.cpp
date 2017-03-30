@@ -31,9 +31,11 @@
 #include "platform/fonts/SegmentedFontData.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/fonts/opentype/OpenTypeVerticalData.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 #include <stdio.h>
 
 namespace blink {
@@ -246,8 +248,8 @@ void GlyphPageTreeNode::initializePurePage(const FontData* fontData, unsigned pa
 
         const SegmentedFontData* segmentedFontData = toSegmentedFontData(fontData);
         for (int i = segmentedFontData->numFaces() - 1; i >= 0; i--) {
-            const FontDataForRangeSet& fontDataForRangeSet = segmentedFontData->faceAt(i);
-            RefPtr<UnicodeRangeSet> ranges = fontDataForRangeSet.ranges();
+            RefPtr<FontDataForRangeSet> fontDataForRangeSet = segmentedFontData->faceAt(i);
+            RefPtr<UnicodeRangeSet> ranges = fontDataForRangeSet->ranges();
             // If there are no ranges, that means this font should be used for
             // the full codepoint range, thus running the loop once over a
             // synthetic full UnicodeRange object. Otherwise we use the ranges
@@ -269,7 +271,7 @@ void GlyphPageTreeNode::initializePurePage(const FontData* fontData, unsigned pa
 
                 // If this is a custom font needs to be loaded, do not fill
                 // the page so that font fallback is used while loading.
-                RefPtr<CustomFontData> customData = fontDataForRangeSet.fontData()->customFontData();
+                RefPtr<CustomFontData> customData = fontDataForRangeSet->fontData()->customFontData();
                 if (customData && customData->isLoadingFallback()) {
                     for (int j = from; j < to; j++) {
                         m_page->setCustomFontToLoad(j, customData.get());
@@ -278,7 +280,7 @@ void GlyphPageTreeNode::initializePurePage(const FontData* fontData, unsigned pa
                     continue;
                 }
 
-                haveGlyphs |= fill(m_page.get(), from, to - from, buffer + from * (start < 0x10000 ? 1 : 2), (to - from) * (start < 0x10000 ? 1 : 2), fontDataForRangeSet.fontData());
+                haveGlyphs |= fill(m_page.get(), from, to - from, buffer + from * (start < 0x10000 ? 1 : 2), (to - from) * (start < 0x10000 ? 1 : 2), fontDataForRangeSet->fontData());
             }
         }
     }
@@ -355,7 +357,7 @@ GlyphPageTreeNode* GlyphPageTreeNode::getNormalChild(const FontData* fontData, u
 #if ENABLE(ASSERT)
     child->m_pageNumber = m_pageNumber;
 #endif
-    m_children.set(fontData, adoptPtr(child));
+    m_children.set(fontData, wrapUnique(child));
     fontData->setMaxGlyphPageTreeLevel(max(fontData->maxGlyphPageTreeLevel(), child->m_level));
     child->initializePage(fontData, pageNumber);
     return child;
@@ -369,7 +371,7 @@ SystemFallbackGlyphPageTreeNode* GlyphPageTreeNode::getSystemFallbackChild(unsig
         return m_systemFallbackChild.get();
 
     SystemFallbackGlyphPageTreeNode* child = new SystemFallbackGlyphPageTreeNode(this);
-    m_systemFallbackChild = adoptPtr(child);
+    m_systemFallbackChild = wrapUnique(child);
 #if ENABLE(ASSERT)
     child->m_pageNumber = m_pageNumber;
 #endif
@@ -382,7 +384,7 @@ void GlyphPageTreeNode::pruneCustomFontData(const FontData* fontData)
         return;
 
     // Prune any branch that contains this FontData.
-    if (OwnPtr<GlyphPageTreeNode> node = m_children.take(fontData)) {
+    if (std::unique_ptr<GlyphPageTreeNode> node = m_children.take(fontData)) {
         if (unsigned customFontCount = node->m_customFontCount + 1) {
             for (GlyphPageTreeNode* curr = this; curr; curr = curr->m_parent)
                 curr->m_customFontCount -= customFontCount;
@@ -411,7 +413,7 @@ void GlyphPageTreeNode::pruneFontData(const SimpleFontData* fontData, unsigned l
         m_page->removePerGlyphFontData(fontData);
 
     // Prune any branch that contains this FontData.
-    if (OwnPtr<GlyphPageTreeNode> node = m_children.take(fontData)) {
+    if (std::unique_ptr<GlyphPageTreeNode> node = m_children.take(fontData)) {
         if (unsigned customFontCount = node->m_customFontCount) {
             for (GlyphPageTreeNode* curr = this; curr; curr = curr->m_parent)
                 curr->m_customFontCount -= customFontCount;

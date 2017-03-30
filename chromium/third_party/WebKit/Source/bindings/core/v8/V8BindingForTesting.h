@@ -5,14 +5,20 @@
 #ifndef V8BindingForTesting_h
 #define V8BindingForTesting_h
 
-#include "bindings/core/v8/DOMWrapperWorld.h"
+#include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
-
 #include <v8.h>
 
 namespace blink {
+
+class Document;
+class DOMWrapperWorld;
+class DummyPageHolder;
+class ExecutionContext;
+class LocalFrame;
+class Page;
 
 class ScriptStateForTesting : public ScriptState {
 public:
@@ -25,18 +31,25 @@ private:
 };
 
 class V8TestingScope {
-    DISALLOW_NEW();
+    STACK_ALLOCATED();
 public:
-    explicit V8TestingScope(v8::Isolate*);
+    V8TestingScope();
     ScriptState* getScriptState() const;
+    ExecutionContext* getExecutionContext() const;
     v8::Isolate* isolate() const;
     v8::Local<v8::Context> context() const;
+    ExceptionState& getExceptionState();
+    Page& page();
+    LocalFrame& frame();
+    Document& document();
     ~V8TestingScope();
 
 private:
+    std::unique_ptr<DummyPageHolder> m_holder;
     v8::HandleScope m_handleScope;
+    v8::Local<v8::Context> m_context;
     v8::Context::Scope m_contextScope;
-    RefPtr<ScriptState> m_scriptState;
+    TrackExceptionState m_exceptionState;
 };
 
 } // namespace blink

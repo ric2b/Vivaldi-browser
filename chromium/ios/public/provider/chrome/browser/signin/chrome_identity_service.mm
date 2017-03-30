@@ -4,6 +4,8 @@
 
 #include "ios/public/provider/chrome/browser/signin/chrome_identity_service.h"
 
+#include "ios/public/provider/chrome/browser/signin/chrome_identity_interaction_manager.h"
+
 namespace ios {
 
 ChromeIdentityService::ChromeIdentityService() {}
@@ -11,6 +13,13 @@ ChromeIdentityService::ChromeIdentityService() {}
 ChromeIdentityService::~ChromeIdentityService() {
   FOR_EACH_OBSERVER(Observer, observer_list_,
                     OnChromeIdentityServiceWillBeDestroyed());
+}
+
+ChromeIdentityInteractionManager*
+ChromeIdentityService::CreateChromeIdentityInteractionManager(
+    ios::ChromeBrowserState* browser_state,
+    id<ChromeIdentityInteractionManagerDelegate> delegate) const {
+  return [[[ChromeIdentityInteractionManager alloc] init] autorelease];
 }
 
 bool ChromeIdentityService::IsValidIdentity(ChromeIdentity* identity) const {
@@ -58,9 +67,6 @@ void ChromeIdentityService::GetAccessToken(
     const std::string& client_secret,
     const std::set<std::string>& scopes,
     const AccessTokenCallback& callback) {}
-
-void ChromeIdentityService::SigninIdentity(ChromeIdentity* identity,
-                                           SigninIdentityCallback callback) {}
 
 void ChromeIdentityService::GetAvatarForIdentity(ChromeIdentity* identity,
                                                  GetAvatarCallback callback) {}

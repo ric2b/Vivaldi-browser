@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/common/shell_observer.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/shell_observer.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "ui/gfx/geometry/vector3d_f.h"
@@ -38,6 +38,7 @@ class MaximizeModeControllerTest;
 class ScopedDisableInternalMouseAndKeyboard;
 class MaximizeModeWindowManager;
 class MaximizeModeWindowManagerTest;
+class WmWindow;
 namespace test {
 class MultiUserWindowManagerChromeOSTest;
 class VirtualKeyboardControllerTest;
@@ -76,7 +77,7 @@ class ASH_EXPORT MaximizeModeController :
   // only required for special windows which are handled by other window
   // managers like the |MultiUserWindowManager|.
   // If the maximize mode is not enabled no action will be performed.
-  void AddWindow(aura::Window* window);
+  void AddWindow(WmWindow* window);
 
   // ShellObserver:
   void OnAppTerminating() override;
@@ -93,6 +94,7 @@ class ASH_EXPORT MaximizeModeController :
 
   // PowerManagerClient::Observer:
   void LidEventReceived(bool open, const base::TimeTicks& time) override;
+  void TabletModeEventReceived(bool on, const base::TimeTicks& time) override;
   void SuspendImminent() override;
   void SuspendDone(const base::TimeDelta& sleep_duration) override;
 #endif  // OS_CHROMEOS
@@ -153,9 +155,6 @@ class ASH_EXPORT MaximizeModeController :
   // Whether we have ever seen accelerometer data.
   bool have_seen_accelerometer_data_;
 
-  // True when the hinge angle has been detected past 180 degrees.
-  bool lid_open_past_180_;
-
   // Tracks time spent in (and out of) touchview mode.
   base::Time touchview_usage_interval_start_time_;
   base::TimeDelta total_touchview_time_;
@@ -168,6 +167,11 @@ class ASH_EXPORT MaximizeModeController :
 
   // Source for the current time in base::TimeTicks.
   std::unique_ptr<base::TickClock> tick_clock_;
+
+#if defined(OS_CHROMEOS)
+  // Set when tablet mode switch is on. This is used to force maximize mode.
+  bool tablet_mode_switch_is_on_;
+#endif
 
   // Tracks when the lid is closed. Used to prevent entering maximize mode.
   bool lid_is_closed_;

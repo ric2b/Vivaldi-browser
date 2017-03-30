@@ -21,8 +21,7 @@ var languageSettings = languageSettings || {};
  * @constructor
  * @extends {SettingsPageBrowserTest}
  */
-function SettingsLanguagesPageBrowserTest() {
-}
+function SettingsLanguagesPageBrowserTest() {}
 
 SettingsLanguagesPageBrowserTest.prototype = {
   __proto__: SettingsPageBrowserTest.prototype,
@@ -76,19 +75,21 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
 
     test('manage languages', function() {
       var manageLanguagesButton =
-          languagesPage.$.languagesCollapse.querySelector('.list-button');
+          languagesPage.$.languagesCollapse.querySelector(
+              '.list-button:last-of-type');
       MockInteractions.tap(manageLanguagesButton);
       assertTrue(!!languagesPage.$$('settings-manage-languages-page'));
     });
 
     test('language detail', function() {
-      var languageButton = languagesPage.$.languagesCollapse.querySelector(
-          '.list-item paper-icon-button[icon="cr:settings"]');
-      assertTrue(!!languageButton);
-      MockInteractions.tap(languageButton);
+      var languagesCollapse = languagesPage.$.languagesCollapse;
+      var languageDetailMenuItem = languagesCollapse.querySelectorAll(
+          '.dropdown-content .language-detail-item')[0];
+      assertTrue(!!languageDetailMenuItem);
+      MockInteractions.tap(languageDetailMenuItem);
 
-      var languageDetailPage = languagesPage.$$(
-          'settings-language-detail-page');
+      var languageDetailPage =
+          languagesPage.$$('settings-language-detail-page');
       assertTrue(!!languageDetailPage);
       assertEquals('en-US', languageDetailPage.detail.language.code);
     });
@@ -99,7 +100,7 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
       if (cr.isChromeOS) {
         assertTrue(inputMethodSettingsExist);
         var manageInputMethodsButton =
-            inputMethodsCollapse.querySelector('.list-button');
+            inputMethodsCollapse.querySelector('.list-button:last-of-type');
         MockInteractions.tap(manageInputMethodsButton);
         assertTrue(!!languagesPage.$$('settings-manage-input-methods-page'));
       } else {
@@ -114,7 +115,8 @@ TEST_F('SettingsLanguagesPageBrowserTest', 'MAYBE_LanguagesPage', function() {
         assertFalse(spellCheckSettingsExist);
       } else {
         assertTrue(spellCheckSettingsExist);
-        MockInteractions.tap(spellCheckCollapse.querySelector('.list-button'));
+        MockInteractions.tap(
+            spellCheckCollapse.querySelector('.list-button:last-of-type'));
         assertTrue(!!languagesPage.$$('settings-edit-dictionary-page'));
       }
     });

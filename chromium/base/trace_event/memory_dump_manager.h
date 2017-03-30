@@ -40,6 +40,7 @@ class MemoryDumpSessionState;
 class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
  public:
   static const char* const kTraceCategory;
+  static const char* const kLogPrefix;
 
   // This value is returned as the tracing id of the child processes by
   // GetTracingProcessId() when tracing is not enabled.
@@ -115,10 +116,14 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   void OnTraceLogEnabled() override;
   void OnTraceLogDisabled() override;
 
+  // Returns true if the dump mode is allowed for current tracing session.
+  bool IsDumpModeAllowed(MemoryDumpLevelOfDetail dump_mode);
+
   // Returns the MemoryDumpSessionState object, which is shared by all the
   // ProcessMemoryDump and MemoryAllocatorDump instances through all the tracing
   // session lifetime.
-  const scoped_refptr<MemoryDumpSessionState>& session_state() const {
+  const scoped_refptr<MemoryDumpSessionState>& session_state_for_testing()
+      const {
     return session_state_;
   }
 
@@ -176,7 +181,8 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     MemoryDumpProviderInfo(MemoryDumpProvider* dump_provider,
                            const char* name,
                            scoped_refptr<SequencedTaskRunner> task_runner,
-                           const MemoryDumpProvider::Options& options);
+                           const MemoryDumpProvider::Options& options,
+                           bool whitelisted_for_background_mode);
 
     MemoryDumpProvider* const dump_provider;
 
@@ -200,6 +206,9 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     // Flagged either by the auto-disable logic or during unregistration.
     bool disabled;
 
+    // True if the dump provider is whitelisted for background mode.
+    const bool whitelisted_for_background_mode;
+
    private:
     friend class base::RefCountedThreadSafe<MemoryDumpProviderInfo>;
     ~MemoryDumpProviderInfo();
@@ -221,7 +230,9 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
     ~ProcessMemoryDumpAsyncState();
 
     // Gets or creates the memory dump container for the given target process.
-    ProcessMemoryDump* GetOrCreateMemoryDumpContainerForProcess(ProcessId pid);
+    ProcessMemoryDump* GetOrCreateMemoryDumpContainerForProcess(
+        ProcessId pid,
+        const MemoryDumpArgs& dump_args);
 
     // A map of ProcessId -> ProcessMemoryDump, one for each target process
     // being dumped from the current process. Typically each process dumps only
@@ -260,6 +271,31 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
 
    private:
     DISALLOW_COPY_AND_ASSIGN(ProcessMemoryDumpAsyncState);
+  };
+
+  // Sets up periodic memory dump timers to start global dump requests based on
+  // the dump triggers from trace config.
+  class BASE_EXPORT PeriodicGlobalDumpTimer {
+   public:
+    PeriodicGlobalDumpTimer();
+    ~PeriodicGlobalDumpTimer();
+
+    void Start(const std::vector<TraceConfig::MemoryDumpConfig::Trigger>&
+                   triggers_list);
+    void Stop();
+
+    bool IsRunning();
+
+   private:
+    // Periodically called by the timer.
+    void RequestPeriodicGlobalDump();
+
+    RepeatingTimer timer_;
+    uint32_t periodic_dumps_count_;
+    uint32_t light_dump_rate_;
+    uint32_t heavy_dump_rate_;
+
+    DISALLOW_COPY_AND_ASSIGN(PeriodicGlobalDumpTimer);
   };
 
   static const int kMaxConsecutiveFailuresCount;
@@ -325,7 +361,7 @@ class BASE_EXPORT MemoryDumpManager : public TraceLog::EnabledStateObserver {
   subtle::AtomicWord memory_tracing_enabled_;
 
   // For time-triggered periodic dumps.
-  RepeatingTimer periodic_dump_timer_;
+  PeriodicGlobalDumpTimer periodic_dump_timer_;
 
   // Thread used for MemoryDumpProviders which don't specify a task runner
   // affinity.

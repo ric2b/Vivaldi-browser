@@ -338,11 +338,12 @@ void WebSocketChannel::SendAddChannelRequest(
     const GURL& socket_url,
     const std::vector<std::string>& requested_subprotocols,
     const url::Origin& origin,
-    const GURL& first_party_for_cookies) {
+    const GURL& first_party_for_cookies,
+    const std::string& additional_headers) {
   // Delegate to the tested version.
   SendAddChannelRequestWithSuppliedCreator(
       socket_url, requested_subprotocols, origin, first_party_for_cookies,
-      base::Bind(&WebSocketStream::CreateAndConnectStream));
+      additional_headers, base::Bind(&WebSocketStream::CreateAndConnectStream));
 }
 
 void WebSocketChannel::SetState(State new_state) {
@@ -545,10 +546,11 @@ void WebSocketChannel::SendAddChannelRequestForTesting(
     const std::vector<std::string>& requested_subprotocols,
     const url::Origin& origin,
     const GURL& first_party_for_cookies,
+    const std::string& additional_headers,
     const WebSocketStreamCreator& creator) {
   SendAddChannelRequestWithSuppliedCreator(socket_url, requested_subprotocols,
                                            origin, first_party_for_cookies,
-                                           creator);
+                                           additional_headers, creator);
 }
 
 void WebSocketChannel::SetClosingHandshakeTimeoutForTesting(
@@ -566,6 +568,7 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCreator(
     const std::vector<std::string>& requested_subprotocols,
     const url::Origin& origin,
     const GURL& first_party_for_cookies,
+    const std::string& additional_headers,
     const WebSocketStreamCreator& creator) {
   DCHECK_EQ(FRESHLY_CONSTRUCTED, state_);
   if (!socket_url.SchemeIsWSOrWSS()) {
@@ -579,8 +582,9 @@ void WebSocketChannel::SendAddChannelRequestWithSuppliedCreator(
   std::unique_ptr<WebSocketStream::ConnectDelegate> connect_delegate(
       new ConnectDelegate(this));
   stream_request_ = creator.Run(socket_url_, requested_subprotocols, origin,
-                                first_party_for_cookies, url_request_context_,
-                                BoundNetLog(), std::move(connect_delegate));
+                                first_party_for_cookies, additional_headers,
+                                url_request_context_, BoundNetLog(),
+                                std::move(connect_delegate));
   SetState(CONNECTING);
 }
 

@@ -4,7 +4,7 @@
 
 #include "ash/system/chromeos/power/video_activity_notifier.h"
 
-#include "ash/shell.h"
+#include "ash/common/wm_shell.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 
@@ -17,14 +17,13 @@ const int kNotifyIntervalSec = 5;
 }  // namespace
 
 VideoActivityNotifier::VideoActivityNotifier(VideoDetector* detector)
-    : detector_(detector),
-      screen_is_locked_(false) {
+    : detector_(detector), screen_is_locked_(false) {
   detector_->AddObserver(this);
-  ash::Shell::GetInstance()->AddShellObserver(this);
+  WmShell::Get()->AddShellObserver(this);
 }
 
 VideoActivityNotifier::~VideoActivityNotifier() {
-  ash::Shell::GetInstance()->RemoveShellObserver(this);
+  WmShell::Get()->RemoveShellObserver(this);
   detector_->RemoveObserver(this);
 }
 
@@ -35,8 +34,9 @@ void VideoActivityNotifier::OnVideoDetected(bool is_fullscreen) {
   base::TimeTicks now = base::TimeTicks::Now();
   if (last_notify_time_.is_null() ||
       (now - last_notify_time_).InSeconds() >= kNotifyIntervalSec) {
-    chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-        NotifyVideoActivity(is_fullscreen);
+    chromeos::DBusThreadManager::Get()
+        ->GetPowerManagerClient()
+        ->NotifyVideoActivity(is_fullscreen);
     last_notify_time_ = now;
   }
 }

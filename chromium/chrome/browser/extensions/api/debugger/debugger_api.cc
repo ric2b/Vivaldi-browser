@@ -230,7 +230,7 @@ ExtensionDevToolsInfoBar::~ExtensionDevToolsInfoBar() {
 void ExtensionDevToolsInfoBar::Remove(
     ExtensionDevToolsClientHost* client_host) {
   callbacks_.erase(client_host);
-  if (!callbacks_.size())
+  if (callbacks_.empty())
     delete this;
 }
 
@@ -367,7 +367,7 @@ void ExtensionDevToolsClientHost::AgentHostClosed(
 }
 
 void ExtensionDevToolsClientHost::Close() {
-  agent_host_->DetachClient();
+  agent_host_->DetachClient(this);
   delete this;
 }
 
@@ -387,7 +387,7 @@ void ExtensionDevToolsClientHost::SendMessageToBackend(
 
   std::string json_args;
   base::JSONWriter::Write(protocol_request, &json_args);
-  agent_host_->DispatchProtocolMessage(json_args);
+  agent_host_->DispatchProtocolMessage(this, json_args);
 }
 
 void ExtensionDevToolsClientHost::InfoBarDismissed() {
@@ -729,7 +729,7 @@ void DebuggerGetTargetsFunction::SendTargetList(
   for (size_t i = 0; i < target_list.size(); ++i)
     result->Append(SerializeTarget(*target_list[i]));
   STLDeleteContainerPointers(target_list.begin(), target_list.end());
-  SetResult(result.release());
+  SetResult(std::move(result));
   SendResponse(true);
 }
 

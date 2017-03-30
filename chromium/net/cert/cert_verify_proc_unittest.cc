@@ -16,7 +16,6 @@
 #include "build/build_config.h"
 #include "crypto/sha2.h"
 #include "net/base/net_errors.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
@@ -27,6 +26,7 @@
 #include "net/cert/x509_certificate.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/test_certificate_data.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_ANDROID)
@@ -38,13 +38,6 @@ using base::HexEncode;
 namespace net {
 
 namespace {
-
-// A certificate for www.paypal.com with a NULL byte in the common name.
-// From http://www.gossamer-threads.com/lists/fulldisc/full-disclosure/70363
-unsigned char paypal_null_fingerprint[] = {
-  0x4c, 0x88, 0x9e, 0x28, 0xd7, 0x7a, 0x44, 0x1e, 0x13, 0xf2, 0x6a, 0xba,
-  0x1f, 0xe8, 0x1b, 0xd6, 0xab, 0x7b, 0xe8, 0xd7
-};
 
 // Mock CertVerifyProc that sets the CertVerifyResult to a given value for
 // all certificates that are Verify()'d
@@ -207,6 +200,10 @@ TEST_F(CertVerifyProcTest, MAYBE_EVVerification) {
 // a bug to track a failing test than a false sense of security due to
 // false positive).
 TEST_F(CertVerifyProcTest, DISABLED_PaypalNullCertParsing) {
+  // A certificate for www.paypal.com with a NULL byte in the common name.
+  // From http://www.gossamer-threads.com/lists/fulldisc/full-disclosure/70363
+  SHA256HashValue paypal_null_fingerprint = {{0x00}};
+
   scoped_refptr<X509Certificate> paypal_null_cert(
       X509Certificate::CreateFromBytes(
           reinterpret_cast<const char*>(paypal_null_der),
@@ -214,10 +211,8 @@ TEST_F(CertVerifyProcTest, DISABLED_PaypalNullCertParsing) {
 
   ASSERT_NE(static_cast<X509Certificate*>(NULL), paypal_null_cert.get());
 
-  const SHA1HashValue& fingerprint =
-      paypal_null_cert->fingerprint();
-  for (size_t i = 0; i < 20; ++i)
-    EXPECT_EQ(paypal_null_fingerprint[i], fingerprint.data[i]);
+  EXPECT_EQ(paypal_null_fingerprint, X509Certificate::CalculateFingerprint256(
+                                         paypal_null_cert->os_cert_handle()));
 
   int flags = 0;
   CertVerifyResult verify_result;
@@ -308,23 +303,6 @@ TEST_F(CertVerifyProcTest, RejectExpiredCert) {
                      &verify_result);
   EXPECT_EQ(ERR_CERT_DATE_INVALID, error);
   EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_DATE_INVALID);
-}
-
-// Test that verifying an ECDSA certificate doesn't crash on XP. (See
-// crbug.com/144466).
-TEST_F(CertVerifyProcTest, ECDSA_RSA) {
-  base::FilePath certs_dir = GetTestCertsDirectory();
-
-  scoped_refptr<X509Certificate> cert =
-      ImportCertFromFile(certs_dir,
-                         "prime256v1-ecdsa-ee-by-1024-rsa-intermediate.pem");
-
-  CertVerifyResult verify_result;
-  Verify(cert.get(), "127.0.0.1", 0, NULL, empty_cert_list_, &verify_result);
-
-  // We don't check verify_result because the certificate is signed by an
-  // unknown CA and will be considered invalid on XP because of the ECDSA
-  // public key.
 }
 
 // Currently, only RSA and DSA keys are checked for weakness, and our example

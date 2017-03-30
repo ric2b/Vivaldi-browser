@@ -26,6 +26,10 @@
 
 namespace vivaldi {
 
+struct SessionOptions {
+  bool openInNewWindow_ = false;
+};
+
 // We cannot inherit from SessionService, and changing that class to be
 // suitable is risky and requires significant changes.
 class VivaldiSessionService {
@@ -45,9 +49,10 @@ class VivaldiSessionService {
                           bool is_pinned);
   void BuildCommandsForBrowser(Browser* browser);
   bool Save(const base::FilePath& file_name);
-  bool Load(const base::FilePath& file_name, Browser* browser);
+  bool Load(const base::FilePath &file_name, Browser *browser,
+            SessionOptions &opts);
 
- private:
+private:
   void ResetFile(const base::FilePath& file_name);
   base::File* OpenAndWriteHeader(const base::FilePath& path);
   bool AppendCommandsToFile(
@@ -111,6 +116,9 @@ class VivaldiSessionService {
   Browser* browser_;
 
   Profile* profile_;
+
+  // Session open options
+  SessionOptions opts_;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiSessionService);
 };

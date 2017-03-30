@@ -26,6 +26,11 @@ public interface ChromiumBaseInputConnection extends InputConnection {
 
         @VisibleForTesting
         Handler getHandler();
+
+        void onWindowFocusChanged(boolean gainFocus);
+        void onViewFocusChanged(boolean gainFocus);
+        void onViewAttachedToWindow();
+        void onViewDetachedFromWindow();
     }
 
     /**

@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/extensions/api/hotword_private/hotword_private_api.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
@@ -78,7 +79,7 @@ class MockAudioHistoryHandler : public HotwordAudioHistoryHandler {
   MockAudioHistoryHandler(content::BrowserContext* context,
                           history::WebHistoryService* web_history)
       : HotwordAudioHistoryHandler(context,
-                                   base::MessageLoop::current()->task_runner()),
+                                   base::ThreadTaskRunnerHandle::Get()),
         web_history_(web_history) {}
   ~MockAudioHistoryHandler() override {}
 
@@ -474,8 +475,9 @@ IN_PROC_BROWSER_TEST_F(HotwordPrivateApiTest, AudioHistory) {
   service()->SetAudioHistoryHandler(handler);
   web_history->SetExpectedValue(true);
 
-  ExtensionTestMessageListener setListenerT("set AH: true success", false);
-  ExtensionTestMessageListener setListenerF("set AH: false success", false);
+  ExtensionTestMessageListener setListenerT("set AH True: true success", false);
+  ExtensionTestMessageListener setListenerF("set AH False: false success",
+                                            false);
   ExtensionTestMessageListener getListener("get AH: true success", false);
 
   ASSERT_TRUE(RunComponentExtensionTest("audioHistory")) << message_;
@@ -486,8 +488,10 @@ IN_PROC_BROWSER_TEST_F(HotwordPrivateApiTest, AudioHistory) {
 
   web_history->SetExpectedValue(false);
 
-  ExtensionTestMessageListener setListenerT2("set AH: true success", false);
-  ExtensionTestMessageListener setListenerF2("set AH: false success", false);
+  ExtensionTestMessageListener setListenerT2("set AH True: true success",
+                                             false);
+  ExtensionTestMessageListener setListenerF2("set AH False: false success",
+                                             false);
   ExtensionTestMessageListener getListener2("get AH: false success", false);
 
   ASSERT_TRUE(RunComponentExtensionTest("audioHistory")) << message_;
@@ -506,8 +510,9 @@ IN_PROC_BROWSER_TEST_F(HotwordPrivateApiTest, AudioHistoryNoWebHistory) {
   PrefService* prefs = profile()->GetPrefs();
   prefs->SetBoolean(prefs::kHotwordAudioLoggingEnabled, true);
 
-  ExtensionTestMessageListener setListenerT("set AH: true failure", false);
-  ExtensionTestMessageListener setListenerF("set AH: true failure", false);
+  ExtensionTestMessageListener setListenerT("set AH True: true failure", false);
+  ExtensionTestMessageListener setListenerF("set AH False: true failure",
+                                            false);
   ExtensionTestMessageListener getListener("get AH: true failure", false);
 
   ASSERT_TRUE(RunComponentExtensionTest("audioHistory")) << message_;
@@ -523,12 +528,13 @@ IN_PROC_BROWSER_TEST_F(HotwordPrivateApiTest, AudioHistoryWebHistoryFailure) {
       new MockAudioHistoryHandler(profile(), web_history);
   service()->SetAudioHistoryHandler(handler);
   web_history->SetFailureState();
-  // It shouldn't matter if this is set to true. GetAduioHistoryEnabled should
+  // It shouldn't matter if this is set to true. GetAudioHistoryEnabled should
   // still return false.
   web_history->SetExpectedValue(true);
 
-  ExtensionTestMessageListener setListenerT("set AH: false failure", false);
-  ExtensionTestMessageListener setListenerF("set AH: false failure", false);
+  ExtensionTestMessageListener setListenerT("set AH True: true failure", false);
+  ExtensionTestMessageListener setListenerF("set AH False: false failure",
+                                            false);
   ExtensionTestMessageListener getListener("get AH: false failure", false);
 
   ASSERT_TRUE(RunComponentExtensionTest("audioHistory")) << message_;

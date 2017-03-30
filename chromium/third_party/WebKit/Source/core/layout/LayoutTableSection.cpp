@@ -87,6 +87,15 @@ void CellSpan::ensureConsistency(const unsigned maximumSpanSize)
     RELEASE_ASSERT(m_start <= m_end);
 }
 
+LayoutTableSection::CellStruct::CellStruct()
+    : inColSpan(false)
+{
+}
+
+LayoutTableSection::CellStruct::~CellStruct()
+{
+}
+
 LayoutTableSection::LayoutTableSection(Element* element)
     : LayoutTableBoxComponent(element)
     , m_cCol(0)
@@ -98,6 +107,7 @@ LayoutTableSection::LayoutTableSection(Element* element)
     , m_needsCellRecalc(false)
     , m_forceSlowPaintPathWithOverflowingCell(false)
     , m_hasMultipleCellLevels(false)
+    , m_offsetForRepeatingHeader(LayoutUnit())
 {
     // init LayoutObject attributes
     setInline(false); // our object is not Inline
@@ -793,10 +803,7 @@ void LayoutTableSection::layout()
 {
     ASSERT(needsLayout());
     LayoutAnalyzer::Scope analyzer(*this);
-    // TODO(dgrogan): Change this to RELEASE_ASSERT(!needsCellRecalc()) once
-    // containment and tables play nicely. https://crbug.com/616643
-    if (needsCellRecalc())
-        return;
+    RELEASE_ASSERT(!needsCellRecalc());
     ASSERT(!table()->needsSectionRecalc());
 
     // addChild may over-grow m_grid but we don't want to throw away the memory too early as addChild
@@ -961,6 +968,15 @@ void LayoutTableSection::layoutRows()
     unsigned nEffCols = table()->numEffectiveColumns();
     bool isPaginated = view()->layoutState()->isPaginated();
 
+    if (isPaginated) {
+        LayoutTableSection* header = table()->header();
+        // If we're a table header nested inside a table cell then we want to repeat on each
+        // page, but below the header we're nested inside. Note we don't try to match the padding
+        // on the cell on each repeated header.
+        if (header && header == this)
+            setOffsetForRepeatingHeader(view()->layoutState()->heightOffsetForTableHeaders());
+    }
+
     LayoutState state(*this, locationOffset());
 
     for (unsigned r = 0; r < totalRows; r++) {
@@ -975,6 +991,13 @@ void LayoutTableSection::layoutRows()
             if (isPaginated) {
                 paginationStrutOnRow = paginationStrutForRow(rowLayoutObject, LayoutUnit(m_rowPos[r]));
                 if (paginationStrutOnRow) {
+                    // If there isn't room for at least one content row on a page with a header group, then
+                    // we won't repeat the header on each page.
+                    if (!r && table()->header() && table()->sectionAbove(this) == table()->header())
+                        state.setHeightOffsetForTableHeaders(state.heightOffsetForTableHeaders() - table()->header()->logicalHeight());
+                    // If we have a header group we will paint it at the top of each page, move the rows
+                    // down to accomodate it.
+                    paginationStrutOnRow += state.heightOffsetForTableHeaders().toInt();
                     for (unsigned rowIndex = r; rowIndex <= totalRows; rowIndex++)
                         m_rowPos[rowIndex] += paginationStrutOnRow;
                 }
@@ -1102,7 +1125,11 @@ void LayoutTableSection::layoutRows()
 
 int LayoutTableSection::paginationStrutForRow(LayoutTableRow* row, LayoutUnit logicalOffset) const
 {
-    if (row->getPaginationBreakability() == AllowAnyBreaks)
+    DCHECK(row);
+    // Even if the row allows us to break-inside, we will want to put a strut on the row if we have a header
+    // group that wants to appear at the top of each page.
+    bool tableHeaderForcesStrut = table()->header() ? table()->header()->getPaginationBreakability() != AllowAnyBreaks : false;
+    if (row->getPaginationBreakability() == AllowAnyBreaks && !tableHeaderForcesStrut)
         return 0;
     LayoutUnit pageLogicalHeight = pageLogicalHeightForOffset(logicalOffset);
     if (!pageLogicalHeight)
@@ -1135,7 +1162,7 @@ void LayoutTableSection::computeOverflowFromCells(unsigned totalRows, unsigned n
     unsigned totalCellsCount = nEffCols * totalRows;
     unsigned maxAllowedOverflowingCellsCount = totalCellsCount < gMinTableSizeToUseFastPaintPathWithOverflowingCell ? 0 : gMaxAllowedOverflowingCellRatioForFastPaintPath * totalCellsCount;
 
-    m_overflow.clear();
+    m_overflow.reset();
     m_overflowingCells.clear();
     m_forceSlowPaintPathWithOverflowingCell = false;
 #if ENABLE(ASSERT)
@@ -1667,5 +1694,41 @@ void LayoutTableSection::setLogicalPositionForCell(LayoutTableCell* cell, unsign
 
     cell->setLogicalLocation(cellLocation);
 }
+
+bool LayoutTableSection::hasRepeatingHeaderGroup() const
+{
+    if (getPaginationBreakability() == LayoutBox::AllowAnyBreaks)
+        return false;
+    // TODO(rhogan): Should we paint a header repeatedly if it's self-painting?
+    if (hasSelfPaintingLayer())
+        return false;
+    LayoutUnit pageHeight = table()->pageLogicalHeightForOffset(LayoutUnit());
+    if (!pageHeight)
+        return false;
+
+    if (logicalHeight() > pageHeight)
+        return false;
+
+    // If the first row of the section after the header group doesn't fit on the page, then
+    // don't repeat the header on each page. See https://drafts.csswg.org/css-tables-3/#repeated-headers
+    LayoutTableSection* sectionBelow = table()->sectionBelow(this);
+    if (sectionBelow && sectionBelow->paginationStrutForRow(sectionBelow->firstRow(), sectionBelow->logicalTop()))
+        return false;
+
+    return true;
+}
+
+bool LayoutTableSection::mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& rect, VisualRectFlags flags) const
+{
+    if (ancestor == this)
+        return true;
+    // Repeating table headers are painted once per fragmentation page/column. This does not go through the regular fragmentation machinery,
+    // so we need special code to expand the invalidation rect to contain all positions of the header in all columns.
+    // Note that this is in flow thread coordinates, not visual coordinates. The enclosing LayoutFlowThread will convert to visual coordinates.
+    if (table()->header() == this && hasRepeatingHeaderGroup())
+        rect.setHeight(table()->logicalHeight());
+    return LayoutTableBoxComponent::mapToVisualRectInAncestorSpace(ancestor, rect, flags);
+}
+
 
 } // namespace blink

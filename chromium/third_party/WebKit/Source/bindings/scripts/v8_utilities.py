@@ -123,6 +123,13 @@ def unique_by(dict_list, key):
     return filtered_list
 
 
+def for_origin_trial_feature(items, feature_name):
+    """Filters the list of attributes or constants, and returns those defined for the named origin trial feature."""
+    return [item for item in items if
+            item['origin_trial_feature_name'] == feature_name and
+            not item.get('exposed_test')]
+
+
 ################################################################################
 # C++
 ################################################################################
@@ -200,7 +207,7 @@ CALL_WITH_ARGUMENTS = {
     'CurrentWindow': 'currentDOMWindow(info.GetIsolate())',
     'EnteredWindow': 'enteredDOMWindow(info.GetIsolate())',
     'Document': 'document',
-    'ThisValue': 'ScriptValue(scriptState, info.This())',
+    'ThisValue': 'ScriptValue(scriptState, info.Holder())',
 }
 # List because key order matters, as we want arguments in deterministic order
 CALL_WITH_VALUES = [
@@ -370,7 +377,7 @@ def measure_as(definition_or_member, interface):
 
 
 # [OriginTrialEnabled]
-def origin_trial_enabled_function_name(definition_or_member, interface):
+def origin_trial_enabled_function_name(definition_or_member):
     """Returns the name of the OriginTrials enabled function.
 
     An exception is raised if both the OriginTrialEnabled and RuntimeEnabled
@@ -393,9 +400,6 @@ def origin_trial_enabled_function_name(definition_or_member, interface):
                         '%s.%s' % (definition_or_member.idl_name, definition_or_member.name))
 
     if is_origin_trial_enabled:
-        includes.add('bindings/core/v8/ScriptState.h')
-        includes.add('core/origin_trials/OriginTrials.h')
-
         trial_name = extended_attributes['OriginTrialEnabled']
         return 'OriginTrials::%sEnabled' % uncapitalize(trial_name)
 

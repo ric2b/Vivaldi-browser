@@ -161,6 +161,8 @@
         '../base/base.gyp:base',
         '../base/base.gyp:test_support_base',
         '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '../mojo/mojo_edk.gyp:mojo_common_test_support',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
         '../testing/gmock.gyp:gmock',
         '../testing/gtest.gyp:gtest',
         '<(angle_path)/src/angle.gyp:translator',
@@ -313,8 +315,8 @@
       'type': '<(gtest_target_type)',
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:run_all_unittests',
         '../base/base.gyp:test_support_base',
+        '../ipc/ipc.gyp:ipc_run_all_unittests',
         '../ipc/ipc.gyp:test_support_ipc',
         '../skia/skia.gyp:skia',
         '../testing/gtest.gyp:gtest',
@@ -438,6 +440,7 @@
         'command_buffer/tests/gl_copy_texture_CHROMIUM_unittest.cc',
         'command_buffer/tests/gl_cube_map_texture_unittest.cc',
         'command_buffer/tests/gl_depth_texture_unittest.cc',
+        'command_buffer/tests/gl_deschedule_unittest.cc',
         'command_buffer/tests/gl_dynamic_config_unittest.cc',
         'command_buffer/tests/gl_ext_blend_func_extended_unittest.cc',
         'command_buffer/tests/gl_ext_multisample_compatibility_unittest.cc',
@@ -448,6 +451,7 @@
         'command_buffer/tests/gl_lose_context_chromium_unittest.cc',
         'command_buffer/tests/gl_manager.cc',
         'command_buffer/tests/gl_manager.h',
+        'command_buffer/tests/gl_native_gmb_backbuffer_unittest.cc',
         'command_buffer/tests/gl_pointcoord_unittest.cc',
         'command_buffer/tests/gl_program_unittest.cc',
         'command_buffer/tests/gl_query_unittest.cc',
@@ -464,6 +468,8 @@
         'command_buffer/tests/gl_unittests_android.cc',
         'command_buffer/tests/gl_virtual_contexts_unittest.cc',
         'command_buffer/tests/occlusion_query_unittest.cc',
+        'command_buffer/tests/texture_image_factory.cc',
+        'command_buffer/tests/texture_image_factory.h',
       ],
       'conditions': [
         ['OS == "android"', {

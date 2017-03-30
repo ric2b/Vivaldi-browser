@@ -43,9 +43,9 @@ BlimpContextProvider::BlimpContextProvider(
 
   context_.reset(gpu::GLInProcessContext::Create(
       nullptr /* service */, nullptr /* surface */, false /* is_offscreen */,
-      widget, gfx::Size(1, 1), nullptr /* share_context */, attribs_for_gles2,
-      gfx::PreferDiscreteGpu, gpu::SharedMemoryLimits(),
-      gpu_memory_buffer_manager, nullptr /* memory_limits */));
+      widget, nullptr /* share_context */, attribs_for_gles2,
+      gpu::SharedMemoryLimits(), gpu_memory_buffer_manager,
+      nullptr /* memory_limits */));
   context_->GetImplementation()->SetLostContextCallback(
       base::Bind(&BlimpContextProvider::OnLostContext, base::Unretained(this)));
 }
@@ -122,6 +122,12 @@ void BlimpContextProvider::OnLostContext() {
     lost_context_callback_.Run();
   if (gr_context_)
     gr_context_->OnLostContext();
+}
+
+uint32_t BlimpContextProvider::GetCopyTextureInternalFormat() {
+  // The attributes used to create the context in the constructor specify
+  // an alpha channel.
+  return GL_RGBA;
 }
 
 }  // namespace client

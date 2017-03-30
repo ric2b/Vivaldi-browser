@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_UI_ASH_SESSION_STATE_DELEGATE_CHROMEOS_H_
 #define CHROME_BROWSER_UI_ASH_SESSION_STATE_DELEGATE_CHROMEOS_H_
 
-#include "ash/session/session_state_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -40,8 +40,8 @@ class SessionStateDelegateChromeos
   SessionState GetSessionState() const override;
   const user_manager::UserInfo* GetUserInfo(
       ash::UserIndex index) const override;
-  bool ShouldShowAvatar(aura::Window* window) const override;
-  gfx::ImageSkia GetAvatarImageForWindow(aura::Window* window) const override;
+  bool ShouldShowAvatar(ash::WmWindow* window) const override;
+  gfx::ImageSkia GetAvatarImageForWindow(ash::WmWindow* window) const override;
   void SwitchActiveUser(const AccountId& account_id) override;
   void CycleActiveUser(CycleUser cycle_user) override;
   bool IsMultiProfileAllowedByPrimaryUserPolicy() const override;

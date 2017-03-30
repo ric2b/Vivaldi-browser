@@ -43,7 +43,7 @@ static SkPath::FillType fillRuleFromStyle(const PaintInfo& paintInfo, const SVGC
 void SVGShapePainter::paint(const PaintInfo& paintInfo)
 {
     if (paintInfo.phase != PaintPhaseForeground
-        || m_layoutSVGShape.style()->visibility() == HIDDEN
+        || m_layoutSVGShape.style()->visibility() != VISIBLE
         || m_layoutSVGShape.isShapeEmpty())
         return;
 
@@ -53,14 +53,14 @@ void SVGShapePainter::paint(const PaintInfo& paintInfo)
 
     PaintInfo paintInfoBeforeFiltering(paintInfo);
     // Shapes cannot have children so do not call updateCullRect.
-    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGShape, m_layoutSVGShape.localSVGTransform());
+    SVGTransformContext transformContext(paintInfoBeforeFiltering.context, m_layoutSVGShape, m_layoutSVGShape.localSVGTransform());
     {
         SVGPaintContext paintContext(m_layoutSVGShape, paintInfoBeforeFiltering);
         if (paintContext.applyClipMaskAndFilterIfNecessary() && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintContext.paintInfo().context, m_layoutSVGShape, paintContext.paintInfo().phase)) {
             LayoutObjectDrawingRecorder recorder(paintContext.paintInfo().context, m_layoutSVGShape, paintContext.paintInfo().phase, boundingBox);
             const SVGComputedStyle& svgStyle = m_layoutSVGShape.style()->svgStyle();
 
-            bool shouldAntiAlias = svgStyle.shapeRendering() != SR_CRISPEDGES;
+            bool shouldAntiAlias = svgStyle.shapeRendering() != SR_CRISPEDGES && svgStyle.shapeRendering() != SR_OPTIMIZESPEED;
 
             for (int i = 0; i < 3; i++) {
                 switch (svgStyle.paintOrderType(i)) {

@@ -27,9 +27,51 @@
 #include "platform/network/ResourceResponse.h"
 
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 namespace blink {
+
+namespace {
+
+Vector<ResourceResponse::SignedCertificateTimestamp> isolatedCopy(const Vector<ResourceResponse::SignedCertificateTimestamp>& src)
+{
+    Vector<ResourceResponse::SignedCertificateTimestamp> result;
+    result.reserveCapacity(src.size());
+    for (const auto& timestamp : src) {
+        result.append(timestamp.isolatedCopy());
+    }
+    return result;
+}
+
+} // namespace
+
+ResourceResponse::SignedCertificateTimestamp::SignedCertificateTimestamp(
+    const blink::WebURLResponse::SignedCertificateTimestamp& sct)
+    : m_status(sct.status)
+    , m_origin(sct.origin)
+    , m_logDescription(sct.logDescription)
+    , m_logId(sct.logId)
+    , m_timestamp(sct.timestamp)
+    , m_hashAlgorithm(sct.hashAlgorithm)
+    , m_signatureAlgorithm(sct.signatureAlgorithm)
+    , m_signatureData(sct.signatureData)
+{
+}
+
+ResourceResponse::SignedCertificateTimestamp ResourceResponse::SignedCertificateTimestamp::isolatedCopy() const
+{
+    return SignedCertificateTimestamp(
+        m_status.isolatedCopy(),
+        m_origin.isolatedCopy(),
+        m_logDescription.isolatedCopy(),
+        m_logId.isolatedCopy(),
+        m_timestamp,
+        m_hashAlgorithm.isolatedCopy(),
+        m_signatureAlgorithm.isolatedCopy(),
+        m_signatureData.isolatedCopy());
+}
 
 ResourceResponse::ResourceResponse()
     : m_expectedContentLength(0)
@@ -125,6 +167,7 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
     m_securityDetails.numUnknownSCTs = data->m_securityDetails.numUnknownSCTs;
     m_securityDetails.numInvalidSCTs = data->m_securityDetails.numInvalidSCTs;
     m_securityDetails.numValidSCTs = data->m_securityDetails.numValidSCTs;
+    m_securityDetails.sctList = data->m_securityDetails.sctList;
     m_httpVersion = data->m_httpVersion;
     m_appCacheID = data->m_appCacheID;
     m_appCacheManifestURL = data->m_appCacheManifestURL.copy();
@@ -148,9 +191,9 @@ ResourceResponse::ResourceResponse(CrossThreadResourceResponseData* data)
     // whatever values may be present in the opaque m_extraData structure.
 }
 
-PassOwnPtr<CrossThreadResourceResponseData> ResourceResponse::copyData() const
+std::unique_ptr<CrossThreadResourceResponseData> ResourceResponse::copyData() const
 {
-    OwnPtr<CrossThreadResourceResponseData> data = adoptPtr(new CrossThreadResourceResponseData);
+    std::unique_ptr<CrossThreadResourceResponseData> data = wrapUnique(new CrossThreadResourceResponseData);
     data->m_url = url().copy();
     data->m_mimeType = mimeType().getString().isolatedCopy();
     data->m_expectedContentLength = expectedContentLength();
@@ -173,6 +216,7 @@ PassOwnPtr<CrossThreadResourceResponseData> ResourceResponse::copyData() const
     data->m_securityDetails.numUnknownSCTs = m_securityDetails.numUnknownSCTs;
     data->m_securityDetails.numInvalidSCTs = m_securityDetails.numInvalidSCTs;
     data->m_securityDetails.numValidSCTs = m_securityDetails.numValidSCTs;
+    data->m_securityDetails.sctList = isolatedCopy(m_securityDetails.sctList);
     data->m_httpVersion = m_httpVersion;
     data->m_appCacheID = m_appCacheID;
     data->m_appCacheManifestURL = m_appCacheManifestURL.copy();
@@ -324,7 +368,7 @@ void ResourceResponse::updateHeaderParsedState(const AtomicString& name)
         m_haveParsedLastModifiedHeader = false;
 }
 
-void ResourceResponse::setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, size_t numUnknownScts, size_t numInvalidScts, size_t numValidScts)
+void ResourceResponse::setSecurityDetails(const String& protocol, const String& keyExchange, const String& cipher, const String& mac, int certId, size_t numUnknownScts, size_t numInvalidScts, size_t numValidScts, const SignedCertificateTimestampList& sctList)
 {
     m_securityDetails.protocol = protocol;
     m_securityDetails.keyExchange = keyExchange;
@@ -334,6 +378,7 @@ void ResourceResponse::setSecurityDetails(const String& protocol, const String& 
     m_securityDetails.numUnknownSCTs = numUnknownScts;
     m_securityDetails.numInvalidSCTs = numInvalidScts;
     m_securityDetails.numValidSCTs = numValidScts;
+    m_securityDetails.sctList = sctList;
 }
 
 void ResourceResponse::setHTTPHeaderField(const AtomicString& name, const AtomicString& value)
@@ -542,7 +587,7 @@ void ResourceResponse::setDownloadedFilePath(const String& downloadedFilePath)
         m_downloadedFileHandle.clear();
         return;
     }
-    OwnPtr<BlobData> blobData = BlobData::create();
+    std::unique_ptr<BlobData> blobData = BlobData::create();
     blobData->appendFile(m_downloadedFilePath);
     blobData->detachFromCurrentThread();
     m_downloadedFileHandle = BlobDataHandle::create(std::move(blobData), -1);

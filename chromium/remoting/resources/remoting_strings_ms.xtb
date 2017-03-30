@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Untuk melindungi akses kepada komputer ini, sila pilih PIN <ph name="BOLD_START" />sekurang-kurangnya enam digit<ph name="BOLD_END" />. PIN ini akan diperlukan apabila menyambung dari lokasi lain.</translation>
 <translation id="4176825807642096119">Kod akses</translation>
 <translation id="4207623512727273241">Sila jalankan pemasang sebelum meneruskan.</translation>
+<translation id="4227991223508142681">Utiliti Peruntukan Hos</translation>
 <translation id="4240294130679914010">Penyahpasang Hos Chromoting</translation>
 <translation id="4277463233460010382">Komputer ini dikonfigurasi untuk membenarkan satu atau beberapa klien bersambung tanpa memasukkan PIN.</translation>
 <translation id="4277736576214464567">Kod akses tidak sah. Sila cuba lagi.</translation>
@@ -261,6 +262,7 @@ Jauh Chrome</translation>
 <translation id="7836926030608666805">Sesetengah komponen yang diperlukan hilang. Sila pastikan anda menjalankan versi terkini Chrome dan cuba lagi.</translation>
 <translation id="7868137160098754906">Sila masukkan PIN anda untuk komputer jauh.</translation>
 <translation id="7869445566579231750">Anda tidak mempunyai kebenaran untuk menjalankan aplikasi ini.</translation>
+<translation id="7895403300744144251">Dasar keselamatan pada komputer jauh tidak membenarkan sambungan daripada akaun anda.</translation>
 <translation id="7948001860594368197">Pilihan skrin</translation>
 <translation id="7970576581263377361">Pengesahan gagal. Sila log masuk ke Chromium sekali lagi.</translation>
 <translation id="7981525049612125370">Sesi jauh telah tamat tempoh.</translation>

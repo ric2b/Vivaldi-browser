@@ -36,6 +36,7 @@
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/resource_request_info.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 #include "extensions/browser/content_verifier.h"
@@ -369,6 +370,14 @@ bool AllowExtensionResourceLoad(net::URLRequest* request,
     return true;
   }
 
+  // PlzNavigate: frame navigations to extensions have already been checked in
+  // the ExtensionNavigationThrottle.
+  if (info->GetChildID() == -1 &&
+      content::IsResourceTypeFrame(info->GetResourceType()) &&
+      content::IsBrowserSideNavigationEnabled()) {
+    return true;
+  }
+
   // Allow the extension module embedder to grant permission for loads.
   if (ExtensionsBrowserClient::Get()->AllowCrossRendererResourceLoad(
           request, is_incognito, extension, extension_info_map)) {
@@ -421,11 +430,10 @@ ExtensionProtocolHandler::MaybeCreateJob(
   const Extension* extension =
       extension_info_map_->extensions().GetByID(extension_id);
 
-  // TODO(mpcomplete): better error code.
   if (!AllowExtensionResourceLoad(
           request, is_incognito_, extension, extension_info_map_)) {
-    return new net::URLRequestErrorJob(
-        request, network_delegate, net::ERR_ADDRESS_UNREACHABLE);
+    return new net::URLRequestErrorJob(request, network_delegate,
+                                       net::ERR_BLOCKED_BY_CLIENT);
   }
 
   // If this is a disabled extension only allow the icon to load.

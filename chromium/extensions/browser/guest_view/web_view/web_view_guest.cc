@@ -76,6 +76,9 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "prefs/vivaldi_pref_names.h"
+
+using vivaldi::IsVivaldiApp;
+using vivaldi::IsVivaldiRunning;
 #endif // VIVALDI_BUILD
 
 using base::UserMetricsAction;
@@ -88,9 +91,7 @@ using content::WebContents;
 using guest_view::GuestViewBase;
 using guest_view::GuestViewEvent;
 using guest_view::GuestViewManager;
-using ui_zoom::ZoomController;
-using vivaldi::IsVivaldiApp;
-using vivaldi::IsVivaldiRunning;
+using zoom::ZoomController;
 
 namespace extensions {
 
@@ -257,7 +258,7 @@ void WebViewGuest::CleanUp(content::BrowserContext* browser_context,
           view_instance_id));
 
   // Clean up content scripts for the WebView.
-  auto csm = WebViewContentScriptManager::Get(browser_context);
+  auto* csm = WebViewContentScriptManager::Get(browser_context);
   csm->RemoveAllContentScriptsForWebView(embedder_process_id, view_instance_id);
 
   // Allow an extensions browser client to potentially perform more cleanup.
@@ -321,7 +322,7 @@ int WebViewGuest::GetOrGenerateRulesRegistryID(
   if (it != web_view_key_to_id_map.Get().end())
     return it->second;
 
-  auto rph = RenderProcessHost::FromID(embedder_process_id);
+  auto* rph = RenderProcessHost::FromID(embedder_process_id);
   int rules_registry_id =
       RulesRegistryService::Get(rph->GetBrowserContext())->
           GetNextRulesRegistryID();
@@ -374,7 +375,7 @@ void WebViewGuest::CreateWebContents(
   // If we already have a webview tag in the same app using the same storage
   // partition, we should use the same SiteInstance so the existing tag and
   // the new tag can script each other.
-  auto guest_view_manager = GuestViewManager::FromBrowserContext(
+  auto* guest_view_manager = GuestViewManager::FromBrowserContext(
       owner_render_process_host->GetBrowserContext());
   scoped_refptr<content::SiteInstance> guest_site_instance =
       guest_view_manager->GetGuestSiteInstance(guest_site);
@@ -426,8 +427,6 @@ void WebViewGuest::CreateWebContents(
 
         newcontents = WebContents::Create(params);
 
-        newcontents->GetController().SetBrowserContext(params.browser_context);
-
         // copy extdata, tab-tiling information, tab id etc.
         newcontents->SetExtData(tabstrip_contents->GetExtData());
 
@@ -463,7 +462,11 @@ void WebViewGuest::CreateWebContents(
     WebContents::CreateParams params =
         GetWebContentsCreateParams(context, guest_site);
     newcontents = WebContents::Create(params);
-    newcontents->GetController().SetBrowserContext(context);
+    // NOTE(andre@vivaldi.com): This is to set up loading when the webview is
+    // attached.
+    if (!new_url.empty()) {
+      newcontents->set_delayed_open_url(new std::string(new_url));
+    }
   }
   if (owner_web_contents()->IsAudioMuted()) {
     // NOTE(pettern@vivaldi.com): If the owner is muted it means the webcontents
@@ -935,7 +938,6 @@ bool WebViewGuest::ClearData(base::Time remove_since,
     // StoragePartitionHttpCacheDataRemover::ClearData() does not clear that.
     web_cache::WebCacheManager::GetInstance()->ClearCacheForProcess(
         render_process_id);
-    web_cache::WebCacheManager::GetInstance()->Remove(render_process_id);
 
     base::Closure cache_removal_done_callback = base::Bind(
         &WebViewGuest::ClearDataInternal, weak_ptr_factory_.GetWeakPtr(),
@@ -1184,7 +1186,7 @@ void WebViewGuest::RequestPointerLockPermission(
 }
 
 void WebViewGuest::SignalWhenReady(const base::Closure& callback) {
-  auto manager = WebViewContentScriptManager::Get(browser_context());
+  auto* manager = WebViewContentScriptManager::Get(browser_context());
   manager->SignalOnScriptsLoaded(callback);
 }
 
@@ -1383,7 +1385,7 @@ void WebViewGuest::SetName(const std::string& name) {
 }
 
 void WebViewGuest::SetZoom(double zoom_factor) {
-  auto zoom_controller = ZoomController::FromWebContents(web_contents());
+  auto* zoom_controller = ZoomController::FromWebContents(web_contents());
   DCHECK(zoom_controller);
   double zoom_level = content::ZoomFactorToZoomLevel(zoom_factor);
   zoom_controller->SetZoomLevel(zoom_level);
@@ -1555,7 +1557,7 @@ void WebViewGuest::WebContentsCreated(WebContents* source_contents,
                                       const std::string& frame_name,
                                       const GURL& target_url,
                                       WebContents* new_contents) {
-  auto guest = WebViewGuest::FromWebContents(new_contents);
+  auto* guest = WebViewGuest::FromWebContents(new_contents);
   CHECK(guest);
   guest->SetOpener(this);
   guest->name_ = frame_name;
@@ -1658,8 +1660,8 @@ void WebViewGuest::LoadURLWithParams(
 void WebViewGuest::RequestNewWindowPermission(WindowOpenDisposition disposition,
                                               const gfx::Rect &initial_bounds,
                                               bool user_gesture,
-                                              WebContents *new_contents) {
-  auto guest = WebViewGuest::FromWebContents(new_contents);
+                                              WebContents* new_contents) {
+  auto* guest = WebViewGuest::FromWebContents(new_contents);
   if (!guest)
     return;
   auto it = pending_new_windows_.find(guest);
@@ -1736,7 +1738,7 @@ void WebViewGuest::OnWebViewNewWindowResponse(
     int new_window_instance_id,
     bool allow,
     const std::string& user_input) {
-  auto guest =
+  auto* guest =
       WebViewGuest::From(owner_web_contents()->GetRenderProcessHost()->GetID(),
                          new_window_instance_id);
   if (!guest)

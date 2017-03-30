@@ -97,7 +97,6 @@ _REVISION_NEGATIVE_FILTER['HEAD'] = [
     'DragAndDropTest.testElementInDiv',
 ]
 
-
 _OS_NEGATIVE_FILTER = {}
 _OS_NEGATIVE_FILTER['win'] = [
     # Flaky: https://code.google.com/p/chromedriver/issues/detail?id=373

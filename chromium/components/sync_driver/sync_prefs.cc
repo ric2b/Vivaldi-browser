@@ -317,6 +317,8 @@ const char* SyncPrefs::GetPrefNameForDataType(syncer::ModelType data_type) {
       return prefs::kSyncDeviceInfo;
     case syncer::WIFI_CREDENTIALS:
       return prefs::kSyncWifiCredentials;
+    case syncer::ARC_PACKAGE:
+      return prefs::kSyncArcPackage;
     default:
       break;
   }
@@ -352,6 +354,7 @@ void SyncPrefs::RegisterPrefGroups() {
   pref_groups_[syncer::APPS].Put(syncer::APP_NOTIFICATIONS);
   pref_groups_[syncer::APPS].Put(syncer::APP_SETTINGS);
   pref_groups_[syncer::APPS].Put(syncer::APP_LIST);
+  pref_groups_[syncer::APPS].Put(syncer::ARC_PACKAGE);
 
   pref_groups_[syncer::AUTOFILL].Put(syncer::AUTOFILL_PROFILE);
   pref_groups_[syncer::AUTOFILL].Put(syncer::AUTOFILL_WALLET_DATA);

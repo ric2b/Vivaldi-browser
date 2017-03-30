@@ -7,7 +7,6 @@ package org.chromium.chrome.browser.omnibox;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Paint;
@@ -21,7 +20,6 @@ import android.text.TextUtils;
 import android.text.style.ReplacementSpan;
 import android.util.AttributeSet;
 import android.view.GestureDetector;
-import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
@@ -93,7 +91,7 @@ public class UrlBar extends VerticallyFixedEditText {
     private boolean mFocused;
     private boolean mAllowFocus = true;
 
-    private final ColorStateList mDarkHintColor;
+    private final int mDarkHintColor;
     private final int mDarkDefaultTextColor;
     private final int mDarkHighlightColor;
 
@@ -166,11 +164,6 @@ public class UrlBar extends VerticallyFixedEditText {
         void onTextChangedForAutocomplete(boolean textDeleted);
 
         /**
-         * Called to notify that back key has been pressed while the focus in on the url bar.
-         */
-        void backKeyPressed();
-
-        /**
          * @return Whether the light security theme should be used.
          */
         boolean shouldEmphasizeHttpsScheme();
@@ -183,7 +176,8 @@ public class UrlBar extends VerticallyFixedEditText {
 
         mDarkDefaultTextColor =
                 ApiCompatibilityUtils.getColor(resources, R.color.url_emphasis_default_text);
-        mDarkHintColor = getHintTextColors();
+        mDarkHintColor = ApiCompatibilityUtils.getColor(resources,
+                R.color.locationbar_dark_hint_text);
         mDarkHighlightColor = getHighlightColor();
 
         mLightDefaultTextColor =
@@ -437,6 +431,10 @@ public class UrlBar extends VerticallyFixedEditText {
         }
 
         if (focused) StartupMetrics.getInstance().recordFocusedOmnibox();
+
+        fixupTextDirection();
+        // Always align to the same as the paragraph direction (LTR = left, RTL = right).
+        ApiCompatibilityUtils.setTextAlignment(this, TEXT_ALIGNMENT_TEXT_START);
     }
 
     /**
@@ -455,6 +453,25 @@ public class UrlBar extends VerticallyFixedEditText {
         if (mFirstDrawComplete) {
             setFocusable(allowFocus);
             setFocusableInTouchMode(allowFocus);
+        }
+    }
+
+    /**
+     * Sets the {@link UrlBar}'s text direction based on focus and contents.
+     *
+     * Should be called whenever focus or text contents change.
+     */
+    private void fixupTextDirection() {
+        // When unfocused, force left-to-right rendering at the paragraph level (which is desired
+        // for URLs). Right-to-left runs are still rendered RTL, but will not flip the whole URL
+        // around. This is consistent with OmniboxViewViews on desktop. When focused, render text
+        // normally (to allow users to make non-URL searches and to avoid showing Android's split
+        // insertion point when an RTL user enters RTL text). Also render text normally when the
+        // text field is empty (because then it displays an instruction that is not a URL).
+        if (mFocused || length() == 0) {
+            ApiCompatibilityUtils.setTextDirection(this, TEXT_DIRECTION_INHERIT);
+        } else {
+            ApiCompatibilityUtils.setTextDirection(this, TEXT_DIRECTION_LTR);
         }
     }
 
@@ -491,25 +508,6 @@ public class UrlBar extends VerticallyFixedEditText {
         } else {
             return super.focusSearch(direction);
         }
-    }
-
-    @Override
-    public boolean onKeyPreIme(int keyCode, KeyEvent event) {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (event.getAction() == KeyEvent.ACTION_DOWN
-                    && event.getRepeatCount() == 0) {
-                // Tell the framework to start tracking this event.
-                getKeyDispatcherState().startTracking(event, this);
-                return true;
-            } else if (event.getAction() == KeyEvent.ACTION_UP) {
-                getKeyDispatcherState().handleUpEvent(event);
-                if (event.isTracking() && !event.isCanceled()) {
-                    mUrlBarDelegate.backKeyPressed();
-                    return true;
-                }
-            }
-        }
-        return super.onKeyPreIme(keyCode, event);
     }
 
     @Override
@@ -865,6 +863,8 @@ public class UrlBar extends VerticallyFixedEditText {
                 clearAutocompleteSpanIfInvalid();
             }
         }
+
+        fixupTextDirection();
     }
 
     private void clearAutocompleteSpanIfInvalid() {

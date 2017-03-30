@@ -40,7 +40,6 @@ class ContainerNode;
 class DOMSelection;
 class Document;
 class Element;
-class HTMLLabelElement;
 class HTMLMapElement;
 class HitTestResult;
 class IdTargetObserverRegistry;
@@ -58,6 +57,7 @@ public:
     bool isInclusiveOlderSiblingShadowRootOrAncestorTreeScopeOf(const TreeScope&) const;
 
     Element* adjustedFocusedElement() const;
+    Element* adjustedPointerLockElement(const Element&) const;
     Element* getElementById(const AtomicString&) const;
     const HeapVector<Member<Element>>& getAllElementsById(const AtomicString&) const;
     bool hasElementWithId(const AtomicString& id) const;
@@ -81,12 +81,6 @@ public:
     Element* hitTestPoint(int x, int y, const HitTestRequest&) const;
     HeapVector<Member<Element>> elementsFromPoint(int x, int y) const;
     HeapVector<Member<Element>> elementsFromHitTestResult(HitTestResult&) const;
-
-    // For accessibility.
-    bool shouldCacheLabelsByForAttribute() const { return m_labelsByForAttribute; }
-    void addLabel(const AtomicString& forAttributeValue, HTMLLabelElement*);
-    void removeLabel(const AtomicString& forAttributeValue, HTMLLabelElement*);
-    HTMLLabelElement* labelElementForId(const AtomicString& forAttributeValue);
 
     DOMSelection* getSelection() const;
 
@@ -138,7 +132,6 @@ private:
 
     Member<DocumentOrderedMap> m_elementsById;
     Member<DocumentOrderedMap> m_imageMapsByName;
-    Member<DocumentOrderedMap> m_labelsByForAttribute;
 
     Member<IdTargetObserverRegistry> m_idTargetObserverRegistry;
 

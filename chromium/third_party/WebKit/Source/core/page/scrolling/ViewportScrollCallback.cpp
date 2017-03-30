@@ -16,9 +16,9 @@
 namespace blink {
 
 ViewportScrollCallback::ViewportScrollCallback(
-    TopControls& topControls, OverscrollController& overscrollController)
-    : m_topControls(&topControls)
-    , m_overscrollController(&overscrollController)
+    TopControls* topControls, OverscrollController* overscrollController)
+    : m_topControls(topControls)
+    , m_overscrollController(overscrollController)
 {
 }
 
@@ -96,9 +96,9 @@ void ViewportScrollCallback::handleEvent(ScrollState* state)
         state->deltaY() - result.unusedScrollDeltaY);
 }
 
-void ViewportScrollCallback::setScroller(ScrollableArea& scroller)
+void ViewportScrollCallback::setScroller(ScrollableArea* scroller)
 {
-    m_scroller = &scroller;
+    m_scroller = scroller;
 }
 
 } // namespace blink

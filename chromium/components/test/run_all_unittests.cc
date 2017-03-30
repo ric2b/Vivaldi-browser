@@ -21,6 +21,7 @@
 
 #if !defined(OS_IOS)
 #include "content/public/test/test_content_client_initializer.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "ui/gl/test/gl_surface_test_support.h"
 #endif
 
@@ -39,10 +40,6 @@
 #include "ui/gfx/android/gfx_jni_registrar.h"
 #endif
 
-#if defined(OS_CHROMEOS)
-#include "mojo/edk/embedder/embedder.h"
-#endif
-
 namespace {
 
 class ComponentsTestSuite : public base::TestSuite {
@@ -59,7 +56,7 @@ class ComponentsTestSuite : public base::TestSuite {
     base::StatisticsRecorder::Initialize();
 
 #if !defined(OS_IOS)
-    gfx::GLSurfaceTestSupport::InitializeOneOff();
+    gl::GLSurfaceTestSupport::InitializeOneOff();
 #endif
 #if defined(OS_ANDROID)
     // Register JNI bindings for android.
@@ -151,7 +148,7 @@ int main(int argc, char** argv) {
       testing::UnitTest::GetInstance()->listeners();
   listeners.Append(new ComponentsUnitTestEventListener());
 
-#if defined(OS_CHROMEOS)
+#if !defined(OS_IOS)
   mojo::edk::Init();
 #endif
 

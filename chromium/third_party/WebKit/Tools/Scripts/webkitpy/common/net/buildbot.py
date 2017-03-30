@@ -44,14 +44,18 @@ _log = get_logger(__file__)
 
 class Builder(object):
 
-    def __init__(self, name, buildbot):
-        self._name = name
+    def __init__(self, builder_name, buildbot, master_name='chromium.webkit'):
+        self._name = builder_name
+        self._master_name = master_name
         self._buildbot = buildbot
         self._builds_cache = {}
         self._revision_to_build_number = None
 
     def name(self):
         return self._name
+
+    def master_name(self):
+        return self._master_name
 
     def results_url(self):
         return config_urls.chromium_results_url_base_for_builder(self._name)
@@ -79,28 +83,32 @@ class Builder(object):
         # FIXME: This should cache that the result was a 404 and stop hitting the network.
         results_file = NetworkTransaction(convert_404_to_None=True).run(
             lambda: self._fetch_file_from_results(results_url, "failing_results.json"))
-        return LayoutTestResults.results_from_string(results_file)
+        revision = NetworkTransaction(convert_404_to_None=True).run(
+            lambda: self._fetch_file_from_results(results_url, "LAST_CHANGE"))
+        if not revision:
+            results_file = None
+        return LayoutTestResults.results_from_string(results_file, revision)
 
     def url_encoded_name(self):
         return urllib.quote(self._name)
 
     def url(self):
-        return "%s/builders/%s" % (self._buildbot.buildbot_url, self.url_encoded_name())
+        buildbot_url = config_urls.chromium_buildbot_url(self.master_name())
+        return "%s/builders/%s" % (buildbot_url, self.url_encoded_name())
 
     # This provides a single place to mock
     def _fetch_build(self, build_number):
-        build_dictionary = self._buildbot._fetch_build_dictionary(self, build_number)
+        build_dictionary = self._buildbot.fetch_build_dictionary(self, build_number)
         if not build_dictionary:
             return None
-        revision_string = build_dictionary['sourceStamp']['revision']
+        revision_string = build_dictionary['sourceStamp'].get('revision')
         return Build(self,
                      build_number=int(build_dictionary['number']),
                      # 'revision' may be None if a trunk build was started by the force-build button on the web page.
                      revision=(int(revision_string) if revision_string else None),
                      # Buildbot uses any number other than 0 to mean fail.  Since we fetch with
                      # filter=1, passing builds may contain no 'results' value.
-                     is_green=(not build_dictionary.get('results')),
-                     )
+                     is_green=(not build_dictionary.get('results')))
 
     def build(self, build_number):
         if not build_number:
@@ -138,7 +146,7 @@ class Builder(object):
             _log.info("Loading revision/build list from %s." % self.results_url())
             _log.info("This may take a while...")
             result_files = self._buildbot._fetch_twisted_directory_listing(self.results_url())
-        except urllib2.HTTPError, error:
+        except urllib2.HTTPError as error:
             if error.code != 404:
                 raise
             _log.debug("Revision/build list failed to load.")
@@ -174,8 +182,7 @@ class Builder(object):
             build = Build(self,
                           build_number=build_number,
                           revision=revision,
-                          is_green=False,
-                          )
+                          is_green=False)
         return build
 
 
@@ -195,8 +202,7 @@ class Build(object):
         return self.build_url(self.builder(), self._number)
 
     def results_url(self):
-        results_directory = "r%s (%s)" % (self.revision(), self._number)
-        return "%s/%s" % (self._builder.results_url(), urllib.quote(results_directory))
+        return "%s/%s/layout-test-results" % (self._builder.results_url(), self._number)
 
     def results_zip_url(self):
         return "%s.zip" % self.results_url()
@@ -217,11 +223,8 @@ class Build(object):
 
 
 class BuildBot(object):
-    _builder_factory = Builder
-    _default_url = config_urls.chromium_buildbot_url
 
-    def __init__(self, url=None):
-        self.buildbot_url = url if url else self._default_url
+    def __init__(self):
         self._builder_by_name = {}
 
     def _parse_last_build_cell(self, builder, cell):
@@ -230,9 +233,7 @@ class BuildBot(object):
             # Will be either a revision number or a build number
             revision_string = status_link.string
             # If revision_string has non-digits assume it's not a revision number.
-            builder['built_revision'] = int(revision_string) \
-                if not re.match('\D', revision_string) \
-                else None
+            builder['built_revision'] = int(revision_string) if not re.match(r'\D', revision_string) else None
 
             # FIXME: We treat slave lost as green even though it is not to
             # work around the Qts bot being on a broken internet connection.
@@ -256,7 +257,7 @@ class BuildBot(object):
         activity_lines = cell.renderContents().split("<br />")
         builder["activity"] = activity_lines[0]  # normally "building" or "idle"
         # The middle lines document how long left for any current builds.
-        match = re.match("(?P<pending_builds>\d) pending", activity_lines[-1])
+        match = re.match(r'(?P<pending_builds>\d) pending', activity_lines[-1])
         builder["pending_builds"] = int(match.group("pending_builds")) if match else 0
 
     def _parse_builder_status_from_row(self, status_row):
@@ -278,27 +279,25 @@ class BuildBot(object):
         return False
 
     # FIXME: These _fetch methods should move to a networking class.
-    def _fetch_build_dictionary(self, builder, build_number):
+    @staticmethod
+    def fetch_build_dictionary(builder, build_number):
         # Note: filter=1 will remove None and {} and '', which cuts noise but can
         # cause keys to be missing which you might otherwise expect.
         # FIXME: The bot sends a *huge* amount of data for each request, we should
         # find a way to reduce the response size further.
-        json_url = "%s/json/builders/%s/builds/%s?filter=1" % (self.buildbot_url, urllib.quote(builder.name()), build_number)
+        buildbot_url = config_urls.chromium_buildbot_url(builder.master_name())
+        json_url = "%s/json/builders/%s/builds/%s?filter=1" % (buildbot_url, urllib.quote(builder.name()), build_number)
         try:
             return json.load(urllib2.urlopen(json_url))
-        except urllib2.URLError, err:
+        except urllib2.URLError as err:
             build_url = Build.build_url(builder, build_number)
             _log.error("Error fetching data for %s build %s (%s, json: %s): %s" %
                        (builder.name(), build_number, build_url, json_url, err))
             return None
-        except ValueError, err:
+        except ValueError as err:
             build_url = Build.build_url(builder, build_number)
             _log.error("Error decoding json data from %s: %s" % (build_url, err))
             return None
-
-    def _fetch_one_box_per_builder(self):
-        build_status_url = "%s/one_box_per_builder" % self.buildbot_url
-        return urllib2.urlopen(build_status_url)
 
     def _file_cell_text(self, file_cell):
         """Traverses down through firstChild elements until one containing a string is found, then returns that string"""
@@ -330,21 +329,27 @@ class BuildBot(object):
     def builders(self):
         return [self.builder_with_name(status["name"]) for status in self.builder_statuses()]
 
-    # This method pulls from /one_box_per_builder as an efficient way to get information about
     def builder_statuses(self):
-        soup = BeautifulSoup(self._fetch_one_box_per_builder())
+        buildbot_url = config_urls.chromium_buildbot_url('chromium.webkit')
+        builders_page_url = "%s/builders" % buildbot_url
+        builders_page_content = urllib2.urlopen(builders_page_url)
+        soup = BeautifulSoup(builders_page_content)
         return [self._parse_builder_status_from_row(status_row) for status_row in soup.find('table').findAll('tr')]
 
-    def builder_with_name(self, name):
-        builder = self._builder_by_name.get(name)
+    def builder_with_name(self, builder_name, master_name='chromium.webkit'):
+        builder = self._builder_by_name.get(builder_name)
         if not builder:
-            builder = self._builder_factory(name, self)
-            self._builder_by_name[name] = builder
+            builder = Builder(builder_name, self, master_name=master_name)
+            self._builder_by_name[builder_name] = builder
         return builder
 
-    # This makes fewer requests than calling Builder.latest_build would.  It grabs all builder
-    # statuses in one request using self.builder_statuses (fetching /one_box_per_builder instead of builder pages).
     def _latest_builds_from_builders(self):
+        """Fetches a list of latest builds.
+
+        This makes fewer requests than calling Builder.latest_build would.
+        It grabs all builder statuses in one request by fetching from .../builders
+        instead of builder pages.
+        """
         builder_statuses = self.builder_statuses()
         return [self.builder_with_name(status["name"]).build(status["build_number"]) for status in builder_statuses]
 
@@ -355,7 +360,8 @@ class BuildBot(object):
             build = build.previous_build()
 
     def _fetch_builder_page(self, builder):
-        builder_page_url = "%s/builders/%s?numbuilds=100" % (self.buildbot_url, urllib2.quote(builder.name()))
+        buildbot_url = config_urls.chromium_buildbot_url('chromium.webkit')
+        builder_page_url = "%s/builders/%s?numbuilds=100" % (buildbot_url, urllib2.quote(builder.name()))
         return urllib2.urlopen(builder_page_url)
 
     def _revisions_for_builder(self, builder):
@@ -399,6 +405,7 @@ class BuildBot(object):
                     break
                 builders_succeeded_in_past = builders_succeeded_in_past.union(revision_statuses[past_revision])
 
-            if len(builders_succeeded_in_future) == len(builder_revisions) and len(builders_succeeded_in_past) == len(builder_revisions):
+            if len(builders_succeeded_in_future) == len(builder_revisions) and len(
+                    builders_succeeded_in_past) == len(builder_revisions):
                 return revision
         return None

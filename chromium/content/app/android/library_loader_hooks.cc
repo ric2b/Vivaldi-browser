@@ -16,9 +16,9 @@
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/tracked_objects.h"
-#include "components/tracing/trace_config_file.h"
-#include "components/tracing/trace_to_console.h"
-#include "components/tracing/tracing_switches.h"
+#include "components/tracing/browser/trace_config_file.h"
+#include "components/tracing/common/trace_to_console.h"
+#include "components/tracing/common/tracing_switches.h"
 #include "content/app/android/app_jni_registrar.h"
 #include "content/browser/android/browser_jni_registrar.h"
 #include "content/common/android/common_jni_registrar.h"
@@ -26,6 +26,8 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/result_codes.h"
 #include "device/bluetooth/android/bluetooth_jni_registrar.h"
+#include "device/gamepad/android/gamepad_jni_registrar.h"
+#include "device/power_save_blocker/power_save_blocker_jni_registrar.h"
 #include "device/usb/android/usb_jni_registrar.h"
 #include "media/base/android/media_jni_registrar.h"
 #include "media/capture/video/android/capture_jni_registrar.h"
@@ -75,6 +77,12 @@ bool EnsureJniRegistered(JNIEnv* env) {
       return false;
 
     if (!device::android::RegisterBluetoothJni(env))
+      return false;
+
+    if (!device::android::RegisterGamepadJni(env))
+      return false;
+
+    if (!device::android::RegisterPowerSaveBlockerJni(env))
       return false;
 
     if (!device::android::RegisterUsbJni(env))

@@ -19,6 +19,7 @@
 #include "base/strings/string_split.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "content/browser/fileapi/mock_url_request_delegate.h"
 #include "content/browser/quota/mock_quota_manager_proxy.h"
 #include "content/common/cache_storage/cache_storage_types.h"
@@ -228,6 +229,11 @@ bool ResponseMetadataEqual(const ServiceWorkerResponse& expected,
   if (expected.cache_storage_cache_name != actual.cache_storage_cache_name)
     return false;
 
+  EXPECT_EQ(expected.cors_exposed_header_names,
+            actual.cors_exposed_header_names);
+  if (expected.cors_exposed_header_names != actual.cors_exposed_header_names)
+    return false;
+
   return true;
 }
 
@@ -246,11 +252,10 @@ bool ResponseSideDataEqual(const std::string& expected_side_data,
 }
 
 ServiceWorkerResponse SetCacheName(const ServiceWorkerResponse& original) {
-  return ServiceWorkerResponse(
-      original.url, original.status_code, original.status_text,
-      original.response_type, original.headers, original.blob_uuid,
-      original.blob_size, original.stream_url, original.error,
-      original.response_time, true, kCacheName);
+  ServiceWorkerResponse result(original);
+  result.is_in_cache_storage = true;
+  result.cache_storage_cache_name = kCacheName;
+  return result;
 }
 
 }  // namespace
@@ -262,12 +267,14 @@ class TestCacheStorageCache : public CacheStorageCache {
       const GURL& origin,
       const std::string& cache_name,
       const base::FilePath& path,
+      CacheStorage* cache_storage,
       const scoped_refptr<net::URLRequestContextGetter>& request_context_getter,
       const scoped_refptr<storage::QuotaManagerProxy>& quota_manager_proxy,
       base::WeakPtr<storage::BlobStorageContext> blob_context)
       : CacheStorageCache(origin,
                           cache_name,
                           path,
+                          cache_storage,
                           request_context_getter,
                           quota_manager_proxy,
                           blob_context),
@@ -299,7 +306,11 @@ class TestCacheStorageCache : public CacheStorageCache {
   }
 
  private:
-  ~TestCacheStorageCache() override {}
+  std::unique_ptr<CacheStorageCacheHandle> CreateCacheHandle() override {
+    // Returns an empty handle. There is no need for CacheStorage and its
+    // handles in these tests.
+    return std::unique_ptr<CacheStorageCacheHandle>();
+  }
 
   bool delay_backend_creation_;
   ErrorCallback backend_creation_callback_;
@@ -345,11 +356,11 @@ class CacheStorageCacheTest : public testing::Test {
 
     CreateRequests(blob_storage_context);
 
-    cache_ = make_scoped_refptr(new TestCacheStorageCache(
-        GURL(kOrigin), kCacheName, temp_dir_.path(),
-        BrowserContext::GetDefaultStoragePartition(&browser_context_)->
-            GetURLRequestContext(),
-        quota_manager_proxy_, blob_storage_context->context()->AsWeakPtr()));
+    cache_ = base::MakeUnique<TestCacheStorageCache>(
+        GURL(kOrigin), kCacheName, temp_dir_.path(), nullptr /* CacheStorage */,
+        BrowserContext::GetDefaultStoragePartition(&browser_context_)
+            ->GetURLRequestContext(),
+        quota_manager_proxy_, blob_storage_context->context()->AsWeakPtr());
   }
 
   void TearDown() override {
@@ -388,7 +399,8 @@ class CacheStorageCacheTest : public testing::Test {
         blob_handle_->uuid(), expected_blob_data_.size(), GURL(),
         blink::WebServiceWorkerResponseErrorUnknown, base::Time::Now(),
         false /* is_in_cache_storage */,
-        std::string() /* cache_storage_cache_name */);
+        std::string() /* cache_storage_cache_name */,
+        ServiceWorkerHeaderList() /* cors_exposed_header_names */);
 
     body_response_with_query_ = ServiceWorkerResponse(
         GURL("http://example.com/body.html?query=test"), 200, "OK",
@@ -396,14 +408,16 @@ class CacheStorageCacheTest : public testing::Test {
         blob_handle_->uuid(), expected_blob_data_.size(), GURL(),
         blink::WebServiceWorkerResponseErrorUnknown, base::Time::Now(),
         false /* is_in_cache_storage */,
-        std::string() /* cache_storage_cache_name */);
+        std::string() /* cache_storage_cache_name */,
+        {"a"} /* cors_exposed_header_names */);
 
     no_body_response_ = ServiceWorkerResponse(
         GURL("http://example.com/no_body.html"), 200, "OK",
         blink::WebServiceWorkerResponseTypeDefault, headers, "", 0, GURL(),
         blink::WebServiceWorkerResponseErrorUnknown, base::Time::Now(),
         false /* is_in_cache_storage */,
-        std::string() /* cache_storage_cache_name */);
+        std::string() /* cache_storage_cache_name */,
+        ServiceWorkerHeaderList() /* cors_exposed_header_names */);
   }
 
   std::unique_ptr<ServiceWorkerFetchRequest> CopyFetchRequest(
@@ -663,7 +677,7 @@ class CacheStorageCacheTest : public testing::Test {
   scoped_refptr<MockQuotaManagerProxy> quota_manager_proxy_;
   storage::BlobStorageContext* blob_storage_context_;
 
-  scoped_refptr<TestCacheStorageCache> cache_;
+  std::unique_ptr<TestCacheStorageCache> cache_;
 
   ServiceWorkerFetchRequest body_request_;
   ServiceWorkerResponse body_response_;
@@ -1224,12 +1238,13 @@ TEST_P(CacheStorageCacheTestP, WriteSideData_NotFound) {
 TEST_F(CacheStorageCacheTest, CaselessServiceWorkerResponseHeaders) {
   // CacheStorageCache depends on ServiceWorkerResponse having caseless
   // headers so that it can quickly lookup vary headers.
-  ServiceWorkerResponse response(GURL("http://www.example.com"), 200, "OK",
-                                 blink::WebServiceWorkerResponseTypeDefault,
-                                 ServiceWorkerHeaderMap(), "", 0, GURL(),
-                                 blink::WebServiceWorkerResponseErrorUnknown,
-                                 base::Time(), false /* is_in_cache_storage */,
-                                 std::string() /* cache_storage_cache_name */);
+  ServiceWorkerResponse response(
+      GURL("http://www.example.com"), 200, "OK",
+      blink::WebServiceWorkerResponseTypeDefault, ServiceWorkerHeaderMap(), "",
+      0, GURL(), blink::WebServiceWorkerResponseErrorUnknown, base::Time(),
+      false /* is_in_cache_storage */,
+      std::string() /* cache_storage_cache_name */,
+      ServiceWorkerHeaderList() /* cors_exposed_header_names */);
   response.headers["content-type"] = "foo";
   response.headers["Content-Type"] = "bar";
   EXPECT_EQ("bar", response.headers["content-type"]);

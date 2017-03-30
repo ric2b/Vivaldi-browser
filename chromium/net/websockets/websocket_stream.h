@@ -109,6 +109,7 @@ class NET_EXPORT_PRIVATE WebSocketStream {
       const std::vector<std::string>& requested_subprotocols,
       const url::Origin& origin,
       const GURL& first_party_for_cookies,
+      const std::string& additional_headers,
       URLRequestContext* url_request_context,
       const BoundNetLog& net_log,
       std::unique_ptr<ConnectDelegate> connect_delegate);
@@ -225,6 +226,7 @@ CreateAndConnectStreamForTesting(
     std::unique_ptr<WebSocketHandshakeStreamCreateHelper> create_helper,
     const url::Origin& origin,
     const GURL& first_party_for_cookies,
+    const std::string& additional_headers,
     URLRequestContext* url_request_context,
     const BoundNetLog& net_log,
     std::unique_ptr<WebSocketStream::ConnectDelegate> connect_delegate,

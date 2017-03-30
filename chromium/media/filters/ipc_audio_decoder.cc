@@ -56,7 +56,8 @@ void PostTaskAndWait(
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     const tracked_objects::Location& from_here,
     const base::Closure& task) {
-  base::WaitableEvent done(false, false);
+  base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED);
   task_runner->PostTask(from_here, base::Bind(&RunAndSignal, task, &done));
   done.Wait();
 }
@@ -154,7 +155,8 @@ IPCAudioDecoder::IPCAudioDecoder(FFmpegURLProtocol* protocol)
       sample_format_(kUnknownSampleFormat),
       audio_bus_(nullptr),
       frames_read_(0),
-      media_task_done_(false, false) {
+      media_task_done_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                       base::WaitableEvent::InitialState::NOT_SIGNALED) {
   DCHECK(IsAvailable());
 }
 

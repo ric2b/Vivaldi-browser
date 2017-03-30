@@ -6,16 +6,19 @@
 
 #include <utility>
 
+#include "base/logging.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/navigator.h"
 #include "content/browser/frame_host/navigator_delegate.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/service_worker_navigation_handle.h"
 #include "content/common/frame_messages.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
 #include "net/url_request/redirect_info.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace content {
 
@@ -179,9 +182,12 @@ net::Error NavigationHandleImpl::GetNetErrorCode() {
 }
 
 RenderFrameHostImpl* NavigationHandleImpl::GetRenderFrameHost() {
-  CHECK(state_ >= READY_TO_COMMIT)
-      << "This accessor should only be called "
-         "after the navigation is ready to commit.";
+  // TODO(mkwst): Change this to check against 'READY_TO_COMMIT' once
+  // ReadyToCommitNavigation is available whether or not PlzNavigate is
+  // enabled. https://crbug.com/621856
+  CHECK_GE(state_, WILL_PROCESS_RESPONSE)
+      << "This accessor should only be called after a response has been "
+         "delivered for processing.";
   return render_frame_host_;
 }
 
@@ -250,7 +256,18 @@ NavigationHandleImpl::CallWillStartRequestForTesting(
     ui::PageTransition transition,
     bool is_external_protocol) {
   NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
-  WillStartRequest(is_post ? "POST" : "GET", sanitized_referrer,
+
+  scoped_refptr<ResourceRequestBodyImpl> resource_request_body;
+  std::string method = "GET";
+  if (is_post) {
+    method = "POST";
+
+    std::string body = "test=body";
+    resource_request_body = new ResourceRequestBodyImpl();
+    resource_request_body->AppendBytes(body.data(), body.size());
+  }
+
+  WillStartRequest(method, resource_request_body, sanitized_referrer,
                    has_user_gesture, transition, is_external_protocol,
                    base::Bind(&UpdateThrottleCheckResult, &result));
 
@@ -280,22 +297,24 @@ NavigationData* NavigationHandleImpl::GetNavigationData() {
   return navigation_data_.get();
 }
 
-void NavigationHandleImpl::InitServiceWorkerHandle(
-    ServiceWorkerContextWrapper* service_worker_context) {
-  DCHECK(IsBrowserSideNavigationEnabled());
-  service_worker_handle_.reset(
-      new ServiceWorkerNavigationHandle(service_worker_context));
-}
-
 void NavigationHandleImpl::WillStartRequest(
     const std::string& method,
+    scoped_refptr<content::ResourceRequestBodyImpl> resource_request_body,
     const Referrer& sanitized_referrer,
     bool has_user_gesture,
     ui::PageTransition transition,
     bool is_external_protocol,
     const ThrottleChecksFinishedCallback& callback) {
+  // |method != "POST"| should imply absence of |resource_request_body|.
+  if (method != "POST" && resource_request_body) {
+    NOTREACHED();
+    resource_request_body = nullptr;
+  }
+
   // Update the navigation parameters.
   method_ = method;
+  if (method_ == "POST")
+    resource_request_body_ = resource_request_body;
   sanitized_referrer_ = sanitized_referrer;
   has_user_gesture_ = has_user_gesture;
   transition_ = transition;
@@ -339,6 +358,8 @@ void NavigationHandleImpl::WillRedirectRequest(
   is_external_protocol_ = new_is_external_protocol;
   response_headers_ = response_headers;
   was_redirected_ = true;
+  if (new_method != "POST")
+    resource_request_body_ = nullptr;
 
   state_ = WILL_REDIRECT_REQUEST;
   complete_callback_ = callback;
@@ -416,6 +437,7 @@ NavigationHandleImpl::CheckWillStartRequest() {
 
       case NavigationThrottle::CANCEL:
       case NavigationThrottle::CANCEL_AND_IGNORE:
+      case NavigationThrottle::BLOCK_REQUEST:
         state_ = CANCELING;
         return result;
 
@@ -423,9 +445,6 @@ NavigationHandleImpl::CheckWillStartRequest() {
         state_ = DEFERRING_START;
         next_index_ = i + 1;
         return result;
-
-      default:
-        NOTREACHED();
     }
   }
   next_index_ = 0;
@@ -455,7 +474,7 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
         next_index_ = i + 1;
         return result;
 
-      default:
+      case NavigationThrottle::BLOCK_REQUEST:
         NOTREACHED();
     }
   }
@@ -490,6 +509,9 @@ NavigationHandleImpl::CheckWillProcessResponse() {
         state_ = DEFERRING_RESPONSE;
         next_index_ = i + 1;
         return result;
+
+      case NavigationThrottle::BLOCK_REQUEST:
+        NOTREACHED();
     }
   }
   next_index_ = 0;

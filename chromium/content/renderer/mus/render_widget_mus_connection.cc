@@ -11,15 +11,12 @@
 #include "components/mus/public/cpp/context_provider.h"
 #include "components/mus/public/cpp/output_surface.h"
 #include "components/mus/public/interfaces/command_buffer.mojom.h"
-#include "components/mus/public/interfaces/compositor_frame.mojom.h"
-#include "components/mus/public/interfaces/gpu.mojom.h"
+#include "components/mus/public/interfaces/surface.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "content/public/common/mojo_shell_connection.h"
 #include "content/renderer/mus/compositor_mus_connection.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/surfaces/surfaces_utils.h"
 #include "services/shell/public/cpp/connector.h"
 
 namespace content {
@@ -49,13 +46,9 @@ std::unique_ptr<cc::OutputSurface>
 RenderWidgetMusConnection::CreateOutputSurface() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!window_surface_binding_);
-  mus::mojom::GpuPtr gpu_service;
-  MojoShellConnection::Get()->GetConnector()->ConnectToInterface("mojo:mus",
-                                                                 &gpu_service);
-  mus::mojom::CommandBufferPtr cb;
-  gpu_service->CreateOffscreenGLES2Context(GetProxy(&cb));
-  scoped_refptr<cc::ContextProvider> context_provider(
-      new mus::ContextProvider(cb.PassInterface().PassHandle()));
+  scoped_refptr<cc::ContextProvider> context_provider(new mus::ContextProvider(
+      MojoShellConnection::GetForProcess()->GetConnector()));
+
   std::unique_ptr<cc::OutputSurface> surface(new mus::OutputSurface(
       context_provider, mus::WindowSurface::Create(&window_surface_binding_)));
   if (compositor_mus_connection_) {
@@ -98,13 +91,6 @@ void RenderWidgetMusConnection::FocusChangeComplete() {
 bool RenderWidgetMusConnection::HasTouchEventHandlersAt(
     const gfx::Point& point) const {
   return true;
-}
-
-void RenderWidgetMusConnection::ObserveWheelEventAndResult(
-    const blink::WebMouseWheelEvent& wheel_event,
-    const gfx::Vector2dF& wheel_unused_delta,
-    bool event_processed) {
-  NOTIMPLEMENTED();
 }
 
 void RenderWidgetMusConnection::ObserveGestureEventAndResult(

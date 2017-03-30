@@ -6,10 +6,10 @@
 
 #include "base/metrics/histogram.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/enumerate_modules_model_win.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/win/enumerate_modules_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -50,7 +50,7 @@ ConflictingModuleView::ConflictingModuleView(views::View* anchor_view,
   set_anchor_view_insets(gfx::Insets(
       GetLayoutConstant(LOCATION_BAR_BUBBLE_ANCHOR_VERTICAL_INSET), 0));
 
-  registrar_.Add(this, chrome::NOTIFICATION_MODULE_INCOMPATIBILITY_BADGE_CHANGE,
+  registrar_.Add(this, chrome::NOTIFICATION_MODULE_INCOMPATIBILITY_ICON_CHANGE,
                  content::NotificationService::AllSources());
 }
 
@@ -166,7 +166,7 @@ void ConflictingModuleView::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  DCHECK(type == chrome::NOTIFICATION_MODULE_INCOMPATIBILITY_BADGE_CHANGE);
+  DCHECK_EQ(chrome::NOTIFICATION_MODULE_INCOMPATIBILITY_ICON_CHANGE, type);
   EnumerateModulesModel* model = EnumerateModulesModel::GetInstance();
   if (!model->ShouldShowConflictWarning())
     GetWidget()->Close();

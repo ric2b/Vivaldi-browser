@@ -20,12 +20,14 @@
 #include "base/path_service.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/worker_pool.h"
-#include "components/cronet/version.h"
+#include "components/cronet/ios/version.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_change_notifier.h"
 #include "net/cert/cert_verify_result.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -53,32 +55,6 @@ base::AtExitManager* g_at_exit_ = nullptr;
 net::NetworkChangeNotifier* g_network_change_notifier = nullptr;
 // MessageLoop on the main thread.
 base::MessageLoop* g_main_message_loop = nullptr;
-
-#if USE_FAKE_CERT_VERIFIER
-// TODO(mef): Remove this after GRPC testing is done.
-class FakeCertVerifier : public net::CertVerifier {
- public:
-  FakeCertVerifier() {}
-
-  ~FakeCertVerifier() override {}
-
-  // CertVerifier implementation
-  int Verify(net::X509Certificate* cert,
-             const std::string& hostname,
-             const std::string& ocsp_response,
-             int flags,
-             net::CRLSet* crl_set,
-             net::CertVerifyResult* verify_result,
-             const net::CompletionCallback& callback,
-             std::unique_ptr<Request>* out_req,
-             const net::BoundNetLog& net_log) override {
-    // It's all good!
-    verify_result->verified_cert = cert;
-    verify_result->cert_status = MapNetErrorToCertStatus(net::OK);
-    return net::OK;
-  }
-};
-#endif  // USE_FAKE_CERT_VERIFIER
 
 }  // namespace
 
@@ -169,7 +145,9 @@ void CronetEnvironment::StartNetLogOnNetworkThread(
 }
 
 void CronetEnvironment::StopNetLog() {
-  base::WaitableEvent log_stopped_event(true, false);
+  base::WaitableEvent log_stopped_event(
+      base::WaitableEvent::ResetPolicy::MANUAL,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
   PostToNetworkThread(FROM_HERE,
                       base::Bind(&CronetEnvironment::StopNetLogOnNetworkThread,
                                  base::Unretained(this), &log_stopped_event));
@@ -209,11 +187,6 @@ CronetEnvironment::CronetEnvironment(const std::string& user_agent_product_name)
       net_log_(new net::NetLog) {}
 
 void CronetEnvironment::Start() {
-#if USE_FAKE_CERT_VERIFIER
-  // TODO(mef): Remove this and FakeCertVerifier after GRPC testing.
-  set_cert_verifier(std::unique_ptr<net::CertVerifier>(new FakeCertVerifier()));
-#endif  // USE_FAKE_CERT_VERIFIER
-
   // Threads setup.
   network_cache_thread_.reset(new base::Thread("Chrome Network Cache Thread"));
   network_cache_thread_->StartWithOptions(
@@ -261,6 +234,7 @@ CronetEnvironment::~CronetEnvironment() {
 
 void CronetEnvironment::InitializeOnNetworkThread() {
   DCHECK(network_io_thread_->task_runner()->BelongsToCurrentThread());
+  // TODO(mef): Use net:UrlRequestContextBuilder instead of manual build.
   main_context_.reset(new net::URLRequestContext);
   main_context_->set_net_log(net_log_.get());
   std::string user_agent(user_agent_product_name_ +
@@ -272,8 +246,7 @@ void CronetEnvironment::InitializeOnNetworkThread() {
   main_context_->set_transport_security_state(
       new net::TransportSecurityState());
   http_server_properties_.reset(new net::HttpServerPropertiesImpl());
-  main_context_->set_http_server_properties(
-      http_server_properties_->GetWeakPtr());
+  main_context_->set_http_server_properties(http_server_properties_.get());
 
   // TODO(rdsmith): Note that the ".release()" calls below are leaking
   // the objects in question; this should be fixed by having an object
@@ -289,6 +262,9 @@ void CronetEnvironment::InitializeOnNetworkThread() {
   if (!cert_verifier_)
     cert_verifier_ = net::CertVerifier::CreateDefault();
   main_context_->set_cert_verifier(cert_verifier_.get());
+
+  main_context_->set_cert_transparency_verifier(new net::MultiLogCTVerifier());
+  main_context_->set_ct_policy_enforcer(new net::CTPolicyEnforcer());
 
   main_context_->set_http_auth_handler_factory(
       net::HttpAuthHandlerRegistryFactory::CreateDefault(
@@ -314,6 +290,9 @@ void CronetEnvironment::InitializeOnNetworkThread() {
 
   params.host_resolver = main_context_->host_resolver();
   params.cert_verifier = main_context_->cert_verifier();
+  params.cert_transparency_verifier =
+      main_context_->cert_transparency_verifier();
+  params.ct_policy_enforcer = main_context_->ct_policy_enforcer();
   params.channel_id_service = main_context_->channel_id_service();
   params.transport_security_state = main_context_->transport_security_state();
   params.proxy_service = main_context_->proxy_service();
@@ -322,7 +301,6 @@ void CronetEnvironment::InitializeOnNetworkThread() {
   params.http_server_properties = main_context_->http_server_properties();
   params.net_log = main_context_->net_log();
   params.enable_http2 = http2_enabled();
-  params.parse_alternative_services = true;
   params.enable_quic = quic_enabled();
 
   for (const auto& quic_hint : quic_hints_) {

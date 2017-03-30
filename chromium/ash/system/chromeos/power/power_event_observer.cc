@@ -4,9 +4,10 @@
 
 #include "ash/system/chromeos/power/power_event_observer.h"
 
-#include "ash/session/session_state_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/system/tray/system_tray_notifier.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_notifier.h"
 #include "ash/wm/power_button_controller.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "ui/aura/window.h"
@@ -45,17 +46,17 @@ void OnSuspendDisplaysCompleted(const base::Closure& suspend_callback,
 
 PowerEventObserver::PowerEventObserver()
     : screen_locked_(false), waiting_for_lock_screen_animations_(false) {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-      AddObserver(this);
-  chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->
-      AddObserver(this);
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
+      this);
+  chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->AddObserver(
+      this);
 }
 
 PowerEventObserver::~PowerEventObserver() {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-      RemoveObserver(this);
-  chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->
-      RemoveObserver(this);
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
+      this);
+  chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->RemoveObserver(
+      this);
 }
 
 void PowerEventObserver::OnLockAnimationsComplete() {
@@ -76,8 +77,7 @@ void PowerEventObserver::BrightnessChanged(int level, bool user_initiated) {
 }
 
 void PowerEventObserver::SuspendImminent() {
-  Shell* shell = Shell::GetInstance();
-  SessionStateDelegate* delegate = shell->session_state_delegate();
+  SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
 
   // This class is responsible for disabling all rendering requests at suspend
   // time and then enabling them at resume time.  When the
@@ -94,11 +94,13 @@ void PowerEventObserver::SuspendImminent() {
   // is unblocked from OnLockAnimationsComplete().
   if (!screen_locked_ && delegate->ShouldLockScreenBeforeSuspending() &&
       delegate->CanLockScreen()) {
-    screen_lock_callback_ = chromeos::DBusThreadManager::Get()->
-        GetPowerManagerClient()->GetSuspendReadinessCallback();
+    screen_lock_callback_ = chromeos::DBusThreadManager::Get()
+                                ->GetPowerManagerClient()
+                                ->GetSuspendReadinessCallback();
     VLOG(1) << "Requesting screen lock from PowerEventObserver";
-    chromeos::DBusThreadManager::Get()->GetSessionManagerClient()->
-        RequestLockScreen();
+    chromeos::DBusThreadManager::Get()
+        ->GetSessionManagerClient()
+        ->RequestLockScreen();
   } else if (waiting_for_lock_screen_animations_) {
     // The lock-before-suspending pref has been set and the lock screen is ready
     // but the animations have not completed yet.  This can happen if a suspend
@@ -117,7 +119,7 @@ void PowerEventObserver::SuspendImminent() {
   }
 
   ui::UserActivityDetector::Get()->OnDisplayPowerChanging();
-  shell->display_configurator()->SuspendDisplays(base::Bind(
+  Shell::GetInstance()->display_configurator()->SuspendDisplays(base::Bind(
       &OnSuspendDisplaysCompleted, chromeos::DBusThreadManager::Get()
                                        ->GetPowerManagerClient()
                                        ->GetSuspendReadinessCallback()));
@@ -125,7 +127,7 @@ void PowerEventObserver::SuspendImminent() {
 
 void PowerEventObserver::SuspendDone(const base::TimeDelta& sleep_duration) {
   Shell::GetInstance()->display_configurator()->ResumeDisplays();
-  Shell::GetInstance()->system_tray_notifier()->NotifyRefreshClock();
+  WmShell::Get()->system_tray_notifier()->NotifyRefreshClock();
 
   // If the suspend request was being blocked while waiting for the lock
   // animation to complete, clear the blocker since the suspend has already

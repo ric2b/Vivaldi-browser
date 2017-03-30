@@ -297,7 +297,7 @@ WebInspector.TracingModel.prototype = {
 
     _processPendingAsyncEvents: function()
     {
-        this._asyncEvents.sort(WebInspector.TracingModel.Event.compareStartTime);
+        this._asyncEvents.stableSort(WebInspector.TracingModel.Event.compareStartTime);
         for (var i = 0; i < this._asyncEvents.length; ++i) {
             var event = this._asyncEvents[i];
             if (WebInspector.TracingModel.isNestableAsyncPhase(event.phase))
@@ -555,7 +555,7 @@ WebInspector.TracingModel.Event.compareStartTime = function(a, b)
  */
 WebInspector.TracingModel.Event.compareStartAndEndTime = function(a, b)
 {
-    return a.startTime - b.startTime || (b.endTime != undefined && a.endTime !== undefined && b.endTime - a.endTime) || 0;
+    return a.startTime - b.startTime || (b.endTime !== undefined && a.endTime !== undefined && b.endTime - a.endTime) || 0;
 }
 
 /**

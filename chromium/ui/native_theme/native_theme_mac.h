@@ -14,7 +14,7 @@ namespace ui {
 // Mac implementation of native theme support.
 class NATIVE_THEME_EXPORT NativeThemeMac : public NativeThemeBase {
  public:
-  static const int kComboboxCornerRadius = 5;
+  static const int kButtonCornerRadius = 3;
 
   // Type of gradient to use on a button background. Use HIGHLIGHTED for the
   // default button of a window and all combobox controls, but only when the
@@ -46,6 +46,22 @@ class NATIVE_THEME_EXPORT NativeThemeMac : public NativeThemeBase {
   // Creates a shader appropriate for painting the background of a button.
   static sk_sp<SkShader> GetButtonBackgroundShader(ButtonBackgroundType type,
                                                    int height);
+
+  // Creates a shader for the button border. This should be painted over with
+  // the background after insetting the rounded rect.
+  static sk_sp<SkShader> GetButtonBorderShader(ButtonBackgroundType type,
+                                               int height);
+
+  // Paints the styled button shape used for default controls on Mac. The basic
+  // style is used for dialog buttons, comboboxes, and tabbed pane tabs.
+  // Depending on the control part being drawn, the left or the right side can
+  // be given rounded corners.
+  static void PaintStyledGradientButton(SkCanvas* canvas,
+                                        const gfx::Rect& bounds,
+                                        ButtonBackgroundType type,
+                                        bool round_left,
+                                        bool round_right,
+                                        bool focus);
 
  private:
   NativeThemeMac();

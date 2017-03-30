@@ -94,7 +94,7 @@ source_set("test_support") {
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/cld_2:cld2_static",
+    "//third_party/cld_2",
   ]
 
   public_deps = [
@@ -215,7 +215,6 @@ test("extensions_browsertests") {
 
   data = [
     "test/data/",
-    "//net/data/",
     "//net/tools/testserver/",
     "//third_party/pyftpdlib/",
     "//third_party/pywebsocket/",
@@ -239,10 +238,10 @@ test("extensions_browsertests") {
     "//device/bluetooth:mocks",
     "//device/core:mocks",
     "//device/hid:mocks",
-    "//device/usb:mocks",
+    "//device/usb:test_support",
     "//mojo/edk/js",
-    "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
+    "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]
@@ -313,7 +312,6 @@ source_set("chrome_extensions_browsertests") {
     "//third_party/leveldatabase",
     "//third_party/libaddressinput",
     "//third_party/libjingle",
-    "//third_party/safe_browsing:test_support",
     "//third_party/webrtc/modules/desktop_capture",
     "//third_party/widevine/cdm:version_h",
     "//ui/accessibility:test_support",

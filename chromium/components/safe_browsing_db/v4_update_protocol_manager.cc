@@ -6,8 +6,9 @@
 
 #include <utility>
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/timer/timer.h"
@@ -77,11 +78,9 @@ class V4UpdateProtocolManagerFactoryImpl
   std::unique_ptr<V4UpdateProtocolManager> CreateProtocolManager(
       net::URLRequestContextGetter* request_context_getter,
       const V4ProtocolConfig& config,
-      const base::hash_map<UpdateListIdentifier, std::string>&
-          current_list_states,
       V4UpdateCallback callback) override {
-    return std::unique_ptr<V4UpdateProtocolManager>(new V4UpdateProtocolManager(
-        request_context_getter, config, current_list_states, callback));
+    return std::unique_ptr<V4UpdateProtocolManager>(
+        new V4UpdateProtocolManager(request_context_getter, config, callback));
   }
 
  private:
@@ -97,13 +96,12 @@ V4UpdateProtocolManagerFactory* V4UpdateProtocolManager::factory_ = NULL;
 std::unique_ptr<V4UpdateProtocolManager> V4UpdateProtocolManager::Create(
     net::URLRequestContextGetter* request_context_getter,
     const V4ProtocolConfig& config,
-    const base::hash_map<UpdateListIdentifier, std::string>&
-        current_list_states,
     V4UpdateCallback callback) {
-  if (!factory_)
+  if (!factory_) {
     factory_ = new V4UpdateProtocolManagerFactoryImpl();
+  }
   return factory_->CreateProtocolManager(request_context_getter, config,
-                                         current_list_states, callback);
+                                         callback);
 }
 
 void V4UpdateProtocolManager::ResetUpdateErrors() {
@@ -114,11 +112,8 @@ void V4UpdateProtocolManager::ResetUpdateErrors() {
 V4UpdateProtocolManager::V4UpdateProtocolManager(
     net::URLRequestContextGetter* request_context_getter,
     const V4ProtocolConfig& config,
-    const base::hash_map<UpdateListIdentifier, std::string>&
-        current_list_states,
-    V4UpdateCallback callback)
-    : current_list_states_(current_list_states),
-      update_error_count_(0),
+    V4UpdateCallback update_callback)
+    : update_error_count_(0),
       update_back_off_mult_(1),
       next_update_interval_(base::TimeDelta::FromSeconds(
           base::RandInt(kV4TimerStartIntervalSecMin,
@@ -126,8 +121,9 @@ V4UpdateProtocolManager::V4UpdateProtocolManager(
       config_(config),
       request_context_getter_(request_context_getter),
       url_fetcher_id_(0),
-      callback_(callback) {
-  ScheduleNextUpdate(false /* no back off */);
+      update_callback_(update_callback) {
+  // Do not auto-schedule updates. Let the owner (V4LocalDatabaseManager) do it
+  // when it is ready to process updates.
 }
 
 V4UpdateProtocolManager::~V4UpdateProtocolManager() {}
@@ -136,7 +132,15 @@ bool V4UpdateProtocolManager::IsUpdateScheduled() const {
   return update_timer_.IsRunning();
 }
 
-void V4UpdateProtocolManager::ScheduleNextUpdate(bool back_off) {
+void V4UpdateProtocolManager::ScheduleNextUpdate(
+    std::unique_ptr<StoreStateMap> store_state_map) {
+  store_state_map_ = std::move(store_state_map);
+  ScheduleNextUpdateWithBackoff(false);
+}
+
+void V4UpdateProtocolManager::ScheduleNextUpdateWithBackoff(bool back_off) {
+  DCHECK(CalledOnValidThread());
+
   // TODO(vakh): Set disable_auto_update correctly using the command line
   // switch.
   if (config_.disable_auto_update) {
@@ -154,10 +158,23 @@ void V4UpdateProtocolManager::ScheduleNextUpdate(bool back_off) {
 base::TimeDelta V4UpdateProtocolManager::GetNextUpdateInterval(bool back_off) {
   DCHECK(CalledOnValidThread());
   DCHECK(next_update_interval_ > base::TimeDelta());
+
   base::TimeDelta next = next_update_interval_;
   if (back_off) {
     next = V4ProtocolManagerUtil::GetNextBackOffInterval(
         &update_error_count_, &update_back_off_mult_);
+  }
+
+  if (!last_response_time_.is_null()) {
+    // The callback spent some time updating the database, including disk I/O.
+    // Do not wait that extra time.
+    base::TimeDelta callback_time = Time::Now() - last_response_time_;
+    if (callback_time < next) {
+      next -= callback_time;
+    } else {
+      // If the callback took too long, schedule the next update with no delay.
+      next = base::TimeDelta();
+    }
   }
   DVLOG(1) << "V4UpdateProtocolManager::GetNextUpdateInterval: "
            << "next_interval: " << next;
@@ -168,19 +185,21 @@ void V4UpdateProtocolManager::ScheduleNextUpdateAfterInterval(
     base::TimeDelta interval) {
   DCHECK(CalledOnValidThread());
   DCHECK(interval >= base::TimeDelta());
+
   // Unschedule any current timer.
   update_timer_.Stop();
   update_timer_.Start(FROM_HERE, interval, this,
                       &V4UpdateProtocolManager::IssueUpdateRequest);
 }
 
+// static
 std::string V4UpdateProtocolManager::GetBase64SerializedUpdateRequestProto(
-    const base::hash_map<UpdateListIdentifier, std::string>&
-        current_list_states) {
+    const StoreStateMap& store_state_map) {
+  DCHECK(!store_state_map.empty());
   // Build the request. Client info and client states are not added to the
   // request protocol buffer. Client info is passed as params in the url.
   FetchThreatListUpdatesRequest request;
-  for (const auto& entry : current_list_states) {
+  for (const auto& entry : store_state_map) {
     const auto& list_to_update = entry.first;
     const auto& state = entry.second;
     ListUpdateRequest* list_update_request = request.add_list_update_requests();
@@ -192,19 +211,23 @@ std::string V4UpdateProtocolManager::GetBase64SerializedUpdateRequestProto(
     if (!state.empty()) {
       list_update_request->set_state(state);
     }
+
+    // TODO(vakh): Accept other compression formats also.
+    // See: https://bugs.chromium.org/p/chromium/issues/detail?id=624567
+    list_update_request->mutable_constraints()->add_supported_compressions(RAW);
   }
 
   // Serialize and Base64 encode.
   std::string req_data, req_base64;
   request.SerializeToString(&req_data);
-  base::Base64Encode(req_data, &req_base64);
-
+  base::Base64UrlEncode(req_data, base::Base64UrlEncodePolicy::INCLUDE_PADDING,
+                        &req_base64);
   return req_base64;
 }
 
 bool V4UpdateProtocolManager::ParseUpdateResponse(
     const std::string& data,
-    std::vector<ListUpdateResponse>* list_update_responses) {
+    ParsedServerResponse* parsed_server_response) {
   FetchThreatListUpdatesResponse response;
 
   if (!response.ParseFromString(data)) {
@@ -226,8 +249,8 @@ bool V4UpdateProtocolManager::ParseUpdateResponse(
   }
 
   // TODO(vakh): Do something useful with this response.
-  for (const ListUpdateResponse& list_update_response :
-       response.list_update_responses()) {
+  for (ListUpdateResponse& list_update_response :
+       *response.mutable_list_update_responses()) {
     if (!list_update_response.has_platform_type()) {
       RecordParseUpdateResult(NO_PLATFORM_TYPE_ERROR);
     } else if (!list_update_response.has_threat_entry_type()) {
@@ -237,7 +260,9 @@ bool V4UpdateProtocolManager::ParseUpdateResponse(
     } else if (!list_update_response.has_new_client_state()) {
       RecordParseUpdateResult(NO_STATE_ERROR);
     } else {
-      list_update_responses->push_back(list_update_response);
+      std::unique_ptr<ListUpdateResponse> add(new ListUpdateResponse);
+      add->Swap(&list_update_response);
+      parsed_server_response->push_back(std::move(add));
     }
   }
   return true;
@@ -252,13 +277,17 @@ void V4UpdateProtocolManager::IssueUpdateRequest() {
     return;
   }
 
-  std::string req_base64 = GetBase64SerializedUpdateRequestProto(
-      current_list_states_);
-  GURL update_url = GetUpdateUrl(req_base64);
+  std::string req_base64 =
+      GetBase64SerializedUpdateRequestProto(*store_state_map_.get());
+  GURL update_url;
+  net::HttpRequestHeaders headers;
+  GetUpdateUrlAndHeaders(req_base64, &update_url, &headers);
 
-  request_.reset(net::URLFetcher::Create(url_fetcher_id_++, update_url,
-                                         net::URLFetcher::GET, this)
-                     .release());
+  std::unique_ptr<net::URLFetcher> fetcher = net::URLFetcher::Create(
+      url_fetcher_id_++, update_url, net::URLFetcher::GET, this);
+  fetcher->SetExtraRequestHeaders(headers.ToString());
+
+  request_.reset(fetcher.release());
 
   request_->SetLoadFlags(net::LOAD_DISABLE_CACHE);
   request_->SetRequestContext(request_context_getter_.get());
@@ -278,23 +307,29 @@ void V4UpdateProtocolManager::OnURLFetchComplete(
   V4ProtocolManagerUtil::RecordHttpResponseOrErrorCode(
       "SafeBrowsing.V4UpdateHttpResponseOrErrorCode", status, response_code);
 
-  std::vector<ListUpdateResponse> list_update_responses;
-  bool back_off;
+  last_response_time_ = Time::Now();
+
+  std::unique_ptr<ParsedServerResponse> parsed_server_response(
+      new ParsedServerResponse);
   if (status.is_success() && response_code == net::HTTP_OK) {
-    back_off = false;
     RecordUpdateResult(V4OperationResult::STATUS_200);
     ResetUpdateErrors();
     std::string data;
     source->GetResponseAsString(&data);
-    if (!ParseUpdateResponse(data, &list_update_responses)) {
-      list_update_responses.clear();
+    if (!ParseUpdateResponse(data, parsed_server_response.get())) {
+      parsed_server_response->clear();
       RecordUpdateResult(V4OperationResult::PARSE_ERROR);
     }
-    // Invoke the callback with list_update_responses.
-    // The caller should update its state now, based on list_update_responses.
-    callback_.Run(list_update_responses);
+    request_.reset();
+
+    UMA_HISTOGRAM_COUNTS("SafeBrowsing.V4UpdateResponseSizeKB",
+                         data.size() / 1024);
+
+    // The caller should update its state now, based on parsed_server_response.
+    // The callback must call ScheduleNextUpdate() at the end to resume
+    // downloading updates.
+    update_callback_.Run(std::move(parsed_server_response));
   } else {
-    back_off = true;
     DVLOG(1) << "SafeBrowsing GetEncodedUpdates request for: "
              << source->GetURL() << " failed with error: " << status.error()
              << " and response code: " << response_code;
@@ -306,18 +341,18 @@ void V4UpdateProtocolManager::OnURLFetchComplete(
     }
     // TODO(vakh): Figure out whether it is just a network error vs backoff vs
     // another condition and RecordUpdateResult more accurately.
+
+    request_.reset();
+    ScheduleNextUpdateWithBackoff(true);
   }
-  request_.reset();
-  ScheduleNextUpdate(back_off);
 }
 
-GURL V4UpdateProtocolManager::GetUpdateUrl(
-    const std::string& req_base64) const {
-  GURL url = V4ProtocolManagerUtil::GetRequestUrl(req_base64, "encodedUpdates",
-                                                  config_);
-  DVLOG(1) << "V4UpdateProtocolManager::GetUpdateUrl: "
-           << "url: " << url;
-  return url;
+void V4UpdateProtocolManager::GetUpdateUrlAndHeaders(
+    const std::string& req_base64,
+    GURL* gurl,
+    net::HttpRequestHeaders* headers) const {
+  V4ProtocolManagerUtil::GetRequestUrlAndHeaders(
+      req_base64, "threatListUpdates:fetch", config_, gurl, headers);
 }
 
 }  // namespace safe_browsing

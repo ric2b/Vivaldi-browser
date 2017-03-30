@@ -11,12 +11,13 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkPictureRecorder.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
-RecordingImageBufferSurface::RecordingImageBufferSurface(const IntSize& size, PassOwnPtr<RecordingImageBufferFallbackSurfaceFactory> fallbackFactory, OpacityMode opacityMode)
+RecordingImageBufferSurface::RecordingImageBufferSurface(const IntSize& size, std::unique_ptr<RecordingImageBufferFallbackSurfaceFactory> fallbackFactory, OpacityMode opacityMode)
     : ImageBufferSurface(size, opacityMode)
     , m_imageBuffer(0)
     , m_currentFramePixelCount(0)
@@ -36,7 +37,7 @@ RecordingImageBufferSurface::~RecordingImageBufferSurface()
 void RecordingImageBufferSurface::initializeCurrentFrame()
 {
     static SkRTreeFactory rTreeFactory;
-    m_currentFrame = adoptPtr(new SkPictureRecorder);
+    m_currentFrame = wrapUnique(new SkPictureRecorder);
     m_currentFrame->beginRecording(size().width(), size().height(), &rTreeFactory);
     if (m_imageBuffer) {
         m_imageBuffer->resetCanvas(m_currentFrame->getRecordingCanvas());
@@ -71,6 +72,7 @@ bool RecordingImageBufferSurface::writePixels(const SkImageInfo& origInfo, const
 void RecordingImageBufferSurface::fallBackToRasterCanvas(FallbackReason reason)
 {
     ASSERT(m_fallbackFactory);
+    DCHECK(reason != FallbackReasonUnknown);
 
     if (m_fallbackSurface) {
         ASSERT(!m_currentFrame);
@@ -90,7 +92,7 @@ void RecordingImageBufferSurface::fallBackToRasterCanvas(FallbackReason reason)
 
     if (m_currentFrame) {
         m_currentFrame->finishRecordingAsPicture()->playback(m_fallbackSurface->canvas());
-        m_currentFrame.clear();
+        m_currentFrame.reset();
     }
 
     if (m_imageBuffer) {
@@ -121,6 +123,14 @@ static RecordingImageBufferSurface::FallbackReason snapshotReasonToFallbackReaso
         return RecordingImageBufferSurface::FallbackReasonSnapshotForDrawImage;
     case SnapshotReasonCreatePattern:
         return RecordingImageBufferSurface::FallbackReasonSnapshotForCreatePattern;
+    case SnapshotReasonTransferToImageBitmap:
+        return RecordingImageBufferSurface::FallbackReasonSnapshotForTransferToImageBitmap;
+    case SnapshotReasonUnitTests:
+        return RecordingImageBufferSurface::FallbackReasonSnapshotForUnitTests;
+    case SnapshotReasonGetCopiedImage:
+        return RecordingImageBufferSurface::FallbackReasonSnapshotGetCopiedImage;
+    case SnapshotReasonWebGLDrawImageIntoBuffer:
+        return RecordingImageBufferSurface::FallbackReasonSnapshotWebGLDrawImageIntoBuffer;
     }
     ASSERT_NOT_REACHED();
     return RecordingImageBufferSurface::FallbackReasonUnknown;
@@ -157,6 +167,8 @@ static RecordingImageBufferSurface::FallbackReason disableDeferralReasonToFallba
         return RecordingImageBufferSurface::FallbackReasonDrawImageOfAnimated2dCanvas;
     case DisableDeferralReasonSubPixelTextAntiAliasingSupport:
         return RecordingImageBufferSurface::FallbackReasonSubPixelTextAntiAliasingSupport;
+    case DisableDeferralDrawImageWithTextureBackedSourceImage:
+        return RecordingImageBufferSurface::FallbackReasonDrawImageWithTextureBackedSourceImage;
     case DisableDeferralReasonCount:
         ASSERT_NOT_REACHED();
         break;

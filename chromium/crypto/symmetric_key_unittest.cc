@@ -21,7 +21,7 @@ TEST(SymmetricKeyTest, GenerateRandomKey) {
 
   std::unique_ptr<crypto::SymmetricKey> key(
       crypto::SymmetricKey::GenerateRandomKey(crypto::SymmetricKey::AES, 256));
-  ASSERT_TRUE(NULL != key.get());
+  ASSERT_TRUE(key);
   EXPECT_TRUE(key->GetRawKey(&raw_key));
   EXPECT_EQ(32U, raw_key.size());
 
@@ -29,7 +29,7 @@ TEST(SymmetricKeyTest, GenerateRandomKey) {
   // (Note: this has a one-in-10^77 chance of failure!)
   std::unique_ptr<crypto::SymmetricKey> key2(
       crypto::SymmetricKey::GenerateRandomKey(crypto::SymmetricKey::AES, 256));
-  ASSERT_TRUE(NULL != key2.get());
+  ASSERT_TRUE(key2);
   std::string raw_key2;
   EXPECT_TRUE(key2->GetRawKey(&raw_key2));
   EXPECT_EQ(32U, raw_key2.size());
@@ -39,13 +39,13 @@ TEST(SymmetricKeyTest, GenerateRandomKey) {
 TEST(SymmetricKeyTest, ImportGeneratedKey) {
   std::unique_ptr<crypto::SymmetricKey> key1(
       crypto::SymmetricKey::GenerateRandomKey(crypto::SymmetricKey::AES, 256));
-  ASSERT_TRUE(NULL != key1.get());
+  ASSERT_TRUE(key1);
   std::string raw_key1;
   EXPECT_TRUE(key1->GetRawKey(&raw_key1));
 
   std::unique_ptr<crypto::SymmetricKey> key2(
       crypto::SymmetricKey::Import(crypto::SymmetricKey::AES, raw_key1));
-  ASSERT_TRUE(NULL != key2.get());
+  ASSERT_TRUE(key2);
 
   std::string raw_key2;
   EXPECT_TRUE(key2->GetRawKey(&raw_key2));
@@ -57,13 +57,13 @@ TEST(SymmetricKeyTest, ImportDerivedKey) {
   std::unique_ptr<crypto::SymmetricKey> key1(
       crypto::SymmetricKey::DeriveKeyFromPassword(
           crypto::SymmetricKey::HMAC_SHA1, "password", "somesalt", 1024, 160));
-  ASSERT_TRUE(NULL != key1.get());
+  ASSERT_TRUE(key1);
   std::string raw_key1;
   EXPECT_TRUE(key1->GetRawKey(&raw_key1));
 
   std::unique_ptr<crypto::SymmetricKey> key2(
       crypto::SymmetricKey::Import(crypto::SymmetricKey::HMAC_SHA1, raw_key1));
-  ASSERT_TRUE(NULL != key2.get());
+  ASSERT_TRUE(key2);
 
   std::string raw_key2;
   EXPECT_TRUE(key2->GetRawKey(&raw_key2));
@@ -86,20 +86,11 @@ class SymmetricKeyDeriveKeyFromPasswordTest
 
 TEST_P(SymmetricKeyDeriveKeyFromPasswordTest, DeriveKeyFromPassword) {
   PBKDF2TestVector test_data(GetParam());
-#if defined(OS_MACOSX) && !defined(OS_IOS)
-  // The OS X crypto libraries have minimum salt and iteration requirements
-  // so some of the tests below will cause them to barf. Skip these.
-  if (strlen(test_data.salt) < 8 || test_data.rounds < 1000) {
-    VLOG(1) << "Skipped test vector for " << test_data.expected;
-    return;
-  }
-#endif  // OS_MACOSX
-
   std::unique_ptr<crypto::SymmetricKey> key(
       crypto::SymmetricKey::DeriveKeyFromPassword(
           test_data.algorithm, test_data.password, test_data.salt,
           test_data.rounds, test_data.key_size_in_bits));
-  ASSERT_TRUE(NULL != key.get());
+  ASSERT_TRUE(key);
 
   std::string raw_key;
   key->GetRawKey(&raw_key);

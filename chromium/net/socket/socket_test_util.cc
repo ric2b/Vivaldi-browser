@@ -30,7 +30,6 @@
 #include "net/socket/websocket_endpoint_lock_manager.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_connection_status_flags.h"
-#include "net/ssl/ssl_failure_state.h"
 #include "net/ssl/ssl_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -841,10 +840,6 @@ crypto::ECPrivateKey* MockClientSocket::GetChannelIDKey() const {
   return NULL;
 }
 
-SSLFailureState MockClientSocket::GetSSLFailureState() const {
-  return IsConnected() ? SSL_FAILURE_NONE : SSL_FAILURE_UNKNOWN;
-}
-
 SSLClientSocket::NextProtoStatus MockClientSocket::GetNextProto(
     std::string* proto) const {
   proto->clear();
@@ -895,7 +890,7 @@ int MockTCPClientSocket::Read(IOBuffer* buf, int buf_len,
     return ERR_UNEXPECTED;
 
   // If the buffer is already in use, a read is already in progress!
-  DCHECK(pending_read_buf_.get() == NULL);
+  DCHECK(!pending_read_buf_);
 
   // Store our async IO data.
   pending_read_buf_ = buf;
@@ -1287,7 +1282,7 @@ int MockUDPClientSocket::Read(IOBuffer* buf,
     return ERR_UNEXPECTED;
 
   // If the buffer is already in use, a read is already in progress!
-  DCHECK(pending_read_buf_.get() == NULL);
+  DCHECK(!pending_read_buf_);
 
   // Store our async IO data.
   pending_read_buf_ = buf;

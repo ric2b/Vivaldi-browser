@@ -39,6 +39,7 @@
 #include "public/platform/WebCachePolicy.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 namespace blink {
 
@@ -64,7 +65,7 @@ ImageResource::ImageResource(const ResourceRequest& resourceRequest, const Resou
     , m_image(nullptr)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
-    WTF_LOG(Timers, "new ImageResource(ResourceRequest) %p", this);
+    WTF_LOG(ResourceLoading, "new ImageResource(ResourceRequest) %p", this);
 }
 
 ImageResource::ImageResource(blink::Image* image, const ResourceLoaderOptions& options)
@@ -73,13 +74,13 @@ ImageResource::ImageResource(blink::Image* image, const ResourceLoaderOptions& o
     , m_image(image)
     , m_hasDevicePixelRatioHeaderValue(false)
 {
-    WTF_LOG(Timers, "new ImageResource(Image) %p", this);
+    WTF_LOG(ResourceLoading, "new ImageResource(Image) %p", this);
     setStatus(Cached);
 }
 
 ImageResource::~ImageResource()
 {
-    WTF_LOG(Timers, "~ImageResource %p", this);
+    WTF_LOG(ResourceLoading, "~ImageResource %p", this);
     clearImage();
 }
 
@@ -93,28 +94,29 @@ DEFINE_TRACE(ImageResource)
 
 void ImageResource::checkNotify()
 {
+    notifyObserversInternal(MarkFinishedOption::ShouldMarkFinished);
+    Resource::checkNotify();
+}
+
+void ImageResource::notifyObserversInternal(MarkFinishedOption markFinishedOption)
+{
     if (isLoading())
         return;
 
     ImageResourceObserverWalker walker(m_observers);
     while (auto* observer = walker.next()) {
+        if (markFinishedOption == MarkFinishedOption::ShouldMarkFinished)
+            markObserverFinished(observer);
         observer->imageNotifyFinished(this);
     }
-
-    Resource::checkNotify();
 }
 
-void ImageResource::markClientsAndObserversFinished()
+void ImageResource::markObserverFinished(ImageResourceObserver* observer)
 {
-    while (!m_observers.isEmpty()) {
-        HashCountedSet<ImageResourceObserver*>::iterator it = m_observers.begin();
-        for (int i = it->value; i; i--) {
-            m_finishedObservers.add(it->key);
-            m_observers.remove(it);
-        }
+    if (m_observers.contains(observer)) {
+        m_finishedObservers.add(observer);
+        m_observers.remove(observer);
     }
-
-    Resource::markClientsAndObserversFinished();
 }
 
 void ImageResource::ensureImage()
@@ -137,7 +139,7 @@ void ImageResource::addObserver(ImageResourceObserver* observer)
 
     m_observers.add(observer);
 
-    if (!m_revalidatingRequest.isNull())
+    if (isCacheValidator())
         return;
 
     ensureImage();
@@ -147,11 +149,8 @@ void ImageResource::addObserver(ImageResourceObserver* observer)
     }
 
     if (isLoaded()) {
+        markObserverFinished(observer);
         observer->imageNotifyFinished(this);
-        if (m_observers.contains(observer)) {
-            m_finishedObservers.add(observer);
-            m_observers.remove(observer);
-        }
     }
 }
 
@@ -203,17 +202,17 @@ bool ImageResource::isSafeToUnlock() const
 
 void ImageResource::destroyDecodedDataForFailedRevalidation()
 {
-    m_image = nullptr;
+    clearImage();
     setDecodedSize(0);
 }
 
 void ImageResource::destroyDecodedDataIfPossible()
 {
     if (!hasClientsOrObservers() && !isLoading() && (!m_image || (m_image->hasOneRef() && m_image->isBitmapImage()))) {
-        m_image = nullptr;
+        clearImage();
         setDecodedSize(0);
     } else if (m_image && !errorOccurred()) {
-        m_image->destroyDecodedData(true);
+        m_image->destroyDecodedData();
     }
 }
 
@@ -230,7 +229,7 @@ void ImageResource::allClientsAndObserversRemoved()
         // Doing so after a conservative GC prevents resetAnimation() from
         // upsetting ongoing animation updates (crbug.com/613709)
         if (!ThreadHeap::willObjectBeLazilySwept(this))
-            Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&ImageResource::doResetAnimation, WeakPersistentThisPointer<ImageResource>(this)));
+            Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&ImageResource::doResetAnimation, wrapWeakPersistent(this)));
         else
             m_image->resetAnimation();
     }
@@ -343,6 +342,7 @@ void ImageResource::clear()
 {
     prune();
     clearImage();
+    m_data.clear();
     setEncodedSize(0);
 }
 
@@ -432,7 +432,7 @@ void ImageResource::error(const ResourceError& error)
     notifyObservers();
 }
 
-void ImageResource::responseReceived(const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void ImageResource::responseReceived(const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT(!handle);
     ASSERT(!m_multipartParser);
@@ -535,7 +535,7 @@ void ImageResource::reloadIfLoFi(ResourceFetcher* fetcher)
     m_data.clear();
     notifyObservers();
     setStatus(NotStarted);
-    load(fetcher);
+    fetcher->startLoad(this);
 }
 
 void ImageResource::changedInRect(const blink::Image* image, const IntRect& rect)
@@ -562,7 +562,10 @@ void ImageResource::onePartInMultipartReceived(const ResourceResponse& response)
         // Notify finished when the first part ends.
         if (!errorOccurred())
             setStatus(Cached);
-        checkNotify();
+        // We will also notify clients/observers of the finish in
+        // Resource::finish()/error() so we don't mark them finished here.
+        notifyObserversInternal(MarkFinishedOption::DoNotMarkFinished);
+        notifyClientsInternal(MarkFinishedOption::DoNotMarkFinished);
         if (m_loader)
             m_loader->didFinishLoadingFirstPartInMultipart();
     }

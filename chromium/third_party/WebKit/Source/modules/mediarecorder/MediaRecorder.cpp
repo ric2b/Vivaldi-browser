@@ -14,6 +14,7 @@
 #include "platform/blob/BlobData.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebMediaStream.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
 
 namespace blink {
@@ -145,7 +146,7 @@ MediaRecorder::MediaRecorder(ExecutionContext* context, MediaStream* stream, con
 {
     DCHECK(m_stream->getTracks().size());
 
-    m_recorderHandler = adoptPtr(Platform::current()->createMediaRecorderHandler());
+    m_recorderHandler = wrapUnique(Platform::current()->createMediaRecorderHandler());
     DCHECK(m_recorderHandler);
 
     if (!m_recorderHandler) {
@@ -280,7 +281,7 @@ void MediaRecorder::stop()
 
     m_stopped = true;
     m_stream.clear();
-    m_recorderHandler.clear();
+    m_recorderHandler.reset();
 }
 
 void MediaRecorder::writeData(const char* data, size_t length, bool lastInSlice)

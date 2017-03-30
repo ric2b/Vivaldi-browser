@@ -6,7 +6,9 @@ import argparse
 import json
 import logging
 import os
+import random
 import sys
+import time
 
 from googleapiclient import discovery
 from oauth2client.client import GoogleCredentials
@@ -22,6 +24,7 @@ sys.path.insert(0, os.path.join(_CLOUD_DIR, os.pardir))
 sys.path.append(_CLOUD_DIR)
 
 from common.clovis_task import ClovisTask
+import common.google_bigquery_helper
 from common.google_instance_helper import GoogleInstanceHelper
 from clovis_task_handler import ClovisTaskHandler
 from failure_database import FailureDatabase
@@ -42,9 +45,9 @@ class Worker(object):
     if self._self_destruct and not self._instance_name:
       self._logger.error('Self destruction requires an instance name.')
 
-    # Separate the cloud storage path into the bucket and the base path under
+    # Separate the task storage path into the bucket and the base path under
     # the bucket.
-    storage_path_components = config['cloud_storage_path'].split('/')
+    storage_path_components = config['task_storage_path'].split('/')
     self._bucket_name = storage_path_components[0]
     self._base_path_in_bucket = ''
     if len(storage_path_components) > 1:
@@ -65,7 +68,7 @@ class Worker(object):
                                                failure_database_filename)
 
     # Recover any existing failures in case the worker died.
-    self._DownloadFailureDatabase()
+    self._failure_database = self._GetFailureDatabase()
 
     if self._failure_database.ToJsonDict():
       # Script is restarting after a crash, or there are already files from a
@@ -73,12 +76,13 @@ class Worker(object):
       self._failure_database.AddFailure(FailureDatabase.DIRTY_STATE_ERROR,
                                         'failure_database')
 
-    bigquery_service = discovery.build('bigquery', 'v2',
-                                      credentials=self._credentials)
+    bigquery_service = common.google_bigquery_helper.GetBigQueryService(
+        self._credentials)
     self._clovis_task_handler = ClovisTaskHandler(
         self._project_name, self._base_path_in_bucket, self._failure_database,
         self._google_storage_accessor, bigquery_service,
-        config['binaries_path'], self._logger, self._instance_name)
+        config['binaries_path'], config['ad_rules_filename'],
+        config['tracking_rules_filename'], self._logger, self._instance_name)
 
     self._UploadFailureDatabase()
 
@@ -111,12 +115,12 @@ class Worker(object):
       self._logger.info('Finished task %s' % task_id)
     self._Finalize()
 
-  def _DownloadFailureDatabase(self):
+  def _GetFailureDatabase(self):
     """Downloads the failure database from CloudStorage."""
     self._logger.info('Downloading failure database')
     failure_database_string = self._google_storage_accessor.DownloadAsString(
         self._failure_database_path)
-    self._failure_database = FailureDatabase(failure_database_string)
+    return FailureDatabase(failure_database_string)
 
   def _UploadFailureDatabase(self):
     """Uploads the failure database to CloudStorage."""
@@ -185,6 +189,12 @@ class Worker(object):
                                                remote_log_path)
     # Self destruct.
     if self._self_destruct:
+      # Workaround for ComputeEngine internal bug b/28760288.
+      random_delay = random.random() * 600.0  # Up to 10 minutes.
+      self._logger.info(
+          'Wait %.0fs to avoid load spikes on compute engine.' % random_delay)
+      time.sleep(random_delay)
+
       self._logger.info('Starting instance destruction: ' + self._instance_name)
       google_instance_helper = GoogleInstanceHelper(
           self._credentials, self._project_name, self._logger)
@@ -203,7 +213,10 @@ if __name__ == '__main__':
   args = parser.parse_args()
 
   # Configure logging.
-  logging.basicConfig(level=logging.WARNING)
+  logging.basicConfig(level=logging.WARNING,
+                      format='[%(asctime)s][%(levelname)s] %(message)s',
+                      datefmt='%y-%m-%d %H:%M:%S')
+  logging.Formatter.converter = time.gmtime
   worker_logger = logging.getLogger('worker')
   worker_logger.setLevel(logging.INFO)
 
@@ -211,4 +224,3 @@ if __name__ == '__main__':
   with open(args.config) as config_json:
     worker = Worker(json.load(config_json), worker_logger)
     worker.Start()
-

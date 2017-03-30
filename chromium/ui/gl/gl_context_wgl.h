@@ -10,13 +10,14 @@
 #include "base/macros.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_export.h"
 
-namespace gfx {
+namespace gl {
 
 class GLSurface;
 
 // This class is a wrapper around a GL context.
-class GLContextWGL : public GLContextReal {
+class GL_EXPORT GLContextWGL : public GLContextReal {
  public:
   explicit GLContextWGL(GLShareGroup* share_group);
 
@@ -39,6 +40,6 @@ class GLContextWGL : public GLContextReal {
   DISALLOW_COPY_AND_ASSIGN(GLContextWGL);
 };
 
-}  // namespace gfx
+}  // namespace gl
 
 #endif  // UI_GL_GL_CONTEXT_WGL_H_

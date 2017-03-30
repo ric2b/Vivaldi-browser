@@ -9,8 +9,10 @@
 
 #include "base/bind.h"
 #include "base/macros.h"
+#include "media/base/demuxer.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_export.h"
+#include "media/base/media_log.h"
 #include "media/base/stream_parser.h"
 #include "media/base/stream_parser_buffer.h"
 
@@ -86,6 +88,10 @@ class MEDIA_EXPORT MediaSourceState {
   // |ended| - Set to true if end of stream has been signaled and the special
   // end of stream range logic needs to be executed.
   Ranges<TimeDelta> GetBufferedRanges(TimeDelta duration, bool ended) const;
+
+  // Returns the highest PTS of currently buffered frames in this source, or
+  // base::TimeDelta() if none of the streams contain buffered data.
+  TimeDelta GetHighestPresentationTimestamp() const;
 
   // Returns the highest buffered duration across all streams managed
   // by this object.
@@ -189,8 +195,6 @@ class MEDIA_EXPORT MediaSourceState {
 
   // The object used to parse appended data.
   std::unique_ptr<StreamParser> stream_parser_;
-
-  std::unique_ptr<MediaTracks> media_tracks_;
 
   ChunkDemuxerStream* audio_;  // Not owned by |this|.
   ChunkDemuxerStream* video_;  // Not owned by |this|.

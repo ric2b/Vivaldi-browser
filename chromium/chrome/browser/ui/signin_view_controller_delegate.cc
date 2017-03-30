@@ -34,29 +34,6 @@ void SigninViewControllerDelegate::CloseModalSignin() {
   PerformClose();
 }
 
-void SigninViewControllerDelegate::ResetSigninViewControllerDelegate() {
-  if (signin_view_controller_) {
-    signin_view_controller_->ResetModalSigninDelegate();
-    signin_view_controller_ = nullptr;
-  }
-}
-
-bool SigninViewControllerDelegate::CanGoBack(
-    content::WebContents* web_ui_web_contents) const {
-  auto auth_web_contents = GetAuthFrameWebContents(web_ui_web_contents);
-  return auth_web_contents && auth_web_contents->GetController().CanGoBack();
-}
-
-// content::WebContentsDelegate
-void SigninViewControllerDelegate::LoadingStateChanged(
-    content::WebContents* source,
-    bool to_different_document) {
-  if (CanGoBack(source))
-    source->GetWebUI()->CallJavascriptFunction("inline.login.showBackButton");
-  else
-    source->GetWebUI()->CallJavascriptFunction("inline.login.showCloseButton");
-}
-
 void SigninViewControllerDelegate::PerformNavigation() {
   if (CanGoBack(web_contents_)) {
     auto auth_web_contents = GetAuthFrameWebContents(web_contents_);
@@ -64,4 +41,35 @@ void SigninViewControllerDelegate::PerformNavigation() {
   } else {
     CloseModalSignin();
   }
+}
+
+bool SigninViewControllerDelegate::HandleContextMenu(
+    const content::ContextMenuParams& params) {
+  // Discard the context menu
+  return true;
+}
+
+void SigninViewControllerDelegate::ResetSigninViewControllerDelegate() {
+  if (signin_view_controller_) {
+    signin_view_controller_->ResetModalSigninDelegate();
+    signin_view_controller_ = nullptr;
+  }
+}
+
+// content::WebContentsDelegate
+void SigninViewControllerDelegate::LoadingStateChanged(
+    content::WebContents* source,
+    bool to_different_document) {
+  if (CanGoBack(source))
+    source->GetWebUI()->CallJavascriptFunctionUnsafe(
+        "inline.login.showBackButton");
+  else
+    source->GetWebUI()->CallJavascriptFunctionUnsafe(
+        "inline.login.showCloseButton");
+}
+
+bool SigninViewControllerDelegate::CanGoBack(
+    content::WebContents* web_ui_web_contents) const {
+  auto auth_web_contents = GetAuthFrameWebContents(web_ui_web_contents);
+  return auth_web_contents && auth_web_contents->GetController().CanGoBack();
 }

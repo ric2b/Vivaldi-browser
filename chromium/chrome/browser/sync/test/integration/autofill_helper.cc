@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include "base/guid.h"
+#include "base/run_loop.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
@@ -71,7 +72,8 @@ void RunOnDBThreadAndSignal(base::Closure task,
 }
 
 void RunOnDBThreadAndBlock(base::Closure task) {
-  WaitableEvent done_event(false, false);
+  WaitableEvent done_event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED);
   BrowserThread::PostTask(BrowserThread::DB,
                           FROM_HERE,
                           Bind(&RunOnDBThreadAndSignal, task, &done_event));
@@ -79,7 +81,8 @@ void RunOnDBThreadAndBlock(base::Closure task) {
 }
 
 void RemoveKeyDontBlockForSync(int profile, const AutofillKey& key) {
-  WaitableEvent done_event(false, false);
+  WaitableEvent done_event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED);
 
   MockWebDataServiceObserver mock_observer;
   EXPECT_CALL(mock_observer, AutofillEntriesChanged(_))
@@ -200,7 +203,8 @@ void AddKeys(int profile, const std::set<AutofillKey>& keys) {
     form_fields.push_back(field);
   }
 
-  WaitableEvent done_event(false, false);
+  WaitableEvent done_event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED);
   MockWebDataServiceObserver mock_observer;
   EXPECT_CALL(mock_observer, AutofillEntriesChanged(_))
       .WillOnce(SignalEvent(&done_event));
@@ -299,7 +303,7 @@ void SetProfiles(int profile, std::vector<AutofillProfile>* autofill_profiles) {
   PersonalDataManager* pdm = GetPersonalDataManager(profile);
   pdm->AddObserver(&observer);
   pdm->SetProfiles(autofill_profiles);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   pdm->RemoveObserver(&observer);
 }
 
@@ -310,7 +314,7 @@ void SetCreditCards(int profile, std::vector<CreditCard>* credit_cards) {
   PersonalDataManager* pdm = GetPersonalDataManager(profile);
   pdm->AddObserver(&observer);
   pdm->SetCreditCards(credit_cards);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   pdm->RemoveObserver(&observer);
 }
 
@@ -358,7 +362,7 @@ const std::vector<AutofillProfile*>& GetAllAutoFillProfiles(
   PersonalDataManager* pdm = GetPersonalDataManager(profile);
   pdm->AddObserver(&observer);
   pdm->Refresh();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
   pdm->RemoveObserver(&observer);
   return pdm->web_profiles();
 }

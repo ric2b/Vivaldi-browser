@@ -26,9 +26,7 @@ config("jingle_unexported_configs") {
   ]
 
   include_dirs = [
-    "overrides",
     "../../third_party/webrtc_overrides",
-    "source",
     "../../testing/gtest/include",
     "../../third_party",
     "../../third_party/libyuv/include",
@@ -40,8 +38,6 @@ config("jingle_unexported_configs") {
 config("jingle_public_configs") {
   include_dirs = [
     "../../third_party/webrtc_overrides",
-    "overrides",
-    "source",
     "../../testing/gtest/include",
     "../../third_party",
   ]
@@ -54,7 +50,6 @@ config("jingle_public_configs") {
     "NO_SOUND_SYSTEM",
   ]
 
-  # TODO(GYP): Port is_win blocks.
   if (is_linux) {
     defines += [
       "LINUX",
@@ -83,17 +78,6 @@ config("jingle_public_configs") {
   if (is_posix) {
     defines += [ "WEBRTC_POSIX" ]
   }
-
-  # TODO(GYP): Support these in GN.
-  # if (is_bsd) {
-  #   defines += [ "BSD" ]
-  # }
-  # if (is_openbsd) {
-  #   defines += [ "OPENBSD" ]
-  # }
-  # if (is_freebsd) {
-  #   defines += [ "FREEBSD" ]
-  # }
   if (is_chromeos) {
     defines += [ "CHROMEOS" ]
   }
@@ -139,10 +123,6 @@ static_library("libjingle") {
     "$p2p_dir/base/portallocator.h",
     "$p2p_dir/base/pseudotcp.cc",
     "$p2p_dir/base/pseudotcp.h",
-    "$p2p_dir/base/rawtransport.cc",
-    "$p2p_dir/base/rawtransport.h",
-    "$p2p_dir/base/rawtransportchannel.cc",
-    "$p2p_dir/base/rawtransportchannel.h",
     "$p2p_dir/base/relayport.cc",
     "$p2p_dir/base/relayport.h",
     "$p2p_dir/base/session.cc",
@@ -241,7 +221,7 @@ static_library("libjingle") {
     ]
   } else {
     # Otherwise, we just add the field_trial which redirects to base.
-    sources += [ "overrides/field_trial.cc" ]
+    sources += [ "../webrtc_overrides/field_trial.cc" ]
   }
 
   configs += [ ":jingle_unexported_configs" ]
@@ -249,10 +229,13 @@ static_library("libjingle") {
 }
 
 if (enable_webrtc) {
+  # TODO(kjellander): Move this target into //third_party/webrtc_overrides as
+  # soon as the work in bugs.webrtc.org/4256 has gotten rid of the duplicated
+  # source listings above.
   source_set("libjingle_webrtc") {
     sources = [
-      "overrides/init_webrtc.cc",
-      "overrides/init_webrtc.h",
+      "../webrtc_overrides/init_webrtc.cc",
+      "../webrtc_overrides/init_webrtc.h",
     ]
     configs += [ ":jingle_unexported_configs" ]
     public_configs = [ ":jingle_public_configs" ]
@@ -267,7 +250,6 @@ if (enable_webrtc) {
       "../webrtc/api/audiotrack.h",
       "../webrtc/api/datachannel.cc",
       "../webrtc/api/datachannel.h",
-      "../webrtc/api/dtlsidentitystore.cc",
       "../webrtc/api/dtlsidentitystore.h",
       "../webrtc/api/dtmfsender.cc",
       "../webrtc/api/dtmfsender.h",
@@ -284,8 +266,6 @@ if (enable_webrtc) {
       "../webrtc/api/mediacontroller.h",
       "../webrtc/api/mediastream.cc",
       "../webrtc/api/mediastream.h",
-      "../webrtc/api/mediastreamhandler.cc",
-      "../webrtc/api/mediastreamhandler.h",
       "../webrtc/api/mediastreaminterface.h",
       "../webrtc/api/mediastreamobserver.cc",
       "../webrtc/api/mediastreamobserver.h",
@@ -299,12 +279,8 @@ if (enable_webrtc) {
       "../webrtc/api/peerconnectionfactory.cc",
       "../webrtc/api/peerconnectionfactory.h",
       "../webrtc/api/peerconnectioninterface.h",
-      "../webrtc/api/portallocatorfactory.cc",
-      "../webrtc/api/portallocatorfactory.h",
       "../webrtc/api/remoteaudiosource.cc",
       "../webrtc/api/remoteaudiosource.h",
-      "../webrtc/api/remoteaudiotrack.cc",
-      "../webrtc/api/remoteaudiotrack.h",
       "../webrtc/api/rtpreceiver.cc",
       "../webrtc/api/rtpreceiver.h",
       "../webrtc/api/rtpreceiverinterface.h",
@@ -332,7 +308,6 @@ if (enable_webrtc) {
       "../webrtc/api/webrtcsession.h",
       "../webrtc/api/webrtcsessiondescriptionfactory.cc",
       "../webrtc/api/webrtcsessiondescriptionfactory.h",
-      "../webrtc/media/base/audiorenderer.h",
       "../webrtc/media/base/codec.cc",
       "../webrtc/media/base/codec.h",
       "../webrtc/media/base/cryptoparams.h",
@@ -436,4 +411,3 @@ if (enable_webrtc) {
     ]
   }
 }  # enable_webrtc
-# TODO(GYP): Port libjingle.gyp's enable_webrtc condition block.

@@ -113,52 +113,38 @@ BASE_EXPORT bool RemoveQuarantineAttribute(const FilePath& file_path);
 // "OrLater" variants to those that check for a specific version, unless you
 // know for sure that you need to check for a specific version.
 
-// Mountain Lion is Mac OS X 10.8, Darwin 12.
-BASE_EXPORT bool IsOSMountainLion();
-BASE_EXPORT bool IsOSMountainLionOrEarlier();
-BASE_EXPORT bool IsOSMountainLionOrLater();
-
-// Mavericks is Mac OS X 10.9, Darwin 13.
+// Mavericks is OS X 10.9, Darwin 13.
 BASE_EXPORT bool IsOSMavericks();
-BASE_EXPORT bool IsOSMavericksOrEarlier();
 BASE_EXPORT bool IsOSMavericksOrLater();
 
-// Yosemite is Mac OS X 10.10, Darwin 14.
+// Yosemite is OS X 10.10, Darwin 14.
 BASE_EXPORT bool IsOSYosemite();
 BASE_EXPORT bool IsOSYosemiteOrEarlier();
 BASE_EXPORT bool IsOSYosemiteOrLater();
 
-// El Capitan is Mac OS X 10.11, Darwin 15.
+// El Capitan is OS X 10.11, Darwin 15.
 BASE_EXPORT bool IsOSElCapitan();
+BASE_EXPORT bool IsOSElCapitanOrEarlier();
 BASE_EXPORT bool IsOSElCapitanOrLater();
+
+// Sierra is macOS 10.12, Darwin 16.
+BASE_EXPORT bool IsOSSierra();
+BASE_EXPORT bool IsOSSierraOrLater();
 
 // This should be infrequently used. It only makes sense to use this to avoid
 // codepaths that are very likely to break on future (unreleased, untested,
 // unborn) OS releases, or to log when the OS is newer than any known version.
-BASE_EXPORT bool IsOSLaterThanElCapitan_DontCallThis();
+BASE_EXPORT bool IsOSLaterThanSierra_DontCallThis();
 
 // Inline functions that are redundant due to version ranges being mutually-
 // exclusive.
-inline bool IsOSMountainLionOrEarlier() { return !IsOSMavericksOrLater(); }
-inline bool IsOSMavericksOrEarlier() { return !IsOSYosemiteOrLater(); }
 inline bool IsOSYosemiteOrEarlier() { return !IsOSElCapitanOrLater(); }
+inline bool IsOSElCapitanOrEarlier() { return !IsOSSierraOrLater(); }
 
 // When the deployment target is set, the code produced cannot run on earlier
 // OS releases. That enables some of the IsOS* family to be implemented as
 // constant-value inline functions. The MAC_OS_X_VERSION_MIN_REQUIRED macro
 // contains the value of the deployment target.
-
-#if defined(MAC_OS_X_VERSION_10_8) && \
-    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_8
-#define BASE_MAC_MAC_UTIL_H_INLINED_GE_10_8
-inline bool IsOSMountainLionOrLater() { return true; }
-#endif
-
-#if defined(MAC_OS_X_VERSION_10_8) && \
-    MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_8
-#define BASE_MAC_MAC_UTIL_H_INLINED_GT_10_8
-inline bool IsOSMountainLion() { return false; }
-#endif
 
 #if defined(MAC_OS_X_VERSION_10_9) && \
     MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_9
@@ -194,7 +180,19 @@ inline bool IsOSElCapitanOrLater() { return true; }
     MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_11
 #define BASE_MAC_MAC_UTIL_H_INLINED_GT_10_11
 inline bool IsOSElCapitan() { return false; }
-inline bool IsOSLaterThanElCapitan_DontCallThis() { return true; }
+#endif
+
+#if defined(MAC_OS_X_VERSION_10_12) && \
+    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12
+#define BASE_MAC_MAC_UTIL_H_INLINED_GE_10_12
+inline bool IsOSSierraOrLater() { return true; }
+#endif
+
+#if defined(MAC_OS_X_VERSION_10_12) && \
+    MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_12
+#define BASE_MAC_MAC_UTIL_H_INLINED_GT_10_12
+inline bool IsOSSierra() { return false; }
+inline bool IsOSLaterThanSierra_DontCallThis() { return true; }
 #endif
 
 // Retrieve the system's model identifier string from the IOKit registry:

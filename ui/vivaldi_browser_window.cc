@@ -23,7 +23,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "chrome/browser/jumplist_win.h"
+#include "chrome/browser/win/jumplist.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 

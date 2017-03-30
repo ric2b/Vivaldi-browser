@@ -55,8 +55,9 @@ void LayoutSVGContainer::layout()
     calcViewport();
 
     // Allow LayoutSVGTransformableContainer to update its transform.
-    bool updatedTransform = calculateLocalTransform();
-    m_didScreenScaleFactorChange = updatedTransform || SVGLayoutSupport::screenScaleFactorChanged(parent());
+    SVGTransformChange transformChange = calculateLocalTransform();
+    m_didScreenScaleFactorChange =
+        transformChange == SVGTransformChange::Full || SVGLayoutSupport::screenScaleFactorChanged(parent());
 
     // LayoutSVGViewportContainer needs to set the 'layout size changed' flag.
     determineIfLayoutSizeChanged();
@@ -72,7 +73,7 @@ void LayoutSVGContainer::layout()
     if (everHadLayout() && needsLayout())
         SVGResourcesCache::clientLayoutChanged(this);
 
-    if (m_needsBoundariesUpdate || updatedTransform) {
+    if (m_needsBoundariesUpdate || transformChange != SVGTransformChange::None) {
         updateCachedBoundaries();
         m_needsBoundariesUpdate = false;
 
@@ -198,6 +199,11 @@ bool LayoutSVGContainer::nodeAtFloatPoint(HitTestResult& result, const FloatPoin
     }
     // 16.4: "If there are no graphics elements whose relevant graphics content is under the pointer (i.e., there is no target element), the event is not dispatched."
     return false;
+}
+
+SVGTransformChange LayoutSVGContainer::calculateLocalTransform()
+{
+    return SVGTransformChange::None;
 }
 
 } // namespace blink

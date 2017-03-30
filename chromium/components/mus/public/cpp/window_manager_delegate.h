@@ -15,8 +15,12 @@
 #include "base/callback_forward.h"
 #include "components/mus/public/interfaces/cursor.mojom.h"
 #include "components/mus/public/interfaces/event_matcher.mojom.h"
-#include "components/mus/public/interfaces/input_events.mojom.h"
 #include "components/mus/public/interfaces/window_manager_constants.mojom.h"
+#include "ui/events/mojo/event.mojom.h"
+
+namespace display {
+class Display;
+}
 
 namespace gfx {
 class Insets;
@@ -89,6 +93,17 @@ class WindowManagerDelegate {
   // of OnWmCreateTopLevelWindow().
   virtual Window* OnWmCreateTopLevelWindow(
       std::map<std::string, std::vector<uint8_t>>* properties) = 0;
+
+  // Called when a Mus client's jankiness changes. |windows| is the set of
+  // windows owned by the window manager in which the client is embedded.
+  virtual void OnWmClientJankinessChanged(
+      const std::set<Window*>& client_windows,
+      bool janky) = 0;
+
+  // Called when a display is added. |window| is the root of the window tree for
+  // the specified display.
+  virtual void OnWmNewDisplay(Window* window,
+                              const display::Display& display) = 0;
 
   virtual void OnAccelerator(uint32_t id, const ui::Event& event) = 0;
 

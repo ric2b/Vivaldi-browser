@@ -35,10 +35,12 @@ class MockVirtualAudioInputStream : public VirtualAudioInputStream {
             base::Bind(&base::DeletePointer<VirtualAudioInputStream>)) {}
   ~MockVirtualAudioInputStream() {}
 
-  MOCK_METHOD2(AddOutputStream, void(VirtualAudioOutputStream* stream,
-                                     const AudioParameters& output_params));
-  MOCK_METHOD2(RemoveOutputStream, void(VirtualAudioOutputStream* stream,
-                                        const AudioParameters& output_params));
+  MOCK_METHOD2(AddInputProvider,
+               void(AudioConverter::InputCallback* input,
+                    const AudioParameters& params));
+  MOCK_METHOD2(RemoveInputProvider,
+               void(AudioConverter::InputCallback* input,
+                    const AudioParameters& params));
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockVirtualAudioInputStream);
@@ -62,7 +64,8 @@ class VirtualAudioOutputStreamTest : public testing::Test {
   }
 
   void SyncWithAudioThread() {
-    base::WaitableEvent done(false, false);
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     audio_task_runner()->PostTask(
         FROM_HERE, base::Bind(&base::WaitableEvent::Signal,
                               base::Unretained(&done)));
@@ -91,9 +94,8 @@ TEST_F(VirtualAudioOutputStreamTest, StartStopStartStop) {
       input_stream,
       base::Bind(&base::DeletePointer<VirtualAudioOutputStream>));
 
-  EXPECT_CALL(*input_stream, AddOutputStream(output_stream, _))
-      .Times(kCycles);
-  EXPECT_CALL(*input_stream, RemoveOutputStream(output_stream, _))
+  EXPECT_CALL(*input_stream, AddInputProvider(output_stream, _)).Times(kCycles);
+  EXPECT_CALL(*input_stream, RemoveInputProvider(output_stream, _))
       .Times(kCycles);
 
   audio_task_runner()->PostTask(

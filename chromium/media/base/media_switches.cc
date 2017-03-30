@@ -17,6 +17,10 @@ const char kVideoThreads[] = "video-threads";
 const char kEnableMediaSuspend[] = "enable-media-suspend";
 const char kDisableMediaSuspend[] = "disable-media-suspend";
 
+// Force to report VP9 as an unsupported MIME type.
+const char kReportVp9AsAnUnsupportedMimeType[] =
+    "report-vp9-as-an-unsupported-mime-type";
+
 #if defined(OS_ANDROID)
 // Sets the MediaSource player that uses UI thread for frame processing.
 const char kDisableMediaThreadForMediaPlayback[] =
@@ -93,7 +97,8 @@ const char kUseFileForFakeVideoCapture[] = "use-file-for-fake-video-capture";
 // the bits as if they came from the microphone, which means you should disable
 // audio processing (lest your audio file will play back distorted). The input
 // file is converted to suit Chrome's audio buses if necessary, so most sane
-// .wav files should work.
+// .wav files should work. You can pass either <path> to play the file looping
+// or <path>%noloop to stop after playing the file to completion.
 const char kUseFileForFakeAudioCapture[] = "use-file-for-fake-audio-capture";
 
 // Enables support for inband text tracks in media content.
@@ -114,9 +119,25 @@ const char kVideoUnderflowThresholdMs[] = "video-underflow-threshold-ms";
 const char kDisableRTCSmoothnessAlgorithm[] =
     "disable-rtc-smoothness-algorithm";
 
+// Enables demuxing of vp9 in mp4. Note that this flag will not have any effect
+// if MP4 demuxing is not enabled in the build.
+const char kEnableVp9InMp4[] = "enable-vp9-in-mp4";
+
+// Switches which method is used to compute the encoder utilization metric
+// (e.g., --cast-encoder-util-heuristic=backlog).
+//
+// TODO(miu): This is temporary, for lab performance testing, until a
+// good "works for all" solution is confirmed.
+// https://code.google.com/p/chrome-os-partner/issues/detail?id=54806
+const char kCastEncoderUtilHeuristic[] = "cast-encoder-util-heuristic";
+
 }  // namespace switches
 
 namespace media {
+
+// Use new audio rendering mixer.
+const base::Feature kNewAudioRenderingMixingStrategy{
+    "NewAudioRenderingMixingStrategy", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use shared block-based buffering for media.
 const base::Feature kUseNewMediaCache{"use-new-media-cache",

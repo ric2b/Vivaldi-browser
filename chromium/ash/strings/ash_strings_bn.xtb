@@ -27,6 +27,7 @@
 <translation id="1621499497873603021">ব্যাটারি শেষ হতে <ph name="TIME_LEFT" /> সময় বাকি আছে</translation>
 <translation id="164969095109328410">Chrome ডিভাইস</translation>
 <translation id="1677472565718498478"><ph name="TIME" /> বাকি আছে</translation>
+<translation id="1683360892415596327">আমাদের সমীক্ষায় যোগ দিন</translation>
 <translation id="1723752762323179280">সেশন থেকে প্রস্থান করা হচ্ছে</translation>
 <translation id="1747827819627189109">অন-স্ক্রীন কীবোর্ড সক্ষম করা রয়েছে</translation>
 <translation id="1812696562331527143">আপনার ইনপুট পদ্ধতি <ph name="INPUT_METHOD_ID" />*(<ph name="BEGIN_LINK" />৩য় পক্ষ<ph name="END_LINK" />) এ পরিবর্তিত হয়েছে৷
@@ -162,6 +163,7 @@ Search অথবা বাতিল করতে Shift টিপুন৷</trans
 <translation id="6062360702481658777">আপনি <ph name="LOGOUT_TIME_LEFT" /> এর মধ্যে স্বয়ংক্রিয়ভাবে প্রস্থান করুন হবেন৷</translation>
 <translation id="607652042414456612">আপনার কম্পিউটার কাছাকাছি ব্লুটুথ ডিভাইসে খুঁজে পাওয়া সম্ভব এবং ঠিকানা <ph name="ADDRESS" /> সমেত "<ph name="NAME" />" হিসাবে প্রদর্শিত হবে</translation>
 <translation id="6106745654298855237"><ph name="POWER_SOURCE" /> চার্জ হচ্ছে</translation>
+<translation id="6144938890088808325">আমাদের Chromebooks উন্নত করতে সাহায্য করুন</translation>
 <translation id="615957422585914272">অন-স্ক্রীন কীবোর্ড প্রদর্শন করুন</translation>
 <translation id="6165508094623778733">আরো জানুন</translation>
 <translation id="6203030746557259519">ভার্চুয়াল প্রদর্শন</translation>
@@ -212,6 +214,7 @@ Alt+Search অথবা বাতিল করতে Shift টিপুন৷</t
 <translation id="7823564328645135659">আপনার সেটিংস সিঙ্ক করার পরে ভাষা "<ph name="FROM_LOCALE" />" থেকে "<ph name="TO_LOCALE" />" এ পরিবর্তন করা হয়েছে৷</translation>
 <translation id="785750925697875037">মোবাইল অ্যাকাউন্ট দেখুন</translation>
 <translation id="7864539943188674973">ব্লুটুথ অক্ষম করুন</translation>
+<translation id="7869829692393275047">Chrome OS HaTS এর সমীক্ষা পাঠ্য এখানে দেখুন।Chrome OS HaTS এর সমীক্ষা পাঠ্য এখানে দেখুন।Chrome OS HaTS এর সমীক্ষা পাঠ্য এখানে দেখুন।Chrome OS HaTS এর সমীক্ষা পাঠ্য এখানে দেখুন।</translation>
 <translation id="7893838033650689677">ওয়াই-ফাই চালু করুন</translation>
 <translation id="7904094684485781019">এই অ্যাকাউন্টের প্রশাসক একাধিক প্রবেশ করুন অননুমোদিত করেছেন৷</translation>
 <translation id="7957227661277029961">আপনার <ph name="DEVICE_TYPE" /> চালু থাকা অবস্থায় চার্জ নাও হতে পারে। এটির মূল চার্জার ব্যবহারের কথা ভাবুন।</translation>

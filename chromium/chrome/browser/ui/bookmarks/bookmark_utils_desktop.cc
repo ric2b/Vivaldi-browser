@@ -231,8 +231,9 @@ bool ConfirmDeleteBookmarkNode(const BookmarkNode* node,
   DCHECK(node && node->is_folder() && !node->empty());
   return ShowQuestionMessageBox(
              window, l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-             l10n_util::GetStringFUTF16Int(IDS_BOOKMARK_EDITOR_CONFIRM_DELETE,
-                                           ChildURLCountTotal(node))) ==
+             l10n_util::GetPluralStringFUTF16(
+                 IDS_BOOKMARK_EDITOR_CONFIRM_DELETE,
+                 ChildURLCountTotal(node))) ==
          MESSAGE_BOX_RESULT_YES;
 }
 

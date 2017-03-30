@@ -276,8 +276,8 @@ const char* BufferFormatToString(gfx::BufferFormat format) {
       return "BGRX_8888";
     case gfx::BufferFormat::BGRA_8888:
       return "BGRA_8888";
-    case gfx::BufferFormat::YUV_420:
-      return "YUV_420";
+    case gfx::BufferFormat::YVU_420:
+      return "YVU_420";
     case gfx::BufferFormat::YUV_420_BIPLANAR:
       return "YUV_420_BIPLANAR";
     case gfx::BufferFormat::UYVY_422:
@@ -444,13 +444,12 @@ void GpuMessageHandler::OnCallAsync(const base::ListValue* args) {
 
   // call BrowserBridge.onCallAsyncReply with result
   if (ret) {
-    web_ui()->CallJavascriptFunction("browserBridge.onCallAsyncReply",
-        *requestId,
-        *ret);
+    web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
+                                           *requestId, *ret);
     delete ret;
   } else {
-    web_ui()->CallJavascriptFunction("browserBridge.onCallAsyncReply",
-        *requestId);
+    web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
+                                           *requestId);
   }
 }
 
@@ -520,8 +519,8 @@ void GpuMessageHandler::OnGpuInfoUpdate() {
   gpu_info_val->Set("gpuMemoryBufferInfo", GpuMemoryBufferInfo());
 
   // Send GPU Info to javascript.
-  web_ui()->CallJavascriptFunction("browserBridge.onGpuInfoUpdate",
-      *(gpu_info_val.get()));
+  web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onGpuInfoUpdate",
+                                         *(gpu_info_val.get()));
 }
 
 void GpuMessageHandler::OnGpuSwitched() {

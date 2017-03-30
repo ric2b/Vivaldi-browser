@@ -33,6 +33,7 @@ include_rules = [
   "+jni",
   "+media/audio", # For media audio hang monitor.
   "+media/base",  # For media switches
+  "+media/cdm/cdm_paths.h",
   "+media/midi",  # For midi switches
   "+media/mojo",  # For mojo media services.
   "+mojo/converters",
@@ -45,8 +46,8 @@ include_rules = [
   "+ppapi/shared_impl",
   "+rlz",
   "+sandbox/win/src",  # The path doesn't say it, but this is the Windows sandbox.
+  "+services/shell",
   "+skia/ext",
-  "+skia/public",
   "+sync/api",  # Sync API files.
   "+sync/internal_api/public/attachments",  # Needed for tests.
   "+sync/internal_api/public/base",
@@ -98,6 +99,7 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h",
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/modules/app_banner/WebAppBannerPromptReply.h",
+  "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",

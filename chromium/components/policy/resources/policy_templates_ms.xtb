@@ -6,6 +6,15 @@
 <translation id="1019101089073227242">Tetapkan direktori data pengguna</translation>
 <translation id="1022361784792428773">ID sambungan pengguna perlu dihalang daripada memasang (atau * untuk semua)</translation>
 <translation id="102492767056134033">Tetapkan keadaan lalai papan kekunci pada skrin di skrin log masuk</translation>
+<translation id="1027000705181149370">Menentukan sama ada kuki pengesahan yang ditetapkan oleh SAML IdP semasa log masuk harus dipindahkan ke profil pengguna.
+
+      Apabila pengguna membuat pengesahan melalui SAML IdP semasa log masuk, kuki yang ditetapkan oleh IdP akan ditulis pada profil sementara terlebih dahulu. Kuki ini boleh dipindahkan ke profil pengguna untuk membawa status pengesahan ke hadapan.
+
+      Apabila dasar ini ditetapkan kepada benar, kuki yang ditetapkan oleh IdP dipindahkan ke profil pengguna setiap kali mereka mengesahkan terhadap SAML IdP semasa log masuk.
+
+      Apabila dasar ini ditetapkan kepada palsu atau tidak ditetapkan, kuki yang ditetapkan oleh IdP dipindahkan ke profil pengguna semasa log masuk mereka yang pertama pada peranti sahaja.
+
+      Dasar ini mempengaruhi pengguna yang mempunyai domain yang sepadan dengan domain pendaftaran peranti sahaja. Bagi semua pengguna lain, kuki yang ditetapkan oleh IdP dipindahkan ke profil pengguna semasa log masuk mereka yang pertama pada peranti tersebut sahaja.</translation>
 <translation id="1040446814317236570">Dayakan pengeluaran URL PAC (untuk https://)</translation>
 <translation id="1044878202534415707">Laporkan statistik perkakasan seperti penggunaan CPU/RAM.
 
@@ -21,18 +30,6 @@
 
       Jika dasar ini dibiarkan tanpa ditetapkan, dasar ini akan akan didayakan tetapi pengguna akan boleh mengubahnya.</translation>
 <translation id="1062011392452772310">Dayakan pembuktian jauh untuk peranti</translation>
-<translation id="108735515923160176">Mengkonfigurasi jenis halaman utama lalai dalam <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada mengubah pilihan halaman utama. Halaman utama boleh ditetapkan sama ada kepada URL yang anda tentukan atau ditetapkan kepada Halaman Tab Baharu.
-
-          Jika anda mendayakan tetapan ini, Halaman Tab Baharu akan sentiasa digunakan untuk halaman utama dan lokasi URL halaman utama akan diabaikan.
-
-          Jika anda melumpuhkan tetapan ini, Halaman Tab Baharu tidak akan menjadi halaman utama pengguna, kecuali URL halaman tersebut ditetapkan kepada  'chrome://newtab'.
-
-          Jika anda mendayakan atau melumpuhkan tetapan ini, pengguna tidak boleh mengubah jenis halaman utama mereka dalam <ph name="PRODUCT_NAME" />.
-
-          Apabila dasar ini dibiarkan tanpa ditetapkan, pengguna boleh memilih sendiri sama ada hendak menjadikan halaman tab baharu sebagai halaman utamanya atau tidak.
-
-          Dasar ini tidak tersedia pada tika Windows yang tidak dihubungkan
-          ke domain Direktori Aktif.</translation>
 <translation id="1090892140761957285">URL untuk mengesahkan token pengesahan pelanggan akses jauh.
 
           Jika dasar ini ditetapkan, hos akses jauh akan menggunakan URL ini untuk mengesahkan token pengesahan daripada pelanggan akses jauh, agar dapat menerima sambungan. Hendaklah digunakan bersama dengan RemoteAccessHostTokenUrl.
@@ -40,6 +37,13 @@
           Pada masa ini, ciri ini dilumpuhkan di pihak pelayan.</translation>
 <translation id="1096105751829466145">Pembekal carian lalai</translation>
 <translation id="1103860406762205913">Mendayakan log masuk lama yang berasaskan web</translation>
+<translation id="1128903365609589950">Mengkonfigurasi direktori yang akan digunakan oleh <ph name="PRODUCT_NAME" /> untuk menyimpan fail cache pada cakera.
+
+      Jika anda menetapkan dasar ini, <ph name="PRODUCT_NAME" /> akan menggunakan direktori yang diberikan tanpa mengambil kira sama ada pengguna telah menentukan bendera '--disk-cache-dir' atau tidak. Untuk mengelakkan kehilangan data atau ralat lain yang tidak dijangka, dasar ini tidak seharusnya ditetapkan pada direktori akar volum atau pada direkori yang digunakan untuk tujuan lain kerana <ph name="PRODUCT_NAME" /> mengurus kandungannya.
+
+      Lihat https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables untuk mendapatkan senarai pemboleh ubah yang boleh digunakan.
+
+      Jika dasar ini dibiarkan tanpa ditetapkan, direktori cache lalai akan digunakan dan pengguna dapat mengatasinya dengan bendera baris perintah '--disk-cache-dir'.</translation>
 <translation id="1138294736309071213">Dasar ini aktif dalam mod runcit sahaja.
 
       Menentukan tempoh sebelum penyelamat skrin dipaparkan pada skrin log masuk untuk peranti dalam mod runcit.
@@ -54,17 +58,7 @@
 
       Jika dasar ini tidak ditetapkan, kekerapan lalai ialah 3 jam. Kekerapan
       minimum yang dibenarkan ialah 60 saat.</translation>
-<translation id="1213523811751486361">Menentukan URL enjin carian yang digunakan untuk menyediakan cadangan carian. URL tersebut harus mengandungi rentetan '<ph name="SEARCH_TERM_MARKER" />', yang akan digantikan dengan teks yang dimasukkan oleh pengguna setakat ini pada masa pertanyaan dibuat.
-
-          Dasar ini merupakan pilihan. Jika tidak ditetapkan, tiada URL dicadangkan akan digunakan.
-
-          Dasar ini hanya akan dihormati jika dasar 'DefaultSearchProviderEnabled' didayakan.</translation>
 <translation id="1221359380862872747">Memuatkan url tertentu pada log masuk tunjuk cara</translation>
-<translation id="1240643596769627465">Menentukan URL enjin carian yang digunakan untuk memberikan hasil carian semerta. URL tersebut harus mengandungi rentetan <ph name="SEARCH_TERM_MARKER" />, yang akan digantikan pada masa pertanyaan dibuat oleh teks yang pengguna telah masukkan setakat ini.
-
-          Dasar ini merupakan pilihan. Jika tidak ditetapkan, tiada hasil carian semerta akan disediakan.
-
-          Dasar ini hanya dihormati jika dasar 'DefaultSearchProviderEnabled' didayakan.</translation>
 <translation id="1265053460044691532">Hadkan masa untuk pengguna yang membuat pengesahan melalui SAML boleh melog masuk dalam talian.</translation>
 <translation id="1291880496936992484">Amaran: RC4 akan dialih keluar sepenuhnya daripada <ph name="PRODUCT_NAME" /> selepas versi 52 (sekitar September 2016) dan dasar ini akan berhenti berfungsi selepas itu.
 
@@ -193,15 +187,6 @@
       Jika tetapan ini dilumpuhkan atau tidak ditetapkan, pengguna akan diminta untuk kebenaran bagi menjalankan pemalam yang memerlukan kebenaran. Ini adalah pemalam yang boleh menjejaskan keselamatan.</translation>
 <translation id="1803646570632580723">Senarai apl berpin untuk dipaparkan dalam pelancar</translation>
 <translation id="1808715480127969042">Sekat kuki pada tapak ini</translation>
-<translation id="1811270320106005269">Mendayakan kunci apabila peranti <ph name="PRODUCT_OS_NAME" /> melahu atau digantung.
-
-      Jika anda mendayakan tetapan ini, pengguna akan diminta memberikan kata laluan untuk membuka peranti daripada keadaan tidak aktif.
-
-      Jika anda melumpuhkan tetapan ini, pengguna tidak akan diminta untuk memberikan kata laluan untuk membuka kunci peranti daripada keadaan tidak aktif.
-
-      Jika anda mendayakan atau melumpuhkan tetapan ini, pengguna tidak boleh mengubah atau mengatasi tetapan ini.
-
-      Jika dasar dibiarkan tanpa ditetapkan, pengguna boleh memilih sama ada beliau ingin diminta memberikan kata laluan untuk membuka peranti atau tidak.</translation>
 <translation id="1827523283178827583">Gunakan pelayan proksi tetap</translation>
 <translation id="1843117931376765605">Segar semula kadar untuk dasar pengguna</translation>
 <translation id="1847960418907100918">Menentukan parameter yang digunakan apabila melakukan carian semerta dengan POST. Parameter ini mengandungi pasangan nama/nilai yang dipisahkan koma. Jika nilai merupakan parameter templat, seperti {searchTerms} dalam contoh di atas, nilai ini akan digantikan dengan data istilah carian sebenar.
@@ -226,6 +211,8 @@
       Ambil perhatian bahawa dasar ini boleh diatasi oleh EnabledPlugins dan DisabledPluginsExceptions.
 
       Jika dasar ini dibiarkan tanpa ditetapkan, pengguna boleh menggunakan mana-mana pemalam yang dipasang pada sistem kecuali pemalam tidak serasi yang berkod keras, sudah lapuk atau berbahaya.</translation>
+<translation id="1864269674877167562">Jika dasar ini ditetapkan kepada rentetan kosong atau tidak dikonfigurasikan, <ph name="PRODUCT_OS_NAME" /> tidak akan memaparkan pilihan autolengkap semasa aliran log masuk pengguna.
+      Jika dasar ini ditetapkan kepada rentetan yang mewakili nama domain, <ph name="PRODUCT_OS_NAME" /> akan memaparkan pilihan autolengkap semasa log masuk pengguna yang membolehkan pengguna menaip nama pengguna mereka sahaja tanpa sambungan nama domain.  Pengguna boleh menulis ganti sambungan nama domain ini.</translation>
 <translation id="1865417998205858223">Kebenaran Utama</translation>
 <translation id="186719019195685253">Tindakan yang perlu diambil apabila kelewatan melahu dicapai semasa dijalankan menggunakan kuasa AC</translation>
 <translation id="187819629719252111">Membenarkan akses ke fail setempat pada mesin dengan membenarkan <ph name="PRODUCT_NAME" /> untuk memaparkan dialog pemilihan fail.
@@ -353,6 +340,13 @@
 <translation id="2337466621458842053">Membolehkan anda menetapkan senarai corak url yang menentukan tapak mana yang dibenarkan untuk memaparkan imej.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, nilai lalai global akan digunakan untuk semua tapak sama ada dari dasar 'DefaultImagesSetting' jika dasar ini ditetapkan atau konfigurasi peribadi pengguna tersebut jika sebaliknya.</translation>
+<translation id="2359612025446382967">Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_OS_NAME" /> akan melumpuhkan Bluetooth dan pengguna tidak dapat mendayakannya semula.
+
+      Jika dasar ini ditetapkan kepada benar atau dibiarkan tidak ditetapkan, pengguna akan dapat mendayakan atau melumpuhkan Bluetooth semahunya.
+
+      Jika dasar ini ditetapkan, pengguna tidak boleh mengubah atau membatalkannya.
+
+      Selepas mendayakan Bluetooth, peranti ini mesti dibut semula supaya perubahan dapat diterapkan (tidak perlu but semula peranti apabila melumpuhkan Bluetooth).</translation>
 <translation id="2366415278352956652">Mendayakan penghantaran</translation>
 <translation id="2371309782685318247">Menetapkan tempoh dalam milisaat apabila perkhidmatan pengurusan peranti disoal untuk mendapatkan maklumat dasar pengguna.
 
@@ -472,6 +466,13 @@
 <translation id="2466131534462628618">Pengesahan portal tawanan mengabaikan proksi</translation>
 <translation id="2482676533225429905">Pemesejan Natif</translation>
 <translation id="2483146640187052324">Ramalkan tindakan rangkaian pada sebarang sambungan rangkaian</translation>
+<translation id="2486371469462493753">Melumpuhkan penguatkuasaan keperluan Ketelusan Sijil kepada URL yang disenaraikan.
+
+      Dasar ini membenarkan sijil bagi nama hos dalam URL yang dinyatakan, tidak didedahkan melalui Ketelusan Sijil. Pada umumnya, sijil yang tidak didedahkan kepada umum dengan betul, dikendalikan sebagai sijil yang tidak dipercayai. Namun, dasar ini membenarkan sijil yang tidak dipercayai itu untuk terus digunakan, tetapi hal ini akan menyukarkan lagi kami mengesan sijil yang tersilap dikeluarkan oleh hos tersebut.
+
+      Pola URL diformatkan mengikut https://www.chromium.org/administrators/url-blacklist-filter-format. Walau bagaimanapun, oleh sebab sijil sah untuk nama hos yang tertentu tanpa mengira skim, port atau laluannya, hanya bahagian nama hos URL yang dipertimbangkan. Kad bebas hos tidak disokong.
+
+      Jika dasar ini tidak ditetapkan, mana-mana sijil yang dikehendaki supaya didedahkan melalui Ketelusan Sijil akan dikendalikan sebagai tidak dipercayai jika sijil itu tidak didedahkan mengikut dasar Ketelusan Sijil.</translation>
 <translation id="2488010520405124654">Dayakan gesaan konfigurasi rangkaian semasa di luar talian.
 
       Jika dasar ini dinyahtetapkan atau ditetapkan kepada True dan akaun setempat peranti dikonfigurasikan kepada autolog masuk tanpa lengah dan peranti tiada akses kepada Internet, <ph name="PRODUCT_OS_NAME" /> akan menunjukkan gesaan konfigurasi rangkaian.
@@ -499,6 +500,13 @@
 <translation id="2529880111512635313">Konfigurasikan senarai apl dan sambungan pemasangan paksa</translation>
 <translation id="253135976343875019">Kelewatan amaran melahu apabila dijalankan dengan kuasa AC</translation>
 <translation id="2552966063069741410">Zon waktu</translation>
+<translation id="2562339630163277285">Menentukan URL enjin carian yang digunakan untuk memberikan hasil carian segera. URL tersebut harus mengandungi rentetan <ph name="SEARCH_TERM_MARKER" />, yang akan digantikan oleh teks yang telah dimasukkan oleh pengguna setakat ini pada masa pertanyaan dibuat.
+
+          Dasar ini tidak wajib. Jika tidak ditetapkan, tiada hasil carian segera akan diberikan.
+
+          URL hasil carian segera Google boleh ditentukan sebagai: <ph name="GOOGLE_INSTANT_SEARCH_URL" />.
+
+          Dasar ini hanya dihormati jika dasar 'DefaultSearchProviderEnabled' didayakan.</translation>
 <translation id="2571066091915960923">Dayakan atau lumpuhkan proksi pemampatan data dan halang pengguna daripada mengubah tetapan ini.
 
       Jika anda mendayakan atau melumpuhkan tetapan ini, pengguna tidak boleh mengubah atau mengatasi tetapan ini.
@@ -509,8 +517,12 @@
 <translation id="2623014935069176671">Tunggu aktiviti pengguna awal</translation>
 <translation id="262740370354162807">Dayakan penyerahan dokumen pada <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2633084400146331575">Dayakan maklum balas yang dituturkan</translation>
-<translation id="2646290749315461919">Membenarkan anda menetapkan sama ada tapak web dibenarkan untuk mengesan lokasi fizikal pengguna. Penjejakan lokasi fizikal pengguna boleh dibenarkan secara lalai, dinafikan secara lalai atau pengguna boleh ditanya setiap kali tapak web meminta lokasi fizikal. Jika dasar ini tidak ditetapkan, 'AskGeolocation' akan digunakan dan pengguna akan dapat mengubah.</translation>
 <translation id="2650049181907741121">Tindakan yang perlu diambil apabila pengguna menutup penutup</translation>
+<translation id="2655233147335439767">Menentukan URL enjin carian yang digunakan apabila melakukan carian lalai. URL ini harus mengandungi rentetan '<ph name="SEARCH_TERM_MARKER" />', yang akan digantikan oleh istilah yang dicari oleh pengguna pada masa pertanyaan dibuat.
+
+          URL carian Google boleh ditentukan sebagai: <ph name="GOOGLE_SEARCH_URL" />.
+
+          Pilihan ini hendaklah ditetapkan apabila dasar 'DefaultSearchProviderEnabled' didayakan dan hanya akan diambil kira dalam keadaan ini.</translation>
 <translation id="2660846099862559570">Jangan sekali-kali menggunakan proksi</translation>
 <translation id="267596348720209223">Menentukan pengekodan aksara yang disokong oleh penyedia carian. Pengekodan ialah nama halaman kod seperti UTF-8, GB2312 dan ISO-8859-1. Ia diuji dalam urutan yang diberikan.
 
@@ -519,6 +531,12 @@
           Dasar ini hanya dihormati jika dasar 'DefaultSearchProviderEnabled' didayakan.</translation>
 <translation id="2682225790874070339">Melumpuhkan Drive dalam apl Fail <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="268577405881275241">Dayakan ciri proksi pemampatan data</translation>
+<translation id="2692168654831544772">Melumpuhkan pengambilan tangkapan skrin.
+
+      Jika didayakan, tangkapan skrin tidak boleh diambil menggunakan pintasan papan kekunci atau API sambungan.
+      Selain itu, penangkapan skrin dilumpuhkan untuk apl ARC.
+
+      Jika dilumpuhkan atau tidak ditentukan, pengambilan tangkapan skrin akan dibenarkan.</translation>
 <translation id="2731627323327011390">Lumpuhkan penggunaan sijil <ph name="PRODUCT_OS_NAME" /> pada apl ARC</translation>
 <translation id="2742843273354638707">Sembunyikan apl Gedung Web Chrome dan pautan pembawah daripada Halaman Tab Baharu dan pelancar apl <ph name="PRODUCT_OS_NAME" />.
 
@@ -586,6 +604,32 @@
           Jika anda mendayakan tetapan ini, <ph name="PRODUCT_NAME" /> akan mengabaikan semua pilihan berkaitan proksi yang ditetapkan daripada baris perintah.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, pengguna boleh memilih tetapan proksi mereka sendiri.</translation>
+<translation id="2818551149761607847">Konfigurasikan imej avatar pengguna.
+
+      Dasar ini membolehkan anda mengkonfigurasikan imej avatar yang mewakili pengguna pada skrin log masuk. Dasar ini ditetapkan dengan menetapkan URL yang boleh digunakan oleh <ph name="PRODUCT_OS_NAME" /> untuk memuat turun imej avatar dan cincangan kriptografi yang digunakan untuk mengesahkan integriti muat turun tersebut. Imej mestilah dalam format JPEG dan saiznya tidak boleh melebihi 512kB. URL ini mesti boleh diakses tanpa sebarang pengesahan.
+
+      Imej avatar dimuat turun dan dicache. Imej akan dimuat turun semula pada bila-bila masa URL atau cincangan berubah.
+
+      Dasar ini harus ditetapkan sebagai rentetan yang menyatakan URL dan cincangan dalam format JSON, yang mematuhi skema berikut:
+      {
+        "type": "object",
+        "properties": {
+          "url": {
+            "description": "The URL from which the avatar image can be downloaded.",
+            "type": "string"
+          },
+          "hash": {
+            "description": "The SHA-256 hash of the avatar image.",
+            "type": "string"
+          }
+        }
+      }
+
+      Jika dasar ini ditetapkan, <ph name="PRODUCT_OS_NAME" /> akan memuat turun dan menggunakan imej avatar tersebut.
+
+      Jika anda menetapkan dasar ini, pengguna tidak boleh mengubah atau membatalkannya.
+
+      Jika dasar ini dibiarkan tanpa ditetapkan, pengguna boleh memilih imej avatar yang mewakili mereka pada skrin log masuk.</translation>
 <translation id="2824715612115726353">Dayakan mod Inkognito</translation>
 <translation id="2844404652289407061">Mendayakan ketersediaan Sentuh untuk Cari dalam paparan kandungan <ph name="PRODUCT_NAME" />.
 
@@ -658,6 +702,11 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="3072847235228302527">Tetapkan Syarat Perkhidmatan untuk akaun setempat peranti</translation>
 <translation id="3096595567015595053">Senarai pemalam yang didayakan</translation>
 <translation id="3101501961102569744">Pilih cara untuk menentukan tetapan pelayan proksi</translation>
+<translation id="3117676313396757089">Amaran: DHE akan dialih keluar sepenuhnya daripada <ph name="PRODUCT_NAME" /> selepas versi 57 (sekitar Mac 2017) dan dasar ini akan berhenti berfungsi selepas itu.
+
+      Jika dasar ini tidak ditetapkan atau ditetapkan kepada palsu, maka suit sifer DHE dalam TLS tidak akan didayakan. Jika tidak, dasar mungkin ditetapkan kepada benar untuk mendayakan suit sifer DHE dan mengekalkan keserasian dengan pelayan yang sudah lapuk. Ini merupakan langkah sementara dan pelayan harus dikonfigurasikan semula.
+
+      Pelayan digalakkan supaya berhijrah kepada suit sifer ECDHE. Jika tidak boleh, pastikan suit sifer yang menggunakan pertukaran kunci RSA didayakan.</translation>
 <translation id="3153348162326497318">Membolehkan anda menentukan sambungan yang TIDAK boleh dipasang oleh pengguna. Sambungan yang telah dipasang akan dialih keluar jika telah disenaraihitamkan.
 
           Nilai senarai hitam '*' bermaksud semua sambungan telah disenaraihitamkan kecuali ia disenaraikan dengan jelas dalam senarai putih.
@@ -746,21 +795,12 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="3322771899429619102">Membenarkan anda menetapkan senarai pola url yang menentukan tapak yang dibenarkan untuk menggunakan penghasilan kunci. Pengecualian akan dibatalkan jika pola url berada dalam 'KeygenBlockedForUrls'.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, nilai lalai global akan digunakan untuk semua tapak, sama ada daripada dasar 'DefaultKeygenSetting' jika ditetapkan atau konfigurasi peribadi pengguna jika tidak ditetapkan.</translation>
+<translation id="3337150554416948435">Membenarkan anda menetapkan sama ada tapak web dibenarkan untuk menjejak lokasi fizikal pengguna atau tidak. Penjejakan lokasi fizikal pengguna boleh dibenarkan secara lalai, dinafikan secara lalai atau pengguna boleh ditanya setiap kali tapak web meminta lokasi fizikal.
+
+          Jika dasar ini ditetapkan kepada 'BlockGeolocation', perkongsian lokasi tidak dibenarkan untuk apl ARC.
+
+          Jika dasar ini dibiarkan tanpa ditetapkan, 'AskGeolocation' akan digunakan dan pengguna akan dapat mengubahnya.</translation>
 <translation id="3381968327636295719">Gunakan penyemak imbas hos secara lalai</translation>
-<translation id="3398137877608138703">Benarkan atau tolak rakaman video.
-
-      Jika didayakan atau tidak dikonfigurasikan (lalai), pengguna akan digesa supaya memberikan
-      akses rakaman video kecuali untuk URL yang dikonfigurasi dalam
-      senarai VideoCaptureAllowedUrls yang akan diberikan akses tanpa memberi gesaan.
-      Apl ARC akan dapat mengakses kamera jika telah diberikan
-      kebenaran.
-
-      Apabila dasar ini dilumpuhkan, pengguna tidak akan digesa dan rakaman
-      video hanya tersedia untuk URL yang dikonfigurasi dalam VideoCaptureAllowedUrls.
-      Apl ARC tidak akan dapat mengakses kamera.
-
-      Di luar apl ARC, dasar ini memberi kesan kepada semua jenis input video
-      dan bukan sahaja kamera terbina dalam.</translation>
 <translation id="3417418267404583991">Jika dasar ini ditetapkan kepada benar atau tidak dikonfigurasi, <ph name="PRODUCT_OS_NAME" /> akan mendayakan log masuk tetamu. Log masuk tetamu adalah sesi pengguna tanpa nama dan tidak memerlukan kata laluan.
 
       Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_OS_NAME" /> tidak akan membenarkan sesi tetamu dimulakan.</translation>
@@ -891,6 +931,13 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
       Jika tidak ditetapkan, URL benih Variasi tidak akan diubah suai.</translation>
 <translation id="3863409707075047163">Versi SSL minimum didayakan</translation>
+<translation id="3864020628639910082">Menentukan URL enjin carian yang digunakan untuk menyediakan cadangan carian. URL tersebut harus mengandungi rentetan '<ph name="SEARCH_TERM_MARKER" />', yang akan digantikan dengan teks yang dimasukkan oleh pengguna setakat ini pada masa pertanyaan dibuat.
+
+          Dasar ini tidak wajib. Jika tidak ditetapkan, URL yang dicadangkan tidak akan digunakan.
+
+          URL cadangan Google boleh ditentukan sebagai: <ph name="GOOGLE_SUGGEST_SEARCH_URL" />.
+
+          Dasar ini hanya akan diambil kira jika dasar 'DefaultSearchProviderEnabled' didayakan.</translation>
 <translation id="3864818549971490907">Tetapan pemalam lalai</translation>
 <translation id="3866249974567520381">Huraian</translation>
 <translation id="3866530186104388232">Jika dasar ini ditetapkan kepada benar atau tidak dikonfigurasi, <ph name="PRODUCT_OS_NAME" /> akan memaparkan pengguna sedia ada pada skrin log masuk dan membenarkan untuk memiilih satu. Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_OS_NAME" /> akan menggunakan gesaan nama pengguna/kata laluan untuk log masuk.</translation>
@@ -905,6 +952,18 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
       Setiap masukan senarai mengandungi kamus yang mesti merangkumi ID sambungan dalam medan 'extension-id' dan URL kemas kininya dalam medan 'update-url'.</translation>
 <translation id="3891357445869647828">Dayakan JavaScript</translation>
+<translation id="3898060089412156345">Benarkan atau tolak penangkapan audio.
+
+      Jika didayakan atau tidak dikonfigurasi (lalai), pengguna akan digesa untuk
+      akses tangkapan audio kecuali untuk URL yang dikonfigurasi dalam senarai
+      AudioCaptureAllowedUrls yang akan diberikan akses tanpa digesa.
+
+      Apabila dasar ini dilumpuhkan, pengguna tidak akan digesa dan tangkapan
+      audio hanya tersedia kepada URL yang dikonfigurasi dalam 
+     .AudioCaptureAllowedUrls.
+      Untuk apl ARC, mikrofon disenyapkan secara kekal.
+
+      Dasar ini memberi kesan kepada semua jenis input audio dan bukan sahaja mikrofon terbina dalam.</translation>
 <translation id="3907986150060929099">Tetapkan penempatan yang disyorkan untuk sesi awam</translation>
 <translation id="391531815696899618">Melumpuhkan penyegerakan Google Drive dalam apl Fail <ph name="PRODUCT_OS_NAME" /> apabila ditetapkan kepada Benar. Jika ini berlaku, tiada data akan dimuat naik ke Google Drive.
 
@@ -915,6 +974,26 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="3967075520570946456">Dayakan pemaparan halaman aluan semasa pelancaran penyemak imbas yang pertama sesudah peningkatan OS.</translation>
 <translation id="3973371701361892765">Jangan sekali-kali sembunyikan rak secara automatik</translation>
 <translation id="3984028218719007910">Memastikan sama ada <ph name="PRODUCT_OS_NAME" /> menyimpan data akaun setempat selepas log keluar. Jika ditetapkan kepada benar, tiada akaun berulang akan disimpan oleh <ph name="PRODUCT_OS_NAME" /> dan semua data dari sesi pengguna akan dibuang selepas log keluar. Jika dasar ini ditetapkan kepada palsu atau tidak dikonfigurasi, peranti boleh menyimpan data pengguna setempat (disulitkan).</translation>
+<translation id="3994569321696536679">Mendayakan ciri
+      log masuk terhad <ph name="PRODUCT_NAME" /> dalam Google Apps dan menghalang pengguna
+      daripada menukar tetapan ini.
+
+      Jika anda menentukan tetapan ini, pengguna hanya akan dapat mengakses
+      Google Apps (seperti Gmail) menggunakan akaun daripada domain yang ditentukan.
+
+      Tetapan ini TIDAK akan menghalang pengguna daripada mengelog masuk pada peranti terurus
+      yang memerlukan pengesahan Google. Pengguna masih akan dibenarkan
+      mengelog masuk ke akaun daripada domain lain tetapi mereka akan menerima ralat
+      semasa cuba menggunakan Google Apps dengan akaun itu.
+
+      Jika anda membiarkan tetapan ini dikosongkan/tidak dikonfigurasi, pengguna akan dapat
+      mengakses Google Apps dengan mana-mana akaun.
+
+      Dasar ini menyebabkan pengepala X-GoogApps-Allowed-Domains ditambahkan pada
+      semua permintaan HTTP dan HTTPS pada semua domain google.com, seperti yang diterangkan dalam
+      https://support.google.com/a/answer/1668854.
+
+      Pengguna tidak boleh menukar atau membatalkan tetapan ini.</translation>
 <translation id="3997519162482760140">URL yang akan diberikan akses kepada peranti tangkapan video pada halaman log masuk SAML</translation>
 <translation id="4001275826058808087">Pentadbir IT untuk peranti perusahaan boleh menggunakan bendera ini untuk mengawal sama ada membenarkan pengguna menebus tawaran melalui Pendaftaran OS Chrome.
 
@@ -949,6 +1028,7 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Apabila dasar ini tidak ditetapkan, panjang masa lalai digunakan.
 
           Nilai dasar harus dinyatakan dalam milisaat.</translation>
+<translation id="4105989332710272578">Lumpuhkan penguatkuasaan Ketelusan Sijil untuk senarai URL</translation>
 <translation id="4115096483386877940">Benarkan mengunci skrin.
 
       Jika dasar ini ditetapkan kepada palsu, pengguna tidak akan dapat mengunci skrin (hanya boleh mengelog keluar daripada sesi pengguna). Jika tetapan ini ditetapkan kepada benar atau tidak ditetapkan, pengguna yang mengesahkan menggunakan kata laluan boleh mengunci skrin.</translation>
@@ -986,19 +1066,13 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Dasar ini tidak wajib. Jika tidak ditetapkan, permintaan carian imej akan dihantar menggunakan kaedah GET.
 
           Dasar ini hanya dipatuhi jika dasar 'DefaultSearchProviderEnabled' didayakan.</translation>
+<translation id="4309640770189628899">Sama ada suit sifer DHE dalam TLS didayakan</translation>
 <translation id="4320376026953250541">Microsoft Windows XP SP2 atau lebih baharu</translation>
 <translation id="4322842393287974810">Benarkan apl kios kelewatan sifar yang dilancarkan secara automatik untuk mengawal versi <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="4325690621216251241">Tambahkan butang log keluar pada dulang sistem</translation>
 <translation id="4347908978527632940">Jika benar dan pengguna merupakan pengguna di bawah seliaan, maka apl Android lain boleh mengemukakan pertanyaan berkaitan pengehadan web pengguna melalui penyedia kandungan.
 
           Jika palsu atau tanpa ditetapkan, maka penyedia kandungan tidak mengembalikan sebarang maklumat.</translation>
-<translation id="4349746760316962317">Mengkonfigurasi direktori yang <ph name="PRODUCT_NAME" /> akan gunakan untuk menyimpan fail cache pada cakera.
-
-      Jika anda menetapkan dasar ini, <ph name="PRODUCT_NAME" /> akan menggunakan direktori yang disediakan tanpa mengira sama ada pengguna telah menentukan bendera '--disk-cache-dir' atau tidak.
-
-      Lihat https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables untuk mendapatkan senarai pemboleh ubah yang boleh digunakan.
-
-       Jika dasar ini dibiarkan tanpa ditetapkan, direktori cache lalai akan digunakan dan pengguna akan boleh mengatasinya dengan bendera baris perintah '--disk-cache-dir'.</translation>
 <translation id="436581050240847513">Laporkan antara muka rangkaian peranti</translation>
 <translation id="4372704773119750918">Jangan benarkan pengguna perusahaan menjadi sebahagian daripada berbilang profil (utama atau kedua)</translation>
 <translation id="4377599627073874279">Benarkan semua tapak untuk menunjukkan semua imej</translation>
@@ -1019,11 +1093,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
       Walaupun dasar ini sendiri disokong pada platform di atas, ciri yang didayakannya mungkin tersedia pada lagi kurang platform. Bukan semua ciri Platform Web yang ditamatkan boleh didayakan semula. Hanya ciri yang disenaraikan dengan jelas di bawah ini boleh didayakan semula untuk tempoh yang terhad, yang berbeza bagi setiap ciri. Format umum bagi tanda rentetan ialah [DeprecatedFeatureName]_EffectiveUntil[yyyymmdd]. Sebagai rujukan, anda boleh dapati tujuan di sebalik perubahan ciri Platform Web di https://bit.ly/blinkintents.
       </translation>
 <translation id="4442582539341804154">Dayakan kunci apabila peranti melahu atau digantung</translation>
-<translation id="4445684791305970001">Melumpuhkan Alat Pembangun dan konsol JavaScript.
-
-      Jika anda mendayakan tetapan ini, Alat Pembangun tidak boleh diakses dan elemen tapak web tidak lagi boleh diperiksa. Sebarang pintasan papan kekunci dan mana-mana menu atau masukan menu konteks untuk membuka Alat Pembangun atau Konsol JavaScript akan dilumpuhkan.
-
-      Menetapkan pilihan ini kepada dilumpuhkan atau membiarkannya tanpa ditetapkan, akan membolehkan pengguna menggunakan Alat Pembangun dan konsol JavaScript.</translation>
 <translation id="4449545651113180484">Putar skrin 270 darjah mengikut arah jam</translation>
 <translation id="4467952432486360968">Sekat kuki pihak ketiga</translation>
 <translation id="4474167089968829729">Dayakan penyimpanan kata laluan pada pengurus kata laluan</translation>
@@ -1092,6 +1161,7 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="467449052039111439">Buka senarai URL</translation>
 <translation id="4680961954980851756">Dayakan Auto Isi</translation>
 <translation id="4723829699367336876">Dayakan penyusuran tembok api daripada klien akses jauh</translation>
+<translation id="4725528134735324213">Dayakan Perkhidmatan Sandaran Android</translation>
 <translation id="4733471537137819387">Dasar berkaitan pengesahan HTTP bersepadu.</translation>
 <translation id="4744190513568488164">Pelayan yang mungkin diwakilkan untuk <ph name="PRODUCT_NAME" />.
 
@@ -1110,13 +1180,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
           Jika dasar ini dibiarkan tanpa ditetapkan, kursor besar dilumpuhkan pada mulanya tetapi boleh didayakan oleh pengguna pada bila-bila masa.</translation>
 <translation id="4807950475297505572">Pengguna yang paling kurang penggunaan baru-baru ini akan dialih keluar sehingga ada ruang kosong yang mencukupi</translation>
-<translation id="480987484799365700">Jika ditetapkan kepada didayakan, dasar ini memaksa profil ditukarkan kepada mod tidak kekal. Jika dasar ini ditetapkan sebagai dasar OS (contohnya GPO pada Windows), dasar ini akan dilaksanakan kepada setiap profil pada sistem; jika dasar ini ditetapkan sebagai dasar Awan, dasar ini akan dilaksanakan hanya kepada profil yang log masuk menggunakan akaun terurus. 
-
-      Dalam mod ini, data profil disimpan pada cakera hanya sepanjang sesi pengguna. Ciri seperti sejarah penyemak imbas, sambungan dan datanya, data web seperti kuki dan pangkalan data web tidak disimpan selepas penyemak imbas ditutup. Walau bagaimanapun hal ini tidak menghalang pengguna daripada memuat turun sebarang data kepada cakera secara manual, menyimpan halaman atau mencetaknya. 
-
-      Jika pengguna telah mendayakan penyegerakan, semua data ini disimpan dalam profil penyegerakan beliau sama seperti profil biasa. Mod inkognito turut disediakan jika tidak dilumpuhkan dengan jelas oleh dasar. 
-
-      Jika dasar ditetapkan kepada dilumpuhkan atau dibiarkan tanpa ditetapkan, log masuk akan dihalakan ke profil biasa.</translation>
 <translation id="4816674326202173458">Membenarkan pengguna perusahaan untuk menjadi utama dan sekunder (Tingkah laku lalai untuk pengguna tidak dikendalikan)</translation>
 <translation id="4826326557828204741">Tindakan yang perlu diambil apabila kelewatan melahu dicapai semasa dijalankan menggunakan kuasa bateri</translation>
 <translation id="4834526953114077364">Pengguna yang paling kurang penggunaan baru-baru ini serta tidak log masuk dalam tempoh 3 bulan yang lalu akan dialih keluar sehingga ada ruang kosong yang mencukupi</translation>
@@ -1131,6 +1194,7 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Jika dasar ini ditetapkan kepada benar atau dibiarkan tanpa ditetapkan, kunci bangkit skrin akan digunakan untuk pengurusan kuasa.
 
           Jika dasar ini ditetapkan kepada palsu, permintaan kunci bangkit skrin akan diabaikan.</translation>
+<translation id="4882546920824859909">Tentukan domain yang dibenarkan untuk mengakses Google Apps</translation>
 <translation id="4890209226533226410">Tetapkan jenis penggadang skrin yang didayakan.
 
           Jika dasar ini ditetapkan, dasar ini mengawal jenis penggadang skrin yang didayakan. Penggadang skrin akan dilumpuhkan jika dasar ini ditetapkan kepada "Tiada".
@@ -1149,9 +1213,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 <translation id="4928632305180102854">Mengawal sama ada <ph name="PRODUCT_OS_NAME" /> membenarkan akaun pengguna baharu dicipta. Jika dasar ini ditetapkan sebagai palsu, pengguna yang tidak mempunyai akaun tidak akan boleh log masuk.
 
       Jika dasar ini ditetapkan sebagai benar atau tidak dikonfigurasi, akaun pengguna baharu akan dibenarkan dicipta dengan syarat <ph name="DEVICEUSERWHITELISTPROTO_POLICY_NAME" /> tidak menghalang pengguna daripada log masuk.</translation>
-<translation id="4962195944157514011">Menentukan URL enjin carian yang digunakan apabila melakukan carian lalai. URL ini harus mengandungi rentetan '<ph name="SEARCH_TERM_MARKER" />', yang akan digantikan pada masa pertanyaan dibuat oleh istilah yang dicari oleh pengguna.
-
-          Pilihan ini hendaklah ditetapkan apabila dasar 'DefaultSearchProviderEnabled' didayakan dan hanya akan diambil kira dalam keadaan ini.</translation>
 <translation id="4971529314808359013">Membolehkan anda menentukan senarai pola url yang menentukan tapak yang <ph name="PRODUCT_NAME" /> harus memilih sijil pelanggan secara automatik untuknya, jika tapak tersebut meminta sijil.
 
           Nilai tersebut mestilah tatasusunan pelbagai kamus JSON yang berentetan. Setiap kamus mestilah berbentuk { "pattern": "$URL_PATTERN", "filter" : $FILTER }, dengan $URL_PATTERN ialah pola tetapan kandungan. $FILTER menyekat yang daripadanya sijil pelanggan akan dipilih secara automatik oleh penyemak imbas. Tanpa bergantung kepada penapis, hanya sijil akan dipilih apabila sepadan dengan permintaan sijil pelayan. Jika $FILTER berbentuk { "ISSUER": { "CN": "$ISSUER_CN" } }, selain itu hanya sijil pelanggan dipilih yang dikeluarkan oleh sijil dengan CommonName $ISSUER_CN. Jika $FILTER ialah kamus kosong {}, pemilihan sijil pelanggan tidak dihadkan sebagai tambahan.
@@ -1181,13 +1242,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Apabila dasar ini tidak ditetapkan, tindakan lalai iaitu penggantungan akan diambil.
 
           Jika tindakan penggantungan diambil, <ph name="PRODUCT_OS_NAME" /> boleh dikonfigurasi secara berasingan sama ada kepada mengunci atau tidak mengunci skrin sebelum penggantungan.</translation>
-<translation id="5111712393799006197">Mengkonfigurasi direktori yang <ph name="PRODUCT_NAME" /> akan gunakan untuk menyimpan data pengguna.
-
-      Jika anda menetapkan dasar ini, <ph name="PRODUCT_NAME" /> akan menggunakan direktori yang disediakan tidak kira sama ada pengguna telah menetapkan bendera '--user-data-dir' atau tidak.
-
-      Lihat http://www.chromium.org/administrators/policy-list-3/user-data-directory-variables untuk mendapatkan senarai pemboleh ubah yang boleh digunakan.
-
-      Jika dasar ini dibiarkan tanpa ditetapkan, laluan profil lalai akan digunakan dan pengguna akan dapat mengatasinya dengan bendera baris perintah '--user-data-dir'.</translation>
 <translation id="5130288486815037971">Sama ada suit sifer RC4 dalam TLS didayakan</translation>
 <translation id="5141670636904227950">Tetapkan jenis penggadang skrin lalai yang didayakan pada skrin log masuk</translation>
 <translation id="5142301680741828703">Sentiasa paparkan corak URL berikut dalam <ph name="PRODUCT_FRAME_NAME" /></translation>
@@ -1222,32 +1276,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
 
           Jika dasar ini dibiarkan tanpa ditetapkan, <ph name="PRODUCT_NAME" /> akan memuatkan semua hos pemesejan natif yang telah dipasang.</translation>
 <translation id="5290940294294002042">Tentukan senarai pemalam yang boleh didayakan atau dilumpuhkan pengguna</translation>
-<translation id="5298412045697677971">Konfigurasikan imej avatar pengguna anda.
-
-      Dasar ini membenarkan anda mengkonfigurasikan imej avatar yang mewakili pengguna pada skrin log masuk. Dasar ini ditetapkan dengan menyatakan URL tempat <ph name="PRODUCT_OS_NAME" /> boleh memuat turun imej avatar dan cincangan kriptografi yang digunakan  untuk mengesahkan integriti muat turun. Imej mestilah dalam format JPEG, saiz mestilah tidak melebihi 512kB. URL mesti boleh diakses tanpa sebarang pengesahan.
-
-      Imej avatar dimuat turun dan dicache. Imej akan dimuat turun semula apabila URL atau pencincangan berubah.
-
-      Dasar mestilah dinyatakan sebagai rentetan yang menunjukkan URL dan cincangan dalam format JSON, mematuhi skema berikut:
-      {
-        "type": "object",
-        "properties": {
-          "url": {
-            "description": "URL tempat imej avatar boleh dimuat turun.",
-            "type": "string"
-          },
-          "hash": {
-            "description": "Pencincangan SHA-256 imej avatar.",
-            "type": "string"
-          }
-        }
-      }
-
-      Jika dasar ini ditetapkan, <ph name="PRODUCT_OS_NAME" /> akan memuat turun dan menggunakan imej avatar.
-
-      Jika anda menetapkan dasar ini, pengguna tidak boleh menukar atau mengatasi dasar itu.
-
-      Jika dasar dibiarkan tanpa ditetapkan, pengguna boleh memilih imej avatar yang mewakili pengguna pada skrin log masuk.</translation>
 <translation id="5302612588919538756">Dasar ini ditamatkan, sebaliknya pertimbangkan untuk menggunakan SyncDisabled.
 
       Membenarkan pengguna log masuk ke <ph name="PRODUCT_NAME" />.
@@ -1323,6 +1351,13 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
       Jika ditetapkan, parameter pertanyaan yang dipanggil 'hadkan' akan ditambahkan kepada URL yang digunakan untuk mengambil benih Variasi. Nilai yang dinyatakan dalam dasar ini akan menjadi nilai parameter.
 
       Jika tidak ditetapkan, URL benih Variasi tidak akan diubah suai.</translation>
+<translation id="5563853101694018649">Melumpuhkan Alatan Pembangun dan konsol JavaScript.
+
+      Jika anda mendayakan tetapan ini, Alatan Pembangun tidak dapat diakses dan elemen tapak web tidak dapat disemak lagi. Mana-mana pintasan papan kekunci dan mana-mana entri menu atau menu konteks untuk membuka Alatan Pembangun atau Konsol JavaScript akan dilumpuhkan.
+
+      Apabila pilihan ini dilumpuhkan atau dibiarkan tidak ditetapkan, pengguna akan dibenarkan untuk menggunakan Alatan Pembangun dan konsol JavaScript.
+
+      Untuk peranti <ph name="PRODUCT_OS_NAME" /> yang berupaya menjalankan apl Android, dasar ini turut mengawal akses kepada Pilihan Pembangun Android. Jika anda menetapkan dasar ini kepada benar, pengguna tidak dapat mengakses Pilihan Pembangun. Jika anda menetapkan dasar ini kepada palsu atau membiarkannya tidak ditetapkan, pengguna boleh mengakses Pilihan Pembangun dengan mengetik nombor binaan sebanyak tujuh kali dalam apl tetapan Android.</translation>
 <translation id="556941986578702361">Mengawal penyembunyian automatik rak <ph name="PRODUCT_OS_NAME" />.
 
       Jika dasar ini ditetapkan kepada 'AlwaysAutoHideShelf', rak akan sentiasa disembunyikan secara automatik.
@@ -1547,15 +1582,6 @@ chrome.enterprise.platformKeysPrivate.challengeUserKey().
           Jika anda mendayakan tetapan ini dan port tidak standard (iaitu, port selain 80 atau 443) dimasukkan, ia akan dimasukkan dalam Kerberos SPN yang dihasilkan.
 
           Jika anda melumpuhkan tetapan ini atau membiarkannya tanpa ditetapkan, Kerberos SPN yang dihasilkan tidak akan memasukkan port dalam sebarang keadaan.</translation>
-<translation id="6279809962528392889">Menentukan sama ada kuki pengesahan ditetapkan oleh IdP SAML semasa log masuk harus dipindahkan ke profil pengguna.
-
-      Apabila pengguna mengesahkan melalui IdP SAML semasa log masuk, kuki yang ditetapkan oleh IdP akan ditulis pada profil sementara pada mulanya. Kuki ini boleh dipindahkan ke profil pengguna untuk membawa ke depan status pengesahan.
-
-      Apabila dasar ini ditetapkan kepada benar, kuki yang ditetapkan oleh IdP akan dipindahkan ke profil pengguna setiap kali beliau membuat pengesahan terhadap IdP SAML semasa log masuk.
-
-      Apabila dasar ini ditetapkan kepada palsu atau tidak ditetapkan, kuki yang ditetapkan oleh IdP akan dipindahkan ke profil pengguna semasa log masuk beliau yang pertama pada peranti sahaja.
-
-      Dasar ini mempengaruhi pengguna yang domainnya sepadan dengan domain pendaftaran peranti sahaja. Untuk semua pengguna lain, kuki yang ditetapkan oleh IdP dipindahkan ke profil pengguna semasa log masuk beliau yang pertama pada peranti sahaja.</translation>
 <translation id="6281043242780654992">Konfigurasi dasar untuk Pemesejan Natif. Hos pemesejan natif yang disenaraihitamkan tidak akan dibenarkan melainkan hos ini disenaraiputihkan.</translation>
 <translation id="6282799760374509080">Benarkan atau nafikan rakaman audio</translation>
 <translation id="6284362063448764300">TLS 1.1</translation>
@@ -1764,6 +1790,13 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
       Jika ia tidak ditetapkan, pengguna boleh ditanya sama ada hendak mengimport atau pengimportan boleh berlaku secara automatik.</translation>
 <translation id="7003746348783715221">Keutamaan <ph name="PRODUCT_NAME" /></translation>
 <translation id="7006788746334555276">Tetapan Kandungan</translation>
+<translation id="7007671350884342624">Mengkonfigurasi direktori yang akan digunakan oleh <ph name="PRODUCT_NAME" /> untuk menyimpan data pengguna.
+
+      Jika anda menetapkan dasar ini, <ph name="PRODUCT_NAME" /> akan menggunakan direktori yang diberikan tanpa mengambil kira sama ada pengguna telah menentukan bendera '--user-data-dir' atau tidak. Untuk mengelakkan kehilangan data atau ralat lain yang tidak dijangka, dasar ini tidak seharusnya ditetapkan pada direktori akar volum atau pada direkori yang digunakan untuk tujuan lain kerana <ph name="PRODUCT_NAME" /> mengurus kandungannya.
+
+      Lihat https://www.chromium.org/administrators/policy-list-3/user-data-directory-variables untuk mendapatkan senarai pemboleh ubah yang boleh digunakan.
+
+      Jika dasar ini dibiarkan tanpa ditetapkan, laluan profil lalai akan digunakan dan pengguna dapat mengatasinya dengan bendera baris perintah '--user-data-dir'.</translation>
 <translation id="7027785306666625591">Konfigurasi pengurusan kuasa dalam <ph name="PRODUCT_OS_NAME" />.
 
       
@@ -1779,21 +1812,31 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
       Jika dilumpuhkan, tiada penanda halaman diimport.
 
       Jika ia tidak ditetapkan, pengguna mungkin ditanya sama ada untuk mengimport atau mengimport mungkin berlaku secara automatik.</translation>
+<translation id="7055358889740598917">Mengkonfigurasikan URL halaman utama lalai dalam <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada mengubahnya.
+
+          Halaman utama ialah halaman yang dibuka oleh butang Laman Utama. Halaman yang dibuka semasa bermula dikawal oleh dasar RestoreOnStartup.
+
+          Jenis halaman boleh ditetapkan kepada URL yang anda nyatakan di sini atau ditetapkan kepada Halaman Tab Baharu. Jika anda memilih Halaman Tab Baharu, maka dasar ini tidak akan dikuatkuasakan.
+
+          Jika anda mendayakan tetapan ini, pengguna tidak boleh menukar URL halaman utama mereka dalam <ph name="PRODUCT_NAME" />, tetapi mereka masih boleh memilih Halaman Tab Baharu sebagai halaman utama mereka.
+
+          Langkah membiarkan dasar ini tanpa ditetapkan akan membolehkan pengguna memilih sendiri halaman utama mereka jika HomepageIsNewTabPage turut tidak ditetapkan.
+
+          Dasar ini tidak tersedia pada tika Windows yang tidak dihubungkan
+          ke domain Direktori Aktif.</translation>
 <translation id="7063895219334505671">Benarkan pop muncul pada halaman ini</translation>
 <translation id="706669471845501145">Benarkan tapak untuk memaparkan pemberitahuan desktop</translation>
 <translation id="7079519252486108041">Sekat pop muncul pada tapak ini</translation>
 <translation id="7091198954851103976">Sentiasa jalankan pemalam yang memerlukan kebenaran</translation>
-<translation id="7109916642577279530">Benarkan atau tolak tangkapan audio.
+<translation id="7106631983877564505">Dayakan kunci apabila peranti <ph name="PRODUCT_OS_NAME" /> melahu atau digantung.
 
-      Jika didayakan atau tidak dikonfigurasi (lalai), pengguna akan digesa untuk 
-      akses tangkapan audio kecuali untuk URL yang dikonfigurasi dalam senarai
-      AudioCaptureAllowedUrls yang akan diberikan akses tanpa digesa.
+      Jika anda mendayakan tetapan ini, pengguna akan diminta memberikan kata laluan untuk membuka kunci peranti daripada keadaan tidur.
 
-      Apabila dasar ini dilumpuhkan, pengguna tidak akan digesa dan tangkapan audio
-      hanya tersedia kepada URL yang dikonfigurasi dalam AudioCaptureAllowedUrls.
+      Jika anda melumpuhkan tetapan ini, pengguna tidak akan diminta memberikan kata laluan untuk membuka kunci peranti daripada keadaan tidur.
 
-      Dasar ini memberi kesan kepada semua jenis input audio dan bukan sahaja
-      mikrofon terbina dalam.</translation>
+      Jika anda mendayakan atau melumpuhkan tetapan ini, pengguna tidak boleh mengubah atau membatalkan tetapan ini.
+
+      Jika dasar dibiarkan tanpa ditetapkan, pengguna boleh memilih sama ada mereka ingin diminta memberikan kata laluan untuk membuka kunci peranti atau tidak.</translation>
 <translation id="7115494316187648452">Menentukan sama ada proses <ph name="PRODUCT_NAME" /> dimulakan pada log masuk OS dan terus berjalan apabila tetingkap penyemak imbas terakhir ditutup, membenarkan apl latar belakang dan sesi penyemakan imbas semasa kekal aktif, termasuk sebarang kuki sesi. Proses latar belakang memaparkan ikon dalam dulang sistem dan boleh ditutup dari sana pada bila-bila masa.
 
       Jika dasar ini ditetapkan kepada Benar, mod latar belakang didayakan dan tidak boleh dikawal oleh pengguna dalam tetapan penyemak imbas.
@@ -1976,6 +2019,17 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 <translation id="7715711044277116530">Peratusan yang digunakan untuk skala kelewatan pemalapan skrin dalam mod penyampaian</translation>
 <translation id="7717938661004793600">Konfigurasi ciri kebolehcapaian <ph name="PRODUCT_OS_NAME" />.</translation>
 <translation id="7719251660743813569">Mengawal sama ada metrik penggunaan dilaporkan kembali kepada Google. Jika ditetapkan kepada benar, <ph name="PRODUCT_OS_NAME" /> akan melaporkan metrik penggunaan. Jika tidak dikonfigurasi atau ditetapkan kepada palsu, laporan metrik akan dilumpuhkan.</translation>
+<translation id="7723433108978650103">Menyekat akses ke URL yang disenaraikan.
+
+      Dasar ini menghalang pengguna daripada memuatkan halaman web daripada URL yang disenaraihitamkan. Senarai hitam menyediakan senarai pola URL yang menentukan URL yang akan disenaraihitamkan.
+
+      Pola URL perlu diformatkan mengikut https://www.chromium.org/administrators/url-blacklist-filter-format.
+
+      Pengecualian boleh ditentukan dalam dasar senarai putih URL. Dasar ini terhad kepada 1000 entri, entri berikutnya akan diabaikan.
+
+      Harap maklum bahawa anda tidak disyorkan untuk menyekat URL 'chrome://*' dalaman memandangkan tindakan ini boleh menyebabkan ralat tidak dijangka berlaku.
+
+      Jika dasar ini tidak ditetapkan, tiada URL akan disenaraihitamkan dalam penyemak imbas.</translation>
 <translation id="7749402620209366169">Mendayakan pengesahan dua faktor untuk hos akses jauh dan bukan PIN yang ditentukan pengguna.
 
           Jika tetapan ini tidak didayakan, maka pengguna hendaklah memberikan kod dua faktor yang sah apabila mengakses hos.
@@ -2023,6 +2077,13 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 <translation id="7796141075993499320">Membolehkan anda menentukan senarai pola url yang dibenarkan untuk menjalankan pemalam.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, nilai lalai global akan digunakan untuk semua tapak sama ada dari dasar 'DefaultPluginsSetting' jika ia ditetapkan atau konfigurasi peribadi pengguna jika sebaliknya.</translation>
+<translation id="7801886189430766248">Apabila dasar ini ditetapkan kepada benar, data apl Android dimuat naik ke pelayan Android Backup dan dipulihkan daripadanya semasa pemasangan semula apl untuk apl yang serasi.
+
+      Apabila dasar ini ditetapkan kepada palsu, Android Backup Service akan dimatikan.
+
+      Jika tetapan ini dikonfigurasikan, maka pengguna tidak akan dapat mengubahnya sendiri.
+
+      Jika tetapan ini tidak dikonfigurasikan, maka pengguna akan dapat menghidupkan dan mematikan Android Backup Service dalam apl Tetapan Android.</translation>
 <translation id="7818131573217430250">Tetapkan keadaan lalai mod kontras tinggi pada skrin log masuk</translation>
 <translation id="7831595031698917016">Menentukan kelewatan maksimum dalam milisaat antara menerima pentaksahan dan mengambil dasar baharu dari perkhidmatan pengurusan peranti.
 
@@ -2056,6 +2117,20 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
       Menentukan id sambungan untuk digunakan sebagai penyelamat skrin pada skrin log masuk. Sambungan mestilah sebahagian daripada AppPack yang dikonfigurasikan untuk domain ini melalui dasar DeviceAppPack.</translation>
 <translation id="7882890448959833986">Sekat amaran OS yang tidak disokong</translation>
 <translation id="7912255076272890813">Konfigurasi jenis apl/sambungan yang dibenarkan</translation>
+<translation id="7914271217607102111">Benarkan atau tolak rakaman video.
+
+      Jika didayakan atau tidak dikonfigurasikan (lalai), pengguna akan digesa supaya memberikan
+      akses rakaman video kecuali untuk URL yang dikonfigurasi dalam
+      senarai VideoCaptureAllowedUrls yang akan diberikan akses tanpa memberi gesaan.
+      Apl ARC akan dapat mengakses kamera jika telah diberikan
+      kebenaran.
+
+      Apabila dasar ini dilumpuhkan, pengguna tidak akan digesa dan rakaman
+      video hanya tersedia untuk URL yang dikonfigurasi dalam VideoCaptureAllowedUrls.
+      Apl ARC tidak akan dapat mengakses kamera.
+
+      Di luar apl ARC, dasar ini memberi kesan kepada semua jenis input video
+      dan bukan sahaja kamera terbina dalam.</translation>
 <translation id="7915236031252389808">Anda boleh menetapkan URL untuk fail .pac proksi di sini.
 
           Dasar ini hanya berkuat kuasa jika anda telah memilih tetapan proksi manual pada 'Pilih cara untuk menentukan tetapan pelayan proksi'.
@@ -2137,6 +2212,13 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
           Jika anda menetapkan dasar ini, pengguna tidak boleh mengubah atau mengatasinya.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, mod kontras tinggi dilumpuhkan pada mulanya tetapi boleh didayakan oleh pengguna pada bila-bila masa.</translation>
+<translation id="815061180603915310">Jika ditetapkan kepada didayakan, dasar ini memaksa profil beralih kepada mod sementara. Jika dasar ini ditetapkan sebagai dasar OS (misalnya GPO pada Windows), dasar ini akan dilaksanakan pada setiap profil pada sistem tersebut; jika dasar ditetapkan sebagai dasar Awan, dasar ini akan dilaksanakan hanya pada profil yang dilog masuk menggunakan akaun terurus.
+
+      Dalam mod ini, data profil disimpan pada cakera hanya sepanjang sesi pengguna. Ciri seperti sejarah penyemak imbas, sambungan dan datanya, data web seperti kuki dan pangkalan data web tidak disimpan selepas penyemak imbas ditutup. Walau bagaimanapun, langkah ini tidak menghalang pengguna daripada memuat turun sebarang data ke cakera secara manual, menyimpan halaman atau mencetaknya.
+
+      Jika pengguna mendayakan penyegerakan, semua data ini disimpan dalam profil penyegerakan mereka sama seperti profil biasa. Mod inkognito turut tersedia jika tidak dilumpuhkan secara jelas oleh dasar.
+
+      Jika dasar ini ditetapkan kepada dilumpuhkan atau dibiarkan tanpa ditetapkan, tindakan log masuk akan menghala ke profil biasa.</translation>
 <translation id="8164246350636985940">Gelagat lalai untuk tapak yang tiada dalam sebarang pek kandungan.
 
           Dasar ini adalah untuk kegunaan dalaman oleh <ph name="PRODUCT_NAME" /> sendiri.</translation>
@@ -2161,19 +2243,6 @@ Jika dasar ini dibiarkan tidak ditetapkan, papan kekunci pada skrin dilumpuhkan 
 
       Jika dasar ini tidak ditetapkan, tiada pengecualian untuk senarai hitam daripada dasar 'URLBlacklist'.</translation>
 <translation id="8176035528522326671">Membenarkan pengguna perusahaan untuk menjadi pengguna berbilang profil utama sahaja (Tingkah laku lalai untuk pengguna perusahaan yang dikendalikan)</translation>
-<translation id="8191318459035150777">Mengkonfigurasi URL halaman utama lalai dalam <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada menukarnya.
-
-          Halaman utama ialah laman yang dibuka oleh butang Laman Utama. 
-Halaman yang dibuka semasa permulaan dikawal oleh dasar RestoreOnStartup.
-
-          Jenis halaman utama boleh ditetapkan kepada URL yang anda tentukan di sini atau ditetapkan kepada Halaman Tab Baharu. Jika anda memilih Halaman Tab Baharu, maka dasar ini tidak berkuat kuasa.
-
-          Jika anda mendayakan tetapan ini, pengguna tidak boleh menukar URL halaman utama mereka dalam <ph name="PRODUCT_NAME" />, tetapi mereka masih boleh memilih Halaman Tab Baharu sebagai halaman utama mereka.
-
-          Jika dasar ini dibiarkan tanpa ditetapkan, pengguna boleh memilih sendiri halaman utamanya jika HomepageIsNewTabPage turut tidak ditetapkan.
-
-          Dasar ini tidak tersedia pada tika Windows yang tidak dihubungkan
-          ke domain Direktori Aktif.</translation>
 <translation id="8197918588508433925">Dasar ini menentukan sambungan yang dibenarkan menggunakan API Enterprise Platform Keys chrome.enterprise.platformKeysPrivate.challengeUserKey() untuk pembuktian jauh. Sambungan hendaklah ditambahkan pada senarai ini untuk penggunakan API tersebut.
 
           Jika sambungan tidak terdapat dalam senarai atau senarai tidak ditetapkan, panggilan kepada API tersebut akan gagal dengan kod ralat.</translation>
@@ -2220,6 +2289,18 @@ Halaman yang dibuka semasa permulaan dikawal oleh dasar RestoreOnStartup.
 <translation id="8312129124898414409">Membenarkan anda untuk menetapkan sama ada tapak web dibenarkan untuk menggunakan penghasilan kunci. Menggunakan penghasilan kunci boleh dibenarkan untuk semua tapak web atau ditolak untuk semua tapak web.
 
           Jika dasar ini dibiarkan tanpa ditetapkan, 'BlockKeygen' akan digunakan dan pengguna akan dapat menukarnya.</translation>
+<translation id="8316806736175990584">Mengkonfigurasikan jenis halaman utama lalai dalam <ph name="PRODUCT_NAME" /> dan menghalang pengguna daripada mengubah pilihan halaman utama. Halaman utama boleh ditetapkan kepada URL yang anda nyatakan atau ditetapkan kepada Halaman Tab Baharu.
+
+          Jika anda mendayakan tetapan ini, Halaman Tab Baharu sentiasa digunakan untuk halaman utama dan lokasi URL halaman utama akan diabaikan.
+
+          Jika anda melumpuhkan tetapan ini, Halaman Tab Baharu tidak sekali-kali akan dijadikan halaman utama, melainkan URLnya ditetapkan kepada 'chrome://newtab'.
+
+          Jika anda mendayakan atau melumpuhkan tetapan ini, pengguna tidak boleh menukar jenis halaman utama mereka dalam <ph name="PRODUCT_NAME" />.
+
+          Tindakan membiarkan dasar ini tanpa ditetapkan akan membolehkan pengguna memilih sendiri sama ada halaman tab baharu tersebut dijadikan halaman utama mereka.
+
+          Dasar ini tidak tersedia pada tika Windows yang tidak dihubungkan
+          ke domain Direktori Aktif.</translation>
 <translation id="8329984337216493753">Dasar ini aktif dalam mod runcit sahaja.
 
       Apabila DeviceIdleLogoutTimeout ditetapkan, dasar ini mentakrifkan tempoh kotak amaran dengan pemasa kira turun yang dipaparkan kepada pengguna sebelum log keluar dilaksanakan.
@@ -2291,23 +2372,6 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
 <translation id="8587229956764455752">Benarkan ciptaan akaun pengguna baharu</translation>
 <translation id="8614804915612153606">Lumpuhkan Kemas Kini Auto</translation>
 <translation id="8631434304112909927">sehingga versi <ph name="UNTIL_VERSION" /></translation>
-<translation id="863712305404093038">Menyekat akses kepada URL yang disenaraikan.
-
-      Dasar ini menghalang pengguna daripada memuatkan halaman web daripada URL yang disenaraihitamkan. Senarai hitam tersebut memberi senarai pola URL yang menentukan URL yang akan disenaraihitamkan.
-
-      Setiap pola URL boleh jadi pola untuk fail setempat atau pola URL generik. Pola fail setempat adalah dalam format 'file://path', di mana laluan sepatutnya adalah laluan mutlak untuk menyekat. Semua lokasi sistem fail yang mana laluan itu adalah awalan akan disekat.
-
-      Pola URL generik mempunyai format 'scheme://host:port/path'.
-      Jika ada, hanya skim yang ditentukan akan disekat. Semua skim akan disekat jika awalan scheme:// tidak dinyatakan.
-      Hos diperlukan dan boleh jadi nama hos atau alamat IP. Subdomain nama hos akan turut disekat. Untuk menghalang subdomain daripada disekat, masukkan '.' sebelum nama hos. Nama hos khas '*' akan menyekat semua domain.
-      Port pilihan ialah nombor port yang sah dari 1 hingga 65535. Jika tiada nombor ditetapkan, semua port akan disekat.
-      Jika laluan pilihan ditentukan, hanya laluan dengan awalan tersebut akan disekat.
-
-      Pengecualian boleh ditentukan dalam dasar senarai putih URL. Dasar ini terhad kepada 1,000 masukan; masukan berikutnya akan diabaikan.
-
-      Ambil perhatian bahawa anda tidak digalakkan untuk menyekat URL 'chrome://*' dalaman kerana tindakan ini boleh menyebabkan berlakunya ralat yang tidak dijangka.
-
-      Jika dasar ini tidak ditetapkan, tiada URL akan disenaraihitamkan dalam penyemak imbas.</translation>
 <translation id="8649763579836720255">Peranti OS Chrome boleh menggunakan pembuktian jauh (Akses Disahkan) untuk mendapatkan perakuan yang dikeluarkan oleh CA OS Chrome yang menyatakan peranti layak memainkan kandungan yang dilindungi.  Proses ini melibatkan penghantaran maklumat sokongan kepada CA OS Chrome yang mengenal pasti peranti tersebut secara unik.
 
           Jika tetapan ini palsu, peranti tidak akan menggunakan pembuktian jauh untuk perlindungan kandungan dan peranti mungkin tidak dapat memainkan kandungan yang dilindungi.
@@ -2436,13 +2500,6 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
 
           Nilai dasar harus dinyatakan dalam milisaat. Nilai diapit supaya kurang daripada kelewatan melahu.</translation>
 <translation id="891435090623616439">dikodkan sebagai rentetan JSON, untuk mendapatkan butiran lanjut, lihat <ph name="COMPLEX_POLICIES_URL" /></translation>
-<translation id="8929359433203547810">Jika dasar ini ditetapkan kepada palsu, <ph name="PRODUCT_OS_NAME" /> akan melumpuhkan Bluetooth dan pengguna tidak akan dapat mendayakannya semula.
-
-      Jika dasar ini ditetapkan kepada benar atau dibiarkan tidak ditetapkan, pengguna akan dapat mendayakan atau melumpuhkan Bluetooth semahunya.
-
-      Jika dasar ini ditetapkan, pengguna tidak boleh mengubah atau membatalkannya.
-
-      Selepas mendayakan Bluetooth, peranti ini mesti dibut semula supaya perubahan dapat diterapkan (tidak perlu but semula peranti apabila melumpuhkan Bluetooth).</translation>
 <translation id="8947415621777543415">Laporkan lokasi peranti</translation>
 <translation id="8951350807133946005">Tetapkan direktori cache cakera</translation>
 <translation id="8955719471735800169">Kembali ke atas</translation>
@@ -2451,8 +2508,6 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
       merakam audio akan diberi tanpa gesaan.
 
       PERHATIAN: Dasar ini hanya disokong dalam mod Kios sehingga versi 45.</translation>
-<translation id="8965758116018152083">Jika dasar ini ditetapkan kepada rentetan kosong atau tidak dikonfigurasikan, <ph name="PRODUCT_OS_NAME" /> tidak akan memaparkan pilihan autolengkap semasa aliran log masuk pengguna.
-      Jika dasar ini ditetapkan kepada rentetan yang mewakili nama domain, <ph name="PRODUCT_OS_NAME" /> akan memaparkan pilihan autolengkap semasa log masuk pengguna yang membenarkan pengguna menaip hanya nama penggunanya tanpa sambungan nama domain.  Pengguna boleh menulis ganti sambungan nama domain ini.</translation>
 <translation id="8970205333161758602">Sekat gesaan penolakan <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="8971221018777092728">Pemasa log masuk automatik sesi terbuka</translation>
 <translation id="8976248126101463034">Benarkan pengesahan gnubby untuk hos akses jauh</translation>
@@ -2511,11 +2566,6 @@ Jika dasar ini dibiarkan tidak ditetapkan mana-mana pemalam yang sepadan dengan 
 <translation id="9187743794267626640">Lumpuhkan pelekapan storan luaran</translation>
 <translation id="9197740283131855199">Peratusan yang digunakan untuk menskala kelewatan pemalapan skrin jika pengguna menjadi aktif selepas pemalapan</translation>
 <translation id="9200828125069750521">Parameter untuk URL imej yang menggunakan POST</translation>
-<translation id="9203071022800375458">Melumpuhkan pengambilan tangkapan skrin.
-
-      Jika didayakan, tangkapan skrin tidak boleh diambil menggunakan pintasan papan kekunci atau API sambungan.
-
-      Jika dilumpuhkan atau tidak ditentukan, pengambilan tangkapan skrin dibenarkan.</translation>
 <translation id="922540222991413931">Konfigurasi sambungan, apl dan sumber pemasangan skrip pengguna</translation>
 <translation id="924557436754151212">Import kata laluan yang disimpan daripada penyemak imbas lalai pada kali pertama menjalankannya</translation>
 <translation id="930930237275114205">Tetapkan direktori data pengguna <ph name="PRODUCT_FRAME_NAME" /></translation>

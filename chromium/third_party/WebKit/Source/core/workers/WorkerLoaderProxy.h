@@ -34,7 +34,6 @@
 #include "core/CoreExport.h"
 #include "core/dom/ExecutionContext.h"
 #include "wtf/Forward.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/ThreadSafeRefCounted.h"
 
 namespace blink {
@@ -68,17 +67,17 @@ public:
     virtual bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) = 0;
 };
 
-class CORE_EXPORT WorkerLoaderProxy : public ThreadSafeRefCounted<WorkerLoaderProxy>, public WorkerLoaderProxyProvider {
+class CORE_EXPORT WorkerLoaderProxy final : public ThreadSafeRefCounted<WorkerLoaderProxy> {
 public:
     static PassRefPtr<WorkerLoaderProxy> create(WorkerLoaderProxyProvider* loaderProxyProvider)
     {
         return adoptRef(new WorkerLoaderProxy(loaderProxyProvider));
     }
 
-    ~WorkerLoaderProxy() override;
+    ~WorkerLoaderProxy();
 
-    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>) override;
-    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>) override;
+    void postTaskToLoader(std::unique_ptr<ExecutionContextTask>);
+    bool postTaskToWorkerGlobalScope(std::unique_ptr<ExecutionContextTask>);
 
     // Notification from the provider that it can no longer be
     // accessed. An implementation of WorkerLoaderProxyProvider is

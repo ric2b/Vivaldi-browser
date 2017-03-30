@@ -6,6 +6,8 @@
 
 #include <stddef.h>
 
+#include <algorithm>
+#include <list>
 #include <utility>
 
 #include "base/base64.h"
@@ -16,18 +18,22 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/histogram.h"
+#include "base/metrics/field_trial.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/tracing/tracing_switches.h"
+#include "components/tracing/common/tracing_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/browser/gpu/gpu_process_host_ui_shim.h"
 #include "content/browser/gpu/shader_disk_cache.h"
-#include "content/browser/mojo/mojo_application_host.h"
+#include "content/browser/mojo/constants.h"
+#include "content/browser/mojo/mojo_child_connection.h"
+#include "content/browser/mojo/mojo_shell_context.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/establish_channel_params.h"
@@ -43,6 +49,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/mojo_channel_switches.h"
+#include "content/public/common/mojo_shell_connection.h"
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
@@ -52,6 +59,10 @@
 #include "ipc/ipc_switches.h"
 #include "ipc/message_filter.h"
 #include "media/base/media_switches.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "services/shell/public/cpp/connection.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/events/latency_info.h"
 #include "ui/gl/gl_switches.h"
@@ -191,7 +202,7 @@ class GpuSandboxedProcessLauncherDelegate
 #if defined(OS_WIN)
   bool ShouldSandbox() override {
     bool sandbox = !cmd_line_->HasSwitch(switches::kDisableGpuSandbox);
-    if(! sandbox) {
+    if (!sandbox) {
       DVLOG(1) << "GPU sandbox is disabled";
     }
     return sandbox;
@@ -208,7 +219,7 @@ class GpuSandboxedProcessLauncherDelegate
   bool PreSpawnTarget(sandbox::TargetPolicy* policy) override {
     if (base::win::GetVersion() > base::win::VERSION_XP) {
       if (cmd_line_->GetSwitchValueASCII(switches::kUseGL) ==
-          gfx::kGLImplementationDesktopName) {
+          gl::kGLImplementationDesktopName) {
         // Open GL path.
         policy->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
                               sandbox::USER_LIMITED);
@@ -411,7 +422,8 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       kind_(kind),
       process_launched_(false),
       initialized_(false),
-      uma_memory_stats_received_(false) {
+      uma_memory_stats_received_(false),
+      child_token_(mojo::edk::GenerateRandomToken()) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kSingleProcess) ||
       base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -435,7 +447,8 @@ GpuProcessHost::GpuProcessHost(int host_id, GpuProcessKind kind)
       FROM_HERE,
       base::Bind(base::IgnoreResult(&GpuProcessHostUIShim::Create), host_id));
 
-  process_.reset(new BrowserChildProcessHostImpl(PROCESS_TYPE_GPU, this));
+  process_.reset(new BrowserChildProcessHostImpl(PROCESS_TYPE_GPU, this,
+                                                 child_token_));
 }
 
 GpuProcessHost::~GpuProcessHost() {
@@ -547,18 +560,22 @@ bool GpuProcessHost::Init() {
   if (channel_id.empty())
     return false;
 
-  DCHECK(!mojo_application_host_);
-  mojo_application_host_.reset(new MojoApplicationHost);
+  DCHECK(!mojo_child_connection_);
+  mojo_child_connection_.reset(new MojoChildConnection(
+      kGpuMojoApplicationName,
+      "",
+      child_token_,
+      MojoShellContext::GetConnectorForIOThread()));
 
   gpu::GpuPreferences gpu_preferences = GetGpuPreferencesFromCommandLine();
   if (in_process_) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     DCHECK(g_gpu_main_thread_factory);
-    in_process_gpu_thread_.reset(
-        g_gpu_main_thread_factory(InProcessChildThreadParams(
-            channel_id, base::MessageLoop::current()->task_runner(),
-            std::string(), mojo_application_host_->GetToken()),
-            gpu_preferences));
+    in_process_gpu_thread_.reset(g_gpu_main_thread_factory(
+        InProcessChildThreadParams(
+            channel_id, base::ThreadTaskRunnerHandle::Get(), std::string(),
+            mojo_child_connection_->shell_client_token()),
+        gpu_preferences));
     base::Thread::Options options;
 #if defined(OS_WIN)
     // WGL needs to create its own window and pump messages on it.
@@ -633,7 +650,7 @@ bool GpuProcessHost::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(GpuHostMsg_AcceleratedSurfaceCreatedChildWindow,
                         OnAcceleratedSurfaceCreatedChildWindow)
 #endif
-
+    IPC_MESSAGE_HANDLER(GpuHostMsg_FieldTrialActivated, OnFieldTrialActivated);
     IPC_MESSAGE_UNHANDLED(RouteOnUIThread(message))
   IPC_END_MESSAGE_MAP()
 
@@ -788,30 +805,6 @@ void GpuProcessHost::CreateGpuMemoryBuffer(
   }
 }
 
-void GpuProcessHost::CreateGpuMemoryBufferFromHandle(
-    const gfx::GpuMemoryBufferHandle& handle,
-    gfx::GpuMemoryBufferId id,
-    const gfx::Size& size,
-    gfx::BufferFormat format,
-    int client_id,
-    const CreateGpuMemoryBufferCallback& callback) {
-  TRACE_EVENT0("gpu", "GpuProcessHost::CreateGpuMemoryBufferFromHandle");
-
-  DCHECK(CalledOnValidThread());
-
-  GpuMsg_CreateGpuMemoryBufferFromHandle_Params params;
-  params.handle = handle;
-  params.id = id;
-  params.size = size;
-  params.format = format;
-  params.client_id = client_id;
-  if (Send(new GpuMsg_CreateGpuMemoryBufferFromHandle(params))) {
-    create_gpu_memory_buffer_requests_.push(callback);
-  } else {
-    callback.Run(gfx::GpuMemoryBufferHandle());
-  }
-}
-
 void GpuProcessHost::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
                                             int client_id,
                                             const gpu::SyncToken& sync_token) {
@@ -920,18 +913,24 @@ void GpuProcessHost::OnDidLoseContext(bool offscreen,
     return;
   }
 
-  GpuDataManagerImpl::DomainGuilt guilt;
+  GpuDataManagerImpl::DomainGuilt guilt =
+      GpuDataManagerImpl::DOMAIN_GUILT_UNKNOWN;
   switch (reason) {
     case gpu::error::kGuilty:
       guilt = GpuDataManagerImpl::DOMAIN_GUILT_KNOWN;
       break;
+    // Treat most other error codes as though they had unknown provenance.
+    // In practice this doesn't affect the user experience. A lost context
+    // of either known or unknown guilt still causes user-level 3D APIs
+    // (e.g. WebGL) to be blocked on that domain until the user manually
+    // reenables them.
     case gpu::error::kUnknown:
-      guilt = GpuDataManagerImpl::DOMAIN_GUILT_UNKNOWN;
+    case gpu::error::kOutOfMemory:
+    case gpu::error::kMakeCurrentFailed:
+    case gpu::error::kGpuChannelLost:
+    case gpu::error::kInvalidGpuMessage:
       break;
     case gpu::error::kInnocent:
-      return;
-    default:
-      NOTREACHED();
       return;
   }
 
@@ -947,6 +946,13 @@ void GpuProcessHost::OnGpuMemoryUmaStatsReceived(
   TRACE_EVENT0("gpu", "GpuProcessHost::OnGpuMemoryUmaStatsReceived");
   uma_memory_stats_received_ = true;
   uma_memory_stats_ = stats;
+}
+
+void GpuProcessHost::OnFieldTrialActivated(const std::string& trial_name) {
+  // Activate the trial in the browser process to match its state in the
+  // GPU process. This is done by calling FindFullName which finalizes the group
+  // and activates the trial.
+  base::FieldTrialList::FindFullName(trial_name);
 }
 
 void GpuProcessHost::OnProcessLaunched() {
@@ -966,8 +972,12 @@ void GpuProcessHost::OnProcessCrashed(int exit_code) {
       process_->GetTerminationStatus(true /* known_dead */, NULL));
 }
 
-ServiceRegistry* GpuProcessHost::GetServiceRegistry() {
-  return mojo_application_host_->service_registry();
+shell::InterfaceRegistry* GpuProcessHost::GetInterfaceRegistry() {
+  return mojo_child_connection_->connection()->GetInterfaceRegistry();
+}
+
+shell::InterfaceProvider* GpuProcessHost::GetRemoteInterfaces() {
+  return mojo_child_connection_->connection()->GetRemoteInterfaces();
 }
 
 GpuProcessHost::GpuProcessKind GpuProcessHost::kind() {
@@ -1025,12 +1035,11 @@ bool GpuProcessHost::LaunchGpuProcess(const std::string& channel_id,
   cmd_line->AppendSwitchASCII(switches::kProcessType, switches::kGpuProcess);
   cmd_line->AppendSwitchASCII(switches::kProcessChannelID, channel_id);
   cmd_line->AppendSwitchASCII(switches::kMojoApplicationChannelToken,
-                              mojo_application_host_->GetToken());
+                              mojo_child_connection_->shell_client_token());
   BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line);
 
 #if defined(OS_WIN)
-  if (GetContentClient()->browser()->ShouldUseWindowsPrefetchArgument())
-    cmd_line->AppendArg(switches::kPrefetchArgumentGpu);
+  cmd_line->AppendArg(switches::kPrefetchArgumentGpu);
 #endif  // defined(OS_WIN)
 
   if (kind_ == GPU_PROCESS_KIND_UNSANDBOXED)

@@ -51,7 +51,7 @@ public:
     BLINK_EXPORT static void enableTestOnlyFeatures(bool);
 
     // Enables a feature by its string identifier from
-    // RuntimeEnabledFeatures.in.
+    // Source/platform/RuntimeEnabledFeatures.in.
     // Note: We use std::string instead of WebString because this API can
     // be called before blink::initalize(). We can't create WebString objects
     // before blink::initialize().
@@ -73,6 +73,7 @@ public:
     BLINK_EXPORT static void enableCredentialManagerAPI(bool);
     BLINK_EXPORT static void enableDatabase(bool);
     BLINK_EXPORT static void enableDecodeToYUV(bool);
+    BLINK_EXPORT static void enableDoNotUnlockSharedBuffer(bool);
     BLINK_EXPORT static void enableDocumentWriteEvaluator(bool);
     BLINK_EXPORT static void enableExperimentalCanvasFeatures(bool);
     BLINK_EXPORT static void enableFastMobileScrolling(bool);
@@ -89,6 +90,8 @@ public:
     BLINK_EXPORT static void enableOrientationEvent(bool);
     BLINK_EXPORT static void enableOverlayScrollbars(bool);
     BLINK_EXPORT static void enablePagePopup(bool);
+    BLINK_EXPORT static void enableParseHTMLOnMainThread(bool);
+    BLINK_EXPORT static void enablePaymentRequest(bool);
     BLINK_EXPORT static void enablePermissionsAPI(bool);
     BLINK_EXPORT static void enablePreciseMemoryInfo(bool);
     BLINK_EXPORT static void enablePresentationAPI(bool);
@@ -102,8 +105,10 @@ public:
     BLINK_EXPORT static void enableTouch(bool);
     BLINK_EXPORT static void enableUnsafeES3APIs(bool);
     BLINK_EXPORT static void enableV8IdleTasks(bool);
+    BLINK_EXPORT static void enableWeakMemoryCache(bool);
     BLINK_EXPORT static void enableWebBluetooth(bool);
-    BLINK_EXPORT static void enableWebFontsInterventionV2(bool);
+    BLINK_EXPORT static void enableWebFontsInterventionV2With2G(bool);
+    BLINK_EXPORT static void enableWebFontsInterventionV2WithSlow2G(bool);
     BLINK_EXPORT static void enableWebFontsInterventionTrigger(bool);
     BLINK_EXPORT static void enableWebGLDraftExtensions(bool);
     BLINK_EXPORT static void enableWebGLImageChromium(bool);
@@ -111,6 +116,7 @@ public:
     BLINK_EXPORT static void enableWebVR(bool);
     BLINK_EXPORT static void enableXSLT(bool);
     BLINK_EXPORT static void forceOverlayFullscreenVideo(bool);
+    BLINK_EXPORT static void enableAutoplayMutedVideos(bool);
 
 private:
     WebRuntimeFeatures();

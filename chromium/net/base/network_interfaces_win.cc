@@ -15,7 +15,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/scoped_handle.h"
-#include "base/win/windows_version.h"
 #include "net/base/escape.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
@@ -27,12 +26,6 @@ namespace {
 
 // Converts Windows defined types to NetworkInterfaceType.
 NetworkChangeNotifier::ConnectionType GetNetworkInterfaceType(DWORD ifType) {
-  // Bail out for pre-Vista versions of Windows which are documented to give
-  // inaccurate results like returning Ethernet for WiFi.
-  // http://msdn.microsoft.com/en-us/library/windows/desktop/aa366058.aspx
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    return NetworkChangeNotifier::CONNECTION_UNKNOWN;
-
   NetworkChangeNotifier::ConnectionType type =
       NetworkChangeNotifier::CONNECTION_UNKNOWN;
   if (ifType == IF_TYPE_ETHERNET_CSMACD) {
@@ -136,7 +129,6 @@ WlanApi::WlanApi() : initialized(false) {
 
 bool GetNetworkListImpl(NetworkInterfaceList* networks,
                         int policy,
-                        bool is_xp,
                         const IP_ADAPTER_ADDRESSES* adapters) {
   for (const IP_ADAPTER_ADDRESSES* adapter = adapters; adapter != NULL;
        adapter = adapter->Next) {
@@ -165,29 +157,7 @@ bool GetNetworkListImpl(NetworkInterfaceList* networks,
         IPEndPoint endpoint;
         if (endpoint.FromSockAddr(address->Address.lpSockaddr,
                                   address->Address.iSockaddrLength)) {
-          // XP has no OnLinkPrefixLength field.
-          size_t prefix_length = is_xp ? 0 : address->OnLinkPrefixLength;
-          if (is_xp) {
-            // Prior to Windows Vista the FirstPrefix pointed to the list with
-            // single prefix for each IP address assigned to the adapter.
-            // Order of FirstPrefix does not match order of FirstUnicastAddress,
-            // so we need to find corresponding prefix.
-            for (IP_ADAPTER_PREFIX* prefix = adapter->FirstPrefix; prefix;
-                 prefix = prefix->Next) {
-              int prefix_family = prefix->Address.lpSockaddr->sa_family;
-              IPEndPoint network_endpoint;
-              if (prefix_family == family &&
-                  network_endpoint.FromSockAddr(
-                      prefix->Address.lpSockaddr,
-                      prefix->Address.iSockaddrLength) &&
-                  IPAddressMatchesPrefix(endpoint.address(),
-                                         network_endpoint.address(),
-                                         prefix->PrefixLength)) {
-                prefix_length =
-                    std::max<size_t>(prefix_length, prefix->PrefixLength);
-              }
-            }
-          }
+          size_t prefix_length = address->OnLinkPrefixLength;
 
           // If the duplicate address detection (DAD) state is not changed to
           // Preferred, skip this address.
@@ -227,26 +197,49 @@ bool GetNetworkListImpl(NetworkInterfaceList* networks,
 }  // namespace internal
 
 bool GetNetworkList(NetworkInterfaceList* networks, int policy) {
-  bool is_xp = base::win::GetVersion() < base::win::VERSION_VISTA;
-  ULONG len = 0;
-  ULONG flags = is_xp ? GAA_FLAG_INCLUDE_PREFIX : 0;
+  // Max number of times to retry GetAdaptersAddresses due to
+  // ERROR_BUFFER_OVERFLOW. If GetAdaptersAddresses returns this indefinitely
+  // due to an unforseen reason, we don't want to be stuck in an endless loop.
+  static constexpr int MAX_GETADAPTERSADDRESSES_TRIES = 10;
+  // Use an initial buffer size of 15KB, as recommended by MSDN. See:
+  // https://msdn.microsoft.com/en-us/library/windows/desktop/aa365915(v=vs.85).aspx
+  static constexpr int INITIAL_BUFFER_SIZE = 15000;
+
+  ULONG len = INITIAL_BUFFER_SIZE;
+  ULONG flags = 0;
+  // Initial buffer allocated on stack.
+  char initial_buf[INITIAL_BUFFER_SIZE];
+  // Dynamic buffer in case initial buffer isn't large enough.
+  std::unique_ptr<char[]> buf;
+
   // GetAdaptersAddresses() may require IO operations.
   base::ThreadRestrictions::AssertIOAllowed();
-  ULONG result = GetAdaptersAddresses(AF_UNSPEC, flags, NULL, NULL, &len);
-  if (result != ERROR_BUFFER_OVERFLOW) {
+
+  IP_ADAPTER_ADDRESSES* adapters =
+      reinterpret_cast<IP_ADAPTER_ADDRESSES*>(&initial_buf);
+  ULONG result =
+      GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, adapters, &len);
+
+  // If we get ERROR_BUFFER_OVERFLOW, call GetAdaptersAddresses in a loop,
+  // because the required size may increase between successive calls, resulting
+  // in ERROR_BUFFER_OVERFLOW multiple times.
+  for (int tries = 1; result == ERROR_BUFFER_OVERFLOW &&
+                      tries < MAX_GETADAPTERSADDRESSES_TRIES;
+       ++tries) {
+    buf.reset(new char[len]);
+    adapters = reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.get());
+    result = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, adapters, &len);
+  }
+
+  if (result == ERROR_NO_DATA) {
     // There are 0 networks.
     return true;
-  }
-  std::unique_ptr<char[]> buf(new char[len]);
-  IP_ADAPTER_ADDRESSES* adapters =
-      reinterpret_cast<IP_ADAPTER_ADDRESSES*>(buf.get());
-  result = GetAdaptersAddresses(AF_UNSPEC, flags, NULL, adapters, &len);
-  if (result != NO_ERROR) {
+  } else if (result != NO_ERROR) {
     LOG(ERROR) << "GetAdaptersAddresses failed: " << result;
     return false;
   }
 
-  return internal::GetNetworkListImpl(networks, policy, is_xp, adapters);
+  return internal::GetNetworkListImpl(networks, policy, adapters);
 }
 
 WifiPHYLayerProtocol GetWifiPHYLayerProtocol() {

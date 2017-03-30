@@ -62,7 +62,6 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/StringExtras.h"
 #include "wtf/text/CString.h"
 #include <algorithm>
@@ -226,6 +225,7 @@ bool WindowProxy::initialize()
 {
     TRACE_EVENT0("v8", "WindowProxy::initialize");
     TRACE_EVENT_SCOPED_SAMPLING_STATE("blink", "InitializeWindow");
+    SCOPED_BLINK_UMA_HISTOGRAM_TIMER("Blink.Binding.InitializeWindowProxy");
 
     ScriptForbiddenScope::AllowUserAgentScript allowScript;
 
@@ -369,11 +369,11 @@ bool WindowProxy::setupWindowPrototypeChain()
     // The prototype object of Window interface.
     v8::Local<v8::Object> windowPrototype = windowWrapper->GetPrototype().As<v8::Object>();
     RELEASE_ASSERT(!windowPrototype.IsEmpty());
-    V8DOMWrapper::setNativeInfo(windowPrototype, wrapperTypeInfo, window);
+    V8DOMWrapper::setNativeInfo(m_isolate, windowPrototype, wrapperTypeInfo, window);
     // The named properties object of Window interface.
     v8::Local<v8::Object> windowProperties = windowPrototype->GetPrototype().As<v8::Object>();
     RELEASE_ASSERT(!windowProperties.IsEmpty());
-    V8DOMWrapper::setNativeInfo(windowProperties, wrapperTypeInfo, window);
+    V8DOMWrapper::setNativeInfo(m_isolate, windowProperties, wrapperTypeInfo, window);
 
     // TODO(keishi): Remove installPagePopupController and implement
     // PagePopupController in another way.
@@ -411,11 +411,6 @@ void WindowProxy::updateDocumentProperty()
     // TODO(jochen): Don't replace the accessor with a data value. We need a way to tell v8 that the accessor's return value won't change after this point.
     if (!v8CallBoolean(context->Global()->ForceSet(context, v8AtomicString(m_isolate, "document"), documentWrapper, static_cast<v8::PropertyAttribute>(v8::ReadOnly | v8::DontDelete))))
         return;
-
-    // We also stash a reference to the document on the inner global object so that
-    // LocalDOMWindow objects we obtain from JavaScript references are guaranteed to have
-    // live Document objects.
-    V8HiddenValue::setHiddenValue(m_scriptState.get(), v8::Local<v8::Object>::Cast(context->Global()->GetPrototype()), V8HiddenValue::document(m_isolate), documentWrapper);
 }
 
 void WindowProxy::updateActivityLogger()

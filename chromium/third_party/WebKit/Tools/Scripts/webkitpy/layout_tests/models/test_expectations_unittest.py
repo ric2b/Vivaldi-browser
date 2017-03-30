@@ -197,24 +197,68 @@ class MiscTests(Base):
     def test_needs_rebaseline_reftest(self):
         try:
             filesystem = self._port.host.filesystem
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsrebaseline.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsrebaseline-expected.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsrebaseline_with_txt.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsrebaseline_with_txt-expected.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsrebaseline_with_txt-expected.txt'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsmanualrebaseline.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsmanualrebaseline-expected.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsmanualrebaseline_with_txt.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsmanualrebaseline_with_txt.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsmanualrebaseline_with_txt-expected.html'), 'content')
-            filesystem.write_text_file(filesystem.join(self._port.layout_tests_dir(), 'reftests/failures/expected/needsmanualrebaseline_with_txt-expected.txt'), 'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsrebaseline.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsrebaseline-expected.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsrebaseline_with_txt.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsrebaseline_with_txt-expected.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsrebaseline_with_txt-expected.txt'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsmanualrebaseline.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsmanualrebaseline-expected.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsmanualrebaseline_with_txt.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsmanualrebaseline_with_txt.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsmanualrebaseline_with_txt-expected.html'),
+                'content')
+            filesystem.write_text_file(
+                filesystem.join(
+                    self._port.layout_tests_dir(),
+                    'reftests/failures/expected/needsmanualrebaseline_with_txt-expected.txt'),
+                'content')
             self.parse_exp("""Bug(user) reftests/failures/expected/needsrebaseline.html [ NeedsRebaseline ]
 Bug(user) reftests/failures/expected/needsrebaseline_with_txt.html [ NeedsRebaseline ]
 Bug(user) reftests/failures/expected/needsmanualrebaseline.html [ NeedsManualRebaseline ]
 Bug(user) reftests/failures/expected/needsmanualrebaseline_with_txt.html [ NeedsManualRebaseline ]
 """, is_lint_mode=True)
             self.assertFalse(True, "ParseError wasn't raised")
-        except ParseError, e:
+        except ParseError as e:
             warnings = """expectations:1 A reftest without text expectation cannot be marked as NeedsRebaseline/NeedsManualRebaseline reftests/failures/expected/needsrebaseline.html
 expectations:3 A reftest without text expectation cannot be marked as NeedsRebaseline/NeedsManualRebaseline reftests/failures/expected/needsmanualrebaseline.html"""
             self.assertEqual(str(e), warnings)
@@ -230,7 +274,7 @@ expectations:3 A reftest without text expectation cannot be marked as NeedsRebas
                            "Bug(user) disabled-test.html-disabled [ Failure ]\n"
                            "Bug(user) [ Release ] test-to-rebaseline.html [ NeedsRebaseline ]", is_lint_mode=True)
             self.assertFalse(True, "ParseError wasn't raised")
-        except ParseError, e:
+        except ParseError as e:
             warnings = ("expectations:1 Unrecognized specifier 'foo' failures/expected/text.html\n"
                         "expectations:2 Path does not exist. non-existent-test.html\n"
                         "expectations:4 A test cannot be rebaselined for Debug/Release. test-to-rebaseline.html")
@@ -406,7 +450,8 @@ class ExpectationSyntaxTests(Base):
         self.parse_exp(exp_str)
         self.assert_exp('failures/expected/text.html', FAIL)
 
-    def assert_tokenize_exp(self, line, bugs=None, specifiers=None, expectations=None, warnings=None, comment=None, name='foo.html', filename='TestExpectations'):
+    def assert_tokenize_exp(self, line, bugs=None, specifiers=None, expectations=None, warnings=None,
+                            comment=None, name='foo.html', filename='TestExpectations'):
         bugs = bugs or []
         specifiers = specifiers or []
         expectations = expectations or []
@@ -476,7 +521,7 @@ class SemanticTests(Base):
         try:
             self.parse_exp('crbug/1234 failures/expected/text.html [ Failure ]', is_lint_mode=True)
             self.fail('should have raised an error about a bad bug identifier')
-        except ParseError, exp:
+        except ParseError as exp:
             self.assertEqual(len(exp.warnings), 3)
 
     def test_missing_bugid(self):
@@ -485,7 +530,7 @@ class SemanticTests(Base):
 
         try:
             self.parse_exp('failures/expected/text.html [ Failure ]', is_lint_mode=True)
-        except ParseError, exp:
+        except ParseError as exp:
             self.assertEqual(exp.warnings, ['expectations:1 Test lacks BUG specifier. failures/expected/text.html'])
 
     def test_skip_and_wontfix(self):
@@ -732,6 +777,29 @@ Bug(y) [ Win Debug ] failures/expected/foo.html [ Crash ]
 Bug(y) [ Win Debug ] failures/expected/foo.html [ Crash ]
 """, actual_expectations)
 
+    def test_remove_line_keeping_comments_before_whitespace_lines(self):
+        host = MockHost()
+        test_port = host.port_factory.get('test-win-win7', None)
+        test_port.test_exists = lambda test: True
+        test_port.test_isfile = lambda test: True
+
+        test_config = test_port.test_configuration()
+        test_port.expectations_dict = lambda: {'expectations': """
+ # This comment line should not get stripped.
+
+ # This comment line should get stripped.
+Bug(x) [ Win Release ] failures/expected/foo.html [ Failure ]
+"""}
+        expectations = TestExpectations(test_port)
+
+        actual_expectations = expectations.remove_configurations([('failures/expected/foo.html', test_config)])
+        actual_expectations = expectations.remove_configurations(
+            [('failures/expected/foo.html', host.port_factory.get('test-win-win10', None).test_configuration())])
+
+        self.assertEqual("""
+ # This comment line should not get stripped.
+""", actual_expectations)
+
     def test_remove_first_line(self):
         host = MockHost()
         test_port = host.port_factory.get('test-win-win7', None)
@@ -873,7 +941,7 @@ class TestExpectationSerializationTests(unittest.TestCase):
         expectation_line.bugs = ['Bug(x)']
         expectation_line.name = 'test/name/for/realz.html'
         expectation_line.parsed_expectations = set([IMAGE])
-        self.assertEqual(expectation_line.to_string(self._converter), None)
+        self.assertIsNone(expectation_line.to_string(self._converter))
         expectation_line.matching_configurations = set([TestConfiguration('win7', 'x86', 'release')])
         self.assertEqual(expectation_line.to_string(self._converter),
                          'Bug(x) [ Win7 Release ] test/name/for/realz.html [ Failure ]')
@@ -886,7 +954,7 @@ class TestExpectationSerializationTests(unittest.TestCase):
         expectation_line.bugs = ['Bug(x)']
         expectation_line.name = 'test/name/for/realz.html'
         expectation_line.parsed_expectations = set([IMAGE])
-        self.assertEqual(expectation_line.to_string(self._converter), None)
+        self.assertIsNone(expectation_line.to_string(self._converter))
         expectation_line.matching_configurations = set([TestConfiguration('mac10.10', 'x86', 'release')])
         self.assertEqual(expectation_line.to_string(self._converter),
                          'Bug(x) [ Mac10.10 Release ] test/name/for/realz.html [ Failure ]')

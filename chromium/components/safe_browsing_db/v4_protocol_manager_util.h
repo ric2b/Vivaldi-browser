@@ -8,6 +8,7 @@
 // A class that implements the stateless methods used by the GetHashUpdate and
 // GetFullHash stubby calls made by Chrome using the SafeBrowsing V4 protocol.
 
+#include <ostream>
 #include <string>
 
 #include "base/gtest_prod_util.h"
@@ -16,7 +17,15 @@
 #include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
 
+namespace net {
+class HttpRequestHeaders;
+}  // namespace net
+
 namespace safe_browsing {
+
+typedef FetchThreatListUpdatesRequest::ListUpdateRequest ListUpdateRequest;
+typedef FetchThreatListUpdatesResponse::ListUpdateResponse ListUpdateResponse;
+
 // Config passed to the constructor of a V4 protocol manager.
 struct V4ProtocolConfig {
   // The safe browsing client name sent in each request.
@@ -40,17 +49,41 @@ struct V4ProtocolConfig {
 // interested in maintaining and downloading from the SafeBrowsing servers.
 // For example, for digests of Malware binaries on Windows:
 // platform_type = WINDOWS,
-// threat_entry_type = BINARY_DIGEST,
+// threat_entry_type = EXECUTABLE,
 // threat_type = MALWARE
 struct UpdateListIdentifier {
+ public:
   PlatformType platform_type;
   ThreatEntryType threat_entry_type;
   ThreatType threat_type;
 
+  UpdateListIdentifier(PlatformType, ThreatEntryType, ThreatType);
+  explicit UpdateListIdentifier(const ListUpdateResponse&);
+
   bool operator==(const UpdateListIdentifier& other) const;
   bool operator!=(const UpdateListIdentifier& other) const;
   size_t hash() const;
+
+ private:
+  UpdateListIdentifier();
 };
+
+std::ostream& operator<<(std::ostream& os, const UpdateListIdentifier& id);
+
+// The set of interesting lists and ASCII filenames for their hash prefix
+// stores. The stores are created inside the user-data directory.
+// For instance, the UpdateListIdentifier could be for URL expressions for UwS
+// on Windows platform, and the corresponding file on disk could be named:
+// "uws_win_url.store"
+// TODO(vakh): Find the canonical place where these are defined and update the
+// comment to point to that place.
+typedef base::hash_map<UpdateListIdentifier, std::string> StoreFileNameMap;
+
+// Represents the state of each store.
+typedef base::hash_map<UpdateListIdentifier, std::string> StoreStateMap;
+
+// Sever response, parsed in vector form.
+typedef std::vector<std::unique_ptr<ListUpdateResponse>> ParsedServerResponse;
 
 // Enumerate failures for histogramming purposes.  DO NOT CHANGE THE
 // ORDERING OF THESE VALUES.
@@ -93,14 +126,18 @@ class V4ProtocolManagerUtil {
                                             const net::URLRequestStatus& status,
                                             int response_code);
 
-  // Generates a Pver4 request URL.
+  // Generates a Pver4 request URL and sets the appropriate header values.
   // |request_base64| is the serialized request protocol buffer encoded in
   // base 64.
   // |method_name| is the name of the method to call, as specified in the proto,
-  // |config| is an instance of V4ProtocolConfig that stores the client config.
-  static GURL GetRequestUrl(const std::string& request_base64,
-                            const std::string& method_name,
-                            const V4ProtocolConfig& config);
+  // |config| is an instance of V4ProtocolConfig that stores the client config,
+  // |gurl| is set to the value of the PVer4 request URL,
+  // |headers| is populated with the appropriate header values.
+  static void GetRequestUrlAndHeaders(const std::string& request_base64,
+                                      const std::string& method_name,
+                                      const V4ProtocolConfig& config,
+                                      GURL* gurl,
+                                      net::HttpRequestHeaders* headers);
 
   // Worker function for calculating the backoff times.
   // |multiplier| is doubled for each consecutive error after the
@@ -113,7 +150,7 @@ class V4ProtocolManagerUtil {
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingV4ProtocolManagerUtilTest,
                            TestBackOffLogic);
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingV4ProtocolManagerUtilTest,
-                           TestGetRequestUrl);
+                           TestGetRequestUrlAndUpdateHeaders);
 
   // Composes a URL using |prefix|, |method| (e.g.: encodedFullHashes).
   // |request_base64|, |client_id|, |version| and |key_param|. |prefix|
@@ -121,9 +158,10 @@ class V4ProtocolManagerUtil {
   static std::string ComposeUrl(const std::string& prefix,
                                 const std::string& method,
                                 const std::string& request_base64,
-                                const std::string& client_id,
-                                const std::string& version,
                                 const std::string& key_param);
+
+  // Sets the HTTP headers expected by a standard PVer4 request.
+  static void UpdateHeaders(net::HttpRequestHeaders* headers);
 
   DISALLOW_COPY_AND_ASSIGN(V4ProtocolManagerUtil);
 };

@@ -53,7 +53,7 @@
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/events/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
 #if defined(USE_X11)
@@ -147,6 +147,16 @@ bool MockInputMethod::OnUntranslatedIMEMessage(const base::NativeEvent& event,
 }
 
 void MockInputMethod::DispatchKeyEvent(ui::KeyEvent* key) {
+// On Mac, emulate InputMethodMac behavior for character events. Composition
+// still needs to be mocked, since it's not possible to generate test events
+// which trigger the appropriate NSResponder action messages for composition.
+#if defined(OS_MACOSX)
+  if (key->is_char()) {
+    ignore_result(DispatchKeyEventPostIME(key));
+    return;
+  }
+#endif
+
   // Checks whether the key event is from EventGenerator on Windows which will
   // generate key event for WM_CHAR.
   // The MockInputMethod will insert char on WM_KEYDOWN so ignore WM_CHAR here.
@@ -306,7 +316,7 @@ class TestTextfield : public views::Textfield {
 class GestureEventForTest : public ui::GestureEvent {
  public:
   GestureEventForTest(int x, int y, ui::GestureEventDetails details)
-      : GestureEvent(x, y, 0, base::TimeDelta(), details) {}
+      : GestureEvent(x, y, 0, base::TimeTicks(), details) {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(GestureEventForTest);
@@ -326,7 +336,8 @@ class TextfieldDestroyerController : public views::TextfieldController {
   // views::TextfieldController:
   bool HandleKeyEvent(views::Textfield* sender,
                       const ui::KeyEvent& key_event) override {
-    target_->OnBlur();
+    if (target_)
+      target_->OnBlur();
     target_.reset();
     return false;
   }
@@ -440,7 +451,7 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
     textfield_->RequestFocus();
 
     event_generator_.reset(
-        new ui::test::EventGenerator(GetContext(), widget_->GetNativeWindow()));
+        new ui::test::EventGenerator(widget_->GetNativeWindow()));
   }
   ui::MenuModel* GetContextMenuModel() {
     test_api_->UpdateContextMenu();
@@ -509,27 +520,37 @@ class TextfieldTest : public ViewsTestBase, public TextfieldController {
       SendKeyEvent(code);
     } else {
       // For unicode characters, assume they come from IME rather than the
-      // keyboard. So they are dispatched directly to the input method.
+      // keyboard. So they are dispatched directly to the input method. But on
+      // Mac, key events don't pass through InputMethod. Hence they are
+      // dispatched regularly.
       ui::KeyEvent event(ch, ui::VKEY_UNKNOWN, ui::EF_NONE);
+#if defined(OS_MACOSX)
+      event_generator_->Dispatch(&event);
+#else
       input_method_->DispatchKeyEvent(&event);
+#endif
     }
   }
 
-  // Sends a platform-specific move (and select) to start of line.
+  // Sends a platform-specific move (and select) to the logical start of line.
+  // Eg. this should move (and select) to the right end of line for RTL text.
   void SendHomeEvent(bool shift) {
     if (TestingNativeMac()) {
-      // Use Cmd+Left on native Mac. An RTL-agnostic "end" doesn't have a
-      // default key-binding on Mac.
-      SendKeyEvent(ui::VKEY_LEFT, shift /* shift */, true /* command */);
+      // [NSResponder moveToBeginningOfLine:] is the correct way to do this on
+      // Mac, but that doesn't have a default key binding. Since
+      // views::Textfield doesn't currently support multiple lines, the same
+      // effect can be achieved by Cmd+Up which maps to
+      // [NSResponder moveToBeginningOfDocument:].
+      SendKeyEvent(ui::VKEY_UP, shift /* shift */, true /* command */);
       return;
     }
     SendKeyEvent(ui::VKEY_HOME, shift /* shift */, false /* control */);
   }
 
-  // Sends a platform-specific move (and select) to end of line.
+  // Sends a platform-specific move (and select) to the logical end of line.
   void SendEndEvent(bool shift) {
     if (TestingNativeMac()) {
-      SendKeyEvent(ui::VKEY_RIGHT, shift, true);  // Cmd+Right.
+      SendKeyEvent(ui::VKEY_DOWN, shift, true);  // Cmd+Down.
       return;
     }
     SendKeyEvent(ui::VKEY_END, shift, false);
@@ -758,7 +779,7 @@ TEST_F(TextfieldTest, KeysWithModifiersTest) {
   SendKeyPress(ui::VKEY_T, shift);
   SendKeyPress(ui::VKEY_E, shift | altgr);
   SendKeyPress(ui::VKEY_X, 0);
-  SendKeyPress(ui::VKEY_T, ctrl);
+  SendKeyPress(ui::VKEY_T, ctrl);  // This causes transpose on Mac.
   SendKeyPress(ui::VKEY_1, alt);
   SendKeyPress(ui::VKEY_2, command);
   SendKeyPress(ui::VKEY_3, 0);
@@ -771,7 +792,7 @@ TEST_F(TextfieldTest, KeysWithModifiersTest) {
   if (TestingNativeCrOs())
     EXPECT_STR_EQ("TeTEx34", textfield_->text());
   else if (TestingNativeMac())
-    EXPECT_STR_EQ("TheTEx134", textfield_->text());
+    EXPECT_STR_EQ("TheTxE134", textfield_->text());
   else
     EXPECT_STR_EQ("TeTEx234", textfield_->text());
 }
@@ -932,6 +953,31 @@ TEST_F(TextfieldTest, PasswordTest) {
   SendAlternatePaste();
   EXPECT_STR_EQ("foo", GetClipboardText(ui::CLIPBOARD_TYPE_COPY_PASTE));
   EXPECT_STR_EQ("foofoofoo", textfield_->text());
+}
+
+// Check that text insertion works appropriately for password and read-only
+// textfields.
+TEST_F(TextfieldTest, TextInputType_InsertionTest) {
+  InitTextfield();
+  textfield_->SetTextInputType(ui::TEXT_INPUT_TYPE_PASSWORD);
+  EXPECT_EQ(ui::TEXT_INPUT_TYPE_PASSWORD, textfield_->GetTextInputType());
+
+  SendKeyEvent(ui::VKEY_A);
+  SendKeyEvent(kHebrewLetterSamekh);
+  SendKeyEvent(ui::VKEY_B);
+
+  EXPECT_EQ(WideToUTF16(L"a\x05E1"
+                        L"b"),
+            textfield_->text());
+
+  textfield_->SetReadOnly(true);
+  EXPECT_EQ(ui::TEXT_INPUT_TYPE_NONE, textfield_->GetTextInputType());
+  SendKeyEvent(ui::VKEY_C);
+
+  // No text should be inserted for read only textfields.
+  EXPECT_EQ(WideToUTF16(L"a\x05E1"
+                        L"b"),
+            textfield_->text());
 }
 
 TEST_F(TextfieldTest, TextInputType) {
@@ -2267,7 +2313,6 @@ TEST_F(TextfieldTest, GetCompositionCharacterBounds_ComplexText) {
 
   // Make sure GetCompositionCharacterBounds never fails for index.
   gfx::Rect rects[kUtf16CharsCount];
-  gfx::Rect prev_cursor = GetCursorBounds();
   for (uint32_t i = 0; i < kUtf16CharsCount; ++i)
     EXPECT_TRUE(client->GetCompositionCharacterBounds(i, &rects[i]));
 

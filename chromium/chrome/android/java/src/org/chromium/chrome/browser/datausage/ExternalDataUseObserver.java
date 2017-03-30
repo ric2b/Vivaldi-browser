@@ -109,6 +109,14 @@ public class ExternalDataUseObserver {
     }
 
     /**
+     * @return the google variation id.
+     */
+    @CalledByNative
+    protected int getGoogleVariationID() {
+        return 0;
+    }
+
+    /**
      * Initializes the control app manager with package name of the control app.
      * @param controlAppPackageName package name of the control app. If this is empty the default
      * control app package name from {@link getDefaultControlAppPackageName} will be used.
@@ -180,14 +188,6 @@ public class ExternalDataUseObserver {
      */
     @CalledByNative
     protected void reportDataUse(String label, String tag, int networkType, String mccMnc,
-            long startTimeInMillis, long endTimeInMillis, long bytesDownloaded,
-            long bytesUploaded) {}
-
-    /**
-     * TODO(rajendrant): Remove this function once the downstream CL lands.
-     * This overloaded function is kept to avoid breakage.
-     */
-    protected void reportDataUse(String label, int networkType, String mccMnc,
             long startTimeInMillis, long endTimeInMillis, long bytesDownloaded,
             long bytesUploaded) {}
 

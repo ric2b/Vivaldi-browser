@@ -43,6 +43,7 @@
 #include "core/events/MessageEvent.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -55,6 +56,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 namespace blink {
 
@@ -74,6 +76,11 @@ inline EventSource::EventSource(ExecutionContext* context, const KURL& url, cons
 
 EventSource* EventSource::create(ExecutionContext* context, const String& url, const EventSourceInit& eventSourceInit, ExceptionState& exceptionState)
 {
+    if (context->isDocument())
+        UseCounter::count(toDocument(context), UseCounter::EventSourceDocument);
+    else
+        UseCounter::count(context, UseCounter::EventSourceWorker);
+
     if (url.isEmpty()) {
         exceptionState.throwDOMException(SyntaxError, "Cannot open an EventSource to an empty URL.");
         return nullptr;
@@ -221,7 +228,7 @@ ExecutionContext* EventSource::getExecutionContext() const
     return ActiveDOMObject::getExecutionContext();
 }
 
-void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT_UNUSED(handle, !handle);
     ASSERT(m_state == CONNECTING);
@@ -238,9 +245,9 @@ void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& resp
         responseIsValid = charset.isEmpty() || equalIgnoringCase(charset, "UTF-8");
         if (!responseIsValid) {
             StringBuilder message;
-            message.appendLiteral("EventSource's response has a charset (\"");
+            message.append("EventSource's response has a charset (\"");
             message.append(charset);
-            message.appendLiteral("\") that is not UTF-8. Aborting the connection.");
+            message.append("\") that is not UTF-8. Aborting the connection.");
             // FIXME: We are missing the source line.
             getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message.toString()));
         }
@@ -248,9 +255,9 @@ void EventSource::didReceiveResponse(unsigned long, const ResourceResponse& resp
         // To keep the signal-to-noise ratio low, we only log 200-response with an invalid MIME type.
         if (statusCode == 200 && !mimeTypeIsValid) {
             StringBuilder message;
-            message.appendLiteral("EventSource's response has a MIME type (\"");
+            message.append("EventSource's response has a MIME type (\"");
             message.append(response.mimeType());
-            message.appendLiteral("\") that is not \"text/event-stream\". Aborting the connection.");
+            message.append("\") that is not \"text/event-stream\". Aborting the connection.");
             // FIXME: We are missing the source line.
             getExecutionContext()->addConsoleMessage(ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, message.toString()));
         }
@@ -318,7 +325,7 @@ void EventSource::didFailRedirectCheck()
 void EventSource::onMessageEvent(const AtomicString& eventType, const String& data, const AtomicString& lastEventId)
 {
     MessageEvent* e = MessageEvent::create();
-    e->initMessageEvent(eventType, false, false, SerializedScriptValueFactory::instance().create(data), m_eventStreamOrigin, lastEventId, 0, nullptr);
+    e->initMessageEvent(eventType, false, false, SerializedScriptValue::serialize(data), m_eventStreamOrigin, lastEventId, 0, nullptr);
 
     InspectorInstrumentation::willDispatchEventSourceEvent(getExecutionContext(), this, eventType, lastEventId, data);
     dispatchEvent(e);

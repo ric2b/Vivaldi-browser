@@ -8,12 +8,11 @@
 
 #include "base/base64.h"
 #include "base/logging.h"
+#include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "content/browser/bluetooth/bluetooth_blacklist.h"
-#include "content/common/bluetooth/bluetooth_scan_filter.h"
 #include "crypto/random.h"
-#include "device/bluetooth/bluetooth_uuid.h"
 
 using device::BluetoothUUID;
 
@@ -42,18 +41,11 @@ BluetoothAllowedDevicesMap::~BluetoothAllowedDevicesMap() {}
 const std::string& BluetoothAllowedDevicesMap::AddDevice(
     const url::Origin& origin,
     const std::string& device_address,
-    const std::vector<BluetoothScanFilter>& filters,
-    const std::vector<BluetoothUUID>& optional_services) {
+    const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options) {
   VLOG(1) << "Adding a device to Map of Allowed Devices.";
 
-  // "Unique" Origins generate the same key in maps. The set of "unique"
-  // Origins that generate the same key does not intersect the set of
-  // potentially trustworthy origins; since Bluetooth is only available for
-  // potntially trustworthy origins we should never receive a request from a
-  // "unique" Origin.
-  // See url::Origin for what constitutes a "unique" Origin and the
-  // Secure Contexts spec for what constitutes a Trusworthy Origin:
-  // https://w3c.github.io/webappsec-secure-contexts/
+  // "Unique" Origins generate the same key in maps, therefore are not
+  // supported.
   CHECK(!origin.unique());
 
   auto device_address_to_id_map = origin_to_device_address_to_id_map_[origin];
@@ -63,8 +55,7 @@ const std::string& BluetoothAllowedDevicesMap::AddDevice(
     const auto& device_id = id_iter->second;
 
     AddUnionOfServicesTo(
-        filters, optional_services,
-        &origin_to_device_id_to_services_map_[origin][device_id]);
+        options, &origin_to_device_id_to_services_map_[origin][device_id]);
 
     return origin_to_device_address_to_id_map_[origin][device_address];
   }
@@ -74,8 +65,7 @@ const std::string& BluetoothAllowedDevicesMap::AddDevice(
   origin_to_device_address_to_id_map_[origin][device_address] = device_id;
   origin_to_device_id_to_address_map_[origin][device_id] = device_address;
   AddUnionOfServicesTo(
-      filters, optional_services,
-      &origin_to_device_id_to_services_map_[origin][device_id]);
+      options, &origin_to_device_id_to_services_map_[origin][device_id]);
 
   CHECK(device_id_set_.insert(device_id).second);
 
@@ -140,9 +130,10 @@ const std::string& BluetoothAllowedDevicesMap::GetDeviceAddress(
 bool BluetoothAllowedDevicesMap::IsOriginAllowedToAccessService(
     const url::Origin& origin,
     const std::string& device_id,
-    const std::string& service_uuid) const {
-  if (BluetoothBlacklist::Get().IsExcluded(BluetoothUUID(service_uuid)))
+    const BluetoothUUID& service_uuid) const {
+  if (BluetoothBlacklist::Get().IsExcluded(service_uuid)) {
     return false;
+  }
 
   auto id_map_iter = origin_to_device_id_to_services_map_.find(origin);
   if (id_map_iter == origin_to_device_id_to_services_map_.end()) {
@@ -168,16 +159,16 @@ std::string BluetoothAllowedDevicesMap::GenerateDeviceId() {
 }
 
 void BluetoothAllowedDevicesMap::AddUnionOfServicesTo(
-    const std::vector<BluetoothScanFilter>& filters,
-    const std::vector<device::BluetoothUUID>& optional_services,
-    std::set<std::string>* unionOfServices) {
-  for (const auto& filter : filters) {
-    for (const BluetoothUUID& uuid : filter.services) {
-      unionOfServices->insert(uuid.canonical_value());
+    const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options,
+    std::unordered_set<BluetoothUUID, device::BluetoothUUIDHash>*
+        unionOfServices) {
+  for (const auto& filter : options->filters) {
+    for (const base::Optional<BluetoothUUID>& uuid : filter->services) {
+      unionOfServices->insert(uuid.value());
     }
   }
-  for (const BluetoothUUID& uuid : optional_services) {
-    unionOfServices->insert(uuid.canonical_value());
+  for (const base::Optional<BluetoothUUID>& uuid : options->optional_services) {
+    unionOfServices->insert(uuid.value());
   }
 }
 

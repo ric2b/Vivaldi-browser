@@ -64,8 +64,8 @@
       'common/multi_process_lock_linux.cc',
       'common/multi_process_lock_mac.cc',
       'common/multi_process_lock_win.cc',
-      'common/origin_trials/origin_trial_key_manager.cc',
-      'common/origin_trials/origin_trial_key_manager.h',
+      'common/origin_trials/chrome_origin_trial_policy.cc',
+      'common/origin_trials/chrome_origin_trial_policy.h',
       'common/partial_circular_buffer.cc',
       'common/partial_circular_buffer.h',
       'common/pref_names_util.cc',
@@ -91,6 +91,8 @@
       'common/spellcheck_marker.h',
       'common/spellcheck_messages.h',
       'common/spellcheck_result.h',
+      'common/ssl_insecure_content.cc',
+      'common/ssl_insecure_content.h',
       'common/switch_utils.cc',
       'common/switch_utils.h',
       'common/trace_event_args_whitelist.cc',
@@ -102,6 +104,8 @@
       'common/url_constants.h',
       'common/v8_breakpad_support_win.cc',
       'common/v8_breakpad_support_win.h',
+      'common/variations/child_process_field_trial_syncer.cc',
+      'common/variations/child_process_field_trial_syncer.h',
       'common/variations/variations_util.cc',
       'common/variations/variations_util.h',
       'common/web_application_info.cc',
@@ -269,10 +273,6 @@
       'common/importer/safari_importer_utils.h',
       'common/importer/safari_importer_utils.mm',
     ],
-    'chrome_common_ipc_fuzzer_sources': [
-      'common/external_ipc_dumper.cc',
-      'common/external_ipc_dumper.h',
-    ],
     'chrome_common_service_process_sources': [
       'common/service_messages.h',
       'common/service_process_util.cc',
@@ -342,12 +342,10 @@
         '<(DEPTH)/components/components.gyp:json_schema',
         '<(DEPTH)/components/components.gyp:metrics',
         '<(DEPTH)/components/components.gyp:metrics_net',
+        '<(DEPTH)/components/components.gyp:network_session_configurator_switches',
         '<(DEPTH)/components/components.gyp:omnibox_common',
         '<(DEPTH)/components/components.gyp:policy',
         '<(DEPTH)/components/components.gyp:policy_component_common',
-        # TODO(fdoray): Remove this once the PreRead field trial has expired.
-        # crbug.com/577698
-        '<(DEPTH)/components/components.gyp:startup_metric_utils_common',
         '<(DEPTH)/components/components.gyp:translate_core_common',
         '<(DEPTH)/components/components.gyp:variations',
         '<(DEPTH)/components/components.gyp:version_info',
@@ -461,9 +459,6 @@
           'dependencies': [
             '<(DEPTH)/components/nacl.gyp:nacl_common',
           ],
-        }],
-        ['enable_ipc_fuzzer==1', {
-          'sources': [ '<@(chrome_common_ipc_fuzzer_sources)' ],
         }],
         ['enable_plugins==1', {
           'dependencies': [
@@ -643,6 +638,7 @@
         'common/safe_browsing/crx_info.proto',
         'common/safe_browsing/csd.proto',
         'common/safe_browsing/download_file_types.proto',
+        'common/safe_browsing/permission_report.proto',
       ],
       'variables': {
         'proto_in_dir': 'common/safe_browsing',
@@ -651,19 +647,34 @@
       'includes': [ '../build/protoc.gypi' ],
     },
     {
-      # GN version: //chrome/common:mojo_bindings
-      'target_name': 'common_mojo_bindings',
-      'type': 'static_library',
-      'includes': [
-        '../mojo/mojom_bindings_generator.gypi'
-      ],
-      'sources': [
-        'common/image_decoder.mojom',
-        'common/resource_usage_reporter.mojom',
-      ],
+      'target_name': 'common_mojo_bindings_mojom',
+      'type': 'none',
+      'variables': {
+        'mojom_files': [
+          'common/image_decoder.mojom',
+          'common/resource_usage_reporter.mojom',
+        ],
+        'mojom_typemaps': [
+          '../skia/public/interfaces/skbitmap.typemap',
+        ],
+      },
       'dependencies': [
         '../mojo/mojo_public.gyp:mojo_cpp_bindings',
         '../skia/skia.gyp:skia_mojo',
+      ],
+      'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
+    },
+    {
+      # GN version: //chrome/common:mojo_bindings
+      'target_name': 'common_mojo_bindings',
+      'type': 'static_library',
+      'dependencies': [
+        'common_mojo_bindings_mojom',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../skia/skia.gyp:skia',
+      ],
+      'export_dependent_settings': [
+        '../skia/skia.gyp:skia',
       ],
     },
   ],

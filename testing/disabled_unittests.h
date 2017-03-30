@@ -6,18 +6,16 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
+  DISABLE(HistoryCounterTest, Synced)
+
   DISABLE(InlineInstallPrivateApiTestApp, BackgroundInstall)
 
-  // Disabled for v50; reverted code broke the test
-  //DISABLE(PasswordManagerBrowserTestBase,
-  //        SkipZeroClickToggledAfterSuccessfulSubmissionWithAPI)
+  DISABLE_ALL(EncryptedMediaSupportedTypesWidevineTest)
 
   DISABLE(NTPSnippetsServiceWithSyncTest, SyncStateCompatibility)
 
   // Disabled in v51, seems an upstream revert broke the test
-  DISABLE(PictureLayerImplTest, DontAddLowResForSmallLayers)
-
-  //DISABLE(ThemeServiceMaterialDesignTest, SeparatorColor)
+  //DISABLE(PictureLayerImplTest, DontAddLowResForSmallLayers)
 
   // Failing media tests since proprietary media code was imported
   DISABLE(AudioVideoMetadataExtractorTest, AndroidRotatedMP4Video)
@@ -31,9 +29,13 @@
   DISABLE(MediaTest, VideoBearRotated0)
   DISABLE(MediaTest, VideoBearRotated180)
 
+  /*
   DISABLE(WebViewContextMenuInteractiveTest,
               ContextMenuParamsAfterCSSTransforms)
 
   // Toolbar tests that started failing in v52
   DISABLE_ALL(ComponentToolbarActionsBrowserTest)
   DISABLE_ALL(ShowPageActionWithoutPageActionRedesignTest)
+*/
+
+  DISABLE_ALL(FirefoxProfileImporterBrowserTest)

@@ -5,8 +5,8 @@
 // Implementation of VideoCaptureDevice class for Blackmagic video capture
 // devices by using the DeckLink SDK.
 
-#ifndef MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_DEVICE_DECKLINK_MAC_H_
-#define MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_DEVICE_DECKLINK_MAC_H_
+#ifndef MEDIA_CAPTURE_VIDEO_MAC_VIDEO_CAPTURE_DEVICE_DECKLINK_MAC_H_
+#define MEDIA_CAPTURE_VIDEO_MAC_VIDEO_CAPTURE_DEVICE_DECKLINK_MAC_H_
 
 #include "media/capture/video/video_capture_device.h"
 
@@ -32,7 +32,7 @@ namespace media {
 // Creates a reference counted |decklink_capture_delegate_| that does all the
 // DeckLink SDK configuration and capture work while holding a weak reference to
 // us for sending back frames, logs and error messages.
-class MEDIA_EXPORT VideoCaptureDeviceDeckLinkMac : public VideoCaptureDevice {
+class CAPTURE_EXPORT VideoCaptureDeviceDeckLinkMac : public VideoCaptureDevice {
  public:
   // Gets the names of all DeckLink video capture devices connected to this
   // computer, as enumerated by the DeckLink SDK. To allow the user to choose
@@ -56,7 +56,8 @@ class MEDIA_EXPORT VideoCaptureDeviceDeckLinkMac : public VideoCaptureDevice {
                               size_t length,
                               const VideoCaptureFormat& frame_format,
                               int rotation,  // Clockwise.
-                              base::TimeTicks timestamp);
+                              base::TimeTicks reference_time,
+                              base::TimeDelta timestamp);
 
   // Forwarder to VideoCaptureDevice::Client::OnError().
   void SendErrorString(const tracked_objects::Location& from_here,
@@ -88,4 +89,4 @@ class MEDIA_EXPORT VideoCaptureDeviceDeckLinkMac : public VideoCaptureDevice {
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_VIDEO_CAPTURE_DEVICE_DECKLINK_MAC_H_
+#endif  // MEDIA_CAPTURE_VIDEO_MAC_VIDEO_CAPTURE_DEVICE_DECKLINK_MAC_H_

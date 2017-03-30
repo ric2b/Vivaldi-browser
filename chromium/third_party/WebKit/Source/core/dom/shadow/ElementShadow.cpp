@@ -222,7 +222,7 @@ void ElementShadow::setNeedsDistributionRecalc()
     if (m_needsDistributionRecalc)
         return;
     m_needsDistributionRecalc = true;
-    host()->markAncestorsWithChildNeedsDistributionRecalc();
+    host().markAncestorsWithChildNeedsDistributionRecalc();
     clearDistribution();
 }
 
@@ -254,9 +254,7 @@ bool ElementShadow::hasSameStyles(const ElementShadow* other) const
 const InsertionPoint* ElementShadow::finalDestinationInsertionPointFor(const Node* key) const
 {
     DCHECK(key);
-#if DCHECK_IS_ON()
     DCHECK(!key->needsDistributionRecalc());
-#endif
     NodeToDestinationInsertionPoints::const_iterator it = m_nodeToInsertionPoints.find(key);
     return it == m_nodeToInsertionPoints.end() ? nullptr : it->value->last();
 }
@@ -264,9 +262,7 @@ const InsertionPoint* ElementShadow::finalDestinationInsertionPointFor(const Nod
 const DestinationInsertionPoints* ElementShadow::destinationInsertionPointsFor(const Node* key) const
 {
     DCHECK(key);
-#if DCHECK_IS_ON()
     DCHECK(!key->needsDistributionRecalc());
-#endif
     NodeToDestinationInsertionPoints::const_iterator it = m_nodeToInsertionPoints.find(key);
     return it == m_nodeToInsertionPoints.end() ? nullptr : it->value;
 }
@@ -282,7 +278,7 @@ void ElementShadow::distribute()
 void ElementShadow::distributeV0()
 {
     HeapVector<Member<HTMLShadowElement>, 32> shadowInsertionPoints;
-    DistributionPool pool(*host());
+    DistributionPool pool(host());
 
     for (ShadowRoot* root = &youngestShadowRoot(); root; root = root->olderShadowRoot()) {
         HTMLShadowElement* shadowInsertionPoint = 0;
@@ -319,7 +315,7 @@ void ElementShadow::distributeV0()
         if (ElementShadow* shadow = shadowWhereNodeCanBeDistributed(*shadowInsertionPoint))
             shadow->setNeedsDistributionRecalc();
     }
-    InspectorInstrumentation::didPerformElementShadowDistribution(host());
+    InspectorInstrumentation::didPerformElementShadowDistribution(&host());
 }
 
 void ElementShadow::didDistributeNode(const Node* node, InsertionPoint* insertionPoint)
@@ -380,6 +376,11 @@ DEFINE_TRACE(ElementShadow)
     visitor->trace(m_nodeToInsertionPoints);
     visitor->trace(m_selectFeatures);
     visitor->trace(m_shadowRoot);
+}
+
+DEFINE_TRACE_WRAPPERS(ElementShadow)
+{
+    visitor->traceWrappers(m_shadowRoot);
 }
 
 } // namespace blink

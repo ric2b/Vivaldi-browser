@@ -8,14 +8,18 @@
 #include "base/containers/scoped_ptr_hash_map.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "content/browser/background_sync/background_sync_context.h"
+#include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_watcher.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/browser/storage_partition_impl_map.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -46,21 +50,28 @@ using ScopeAgentsMap =
 
 void ResultNoOp(bool success) {
 }
+
 void StatusNoOp(ServiceWorkerStatusCode status) {
 }
+
+void StatusNoOpKeepingRegistration(
+    scoped_refptr<content::ServiceWorkerRegistration> protect,
+    ServiceWorkerStatusCode status) {
+}
+
 void PushDeliveryNoOp(PushDeliveryStatus status) {
 }
 
 const std::string GetVersionRunningStatusString(
-    content::ServiceWorkerVersion::RunningStatus running_status) {
+    EmbeddedWorkerStatus running_status) {
   switch (running_status) {
-    case content::ServiceWorkerVersion::STOPPED:
+    case EmbeddedWorkerStatus::STOPPED:
       return kServiceWorkerVersionRunningStatusStopped;
-    case content::ServiceWorkerVersion::STARTING:
+    case EmbeddedWorkerStatus::STARTING:
       return kServiceWorkerVersionRunningStatusStarting;
-    case content::ServiceWorkerVersion::RUNNING:
+    case EmbeddedWorkerStatus::RUNNING:
       return kServiceWorkerVersionRunningStatusRunning;
-    case content::ServiceWorkerVersion::STOPPING:
+    case EmbeddedWorkerStatus::STOPPING:
       return kServiceWorkerVersionRunningStatusStopping;
   }
   return std::string();
@@ -253,6 +264,36 @@ const std::string GetDevToolsAgentHostTypeString(
   return std::string();
 }
 
+void DidFindRegistrationForDispatchSyncEventOnIO(
+    scoped_refptr<BackgroundSyncContext> sync_context,
+    const std::string& tag,
+    bool last_chance,
+    ServiceWorkerStatusCode status,
+    const scoped_refptr<content::ServiceWorkerRegistration>& registration) {
+  if (status != SERVICE_WORKER_OK || !registration->active_version())
+    return;
+  BackgroundSyncManager* background_sync_manager =
+      sync_context->background_sync_manager();
+  scoped_refptr<content::ServiceWorkerVersion> version(
+      registration->active_version());
+  // Keep the registration while dispatching the sync event.
+  background_sync_manager->EmulateDispatchSyncEvent(
+      tag, std::move(version), last_chance,
+      base::Bind(&StatusNoOpKeepingRegistration, registration));
+}
+
+void DispatchSyncEventOnIO(scoped_refptr<ServiceWorkerContextWrapper> context,
+                           scoped_refptr<BackgroundSyncContext> sync_context,
+                           const GURL& origin,
+                           int64_t registration_id,
+                           const std::string& tag,
+                           bool last_chance) {
+  context->FindReadyRegistrationForId(
+      registration_id, origin,
+      base::Bind(&DidFindRegistrationForDispatchSyncEventOnIO, sync_context,
+                 tag, last_chance));
+}
+
 }  // namespace
 
 ServiceWorkerHandler::ServiceWorkerHandler()
@@ -347,7 +388,7 @@ Response ServiceWorkerHandler::Disable() {
   ServiceWorkerDevToolsManager::GetInstance()->RemoveObserver(this);
   ClearForceUpdate();
   for (const auto& pair : attached_hosts_)
-    pair.second->DetachClient();
+    pair.second->DetachClient(this);
   attached_hosts_.clear();
   DCHECK(context_watcher_);
   context_watcher_->Stop();
@@ -466,6 +507,32 @@ Response ServiceWorkerHandler::DeliverPushMessage(
   BrowserContext::DeliverPushMessage(
       render_frame_host_->GetProcess()->GetBrowserContext(), GURL(origin), id,
       payload, base::Bind(&PushDeliveryNoOp));
+  return Response::OK();
+}
+
+Response ServiceWorkerHandler::DispatchSyncEvent(
+    const std::string& origin,
+    const std::string& registration_id,
+    const std::string& tag,
+    bool last_chance) {
+  if (!enabled_)
+    return Response::OK();
+  if (!render_frame_host_)
+    return CreateContextErrorResponse();
+  int64_t id = 0;
+  if (!base::StringToInt64(registration_id, &id))
+    return CreateInvalidVersionIdErrorResponse();
+
+  StoragePartitionImpl* partition =
+      static_cast<StoragePartitionImpl*>(BrowserContext::GetStoragePartition(
+          render_frame_host_->GetProcess()->GetBrowserContext(),
+          render_frame_host_->GetSiteInstance()));
+  BackgroundSyncContext* sync_context = partition->GetBackgroundSyncContext();
+
+  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
+                          base::Bind(&DispatchSyncEventOnIO, context_,
+                                     make_scoped_refptr(sync_context),
+                                     GURL(origin), id, tag, last_chance));
   return Response::OK();
 }
 
@@ -618,7 +685,7 @@ void ServiceWorkerHandler::ReportWorkerTerminated(
   auto it = attached_hosts_.find(host->GetId());
   if (it == attached_hosts_.end())
     return;
-  host->DetachClient();
+  host->DetachClient(this);
   client_->WorkerTerminated(WorkerTerminatedParams::Create()->
       set_worker_id(host->GetId()));
   attached_hosts_.erase(it);

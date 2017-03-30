@@ -12,7 +12,7 @@ namespace blink {
 
 CSSAngleValue* CSSAngleValue::create(double value, const String& unit, ExceptionState& exceptionState)
 {
-    CSSPrimitiveValue::UnitType primitiveUnit = CSSPrimitiveValue::fromName(unit);
+    CSSPrimitiveValue::UnitType primitiveUnit = CSSPrimitiveValue::stringToUnitType(unit);
     DCHECK(CSSPrimitiveValue::isAngle(primitiveUnit));
     return new CSSAngleValue(value, primitiveUnit);
 }
@@ -51,7 +51,7 @@ double CSSAngleValue::turns() const
 
 CSSValue* CSSAngleValue::toCSSValue() const
 {
-    return cssValuePool().createValue(m_value, m_unit);
+    return CSSPrimitiveValue::create(m_value, m_unit);
 }
 
 } // namespace blink

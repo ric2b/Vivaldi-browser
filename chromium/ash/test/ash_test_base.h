@@ -42,6 +42,8 @@ class WindowDelegate;
 
 namespace ash {
 class DisplayManager;
+class SystemTray;
+class WmShelf;
 
 namespace test {
 
@@ -60,6 +62,9 @@ class AshTestBase : public testing::Test {
   // testing::Test:
   void SetUp() override;
   void TearDown() override;
+
+  // Returns the system tray on the primary display.
+  static SystemTray* GetPrimarySystemTray();
 
   // Update the display configuration as given in |display_specs|.
   // See ash::test::DisplayManagerTestApi::UpdateDisplay for more details.
@@ -116,6 +121,9 @@ class AshTestBase : public testing::Test {
   // Proxy to AshTestHelper::SupportsHostWindowResize().
   static bool SupportsHostWindowResize();
 
+  // Returns the WmShelf for the primary display.
+  static WmShelf* GetPrimaryShelf();
+
   void set_start_session(bool start_session) { start_session_ = start_session; }
 
   AshTestHelper* ash_test_helper() { return ash_test_helper_.get(); }
@@ -123,6 +131,7 @@ class AshTestBase : public testing::Test {
   void RunAllPendingInMessageLoop();
 
   TestScreenshotDelegate* GetScreenshotDelegate();
+
   TestSystemTrayDelegate* GetSystemTrayDelegate();
 
   // Utility methods to emulate user logged in or not, session started or not
@@ -161,9 +170,7 @@ class AshTestBase : public testing::Test {
 
 class NoSessionAshTestBase : public AshTestBase {
  public:
-  NoSessionAshTestBase() {
-    set_start_session(false);
-  }
+  NoSessionAshTestBase() { set_start_session(false); }
   ~NoSessionAshTestBase() override {}
 
  private:

@@ -7,10 +7,6 @@
 #include "core/dom/Document.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
-#include "core/layout/LayoutBox.h"
-#include "core/layout/LayoutObject.h"
-#include "core/layout/LayoutVideo.h"
-#include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
 #include "platform/Logging.h"
 #include "platform/UserGestureIndicator.h"
@@ -44,12 +40,6 @@ AutoplayExperimentHelper::AutoplayExperimentHelper(Client* client)
 
 AutoplayExperimentHelper::~AutoplayExperimentHelper()
 {
-}
-
-void AutoplayExperimentHelper::dispose()
-{
-    // Do any cleanup that requires the client.
-    unregisterForPositionUpdatesIfNeeded();
 }
 
 void AutoplayExperimentHelper::becameReadyToPlay()
@@ -412,11 +402,6 @@ void AutoplayExperimentHelper::prepareToAutoplay(AutoplayMetrics metric)
     muteIfNeeded();
 
     // Do not actually start playback here.
-}
-
-AutoplayExperimentHelper::Client& AutoplayExperimentHelper::client() const
-{
-    return *m_client;
 }
 
 AutoplayExperimentHelper::Mode AutoplayExperimentHelper::fromString(const String& mode)

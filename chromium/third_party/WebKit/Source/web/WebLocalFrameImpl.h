@@ -34,6 +34,7 @@
 #include "core/editing/VisiblePosition.h"
 #include "core/frame/LocalFrame.h"
 #include "platform/geometry/FloatRect.h"
+#include "platform/heap/SelfKeepAlive.h"
 #include "public/platform/WebFileSystemType.h"
 #include "public/web/WebFrameWidget.h"
 #include "public/web/WebLocalFrame.h"
@@ -42,9 +43,8 @@
 #include "web/WebExport.h"
 #include "web/WebFrameImplBase.h"
 #include "wtf/Compiler.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/RefCounted.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -52,6 +52,7 @@ class ChromePrintContext;
 class IntSize;
 class KURL;
 class Range;
+class ScrollableArea;
 class SharedWorkerRepositoryClientImpl;
 class TextFinder;
 class WebAutofillClient;
@@ -95,7 +96,6 @@ public:
     WebView* view() const override;
     WebDocument document() const override;
     WebPerformance performance() const override;
-    bool dispatchBeforeUnloadEvent() override;
     void dispatchUnloadEvent() override;
     void executeScript(const WebScriptSource&) override;
     void executeScriptInIsolatedWorld(
@@ -202,11 +202,11 @@ public:
     WebAutofillClient* autofillClient() override;
     void setDevToolsAgentClient(WebDevToolsAgentClient*) override;
     WebDevToolsAgent* devToolsAgent() override;
-    void setFrameOwnerProperties(const WebFrameOwnerProperties&) override;
     WebLocalFrameImpl* localRoot() override;
     WebLocalFrame* traversePreviousLocal(bool wrap) const override;
     WebLocalFrame* traverseNextLocal(bool wrap) const override;
     void sendPings(const WebURL& destinationURL) override;
+    bool dispatchBeforeUnloadEvent(bool) override;
     WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebCachePolicy) const override;
     WebURLRequest requestForReload(WebFrameLoadType, const WebURL&) const override;
     void load(const WebURLRequest&, WebFrameLoadType, const WebHistoryItem&,
@@ -229,7 +229,7 @@ public:
     bool find(
         int identifier, const WebString& searchText, const WebFindOptions&,
         bool wrapWithinFrame, WebRect* selectionRect, bool* activeNow = nullptr) override;
-    void stopFinding(bool clearSelection) override;
+    void stopFinding(StopFindAction) override;
     void scopeStringMatches(
         int identifier, const WebString& searchText, const WebFindOptions&,
         bool reset) override;
@@ -240,8 +240,12 @@ public:
     WebFloatRect activeFindMatchRect() override;
     void findMatchRects(WebVector<WebFloatRect>&) override;
     int selectNearestFindMatch(const WebFloatPoint&, WebRect* selectionRect) override;
+    float distanceToNearestFindMatch(const WebFloatPoint&) override;
     void setTickmarks(const WebVector<WebRect>&) override;
     WebFrameWidget* frameWidget() const override;
+    void copyImageAt(const WebPoint&) override;
+    void saveImageAt(const WebPoint&) override;
+    void clearActiveFindMatch() override;
 
     // WebFrameImplBase methods:
     void initializeCoreFrame(FrameHost*, FrameOwner*, const AtomicString& name, const AtomicString& uniqueName) override;
@@ -251,7 +255,7 @@ public:
     void willDetachParent();
 
     static WebLocalFrameImpl* create(WebTreeScopeType, WebFrameClient*, WebFrame* opener);
-    static WebLocalFrameImpl* createProvisional(WebFrameClient*, WebRemoteFrame*, WebSandboxFlags, const WebFrameOwnerProperties&);
+    static WebLocalFrameImpl* createProvisional(WebFrameClient*, WebRemoteFrame*, WebSandboxFlags);
     ~WebLocalFrameImpl() override;
 
     LocalFrame* createChildFrame(const FrameLoadRequest&, const AtomicString& name, HTMLFrameOwnerElement*);
@@ -348,8 +352,13 @@ private:
 
     void loadJavaScriptURL(const KURL&);
 
+    HitTestResult hitTestResultForVisualViewportPos(const IntPoint&);
+
     WebPlugin* focusedPluginIfInputMethodSupported();
     ScrollableArea* layoutViewportScrollableArea() const;
+
+    // Returns true if the frame is focused.
+    bool isFocused() const;
 
     Member<FrameLoaderClientImpl> m_frameLoaderClientImpl;
 
@@ -366,7 +375,7 @@ private:
     WebFrameClient* m_client;
     WebAutofillClient* m_autofillClient;
     WebContentSettingsClient* m_contentSettingsClient;
-    OwnPtr<SharedWorkerRepositoryClientImpl> m_sharedWorkerRepositoryClient;
+    std::unique_ptr<SharedWorkerRepositoryClientImpl> m_sharedWorkerRepositoryClient;
 
     // Will be initialized after first call to find() or scopeStringMatches().
     Member<TextFinder> m_textFinder;

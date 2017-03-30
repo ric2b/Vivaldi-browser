@@ -16,6 +16,8 @@ class GURL;
 
 namespace content {
 
+enum class EmbeddedWorkerStatus;
+
 class ServiceWorkerMetrics {
  public:
   // Used for UMA. Append-only.
@@ -78,6 +80,13 @@ class ServiceWorkerMetrics {
   };
 
   // Used for UMA. Append-only.
+  // This class is used to indicate which event is fired/finished. Most events
+  // have only one request that starts the event and one response that finishes
+  // the event, but the fetch and the foreign fetch event have two responses, so
+  // there are two types of EventType to break down the measurement into two:
+  // FETCH/FOREIGN_FETCH and FETCH_WAITUNTIL/FOREIGN_FETCH_WAITUNTIL.
+  // Moreover, FETCH is separated into the four: MAIN_FRAME, SUB_FRAME,
+  // SHARED_WORKER and SUB_RESOURCE for more detailed UMA.
   enum class EventType {
     ACTIVATE = 0,
     INSTALL = 1,
@@ -95,12 +104,20 @@ class ServiceWorkerMetrics {
     FETCH_SUB_RESOURCE = 13,
     UNKNOWN = 14,  // Used when event type is not known.
     FOREIGN_FETCH = 15,
+    FETCH_WAITUNTIL = 16,
+    FOREIGN_FETCH_WAITUNTIL = 17,
     // Add new events to record here.
     NUM_TYPES
   };
 
   // Used for UMA. Append only.
-  enum class Site { OTHER, NEW_TAB_PAGE, NUM_TYPES };
+  enum class Site {
+    OTHER,  // Obsolete
+    NEW_TAB_PAGE,
+    WITH_FETCH_HANDLER,
+    WITHOUT_FETCH_HANDLER,
+    NUM_TYPES
+  };
 
   // Not used for UMA.
   enum class StartSituation {
@@ -138,7 +155,9 @@ class ServiceWorkerMetrics {
   static void RecordDeleteAndStartOverResult(DeleteAndStartOverResult result);
 
   // Counts the number of page loads controlled by a Service Worker.
-  static void CountControlledPageLoad(const GURL& url);
+  static void CountControlledPageLoad(const GURL& url,
+                                      bool has_fetch_handler,
+                                      bool is_main_frame_load);
 
   // Records the result of trying to start a worker. |is_installed| indicates
   // whether the version has been installed.
@@ -150,7 +169,15 @@ class ServiceWorkerMetrics {
   // indicates whether the version has been installed.
   static void RecordStartWorkerTime(base::TimeDelta time,
                                     bool is_installed,
-                                    StartSituation start_situation);
+                                    StartSituation start_situation,
+                                    EventType purpose);
+
+  // Records the time taken to prepare an activated Service Worker for a main
+  // frame fetch.
+  static void RecordActivatedWorkerPreparationTimeForMainFrame(
+      base::TimeDelta time,
+      EmbeddedWorkerStatus initial_worker_status,
+      StartSituation start_situation);
 
   // Records the result of trying to stop a worker.
   static void RecordWorkerStopped(StopStatus status);
@@ -158,7 +185,8 @@ class ServiceWorkerMetrics {
   // Records the time taken to successfully stop a worker.
   static void RecordStopWorkerTime(base::TimeDelta time);
 
-  static void RecordActivateEventStatus(ServiceWorkerStatusCode status);
+  static void RecordActivateEventStatus(ServiceWorkerStatusCode status,
+                                        bool is_shutdown);
   static void RecordInstallEventStatus(ServiceWorkerStatusCode status);
 
   // Records how much of dispatched events are handled while a Service

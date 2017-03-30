@@ -4,7 +4,9 @@
 
 #include "content/renderer/media/html_video_element_capturer_source.h"
 
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "content/public/renderer/render_thread.h"
@@ -12,11 +14,13 @@
 #include "content/renderer/media/webrtc_uma_histograms.h"
 #include "media/base/limits.h"
 #include "media/blink/webmediaplayer_impl.h"
+#include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/libyuv/include/libyuv.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkSurface.h"
 #include "third_party/skia/include/core/SkXfermode.h"
 
 namespace {
@@ -91,9 +95,12 @@ void HtmlVideoElementCapturerSource::StartCapture(
     return;
   }
   const blink::WebSize resolution = web_media_player_->naturalSize();
-  canvas_ = sk_sp<SkCanvas>(skia::CreatePlatformCanvas(resolution.width,
-                               resolution.height,
-                               true /* is_opaque */));
+  surface_ =
+      SkSurface::MakeRasterN32Premul(resolution.width, resolution.height);
+  if (!surface_) {
+    running_callback_.Run(false);
+    return;
+  }
 
   new_frame_callback_ = new_frame_callback;
   // Force |capture_frame_rate_| to be in between k{Min,Max}FramesPerSecond.
@@ -127,14 +134,15 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
   const base::TimeTicks current_time = base::TimeTicks::Now();
   const blink::WebSize resolution = web_media_player_->naturalSize();
 
+  SkCanvas* canvas = surface_->getCanvas();
   web_media_player_->paint(
-      canvas_.get(), blink::WebRect(0, 0, resolution.width, resolution.height),
+      canvas, blink::WebRect(0, 0, resolution.width, resolution.height),
       0xFF /* alpha */, SkXfermode::kSrc_Mode);
-  DCHECK_NE(kUnknown_SkColorType, canvas_->imageInfo().colorType());
-  DCHECK_EQ(canvas_->imageInfo().width(), resolution.width);
-  DCHECK_EQ(canvas_->imageInfo().height(), resolution.height);
+  DCHECK_NE(kUnknown_SkColorType, canvas->imageInfo().colorType());
+  DCHECK_EQ(canvas->imageInfo().width(), resolution.width);
+  DCHECK_EQ(canvas->imageInfo().height(), resolution.height);
 
-  const SkBitmap bitmap = skia::ReadPixels(canvas_.get());
+  const SkBitmap bitmap = skia::ReadPixels(canvas);
   DCHECK_NE(kUnknown_SkColorType, bitmap.colorType());
   DCHECK(!bitmap.drawsNothing());
   DCHECK(bitmap.getPixels());
@@ -160,8 +168,8 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
                             0 /* crop_y */,
                             bitmap.info().width(),
                             bitmap.info().height(),
-                            frame->natural_size().width(),
-                            frame->natural_size().height(),
+                            frame->coded_size().width(),
+                            frame->coded_size().height(),
                             libyuv::kRotate0,
                             libyuv::FOURCC_ARGB) == 0) {
     // Success!
@@ -182,7 +190,7 @@ void HtmlVideoElementCapturerSource::sendNewFrame() {
       next_capture_time_ = current_time;
   }
   // Schedule next capture.
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&HtmlVideoElementCapturerSource::sendNewFrame,
                             weak_factory_.GetWeakPtr()),
       next_capture_time_ - current_time);

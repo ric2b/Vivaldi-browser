@@ -149,7 +149,7 @@ void PopulateDevice(const device::BluetoothDevice* device,
     return;
   request->device.address = device->GetAddress();
   request->device.name.reset(
-      new std::string(base::UTF16ToUTF8(device->GetName())));
+      new std::string(base::UTF16ToUTF8(device->GetNameForDisplay())));
   request->device.device_class.reset(new int(device->GetBluetoothClass()));
 }
 
@@ -1064,7 +1064,7 @@ void BluetoothLowEnergyEventRouter::GattCharacteristicValueChanged(
   apibtle::Characteristic api_characteristic;
   PopulateCharacteristic(characteristic, &api_characteristic);
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(apibtle::CharacteristicToValue(&api_characteristic).release());
+  args->Append(apibtle::CharacteristicToValue(&api_characteristic));
 
   DispatchEventToExtensionsWithPermission(
       events::BLUETOOTH_LOW_ENERGY_ON_CHARACTERISTIC_VALUE_CHANGED,
@@ -1095,7 +1095,7 @@ void BluetoothLowEnergyEventRouter::GattDescriptorValueChanged(
   apibtle::Descriptor api_descriptor;
   PopulateDescriptor(descriptor, &api_descriptor);
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(apibtle::DescriptorToValue(&api_descriptor).release());
+  args->Append(apibtle::DescriptorToValue(&api_descriptor));
 
   DispatchEventToExtensionsWithPermission(
       events::BLUETOOTH_LOW_ENERGY_ON_DESCRIPTOR_VALUE_CHANGED,

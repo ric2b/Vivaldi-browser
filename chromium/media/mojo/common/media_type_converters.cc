@@ -14,6 +14,7 @@
 #include "media/base/buffering_state.h"
 #include "media/base/cdm_config.h"
 #include "media/base/cdm_key_information.h"
+#include "media/base/decode_status.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/decryptor.h"
@@ -24,7 +25,6 @@
 #include "media/base/video_frame.h"
 #include "media/mojo/common/mojo_shared_buffer_video_frame.h"
 #include "media/mojo/interfaces/demuxer_stream.mojom.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/public/cpp/system/buffer.h"
 
 namespace mojo {
@@ -41,9 +41,20 @@ namespace mojo {
                                                media::mojom::mojo_enum_value), \
                 "Mismatched enum: " #media_enum_value " != " #mojo_enum_value)
 
+#define ASSERT_ENUM_CLASS_EQ(media_enum, value)                            \
+  static_assert(                                                           \
+      media::media_enum::value ==                                          \
+          static_cast<media::media_enum>(media::mojom::media_enum::value), \
+      "Mismatched enum: " #media_enum #value)
+
 // BufferingState.
 ASSERT_ENUM_EQ(BufferingState, BUFFERING_, , HAVE_NOTHING);
 ASSERT_ENUM_EQ(BufferingState, BUFFERING_, , HAVE_ENOUGH);
+
+// DecodeStatus.
+ASSERT_ENUM_CLASS_EQ(DecodeStatus, OK);
+ASSERT_ENUM_CLASS_EQ(DecodeStatus, ABORTED);
+ASSERT_ENUM_CLASS_EQ(DecodeStatus, DECODE_ERROR);
 
 // AudioCodec.
 ASSERT_ENUM_EQ_RAW(AudioCodec, kUnknownAudioCodec, AudioCodec::UNKNOWN);
@@ -427,8 +438,6 @@ TypeConverter<media::mojom::DecoderBufferPtr,
   mojo_buffer->duration_usec = input->duration().InMicroseconds();
   mojo_buffer->is_key_frame = input->is_key_frame();
   mojo_buffer->data_size = base::checked_cast<uint32_t>(input->data_size());
-  mojo_buffer->side_data_size =
-      base::checked_cast<uint32_t>(input->side_data_size());
   mojo_buffer->front_discard_usec =
       input->discard_padding().first.InMicroseconds();
   mojo_buffer->back_discard_usec =
@@ -463,8 +472,11 @@ TypeConverter<scoped_refptr<media::DecoderBuffer>,
 
   scoped_refptr<media::DecoderBuffer> buffer(
       new media::DecoderBuffer(input->data_size));
-  if (input->side_data_size)
-    buffer->CopySideDataFrom(&input->side_data.front(), input->side_data_size);
+
+  if (!input->side_data.empty()) {
+    buffer->CopySideDataFrom(&input->side_data.front(),
+                             input->side_data.size());
+  }
 
   buffer->set_timestamp(
       base::TimeDelta::FromMicroseconds(input->timestamp_usec));
@@ -541,9 +553,9 @@ TypeConverter<media::mojom::VideoDecoderConfigPtr, media::VideoDecoderConfig>::
   config->format = static_cast<media::mojom::VideoFormat>(input.format());
   config->color_space =
       static_cast<media::mojom::ColorSpace>(input.color_space());
-  config->coded_size = Size::From(input.coded_size());
-  config->visible_rect = Rect::From(input.visible_rect());
-  config->natural_size = Size::From(input.natural_size());
+  config->coded_size = input.coded_size();
+  config->visible_rect = input.visible_rect();
+  config->natural_size = input.natural_size();
   if (!input.extra_data().empty()) {
     config->extra_data = mojo::Array<uint8_t>::From(input.extra_data());
   }
@@ -557,14 +569,13 @@ media::VideoDecoderConfig
 TypeConverter<media::VideoDecoderConfig, media::mojom::VideoDecoderConfigPtr>::
     Convert(const media::mojom::VideoDecoderConfigPtr& input) {
   media::VideoDecoderConfig config;
-  config.Initialize(
-      static_cast<media::VideoCodec>(input->codec),
-      static_cast<media::VideoCodecProfile>(input->profile),
-      static_cast<media::VideoPixelFormat>(input->format),
-      static_cast<media::ColorSpace>(input->color_space),
-      input->coded_size.To<gfx::Size>(), input->visible_rect.To<gfx::Rect>(),
-      input->natural_size.To<gfx::Size>(), input->extra_data.storage(),
-      input->encryption_scheme.To<media::EncryptionScheme>());
+  config.Initialize(static_cast<media::VideoCodec>(input->codec),
+                    static_cast<media::VideoCodecProfile>(input->profile),
+                    static_cast<media::VideoPixelFormat>(input->format),
+                    static_cast<media::ColorSpace>(input->color_space),
+                    input->coded_size, input->visible_rect, input->natural_size,
+                    input->extra_data.storage(),
+                    input->encryption_scheme.To<media::EncryptionScheme>());
   return config;
 }
 
@@ -678,16 +689,14 @@ TypeConverter<media::mojom::VideoFramePtr, scoped_refptr<media::VideoFrame>>::
            input->storage_type());
   media::MojoSharedBufferVideoFrame* input_frame =
       static_cast<media::MojoSharedBufferVideoFrame*>(input.get());
-  mojo::ScopedSharedBufferHandle duplicated_handle;
-  const MojoResult result =
-      DuplicateBuffer(input_frame->Handle(), nullptr, &duplicated_handle);
-  CHECK_EQ(MOJO_RESULT_OK, result);
+  mojo::ScopedSharedBufferHandle duplicated_handle =
+      input_frame->Handle().Clone();
   CHECK(duplicated_handle.is_valid());
 
   frame->format = static_cast<media::mojom::VideoFormat>(input->format());
-  frame->coded_size = Size::From(input->coded_size());
-  frame->visible_rect = Rect::From(input->visible_rect());
-  frame->natural_size = Size::From(input->natural_size());
+  frame->coded_size = input->coded_size();
+  frame->visible_rect = input->visible_rect();
+  frame->natural_size = input->natural_size();
   frame->timestamp_usec = input->timestamp().InMicroseconds();
   frame->frame_data = std::move(duplicated_handle);
   frame->frame_data_size = input_frame->MappedSize();
@@ -708,9 +717,8 @@ TypeConverter<scoped_refptr<media::VideoFrame>, media::mojom::VideoFramePtr>::
     return media::VideoFrame::CreateEOSFrame();
 
   return media::MojoSharedBufferVideoFrame::Create(
-      static_cast<media::VideoPixelFormat>(input->format),
-      input->coded_size.To<gfx::Size>(), input->visible_rect.To<gfx::Rect>(),
-      input->natural_size.To<gfx::Size>(), std::move(input->frame_data),
+      static_cast<media::VideoPixelFormat>(input->format), input->coded_size,
+      input->visible_rect, input->natural_size, std::move(input->frame_data),
       base::saturated_cast<size_t>(input->frame_data_size),
       base::saturated_cast<size_t>(input->y_offset),
       base::saturated_cast<size_t>(input->u_offset),

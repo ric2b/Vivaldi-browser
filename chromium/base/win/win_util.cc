@@ -6,10 +6,7 @@
 
 #include <aclapi.h>
 #include <cfgmgr32.h>
-#include <lm.h>
 #include <powrprof.h>
-#include <shellapi.h>
-#include <shlobj.h>
 #include <shobjidl.h>  // Must be before propkey.
 #include <initguid.h>
 #include <inspectable.h>
@@ -19,6 +16,8 @@
 #include <roapi.h>
 #include <sddl.h>
 #include <setupapi.h>
+#include <shellscalingapi.h>
+#include <shlwapi.h>
 #include <signal.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -41,7 +40,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/win/registry.h"
-#include "base/win/scoped_co_mem.h"
 #include "base/win/scoped_comptr.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/scoped_propvariant.h"
@@ -106,10 +104,6 @@ class LazyIsUser32AndGdi32Available {
 
   DISALLOW_COPY_AND_ASSIGN(LazyIsUser32AndGdi32Available);
 };
-
-const wchar_t kWindows8OSKRegPath[] =
-    L"Software\\Classes\\CLSID\\{054AAE20-4BEA-4347-8A35-64A533254A9D}"
-    L"\\LocalServer32";
 
 // Returns the current platform role. We use the PowerDeterminePlatformRoleEx
 // API for that.
@@ -525,116 +519,15 @@ bool IsTabletDevice(std::string* reason) {
   return is_tablet;
 }
 
-bool DisplayVirtualKeyboard() {
-  if (GetVersion() < VERSION_WIN8)
-    return false;
-
-  if (IsKeyboardPresentOnSlate(nullptr))
-    return false;
-
-  static LazyInstance<string16>::Leaky osk_path = LAZY_INSTANCE_INITIALIZER;
-
-  if (osk_path.Get().empty()) {
-    // We need to launch TabTip.exe from the location specified under the
-    // LocalServer32 key for the {{054AAE20-4BEA-4347-8A35-64A533254A9D}}
-    // CLSID.
-    // TabTip.exe is typically found at
-    // c:\program files\common files\microsoft shared\ink on English Windows.
-    // We don't want to launch TabTip.exe from
-    // c:\program files (x86)\common files\microsoft shared\ink. This path is
-    // normally found on 64 bit Windows.
-    RegKey key(HKEY_LOCAL_MACHINE, kWindows8OSKRegPath,
-               KEY_READ | KEY_WOW64_64KEY);
-    DWORD osk_path_length = 1024;
-    if (key.ReadValue(NULL,
-                      WriteInto(&osk_path.Get(), osk_path_length),
-                      &osk_path_length,
-                      NULL) != ERROR_SUCCESS) {
-      DLOG(WARNING) << "Failed to read on screen keyboard path from registry";
-      return false;
-    }
-    size_t common_program_files_offset =
-        osk_path.Get().find(L"%CommonProgramFiles%");
-    // Typically the path to TabTip.exe read from the registry will start with
-    // %CommonProgramFiles% which needs to be replaced with the corrsponding
-    // expanded string.
-    // If the path does not begin with %CommonProgramFiles% we use it as is.
-    if (common_program_files_offset != string16::npos) {
-      // Preserve the beginning quote in the path.
-      osk_path.Get().erase(common_program_files_offset,
-                           wcslen(L"%CommonProgramFiles%"));
-      // The path read from the registry contains the %CommonProgramFiles%
-      // environment variable prefix. On 64 bit Windows the SHGetKnownFolderPath
-      // function returns the common program files path with the X86 suffix for
-      // the FOLDERID_ProgramFilesCommon value.
-      // To get the correct path to TabTip.exe we first read the environment
-      // variable CommonProgramW6432 which points to the desired common
-      // files path. Failing that we fallback to the SHGetKnownFolderPath API.
-
-      // We then replace the %CommonProgramFiles% value with the actual common
-      // files path found in the process.
-      string16 common_program_files_path;
-      std::unique_ptr<wchar_t[]> common_program_files_wow6432;
-      DWORD buffer_size =
-          GetEnvironmentVariable(L"CommonProgramW6432", NULL, 0);
-      if (buffer_size) {
-        common_program_files_wow6432.reset(new wchar_t[buffer_size]);
-        GetEnvironmentVariable(L"CommonProgramW6432",
-                               common_program_files_wow6432.get(),
-                               buffer_size);
-        common_program_files_path = common_program_files_wow6432.get();
-        DCHECK(!common_program_files_path.empty());
-      } else {
-        ScopedCoMem<wchar_t> common_program_files;
-        if (FAILED(SHGetKnownFolderPath(FOLDERID_ProgramFilesCommon, 0, NULL,
-                                        &common_program_files))) {
-          return false;
-        }
-        common_program_files_path = common_program_files;
-      }
-
-      osk_path.Get().insert(1, common_program_files_path);
-    }
-  }
-
-  HINSTANCE ret = ::ShellExecuteW(NULL,
-                                  L"",
-                                  osk_path.Get().c_str(),
-                                  NULL,
-                                  NULL,
-                                  SW_SHOW);
-  return reinterpret_cast<intptr_t>(ret) > 32;
-}
-
-bool DismissVirtualKeyboard() {
-  if (GetVersion() < VERSION_WIN8)
-    return false;
-
-  // We dismiss the virtual keyboard by generating the ESC keystroke
-  // programmatically.
-  const wchar_t kOSKClassName[] = L"IPTip_Main_Window";
-  HWND osk = ::FindWindow(kOSKClassName, NULL);
-  if (::IsWindow(osk) && ::IsWindowEnabled(osk)) {
-    PostMessage(osk, WM_SYSCOMMAND, SC_CLOSE, 0);
-    return true;
-  }
-  return false;
-}
-
-enum DomainEnrollementState {UNKNOWN = -1, NOT_ENROLLED, ENROLLED};
+enum DomainEnrollmentState {UNKNOWN = -1, NOT_ENROLLED, ENROLLED};
 static volatile long int g_domain_state = UNKNOWN;
 
 bool IsEnrolledToDomain() {
   // Doesn't make any sense to retry inside a user session because joining a
   // domain will only kick in on a restart.
   if (g_domain_state == UNKNOWN) {
-    LPWSTR domain;
-    NETSETUP_JOIN_STATUS join_status;
-    if(::NetGetJoinInformation(NULL, &domain, &join_status) != NERR_Success)
-      return false;
-    ::NetApiBufferFree(domain);
     ::InterlockedCompareExchange(&g_domain_state,
-                                 join_status == ::NetSetupDomainName ?
+                                 IsOS(OS_DOMAINMEMBER) ?
                                      ENROLLED : NOT_ENROLLED,
                                  UNKNOWN);
   }
@@ -703,6 +596,31 @@ void DisableFlicks(HWND hwnd) {
   ::SetProp(hwnd, MICROSOFT_TABLETPENSERVICE_PROPERTY,
       reinterpret_cast<HANDLE>(TABLET_DISABLE_FLICKS |
           TABLET_DISABLE_FLICKFALLBACKKEYS));
+}
+
+bool IsProcessPerMonitorDpiAware() {
+  enum class PerMonitorDpiAware {
+    UNKNOWN = 0,
+    PER_MONITOR_DPI_UNAWARE,
+    PER_MONITOR_DPI_AWARE,
+  };
+  static PerMonitorDpiAware per_monitor_dpi_aware = PerMonitorDpiAware::UNKNOWN;
+  if (per_monitor_dpi_aware == PerMonitorDpiAware::UNKNOWN) {
+    per_monitor_dpi_aware = PerMonitorDpiAware::PER_MONITOR_DPI_UNAWARE;
+    HMODULE shcore_dll = ::LoadLibrary(L"shcore.dll");
+    if (shcore_dll) {
+      auto get_process_dpi_awareness_func =
+          reinterpret_cast<decltype(::GetProcessDpiAwareness)*>(
+              ::GetProcAddress(shcore_dll, "GetProcessDpiAwareness"));
+      if (get_process_dpi_awareness_func) {
+        PROCESS_DPI_AWARENESS awareness;
+        if (SUCCEEDED(get_process_dpi_awareness_func(nullptr, &awareness)) &&
+            awareness == PROCESS_PER_MONITOR_DPI_AWARE)
+          per_monitor_dpi_aware = PerMonitorDpiAware::PER_MONITOR_DPI_AWARE;
+      }
+    }
+  }
+  return per_monitor_dpi_aware == PerMonitorDpiAware::PER_MONITOR_DPI_AWARE;
 }
 
 }  // namespace win

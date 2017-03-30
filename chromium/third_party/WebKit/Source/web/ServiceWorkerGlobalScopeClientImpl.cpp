@@ -34,7 +34,7 @@
 #include "public/platform/WebURL.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 #include "public/web/modules/serviceworker/WebServiceWorkerContextClient.h"
-#include "wtf/PassOwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -87,14 +87,19 @@ void ServiceWorkerGlobalScopeClientImpl::didHandleExtendableMessageEvent(int eve
     m_client.didHandleExtendableMessageEvent(eventID, result);
 }
 
-void ServiceWorkerGlobalScopeClientImpl::didHandleFetchEvent(int fetchEventID)
+void ServiceWorkerGlobalScopeClientImpl::respondToFetchEvent(int responseID)
 {
-    m_client.didHandleFetchEvent(fetchEventID);
+    m_client.respondToFetchEvent(responseID);
 }
 
-void ServiceWorkerGlobalScopeClientImpl::didHandleFetchEvent(int fetchEventID, const WebServiceWorkerResponse& webResponse)
+void ServiceWorkerGlobalScopeClientImpl::respondToFetchEvent(int responseID, const WebServiceWorkerResponse& response)
 {
-    m_client.didHandleFetchEvent(fetchEventID, webResponse);
+    m_client.respondToFetchEvent(responseID, response);
+}
+
+void ServiceWorkerGlobalScopeClientImpl::didHandleFetchEvent(int eventFinishID, WebServiceWorkerEventResult result)
+{
+    m_client.didHandleFetchEvent(eventFinishID, result);
 }
 
 void ServiceWorkerGlobalScopeClientImpl::didHandleInstallEvent(int installEventID, WebServiceWorkerEventResult result)
@@ -122,14 +127,14 @@ void ServiceWorkerGlobalScopeClientImpl::didHandleSyncEvent(int syncEventID, Web
     m_client.didHandleSyncEvent(syncEventID, result);
 }
 
-void ServiceWorkerGlobalScopeClientImpl::postMessageToClient(const WebString& clientUUID, const WebString& message, PassOwnPtr<WebMessagePortChannelArray> webChannels)
+void ServiceWorkerGlobalScopeClientImpl::postMessageToClient(const WebString& clientUUID, const WebString& message, std::unique_ptr<WebMessagePortChannelArray> webChannels)
 {
-    m_client.postMessageToClient(clientUUID, message, webChannels.leakPtr());
+    m_client.postMessageToClient(clientUUID, message, webChannels.release());
 }
 
-void ServiceWorkerGlobalScopeClientImpl::postMessageToCrossOriginClient(const WebCrossOriginServiceWorkerClient& client, const WebString& message, PassOwnPtr<WebMessagePortChannelArray> webChannels)
+void ServiceWorkerGlobalScopeClientImpl::postMessageToCrossOriginClient(const WebCrossOriginServiceWorkerClient& client, const WebString& message, std::unique_ptr<WebMessagePortChannelArray> webChannels)
 {
-    m_client.postMessageToCrossOriginClient(client, message, webChannels.leakPtr());
+    m_client.postMessageToCrossOriginClient(client, message, webChannels.release());
 }
 
 void ServiceWorkerGlobalScopeClientImpl::skipWaiting(WebServiceWorkerSkipWaitingCallbacks* callbacks)

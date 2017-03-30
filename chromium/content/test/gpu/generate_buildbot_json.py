@@ -397,53 +397,76 @@ FYI_WATERFALL = {
       'swarming': False,
       'os_type': 'linux',
     },
-    'Android Debug (Nexus 5)': {
+    'Android Release (Nexus 5)': {
       'swarming_dimensions': {
         # There are no PCI IDs on Android.
         # This is a hack to get the script working.
         'gpu': '0000:0000',
         'os': 'Android'
       },
-      'build_config': 'android-content-shell',
+      'build_config': 'android-chromium',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
       'os_type': 'android',
     },
-    'Android Debug (Nexus 5X)': {
+    'Android Release (Nexus 5X)': {
+      'swarming_dimensions': {
+        'device_type': 'bullhead',
+        'device_os': 'M',
+        'os': 'Android'
+      },
+      'build_config': 'android-chromium',
+      'swarming': True,
+      'os_type': 'android',
+    },
+    'Android Release (Nexus 6)': {
       'swarming_dimensions': {
         # There are no PCI IDs on Android.
         # This is a hack to get the script working.
         'gpu': '0000:0000',
         'os': 'Android'
       },
-      'build_config': 'android-content-shell',
+      'build_config': 'android-chromium',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
       'os_type': 'android',
     },
-    'Android Debug (Nexus 6)': {
+    'Android Release (Nexus 6P)': {
       'swarming_dimensions': {
         # There are no PCI IDs on Android.
         # This is a hack to get the script working.
         'gpu': '0000:0000',
         'os': 'Android'
       },
-      'build_config': 'android-content-shell',
+      'build_config': 'android-chromium',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
       'os_type': 'android',
     },
-    'Android Debug (Nexus 9)': {
+    'Android Release (Nexus 9)': {
       'swarming_dimensions': {
         # There are no PCI IDs on Android.
         # This is a hack to get the script working.
         'gpu': '0000:0000',
         'os': 'Android'
       },
-      'build_config': 'android-content-shell',
+      'build_config': 'android-chromium',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'android',
+    },
+    'Android Release (Pixel C)': {
+      'swarming_dimensions': {
+        # There are no PCI IDs on Android.
+        # This is a hack to get the script working.
+        'gpu': '0000:0000',
+        'os': 'Android'
+      },
+      'build_config': 'android-chromium',
       # This bot is a one-off and doesn't have similar slaves in the
       # swarming pool.
       'swarming': False,
@@ -560,8 +583,6 @@ COMMON_GTESTS = {
     ],
     'swarming': {
       'shards': 4,
-      'priority_adjustment': 'lower',
-      'expiration': 7200
     }
   },
 
@@ -589,8 +610,6 @@ COMMON_GTESTS = {
     ],
     'swarming': {
       'shards': 12,
-      'priority_adjustment': 'lower',
-      'expiration': 7200
     }
   },
 
@@ -606,7 +625,14 @@ COMMON_GTESTS = {
     ],
     'args': ['--use-gpu-in-tests']
   },
-  'angle_unittests': {'args': ['--use-gpu-in-tests']},
+  'angle_unittests': {
+    'tester_configs': [
+      {
+        'allow_on_android': True,
+      }
+    ],
+    'desktop_args': ['--use-gpu-in-tests']
+  },
   # Until the media-only tests are extracted from content_unittests,
   # and audio_unittests and content_unittests can be run on the commit
   # queue with --require-audio-hardware-for-testing, run them only on
@@ -748,6 +774,14 @@ TELEMETRY_TESTS = {
   },
   'maps_pixel_test': {
     'target_name': 'maps',
+    'args': [
+      '--os-type',
+      '${os_type}',
+      '--build-revision',
+      '${got_revision}',
+      '--test-machine-name',
+      '${buildername}',
+    ],
     'tester_configs': [
       {
         'allow_on_android': True,
@@ -799,6 +833,12 @@ TELEMETRY_TESTS = {
       },
     ],
   },
+}
+
+# These tests use Telemetry's new, simpler, browser_test_runner.
+# Eventually all of the Telemetry based tests above will be ported to
+# this harness, and the old harness will be deleted.
+TELEMETRY_GPU_INTEGRATION_TESTS = {
   'webgl_conformance': {
     'tester_configs': [
       {
@@ -892,6 +932,11 @@ TELEMETRY_TESTS = {
       '--webgl-conformance-version=2.0.0',
       '--webgl2-only=true',
     ],
+    'swarming': {
+      # These tests currently take about an hour to run. Split them
+      # into roughly 5-minute shards.
+      'shards': 12,
+    },
   },
   'webgl2_conformance_angle_tests': {
     'tester_configs': [
@@ -922,6 +967,11 @@ TELEMETRY_TESTS = {
       '--webgl-conformance-version=2.0.0',
       '--webgl2-only=true',
     ],
+    'swarming': {
+      # These tests currently take about an hour to run. Split them
+      # into roughly 5-minute shards.
+      'shards': 12,
+    },
   },
 }
 
@@ -1019,6 +1069,10 @@ def generate_gtest(tester_name, tester_config, test, test_config, is_fyi):
         tester_config['swarming_dimensions']
       ],
     })
+    if is_android(tester_config):
+      # Override the isolate target to get rid of any "_apk" suffix
+      # that would be added by the recipes.
+      result['override_isolate_target'] = test
   if 'desktop_args' in result:
     if not is_android(tester_config):
       if not 'args' in result:
@@ -1035,7 +1089,8 @@ def generate_gtest(tester_name, tester_config, test, test_config, is_fyi):
   return result
 
 def generate_telemetry_test(tester_name, tester_config,
-                            test, test_config, is_fyi):
+                            test, test_config, is_fyi,
+                            use_gpu_integration_test_harness):
   if not should_run_on_tester(tester_name, tester_config, test_config, is_fyi):
     return None
   test_args = ['-v']
@@ -1066,21 +1121,27 @@ def generate_telemetry_test(tester_name, tester_config,
     '--show-stdout',
     '--browser=%s' % tester_config['build_config'].lower()
   ]
+  swarming = {
+    # Always say this is true regardless of whether the tester
+    # supports swarming. It doesn't hurt.
+    'can_use_on_swarming_builders': True,
+    'dimension_sets': [
+      tester_config['swarming_dimensions']
+    ]
+  }
+  if 'swarming' in test_config:
+    swarming.update(test_config['swarming'])
   result = {
     'args': prefix_args + test_args,
-    'isolate_name': 'telemetry_gpu_test',
+    'isolate_name': (
+      'telemetry_gpu_integration_test' if use_gpu_integration_test_harness
+      else 'telemetry_gpu_test'),
     'name': step_name,
     'override_compile_targets': [
-      'telemetry_gpu_test_run'
+      ('telemetry_gpu_integration_test_run' if use_gpu_integration_test_harness
+       else 'telemetry_gpu_test_run')
     ],
-    'swarming': {
-      # Always say this is true regardless of whether the tester
-      # supports swarming. It doesn't hurt.
-      'can_use_on_swarming_builders': True,
-      'dimension_sets': [
-        tester_config['swarming_dimensions']
-      ]
-    },
+    'swarming': swarming,
   }
   if 'non_precommit_args' in test_config:
     result['non_precommit_args'] = test_config['non_precommit_args']
@@ -1104,11 +1165,13 @@ def generate_gtests(tester_name, tester_config, test_dictionary, is_fyi):
   return gtests
 
 def generate_telemetry_tests(tester_name, tester_config,
-                             test_dictionary, is_fyi):
+                             test_dictionary, is_fyi,
+                             use_gpu_integration_test_harness):
   isolated_scripts = []
   for test_name, test_config in sorted(test_dictionary.iteritems()):
     test = generate_telemetry_test(
-        tester_name, tester_config, test_name, test_config, is_fyi)
+      tester_name, tester_config, test_name, test_config, is_fyi,
+      use_gpu_integration_test_harness)
     if test:
       isolated_scripts.append(test)
   return isolated_scripts
@@ -1120,7 +1183,9 @@ def generate_all_tests(waterfall, is_fyi):
   for name, config in waterfall['testers'].iteritems():
     gtests = generate_gtests(name, config, COMMON_GTESTS, is_fyi)
     isolated_scripts = \
-        generate_telemetry_tests(name, config, TELEMETRY_TESTS, is_fyi)
+      generate_telemetry_tests(name, config, TELEMETRY_TESTS, is_fyi, False) + \
+      generate_telemetry_tests(name, config, TELEMETRY_GPU_INTEGRATION_TESTS,
+                               is_fyi, True)
     tests[name] = {
       'gtest_tests': sorted(gtests, key=lambda x: x['test']),
       'isolated_scripts': sorted(isolated_scripts, key=lambda x: x['name'])

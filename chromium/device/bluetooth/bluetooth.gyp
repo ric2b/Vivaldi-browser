@@ -48,6 +48,7 @@
         'bluetooth_classic_device_mac.h',
         'bluetooth_classic_win.cc',
         'bluetooth_classic_win.h',
+        'bluetooth_common.h',
         'bluetooth_device.cc',
         'bluetooth_device.h',
         'bluetooth_device_android.h',
@@ -73,6 +74,8 @@
         'bluetooth_gatt_notify_session.h',
         'bluetooth_gatt_notify_session_android.cc',
         'bluetooth_gatt_notify_session_android.h',
+        'bluetooth_gatt_notify_session_mac.h',
+        'bluetooth_gatt_notify_session_mac.mm',
         'bluetooth_gatt_notify_session_win.cc',
         'bluetooth_gatt_notify_session_win.h',
         'bluetooth_gatt_service.cc',
@@ -103,6 +106,8 @@
         'bluetooth_remote_gatt_characteristic.h',
         'bluetooth_remote_gatt_characteristic_android.cc',
         'bluetooth_remote_gatt_characteristic_android.h',
+        'bluetooth_remote_gatt_characteristic_mac.h',
+        'bluetooth_remote_gatt_characteristic_mac.mm',
         'bluetooth_remote_gatt_characteristic_win.cc',
         'bluetooth_remote_gatt_characteristic_win.h',
         'bluetooth_remote_gatt_descriptor.cc',
@@ -180,6 +185,10 @@
                 'bluez/bluetooth_remote_gatt_descriptor_bluez.h',
                 'bluez/bluetooth_remote_gatt_service_bluez.cc',
                 'bluez/bluetooth_remote_gatt_service_bluez.h',
+                'bluez/bluetooth_service_attribute_value_bluez.cc',
+                'bluez/bluetooth_service_attribute_value_bluez.h',
+                'bluez/bluetooth_service_record_bluez.cc',
+                'bluez/bluetooth_service_record_bluez.h',
                 'bluez/bluetooth_socket_bluez.cc',
                 'bluez/bluetooth_socket_bluez.h',
                 'dbus/bluetooth_adapter_client.cc',
@@ -464,6 +473,47 @@
             'java_in_dir': '../../device/bluetooth/android/java',
           },
           'includes': [ '../../build/java.gypi' ],
+        },
+      ],
+    }],
+    ['OS != "ios"', {
+      'targets': [
+        {
+          'target_name': 'bluetooth_interfaces_mojom',
+          'type': 'none',
+          'variables': {
+            'mojom_files': [
+              'public/interfaces/bluetooth_uuid.mojom',
+            ],
+            'mojom_typemaps': [
+              'public/interfaces/bluetooth_uuid.typemap',
+            ],
+          },
+          'includes': [ '../../mojo/mojom_bindings_generator_explicit.gypi' ],
+        },
+        {
+          'target_name': 'bluetooth_interfaces_blink_mojom',
+          'type': 'none',
+          'variables': {
+            'mojom_files': [
+              'public/interfaces/bluetooth_uuid.mojom',
+            ],
+            'for_blink': 'true',
+          },
+          'includes': [ '../../mojo/mojom_bindings_generator_explicit.gypi' ],
+        },
+        {
+          'target_name': 'bluetooth_mojom',
+          'type': 'static_library',
+          'export_dependent_settings': [
+            '../../mojo/mojo_public.gyp:mojo_cpp_bindings',
+          ],
+          'dependencies': [
+            '../../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            'bluetooth_interfaces_blink_mojom',
+            'bluetooth_interfaces_mojom',
+            'device_bluetooth',
+          ],
         },
       ],
     }],

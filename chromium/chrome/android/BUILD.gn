@@ -56,6 +56,7 @@ android_resources("chrome_java_resources") {
     ":chrome_strings_grd",
     "//chrome/app:java_strings_grd",
     "//components/policy:app_restrictions_resources",
+    "//components/strings:components_locale_settings_grd",
     "//components/strings:components_strings_grd",
     "//content/public/android:content_java_resources",
     "//third_party/android_data_chart:android_data_chart_java_resources",
@@ -111,7 +112,7 @@ java_strings_grd("chrome_strings_grd") {
     "values-uk/android_chrome_strings.xml",
     "values-vi/android_chrome_strings.xml",
     "values-zh-rCN/android_chrome_strings.xml",
-    "values-zh/android_chrome_strings.xml",
+    "values-zh-rTW/android_chrome_strings.xml",
   ]
 }
 
@@ -119,7 +120,8 @@ java_strings_grd("chrome_strings_grd") {
 android_library("chrome_java") {
   deps = [
     "//base:base_java",
-    "//chrome/android/webapk/libs/client",
+    "//chrome/android/webapk/libs/client:client_java",
+    "//chrome/android/webapk/libs/common:common_java",
     "//components/safe_json/android:safe_json_java",
     "//components/variations/android:variations_java",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
@@ -139,18 +141,18 @@ android_library("chrome_java") {
     "//third_party/android_protobuf:protobuf_nano_javalib",
     "//third_party/android_swipe_refresh:android_swipe_refresh_java",
     "//third_party/android_tools:android_gcm_java",
+    "//third_party/android_tools:android_support_design_java",
     "//third_party/android_tools:android_support_v13_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
     "//third_party/android_tools:android_support_v7_mediarouter_java",
-    "//third_party/android_tools:android_support_v7_mediarouter_resources",
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
     "//third_party/cacheinvalidation:cacheinvalidation_proto_java",
+    "//third_party/custom_tabs_client:custom_tabs_support_lib",
     "//third_party/gif_player:gif_player_java",
     "//third_party/jsr-305:jsr_305_javalib",
     "//third_party/leakcanary:leakcanary_java",
     "//ui/android:ui_java",
-    "//ui/android:ui_java_resources",
     google_play_services_library,
   ]
 
@@ -176,10 +178,11 @@ android_library("chrome_java") {
     java_files = chrome_java_sources
 
     srcjar_deps += [
-      ":custom_tabs_service_aidl",
       "//chrome:page_info_connection_type_javagen",
       "//chrome:website_settings_action_javagen",
       "//components/infobars/core:infobar_enums_java",
+      "//components/ntp_snippets:ntp_snippets_java_enums_srcjar",
+      "//components/ntp_tiles:ntp_tiles_enums_java",
       "//components/offline_pages:offline_page_model_enums_java",
       "//components/omnibox/browser:autocomplete_match_javagen",
       "//components/omnibox/browser:autocomplete_match_type_javagen",
@@ -196,9 +199,12 @@ android_library("chrome_java") {
       "//components/gcm_driver/android:gcm_driver_java",
       "//components/gcm_driver/instance_id/android:instance_id_driver_java",
       "//components/invalidation/impl:java",
+      "//components/location/android:location_java",
       "//components/navigation_interception/android:navigation_interception_java",
+      "//components/ntp_tiles/android:ntp_tiles_java",
       "//components/policy/android:policy_java",
       "//components/precache/android:precache_java",
+      "//components/safe_json/android:safe_json_java",
       "//components/service_tab_launcher:service_tab_launcher_java",
       "//components/signin/core/browser/android:java",
       "//components/web_contents_delegate_android:web_contents_delegate_android_java",
@@ -230,7 +236,6 @@ java_cpp_enum("chrome_android_java_enums_srcjar") {
   sources = [
     "//chrome/browser/android/activity_type_ids.h",
     "//chrome/browser/android/feedback/connectivity_checker.cc",
-    "//chrome/browser/android/ntp/most_visited_sites.cc",
     "//chrome/browser/android/policy/policy_auditor.cc",
     "//chrome/browser/android/shortcut_info.h",
     "//chrome/browser/android/tab_android.h",
@@ -277,6 +282,7 @@ junit_binary("chrome_junit_tests") {
     "//net/android:net_java",
     "//sync:sync_java_test_support",
     "//sync/android:sync_java",
+    "//third_party/WebKit/public:blink_headers_java",
     "//third_party/android_tools:android_support_v7_mediarouter_java",
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
@@ -309,16 +315,6 @@ zip("chrome_version_srcjar") {
   ]
 }
 
-#GYP: //chrome/android/chrome_apk.gyp:custom_tabs_service_aidl
-android_aidl("custom_tabs_service_aidl") {
-  import_include = "java/src/android/support/customtabs"
-  interface_file = "java/src/android/support/customtabs/common.aidl"
-  sources = [
-    "java/src/android/support/customtabs/ICustomTabsCallback.aidl",
-    "java/src/android/support/customtabs/ICustomTabsService.aidl",
-  ]
-}
-
 # GYP: //chrome/android/chrome_apk.gyp:chrome_test_java
 android_library("chrome_test_java") {
   testonly = true
@@ -330,13 +326,14 @@ android_library("chrome_test_java") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android:chrome_java",
-    "//chrome/android:chrome_java_resources",
+    "//chrome/android/webapk/libs/common:common_java",
     "//chrome/test/android:chrome_java_test_support",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/dom_distiller/android:dom_distiller_core_java",
     "//components/gcm_driver/android:gcm_driver_java",
     "//components/invalidation/impl:java",
     "//components/invalidation/impl:javatests",
+    "//components/location/android:location_java",
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/policy/android:policy_java",
     "//components/precache/android:precache_java",
@@ -345,17 +342,23 @@ android_library("chrome_test_java") {
     "//components/web_restrictions:web_restrictions_java",
     "//content/public/android:content_java",
     "//content/public/test/android:content_java_test_support",
+    "//mojo/public/java:bindings",
+    "//mojo/public/java:system",
     "//net/android:net_java",
     "//net/android:net_java_test_support",
     "//printing:printing_java",
     "//sync:sync_java_test_support",
     "//sync/android:sync_java",
     "//sync/android:sync_javatests",
+    "//third_party/WebKit/public:android_mojo_bindings_java",
+    "//third_party/WebKit/public:blink_headers_java",
+    "//third_party/android_tools:android_support_design_java",
     "//third_party/android_tools:android_support_v13_java",
     "//third_party/android_tools:android_support_v7_appcompat_java",
     "//third_party/android_tools:android_support_v7_recyclerview_java",
     "//third_party/android_tools:legacy_http_javalib",
     "//third_party/cacheinvalidation:cacheinvalidation_javalib",
+    "//third_party/custom_tabs_client:custom_tabs_support_lib",
     "//third_party/jsr-305:jsr_305_javalib",
     "//ui/android:ui_java",
     "//ui/android:ui_javatests",
@@ -381,6 +384,7 @@ android_assets("chrome_public_apk_assets") {
   deps = [
     "//chrome:packed_extra_resources",
     "//chrome:packed_resources",
+    "//chrome/android/webapk/libs/runtime_library:runtime_library_assets",
     "//third_party/icu:icu_assets",
     "//v8:v8_external_startup_data_assets",
   ]
@@ -487,7 +491,6 @@ template("chrome_public_apk_tmpl_shared") {
       ":chrome_public_apk_assets",
       ":chrome_public_apk_resources",
       "//base:base_java",
-      google_play_services_resources,
     ]
   }
 }
@@ -495,12 +498,11 @@ template("chrome_public_apk_tmpl_shared") {
 chrome_public_apk_tmpl_shared("chrome_public_apk") {
   android_manifest = get_target_outputs(":chrome_public_apk_manifest")
   android_manifest = android_manifest[1]
+  android_manifest_dep = ":chrome_public_apk_manifest"
   apk_name = "ChromePublic"
-  native_libs = [ "libchrome.so" ]
+  shared_libraries = [ ":chrome" ]
 
   deps = [
-    ":chrome",
-    ":chrome_public_apk_manifest",
     ":chrome_public_apk_template_resources",
   ]
 }
@@ -509,12 +511,11 @@ chrome_public_apk_tmpl_shared("chrome_sync_shell_apk") {
   testonly = true
   android_manifest = get_target_outputs(":chrome_sync_shell_apk_manifest")
   android_manifest = android_manifest[1]
+  android_manifest_dep = ":chrome_sync_shell_apk_manifest"
   apk_name = "ChromeSyncShell"
-  native_libs = [ "libchrome_sync_shell.so" ]
+  shared_libraries = [ ":chrome_sync_shell" ]
 
   deps = [
-    ":chrome_sync_shell",
-    ":chrome_sync_shell_apk_manifest",
     ":chrome_sync_shell_apk_template_resources",
 
     # This exists here because com.google.protobuf.nano is needed in tests,
@@ -548,9 +549,9 @@ instrumentation_test_apk("chrome_public_test_apk") {
   apk_name = "ChromePublicTest"
   apk_under_test = ":chrome_public_apk"
   android_manifest = chrome_public_test_apk_manifest
+  android_manifest_dep = ":chrome_public_test_apk_manifest"
 
   deps = [
-    ":chrome_public_test_apk_manifest",
     ":chrome_test_java",
     "//chrome/android/webapk/shell_apk:shell_apk_javatests",
   ]
@@ -560,7 +561,7 @@ instrumentation_test_apk("chrome_public_test_apk") {
     "//net/android:net_test_support_apk",
   ]
   isolate_file = "../chrome_public_test_apk.isolate"
-  proguard_enabled = !is_debug
+  proguard_enabled = !is_java_debug
 }
 
 android_library("chrome_sync_shell_test_apk_java") {
@@ -573,7 +574,6 @@ android_library("chrome_sync_shell_test_apk_java") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/android:chrome_java",
-    "//chrome/android:chrome_java_resources",
     "//chrome/test/android:chrome_java_test_support",
     "//components/bookmarks/common/android:bookmarks_java",
     "//components/policy/android:policy_java",
@@ -594,9 +594,9 @@ instrumentation_test_apk("chrome_sync_shell_test_apk") {
   apk_name = "ChromeSyncShellTest"
   apk_under_test = ":chrome_sync_shell_apk"
   android_manifest = chrome_sync_shell_test_apk_manifest
+  android_manifest_dep = ":chrome_sync_shell_test_apk_manifest"
   deps = [
     ":chrome_sync_shell_test_apk_java",
-    ":chrome_sync_shell_test_apk_manifest",
   ]
-  proguard_enabled = !is_debug
+  proguard_enabled = !is_java_debug
 }

@@ -35,6 +35,7 @@
 #include "core/fetch/ImageResource.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/ImageBitmap.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLFormElement.h"
@@ -465,6 +466,10 @@ const String& HTMLImageElement::currentSrc() const
 {
     // http://www.whatwg.org/specs/web-apps/current-work/multipage/edits.html#dom-img-currentsrc
     // The currentSrc IDL attribute must return the img element's current request's current URL.
+
+    // Return the picked URL string in case of load error.
+    if (imageLoader().hadError())
+        return m_bestFitImageURL;
     // Initially, the pending request turns into current request when it is either available or broken.
     // We use the image's dimensions as a proxy to it being in any of these states.
     if (!imageLoader().image() || !imageLoader().image()->getImage() || !imageLoader().image()->getImage()->width())
@@ -799,6 +804,22 @@ bool HTMLImageElement::isOpaque() const
 {
     Image* image = const_cast<HTMLImageElement*>(this)->imageContents();
     return image && image->currentFrameKnownToBeOpaque();
+}
+
+int HTMLImageElement::sourceWidth()
+{
+    SourceImageStatus status;
+    FloatSize defaultObjectSize(width(), height());
+    RefPtr<Image> image = getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCopyToWebGLTexture, defaultObjectSize);
+    return image->width();
+}
+
+int HTMLImageElement::sourceHeight()
+{
+    SourceImageStatus status;
+    FloatSize defaultObjectSize(width(), height());
+    RefPtr<Image> image = getSourceImageForCanvas(&status, PreferNoAcceleration, SnapshotReasonCopyToWebGLTexture, defaultObjectSize);
+    return image->height();
 }
 
 IntSize HTMLImageElement::bitmapSourceSize() const

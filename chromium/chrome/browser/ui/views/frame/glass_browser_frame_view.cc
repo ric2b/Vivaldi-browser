@@ -14,7 +14,7 @@
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
+#include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -224,8 +224,8 @@ int GlassBrowserFrameView::NonClientHitTest(const gfx::Point& point) {
     return HTNOWHERE;
 
   // See if the point is within the incognito icon or the profile switcher menu.
-  if ((avatar_button() &&
-       avatar_button()->GetMirroredBounds().Contains(point)) ||
+  if ((profile_indicator_icon() &&
+       profile_indicator_icon()->GetMirroredBounds().Contains(point)) ||
       (profile_switcher_.view() &&
        profile_switcher_.view()->GetMirroredBounds().Contains(point)))
     return HTCLIENT;
@@ -284,11 +284,11 @@ void GlassBrowserFrameView::Layout() {
 // GlassBrowserFrameView, protected:
 
 // BrowserNonClientFrameView:
-void GlassBrowserFrameView::UpdateAvatar() {
+void GlassBrowserFrameView::UpdateProfileIcons() {
   if (browser_view()->IsRegularOrGuestSession())
     profile_switcher_.Update(AvatarButtonStyle::NATIVE);
   else
-    UpdateOldAvatarButton();
+    UpdateProfileIndicatorIcon();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -298,8 +298,9 @@ void GlassBrowserFrameView::UpdateAvatar() {
 bool GlassBrowserFrameView::DoesIntersectRect(const views::View* target,
                                               const gfx::Rect& rect) const {
   CHECK_EQ(target, this);
-  bool hit_incognito_icon = avatar_button() &&
-      avatar_button()->GetMirroredBounds().Intersects(rect);
+  bool hit_incognito_icon =
+      profile_indicator_icon() &&
+      profile_indicator_icon()->GetMirroredBounds().Intersects(rect);
   bool hit_profile_switcher_button =
       profile_switcher_.view() &&
       profile_switcher_.view()->GetMirroredBounds().Intersects(rect);
@@ -326,12 +327,17 @@ int GlassBrowserFrameView::FrameTopBorderThickness(bool restored) const {
   // windows an offscreen CYSIZEFRAME-thick region around the edges. The
   // left/right/bottom edges don't worry about this because we cancel them out
   // in BrowserDesktopWindowTreeHostWin::GetClientAreaInsets() so the offscreen
-  // area is non-client as far as Windows is concerned. However because we want
-  // to push away the top part of the glass's gradient in Win7 we set the top
-  // client inset to 0. Thus we must compensate here to avoid having UI elements
-  // drift off the top of the screen.
-  return (frame()->IsFullscreen() && !restored) ?
-      0 : display::win::GetSystemMetricsInDIP(SM_CYSIZEFRAME);
+  // area is non-client as far as Windows is concerned. However we can't do this
+  // with the top inset because otherwise Windows will give us a standard
+  // titlebar. Thus we must compensate here to avoid having UI elements drift
+  // off the top of the screen.
+  if (frame()->IsFullscreen() && !restored)
+    return 0;
+  // Mouse and touch locations are floored but GetSystemMetricsInDIP is rounded,
+  // so we need to floor instead or else the difference will cause the hittest
+  // to fail when it ought to succeed.
+  return std::floor(GetSystemMetrics(SM_CYSIZEFRAME) /
+                    display::win::GetDPIScale());
 }
 
 int GlassBrowserFrameView::TopAreaHeight(bool restored) const {
@@ -472,10 +478,8 @@ void GlassBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   const gfx::Rect toolbar_bounds(browser_view()->GetToolbarBounds());
   const int y =
       client_bounds.y() + (md ? toolbar_bounds.y() : toolbar_bounds.bottom());
-  const int w = client_bounds.width();
   const int right = client_bounds.right();
   const int bottom = std::max(y, height() - ClientBorderThickness(false));
-  const int height = bottom - y;
 
   // Draw the client edge images.  For non-MD, we fill the toolbar color
   // underneath these images so they will lighten/darken it appropriately to
@@ -485,19 +489,23 @@ void GlassBrowserFrameView::PaintClientEdge(gfx::Canvas* canvas) const {
   const SkColor toolbar_color = tp->GetColor(ThemeProperties::COLOR_TOOLBAR);
   if (!md)
     FillClientEdgeRects(x, y, right, bottom, toolbar_color, canvas);
-  const gfx::ImageSkia* const right_image =
-      tp->GetImageSkiaNamed(IDR_CONTENT_RIGHT_SIDE);
-  const int img_w = right_image->width();
-  canvas->TileImageInt(*right_image, right, y, img_w, height);
-  canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_RIGHT_CORNER),
-                       right, bottom);
-  const gfx::ImageSkia* const bottom_image =
-      tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_CENTER);
-  canvas->TileImageInt(*bottom_image, x, bottom, w, bottom_image->height());
-  canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_LEFT_CORNER),
-                       x - img_w, bottom);
-  canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_LEFT_SIDE), x - img_w,
-                       y, img_w, height);
+  if (!md || (base::win::GetVersion() < base::win::VERSION_WIN10)) {
+    const gfx::ImageSkia* const right_image =
+        tp->GetImageSkiaNamed(IDR_CONTENT_RIGHT_SIDE);
+    const int img_w = right_image->width();
+    const int height = bottom - y;
+    canvas->TileImageInt(*right_image, right, y, img_w, height);
+    canvas->DrawImageInt(
+        *tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_RIGHT_CORNER), right, bottom);
+    const gfx::ImageSkia* const bottom_image =
+        tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_CENTER);
+    canvas->TileImageInt(*bottom_image, x, bottom, client_bounds.width(),
+                         bottom_image->height());
+    canvas->DrawImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_BOTTOM_LEFT_CORNER),
+                         x - img_w, bottom);
+    canvas->TileImageInt(*tp->GetImageSkiaNamed(IDR_CONTENT_LEFT_SIDE),
+                         x - img_w, y, img_w, height);
+  }
   if (md)
     FillClientEdgeRects(x, y, right, bottom, toolbar_color, canvas);
 }
@@ -553,7 +561,7 @@ void GlassBrowserFrameView::LayoutIncognitoIcon() {
         (profile_switcher_.view() ? (profile_switcher_.view()->width() +
                                      kProfileSwitcherButtonOffset)
                                   : 0);
-  } else if (!md && !avatar_button() && IsToolbarVisible() &&
+  } else if (!md && !profile_indicator_icon() && IsToolbarVisible() &&
              (base::win::GetVersion() < base::win::VERSION_WIN10)) {
     // In non-MD before Win 10, the toolbar has a rounded corner that we don't
     // want the tabstrip to overlap.
@@ -566,10 +574,11 @@ void GlassBrowserFrameView::LayoutIncognitoIcon() {
   const int y = (md || !frame()->IsMaximized())
                     ? (bottom - size.height())
                     : FrameTopBorderThickness(false);
-  incognito_bounds_.SetRect(x + (avatar_button() ? insets.left() : 0), y,
-                            avatar_button() ? size.width() : 0, bottom - y);
-  if (avatar_button())
-    avatar_button()->SetBoundsRect(incognito_bounds_);
+  incognito_bounds_.SetRect(x + (profile_indicator_icon() ? insets.left() : 0),
+                            y, profile_indicator_icon() ? size.width() : 0,
+                            bottom - y);
+  if (profile_indicator_icon())
+    profile_indicator_icon()->SetBoundsRect(incognito_bounds_);
 }
 
 void GlassBrowserFrameView::LayoutClientView() {

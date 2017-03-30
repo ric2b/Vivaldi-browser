@@ -13,7 +13,7 @@
 #include "modules/csspaint/PaintWorkletGlobalScope.h"
 #include "modules/csspaint/WindowPaintWorklet.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -39,12 +39,12 @@ public:
     }
 
 protected:
-    OwnPtr<DummyPageHolder> m_page;
+    std::unique_ptr<DummyPageHolder> m_page;
 };
 
 TEST_F(PaintWorkletTest, GarbageCollectionOfCSSPaintDefinition)
 {
-    PaintWorkletGlobalScope* globalScope = toPaintWorkletGlobalScope(paintWorklet()->workletGlobalScope());
+    PaintWorkletGlobalScope* globalScope = paintWorklet()->workletGlobalScopeProxy();
     globalScope->scriptController()->evaluate(ScriptSourceCode("registerPaint('foo', class { paint() { } });"));
 
     CSSPaintDefinition* definition = globalScope->findDefinition("foo");
@@ -69,7 +69,7 @@ TEST_F(PaintWorkletTest, GarbageCollectionOfCSSPaintDefinition)
     ASSERT(!handle.isEmpty());
 
     // Delete the page & associated objects.
-    m_page.clear();
+    m_page.reset();
 
     // Run a GC, the persistent should have been collected.
     ThreadHeap::collectAllGarbage();

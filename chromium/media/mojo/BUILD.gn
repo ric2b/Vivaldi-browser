@@ -4,16 +4,11 @@
 
 import("//testing/test.gni")
 
-group("tests") {
-  testonly = true
-  deps = [
-    ":media_mojo_unittests",
-  ]
-}
-
 test("media_mojo_unittests") {
   sources = [
+    "clients/mojo_renderer_unittest.cc",
     "common/media_type_converters_unittest.cc",
+    "common/mojo_decoder_buffer_converter_unittest.cc",
     "common/mojo_shared_buffer_video_frame_unittest.cc",
     "services/mojo_cdm_allocator_unittest.cc",
   ]
@@ -22,11 +17,12 @@ test("media_mojo_unittests") {
     "//base",
     "//base/test:test_support",
     "//media",
+    "//media:cdm_api",
     "//media/base:test_support",
+    "//media/mojo/clients",
     "//media/mojo/common",
     "//media/mojo/interfaces",
     "//media/mojo/services",
-    "//mojo/edk/system",
     "//mojo/edk/test:run_all_unittests",
     "//testing/gmock",
     "//testing/gtest",

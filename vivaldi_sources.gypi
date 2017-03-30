@@ -172,11 +172,6 @@
       'app/theme/vivaldi/mac/app.icns',
       'app/theme/vivaldi/mac/document.icns',
     ],
-    #chrome_initial
-    'vivaldi_add_mac_resources_chrome_exe' : [
-      '<(VIVALDI)/app/resources/theme/vivaldi/mac/app.icns',
-      '<(VIVALDI)/app/resources/theme/vivaldi/mac/document.icns',
-    ],
     #components_unittests
     'vivaldi_tab_zoom_pref' : [
       '<(VIVALDI)/prefs/vivaldi_tab_zoom_pref_tests.cc',

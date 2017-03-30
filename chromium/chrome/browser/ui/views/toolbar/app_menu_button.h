@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/toolbar/app_menu_icon_painter.h"
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/menu_button_listener.h"
@@ -18,7 +19,6 @@ class AppMenu;
 class AppMenuModel;
 
 namespace views {
-class InkDropDelegate;
 class LabelButtonBorder;
 class MenuListener;
 }
@@ -31,7 +31,9 @@ class AppMenuButton : public views::MenuButton,
   explicit AppMenuButton(ToolbarView* toolbar_view);
   ~AppMenuButton() override;
 
-  void SetSeverity(AppMenuIconPainter::Severity severity, bool animate);
+  void SetSeverity(AppMenuIconController::IconType type,
+                   AppMenuIconPainter::Severity severity,
+                   bool animate);
 
   // Shows the app menu. |for_drop| indicates whether the menu is opened for a
   // drag-and-drop operation.
@@ -91,6 +93,7 @@ class AppMenuButton : public views::MenuButton,
 
   // Only used in MD.
   AppMenuIconPainter::Severity severity_;
+  AppMenuIconController::IconType type_;
 
   // Our owning toolbar view.
   ToolbarView* toolbar_view_;
@@ -111,9 +114,6 @@ class AppMenuButton : public views::MenuButton,
   // Any trailing margin to be applied. Used when the browser is in
   // a maximized state to extend to the full window width.
   int margin_trailing_;
-
-  // Controls the visual feedback for the button state.
-  std::unique_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   // Used to spawn weak pointers for delayed tasks to open the overflow menu.
   base::WeakPtrFactory<AppMenuButton> weak_factory_;

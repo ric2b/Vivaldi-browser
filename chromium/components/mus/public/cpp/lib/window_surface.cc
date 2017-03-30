@@ -6,7 +6,6 @@
 
 #include "base/memory/ptr_util.h"
 #include "components/mus/public/cpp/window_surface_client.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
 
 namespace mus {
 
@@ -34,8 +33,8 @@ void WindowSurface::BindToThread() {
       this, std::move(client_request_)));
 }
 
-void WindowSurface::SubmitCompositorFrame(mojom::CompositorFramePtr frame,
-                                          const mojo::Closure& callback) {
+void WindowSurface::SubmitCompositorFrame(cc::CompositorFrame frame,
+                                          const base::Closure& callback) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   if (!surface_)
@@ -51,7 +50,7 @@ WindowSurface::WindowSurface(
       client_request_(std::move(client_request)) {}
 
 void WindowSurface::ReturnResources(
-    mojo::Array<mojom::ReturnedResourcePtr> resources) {
+    mojo::Array<cc::ReturnedResource> resources) {
   DCHECK(thread_checker_);
   DCHECK(thread_checker_->CalledOnValidThread());
   if (!client_)

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/webui/options/password_manager_handler.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -211,7 +214,8 @@ void PasswordManagerHandler::InitializeHandler() {
 void PasswordManagerHandler::InitializePage() {
   if (base::FeatureList::IsEnabled(
           password_manager::features::kPasswordImportExport)) {
-    web_ui()->CallJavascriptFunction("PasswordManager.showImportExportButton");
+    web_ui()->CallJavascriptFunctionUnsafe(
+        "PasswordManager.showImportExportButton");
   }
 }
 
@@ -250,7 +254,7 @@ void PasswordManagerHandler::ShowPassword(
     const std::string& username,
     const base::string16& password_value) {
   // Call back the front end to reveal the password.
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "PasswordManager.showPassword",
       base::FundamentalValue(static_cast<int>(index)),
       base::StringValue(password_value));
@@ -282,11 +286,11 @@ void PasswordManagerHandler::SetPasswordList(
               base::UTF8ToUTF16(saved_password->federation_origin.host())));
     }
 
-    entries.Append(entry.release());
+    entries.Append(std::move(entry));
   }
 
-  web_ui()->CallJavascriptFunction("PasswordManager.setSavedPasswordsList",
-                                   entries);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "PasswordManager.setSavedPasswordsList", entries);
 }
 
 void PasswordManagerHandler::SetPasswordExceptionList(
@@ -296,11 +300,11 @@ void PasswordManagerHandler::SetPasswordExceptionList(
   for (const auto& exception : password_exception_list) {
     std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue);
     CopyOriginInfoOfPasswordForm(*exception,  entry.get());
-    entries.Append(entry.release());
+    entries.Append(std::move(entry));
   }
 
-  web_ui()->CallJavascriptFunction("PasswordManager.setPasswordExceptionsList",
-                                   entries);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "PasswordManager.setPasswordExceptionsList", entries);
 }
 
 void PasswordManagerHandler::FileSelected(const base::FilePath& path,

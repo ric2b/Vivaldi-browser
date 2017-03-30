@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/hash.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/task_runner_util.h"
@@ -110,6 +111,16 @@ BluetoothHostPairingController::BluetoothHostPairingController(
 
 BluetoothHostPairingController::~BluetoothHostPairingController() {
   Reset();
+}
+
+void BluetoothHostPairingController::SetDelegateForTesting(
+    TestDelegate* delegate) {
+  delegate_ = delegate;
+}
+
+scoped_refptr<device::BluetoothAdapter>
+BluetoothHostPairingController::GetAdapterForTesting() {
+  return adapter_;
 }
 
 void BluetoothHostPairingController::ChangeStage(Stage new_stage) {
@@ -341,11 +352,21 @@ void BluetoothHostPairingController::PowerOffAdapterIfApplicable(
     }
   }
   if (!was_powered_ && !use_bluetooth) {
-    adapter_->SetPowered(false, base::Bind(&base::DoNothing),
-                         base::Bind(&base::DoNothing));
+    adapter_->SetPowered(
+        false, base::Bind(&BluetoothHostPairingController::ResetAdapter,
+                          ptr_factory_.GetWeakPtr()),
+        base::Bind(&BluetoothHostPairingController::ResetAdapter,
+                   ptr_factory_.GetWeakPtr()));
+  } else {
+    ResetAdapter();
   }
+}
+
+void BluetoothHostPairingController::ResetAdapter() {
   adapter_->RemoveObserver(this);
   adapter_ = nullptr;
+  if (delegate_)
+    delegate_->OnAdapterReset();
 }
 
 void BluetoothHostPairingController::OnReceiveError(

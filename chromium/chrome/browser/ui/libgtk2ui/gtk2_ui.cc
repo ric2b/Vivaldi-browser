@@ -485,6 +485,7 @@ views::LinuxUI::NonClientMiddleClickAction GetDefaultMiddleClickAction() {
 Gtk2UI::Gtk2UI()
     : default_font_size_pixels_(0),
       default_font_style_(gfx::Font::NORMAL),
+      default_font_weight_(gfx::Font::Weight::NORMAL),
       middle_click_action_(GetDefaultMiddleClickAction()),
       device_scale_factor_(1.0) {
   GtkInitFromCommandLine(*base::CommandLine::ForCurrentProcess());
@@ -556,9 +557,12 @@ gfx::Image Gtk2UI::GetThemeImageNamed(int id) const {
 
 bool Gtk2UI::GetTint(int id, color_utils::HSL* tint) const {
   switch (id) {
+    // Tints for which the cross-platform default is fine. Before adding new
+    // values here, specifically verify they work well on Linux.
     case ThemeProperties::TINT_BACKGROUND_TAB:
-      // Tints for which the cross-platform default is fine. Before adding new
-      // values here, specifically verify they work well on Linux.
+    // TODO(estade): Return something useful for TINT_BUTTONS so that chrome://
+    // page icons are colored appropriately.
+    case ThemeProperties::TINT_BUTTONS:
       break;
     default:
       // Assume any tints not specifically verified on Linux aren't usable.
@@ -836,10 +840,12 @@ void Gtk2UI::GetDefaultFontDescription(
     std::string* family_out,
     int* size_pixels_out,
     int* style_out,
+    gfx::Font::Weight* weight_out,
     gfx::FontRenderParams* params_out) const {
   *family_out = default_font_family_;
   *size_pixels_out = default_font_size_pixels_;
   *style_out = default_font_style_;
+  *weight_out = default_font_weight_;
   *params_out = default_font_render_params_;
 }
 
@@ -1371,9 +1377,8 @@ void Gtk2UI::UpdateDefaultFont() {
   }
 
   query.style = gfx::Font::NORMAL;
-  // TODO(davemoore): Support weights other than bold?
-  if (pango_font_description_get_weight(desc) == PANGO_WEIGHT_BOLD)
-    query.style |= gfx::Font::BOLD;
+  query.weight =
+      static_cast<gfx::Font::Weight>(pango_font_description_get_weight(desc));
   // TODO(davemoore): What about PANGO_STYLE_OBLIQUE?
   if (pango_font_description_get_style(desc) == PANGO_STYLE_ITALIC)
     query.style |= gfx::Font::ITALIC;

@@ -37,9 +37,6 @@ enum FragmentShaderId {
 FragmentShaderId GetFragmentShaderId(bool premultiply_alpha,
                                      bool unpremultiply_alpha,
                                      GLenum target) {
-  // Only one alpha mode at a time makes sense.
-  DCHECK(!premultiply_alpha || !unpremultiply_alpha);
-
   enum {
     SAMPLER_2D,
     SAMPLER_RECTANGLE_ARB,
@@ -101,8 +98,7 @@ std::string GetVertexShaderSource() {
   std::string source;
 
   // Preamble for core and compatibility mode.
-  if (gfx::GetGLImplementation() ==
-          gfx::kGLImplementationDesktopGLCoreProfile) {
+  if (gl::GetGLImplementation() == gl::kGLImplementationDesktopGLCoreProfile) {
     source += std::string("\
         #version 150\n\
         #define ATTRIBUTE in\n\
@@ -137,14 +133,10 @@ std::string GetVertexShaderSource() {
 std::string GetFragmentShaderSource(bool premultiply_alpha,
                                     bool unpremultiply_alpha,
                                     GLenum target) {
-  // Only one alpha mode at a time makes sense.
-  DCHECK(!premultiply_alpha || !unpremultiply_alpha);
-
   std::string source;
 
   // Preamble for core and compatibility mode.
-  if (gfx::GetGLImplementation() ==
-          gfx::kGLImplementationDesktopGLCoreProfile) {
+  if (gl::GetGLImplementation() == gl::kGLImplementationDesktopGLCoreProfile) {
     source += std::string("\
         #version 150\n\
         out vec4 frag_color;\n\
@@ -586,8 +578,8 @@ void CopyTextureCHROMIUMResourceManager::DoCopyTextureInternal(
   if (vertex_array_object_id_) {
     glBindVertexArrayOES(vertex_array_object_id_);
   } else {
-    if (gfx::GetGLImplementation() !=
-        gfx::kGLImplementationDesktopGLCoreProfile) {
+    if (gl::GetGLImplementation() !=
+        gl::kGLImplementationDesktopGLCoreProfile) {
       decoder->ClearAllAttributes();
     }
     glEnableVertexAttribArray(kVertexPositionAttrib);

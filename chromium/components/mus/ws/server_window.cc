@@ -13,7 +13,6 @@
 #include "components/mus/ws/server_window_delegate.h"
 #include "components/mus/ws/server_window_observer.h"
 #include "components/mus/ws/server_window_surface_manager.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
 
 namespace mus {
 
@@ -177,6 +176,14 @@ void ServerWindow::SetClientArea(
   FOR_EACH_OBSERVER(
       ServerWindowObserver, observers_,
       OnWindowClientAreaChanged(this, insets, additional_client_areas));
+}
+
+void ServerWindow::SetHitTestMask(const gfx::Rect& mask) {
+  hit_test_mask_.reset(new gfx::Rect(mask));
+}
+
+void ServerWindow::ClearHitTestMask() {
+  hit_test_mask_.reset();
 }
 
 const ServerWindow* ServerWindow::GetRoot() const {
@@ -398,7 +405,7 @@ void ServerWindow::BuildDebugInfo(const std::string& depth,
   std::string name = GetName();
   *result += base::StringPrintf(
       "%sid=%d,%d visible=%s bounds=%d,%d %dx%d %s\n", depth.c_str(),
-      static_cast<int>(id_.connection_id), static_cast<int>(id_.window_id),
+      static_cast<int>(id_.client_id), static_cast<int>(id_.window_id),
       visible_ ? "true" : "false", bounds_.x(), bounds_.y(), bounds_.width(),
       bounds_.height(), !name.empty() ? name.c_str() : "(no name)");
   for (const ServerWindow* child : children_)

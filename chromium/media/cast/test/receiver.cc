@@ -21,6 +21,7 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/synchronization/lock.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
@@ -220,7 +221,8 @@ class NaivePlayer : public InProcessReceiver,
 
   void Stop() final {
     // First, stop audio output to the Chromium audio stack.
-    base::WaitableEvent done(false, false);
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     DCHECK(!AudioManager::Get()->GetTaskRunner()->BelongsToCurrentThread());
     AudioManager::Get()->GetTaskRunner()->PostTask(
         FROM_HERE,
@@ -601,7 +603,7 @@ int main(int argc, char** argv) {
                                   window_height);
   player.Start();
 
-  message_loop.Run();  // Run forever (i.e., until SIGTERM).
+  base::RunLoop().Run();  // Run forever (i.e., until SIGTERM).
   NOTREACHED();
   return 0;
 }

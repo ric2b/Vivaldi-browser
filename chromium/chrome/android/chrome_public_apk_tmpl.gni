@@ -23,7 +23,7 @@ declare_args() {
   # approach falls to a minimal level -  http://crbug.com/390618.
   chrome_public_apk_load_library_from_apk =
       chromium_linker_supported &&
-      (target_cpu == "arm64" || target_cpu == "x64")
+      (current_cpu == "arm64" || current_cpu == "x64")
 }
 
 default_chrome_public_jinja_variables = [
@@ -39,7 +39,7 @@ template("chrome_public_apk_tmpl") {
         rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
     native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
 
-    if (is_debug) {
+    if (is_java_debug) {
       enable_multidex = true
     } else {
       proguard_enabled = true

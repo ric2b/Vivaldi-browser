@@ -701,7 +701,7 @@ bool Widget::IsFullscreen() const {
   return native_widget_->IsFullscreen();
 }
 
-void Widget::SetOpacity(unsigned char opacity) {
+void Widget::SetOpacity(float opacity) {
   native_widget_->SetOpacity(opacity);
 }
 
@@ -1069,7 +1069,7 @@ void Widget::OnNativeWidgetCreated(bool desktop_widget) {
 void Widget::OnNativeWidgetDestroying() {
   // Tell the focus manager (if any) that root_view is being removed
   // in case that the focused view is under this root view.
-  if (GetFocusManager())
+  if (GetFocusManager() && root_view_)
     GetFocusManager()->ViewRemoved(root_view_.get());
   FOR_EACH_OBSERVER(WidgetObserver, observers_, OnWidgetDestroying(this));
   if (non_client_view_)

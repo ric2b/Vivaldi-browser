@@ -44,8 +44,6 @@
 #include "core/html/shadow/MediaControls.h"
 #include "core/html/track/TextTrackList.h"
 #include "core/input/EventHandler.h"
-#include "core/layout/LayoutTheme.h"
-#include "core/layout/LayoutVideo.h"
 #include "core/layout/api/LayoutSliderItem.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/Histogram.h"
@@ -182,7 +180,7 @@ void MediaControlPanelElement::transitionTimerFired(Timer<MediaControlPanelEleme
 
 void MediaControlPanelElement::didBecomeVisible()
 {
-    ASSERT(m_isDisplayed && m_opaque);
+    DCHECK(m_isDisplayed && m_opaque);
     mediaElement().mediaControlsDidBecomeVisible();
 }
 
@@ -443,7 +441,7 @@ void MediaControlTextTrackListElement::defaultEventHandler(Event* event)
         disableShowingTextTracks();
         int trackIndex = toElement(target)->getIntegralAttribute(trackIndexAttrName());
         if (trackIndex != trackIndexOffValue) {
-            ASSERT(trackIndex >= 0);
+            DCHECK_GE(trackIndex, 0);
             showTextTrackAtIndex(trackIndex);
             mediaElement().disableAutomaticTextTrackSelection();
         }
@@ -501,7 +499,7 @@ String MediaControlTextTrackListElement::getTextTrackLabel(TextTrack* track)
 Element* MediaControlTextTrackListElement::createTextTrackListItem(TextTrack* track)
 {
     int trackIndex = track ? track->trackIndex() : trackIndexOffValue;
-    HTMLLabelElement* trackItem = HTMLLabelElement::create(document(), nullptr);
+    HTMLLabelElement* trackItem = HTMLLabelElement::create(document());
     trackItem->setShadowPseudoId(AtomicString("-internal-media-controls-text-track-list-item"));
     HTMLInputElement* trackItemInput = HTMLInputElement::create(document(), nullptr, false);
     trackItemInput->setShadowPseudoId(AtomicString("-internal-media-controls-text-track-list-item-input"));
@@ -526,7 +524,7 @@ Element* MediaControlTextTrackListElement::createTextTrackListItem(TextTrack* tr
         if (track->kind() == track->captionsKeyword()) {
             trackKindMarker->setShadowPseudoId(AtomicString("-internal-media-controls-text-track-list-kind-captions"));
         } else {
-            ASSERT(track->kind() == track->subtitlesKeyword());
+            DCHECK_EQ(track->kind(), track->subtitlesKeyword());
             trackKindMarker->setShadowPseudoId(AtomicString("-internal-media-controls-text-track-list-kind-subtitles"));
         }
         trackItem->appendChild(trackKindMarker);
@@ -805,7 +803,7 @@ void MediaControlCastButtonElement::setIsPlayingRemotely(bool isPlayingRemotely)
 
 void MediaControlCastButtonElement::tryShowOverlay()
 {
-    ASSERT(m_isOverlayButton);
+    DCHECK(m_isOverlayButton);
 
     setIsWanted(true);
     if (elementFromCenter(*this) != &mediaElement()) {
@@ -813,7 +811,7 @@ void MediaControlCastButtonElement::tryShowOverlay()
         return;
     }
 
-    ASSERT(isWanted());
+    DCHECK(isWanted());
     if (!m_showUseCounted) {
         m_showUseCounted = true;
         recordMetrics(CastOverlayMetrics::Shown);
@@ -827,7 +825,7 @@ bool MediaControlCastButtonElement::keepEventInNode(Event* event)
 
 void MediaControlCastButtonElement::recordMetrics(CastOverlayMetrics metric)
 {
-    ASSERT(m_isOverlayButton);
+    DCHECK(m_isOverlayButton);
     DEFINE_STATIC_LOCAL(EnumerationHistogram, overlayHistogram, ("Cast.Sender.Overlay", static_cast<int>(CastOverlayMetrics::Count)));
     overlayHistogram.count(static_cast<int>(metric));
 }

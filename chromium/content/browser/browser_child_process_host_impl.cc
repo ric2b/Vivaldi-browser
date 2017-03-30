@@ -18,8 +18,9 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/waitable_event.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "components/tracing/tracing_switches.h"
+#include "components/tracing/common/tracing_switches.h"
 #include "content/browser/histogram_message_filter.h"
 #include "content/browser/loader/resource_message_filter.h"
 #include "content/browser/memory/memory_message_filter.h"
@@ -82,7 +83,16 @@ void NotifyProcessKilled(const ChildProcessData& data, int exit_code) {
 BrowserChildProcessHost* BrowserChildProcessHost::Create(
     content::ProcessType process_type,
     BrowserChildProcessHostDelegate* delegate) {
-  return new BrowserChildProcessHostImpl(process_type, delegate);
+  return new BrowserChildProcessHostImpl(
+      process_type, delegate, mojo::edk::GenerateRandomToken());
+}
+
+BrowserChildProcessHost* BrowserChildProcessHost::Create(
+    content::ProcessType process_type,
+    BrowserChildProcessHostDelegate* delegate,
+    const std::string& mojo_child_token) {
+  return new BrowserChildProcessHostImpl(
+      process_type, delegate, mojo_child_token);
 }
 
 BrowserChildProcessHost* BrowserChildProcessHost::FromID(int child_process_id) {
@@ -124,12 +134,15 @@ void BrowserChildProcessHostImpl::RemoveObserver(
 
 BrowserChildProcessHostImpl::BrowserChildProcessHostImpl(
     content::ProcessType process_type,
-    BrowserChildProcessHostDelegate* delegate)
+    BrowserChildProcessHostDelegate* delegate,
+    const std::string& mojo_child_token)
     : data_(process_type),
       delegate_(delegate),
+      mojo_child_token_(mojo_child_token),
       power_monitor_message_broadcaster_(this),
       is_channel_connected_(false),
-      notify_child_disconnected_(false) {
+      notify_child_disconnected_(false),
+      weak_factory_(this) {
   data_.id = ChildProcessHostImpl::GenerateChildProcessUniqueId();
 
 #if USE_ATTACHMENT_BROKER
@@ -229,6 +242,10 @@ void BrowserChildProcessHostImpl::Launch(
       cmd_line,
       data_.id,
       this,
+      mojo_child_token_,
+      base::Bind(&BrowserChildProcessHostImpl::OnMojoError,
+                 weak_factory_.GetWeakPtr(),
+                 base::ThreadTaskRunnerHandle::Get()),
       terminate_on_shutdown));
 }
 
@@ -261,9 +278,14 @@ void BrowserChildProcessHostImpl::SetHandle(base::ProcessHandle handle) {
   data_.handle = handle;
 }
 
-ServiceRegistry* BrowserChildProcessHostImpl::GetServiceRegistry() {
+shell::InterfaceRegistry* BrowserChildProcessHostImpl::GetInterfaceRegistry() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return delegate_->GetServiceRegistry();
+  return delegate_->GetInterfaceRegistry();
+}
+
+shell::InterfaceProvider* BrowserChildProcessHostImpl::GetRemoteInterfaces() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  return delegate_->GetRemoteInterfaces();
 }
 
 void BrowserChildProcessHostImpl::ForceShutdown() {
@@ -455,6 +477,33 @@ bool BrowserChildProcessHostImpl::IsProcessLaunched() const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   return child_process_.get() && child_process_->GetProcess().IsValid();
+}
+
+// static
+void BrowserChildProcessHostImpl::OnMojoError(
+    base::WeakPtr<BrowserChildProcessHostImpl> process,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    const std::string& error) {
+  if (!task_runner->BelongsToCurrentThread()) {
+    task_runner->PostTask(
+        FROM_HERE, base::Bind(&BrowserChildProcessHostImpl::OnMojoError,
+                              process, task_runner, error));
+  }
+  if (!process)
+    return;
+  HistogramBadMessageTerminated(process->data_.process_type);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableKillAfterBadIPC)) {
+    return;
+  }
+  LOG(ERROR) << "Terminating child process for bad Mojo message: " << error;
+
+  // Create a memory dump with the error message aliased. This will make it easy
+  // to determine details about what interface call failed.
+  base::debug::Alias(&error);
+  base::debug::DumpWithoutCrashing();
+  process->child_process_->GetProcess().Terminate(
+      RESULT_CODE_KILLED_BAD_MESSAGE, false);
 }
 
 #if defined(OS_WIN)

@@ -106,7 +106,7 @@ Position adjustPositionForEnd(const Position& currentPosition, Node* startContai
     if (Node* ancestor = treeScope.ancestorInThisScope(currentPosition.computeContainerNode())) {
         if (ancestor->contains(startContainerNode))
             return Position::afterNode(ancestor);
-        return positionBeforeNode(ancestor);
+        return Position::beforeNode(ancestor);
     }
 
     if (Node* lastChild = treeScope.rootNode().lastChild())
@@ -139,12 +139,12 @@ Position adjustPositionForStart(const Position& currentPosition, Node* endContai
 
     if (Node* ancestor = treeScope.ancestorInThisScope(currentPosition.computeContainerNode())) {
         if (ancestor->contains(endContainerNode))
-            return positionBeforeNode(ancestor);
+            return Position::beforeNode(ancestor);
         return Position::afterNode(ancestor);
     }
 
     if (Node* firstChild = treeScope.rootNode().firstChild())
-        return positionBeforeNode(firstChild);
+        return Position::beforeNode(firstChild);
 
     return Position();
 }
@@ -180,7 +180,6 @@ void SelectionAdjuster::adjustSelectionInFlatTree(VisibleSelectionInFlatTree* se
         selectionInFlatTree->m_end = position1;
     }
     selectionInFlatTree->updateSelectionType();
-    selectionInFlatTree->didChange();
 }
 
 static bool isCrossingShadowBoundaries(const VisibleSelectionInFlatTree& selection)
@@ -225,7 +224,6 @@ void SelectionAdjuster::adjustSelectionInDOMTree(VisibleSelection* selection, co
         selection->m_end = position1;
     }
     selection->updateSelectionType();
-    selection->didChange();
 }
 
 void SelectionAdjuster::adjustSelectionToAvoidCrossingShadowBoundaries(VisibleSelection* selection)

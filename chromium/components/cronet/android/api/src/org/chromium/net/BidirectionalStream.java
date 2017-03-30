@@ -4,6 +4,7 @@
 
 package org.chromium.net;
 
+import android.annotation.SuppressLint;
 import android.support.annotation.IntDef;
 
 import java.lang.annotation.Retention;
@@ -199,6 +200,7 @@ public abstract class BidirectionalStream {
          * @return constructed {@link BidirectionalStream} using configuration from
          *         this {@link Builder}
          */
+        @SuppressLint("WrongConstant") // TODO(jbudorick): Remove this after rolling to the N SDK.
         public BidirectionalStream build() {
             return mCronetEngine.createBidirectionalStream(mUrl, mCallback, mExecutor, mHttpMethod,
                     mRequestHeaders, mPriority, mDisableAutoFlush,
@@ -253,16 +255,15 @@ public abstract class BidirectionalStream {
                 ByteBuffer buffer, boolean endOfStream);
 
         /**
-         * Invoked when data passed to {@link BidirectionalStream#write write()} is sent. The
-         * buffer's position is updated to the end of the sent data. The buffer's limit is not
-         * changed. Not all available data may have been sent, so the buffer's position is not
-         * necessarily equal to its limit. To continue writing, call
+         * Invoked when the entire ByteBuffer passed to {@link BidirectionalStream#write write()}
+         * is sent. The buffer's position is updated to be the same as the buffer's limit.
+         * The buffer's limit is not changed. To continue writing, call
          * {@link BidirectionalStream#write write()}.
          *
          * @param stream the stream on which the write completed
          * @param info the response information
          * @param buffer the buffer that was passed to {@link BidirectionalStream#write write()}.
-         *     The buffer's position is set to the end of the sent data. The buffer's limit
+         *     The buffer's position is set to the buffer's limit. The buffer's limit
          *     is not changed.
          * @param endOfStream the endOfStream flag that was passed to the corresponding
          *     {@link BidirectionalStream#write write()}. If true, the write side is closed.
@@ -321,28 +322,6 @@ public abstract class BidirectionalStream {
     }
 
     /**
-     * A callback that is invoked when the acknowledgement to a {@link #ping ping()} is received.
-     * Exactly one of the two methods will be invoked per each call to {@link #ping ping()}.
-     */
-    public abstract static class PingCallback {
-        /**
-         * Invoked when a ping is acknowledged. The given argument is the round-trip time of the
-         * ping, in microseconds.
-         *
-         * @param roundTripTimeMicros the round-trip duration between the ping being sent and the
-         *     acknowledgement received
-         */
-        public abstract void pingAcknowledged(long roundTripTimeMicros);
-
-        /**
-         * Invoked when a ping fails. The given argument is the cause of the failure.
-         *
-         * @param cause the cause of the ping failure
-         */
-        public abstract void pingFailed(CronetException cause);
-    }
-
-    /**
      * Starts the stream, all callbacks go to the {@code callback} argument passed to {@link
      * BidirectionalStream.Builder}'s constructor. Should only be called once.
      */
@@ -380,10 +359,10 @@ public abstract class BidirectionalStream {
      * method if data is sent, or its {@link Callback#onFailed onFailed()} method if
      * there's an error.
      *
-     * An attempt to write data from {@code buffer} starting at {@code
-     * buffer.position()} is begun. At most {@code buffer.remaining()} bytes are
-     * written. {@code buffer.position()} is updated upon invocation of {@link
-     * Callback#onWriteCompleted onWriteCompleted()} to indicate how much data was written.
+     * An attempt to write data from {@code buffer} starting at {@code buffer.position()}
+     * is begun. {@code buffer.remaining()} bytes will be written.
+     * {@link Callback#onWriteCompleted onWriteCompleted()} will be invoked only when the
+     * full ByteBuffer is written.
      *
      * @param buffer the {@link ByteBuffer} to write data from. Must be a
      *     direct ByteBuffer. The embedder must not read or modify buffer's
@@ -404,23 +383,6 @@ public abstract class BidirectionalStream {
      * will be invoked when the buffer is sent.
      */
     public abstract void flush();
-
-    /**
-     * Pings remote end-point. {@code callback} methods will be invoked on {@code executor}.
-     *
-     * @param callback the callback that will be invoked when ping succeeds or fails
-     * @param executor the executor on which the callback will be invoked
-     */
-    // TODO(mef): May be last thing to be implemented on Android.
-    public abstract void ping(PingCallback callback, Executor executor);
-
-    /**
-     * Updates stream flow control window.
-     *
-     * @param windowSizeIncrement the value in bytes to increment window by. May be negative.
-     */
-    // TODO(mef): Understand the needs and semantics of this method.
-    public abstract void windowUpdate(int windowSizeIncrement);
 
     /**
      * Cancels the stream. Can be called at any time after {@link #start}.

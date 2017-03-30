@@ -50,7 +50,6 @@
 #include "core/html/HTMLTextFormControlElement.h"
 #include "core/layout/HitTestRequest.h"
 #include "core/layout/HitTestResult.h"
-#include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTextFragment.h"
@@ -61,11 +60,10 @@
 #include "core/layout/api/LineLayoutItem.h"
 #include "core/layout/line/InlineIterator.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/paint/PaintLayer.h"
 #include "platform/Logging.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
 #include "platform/text/TextBoundaries.h"
+#include "platform/text/TextBreakIterator.h"
 
 namespace blink {
 
@@ -279,7 +277,7 @@ static Position previousRootInlineBoxCandidatePosition(Node* node, const Visible
         if (highestEditableRoot(firstPositionInOrBeforeNode(previousNode), editableType) != highestRoot)
             break;
 
-        Position pos = isHTMLBRElement(*previousNode) ? positionBeforeNode(previousNode) :
+        Position pos = isHTMLBRElement(*previousNode) ? Position::beforeNode(previousNode) :
             Position::editingPositionOf(previousNode, caretMaxOffset(previousNode));
 
         if (isVisuallyEquivalentCandidate(pos))
@@ -1328,10 +1326,10 @@ VisiblePosition previousLinePosition(const VisiblePosition& visiblePosition, Lay
     if (root) {
         // FIXME: Can be wrong for multi-column layout and with transforms.
         LayoutPoint pointInLine = absoluteLineDirectionPointToLocalPointInBlock(root, lineDirectionPoint);
-        LineLayoutItem lineLayoutItem = root->closestLeafChildForPoint(pointInLine, isEditablePosition(p, ContentIsEditable, DoNotUpdateStyle))->getLineLayoutItem();
+        LineLayoutItem lineLayoutItem = root->closestLeafChildForPoint(pointInLine, isEditablePosition(p, ContentIsEditable))->getLineLayoutItem();
         Node* node = lineLayoutItem.node();
         if (node && editingIgnoresContent(node))
-            return createVisiblePosition(Position::inParentBeforeNode(*node));
+            return VisiblePosition::inParentBeforeNode(*node);
         return createVisiblePosition(lineLayoutItem.positionForPoint(pointInLine));
     }
 
@@ -1387,7 +1385,7 @@ VisiblePosition nextLinePosition(const VisiblePosition& visiblePosition, LayoutU
         LineLayoutItem lineLayoutItem = root->closestLeafChildForPoint(pointInLine, isEditablePosition(p))->getLineLayoutItem();
         Node* node = lineLayoutItem.node();
         if (node && editingIgnoresContent(node))
-            return createVisiblePosition(Position::inParentBeforeNode(*node));
+            return VisiblePosition::inParentBeforeNode(*node);
         return createVisiblePosition(lineLayoutItem.positionForPoint(pointInLine));
     }
 
@@ -1397,7 +1395,7 @@ VisiblePosition nextLinePosition(const VisiblePosition& visiblePosition, LayoutU
     Element* rootElement = node->hasEditableStyle(editableType) ? node->rootEditableElement(editableType) : node->document().documentElement();
     if (!rootElement)
         return VisiblePosition();
-    return createVisiblePosition(Position::lastPositionInNode(rootElement));
+    return VisiblePosition::lastPositionInNode(rootElement);
 }
 
 // ---------
@@ -1737,7 +1735,7 @@ VisiblePosition endOfBlock(const VisiblePosition& visiblePosition, EditingBounda
 {
     Position position = visiblePosition.deepEquivalent();
     Element* endBlock = position.computeContainerNode() ? enclosingBlock(position.computeContainerNode(), rule) : 0;
-    return endBlock ? createVisiblePosition(Position::lastPositionInNode(endBlock)) : VisiblePosition();
+    return endBlock ? VisiblePosition::lastPositionInNode(endBlock) : VisiblePosition();
 }
 
 bool inSameBlock(const VisiblePosition& a, const VisiblePosition& b)
@@ -1825,7 +1823,7 @@ VisiblePosition endOfEditableContent(const VisiblePosition& visiblePosition)
     if (!highestRoot)
         return VisiblePosition();
 
-    return createVisiblePosition(Position::lastPositionInNode(highestRoot));
+    return VisiblePosition::lastPositionInNode(highestRoot);
 }
 
 bool isEndOfEditableOrNonEditableContent(const VisiblePosition& position)
@@ -1924,7 +1922,9 @@ static InlineBoxPosition computeInlineBoxPositionTemplate(const PositionTemplate
     InlineBox* inlineBox = nullptr;
     int caretOffset = position.computeEditingOffset();
     Node* const anchorNode = position.anchorNode();
-    LayoutObject* layoutObject = anchorNode->isShadowRoot() ? toShadowRoot(anchorNode)->host()->layoutObject() : anchorNode->layoutObject();
+    LayoutObject* layoutObject = anchorNode->isShadowRoot() ? toShadowRoot(anchorNode)->host().layoutObject() : anchorNode->layoutObject();
+
+    DCHECK(layoutObject) << position;
 
     if (!layoutObject->isText()) {
         inlineBox = 0;
@@ -2178,7 +2178,7 @@ VisiblePosition visiblePositionForContentsPoint(const IntPoint& contentsPoint, L
     frame->document()->layoutViewItem().hitTest(result);
 
     if (Node* node = result.innerNode())
-        return frame->selection().selection().visiblePositionRespectingEditingBoundary(result.localPoint(), node);
+        return createVisiblePosition(positionRespectingEditingBoundary(frame->selection().selection().start(), result.localPoint(), node));
     return VisiblePosition();
 }
 
@@ -3180,7 +3180,7 @@ static VisiblePositionTemplate<Strategy> nextPositionOfAlgorithm(const VisiblePo
     case CanSkipOverEditingBoundary:
         return skipToEndOfEditingBoundary(next, visiblePosition.deepEquivalent());
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return honorEditingBoundaryAtOrAfter(next, visiblePosition.deepEquivalent());
 }
 
@@ -3243,7 +3243,7 @@ static VisiblePositionTemplate<Strategy> previousPositionOfAlgorithm(const Visib
         return skipToStartOfEditingBoundary(prev, visiblePosition.deepEquivalent());
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return honorEditingBoundaryAtOrBefore(prev, visiblePosition.deepEquivalent());
 }
 

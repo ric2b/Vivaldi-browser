@@ -35,9 +35,21 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.PermissionValues = settings.PermissionValues;
     this.addWebUIListener('contentSettingSitePermissionChanged',
         this.sitePermissionChanged_.bind(this));
+  },
+
+  /**
+   * Returns true if the origins match, e.g. http://google.com and
+   * http://[*.]google.com.
+   * @param {string} left The first origin to compare.
+   * @param {string} right The second origin to compare.
+   * @return {boolean} True if the origins are the same.
+   * @private
+   */
+  sameOrigin_: function(left, right) {
+    return this.removePatternWildcard_(left) ==
+        this.removePatternWildcard_(right);
   },
 
   /**
@@ -51,7 +63,7 @@ Polymer({
     this.browserProxy.getExceptionList(this.category).then(
         function(exceptionList) {
       for (var i = 0; i < exceptionList.length; ++i) {
-        if (exceptionList[i].origin == site.origin) {
+        if (this.sameOrigin_(exceptionList[i].origin, site.origin)) {
           this.$.permission.selected = exceptionList[i].setting;
           this.$.details.hidden = false;
         }

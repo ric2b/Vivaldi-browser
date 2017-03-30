@@ -49,12 +49,10 @@ namespace media {
 DefaultRendererFactory::DefaultRendererFactory(
     const scoped_refptr<MediaLog>& media_log,
     DecoderFactory* decoder_factory,
-    const GetGpuFactoriesCB& get_gpu_factories_cb,
-    const AudioHardwareConfig& audio_hardware_config)
+    const GetGpuFactoriesCB& get_gpu_factories_cb)
     : media_log_(media_log),
       decoder_factory_(decoder_factory),
-      get_gpu_factories_cb_(get_gpu_factories_cb),
-      audio_hardware_config_(audio_hardware_config) {}
+      get_gpu_factories_cb_(get_gpu_factories_cb) {}
 
 DefaultRendererFactory::~DefaultRendererFactory() {
 }
@@ -102,16 +100,12 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
   // Create our video decoders and renderer.
   ScopedVector<VideoDecoder> video_decoders;
 
-  // Prefer an external decoder since one will only exist if it is hardware
-  // accelerated.
-  if (decoder_factory_)
-    decoder_factory_->CreateVideoDecoders(media_task_runner, &video_decoders);
-
-  // |gpu_factories_| requires that its entry points be called on its
-  // |GetTaskRunner()|.  Since |pipeline_| will own decoders created from the
-  // factories, require that their message loops are identical.
-  DCHECK(!gpu_factories ||
-         (gpu_factories->GetTaskRunner() == media_task_runner.get()));
+  if (gpu_factories) {
+    // |gpu_factories_| requires that its entry points be called on its
+    // |GetTaskRunner()|.  Since |pipeline_| will own decoders created from the
+    // factories, require that their message loops are identical.
+    DCHECK(gpu_factories->GetTaskRunner() == media_task_runner.get());
+  }
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   if (use_platform_media_pipeline) {
@@ -123,9 +117,17 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
   // GpuVideoDecoder, we should make it our first choice on the list of video
   // decoders, for more details see: DNA-36050,
   // https://code.google.com/p/chromium/issues/detail?id=470466.
-  if (gpu_factories)
-    video_decoders.push_back(
-        new GpuVideoDecoder(gpu_factories, request_surface_cb));
+    if (decoder_factory_) {
+      decoder_factory_->CreateVideoDecoders(media_task_runner, gpu_factories,
+                                            &video_decoders);
+    }
+    if (gpu_factories) {
+      video_decoders.push_back(
+        new GpuVideoDecoder(gpu_factories, request_surface_cb, media_log_));
+    }
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  }
+#endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
 #if defined(OS_WIN)
@@ -144,9 +146,6 @@ ScopedVector<VideoDecoder> DefaultRendererFactory::CreateVideoDecoders(
   video_decoders.push_back(new FFmpegVideoDecoder());
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  }
-#endif
   return video_decoders;
 }
 
@@ -160,11 +159,10 @@ std::unique_ptr<Renderer> DefaultRendererFactory::CreateRenderer(
     bool platform_pipeline_enlarges_buffers_on_underflow) {
   DCHECK(audio_renderer_sink);
 
-  std::unique_ptr<AudioRenderer> audio_renderer(
-      new AudioRendererImpl(media_task_runner, audio_renderer_sink,
-                            CreateAudioDecoders(media_task_runner,
-                                use_platform_media_pipeline),
-                            audio_hardware_config_, media_log_));
+  std::unique_ptr<AudioRenderer> audio_renderer(new AudioRendererImpl(
+      media_task_runner, audio_renderer_sink,
+      CreateAudioDecoders(media_task_runner,
+          use_platform_media_pipeline), media_log_));
 
   GpuVideoAcceleratorFactories* gpu_factories = nullptr;
   if (!get_gpu_factories_cb_.is_null())

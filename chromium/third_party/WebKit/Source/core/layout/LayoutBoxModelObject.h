@@ -25,10 +25,13 @@
 #define LayoutBoxModelObject_h
 
 #include "core/CoreExport.h"
+#include "core/layout/BackgroundBleedAvoidance.h"
+#include "core/layout/ContentChangeType.h"
 #include "core/layout/LayoutObject.h"
 #include "core/page/scrolling/StickyPositionScrollingConstraints.h"
-#include "core/style/ShadowData.h"
 #include "platform/geometry/LayoutRect.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -48,20 +51,6 @@ enum PaintLayerType {
 // Modes for some of the line-related functions.
 enum LinePositionMode { PositionOnContainingLine, PositionOfInteriorLineBoxes };
 enum LineDirectionMode { HorizontalLine, VerticalLine };
-typedef unsigned BorderEdgeFlags;
-
-enum BackgroundBleedAvoidance {
-    BackgroundBleedNone,
-    BackgroundBleedShrinkBackground,
-    BackgroundBleedClipOnly,
-    BackgroundBleedClipLayer,
-};
-
-enum ContentChangeType {
-    ImageChanged,
-    CanvasChanged,
-    CanvasContextChanged
-};
 
 class InlineFlowBox;
 
@@ -161,15 +150,15 @@ public:
 
     // IE extensions. Used to calculate offsetWidth/Height.  Overridden by inlines (LayoutFlow)
     // to return the remaining width on a given line (and the height of a single line).
-    virtual LayoutUnit offsetLeft() const;
-    virtual LayoutUnit offsetTop() const;
+    virtual LayoutUnit offsetLeft(const Element*) const;
+    virtual LayoutUnit offsetTop(const Element*) const;
     virtual LayoutUnit offsetWidth() const = 0;
     virtual LayoutUnit offsetHeight() const = 0;
 
-    int pixelSnappedOffsetLeft() const { return roundToInt(offsetLeft()); }
-    int pixelSnappedOffsetTop() const { return roundToInt(offsetTop()); }
-    virtual int pixelSnappedOffsetWidth() const;
-    virtual int pixelSnappedOffsetHeight() const;
+    int pixelSnappedOffsetLeft(const Element* parent) const { return roundToInt(offsetLeft(parent)); }
+    int pixelSnappedOffsetTop(const Element* parent) const { return roundToInt(offsetTop(parent)); }
+    virtual int pixelSnappedOffsetWidth(const Element*) const;
+    virtual int pixelSnappedOffsetHeight(const Element*) const;
 
     bool hasSelfPaintingLayer() const;
     PaintLayer* layer() const { return m_layer.get(); }
@@ -305,8 +294,6 @@ public:
     // The rect is in the physical coordinate space of this layout object.
     void setBackingNeedsPaintInvalidationInRect(const LayoutRect&, PaintInvalidationReason, const LayoutObject&) const;
 
-    void invalidateDisplayItemClientOnBacking(const DisplayItemClient&, PaintInvalidationReason) const;
-
     // http://www.w3.org/TR/css3-background/#body-background
     // <html> root element with no background steals background from its first <body> child.
     // The used background for such body element should be the initial value. (i.e. transparent)
@@ -315,7 +302,7 @@ public:
 protected:
     void willBeDestroyed() override;
 
-    LayoutPoint adjustedPositionRelativeToOffsetParent(const LayoutPoint&) const;
+    LayoutPoint adjustedPositionRelativeTo(const LayoutPoint&, const Element*) const;
 
     bool calculateHasBoxDecorations() const;
 
@@ -385,15 +372,15 @@ private:
     LayoutBoxModelObjectRareData& ensureRareData()
     {
         if (!m_rareData)
-            m_rareData = adoptPtr(new LayoutBoxModelObjectRareData());
+            m_rareData = wrapUnique(new LayoutBoxModelObjectRareData());
         return *m_rareData.get();
     }
 
     // The PaintLayer associated with this object.
     // |m_layer| can be nullptr depending on the return value of layerTypeRequired().
-    OwnPtr<PaintLayer> m_layer;
+    std::unique_ptr<PaintLayer> m_layer;
 
-    OwnPtr<LayoutBoxModelObjectRareData> m_rareData;
+    std::unique_ptr<LayoutBoxModelObjectRareData> m_rareData;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutBoxModelObject, isBoxModelObject());

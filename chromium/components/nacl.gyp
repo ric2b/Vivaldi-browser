@@ -74,6 +74,7 @@
             '../base/base.gyp:base_static',
             '../crypto/crypto.gyp:crypto',
             '../ipc/ipc.gyp:ipc',
+            '../mojo/mojo_edk.gyp:mojo_system_impl',
             '../native_client/src/trusted/service_runtime/service_runtime.gyp:sel_main_chrome',
             '../ppapi/ppapi_internal.gyp:ppapi_ipc',
             '../ppapi/ppapi_internal.gyp:ppapi_shared',
@@ -137,13 +138,6 @@
                 # Required by nacl_fork_delegate_linux.cc.
                 '../sandbox/sandbox.gyp:suid_sandbox_client',
                 '../sandbox/sandbox.gyp:sandbox_services',
-              ]
-            }],
-            ['OS=="win"', {
-              'dependencies': [
-                # TODO(fdoray): Remove this once the PreRead field trial has
-                # expired. crbug.com/577698
-                '../components/components.gyp:startup_metric_utils_common',
               ]
             }],
           ],
@@ -284,6 +278,7 @@
               },
               'dependencies': [
                 'nacl_common_win64',
+                '../mojo/mojo_edk.gyp:mojo_system_impl_win64',
                 '../native_client/src/trusted/service_runtime/service_runtime.gyp:sel_main_chrome64',
                 '../ppapi/ppapi_internal.gyp:ppapi_shared_win64',
                 '../ppapi/ppapi_internal.gyp:ppapi_ipc_win64',

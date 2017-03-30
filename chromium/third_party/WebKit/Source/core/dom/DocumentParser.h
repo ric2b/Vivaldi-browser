@@ -26,6 +26,7 @@
 
 #include "platform/heap/Handle.h"
 #include "wtf/Forward.h"
+#include <memory>
 
 namespace blink {
 
@@ -51,7 +52,7 @@ public:
     // The below functions are used by DocumentWriter (the loader).
     virtual void appendBytes(const char* bytes, size_t length) = 0;
     virtual bool needsDecoder() const { return false; }
-    virtual void setDecoder(PassOwnPtr<TextResourceDecoder>);
+    virtual void setDecoder(std::unique_ptr<TextResourceDecoder>);
     virtual TextResourceDecoder* decoder();
     virtual void setHasAppendedData() { }
 
@@ -85,6 +86,10 @@ public:
     // detach is called.
     // Oilpan: We don't need to call detach when a Document is destructed.
     virtual void detach();
+
+    // Notifies the parser that the document element is available. Used by
+    // HTMLDocumentParser to dispatch preloads.
+    virtual void documentElementAvailable() { }
 
     void setDocumentWasLoadedAsPartOfNavigation() { m_documentWasLoadedAsPartOfNavigation = true; }
     bool documentWasLoadedAsPartOfNavigation() const { return m_documentWasLoadedAsPartOfNavigation; }

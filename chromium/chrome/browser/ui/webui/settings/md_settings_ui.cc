@@ -12,6 +12,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/settings/about_handler.h"
 #include "chrome/browser/ui/webui/settings/appearance_handler.h"
+#include "chrome/browser/ui/webui/settings/browser_lifetime_handler.h"
 #include "chrome/browser/ui/webui/settings/downloads_handler.h"
 #include "chrome/browser/ui/webui/settings/font_handler.h"
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/ui/webui/settings/reset_settings_handler.h"
 #include "chrome/browser/ui/webui/settings/search_engines_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
+#include "chrome/browser/ui/webui/settings/settings_media_devices_selection_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
 #include "chrome/browser/ui/webui/settings/site_settings_handler.h"
@@ -49,7 +51,7 @@
 
 namespace settings {
 
-MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
+MdSettingsUI::MdSettingsUI(content::WebUI* web_ui, const GURL& url)
     : content::WebUIController(web_ui),
       WebContentsObserver(web_ui->GetWebContents()) {
   Profile* profile = Profile::FromWebUI(web_ui);
@@ -62,9 +64,11 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
 #endif  // defined(USE_NSS_CERTS)
 
   AddSettingsPageUIHandler(new ClearBrowsingDataHandler(web_ui));
+  AddSettingsPageUIHandler(new BrowserLifetimeHandler());
   AddSettingsPageUIHandler(new DownloadsHandler());
   AddSettingsPageUIHandler(new FontHandler(web_ui));
   AddSettingsPageUIHandler(new LanguagesHandler(web_ui));
+  AddSettingsPageUIHandler(new MediaDevicesSelectionHandler(profile));
   AddSettingsPageUIHandler(new PeopleHandler(profile));
   AddSettingsPageUIHandler(new ProfileInfoHandler(profile));
   AddSettingsPageUIHandler(new SearchEnginesHandler(profile));
@@ -80,8 +84,13 @@ MdSettingsUI::MdSettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(new SystemHandler());
 #endif
 
+  // Host must be derived from the visible URL, since this might be serving
+  // either chrome://settings or chrome://md-settings.
+  CHECK(url.GetOrigin() == GURL(chrome::kChromeUISettingsURL).GetOrigin() ||
+        url.GetOrigin() == GURL(chrome::kChromeUIMdSettingsURL).GetOrigin());
+
   content::WebUIDataSource* html_source =
-      content::WebUIDataSource::Create(chrome::kChromeUIMdSettingsHost);
+      content::WebUIDataSource::Create(url.host());
 
 #if defined(OS_CHROMEOS)
   chromeos::settings::EasyUnlockSettingsHandler* easy_unlock_handler =

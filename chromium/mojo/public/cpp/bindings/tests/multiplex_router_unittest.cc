@@ -6,12 +6,13 @@
 
 #include <utility>
 
+#include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "mojo/public/cpp/bindings/lib/interface_endpoint_client.h"
+#include "mojo/public/cpp/bindings/interface_endpoint_client.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/message_filter.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
@@ -23,7 +24,6 @@ namespace mojo {
 namespace test {
 namespace {
 
-using mojo::internal::InterfaceEndpointClient;
 using mojo::internal::MultiplexRouter;
 
 class MultiplexRouterTest : public testing::Test {
@@ -43,7 +43,7 @@ class MultiplexRouterTest : public testing::Test {
 
   void TearDown() override {}
 
-  void PumpMessages() { loop_.RunUntilIdle(); }
+  void PumpMessages() { base::RunLoop().RunUntilIdle(); }
 
   ScopedInterfaceEndpointHandle EmulatePassingEndpointHandle(
       ScopedInterfaceEndpointHandle handle,
@@ -247,6 +247,11 @@ TEST_F(MultiplexRouterTest, LazyResponses) {
             std::string(reinterpret_cast<const char*>(response.payload())));
 }
 
+void ForwardErrorHandler(bool* called, const base::Closure& callback) {
+  *called = true;
+  callback.Run();
+}
+
 // Tests that if the receiving application destroys the responder_ without
 // sending a response, then we trigger connection error at both sides. Moreover,
 // both sides still appear to have a valid message pipe handle bound.
@@ -257,10 +262,8 @@ TEST_F(MultiplexRouterTest, MissingResponses) {
                                   false, base::ThreadTaskRunnerHandle::Get());
   bool error_handler_called0 = false;
   client0.set_connection_error_handler(
-      [&error_handler_called0, &run_loop0]() {
-        error_handler_called0 = true;
-        run_loop0.Quit();
-      });
+      base::Bind(&ForwardErrorHandler, &error_handler_called0,
+                 run_loop0.QuitClosure()));
 
   base::RunLoop run_loop3;
   LazyResponseGenerator generator(run_loop3.QuitClosure());
@@ -269,10 +272,8 @@ TEST_F(MultiplexRouterTest, MissingResponses) {
                                   false, base::ThreadTaskRunnerHandle::Get());
   bool error_handler_called1 = false;
   client1.set_connection_error_handler(
-      [&error_handler_called1, &run_loop1]() {
-        error_handler_called1 = true;
-        run_loop1.Quit();
-      });
+      base::Bind(&ForwardErrorHandler, &error_handler_called1,
+                 run_loop1.QuitClosure()));
 
   Message request;
   AllocRequestMessage(1, "hello", &request);

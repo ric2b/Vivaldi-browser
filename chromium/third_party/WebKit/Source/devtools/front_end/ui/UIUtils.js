@@ -290,19 +290,12 @@ WebInspector.GlassPane.prototype = {
     dispose: function()
     {
         delete WebInspector._glassPane;
-        if (WebInspector.GlassPane.DefaultFocusedViewStack.length)
-            WebInspector.GlassPane.DefaultFocusedViewStack.peekLast().focus();
         this.element.remove();
     }
 }
 
 /** @type {!WebInspector.GlassPane|undefined} */
 WebInspector._glassPane;
-
-/**
- * @type {!Array.<!WebInspector.Widget|!WebInspector.Dialog>}
- */
-WebInspector.GlassPane.DefaultFocusedViewStack = [];
 
 /**
  * @param {?Node=} node
@@ -383,9 +376,9 @@ WebInspector._valueModificationDirection = function(event)
         else if (event.wheelDeltaY < 0 || event.wheelDeltaX < 0)
             direction = "Down";
     } else {
-        if (event.keyIdentifier === "Up" || event.keyIdentifier === "PageUp")
+        if (event.key === "ArrowUp" || event.key === "PageUp")
             direction = "Up";
-        else if (event.keyIdentifier === "Down" || event.keyIdentifier === "PageDown")
+        else if (event.key === "ArrowDown" || event.key === "PageDown")
             direction = "Down";
     }
     return direction;
@@ -534,8 +527,8 @@ WebInspector.handleElementValueModifications = function(event, element, finishHa
         return document.createRange();
     }
 
-    var arrowKeyOrMouseWheelEvent = (event.keyIdentifier === "Up" || event.keyIdentifier === "Down" || event.type === "mousewheel");
-    var pageKeyPressed = (event.keyIdentifier === "PageUp" || event.keyIdentifier === "PageDown");
+    var arrowKeyOrMouseWheelEvent = (event.key === "ArrowUp" || event.key === "ArrowDown" || event.type === "mousewheel");
+    var pageKeyPressed = (event.key === "PageUp" || event.key === "PageDown");
     if (!arrowKeyOrMouseWheelEvent && !pageKeyPressed)
         return false;
 
@@ -838,7 +831,7 @@ WebInspector._documentBlurred = function(document, event)
     // This is the case when event.relatedTarget is null (no element is being focused)
     // and document.activeElement is reset to default (this is not a window blur).
     if (!event.relatedTarget && document.activeElement === document.body)
-      WebInspector.setCurrentFocusElement(null);
+        WebInspector.setCurrentFocusElement(null);
 }
 
 WebInspector._textInputTypes = ["text", "search", "tel", "url", "email", "password"].keySet();
@@ -1601,7 +1594,7 @@ WebInspector.bindInput = function(input, apply, validate, numeric)
         if (!numeric)
             return;
 
-        var increment = event.keyIdentifier === "Up" ? 1 : event.keyIdentifier === "Down" ? -1 : 0;
+        var increment = event.key === "ArrowUp" ? 1 : event.key === "ArrowDown" ? -1 : 0;
         if (!increment)
             return;
         if (event.shiftKey)
@@ -1631,11 +1624,6 @@ WebInspector.bindInput = function(input, apply, validate, numeric)
         var valid = validate(value);
         input.classList.toggle("error-input", !valid);
         input.value = value;
-
-        // Selection range operations are not supported by type "number" inputs.  This browser
-        // behavior is detailed by the WHATWG forms spec.
-        if (input.type !== "number")
-            input.setSelectionRange(value.length, value.length);
     }
 
     return setValue;
@@ -1821,8 +1809,8 @@ WebInspector.ThemeSupport.prototype = {
             this._cachedThemePatches.set(id, fullText);
             return fullText;
         } catch (e) {
-           this._setting.set("default");
-           return "";
+            this._setting.set("default");
+            return "";
         }
     },
 

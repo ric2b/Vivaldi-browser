@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
+#include "cc/animation/element_id.h"
 #include "cc/animation/target_property.h"
 #include "cc/base/cc_export.h"
 #include "cc/base/region.h"
@@ -106,6 +107,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     return !copy_requests_.empty();
   }
 
+  void TakeCopyRequests(
+      std::vector<std::unique_ptr<CopyOutputRequest>>* requests);
+
   virtual void SetBackgroundColor(SkColor background_color);
   SkColor background_color() const { return background_color_; }
   void SetSafeOpaqueBackgroundColor(SkColor background_color);
@@ -128,7 +132,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   virtual void SetNeedsDisplayRect(const gfx::Rect& dirty_rect);
   void SetNeedsDisplay() { SetNeedsDisplayRect(gfx::Rect(bounds())); }
 
-  void SetOpacity(float opacity);
+  virtual void SetOpacity(float opacity);
   float opacity() const { return opacity_; }
   float EffectiveOpacity() const;
   bool OpacityIsAnimating() const;
@@ -481,12 +485,15 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetSubtreePropertyChanged();
   bool subtree_property_changed() const { return subtree_property_changed_; }
 
+  void SetLayerPropertyChanged();
+  bool layer_property_changed() const { return layer_property_changed_; }
+
   void DidBeginTracing();
 
   int num_copy_requests_in_target_subtree();
 
-  void SetElementId(uint64_t id);
-  uint64_t element_id() const { return element_id_; }
+  void SetElementId(ElementId id);
+  ElementId element_id() const { return element_id_; }
 
   void SetMutableProperties(uint32_t properties);
   uint32_t mutable_properties() const { return mutable_properties_; }
@@ -622,7 +629,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   int clip_tree_index_;
   int scroll_tree_index_;
   int property_tree_sequence_number_;
-  uint64_t element_id_;
+  ElementId element_id_;
   uint32_t mutable_properties_;
   gfx::Vector2dF offset_to_transform_parent_;
   uint32_t main_thread_scrolling_reasons_;
@@ -643,6 +650,7 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool should_check_backface_visibility_ : 1;
   bool force_render_surface_for_testing_ : 1;
   bool subtree_property_changed_ : 1;
+  bool layer_property_changed_ : 1;
   bool has_will_change_transform_hint_ : 1;
   Region non_fast_scrollable_region_;
   Region touch_event_handler_region_;

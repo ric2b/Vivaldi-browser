@@ -32,23 +32,19 @@ std::unique_ptr<gpu::GLInProcessContext> CreateTestInProcessContext(
     gpu::GLInProcessContext* shared_context) {
   const bool is_offscreen = true;
   gpu::gles2::ContextCreationAttribHelper attribs;
-  attribs.alpha_size = 8;
-  attribs.blue_size = 8;
-  attribs.green_size = 8;
-  attribs.red_size = 8;
+  attribs.alpha_size = -1;
   attribs.depth_size = 24;
   attribs.stencil_size = 8;
   attribs.samples = 0;
   attribs.sample_buffers = 0;
   attribs.fail_if_major_perf_caveat = false;
   attribs.bind_generates_resource = false;
-  gfx::GpuPreference gpu_preference = gfx::PreferDiscreteGpu;
 
   std::unique_ptr<gpu::GLInProcessContext> context =
       base::WrapUnique(gpu::GLInProcessContext::Create(
           nullptr, nullptr, is_offscreen, gfx::kNullAcceleratedWidget,
-          gfx::Size(1, 1), shared_context, attribs, gpu_preference,
-          gpu::SharedMemoryLimits(), gpu_memory_buffer_manager, image_factory));
+          shared_context, attribs, gpu::SharedMemoryLimits(),
+          gpu_memory_buffer_manager, image_factory));
 
   DCHECK(context);
   return context;

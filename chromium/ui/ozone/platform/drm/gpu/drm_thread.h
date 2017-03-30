@@ -9,6 +9,7 @@
 
 #include <memory>
 
+#include "base/files/scoped_file.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread.h"
@@ -59,11 +60,13 @@ class DrmThread : public base::Thread {
                     gfx::BufferFormat format,
                     gfx::BufferUsage usage,
                     scoped_refptr<GbmBuffer>* buffer);
-  void CreateBufferFromFD(const gfx::Size& size,
-                          gfx::BufferFormat format,
-                          base::ScopedFD fd,
-                          int stride,
-                          scoped_refptr<GbmBuffer>* buffer);
+  void CreateBufferFromFds(gfx::AcceleratedWidget widget,
+                           const gfx::Size& size,
+                           gfx::BufferFormat format,
+                           std::vector<base::ScopedFD>&& fds,
+                           std::vector<int> strides,
+                           std::vector<int> offsets,
+                           scoped_refptr<GbmBuffer>* buffer);
 
   void GetScanoutFormats(gfx::AcceleratedWidget widget,
                          std::vector<gfx::BufferFormat>* scanout_formats);
@@ -81,7 +84,8 @@ class DrmThread : public base::Thread {
                  const std::vector<SkBitmap>& bitmaps,
                  const gfx::Point& location,
                  int frame_delay_ms);
-  void MoveCursor(gfx::AcceleratedWidget widget, const gfx::Point& location);
+  void MoveCursor(const gfx::AcceleratedWidget& widget,
+                  const gfx::Point& location);
   void CheckOverlayCapabilities(
       gfx::AcceleratedWidget widget,
       const std::vector<OverlayCheck_Params>& overlays,

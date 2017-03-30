@@ -40,8 +40,10 @@ namespace data_reduction_proxy {
 class DataReductionProxyCompressionStats;
 class DataReductionProxyEventStore;
 class DataReductionProxyIOData;
+class DataReductionProxyPingbackClient;
 class DataReductionProxyServiceObserver;
 class DataReductionProxySettings;
+class DataUseGroup;
 
 // Contains and initializes all Data Reduction Proxy objects that have a
 // lifetime based on the UI thread.
@@ -89,7 +91,7 @@ class DataReductionProxyService
                             int64_t original_size,
                             bool data_reduction_proxy_enabled,
                             DataReductionProxyRequestType request_type,
-                            const std::string& data_usage_host,
+                            scoped_refptr<DataUseGroup> data_use_group,
                             const std::string& mime_type);
 
   // Overrides of DataReductionProxyEventStorageDelegate.
@@ -136,6 +138,9 @@ class DataReductionProxyService
   void AddObserver(DataReductionProxyServiceObserver* observer);
   void RemoveObserver(DataReductionProxyServiceObserver* observer);
 
+  // Sets the reporting fraction in the pingback client.
+  void SetPingbackReportingFraction(float pingback_reporting_fraction);
+
   // Accessor methods.
   DataReductionProxyCompressionStats* compression_stats() const {
     return compression_stats_.get();
@@ -147,6 +152,10 @@ class DataReductionProxyService
 
   net::URLRequestContextGetter* url_request_context_getter() const {
     return url_request_context_getter_;
+  }
+
+  DataReductionProxyPingbackClient* pingback_client() const {
+    return pingback_client_.get();
   }
 
   base::WeakPtr<DataReductionProxyService> GetWeakPtr();
@@ -175,6 +184,8 @@ class DataReductionProxyService
   std::unique_ptr<DataReductionProxyCompressionStats> compression_stats_;
 
   std::unique_ptr<DataReductionProxyEventStore> event_store_;
+
+  std::unique_ptr<DataReductionProxyPingbackClient> pingback_client_;
 
   DataReductionProxySettings* settings_;
 

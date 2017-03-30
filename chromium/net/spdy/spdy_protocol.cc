@@ -4,9 +4,46 @@
 
 #include "net/spdy/spdy_protocol.h"
 
+#include "base/memory/ptr_util.h"
 #include "net/spdy/spdy_bug_tracker.h"
 
 namespace net {
+
+SpdyPriority ClampSpdy3Priority(SpdyPriority priority) {
+  if (priority < kV3HighestPriority) {
+    SPDY_BUG << "Invalid priority: " << static_cast<int>(priority);
+    return kV3HighestPriority;
+  }
+  if (priority > kV3LowestPriority) {
+    SPDY_BUG << "Invalid priority: " << static_cast<int>(priority);
+    return kV3LowestPriority;
+  }
+  return priority;
+}
+
+int ClampHttp2Weight(int weight) {
+  if (weight < kHttp2MinStreamWeight) {
+    SPDY_BUG << "Invalid weight: " << weight;
+    return kHttp2MinStreamWeight;
+  }
+  if (weight > kHttp2MaxStreamWeight) {
+    SPDY_BUG << "Invalid weight: " << weight;
+    return kHttp2MaxStreamWeight;
+  }
+  return weight;
+}
+
+int Spdy3PriorityToHttp2Weight(SpdyPriority priority) {
+  priority = ClampSpdy3Priority(priority);
+  const float kSteps = 255.9f / 7.f;
+  return static_cast<int>(kSteps * (7.f - priority)) + 1;
+}
+
+SpdyPriority Http2WeightToSpdy3Priority(int weight) {
+  weight = ClampHttp2Weight(weight);
+  const float kSteps = 255.9f / 7.f;
+  return static_cast<SpdyPriority>(7.f - (weight - 1) / kSteps);
+}
 
 bool SpdyConstants::IsValidFrameType(SpdyMajorVersion version,
                                      int frame_type_field) {
@@ -691,15 +728,18 @@ size_t SpdyConstants::GetFrameMaximumSize(SpdyMajorVersion version) {
     return ((1 << 24) - 1) + 8;
   } else {
     // Max payload of 2^14 plus nine-byte frame header.
-    // TODO(mlavan): In HTTP/2 this is actually not a constant;
-    // payload size can be set using the MAX_FRAME_SIZE setting to
-    // anything between 1 << 14 and (1 << 24) - 1
+    // TODO(dahollings): Change this to the actual spec
+    // max of (1 << 24) - 1 + 9.
     return (1 << 14) + 9;
   }
 }
 
 size_t SpdyConstants::GetSizeOfSizeField() {
   return sizeof(uint32_t);
+}
+
+size_t SpdyConstants::GetPerHeaderOverhead(SpdyMajorVersion version) {
+  return (version == net::HTTP2) ? 32 : 0;
 }
 
 size_t SpdyConstants::GetSettingSize(SpdyMajorVersion version) {
@@ -717,17 +757,19 @@ int32_t SpdyConstants::GetInitialSessionWindowSize(SpdyMajorVersion version) {
 std::string SpdyConstants::GetVersionString(SpdyMajorVersion version) {
   switch (version) {
     case SPDY3:
-      return "spdy/3";
+      return "spdy/3.1";
     case HTTP2:
       return "h2";
     default:
       SPDY_BUG << "Unsupported SPDY major version: " << version;
-      return "spdy/3";
+      return "spdy/3.1";
   }
 }
 
-SpdyFrameWithHeaderBlockIR::SpdyFrameWithHeaderBlockIR(SpdyStreamId stream_id)
-    : SpdyFrameWithFinIR(stream_id) {}
+SpdyFrameWithHeaderBlockIR::SpdyFrameWithHeaderBlockIR(
+    SpdyStreamId stream_id,
+    SpdyHeaderBlock header_block)
+    : SpdyFrameWithFinIR(stream_id), header_block_(std::move(header_block)) {}
 
 SpdyFrameWithHeaderBlockIR::~SpdyFrameWithHeaderBlockIR() {}
 
@@ -735,6 +777,16 @@ SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, base::StringPiece data)
     : SpdyFrameWithFinIR(stream_id), padded_(false), padding_payload_len_(0) {
   SetDataDeep(data);
 }
+
+SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, const char* data)
+    : SpdyDataIR(stream_id, base::StringPiece(data)) {}
+
+SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id, std::string data)
+    : SpdyFrameWithFinIR(stream_id),
+      data_store_(base::MakeUnique<std::string>(std::move(data))),
+      data_(*data_store_),
+      padded_(false),
+      padding_payload_len_(0) {}
 
 SpdyDataIR::SpdyDataIR(SpdyStreamId stream_id)
     : SpdyFrameWithFinIR(stream_id), padded_(false), padding_payload_len_(0) {}
@@ -784,6 +836,22 @@ SpdyGoAwayIR::SpdyGoAwayIR(SpdyStreamId last_good_stream_id,
                            base::StringPiece description)
     : description_(description) {
       set_last_good_stream_id(last_good_stream_id);
+  set_status(status);
+}
+
+SpdyGoAwayIR::SpdyGoAwayIR(SpdyStreamId last_good_stream_id,
+                           SpdyGoAwayStatus status,
+                           const char* description)
+    : SpdyGoAwayIR(last_good_stream_id,
+                   status,
+                   base::StringPiece(description)) {}
+
+SpdyGoAwayIR::SpdyGoAwayIR(SpdyStreamId last_good_stream_id,
+                           SpdyGoAwayStatus status,
+                           std::string description)
+    : description_store_(std::move(description)),
+      description_(description_store_) {
+  set_last_good_stream_id(last_good_stream_id);
   set_status(status);
 }
 

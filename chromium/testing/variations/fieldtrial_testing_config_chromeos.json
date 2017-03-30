@@ -35,10 +35,7 @@
     ],
     "ChromotingQUIC": [
         {
-            "group_name": "Enabled",
-            "params": {
-                "delay_tcp_race": "true"
-            }
+            "group_name": "Enabled"
         }
     ],
     "DisallowFetchForDocWrittenScriptsInMainFrame": [
@@ -143,7 +140,10 @@
     ],
     "QUIC": [
         {
-            "group_name": "Enabled"
+            "group_name": "Enabled",
+            "params": {
+                "delay_tcp_race": "true"
+            }
         }
     ],
     "ReportCertificateErrors": [
@@ -212,6 +212,11 @@
             "group_name": "Default"
         }
     ],
+    "SafeBrowsingV4LocalDatabaseManagerEnabled": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "SchedulerExpensiveTaskBlocking": [
         {
             "group_name": "Enabled"
@@ -255,6 +260,9 @@
     ],
     "V8CacheStrategiesForCacheStorage": [
         {
+            "group_name": "default"
+        },
+        {
             "group_name": "none"
         },
         {
@@ -270,11 +278,6 @@
             "params": {
                 "fetch_period_min": "30"
             }
-        }
-    ],
-    "WebFontsIntervention": [
-        {
-            "group_name": "Enabled"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

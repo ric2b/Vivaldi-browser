@@ -33,6 +33,7 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptEventListener.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/editing/Editor.h"
@@ -45,9 +46,11 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "platform/EventDispatchForbiddenScope.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Threading.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 using namespace WTF;
 
@@ -94,20 +97,20 @@ void reportBlockedEvent(ExecutionContext* context, const Event* event, Registere
 
     V8AbstractEventListener* v8Listener = V8AbstractEventListener::cast(registeredListener->listener());
     v8::HandleScope handles(v8Listener->isolate());
+    v8::Local<v8::Context> v8Context = toV8Context(context, v8Listener->world());
+    if (v8Context.IsEmpty())
+        return;
+    v8::Context::Scope contextScope(v8Context);
     v8::Local<v8::Object> handler = v8Listener->getListenerObject(context);
 
     String messageText = String::format(
         "Handling of '%s' input event was delayed for %ld ms due to main thread being busy. "
         "Consider marking event handler as 'passive' to make the page more responive.",
         event->type().getString().utf8().data(), lround(delayedSeconds * 1000));
-    ConsoleMessage* message = ConsoleMessage::create(JSMessageSource, WarningMessageLevel, messageText);
 
     v8::Local<v8::Function> function = eventListenerEffectiveFunction(v8Listener->isolate(), handler);
-    if (!function.IsEmpty()) {
-        message->setLineNumber(function->GetScriptLineNumber() + 1);
-        message->setColumnNumber(function->GetScriptColumnNumber());
-        message->setScriptId(function->ScriptId());
-    }
+    std::unique_ptr<SourceLocation> location = SourceLocation::fromFunction(function);
+    ConsoleMessage* message = ConsoleMessage::create(JSMessageSource, WarningMessageLevel, messageText, std::move(location));
     context->addConsoleMessage(message);
     registeredListener->setBlockedEventWarningEmitted();
 }
@@ -138,9 +141,7 @@ DEFINE_TRACE_WRAPPERS(EventTarget)
         if (!v8listener->hasExistingListenerObject())
             continue;
 
-        ScriptWrappableVisitor::markWrapper(
-            &(v8listener->existingListenerObjectPersistentHandle()),
-            v8listener->isolate());
+        visitor->traceWrappers(v8listener);
     }
 }
 
@@ -190,6 +191,12 @@ void EventTarget::setDefaultAddEventListenerOptions(const AtomicString& eventTyp
         if (!options.hasPassive())
             options.setPassive(false);
         return;
+    }
+
+    if (LocalDOMWindow* executingWindow = this->executingWindow()) {
+        if (options.hasPassive()) {
+            UseCounter::count(executingWindow->document(), options.passive() ? UseCounter::AddEventListenerPassiveTrue : UseCounter::AddEventListenerPassiveFalse);
+        }
     }
 
     if (Settings* settings = windowSettings(executingWindow())) {
@@ -551,7 +558,7 @@ bool EventTarget::fireEventListeners(Event* event, EventTargetData* d, EventList
     size_t i = 0;
     size_t size = entry.size();
     if (!d->firingEventIterators)
-        d->firingEventIterators = adoptPtr(new FiringEventIteratorVector);
+        d->firingEventIterators = wrapUnique(new FiringEventIteratorVector);
     d->firingEventIterators->append(FiringEventIterator(event->type(), i, size));
 
     double blockedEventThreshold = blockedEventsWarningThreshold(context, event);

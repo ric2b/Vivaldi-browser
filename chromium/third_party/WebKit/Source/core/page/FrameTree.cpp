@@ -54,6 +54,23 @@ FrameTree::~FrameTree()
 
 void FrameTree::setName(const AtomicString& name)
 {
+    // This method should only be called for local frames
+    // (remote frames should be updated via setPrecalculatedName).
+    DCHECK(m_thisFrame->isLocalFrame());
+
+    // When this method is called, m_uniqueName should be already initialized.
+    // This assert helps ensure that early return (a few lines below) won't
+    // result in an uninitialized m_uniqueName.
+    DCHECK(!m_uniqueName.isNull()
+        || (m_uniqueName.isNull() && m_name.isNull() && !parent()));
+
+    // Do not recalculate m_uniqueName if there is no real change of m_name.
+    // This is not just a performance optimization - other code relies on the
+    // assumption that unique name shouldn't change if the assigned name didn't
+    // change (i.e. code in content::FrameTreeNode::SetFrameName).
+    if (m_name == name)
+        return;
+
     m_name = name;
 
     // Remove our old frame name so it's not considered in calculateUniqueNameForChildFrame
@@ -194,9 +211,9 @@ String FrameTree::generateUniqueNameCandidate(bool existingChildFrame) const
         uniqueName.append(frame->tree().uniqueName());
     }
 
-    uniqueName.appendLiteral("/<!--frame");
+    uniqueName.append("/<!--frame");
     uniqueName.appendNumber(childCount() - (existingChildFrame ? 1 : 0));
-    uniqueName.appendLiteral("-->-->");
+    uniqueName.append("-->-->");
 
     // NOTE: This name might not be unique - see http://crbug.com/588800.
     return uniqueName.toAtomicString();

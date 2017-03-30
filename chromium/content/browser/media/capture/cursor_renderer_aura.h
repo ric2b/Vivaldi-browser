@@ -13,7 +13,7 @@
 #include "content/browser/media/capture/cursor_renderer.h"
 #include "content/common/content_export.h"
 #include "media/base/video_frame.h"
-#include "skia/ext/image_operations.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/aura/window.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/events/event_handler.h"
@@ -67,7 +67,7 @@ class CONTENT_EXPORT CursorRendererAura : public CursorRenderer,
 
   // Updated in mouse event listener and used to make a decision on
   // when the cursor is rendered.
-  base::TimeDelta last_mouse_movement_timestamp_;
+  base::TimeTicks last_mouse_movement_timestamp_;
   float last_mouse_position_x_;
   float last_mouse_position_y_;
   bool cursor_displayed_;

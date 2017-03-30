@@ -17,13 +17,14 @@
 #include "base/id_map.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/process/process_handle.h"
 #include "build/build_config.h"
 #include "content/common/accessibility_mode_enums.h"
+#include "content/common/frame.mojom.h"
 #include "content/common/frame_message_enums.h"
-#include "content/common/mojo/service_registry_impl.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/javascript_message_type.h"
 #include "content/public/common/referrer.h"
@@ -36,12 +37,14 @@
 #include "ipc/ipc_platform_file.h"
 #include "media/blink/webmediaplayer_delegate.h"
 #include "media/blink/webmediaplayer_params.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "services/shell/public/interfaces/interface_provider.mojom.h"
 #include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/modules/app_banner/WebAppBannerClient.h"
 #include "third_party/WebKit/public/web/WebAXObject.h"
 #include "third_party/WebKit/public/web/WebDataSource.h"
@@ -108,8 +111,9 @@ class UrlIndex;
 class WebEncryptedMediaClientImpl;
 }
 
-namespace mojo {
-class ServiceProvider;
+namespace shell {
+class InterfaceRegistry;
+class InterfaceProvider;
 }
 
 namespace url {
@@ -136,7 +140,7 @@ class PepperPluginInstanceImpl;
 class PermissionDispatcher;
 class PresentationDispatcher;
 class PushMessagingDispatcher;
-class RendererAccessibility;
+class RenderAccessibilityImpl;
 class RendererCdmManager;
 class RendererMediaPlayerManager;
 class RendererMediaSessionManager;
@@ -146,11 +150,14 @@ class RenderFrameObserver;
 class RenderViewImpl;
 class RenderWidget;
 class RenderWidgetFullscreenPepper;
+class ResourceRequestBodyImpl;
 class ScreenOrientationDispatcher;
 class UserMediaClientImpl;
 class WakeLockDispatcher;
 struct CommonNavigationParams;
 struct CustomContextMenuContext;
+struct FileChooserFileInfo;
+struct FileChooserParams;
 struct FrameReplicationState;
 struct NavigationParams;
 struct RequestNavigationParams;
@@ -160,6 +167,7 @@ struct StreamOverrideParameters;
 
 class CONTENT_EXPORT RenderFrameImpl
     : public RenderFrame,
+      NON_EXPORTED_BASE(mojom::Frame),
       NON_EXPORTED_BASE(public blink::WebFrameClient),
       NON_EXPORTED_BASE(public blink::WebFrameSerializerClient) {
  public:
@@ -283,8 +291,8 @@ class CONTENT_EXPORT RenderFrameImpl
     return accessibility_mode_;
   }
 
-  RendererAccessibility* renderer_accessibility() {
-    return renderer_accessibility_;
+  RenderAccessibilityImpl* render_accessibility() {
+    return render_accessibility_;
   }
 
   void HandleWebAccessibilityEvent(const blink::WebAXObject& obj,
@@ -295,7 +303,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void FocusedNodeChanged(const blink::WebNode& node);
 
   // TODO(dmazzoni): the only reason this is here is to plumb it through to
-  // RendererAccessibility. It should use the RenderFrameObserver method, once
+  // RenderAccessibilityImpl. It should use the RenderFrameObserver method, once
   // blink has a separate accessibility tree per frame.
   void FocusedNodeChangedForAccessibility(const blink::WebNode& node);
 
@@ -371,7 +379,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // NULL.
   MediaStreamDispatcher* GetMediaStreamDispatcher();
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(USE_EXTERNAL_POPUP_MENU)
   void DidHideExternalPopupMenu();
 #endif
 
@@ -383,6 +391,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // RenderFrame implementation:
   RenderView* GetRenderView() override;
+  RenderAccessibility* GetRenderAccessibility() override;
   int GetRoutingID() override;
   blink::WebLocalFrame* GetWebFrame() override;
   WebPreferences& GetWebkitPreferences() override;
@@ -399,7 +408,8 @@ class CONTENT_EXPORT RenderFrameImpl
   void ExecuteJavaScript(const base::string16& javascript) override;
   bool IsMainFrame() override;
   bool IsHidden() override;
-  ServiceRegistry* GetServiceRegistry() override;
+  shell::InterfaceRegistry* GetInterfaceRegistry() override;
+  shell::InterfaceProvider* GetRemoteInterfaces() override;
 #if defined(ENABLE_PLUGINS)
   void RegisterPeripheralPlugin(
       const url::Origin& content_origin,
@@ -422,6 +432,11 @@ class CONTENT_EXPORT RenderFrameImpl
                            const std::string& message) override;
   bool IsUsingLoFi() const override;
   bool IsPasting() const override;
+  blink::WebPageVisibilityState GetVisibilityState() const override;
+
+  // mojom::Frame implementation:
+  void GetInterfaceProvider(
+      shell::mojom::InterfaceProviderRequest request) override;
 
   // blink::WebFrameClient implementation:
   blink::WebPlugin* createPlugin(blink::WebLocalFrame* frame,
@@ -458,7 +473,8 @@ class CONTENT_EXPORT RenderFrameImpl
   void willClose(blink::WebFrame* frame) override;
   void didChangeName(const blink::WebString& name,
                      const blink::WebString& unique_name) override;
-  void didEnforceStrictMixedContentChecking() override;
+  void didEnforceInsecureRequestPolicy(
+      blink::WebInsecureRequestPolicy policy) override;
   void didUpdateToUniqueOrigin(
       bool is_potentially_trustworthy_unique_origin) override;
   void didChangeSandboxFlags(blink::WebFrame* child_frame,
@@ -543,7 +559,11 @@ class CONTENT_EXPORT RenderFrameImpl
                             const blink::WebString& default_value,
                             blink::WebString* actual_value) override;
   bool runModalBeforeUnloadDialog(bool is_reload) override;
+  bool runFileChooser(
+      const blink::WebFileChooserParams& params,
+      blink::WebFileChooserCompletion* chooser_completion) override;
   void showContextMenu(const blink::WebContextMenuData& data) override;
+  void saveImageFromDataURL(const blink::WebString& data_url) override;
   void willSendRequest(blink::WebLocalFrame* frame,
                        unsigned identifier,
                        blink::WebURLRequest& request,
@@ -622,6 +642,7 @@ class CONTENT_EXPORT RenderFrameImpl
       const blink::WebSecurityOrigin& security_origin,
       blink::WebSetSinkIdCallbacks* web_callbacks) override;
   blink::ServiceRegistry* serviceRegistry() override;
+  blink::WebPageVisibilityState visibilityState() const override;
 
   // WebFrameSerializerClient implementation:
   void didSerializeDataForFrame(
@@ -629,9 +650,8 @@ class CONTENT_EXPORT RenderFrameImpl
       blink::WebFrameSerializerClient::FrameSerializationStatus status)
       override;
 
-  // Binds this render frame's service registry.
-  void BindServiceRegistry(shell::mojom::InterfaceProviderRequest services,
-                           shell::mojom::InterfaceProviderPtr exposed_services);
+  // Binds to the FrameHost in the browser.
+  void Bind(mojom::FrameRequest frame, mojom::FrameHostPtr frame_host);
 
   ManifestManager* manifest_manager();
 
@@ -674,6 +694,10 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Notification that the given plugin is focused or unfocused.
   void PepperFocusChanged(PepperPluginInstanceImpl* instance, bool focused);
+
+  void PepperStartsPlayback(PepperPluginInstanceImpl* instance);
+  void PepperStopsPlayback(PepperPluginInstanceImpl* instance);
+  void OnSetPepperVolume(int32_t pp_instance, double volume);
 #endif  // ENABLE_PLUGINS
 
  protected:
@@ -682,13 +706,13 @@ class CONTENT_EXPORT RenderFrameImpl
  private:
   friend class RenderFrameImplTest;
   friend class RenderFrameObserver;
-  friend class RendererAccessibilityTest;
+  friend class RenderAccessibilityImplTest;
   friend class TestRenderFrame;
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuDisplayNoneTest, SelectItem);
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuRemoveTest, RemoveOnChange);
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuTest, NormalCase);
   FRIEND_TEST_ALL_PREFIXES(ExternalPopupMenuTest, ShowPopupThenNavigate);
-  FRIEND_TEST_ALL_PREFIXES(RendererAccessibilityTest,
+  FRIEND_TEST_ALL_PREFIXES(RenderAccessibilityImplTest,
                            AccessibilityMessagesQueueWhileSwappedOut);
 
   // A wrapper class used as the callback for JavaScript executed
@@ -745,7 +769,7 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnNavigate(const CommonNavigationParams& common_params,
                   const StartNavigationParams& start_params,
                   const RequestNavigationParams& request_params);
-  void OnBeforeUnload();
+  void OnBeforeUnload(bool is_reload);
   void OnSwapOut(int proxy_routing_id,
                  bool is_loading,
                  const FrameReplicationState& replicated_frame_state);
@@ -769,6 +793,8 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnMoveRangeSelectionExtent(const gfx::Point& point);
   void OnReplace(const base::string16& text);
   void OnReplaceMisspelling(const base::string16& text);
+  void OnCopyImageAt(int x, int y);
+  void OnSaveImageAt(int x, int y);
   void OnCSSInsertRequest(const std::string& css);
   void OnAddMessageToConsole(ConsoleMessageLevel level,
                              const std::string& message);
@@ -820,16 +846,28 @@ class CONTENT_EXPORT RenderFrameImpl
   void OnFind(int request_id,
               const base::string16& search_text,
               const blink::WebFindOptions& options);
+  void OnClearActiveFindMatch();
   void OnStopFinding(StopFindAction action);
   void OnEnableViewSourceMode();
   void OnSuppressFurtherDialogs();
+  void OnFileChooserResponse(
+      const std::vector<content::FileChooserFileInfo>& files);
 #if defined(OS_ANDROID)
   void OnActivateNearestFindResult(int request_id, float x, float y);
+  void OnGetNearestFindResult(int request_id, float x, float y);
   void OnFindMatchRects(int current_version);
+#endif
+
+#if defined(USE_EXTERNAL_POPUP_MENU)
+#if defined(OS_MACOSX)
+  void OnSelectPopupMenuItem(int selected_index);
+#else
   void OnSelectPopupMenuItems(bool canceled,
                               const std::vector<int>& selected_indices);
-#elif defined(OS_MACOSX)
-  void OnSelectPopupMenuItem(int selected_index);
+#endif
+#endif
+
+#if defined(OS_MACOSX)
   void OnCopyToFindPboard();
 #endif
 
@@ -837,11 +875,14 @@ class CONTENT_EXPORT RenderFrameImpl
   // |is_history_navigation_in_new_child| is true, the browser process should
   // look for a matching FrameNavigationEntry in the last committed entry to use
   // instead of |url|.
-  void OpenURL(const GURL& url,
-               const Referrer& referrer,
-               blink::WebNavigationPolicy policy,
-               bool should_replace_current_entry,
-               bool is_history_navigation_in_new_child);
+  void OpenURL(
+      const GURL& url,
+      bool uses_post,
+      const scoped_refptr<ResourceRequestBodyImpl>& resource_request_body,
+      const Referrer& referrer,
+      blink::WebNavigationPolicy policy,
+      bool should_replace_current_entry,
+      bool is_history_navigation_in_new_child);
 
   // Performs a navigation in the frame. This provides a unified function for
   // the current code path and the browser-side navigation path (in
@@ -884,6 +925,15 @@ class CONTENT_EXPORT RenderFrameImpl
                             const base::string16& default_value,
                             const GURL& frame_url,
                             base::string16* result);
+
+  // Adds the given file chooser request to the file_chooser_completion_ queue
+  // (see that var for more) and requests the chooser be displayed if there are
+  // no other waiting items in the queue.
+  //
+  // Returns true if the chooser was successfully scheduled. False means we
+  // didn't schedule anything.
+  bool ScheduleFileChooser(const FileChooserParams& params,
+                           blink::WebFileChooserCompletion* completion);
 
   // Loads the appropriate error page for the specified failure into the frame.
   void LoadNavigationErrorPage(const blink::WebURLRequest& failed_request,
@@ -982,7 +1032,7 @@ class CONTENT_EXPORT RenderFrameImpl
   media::CdmFactory* GetCdmFactory();
   media::DecoderFactory* GetDecoderFactory();
 
-  void RegisterMojoServices();
+  void RegisterMojoInterfaces();
 
   // Connect to an interface provided by the service registry.
   template <typename Interface>
@@ -1041,8 +1091,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   base::WeakPtr<RenderViewImpl> render_view_;
   int routing_id_;
-
-  bool is_detaching_;
 
   // If this frame was created to replace a proxy, this will store the routing
   // id of the proxy to replace at commit-time, at which time it will be
@@ -1176,8 +1224,11 @@ class CONTENT_EXPORT RenderFrameImpl
   // initialized.
   PresentationDispatcher* presentation_dispatcher_;
 
-  ServiceRegistryImpl service_registry_;
-  BlinkServiceRegistryImpl blink_service_registry_;
+  std::unique_ptr<shell::InterfaceRegistry> interface_registry_;
+  std::unique_ptr<shell::InterfaceProvider> remote_interfaces_;
+  std::unique_ptr<BlinkServiceRegistryImpl> blink_service_registry_;
+  shell::mojom::InterfaceProviderRequest
+      pending_remote_interface_provider_request_;
 
   // The shell proxy used to connect to Mojo applications.
   shell::mojom::ConnectorPtr connector_;
@@ -1195,7 +1246,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // Only valid if |accessibility_mode_| is anything other than
   // AccessibilityModeOff.
-  RendererAccessibility* renderer_accessibility_;
+  RenderAccessibilityImpl* render_accessibility_;
 
   std::unique_ptr<PermissionDispatcher> permission_client_;
 
@@ -1221,12 +1272,19 @@ class CONTENT_EXPORT RenderFrameImpl
   // stack that interferes with swapping out.
   bool suppress_further_dialogs_;
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+  // The current and pending file chooser completion objects. If the queue is
+  // nonempty, the first item represents the currently running file chooser
+  // callback, and the remaining elements are the other file chooser completion
+  // still waiting to be run (in order).
+  struct PendingFileChooser;
+  std::deque<std::unique_ptr<PendingFileChooser>> file_chooser_completions_;
+
+#if defined(USE_EXTERNAL_POPUP_MENU)
   // The external popup for the currently showing select popup.
   std::unique_ptr<ExternalPopupMenu> external_popup_menu_;
 #endif
 
-  FrameBlameContext* blame_context_;  // Not owned.
+  std::unique_ptr<FrameBlameContext> blame_context_;
 
   // Plugins -------------------------------------------------------------------
 #if defined(ENABLE_PLUGINS)
@@ -1242,6 +1300,9 @@ class CONTENT_EXPORT RenderFrameImpl
   // the RenderFrameImpl to NULL it out when it destructs.
   PepperPluginInstanceImpl* pepper_last_mouse_event_target_;
 #endif
+
+  mojo::Binding<mojom::Frame> frame_binding_;
+  mojom::FrameHostPtr frame_host_;
 
   base::WeakPtrFactory<RenderFrameImpl> weak_factory_;
 

@@ -178,8 +178,8 @@ bool DesktopSessionProxy::OnMessageReceived(const IPC::Message& message) {
   IPC_BEGIN_MESSAGE_MAP(DesktopSessionProxy, message)
     IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_AudioPacket,
                         OnAudioPacket)
-    IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_CaptureCompleted,
-                        OnCaptureCompleted)
+    IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_CaptureResult,
+                        OnCaptureResult)
     IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_MouseCursor,
                         OnMouseCursor)
     IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_CreateSharedBuffer,
@@ -200,6 +200,13 @@ void DesktopSessionProxy::OnChannelConnected(int32_t peer_pid) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   VLOG(1) << "IPC: network <- desktop (" << peer_pid << ")";
+
+#if defined(OS_WIN)
+  if (!ProcessIdToSessionId(peer_pid,
+                            reinterpret_cast<DWORD*>(&desktop_session_id_))) {
+    PLOG(ERROR) << "ProcessIdToSessionId() failed!";
+  }
+#endif  // defined(OS_WIN)
 }
 
 void DesktopSessionProxy::OnChannelError() {
@@ -253,6 +260,7 @@ void DesktopSessionProxy::DetachFromDesktop() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   desktop_channel_.reset();
+  desktop_session_id_ = UINT32_MAX;
 
   if (desktop_process_.IsValid())
     desktop_process_.Close();
@@ -262,7 +270,8 @@ void DesktopSessionProxy::DetachFromDesktop() {
   // Generate fake responses to keep the video capturer in sync.
   while (pending_capture_frame_requests_) {
     --pending_capture_frame_requests_;
-    video_capturer_->OnCaptureCompleted(nullptr);
+    video_capturer_->OnCaptureResult(
+        webrtc::DesktopCapturer::Result::ERROR_PERMANENT, nullptr);
   }
 }
 
@@ -280,7 +289,8 @@ void DesktopSessionProxy::CaptureFrame() {
     ++pending_capture_frame_requests_;
     SendToDesktop(new ChromotingNetworkDesktopMsg_CaptureFrame());
   } else {
-    video_capturer_->OnCaptureCompleted(nullptr);
+    video_capturer_->OnCaptureResult(
+        webrtc::DesktopCapturer::Result::ERROR_PERMANENT, nullptr);
   }
 }
 
@@ -467,9 +477,17 @@ void DesktopSessionProxy::OnReleaseSharedBuffer(int id) {
   shared_buffers_.erase(id);
 }
 
-void DesktopSessionProxy::OnCaptureCompleted(
+void DesktopSessionProxy::OnCaptureResult(
+    webrtc::DesktopCapturer::Result result,
     const SerializedDesktopFrame& serialized_frame) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
+
+  --pending_capture_frame_requests_;
+
+  if (result != webrtc::DesktopCapturer::Result::SUCCESS) {
+    video_capturer_->OnCaptureResult(result, nullptr);
+    return;
+  }
 
   // Assume that |serialized_frame| is well-formed because it was received from
   // a more privileged process.
@@ -484,12 +502,12 @@ void DesktopSessionProxy::OnCaptureCompleted(
   frame->set_capture_time_ms(serialized_frame.capture_time_ms);
   frame->set_dpi(serialized_frame.dpi);
 
-  for (size_t i = 0; i < serialized_frame.dirty_region.size(); ++i) {
-    frame->mutable_updated_region()->AddRect(serialized_frame.dirty_region[i]);
+  for (const auto& rect : serialized_frame.dirty_region) {
+    frame->mutable_updated_region()->AddRect(rect);
   }
 
-  --pending_capture_frame_requests_;
-  video_capturer_->OnCaptureCompleted(std::move(frame));
+  video_capturer_->OnCaptureResult(webrtc::DesktopCapturer::Result::SUCCESS,
+                                   std::move(frame));
 }
 
 void DesktopSessionProxy::OnMouseCursor(

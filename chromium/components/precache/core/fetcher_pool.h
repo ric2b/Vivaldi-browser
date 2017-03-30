@@ -8,6 +8,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "base/gtest_prod_util.h"
 #include "base/logging.h"
 
 namespace precache {
@@ -48,7 +49,7 @@ class FetcherPool {
     DCHECK(element) << "The element cannot be null.";
     DCHECK(elements_.find(element.get()) == elements_.end())
         << "The pool already contains the given element.";
-    elements_[element.get()].reset(element.release());
+    elements_[element.get()] = std::move(element);
   }
 
   // Deletes the given |element| from the pool.
@@ -66,6 +67,13 @@ class FetcherPool {
 
   // Returns true iff the pool can accept a new element.
   bool IsAvailable() const { return max_size_ > elements_.size(); }
+
+  const std::unordered_map<const T*, std::unique_ptr<T>>& elements() const {
+    return elements_;
+  }
+
+  // Returns the maximum size of the pool.
+  size_t max_size() const { return max_size_; }
 
  private:
   const size_t max_size_;

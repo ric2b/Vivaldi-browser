@@ -10,9 +10,9 @@
 #include <map>
 
 #include "ash/ash_export.h"
-#include "ash/display/display_info.h"
+#include "ash/common/display/display_info.h"
+#include "ash/common/system/tray/system_tray_item.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/system/tray/system_tray_item.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "ui/views/view.h"
@@ -50,17 +50,16 @@ class ASH_EXPORT TrayDisplay : public SystemTrayItem,
   // |message_out| to empty, which means the notification should be removed. It
   // also sets |additional_message_out| which appears in the notification with
   // the |message_out|.
-  bool GetDisplayMessageForNotification(
-      const DisplayInfoMap& old_info,
-      base::string16* message_out,
-      base::string16* additional_message_out);
+  bool GetDisplayMessageForNotification(const DisplayInfoMap& old_info,
+                                        base::string16* message_out,
+                                        base::string16* additional_message_out);
 
   // Creates or updates the display notification.
   void CreateOrUpdateNotification(const base::string16& message,
                                   const base::string16& additional_message);
 
   // Overridden from SystemTrayItem.
-  views::View* CreateDefaultView(user::LoginStatus status) override;
+  views::View* CreateDefaultView(LoginStatus status) override;
   void DestroyDefaultView() override;
 
   // Test accessors.

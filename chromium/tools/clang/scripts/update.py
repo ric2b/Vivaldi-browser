@@ -27,7 +27,7 @@ import zipfile
 # Do NOT CHANGE this if you don't know what you're doing -- see
 # https://chromium.googlesource.com/chromium/src/+/master/docs/updating_clang.md
 # Reverting problematic clang rolls is safe, though.
-CLANG_REVISION = '269902'
+CLANG_REVISION = '274142'
 
 use_head_revision = 'LLVM_FORCE_HEAD_REVISION' in os.environ
 if use_head_revision:
@@ -616,6 +616,9 @@ def UpdateClang(args):
       '-DCMAKE_SHARED_LINKER_FLAGS=' + ' '.join(ldflags),
       '-DCMAKE_MODULE_LINKER_FLAGS=' + ' '.join(ldflags),
       '-DCMAKE_INSTALL_PREFIX=' + LLVM_BUILD_DIR,
+      # TODO(thakis): Remove this once official builds pass -Wl,--build-id
+      # explicitly, https://crbug.com/622775
+      '-DENABLE_LINKER_BUILD_ID=ON',
       '-DCHROMIUM_TOOLS_SRC=%s' % os.path.join(CHROMIUM_DIR, 'tools', 'clang'),
       '-DCHROMIUM_TOOLS=%s' % ';'.join(args.tools)]
 
@@ -841,7 +844,7 @@ def main():
     if re.search(r'\b(clang|asan|lsan|msan|tsan)=1',
                  os.environ.get('GYP_DEFINES', '')):
       is_clang_required = True
-    # clang previously downloaded, keep it up-to-date.
+    # clang previously downloaded, keep it up to date.
     # If you don't want this, delete third_party/llvm-build on your machine.
     if os.path.isdir(LLVM_BUILD_DIR):
       is_clang_required = True

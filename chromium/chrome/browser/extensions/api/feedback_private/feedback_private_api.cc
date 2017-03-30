@@ -31,6 +31,10 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "url/url_util.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#endif  // defined(OS_CHROMEOS)
+
 #if defined(OS_WIN)
 #include "base/feature_list.h"
 #include "chrome/browser/safe_browsing/srt_fetcher_win.h"
@@ -144,8 +148,7 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
 base::Closure* FeedbackPrivateGetStringsFunction::test_callback_ = NULL;
 
 bool FeedbackPrivateGetStringsFunction::RunSync() {
-  base::DictionaryValue* dict = new base::DictionaryValue();
-  SetResult(dict);
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
 #define SET_STRING(id, idr) \
   dict->SetString(id, l10n_util::GetStringUTF16(idr))
@@ -154,8 +157,14 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
   SET_STRING("screenshot", IDS_FEEDBACK_SCREENSHOT_LABEL);
   SET_STRING("user-email", IDS_FEEDBACK_USER_EMAIL_LABEL);
 #if defined(OS_CHROMEOS)
-  SET_STRING("sys-info",
-             IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX);
+  const arc::ArcAuthService* auth_service = arc::ArcAuthService::Get();
+  if (auth_service && auth_service->IsArcEnabled()) {
+    SET_STRING("sys-info",
+               IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX_ARC);
+  } else {
+    SET_STRING("sys-info",
+               IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_AND_METRICS_CHKBOX);
+  }
 #else
   SET_STRING("sys-info", IDS_FEEDBACK_INCLUDE_SYSTEM_INFORMATION_CHKBOX);
 #endif
@@ -186,7 +195,9 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
 #undef SET_STRING
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
-  webui::SetLoadTimeDataDefaults(app_locale, dict);
+  webui::SetLoadTimeDataDefaults(app_locale, dict.get());
+
+  SetResult(std::move(dict));
 
   if (test_callback_ && !test_callback_->is_null())
     test_callback_->Run();
@@ -197,7 +208,7 @@ bool FeedbackPrivateGetStringsFunction::RunSync() {
 bool FeedbackPrivateGetUserEmailFunction::RunSync() {
   SigninManagerBase* signin_manager =
       SigninManagerFactory::GetForProfile(GetProfile());
-  SetResult(new base::StringValue(
+  SetResult(base::MakeUnique<base::StringValue>(
       signin_manager ? signin_manager->GetAuthenticatedAccountInfo().email
                      : std::string()));
   return true;

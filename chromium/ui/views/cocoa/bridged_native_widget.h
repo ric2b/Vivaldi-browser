@@ -34,6 +34,8 @@ class BridgedNativeWidgetTestApi;
 }
 
 class CocoaMouseCapture;
+class CocoaWindowMoveLoop;
+class DragDropClientMac;
 class NativeWidgetMac;
 class View;
 
@@ -99,6 +101,12 @@ class VIEWS_EXPORT BridgedNativeWidget
   void ReleaseCapture();
   bool HasCapture();
 
+  // Start moving the window, pinned to the mouse cursor, and monitor events.
+  // Return MOVE_LOOP_SUCCESSFUL on mouse up or MOVE_LOOP_CANCELED on premature
+  // termination via EndMoveLoop() or when window is destroyed during the drag.
+  Widget::MoveLoopResult RunMoveLoop(const gfx::Vector2d& drag_offset);
+  void EndMoveLoop();
+
   // See views::Widget.
   void SetNativeWindowProperty(const char* key, void* value);
   void* GetNativeWindowProperty(const char* key) const;
@@ -125,14 +133,14 @@ class VIEWS_EXPORT BridgedNativeWidget
   // Called by the NSWindowDelegate when the size of the window changes.
   void OnSizeChanged();
 
+  // Called once by the NSWindowDelegate when the position of the window has
+  // changed.
+  void OnPositionChanged();
+
   // Called by the NSWindowDelegate when the visibility of the window may have
   // changed. For example, due to a (de)miniaturize operation, or the window
   // being reordered in (or out of) the screen list.
   void OnVisibilityChanged();
-
-  // Explicitly set the visibility. This is called when Cocoa requests a draw,
-  // but hasn't updated the value of -[NSWindow isVisible] yet.
-  void OnVisibilityChangedTo(bool new_visibility);
 
   // Called by the NSWindowDelegate on a scale factor or color space change.
   void OnBackingPropertiesChanged();
@@ -170,6 +178,8 @@ class VIEWS_EXPORT BridgedNativeWidget
   NSWindow* ns_window() { return window_; }
 
   TooltipManager* tooltip_manager() { return tooltip_manager_.get(); }
+
+  DragDropClientMac* drag_drop_client() { return drag_drop_client_.get(); }
 
   // The parent widget specified in Widget::InitParams::parent. If non-null, the
   // parent will close children before the parent closes, and children will be
@@ -227,6 +237,7 @@ class VIEWS_EXPORT BridgedNativeWidget
   // Overridden from CocoaMouseCaptureDelegate:
   void PostCapturedEvent(NSEvent* event) override;
   void OnMouseCaptureLost() override;
+  NSWindow* GetWindow() const override;
 
   // Returns a properties dictionary associated with the NSWindow.
   // Creates and attaches a new instance if not found.
@@ -262,7 +273,9 @@ class VIEWS_EXPORT BridgedNativeWidget
   base::scoped_nsobject<BridgedContentView> bridged_view_;
   std::unique_ptr<ui::InputMethod> input_method_;
   std::unique_ptr<CocoaMouseCapture> mouse_capture_;
+  std::unique_ptr<CocoaWindowMoveLoop> window_move_loop_;
   std::unique_ptr<TooltipManager> tooltip_manager_;
+  std::unique_ptr<DragDropClientMac> drag_drop_client_;
   FocusManager* focus_manager_;  // Weak. Owned by our Widget.
   Widget::InitParams::Type widget_type_;
 

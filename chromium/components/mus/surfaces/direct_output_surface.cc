@@ -7,9 +7,11 @@
 #include <stdint.h>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/context_provider.h"
 #include "cc/output/output_surface_client.h"
+#include "cc/scheduler/begin_frame_source.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 
@@ -17,22 +19,18 @@ namespace mus {
 
 DirectOutputSurface::DirectOutputSurface(
     scoped_refptr<SurfacesContextProvider> context_provider,
-    base::SingleThreadTaskRunner* task_runner)
-    : cc::OutputSurface(context_provider),
-      synthetic_begin_frame_source_(new cc::SyntheticBeginFrameSource(
-          task_runner,
-          cc::BeginFrameArgs::DefaultInterval())),
+    cc::SyntheticBeginFrameSource* synthetic_begin_frame_source)
+    : cc::OutputSurface(context_provider, nullptr, nullptr),
+      synthetic_begin_frame_source_(synthetic_begin_frame_source),
       weak_ptr_factory_(this) {
   context_provider->SetDelegate(this);
 }
 
-DirectOutputSurface::~DirectOutputSurface() {}
+DirectOutputSurface::~DirectOutputSurface() = default;
 
 bool DirectOutputSurface::BindToClient(cc::OutputSurfaceClient* client) {
   if (!cc::OutputSurface::BindToClient(client))
     return false;
-
-  client->SetBeginFrameSource(synthetic_begin_frame_source_.get());
 
   if (capabilities_.uses_default_gl_framebuffer) {
     capabilities_.flipped_output_surface =
@@ -41,29 +39,24 @@ bool DirectOutputSurface::BindToClient(cc::OutputSurfaceClient* client) {
   return true;
 }
 
-void DirectOutputSurface::OnVSyncParametersUpdated(int64_t timebase,
-                                                   int64_t interval) {
-  auto timebase_time_ticks = base::TimeTicks::FromInternalValue(timebase);
-  auto interval_time_delta = base::TimeDelta::FromInternalValue(interval);
-
-  if (interval_time_delta.is_zero()) {
-    // TODO(brianderson): We should not be receiving 0 intervals.
-    interval_time_delta = cc::BeginFrameArgs::DefaultInterval();
-  }
-
-  synthetic_begin_frame_source_->OnUpdateVSyncParameters(timebase_time_ticks,
-                                                         interval_time_delta);
+void DirectOutputSurface::OnVSyncParametersUpdated(
+    const base::TimeTicks& timebase,
+    const base::TimeDelta& interval) {
+  // TODO(brianderson): We should not be receiving 0 intervals.
+  synthetic_begin_frame_source_->OnUpdateVSyncParameters(
+      timebase,
+      interval.is_zero() ? cc::BeginFrameArgs::DefaultInterval() : interval);
 }
 
-void DirectOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
+void DirectOutputSurface::SwapBuffers(cc::CompositorFrame frame) {
   DCHECK(context_provider_);
-  DCHECK(frame->gl_frame_data);
-  if (frame->gl_frame_data->sub_buffer_rect ==
-      gfx::Rect(frame->gl_frame_data->size)) {
+  DCHECK(frame.gl_frame_data);
+  if (frame.gl_frame_data->sub_buffer_rect ==
+      gfx::Rect(frame.gl_frame_data->size)) {
     context_provider_->ContextSupport()->Swap();
   } else {
     context_provider_->ContextSupport()->PartialSwapBuffers(
-        frame->gl_frame_data->sub_buffer_rect);
+        frame.gl_frame_data->sub_buffer_rect);
   }
 
   gpu::gles2::GLES2Interface* gl = context_provider_->ContextGL();
@@ -77,6 +70,12 @@ void DirectOutputSurface::SwapBuffers(cc::CompositorFrame* frame) {
       sync_token, base::Bind(&OutputSurface::OnSwapBuffersComplete,
                              weak_ptr_factory_.GetWeakPtr()));
   client_->DidSwapBuffers();
+}
+
+uint32_t DirectOutputSurface::GetFramebufferCopyTextureFormat() {
+  // TODO(danakj): What attributes are used for the default framebuffer here?
+  // Can it have alpha? SurfacesContextProvider doesn't take any attributes.
+  return GL_RGB;
 }
 
 }  // namespace mus

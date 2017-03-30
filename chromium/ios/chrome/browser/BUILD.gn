@@ -244,6 +244,7 @@ source_set("browser") {
     "metrics/mobile_session_shutdown_metrics_provider.mm",
     "metrics/previous_session_info.h",
     "metrics/previous_session_info.mm",
+    "metrics/previous_session_info_private.h",
     "net/chrome_cookie_store_ios_client.h",
     "net/chrome_cookie_store_ios_client.mm",
     "net/connection_type_observer_bridge.h",
@@ -283,6 +284,8 @@ source_set("browser") {
     "passwords/ios_chrome_password_manager_client.mm",
     "passwords/ios_chrome_password_manager_driver.h",
     "passwords/ios_chrome_password_manager_driver.mm",
+    "passwords/ios_chrome_password_manager_infobar_delegate.h",
+    "passwords/ios_chrome_password_manager_infobar_delegate.mm",
     "passwords/ios_chrome_password_manager_setting_migrator_service_factory.cc",
     "passwords/ios_chrome_password_manager_setting_migrator_service_factory.h",
     "passwords/ios_chrome_password_store_factory.cc",
@@ -403,8 +406,12 @@ source_set("browser") {
     "ssl/ios_chrome_security_state_model_client.mm",
     "ssl/ios_ssl_blocking_page.h",
     "ssl/ios_ssl_blocking_page.mm",
+    "ssl/ios_ssl_error_handler.h",
+    "ssl/ios_ssl_error_handler.mm",
     "suggestions/image_fetcher_impl.h",
     "suggestions/image_fetcher_impl.mm",
+    "suggestions/ios_image_decoder_impl.h",
+    "suggestions/ios_image_decoder_impl.mm",
     "suggestions/suggestions_service_factory.h",
     "suggestions/suggestions_service_factory.mm",
     "sync/glue/sync_start_util.cc",
@@ -468,11 +475,8 @@ source_set("browser") {
     "ui/commands/show_mail_composer_command.mm",
     "ui/commands/show_signin_command.h",
     "ui/commands/show_signin_command.mm",
-    "ui/context_menu/context_menu_controller.h",
-    "ui/context_menu/context_menu_controller.mm",
-    "ui/context_menu/context_menu_holder.h",
-    "ui/context_menu/context_menu_holder.mm",
-    "ui/context_menu/context_menu_provider.h",
+    "ui/context_menu/context_menu_coordinator.h",
+    "ui/context_menu/context_menu_coordinator.mm",
     "ui/file_locations.h",
     "ui/file_locations.mm",
     "ui/image_util.h",
@@ -521,6 +525,7 @@ source_set("browser") {
     "ui/webui/history/history_ui.mm",
     "ui/webui/history/metrics_handler.cc",
     "ui/webui/history/metrics_handler.h",
+    "ui/webui/mojo_web_ui_ios_controller.h",
     "ui/webui/net_export/net_export_ui.cc",
     "ui/webui/net_export/net_export_ui.h",
     "ui/webui/sync_internals/sync_internals_message_handler.cc",
@@ -602,6 +607,7 @@ source_set("browser") {
     "//components/metrics_services_manager",
     "//components/navigation_metrics",
     "//components/net_log",
+    "//components/network_session_configurator",
     "//components/network_time",
     "//components/ntp_snippets",
     "//components/omnibox/browser",
@@ -657,8 +663,10 @@ source_set("browser") {
     "//ios/web/public/app",
     "//net",
     "//net:extras",
+    "//services/shell/public/cpp",
     "//skia",
     "//sync",
+    "//third_party/brotli",
     "//third_party/google_toolbox_for_mac",
     "//ui/base",
     "//ui/gfx",
@@ -735,12 +743,28 @@ source_set("about_flags") {
   ]
 }
 
+# Temporary target while moving coordinator classes upstream.
+source_set("chrome_coordinators") {
+  sources = [
+    "chrome_coordinator.h",
+    "chrome_coordinator.mm",
+    "root_coordinator.h",
+    "root_coordinator.mm",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
 # TODO(crbug.com/487804): use js_compile_checked instead once the errors have
 # been fixed.
 js_compile_unchecked("injected_js") {
   visibility = [ ":browser" ]
   sources = [
     "find_in_page/resources/find_in_page.js",
+    "passwords/resources/credential_manager.js",
+    "passwords/resources/password_controller.js",
   ]
 }
 
@@ -751,6 +775,8 @@ source_set("test_support") {
     "browser_state/test_chrome_browser_state.mm",
     "browser_state/test_chrome_browser_state_isolated_context.h",
     "browser_state/test_chrome_browser_state_isolated_context.mm",
+    "browser_state/test_chrome_browser_state_manager.cc",
+    "browser_state/test_chrome_browser_state_manager.h",
     "geolocation/test_location_manager.h",
     "geolocation/test_location_manager.mm",
     "net/mock_image_fetcher.h",

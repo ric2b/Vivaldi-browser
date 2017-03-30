@@ -5,6 +5,10 @@
 #ifndef CHROME_BROWSER_CHROMEOS_ARC_ARC_OPTIN_UMA_H_
 #define CHROME_BROWSER_CHROMEOS_ARC_ARC_OPTIN_UMA_H_
 
+namespace base {
+class TimeDelta;
+}
+
 namespace arc {
 
 // These enums are used to define the buckets for an enumerated UMA histogram
@@ -20,20 +24,72 @@ enum class OptInActionType : int {
 };
 
 enum class OptInCancelReason {
-  USER_CANCEL = 0,                  // Canceled by user.
-  UNKNOWN_ERROR = 1,                // Unclassified failure.
-  NETWORK_ERROR = 2,                // Network failure.
-  SERVICE_UNAVAILABLE = 3,          // GMS Services are not available.
-  BAD_AUTHENTICATION = 4,           // Bad authentication returned by server.
-  GMS_CORE_NOT_AVAILABLE = 5,       // GMS Core is not available.
+  USER_CANCEL = 0,          // Canceled by user.
+  UNKNOWN_ERROR = 1,        // Unclassified failure.
+  NETWORK_ERROR = 2,        // Network failure.
+  SERVICE_UNAVAILABLE = 3,  // GMS Services are not available.
+  DEPRECATED_BAD_AUTHENTICATION = 4,
+  DEPRECATED_GMS_CORE_NOT_AVAILABLE = 5,
   CLOUD_PROVISION_FLOW_FAIL = 6,    // Cloud provision flow failed.
   ANDROID_MANAGEMENT_REQUIRED = 7,  // Android management is required for user.
   SIZE,                             // The size of this enum; keep last.
 };
 
+// The values should be listed in ascending order for SIZE a last, for safety.
+// For detailed meaning, please see also to auth.mojom.
+enum class ProvisioningResult : int {
+  // Provisioning was successful.
+  SUCCESS = 0,
+
+  // Unclassified failure.
+  UNKNOWN_ERROR = 1,
+
+  // GMS errors. More errors defined below.
+  GMS_NETWORK_ERROR = 2,
+  GMS_SERVICE_UNAVAILABLE = 3,
+  GMS_BAD_AUTHENTICATION = 4,
+
+  // Check in error. More errors defined below.
+  DEVICE_CHECK_IN_FAILED = 5,
+
+  // Cloud provision error. More errors defined below.
+  CLOUD_PROVISION_FLOW_FAILED = 6,
+
+  // Mojo errors.
+  MOJO_VERSION_MISMATCH = 7,
+  MOJO_CALL_TIMEOUT = 8,
+
+  // Check in error.
+  DEVICE_CHECK_IN_TIMEOUT = 9,
+  DEVICE_CHECK_IN_INTERNAL_ERROR = 10,
+
+  // GMS errors:
+  GMS_SIGN_IN_FAILED = 11,
+  GMS_SIGN_IN_TIMEOUT = 12,
+  GMS_SIGN_IN_INTERNAL_ERROR = 13,
+
+  // Cloud provision error:
+  CLOUD_PROVISION_FLOW_TIMEOUT = 14,
+  CLOUD_PROVISION_FLOW_INTERNAL_ERROR = 15,
+
+  // ARC instance is stopped during the sign in procedure.
+  ARC_STOPPED = 16,
+
+  // ARC instance did not report sign in status within a reasonable amount of
+  // time.
+  OVERALL_SIGN_IN_TIMEOUT = 17,
+
+  // The size of this enum; keep last.
+  SIZE,
+};
+
 void UpdateOptInActionUMA(OptInActionType type);
 void UpdateOptInCancelUMA(OptInCancelReason reason);
 void UpdateEnabledStateUMA(bool enabled);
+void UpdateProvisioningResultUMA(ProvisioningResult result);
+void UpdateProvisioningTiming(const base::TimeDelta& elapsed_time,
+                              bool success,
+                              bool managed);
 
 }  // namespace arc
 

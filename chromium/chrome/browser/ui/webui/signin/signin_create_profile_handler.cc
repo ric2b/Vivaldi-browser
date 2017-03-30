@@ -173,20 +173,9 @@ void SigninCreateProfileHandler::RegisterMessages() {
 
 void SigninCreateProfileHandler::RequestDefaultProfileIcons(
     const base::ListValue* args) {
-  base::ListValue image_url_list;
-
-  // Add the default avatar icons.
-  size_t placeholder_avatar_index = profiles::GetPlaceholderAvatarIndex();
-  for (size_t i = 0; i < profiles::GetDefaultAvatarIconCount() &&
-                     i != placeholder_avatar_index;
-       i++) {
-    std::string url = profiles::GetDefaultAvatarIconUrl(i);
-    image_url_list.AppendString(url);
-  }
-
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("profile-icons-received"),
-                                   image_url_list);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "cr.webUIListenerCallback", base::StringValue("profile-icons-received"),
+      *profiles::GetDefaultProfileAvatarIconsAndLabels());
 
   SendNewProfileDefaults();
 }
@@ -197,10 +186,9 @@ void SigninCreateProfileHandler::SendNewProfileDefaults() {
   base::DictionaryValue profile_info;
   profile_info.SetString("name", storage.ChooseNameForNewProfile(0));
 
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "cr.webUIListenerCallback",
-      base::StringValue("profile-defaults-received"),
-      profile_info);
+      base::StringValue("profile-defaults-received"), profile_info);
 }
 
 void SigninCreateProfileHandler::RequestSignedInProfiles(
@@ -221,9 +209,9 @@ void SigninCreateProfileHandler::RequestSignedInProfiles(
 
     user_info_list.Append(std::move(user_info));
   }
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("signedin-users-received"),
-                                   user_info_list);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "cr.webUIListenerCallback", base::StringValue("signedin-users-received"),
+      user_info_list);
 }
 
 void SigninCreateProfileHandler::CreateProfile(const base::ListValue* args) {
@@ -393,10 +381,9 @@ void SigninCreateProfileHandler::CreateShortcutAndShowSuccess(
   }
 #endif
 
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "cr.webUIListenerCallback",
-      GetWebUIListenerName(PROFILE_CREATION_SUCCESS),
-      dict);
+      GetWebUIListenerName(PROFILE_CREATION_SUCCESS), dict);
 
   if (open_new_window) {
     // Opening the new window must be the last action, after all callbacks
@@ -422,9 +409,9 @@ void SigninCreateProfileHandler::ShowProfileCreationError(
     Profile* profile,
     const base::string16& error) {
   DCHECK_NE(NO_CREATION_IN_PROGRESS, profile_creation_type_);
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   GetWebUIListenerName(PROFILE_CREATION_ERROR),
-                                   base::StringValue(error));
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "cr.webUIListenerCallback", GetWebUIListenerName(PROFILE_CREATION_ERROR),
+      base::StringValue(error));
   // The ProfileManager calls us back with a NULL profile in some cases.
   if (profile) {
     webui::DeleteProfileAtPath(profile->GetPath(),
@@ -459,17 +446,12 @@ void SigninCreateProfileHandler::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_BROWSER_WINDOW_READY:
-      // Only respond to one Browser Window Ready event.
-      registrar_.Remove(this,
-                        chrome::NOTIFICATION_BROWSER_WINDOW_READY,
-                        content::NotificationService::AllSources());
-      UserManager::Hide();
-    break;
-    default:
-      NOTREACHED();
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_BROWSER_WINDOW_READY, type);
+
+  // Only respond to one Browser Window Ready event.
+  registrar_.Remove(this, chrome::NOTIFICATION_BROWSER_WINDOW_READY,
+                    content::NotificationService::AllSources());
+  UserManager::Hide();
 }
 
 void SigninCreateProfileHandler::OnBrowserReadyCallback(
@@ -485,6 +467,18 @@ void SigninCreateProfileHandler::OnBrowserReadyCallback(
                    chrome::NOTIFICATION_BROWSER_WINDOW_READY,
                    content::NotificationService::AllSources());
   }
+}
+
+base::StringValue SigninCreateProfileHandler::GetWebUIListenerName(
+    ProfileCreationStatus status) const {
+  switch (status) {
+    case PROFILE_CREATION_SUCCESS:
+      return base::StringValue("create-profile-success");
+    case PROFILE_CREATION_ERROR:
+      return base::StringValue("create-profile-error");
+  }
+  NOTREACHED();
+  return base::StringValue(std::string());
 }
 
 #if defined(ENABLE_SUPERVISED_USERS)
@@ -503,21 +497,7 @@ base::string16 SigninCreateProfileHandler::GetProfileCreateErrorMessageSignin()
           ? IDS_LEGACY_SUPERVISED_USER_IMPORT_SIGN_IN_ERROR
           : IDS_PROFILES_CREATE_SIGN_IN_ERROR);
 }
-#endif
 
-base::StringValue SigninCreateProfileHandler::GetWebUIListenerName(
-    ProfileCreationStatus status) const {
-  switch (status) {
-    case PROFILE_CREATION_SUCCESS:
-      return base::StringValue("create-profile-success");
-    case PROFILE_CREATION_ERROR:
-      return base::StringValue("create-profile-error");
-  }
-  NOTREACHED();
-  return base::StringValue(std::string());
-}
-
-#if defined(ENABLE_SUPERVISED_USERS)
 bool SigninCreateProfileHandler::GetSupervisedCreateProfileArgs(
     const base::ListValue* args,
     std::string* supervised_user_id,
@@ -562,16 +542,20 @@ void SigninCreateProfileHandler::LoadCustodianProfileCallback(
       // everything is ready.
       if (!IsAccountConnected(custodian_profile) ||
           HasAuthError(custodian_profile)) {
-        ShowProfileCreationError(nullptr, l10n_util::GetStringUTF16(
-          IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR));
+        ShowProfileCreationError(nullptr, l10n_util::GetStringFUTF16(
+          IDS_PROFILES_CREATE_CUSTODIAN_ACCOUNT_DETAILS_OUT_OF_DATE_ERROR,
+          base::ASCIIToUTF16(custodian_profile->GetProfileUserName())));
         return;
       }
 
-      // TODO(mahmadi): return proper error message if policy-controlled prefs
-      // prohibit adding supervised users (also disable the controls in the UI).
       PrefService* prefs = custodian_profile->GetPrefs();
-      if (!prefs->GetBoolean(prefs::kSupervisedUserCreationAllowed))
+      if (!prefs->GetBoolean(prefs::kSupervisedUserCreationAllowed)) {
+        ShowProfileCreationError(
+            nullptr,
+            l10n_util::GetStringUTF16(
+                IDS_PROFILES_CREATE_SUPERVISED_NOT_ALLOWED_BY_POLICY));
         return;
+      }
 
       if (!supervised_user_id.empty()) {
         profile_creation_type_ = SUPERVISED_PROFILE_IMPORT;
@@ -755,9 +739,9 @@ void SigninCreateProfileHandler::OnSupervisedUserRegistered(
 void SigninCreateProfileHandler::ShowProfileCreationWarning(
     const base::string16& warning) {
   DCHECK_EQ(SUPERVISED_PROFILE_CREATION, profile_creation_type_);
-  web_ui()->CallJavascriptFunction("cr.webUIListenerCallback",
-                                   base::StringValue("create-profile-warning"),
-                                   base::StringValue(warning));
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "cr.webUIListenerCallback", base::StringValue("create-profile-warning"),
+      base::StringValue(warning));
 }
 
 void SigninCreateProfileHandler::RecordSupervisedProfileCreationMetrics(
@@ -801,5 +785,4 @@ void SigninCreateProfileHandler::SwitchToProfile(
       profile,
       Profile::CREATE_STATUS_INITIALIZED);
 }
-
 #endif

@@ -20,7 +20,6 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/omnibox/browser/omnibox_edit_model.h"
-#include "components/omnibox/browser/omnibox_view.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"

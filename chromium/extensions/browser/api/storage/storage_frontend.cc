@@ -52,8 +52,7 @@ class DefaultObserver : public SettingsObserver {
     if (*(args->begin()) == NULL)
       args->Set(0,base::JSONReader::Read("{}"));
 
-    args->Append(new base::StringValue(settings_namespace::ToString(
-        settings_namespace)));
+    args->AppendString(settings_namespace::ToString(settings_namespace));
     std::unique_ptr<Event> event(new Event(events::STORAGE_ON_CHANGED,
                                            api::storage::OnChanged::kEventName,
                                            std::move(args)));

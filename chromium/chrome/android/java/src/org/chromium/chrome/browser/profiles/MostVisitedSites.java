@@ -4,8 +4,6 @@
 
 package org.chromium.chrome.browser.profiles;
 
-import android.graphics.Bitmap;
-
 import org.chromium.base.annotations.CalledByNative;
 
 /**
@@ -29,8 +27,8 @@ public class MostVisitedSites {
          *             visited URLs).
          */
         @CalledByNative("MostVisitedURLsObserver")
-        public void onMostVisitedURLsAvailable(
-                String[] titles, String[] urls, String[] whitelistIconPaths);
+        public void onMostVisitedURLsAvailable(String[] titles, String[] urls,
+                String[] whitelistIconPaths, int[] sources, int[] providerIndexes);
 
         /**
          * This is called when the list of popular URLs is initially available or updated.
@@ -42,22 +40,6 @@ public class MostVisitedSites {
         @CalledByNative("MostVisitedURLsObserver")
         public void onPopularURLsAvailable(
                 String[] urls, String[] faviconUrls, String[] largeIconUrls);
-    }
-
-    /**
-     * Interface for receiving a thumbnail for a most visited site.
-     */
-    public interface ThumbnailCallback {
-        /**
-         * Callback method for fetching thumbnail of a most visited URL.
-         * Parameter may be null.
-         *
-         * @param thumbnail The bitmap thumbnail for the requested URL.
-         * @param isLocalThumbnail Whether the thumbnail was locally captured, as opposed to
-         *                         server-provided.
-         */
-        @CalledByNative("ThumbnailCallback")
-        public void onMostVisitedURLsThumbnailAvailable(Bitmap thumbnail, boolean isLocalThumbnail);
     }
 
     /**
@@ -90,11 +72,12 @@ public class MostVisitedSites {
     public void setMostVisitedURLsObserver(final MostVisitedURLsObserver observer, int numSites) {
         MostVisitedURLsObserver wrappedObserver = new MostVisitedURLsObserver() {
             @Override
-            public void onMostVisitedURLsAvailable(
-                    String[] titles, String[] urls, String[] whitelistIconPaths) {
+            public void onMostVisitedURLsAvailable(String[] titles, String[] urls,
+                    String[] whitelistIconPaths, int[] sources, int[] providerIndexes) {
                 // Don't notify observer if we've already been destroyed.
                 if (mNativeMostVisitedSitesBridge != 0) {
-                    observer.onMostVisitedURLsAvailable(titles, urls, whitelistIconPaths);
+                    observer.onMostVisitedURLsAvailable(
+                            titles, urls, whitelistIconPaths, sources, providerIndexes);
                 }
             }
             @Override
@@ -108,26 +91,6 @@ public class MostVisitedSites {
         };
         nativeSetMostVisitedURLsObserver(
                 mNativeMostVisitedSitesBridge, wrappedObserver, numSites);
-    }
-
-    /**
-     * Fetches thumbnail bitmap for a url returned by getMostVisitedURLs.
-     *
-     * @param url String representation of url.
-     * @param callback Instance of a callback object.
-     */
-    public void getURLThumbnail(String url, final ThumbnailCallback callback) {
-        ThumbnailCallback wrappedCallback = new ThumbnailCallback() {
-            @Override
-            public void onMostVisitedURLsThumbnailAvailable(Bitmap thumbnail,
-                    boolean isLocalThumbnail) {
-                // Don't notify callback if we've already been destroyed.
-                if (mNativeMostVisitedSitesBridge != 0) {
-                    callback.onMostVisitedURLsThumbnailAvailable(thumbnail, isLocalThumbnail);
-                }
-            }
-        };
-        nativeGetURLThumbnail(mNativeMostVisitedSitesBridge, url, wrappedCallback);
     }
 
     /**
@@ -149,8 +112,9 @@ public class MostVisitedSites {
      * @param tileTypes An array of values from MostVisitedTileType indicating the type of each
      *                  tile that's currently showing.
      */
-    public void recordTileTypeMetrics(int[] tileTypes) {
-        nativeRecordTileTypeMetrics(mNativeMostVisitedSitesBridge, tileTypes);
+    public void recordTileTypeMetrics(int[] tileTypes, int[] sources, int[] providerIndices) {
+        nativeRecordTileTypeMetrics(
+                mNativeMostVisitedSitesBridge, tileTypes, sources, providerIndices);
     }
 
     /**
@@ -166,13 +130,11 @@ public class MostVisitedSites {
     private native void nativeDestroy(long nativeMostVisitedSitesBridge);
     private native void nativeSetMostVisitedURLsObserver(long nativeMostVisitedSitesBridge,
             MostVisitedURLsObserver observer, int numSites);
-    private native void nativeGetURLThumbnail(long nativeMostVisitedSitesBridge, String url,
-            ThumbnailCallback callback);
     private native void nativeAddOrRemoveBlacklistedUrl(
             long nativeMostVisitedSitesBridge, String url,
             boolean addUrl);
-    private native void nativeRecordTileTypeMetrics(
-            long nativeMostVisitedSitesBridge, int[] tileTypes);
+    private native void nativeRecordTileTypeMetrics(long nativeMostVisitedSitesBridge,
+            int[] tileTypes, int[] sources, int[] providerIndices);
     private native void nativeRecordOpenedMostVisitedItem(
             long nativeMostVisitedSitesBridge, int index, int tileType);
 

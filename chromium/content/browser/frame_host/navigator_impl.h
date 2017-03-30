@@ -24,6 +24,7 @@ namespace content {
 class NavigationControllerImpl;
 class NavigatorDelegate;
 class NavigatorTest;
+class ResourceRequestBodyImpl;
 struct LoadCommittedDetails;
 
 // This class is an implementation of Navigator, responsible for managing
@@ -64,24 +65,28 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                              const std::string& unique_name) override;
   void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
                       const GURL& url,
+                      bool uses_post,
+                      const scoped_refptr<ResourceRequestBodyImpl>& body,
                       SiteInstance* source_site_instance,
                       const Referrer& referrer,
                       WindowOpenDisposition disposition,
                       bool should_replace_current_entry,
                       bool user_gesture) override;
-  void RequestTransferURL(RenderFrameHostImpl* render_frame_host,
-                          const GURL& url,
-                          SiteInstance* source_site_instance,
-                          const std::vector<GURL>& redirect_chain,
-                          const Referrer& referrer,
-                          ui::PageTransition page_transition,
-                          const GlobalRequestID& transferred_global_request_id,
-                          bool should_replace_current_entry) override;
+  void RequestTransferURL(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& url,
+      SiteInstance* source_site_instance,
+      const std::vector<GURL>& redirect_chain,
+      const Referrer& referrer,
+      ui::PageTransition page_transition,
+      const GlobalRequestID& transferred_global_request_id,
+      bool should_replace_current_entry,
+      const std::string& method,
+      scoped_refptr<ResourceRequestBodyImpl> post_body) override;
   void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node, bool proceed) override;
   void OnBeginNavigation(FrameTreeNode* frame_tree_node,
                          const CommonNavigationParams& common_params,
-                         const BeginNavigationParams& begin_params,
-                         scoped_refptr<ResourceRequestBody> body) override;
+                         const BeginNavigationParams& begin_params) override;
   void FailedNavigation(FrameTreeNode* frame_tree_node,
                         bool has_stale_copy_in_cache,
                         int error_code) override;
@@ -107,7 +112,8 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                        const NavigationEntryImpl& entry,
                        NavigationController::ReloadType reload_type,
                        bool is_same_document_history_load,
-                       bool is_pending_entry);
+                       bool is_pending_entry,
+                       const scoped_refptr<ResourceRequestBodyImpl>& post_body);
 
   bool ShouldAssignSiteForURL(const GURL& url);
 

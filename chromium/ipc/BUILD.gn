@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/nacl/config.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
@@ -38,6 +39,8 @@ component("ipc") {
     "ipc_channel_factory.cc",
     "ipc_channel_factory.h",
     "ipc_channel_handle.h",
+    "ipc_channel_mojo.cc",
+    "ipc_channel_mojo.h",
     "ipc_channel_nacl.cc",
     "ipc_channel_nacl.h",
     "ipc_channel_posix.cc",
@@ -66,11 +69,21 @@ component("ipc") {
     "ipc_message_generator.cc",
     "ipc_message_generator.h",
     "ipc_message_macros.h",
+    "ipc_message_pipe_reader.cc",
+    "ipc_message_pipe_reader.h",
     "ipc_message_start.h",
     "ipc_message_templates.h",
     "ipc_message_templates_impl.h",
     "ipc_message_utils.cc",
     "ipc_message_utils.h",
+    "ipc_mojo_bootstrap.cc",
+    "ipc_mojo_bootstrap.h",
+    "ipc_mojo_handle_attachment.cc",
+    "ipc_mojo_handle_attachment.h",
+    "ipc_mojo_message_helper.cc",
+    "ipc_mojo_message_helper.h",
+    "ipc_mojo_param_traits.cc",
+    "ipc_mojo_param_traits.h",
     "ipc_platform_file.cc",
     "ipc_platform_file.h",
     "ipc_platform_file_attachment_posix.cc",
@@ -94,6 +107,8 @@ component("ipc") {
     "message_filter_router.h",
     "message_router.cc",
     "message_router.h",
+    "mojo_event.cc",
+    "mojo_event.h",
     "param_traits_log_macros.h",
     "param_traits_macros.h",
     "param_traits_read_macros.h",
@@ -127,12 +142,12 @@ component("ipc") {
 
   public_deps = [
     ":param_traits",
+    "//mojo/public/cpp/system",
   ]
   deps = [
+    ":mojom",
     "//base",
-
-    # TODO(viettrungluu): Needed for base/lazy_instance.h, which is suspect.
-    "//base/third_party/dynamic_annotations",
+    "//mojo/public/cpp/bindings",
   ]
 
   if (is_win || is_mac) {
@@ -146,6 +161,12 @@ component("ipc") {
   }
 }
 
+mojom("mojom") {
+  sources = [
+    "ipc.mojom",
+  ]
+}
+
 # This is provided as a separate target so other targets can provide param
 # traits implementations without necessarily linking to all of IPC.
 source_set("param_traits") {
@@ -154,105 +175,130 @@ source_set("param_traits") {
   ]
 }
 
-test("ipc_tests") {
-  sources = [
-    "attachment_broker_mac_unittest.cc",
-    "attachment_broker_privileged_mac_unittest.cc",
-    "attachment_broker_privileged_win_unittest.cc",
-    "ipc_channel_posix_unittest.cc",
-    "ipc_channel_proxy_unittest.cc",
-    "ipc_channel_reader_unittest.cc",
-    "ipc_channel_unittest.cc",
-    "ipc_fuzzing_tests.cc",
-    "ipc_message_attachment_set_posix_unittest.cc",
-    "ipc_message_unittest.cc",
-    "ipc_message_utils_unittest.cc",
-    "ipc_send_fds_test.cc",
-    "ipc_sync_channel_unittest.cc",
-    "ipc_sync_message_unittest.cc",
-    "ipc_sync_message_unittest.h",
-    "ipc_test_message_generator.cc",
-    "ipc_test_message_generator.h",
-    "ipc_test_messages.h",
-    "run_all_unittests.cc",
-    "sync_socket_unittest.cc",
-    "unix_domain_socket_util_unittest.cc",
-  ]
+if (!is_ios) {
+  source_set("run_all_unittests") {
+    testonly = true
 
-  if (is_win || is_ios) {
-    sources -= [ "unix_domain_socket_util_unittest.cc" ]
+    sources = [
+      "run_all_unittests.cc",
+    ]
+
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//mojo/edk/system",
+      "//mojo/edk/test:test_support",
+    ]
   }
 
-  if (is_android) {
-    # These multiprocess tests don't work on Android.
-    sources -= [ "ipc_channel_unittest.cc" ]
+  test("ipc_tests") {
+    sources = [
+      "attachment_broker_mac_unittest.cc",
+      "attachment_broker_privileged_mac_unittest.cc",
+      "attachment_broker_privileged_win_unittest.cc",
+      "ipc_channel_mojo_unittest.cc",
+      "ipc_channel_posix_unittest.cc",
+      "ipc_channel_proxy_unittest.cc",
+      "ipc_channel_reader_unittest.cc",
+      "ipc_fuzzing_tests.cc",
+      "ipc_message_attachment_set_posix_unittest.cc",
+      "ipc_message_unittest.cc",
+      "ipc_message_utils_unittest.cc",
+      "ipc_mojo_bootstrap_unittest.cc",
+      "ipc_sync_channel_unittest.cc",
+      "ipc_sync_message_unittest.cc",
+      "ipc_sync_message_unittest.h",
+      "ipc_test_message_generator.cc",
+      "ipc_test_message_generator.h",
+      "ipc_test_messages.h",
+      "sync_socket_unittest.cc",
+    ]
+
+    if (!is_win && !is_ios) {
+      sources += [ "unix_domain_socket_util_unittest.cc" ]
+    }
+
+    if (!is_android) {
+      sources += [ "ipc_channel_unittest.cc" ]
+    }
+
+    if (!is_ios) {
+      sources += [ "ipc_send_fds_test.cc" ]
+    }
+
+    # TODO(brettw) hook up Android testing.
+    #if (is_android && gtest_target_type == "shared_library") {
+    #  deps += "/testing/android/native_test.gyp:native_testNative_code"
+    #}
+
+    deps = [
+      ":ipc",
+      ":mojom",
+      ":run_all_unittests",
+      ":test_support",
+      "//base",
+      "//base:i18n",
+      "//base/test:test_support",
+      "//crypto",
+      "//mojo/edk/system",
+      "//mojo/edk/test:test_support",
+      "//testing/gtest",
+    ]
+
+    if (is_mac) {
+      deps += [ "//sandbox/mac:seatbelt" ]
+    }
   }
 
-  # TODO(brettw) hook up Android testing.
-  #if (is_android && gtest_target_type == "shared_library") {
-  #  deps += "/testing/android/native_test.gyp:native_testNative_code"
-  #}
+  test("ipc_perftests") {
+    sources = [
+      "ipc_mojo_perftest.cc",
+      "ipc_perftests.cc",
+      "run_all_perftests.cc",
+    ]
 
-  deps = [
-    ":ipc",
-    ":test_support",
-    "//base",
-    "//base:i18n",
-    "//base/test:test_support",
-    "//crypto",
-    "//testing/gtest",
-  ]
+    # TODO(brettw) hook up Android testing.
+    #if (is_android && gtest_target_type == "shared_library") {
+    #  deps += "/testing/android/native_test.gyp:native_testNative_code"
+    #}
 
-  if (is_mac) {
-    deps += [ "//sandbox/mac:seatbelt" ]
+    deps = [
+      ":ipc",
+      ":test_support",
+      "//base",
+      "//base:i18n",
+      "//base/test:test_support",
+      "//mojo/edk/system",
+      "//mojo/edk/test:test_support",
+      "//testing/gtest",
+    ]
   }
-}
 
-test("ipc_perftests") {
-  sources = [
-    "ipc_perftests.cc",
-  ]
-
-  # TODO(brettw) hook up Android testing.
-  #if (is_android && gtest_target_type == "shared_library") {
-  #  deps += "/testing/android/native_test.gyp:native_testNative_code"
-  #}
-
-  deps = [
-    ":ipc",
-    ":test_support",
-    "//base",
-    "//base:i18n",
-    "//base/test:test_support",
-    "//base/test:test_support_perf",
-    "//testing/gtest",
-  ]
-}
-
-source_set("test_support") {
-  testonly = true
-  sources = [
-    "ipc_multiprocess_test.cc",
-    "ipc_multiprocess_test.h",
-    "ipc_perftest_support.cc",
-    "ipc_perftest_support.h",
-    "ipc_security_test_util.cc",
-    "ipc_security_test_util.h",
-    "ipc_test_base.cc",
-    "ipc_test_base.h",
-    "ipc_test_channel_listener.cc",
-    "ipc_test_channel_listener.h",
-    "ipc_test_sink.cc",
-    "ipc_test_sink.h",
-    "test_util_mac.cc",
-    "test_util_mac.h",
-  ]
-  public_deps = [
-    ":ipc",
-  ]
-  deps = [
-    "//base",
-    "//base/test:test_support",
-    "//testing/gtest",
-  ]
+  source_set("test_support") {
+    testonly = true
+    sources = [
+      "ipc_multiprocess_test.cc",
+      "ipc_multiprocess_test.h",
+      "ipc_perftest_support.cc",
+      "ipc_perftest_support.h",
+      "ipc_security_test_util.cc",
+      "ipc_security_test_util.h",
+      "ipc_test_base.cc",
+      "ipc_test_base.h",
+      "ipc_test_channel_listener.cc",
+      "ipc_test_channel_listener.h",
+      "ipc_test_sink.cc",
+      "ipc_test_sink.h",
+      "test_util_mac.cc",
+      "test_util_mac.h",
+    ]
+    public_deps = [
+      ":ipc",
+    ]
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//testing/gtest",
+    ]
+  }
 }

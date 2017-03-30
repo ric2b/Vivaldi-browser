@@ -10,9 +10,11 @@
 #include <string>
 #include <utility>
 
+#include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "services/shell/public/cpp/connect.h"
 #include "services/shell/public/cpp/identity.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "services/shell/public/cpp/interface_registry.h"
 #include "services/shell/public/interfaces/connector.mojom.h"
 #include "services/shell/public/interfaces/interface_provider.mojom.h"
@@ -20,6 +22,7 @@
 namespace shell {
 
 class InterfaceBinder;
+class InterfaceProvider;
 
 // Represents a connection to another application. An instance of this class is
 // returned from Shell's ConnectToApplication(), and passed to ShellClient's
@@ -71,15 +74,22 @@ class Connection {
   // from the shell prevented the interface from being exposed.
   template <typename Interface>
   bool AddInterface(InterfaceFactory<Interface>* factory) {
-    return GetLocalRegistry()->AddInterface<Interface>(factory);
+    return GetInterfaceRegistry()->AddInterface<Interface>(factory);
+  }
+  template <typename Interface>
+  bool AddInterface(
+      const base::Callback<void(mojo::InterfaceRequest<Interface>)>& callback,
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
+    return GetInterfaceRegistry()->AddInterface<Interface>(
+        callback, task_runner);
   }
 
-  // Binds |ptr| to an implemention of Interface in the remote application.
+  // Binds |ptr| to an implementation of Interface in the remote application.
   // |ptr| can immediately be used to start sending requests to the remote
   // interface.
   template <typename Interface>
   void GetInterface(mojo::InterfacePtr<Interface>* ptr) {
-    shell::GetInterface(GetRemoteInterfaces(), ptr);
+    GetRemoteInterfaces()->GetInterface(ptr);
   }
 
   // Returns true if the remote application has the specified capability class
@@ -103,7 +113,7 @@ class Connection {
 
   // Register a handler to receive an error notification on the pipe to the
   // remote application's InterfaceProvider.
-  virtual void SetConnectionLostClosure(const mojo::Closure& handler) = 0;
+  virtual void SetConnectionLostClosure(const base::Closure& handler) = 0;
 
   // Returns the result of the connection. This function should only be called
   // when the connection state is not pending. Call
@@ -125,20 +135,23 @@ class Connection {
   // shell and remote metadata is available. Useful only for connections created
   // via Connector::Connect(). Once the connection is complete, metadata is
   // available immediately.
-  virtual void AddConnectionCompletedClosure(const mojo::Closure& callback) = 0;
+  virtual void AddConnectionCompletedClosure(const base::Closure& callback) = 0;
 
   // Returns true if the Shell allows |interface_name| to be exposed to the
   // remote application.
   virtual bool AllowsInterface(const std::string& interface_name) const = 0;
 
-  // Returns the raw proxy to the remote application's InterfaceProvider
-  // interface. Most applications will just use GetInterface() instead.
-  // Caller does not take ownership.
-  virtual mojom::InterfaceProvider* GetRemoteInterfaces() = 0;
+  // Returns a raw pointer to the InterfaceProvider at the remote end.
+  virtual mojom::InterfaceProvider* GetRemoteInterfaceProvider() = 0;
+
+  // Returns the InterfaceRegistry that implements the mojom::InterfaceProvider
+  // exposed to the remote application.
+  virtual InterfaceRegistry* GetInterfaceRegistry() = 0;
+
+  // Returns an object encapsulating a remote InterfaceProvider.
+  virtual InterfaceProvider* GetRemoteInterfaces() = 0;
 
  protected:
-  virtual InterfaceRegistry* GetLocalRegistry() = 0;
-
   virtual base::WeakPtr<Connection> GetWeakPtr() = 0;
 };
 

@@ -5,6 +5,7 @@
 #include "components/arc/ime/arc_ime_service.h"
 
 #include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/arc/ime/arc_ime_bridge_impl.h"
 #include "components/exo/shell_surface.h"
 #include "components/exo/surface.h"
@@ -15,6 +16,7 @@
 #include "ui/base/ime/input_method.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 
 namespace arc {
 
@@ -38,6 +40,7 @@ ArcImeService::ArcImeService(ArcBridgeService* bridge_service)
       ime_bridge_(new ArcImeBridgeImpl(this, bridge_service)),
       ime_type_(ui::TEXT_INPUT_TYPE_NONE),
       has_composition_text_(false),
+      keyboard_controller_(nullptr),
       test_input_method_(nullptr) {
   aura::Env* env = aura::Env::GetInstanceDontCreate();
   if (env)
@@ -56,6 +59,12 @@ ArcImeService::~ArcImeService() {
   aura::Env* env = aura::Env::GetInstanceDontCreate();
   if (env)
     env->RemoveObserver(this);
+  // Removing |this| from KeyboardController.
+  keyboard::KeyboardController* keyboard_controller =
+      keyboard::KeyboardController::GetInstance();
+  if (keyboard_controller && keyboard_controller_ == keyboard_controller) {
+    keyboard_controller_->RemoveObserver(this);
+  }
 }
 
 void ArcImeService::SetImeBridgeForTesting(
@@ -83,6 +92,13 @@ void ArcImeService::OnWindowInitialized(aura::Window* new_window) {
   if (IsArcWindow(new_window)) {
     arc_windows_.Add(new_window);
     new_window->AddObserver(this);
+  }
+  keyboard::KeyboardController* keyboard_controller =
+      keyboard::KeyboardController::GetInstance();
+  if (keyboard_controller && keyboard_controller_ != keyboard_controller) {
+    // Registering |this| as an observer only once per KeyboardController.
+    keyboard_controller_ = keyboard_controller;
+    keyboard_controller_->AddObserver(this);
   }
 }
 
@@ -133,13 +149,10 @@ void ArcImeService::OnTextInputTypeChanged(ui::TextInputType type) {
   ui::InputMethod* const input_method = GetInputMethod();
   if (input_method) {
     input_method->OnTextInputTypeChanged(this);
+    // TODO(crbug.com/581282): Remove this piggyback call when
+    // ImeInstance::ShowImeIfNeeded is wired to ARC.
     if (input_method->GetTextInputClient() == this &&
         ime_type_ != ui::TEXT_INPUT_TYPE_NONE) {
-      // TODO(kinaba): crbug.com/581282. This is tentative short-term solution.
-      //
-      // For fully correct implementation, rather than to piggyback the "show"
-      // request with the input type change, we need dedicated IPCs to share the
-      // virtual keyboard show/hide states between Chromium and ARC.
       input_method->ShowImeIfNeeded();
     }
   }
@@ -161,8 +174,27 @@ void ArcImeService::OnCancelComposition() {
     input_method->CancelComposition(this);
 }
 
+void ArcImeService::ShowImeIfNeeded() {
+  ui::InputMethod* const input_method = GetInputMethod();
+  if (input_method && input_method->GetTextInputClient() == this) {
+    input_method->ShowImeIfNeeded();
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
-// Oberridden from ui::TextInputClient:
+// Overridden from keyboard::KeyboardControllerObserver
+void ArcImeService::OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) {
+  if (focused_arc_window_.windows().empty())
+    return;
+  aura::Window* window = focused_arc_window_.windows().front();
+  // Multiply by the scale factor. To convert from DPI to physical pixels.
+  gfx::Rect bounds_in_px = gfx::ScaleToEnclosingRect(
+      new_bounds, window->layer()->device_scale_factor());
+  ime_bridge_->SendOnKeyboardBoundsChanging(bounds_in_px);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Overridden from ui::TextInputClient:
 
 void ArcImeService::SetCompositionText(
     const ui::CompositionText& composition) {
@@ -188,6 +220,31 @@ void ArcImeService::InsertText(const base::string16& text) {
 }
 
 void ArcImeService::InsertChar(const ui::KeyEvent& event) {
+  // According to the document in text_input_client.h, InsertChar() is called
+  // even when the text input type is NONE. We ignore such events, since for
+  // ARC we are only interested in the event as a method of text input.
+  if (ime_type_ == ui::TEXT_INPUT_TYPE_NONE)
+    return;
+
+  // For apps that doesn't handle hardware keyboard events well, keys that are
+  // typically on software keyboard and lack of them are fatal, namely,
+  // unmodified enter and backspace keys are sent through IME.
+  constexpr int kModifierMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
+                                ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN |
+                                ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN;
+  if ((event.flags() & kModifierMask) == 0) {
+    if (event.key_code() ==  ui::VKEY_RETURN) {
+      has_composition_text_ = false;
+      ime_bridge_->SendInsertText(base::ASCIIToUTF16("\n"));
+      return;
+    }
+    if (event.key_code() ==  ui::VKEY_BACK) {
+      has_composition_text_ = false;
+      ime_bridge_->SendInsertText(base::ASCIIToUTF16("\b"));
+      return;
+    }
+  }
+
   // Drop 0x00-0x1f (C0 controls), 0x7f (DEL), and 0x80-0x9f (C1 controls).
   // See: https://en.wikipedia.org/wiki/Unicode_control_characters
   // They are control characters and not treated as a text insertion.
@@ -226,6 +283,14 @@ gfx::Rect ArcImeService::GetCaretBounds() const {
 
 ui::TextInputMode ArcImeService::GetTextInputMode() const {
   return ui::TEXT_INPUT_MODE_DEFAULT;
+}
+
+base::i18n::TextDirection ArcImeService::GetTextDirection() const {
+  return base::i18n::UNKNOWN_DIRECTION;
+}
+
+void ArcImeService::ExtendSelectionAndDelete(size_t before, size_t after) {
+  ime_bridge_->SendExtendSelectionAndDelete(before, after);
 }
 
 int ArcImeService::GetTextInputFlags() const {
@@ -275,7 +340,8 @@ bool ArcImeService::ChangeTextDirectionAndLayoutAlignment(
   return false;
 }
 
-bool ArcImeService::IsEditCommandEnabled(int command_id) {
+bool ArcImeService::IsTextEditCommandEnabled(
+    ui::TextEditCommand command) const {
   return false;
 }
 

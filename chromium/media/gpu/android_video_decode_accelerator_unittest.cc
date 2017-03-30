@@ -37,23 +37,23 @@ static base::WeakPtr<gpu::gles2::GLES2Decoder> MockGetGLES2Decoder(
 
 namespace media {
 
-class MockVideoDecodeAcceleratorClient
-    : public media::VideoDecodeAccelerator::Client {
+class MockVideoDecodeAcceleratorClient : public VideoDecodeAccelerator::Client {
  public:
   MockVideoDecodeAcceleratorClient() {}
   ~MockVideoDecodeAcceleratorClient() override {}
 
   // VideoDecodeAccelerator::Client implementation.
   void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
+                             VideoPixelFormat format,
                              uint32_t textures_per_buffer,
                              const gfx::Size& dimensions,
                              uint32_t texture_target) override {}
   void DismissPictureBuffer(int32_t picture_buffer_id) override {}
-  void PictureReady(const media::Picture& picture) override {}
+  void PictureReady(const Picture& picture) override {}
   void NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) override {}
   void NotifyFlushDone() override {}
   void NotifyResetDone() override {}
-  void NotifyError(media::VideoDecodeAccelerator::Error error) override {}
+  void NotifyError(VideoDecodeAccelerator::Error error) override {}
 };
 
 class AndroidVideoDecodeAcceleratorTest : public testing::Test {
@@ -63,7 +63,7 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
  protected:
   void SetUp() override {
     JNIEnv* env = base::android::AttachCurrentThread();
-    media::RegisterJni(env);
+    RegisterJni(env);
 
     // Start message loop because
     // AndroidVideoDecodeAccelerator::ConfigureMediaCodec() starts a timer task.
@@ -78,30 +78,30 @@ class AndroidVideoDecodeAcceleratorTest : public testing::Test {
         base::Bind(&MockGetGLES2Decoder, decoder->AsWeakPtr())));
   }
 
-  bool Configure(media::VideoCodec codec) {
+  bool Configure(VideoCodec codec) {
     AndroidVideoDecodeAccelerator* accelerator =
         static_cast<AndroidVideoDecodeAccelerator*>(accelerator_.get());
-    scoped_refptr<gfx::SurfaceTexture> surface_texture =
-        gfx::SurfaceTexture::Create(0);
+    scoped_refptr<gl::SurfaceTexture> surface_texture =
+        gl::SurfaceTexture::Create(0);
     accelerator->codec_config_->surface_ =
-        gfx::ScopedJavaSurface(surface_texture.get());
+        gl::ScopedJavaSurface(surface_texture.get());
     accelerator->codec_config_->codec_ = codec;
     return accelerator->ConfigureMediaCodecSynchronously();
   }
 
  private:
-  std::unique_ptr<media::VideoDecodeAccelerator> accelerator_;
+  std::unique_ptr<VideoDecodeAccelerator> accelerator_;
   std::unique_ptr<base::MessageLoop> message_loop_;
 };
 
 TEST_F(AndroidVideoDecodeAcceleratorTest, ConfigureUnsupportedCodec) {
-  EXPECT_FALSE(Configure(media::kUnknownVideoCodec));
+  EXPECT_FALSE(Configure(kUnknownVideoCodec));
 }
 
 TEST_F(AndroidVideoDecodeAcceleratorTest, ConfigureSupportedCodec) {
-  if (!media::MediaCodecUtil::IsMediaCodecAvailable())
+  if (!MediaCodecUtil::IsMediaCodecAvailable())
     return;
-  EXPECT_TRUE(Configure(media::kCodecVP8));
+  EXPECT_TRUE(Configure(kCodecVP8));
 }
 
 }  // namespace media

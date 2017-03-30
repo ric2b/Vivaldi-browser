@@ -4,11 +4,10 @@
 
 import json
 import math
-import uuid
 
 from googleapiclient import errors
 
-import common.clovis_paths
+import common.google_bigquery_helper
 from common.loading_trace_database import LoadingTraceDatabase
 import common.google_error_helper as google_error_helper
 from failure_database import FailureDatabase
@@ -60,12 +59,24 @@ class ReportTaskHandler(object):
   """
 
   def __init__(self, project_name, failure_database, google_storage_accessor,
-               bigquery_service, logger):
+               bigquery_service, logger, ad_rules_filename,
+               tracking_rules_filename):
     self._project_name = project_name
     self._failure_database = failure_database
     self._google_storage_accessor = google_storage_accessor
     self._bigquery_service = bigquery_service
     self._logger = logger
+    self._ad_rules_filename = ad_rules_filename
+    self._tracking_rules_filename = tracking_rules_filename
+
+  def _IsBigQueryValueValid(self, value):
+    """Returns whether a value is valid and can be uploaded to BigQuery."""
+    if value is None:
+      return False
+    # BigQuery rejects NaN.
+    if type(value) is float and (math.isnan(value) or math.isinf(value)):
+      return False
+    return True
 
   def _StreamRowsToBigQuery(self, rows, table_id):
     """Uploads a list of rows to the BigQuery table associated with the given
@@ -75,18 +86,10 @@ class ReportTaskHandler(object):
       rows: (list of dict) Each dictionary is a row to add to the table.
       table_id: (str) Identifier of the BigQuery table to update.
     """
-    # Assumes that the dataset and the table template already exist.
-    dataset = 'clovis_dataset'
-    template = 'report'
-    rows_data = [{'json': row, 'insertId': str(uuid.uuid4())} for row in rows]
-    body = {'rows': rows_data, 'templateSuffix':'_'+table_id}
-    self._logger.info('BigQuery API request:\n' + str(body))
-
     try:
-      response = self._bigquery_service.tabledata().insertAll(
-          projectId=self._project_name, datasetId=dataset, tableId=template,
-          body=body).execute()
-      self._logger.info('BigQuery API response:\n' + str(response))
+      response = common.google_bigquery_helper.InsertInTemplatedBigQueryTable(
+          self._bigquery_service, self._project_name, table_id, rows,
+          self._logger)
     except errors.HttpError as http_error:
       # Handles HTTP error response codes (such as 404), typically indicating a
       # problem in parameters other than 'body'.
@@ -123,6 +126,9 @@ class ReportTaskHandler(object):
                                         'report_task_handler_run')
       return
 
+    ad_rules = open(self._ad_rules_filename).readlines()
+    tracking_rules = open(self._tracking_rules_filename).readlines()
+
     rows = []
     for path in clovis_task.ActionParams()['traces']:
       self._logger.info('Generating report for: ' + path)
@@ -131,20 +137,20 @@ class ReportTaskHandler(object):
         self._logger.error('Failed loading trace at: ' + path)
         self._failure_database.AddFailure('missing_trace_for_report', path)
         continue
-      report = LoadingReport(trace).GenerateReport()
+      report = LoadingReport(trace, ad_rules, tracking_rules).GenerateReport()
       if not report:
         self._logger.error('Failed generating report for: ' + path)
         self._failure_database.AddFailure('report_generation_failed', path)
         continue
       # Filter out bad values.
       for key, value in report.items():
-        if type(value) is float and (math.isnan(value) or math.isinf(value)):
-          self._logger.error('Invalid %s for URL:%s' % (key, report.get('url')))
-          self._failure_database.AddFailure('invalid_bigquery_value', key)
+        if not self._IsBigQueryValueValid(value):
+          url = report.get('url')
+          self._logger.error('Invalid %s for URL:%s' % (key, url))
+          self._failure_database.AddFailure('invalid_bigquery_value', url)
           del report[key]
       rows.append(report)
 
     if rows:
-      tag = clovis_task.BackendParams()['tag']
-      table_id = common.clovis_paths.GetBigQueryTableID(tag)
+      table_id = common.google_bigquery_helper.GetBigQueryTableID(clovis_task)
       self._StreamRowsToBigQuery(rows, table_id)

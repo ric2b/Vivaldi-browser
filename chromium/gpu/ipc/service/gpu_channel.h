@@ -61,7 +61,7 @@ class GPU_EXPORT GpuChannel
   GpuChannel(GpuChannelManager* gpu_channel_manager,
              SyncPointManager* sync_point_manager,
              GpuWatchdog* watchdog,
-             gfx::GLShareGroup* share_group,
+             gl::GLShareGroup* share_group,
              gles2::MailboxManager* mailbox_manager,
              PreemptionFlag* preempting_flag,
              PreemptionFlag* preempted_flag,
@@ -123,7 +123,7 @@ class GPU_EXPORT GpuChannel
 
   void OnStreamRescheduled(int32_t stream_id, bool scheduled);
 
-  gfx::GLShareGroup* share_group() const { return share_group_.get(); }
+  gl::GLShareGroup* share_group() const { return share_group_.get(); }
 
   GpuCommandBufferStub* LookupCommandBuffer(int32_t route_id);
 
@@ -148,7 +148,8 @@ class GPU_EXPORT GpuChannel
       const gfx::GpuMemoryBufferHandle& handle,
       const gfx::Size& size,
       gfx::BufferFormat format,
-      uint32_t internalformat);
+      uint32_t internalformat,
+      SurfaceHandle surface_handle);
 
   GpuChannelMessageFilter* filter() const { return filter_.get(); }
 
@@ -260,7 +261,7 @@ class GPU_EXPORT GpuChannel
 
   // The share group that all contexts associated with a particular renderer
   // process use.
-  scoped_refptr<gfx::GLShareGroup> share_group_;
+  scoped_refptr<gl::GLShareGroup> share_group_;
 
   scoped_refptr<gles2::MailboxManager> mailbox_manager_;
 

@@ -36,7 +36,6 @@
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_target_aura.h"
 #include "content/browser/renderer_host/input/touch_selection_controller_client_aura.h"
-#include "content/browser/renderer_host/input/ui_touch_selection_helper.h"
 #include "content/browser/renderer_host/input/web_input_event_util.h"
 #include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate.h"
@@ -86,7 +85,6 @@
 #include "ui/events/gesture_detection/gesture_configuration.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_profile.h"
 #include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -99,18 +97,21 @@
 #include "ui/wm/public/window_types.h"
 
 #if defined(OS_WIN)
+#include "base/time/time.h"
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #include "content/browser/accessibility/browser_accessibility_win.h"
 #include "content/browser/renderer_host/legacy_render_widget_host_win.h"
 #include "ui/base/win/hidden_window.h"
+#include "ui/base/win/osk_display_manager.h"
+#include "ui/base/win/osk_display_observer.h"
 #include "ui/display/win/screen_win.h"
 #include "ui/gfx/gdi_util.h"
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "content/common/input_messages.h"
-#include "ui/events/linux/text_edit_command_auralinux.h"
-#include "ui/events/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_command_auralinux.h"
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
 using gfx::RectToSkIRect;
@@ -213,6 +214,87 @@ void MarkUnchangedTouchPointsAsStationary(
     }
   }
 }
+
+#if defined(OS_WIN)
+// This class implements the ui::OnScreenKeyboardObserver interface
+// which provides notifications about the on screen keyboard on Windows getting
+// displayed or hidden in response to taps on editable fields.
+// It provides functionality to request blink to scroll the input field if it
+// is obscured by the on screen keyboard.
+class WinScreenKeyboardObserver : public ui::OnScreenKeyboardObserver {
+ public:
+  WinScreenKeyboardObserver(RenderWidgetHostImpl* host,
+                            const gfx::Point& location_in_screen,
+                            float scale_factor,
+                            aura::Window* window)
+      : host_(host),
+        location_in_screen_(location_in_screen),
+        device_scale_factor_(scale_factor),
+        window_(window) {
+    host_->GetView()->SetInsets(gfx::Insets());
+  }
+
+  // base::win::OnScreenKeyboardObserver overrides.
+  void OnKeyboardVisible(const gfx::Rect& keyboard_rect_pixels) override {
+    gfx::Point location_in_pixels =
+        gfx::ConvertPointToPixel(device_scale_factor_, location_in_screen_);
+
+    // Restore the viewport.
+    host_->GetView()->SetInsets(gfx::Insets());
+
+    if (keyboard_rect_pixels.Contains(location_in_pixels)) {
+      aura::client::ScreenPositionClient* screen_position_client =
+          aura::client::GetScreenPositionClient(window_->GetRootWindow());
+      if (!screen_position_client)
+        return;
+
+      DVLOG(1) << "OSK covering focus point.";
+      gfx::Rect keyboard_rect =
+          gfx::ConvertRectToDIP(device_scale_factor_, keyboard_rect_pixels);
+      gfx::Rect bounds_in_screen = window_->GetBoundsInScreen();
+
+      DCHECK(bounds_in_screen.bottom() > keyboard_rect.y());
+
+      // Set the viewport of the window to be just above the on screen
+      // keyboard.
+      int viewport_bottom = bounds_in_screen.bottom() - keyboard_rect.y();
+
+      // If the viewport is bigger than the view, then we cannot handle it
+      // with the current approach. Moving the window above the OSK is one way.
+      // That for a later patchset.
+      if (viewport_bottom > bounds_in_screen.height())
+        return;
+
+      host_->GetView()->SetInsets(gfx::Insets(0, 0, viewport_bottom, 0));
+
+      gfx::Point origin(location_in_screen_);
+      screen_position_client->ConvertPointFromScreen(window_, &origin);
+
+      // We want to scroll the node into a rectangle which originates from
+      // the touch point and a small offset (10) in either direction.
+      gfx::Rect node_rect(origin.x(), origin.y(), 10, 10);
+      host_->ScrollFocusedEditableNodeIntoRect(node_rect);
+    }
+  }
+
+  void OnKeyboardHidden(const gfx::Rect& keyboard_rect_pixels) override {
+    // Restore the viewport.
+    host_->GetView()->SetInsets(gfx::Insets());
+  }
+
+ private:
+  RenderWidgetHostImpl* host_;
+  // The location in DIPs where the touch occurred.
+  gfx::Point location_in_screen_;
+  // The current device scale factor.
+  float device_scale_factor_;
+
+  // The content Window.
+  aura::Window* window_;
+
+  DISALLOW_COPY_AND_ASSIGN(WinScreenKeyboardObserver);
+};
+#endif
 
 }  // namespace
 
@@ -372,10 +454,6 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
       popup_parent_host_view_(nullptr),
       popup_child_host_view_(nullptr),
       is_loading_(false),
-      text_input_type_(ui::TEXT_INPUT_TYPE_NONE),
-      text_input_mode_(ui::TEXT_INPUT_MODE_DEFAULT),
-      text_input_flags_(0),
-      can_compose_inline_(true),
       has_composition_text_(false),
       accept_return_character_(false),
       begin_frame_source_(nullptr),
@@ -385,6 +463,7 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
 #if defined(OS_WIN)
       legacy_render_widget_host_HWND_(nullptr),
       legacy_window_destroyed_(false),
+      virtual_keyboard_requested_(false),
 #endif
       has_snapped_to_boundary_(false),
       is_guest_view_hack_(is_guest_view_hack),
@@ -401,6 +480,11 @@ RenderWidgetHostViewAura::RenderWidgetHostViewAura(RenderWidgetHost* host,
     host_->delegate()->GetInputEventRouter()->AddSurfaceIdNamespaceOwner(
         GetSurfaceIdNamespace(), this);
   }
+
+  // We should start observing the TextInputManager for IME-related events as
+  // well as monitoring its lifetime.
+  if (GetTextInputManager())
+    GetTextInputManager()->AddObserver(this);
 
   bool overscroll_enabled = base::CommandLine::ForCurrentProcess()->
       GetSwitchValueASCII(switches::kOverscrollHistoryNavigation) != "0";
@@ -789,7 +873,9 @@ bool RenderWidgetHostViewAura::ShouldRouteEvent(const ui::Event* event) const {
   //    in a similar manner to RenderWidgetHostViewGuest.
   bool result = host_->delegate() && host_->delegate()->GetInputEventRouter() &&
                 !disable_input_event_router_for_testing_;
-  if (event->IsMouseEvent())
+  // ScrollEvents get transformed into MouseWheel events, and so are treated
+  // the same as mouse events for routing purposes.
+  if (event->IsMouseEvent() || event->type() == ui::ET_SCROLL)
     result = result && SiteIsolationPolicy::AreCrossProcessFramesPossible();
   return result;
 }
@@ -864,6 +950,29 @@ void RenderWidgetHostViewAura::SetInsets(const gfx::Insets& insets) {
   }
 }
 
+void RenderWidgetHostViewAura::FocusedNodeTouched(
+    const gfx::Point& location_dips_screen,
+    bool editable) {
+#if defined(OS_WIN)
+  RenderViewHost* rvh = RenderViewHost::From(host_);
+  if (rvh && rvh->GetDelegate())
+    rvh->GetDelegate()->SetIsVirtualKeyboardRequested(editable);
+
+  ui::OnScreenKeyboardDisplayManager* osk_display_manager =
+      ui::OnScreenKeyboardDisplayManager::GetInstance();
+  DCHECK(osk_display_manager);
+  if (editable && host_ && host_->GetView()) {
+    keyboard_observer_.reset(new WinScreenKeyboardObserver(
+        host_, location_dips_screen, device_scale_factor_, window_));
+    virtual_keyboard_requested_ =
+        osk_display_manager->DisplayVirtualKeyboard(keyboard_observer_.get());
+  } else {
+    virtual_keyboard_requested_ = false;
+    osk_display_manager->DismissVirtualKeyboard();
+  }
+#endif
+}
+
 void RenderWidgetHostViewAura::UpdateCursor(const WebCursor& cursor) {
   current_cursor_ = cursor;
   const display::Display display =
@@ -875,31 +984,6 @@ void RenderWidgetHostViewAura::UpdateCursor(const WebCursor& cursor) {
 void RenderWidgetHostViewAura::SetIsLoading(bool is_loading) {
   is_loading_ = is_loading;
   UpdateCursorIfOverSelf();
-}
-
-void RenderWidgetHostViewAura::TextInputStateChanged(
-    const TextInputState& params) {
-  if (text_input_type_ != params.type ||
-      text_input_mode_ != params.mode ||
-      can_compose_inline_ != params.can_compose_inline ||
-      text_input_flags_ != params.flags) {
-    text_input_type_ = params.type;
-    text_input_mode_ = params.mode;
-    can_compose_inline_ = params.can_compose_inline;
-    text_input_flags_ = params.flags;
-    if (GetInputMethod())
-      GetInputMethod()->OnTextInputTypeChanged(this);
-  }
-  if (params.show_ime_if_needed && params.type != ui::TEXT_INPUT_TYPE_NONE) {
-    if (GetInputMethod())
-      GetInputMethod()->ShowImeIfNeeded();
-  }
-}
-
-void RenderWidgetHostViewAura::ImeCancelComposition() {
-  if (GetInputMethod())
-    GetInputMethod()->CancelComposition(this);
-  has_composition_text_ = false;
 }
 
 void RenderWidgetHostViewAura::ImeCompositionRangeChanged(
@@ -974,15 +1058,15 @@ gfx::Size RenderWidgetHostViewAura::GetRequestedRendererSize() const {
 
 void RenderWidgetHostViewAura::SelectionBoundsChanged(
     const ViewHostMsg_SelectionBounds_Params& params) {
-  ui::SelectionBound anchor_bound, focus_bound;
+  gfx::SelectionBound anchor_bound, focus_bound;
   anchor_bound.SetEdge(gfx::PointF(params.anchor_rect.origin()),
                        gfx::PointF(params.anchor_rect.bottom_left()));
   focus_bound.SetEdge(gfx::PointF(params.focus_rect.origin()),
                       gfx::PointF(params.focus_rect.bottom_left()));
 
   if (params.anchor_rect == params.focus_rect) {
-    anchor_bound.set_type(ui::SelectionBound::CENTER);
-    focus_bound.set_type(ui::SelectionBound::CENTER);
+    anchor_bound.set_type(gfx::SelectionBound::CENTER);
+    focus_bound.set_type(gfx::SelectionBound::CENTER);
   } else {
     // Whether text is LTR at the anchor handle.
     bool anchor_LTR = params.anchor_dir == blink::WebTextDirectionLeftToRight;
@@ -991,15 +1075,15 @@ void RenderWidgetHostViewAura::SelectionBoundsChanged(
 
     if ((params.is_anchor_first && anchor_LTR) ||
         (!params.is_anchor_first && !anchor_LTR)) {
-      anchor_bound.set_type(ui::SelectionBound::LEFT);
+      anchor_bound.set_type(gfx::SelectionBound::LEFT);
     } else {
-      anchor_bound.set_type(ui::SelectionBound::RIGHT);
+      anchor_bound.set_type(gfx::SelectionBound::RIGHT);
     }
     if ((params.is_anchor_first && focus_LTR) ||
         (!params.is_anchor_first && !focus_LTR)) {
-      focus_bound.set_type(ui::SelectionBound::RIGHT);
+      focus_bound.set_type(gfx::SelectionBound::RIGHT);
     } else {
-      focus_bound.set_type(ui::SelectionBound::LEFT);
+      focus_bound.set_type(gfx::SelectionBound::LEFT);
     }
   }
 
@@ -1063,27 +1147,34 @@ void RenderWidgetHostViewAura::OnLegacyWindowDestroyed() {
 
 void RenderWidgetHostViewAura::OnSwapCompositorFrame(
     uint32_t output_surface_id,
-    std::unique_ptr<cc::CompositorFrame> frame) {
+    cc::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewAura::OnSwapCompositorFrame");
 
-  last_scroll_offset_ = frame->metadata.root_scroll_offset;
-  if (!frame->delegated_frame_data)
+  last_scroll_offset_ = frame.metadata.root_scroll_offset;
+  if (!frame.delegated_frame_data)
     return;
 
-  cc::ViewportSelection selection = frame->metadata.selection;
+  cc::Selection<gfx::SelectionBound> selection = frame.metadata.selection;
   if (IsUseZoomForDSFEnabled()) {
     float viewportToDIPScale = 1.0f / current_device_scale_factor_;
-    selection.start.edge_top.Scale(viewportToDIPScale);
-    selection.start.edge_bottom.Scale(viewportToDIPScale);
-    selection.end.edge_top.Scale(viewportToDIPScale);
-    selection.end.edge_bottom.Scale(viewportToDIPScale);
+    gfx::PointF start_edge_top = selection.start.edge_top();
+    gfx::PointF start_edge_bottom = selection.start.edge_bottom();
+    gfx::PointF end_edge_top = selection.end.edge_top();
+    gfx::PointF end_edge_bottom = selection.end.edge_bottom();
+
+    start_edge_top.Scale(viewportToDIPScale);
+    start_edge_bottom.Scale(viewportToDIPScale);
+    end_edge_top.Scale(viewportToDIPScale);
+    end_edge_bottom.Scale(viewportToDIPScale);
+
+    selection.start.SetEdge(start_edge_top, start_edge_bottom);
+    selection.end.SetEdge(end_edge_top, end_edge_bottom);
   }
 
   delegated_frame_host_->SwapDelegatedFrame(output_surface_id,
                                             std::move(frame));
   SelectionUpdated(selection.is_editable, selection.is_empty_text_form_control,
-                   ConvertSelectionBound(selection.start),
-                   ConvertSelectionBound(selection.end));
+                   selection.start, selection.end);
 }
 
 void RenderWidgetHostViewAura::ClearCompositorFrame() {
@@ -1104,13 +1195,6 @@ bool RenderWidgetHostViewAura::HasAcceleratedSurface(
 
 void RenderWidgetHostViewAura::GetScreenInfo(WebScreenInfo* results) {
   GetScreenInfoForWindow(results, window_->GetRootWindow() ? window_ : NULL);
-}
-
-bool RenderWidgetHostViewAura::GetScreenColorProfile(
-    std::vector<char>* color_profile) {
-  DCHECK(color_profile->empty());
-  gfx::Rect bounds(window_->GetToplevelWindow()->GetBoundsInScreen());
-  return gfx::GetDisplayColorProfile(bounds, color_profile);
 }
 
 gfx::Rect RenderWidgetHostViewAura::GetBoundsInRootWindow() {
@@ -1261,12 +1345,16 @@ InputEventAckState RenderWidgetHostViewAura::FilterInputEvent(
   if (WebTouchEvent::isTouchEventType(input_event.type))
     return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 
-  // Reporting consumed for a fling suggests that there's now an *active* fling
-  // that requires both animation and a fling-end notification. However, the
-  // OverscrollController consumes a fling to stop its propagation; it doesn't
-  // actually tick a fling animation. Report no consumer to convey this.
-  if (consumed && input_event.type == blink::WebInputEvent::GestureFlingStart)
+  if (consumed && input_event.type == blink::WebInputEvent::GestureFlingStart) {
+    // Here we indicate that there was no consumer for this event, as
+    // otherwise the fling animation system will try to run an animation
+    // and will also expect a notification when the fling ends. Since
+    // CrOS just uses the GestureFlingStart with zero-velocity as a means
+    // of indicating that touchpad scroll has ended, we don't actually want
+    // a fling animation. Note: Similar code exists in
+    // RenderWidgetHostViewChildFrame::FilterInputEvent()
     return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
+  }
 
   return consumed ? INPUT_EVENT_ACK_STATE_CONSUMED
                   : INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
@@ -1371,8 +1459,7 @@ void RenderWidgetHostViewAura::UnlockMouse() {
 // RenderWidgetHostViewAura, ui::TextInputClient implementation:
 void RenderWidgetHostViewAura::SetCompositionText(
     const ui::CompositionText& composition) {
-  // TODO(wjmaclean): can host_ ever be null?
-  if (!host_)
+  if (!text_input_manager_ || !text_input_manager_->GetActiveWidget())
     return;
 
   // TODO(suzhe): convert both renderer_host and renderer to use
@@ -1392,35 +1479,36 @@ void RenderWidgetHostViewAura::SetCompositionText(
 
   // TODO(suzhe): due to a bug of webkit, we can't use selection range with
   // composition string. See: https://bugs.webkit.org/show_bug.cgi?id=37788
-  host_->ImeSetComposition(composition.text, underlines,
-                           gfx::Range::InvalidRange(),
-                           composition.selection.end(),
-                           composition.selection.end());
+  text_input_manager_->GetActiveWidget()->ImeSetComposition(
+      composition.text, underlines, gfx::Range::InvalidRange(),
+      composition.selection.end(), composition.selection.end());
 
   has_composition_text_ = !composition.text.empty();
 }
 
 void RenderWidgetHostViewAura::ConfirmCompositionText() {
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_ && has_composition_text_) {
-    host_->ImeConfirmComposition(base::string16(), gfx::Range::InvalidRange(),
-                                 false);
+  if (text_input_manager_ && text_input_manager_->GetActiveWidget() &&
+      has_composition_text_) {
+    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
+        base::string16(), gfx::Range::InvalidRange(), false);
   }
   has_composition_text_ = false;
 }
 
 void RenderWidgetHostViewAura::ClearCompositionText() {
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_ && has_composition_text_)
-    host_->ImeCancelComposition();
+  if (text_input_manager_ && text_input_manager_->GetActiveWidget() &&
+      has_composition_text_)
+    text_input_manager_->GetActiveWidget()->ImeCancelComposition();
   has_composition_text_ = false;
 }
 
 void RenderWidgetHostViewAura::InsertText(const base::string16& text) {
-  DCHECK(text_input_type_ != ui::TEXT_INPUT_TYPE_NONE);
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_)
-    host_->ImeConfirmComposition(text, gfx::Range::InvalidRange(), false);
+  DCHECK_NE(GetTextInputType(), ui::TEXT_INPUT_TYPE_NONE);
+
+  if (text_input_manager_ && text_input_manager_->GetActiveWidget()) {
+    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
+        text, gfx::Range::InvalidRange(), false);
+  }
   has_composition_text_ = false;
 }
 
@@ -1440,19 +1528,32 @@ void RenderWidgetHostViewAura::InsertChar(const ui::KeyEvent& event) {
 }
 
 ui::TextInputType RenderWidgetHostViewAura::GetTextInputType() const {
-  return text_input_type_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->type;
+  return ui::TEXT_INPUT_TYPE_NONE;
 }
 
 ui::TextInputMode RenderWidgetHostViewAura::GetTextInputMode() const {
-  return text_input_mode_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->mode;
+  return ui::TEXT_INPUT_MODE_DEFAULT;
+}
+
+base::i18n::TextDirection RenderWidgetHostViewAura::GetTextDirection() const {
+  NOTIMPLEMENTED();
+  return base::i18n::UNKNOWN_DIRECTION;
 }
 
 int RenderWidgetHostViewAura::GetTextInputFlags() const {
-  return text_input_flags_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->flags;
+  return 0;
 }
 
 bool RenderWidgetHostViewAura::CanComposeInline() const {
-  return can_compose_inline_;
+  if (text_input_manager_ && text_input_manager_->GetTextInputState())
+    return text_input_manager_->GetTextInputState()->can_compose_inline;
+  return true;
 }
 
 gfx::Rect RenderWidgetHostViewAura::ConvertRectToScreen(
@@ -1497,7 +1598,7 @@ gfx::Rect RenderWidgetHostViewAura::ConvertRectFromScreen(
 
 gfx::Rect RenderWidgetHostViewAura::GetCaretBounds() const {
   return ConvertRectToScreen(
-      ui::RectBetweenSelectionBounds(selection_anchor_, selection_focus_));
+      gfx::RectBetweenSelectionBounds(selection_anchor_, selection_focus_));
 }
 
 bool RenderWidgetHostViewAura::GetCompositionCharacterBounds(
@@ -1606,12 +1707,13 @@ void RenderWidgetHostViewAura::EnsureCaretInRect(const gfx::Rect& rect) {
       ConvertRectFromScreen(intersected_rect));
 }
 
-bool RenderWidgetHostViewAura::IsEditCommandEnabled(int command_id) {
+bool RenderWidgetHostViewAura::IsTextEditCommandEnabled(
+    ui::TextEditCommand command) const {
   return false;
 }
 
-void RenderWidgetHostViewAura::SetEditCommandForNextKeyEvent(int command_id) {
-}
+void RenderWidgetHostViewAura::SetTextEditCommandForNextKeyEvent(
+    ui::TextEditCommand command) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // RenderWidgetHostViewAura, display::DisplayObserver implementation:
@@ -1919,7 +2021,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
         host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
             this, &mouse_wheel_event);
       } else {
-        ProcessMouseWheelEvent(mouse_wheel_event);
+        ProcessMouseWheelEvent(mouse_wheel_event, *event->latency());
       }
     }
   } else {
@@ -1938,7 +2040,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
         host_->delegate()->GetInputEventRouter()->RouteMouseEvent(this,
                                                                   &mouse_event);
       } else {
-        ProcessMouseEvent(mouse_event);
+        ProcessMouseEvent(mouse_event, *event->latency());
       }
 
       // Ensure that we get keyboard focus on mouse down as a plugin window may
@@ -1983,17 +2085,19 @@ uint32_t RenderWidgetHostViewAura::SurfaceIdNamespaceAtPoint(
   // case we return our current namespace.
   if (id.is_null())
     return GetSurfaceIdNamespace();
-  return cc::SurfaceIdAllocator::NamespaceForId(id);
+  return id.id_namespace();
 }
 
 void RenderWidgetHostViewAura::ProcessMouseEvent(
-    const blink::WebMouseEvent& event) {
-  host_->ForwardMouseEvent(event);
+    const blink::WebMouseEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardMouseEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewAura::ProcessMouseWheelEvent(
-    const blink::WebMouseWheelEvent& event) {
-  host_->ForwardWheelEvent(event);
+    const blink::WebMouseWheelEvent& event,
+    const ui::LatencyInfo& latency) {
+  host_->ForwardWheelEventWithLatencyInfo(event, latency);
 }
 
 void RenderWidgetHostViewAura::ProcessTouchEvent(
@@ -2022,6 +2126,21 @@ void RenderWidgetHostViewAura::TransformPointToLocalCoordSpace(
       gfx::ConvertPointToDIP(device_scale_factor_, *transformed_point);
 }
 
+void RenderWidgetHostViewAura::FocusedNodeChanged(bool editable) {
+#if defined(OS_WIN)
+  if (!editable && virtual_keyboard_requested_) {
+    virtual_keyboard_requested_ = false;
+
+    RenderViewHost* rvh = RenderViewHost::From(host_);
+    if (rvh && rvh->GetDelegate())
+      rvh->GetDelegate()->SetIsVirtualKeyboardRequested(false);
+
+    DCHECK(ui::OnScreenKeyboardDisplayManager::GetInstance());
+    ui::OnScreenKeyboardDisplayManager::GetInstance()->DismissVirtualKeyboard();
+  }
+#endif
+}
+
 void RenderWidgetHostViewAura::OnScrollEvent(ui::ScrollEvent* event) {
   TRACE_EVENT0("input", "RenderWidgetHostViewAura::OnScrollEvent");
 
@@ -2034,15 +2153,33 @@ void RenderWidgetHostViewAura::OnScrollEvent(ui::ScrollEvent* event) {
 #endif
     blink::WebGestureEvent gesture_event =
         MakeWebGestureEventFlingCancel();
-    host_->ForwardGestureEvent(gesture_event);
+    // Coordinates need to be transferred to the fling cancel gesture only
+    // for Surface-targeting to ensure that it is targeted to the correct
+    // RenderWidgetHost.
+    gesture_event.x = event->x();
+    gesture_event.y = event->y();
     blink::WebMouseWheelEvent mouse_wheel_event =
         MakeWebMouseWheelEvent(*event);
-    host_->ForwardWheelEvent(mouse_wheel_event);
+    if (ShouldRouteEvent(event)) {
+      host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
+          this, &gesture_event, ui::LatencyInfo());
+      host_->delegate()->GetInputEventRouter()->RouteMouseWheelEvent(
+          this, &mouse_wheel_event);
+    } else {
+      host_->ForwardGestureEvent(gesture_event);
+      host_->ForwardWheelEventWithLatencyInfo(mouse_wheel_event,
+                                              *event->latency());
+    }
     RecordAction(base::UserMetricsAction("TrackpadScroll"));
   } else if (event->type() == ui::ET_SCROLL_FLING_START ||
              event->type() == ui::ET_SCROLL_FLING_CANCEL) {
     blink::WebGestureEvent gesture_event = MakeWebGestureEvent(*event);
-    host_->ForwardGestureEvent(gesture_event);
+    if (ShouldRouteEvent(event)) {
+      host_->delegate()->GetInputEventRouter()->RouteGestureEvent(
+          this, &gesture_event, ui::LatencyInfo());
+    } else {
+      host_->ForwardGestureEvent(gesture_event);
+    }
     if (event->type() == ui::ET_SCROLL_FLING_START)
       RecordAction(base::UserMetricsAction("TrackpadScrollFling"));
   }
@@ -2305,7 +2442,18 @@ RenderWidgetHostViewAura::~RenderWidgetHostViewAura() {
   // RenderWidgetHostViewAura::OnWindowDestroying and the pointer should
   // be set to NULL.
   DCHECK(!legacy_render_widget_host_HWND_);
+  if (virtual_keyboard_requested_) {
+    DCHECK(keyboard_observer_.get());
+    ui::OnScreenKeyboardDisplayManager* osk_display_manager =
+        ui::OnScreenKeyboardDisplayManager::GetInstance();
+    DCHECK(osk_display_manager);
+    osk_display_manager->RemoveObserver(keyboard_observer_.get());
+  }
+
 #endif
+
+  if (text_input_manager_)
+    text_input_manager_->RemoveObserver(this);
 }
 
 void RenderWidgetHostViewAura::CreateAuraWindow() {
@@ -2384,9 +2532,11 @@ void RenderWidgetHostViewAura::UpdateCursorIfOverSelf() {
 }
 
 ui::InputMethod* RenderWidgetHostViewAura::GetInputMethod() const {
+  if (!window_)
+    return nullptr;
   aura::Window* root_window = window_->GetRootWindow();
   if (!root_window)
-    return NULL;
+    return nullptr;
   return root_window->GetHost()->GetInputMethod();
 }
 
@@ -2411,10 +2561,10 @@ bool RenderWidgetHostViewAura::NeedsMouseCapture() {
 void RenderWidgetHostViewAura::FinishImeCompositionSession() {
   if (!has_composition_text_)
     return;
-  // TODO(wjmaclean): can host_ ever be null?
-  if (host_) {
-    host_->ImeConfirmComposition(base::string16(), gfx::Range::InvalidRange(),
-                                 false);
+
+  if (!!text_input_manager_ && !!text_input_manager_->GetActiveWidget()) {
+    text_input_manager_->GetActiveWidget()->ImeConfirmComposition(
+        base::string16(), gfx::Range::InvalidRange(), false);
   }
   ImeCancelComposition();
 }
@@ -2653,9 +2803,6 @@ void RenderWidgetHostViewAura::ForwardKeyboardEvent(
     // RenderWidgetHosts for OOPIF.  See https://crbug.com/549334.
     target_host->Send(new InputMsg_SetEditCommandsForNextKeyEvent(
         target_host->GetRoutingID(), edit_commands));
-
-    NativeWebKeyboardEvent copy_event(event);
-    copy_event.match_edit_command = true;
     target_host->ForwardKeyboardEvent(event);
     return;
   }
@@ -2664,10 +2811,11 @@ void RenderWidgetHostViewAura::ForwardKeyboardEvent(
   target_host->ForwardKeyboardEvent(event);
 }
 
-void RenderWidgetHostViewAura::SelectionUpdated(bool is_editable,
-                                                bool is_empty_text_form_control,
-                                                const ui::SelectionBound& start,
-                                                const ui::SelectionBound& end) {
+void RenderWidgetHostViewAura::SelectionUpdated(
+    bool is_editable,
+    bool is_empty_text_form_control,
+    const gfx::SelectionBound& start,
+    const gfx::SelectionBound& end) {
   selection_controller_->OnSelectionEditable(is_editable);
   selection_controller_->OnSelectionEmpty(is_empty_text_form_control);
   selection_controller_->OnSelectionBoundsChanged(start, end);
@@ -2690,7 +2838,7 @@ void RenderWidgetHostViewAura::HandleGestureForTouchSelection(
   switch (event->type()) {
     case ui::ET_GESTURE_LONG_PRESS:
       if (selection_controller_->WillHandleLongPressEvent(
-              base::TimeTicks() + event->time_stamp(), event->location_f())) {
+              event->time_stamp(), event->location_f())) {
         event->SetHandled();
       }
       break;
@@ -2797,7 +2945,7 @@ SkColor RenderWidgetHostViewAura::DelegatedFrameHostGetGutterColor(
   // When making an element on the page fullscreen the element's background
   // may not match the page's, so use black as the gutter color to avoid
   // flashes of brighter colors during the transition.
-  if (host_->delegate() && host_->delegate()->IsFullscreenForCurrentTab(host_))
+  if (host_->delegate() && host_->delegate()->IsFullscreenForCurrentTab())
     return SK_ColorBLACK;
   return color;
 }
@@ -2889,6 +3037,37 @@ uint32_t RenderWidgetHostViewAura::GetSurfaceIdNamespace() {
 
 cc::SurfaceId RenderWidgetHostViewAura::SurfaceIdForTesting() const {
   return delegated_frame_host_->SurfaceIdForTesting();
+}
+
+void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
+    TextInputManager* text_input_manager,
+    RenderWidgetHostViewBase* updated_view,
+    bool did_update_state) {
+  DCHECK_EQ(text_input_manager_, text_input_manager);
+
+  if (!GetInputMethod())
+    return;
+
+  if (did_update_state)
+    GetInputMethod()->OnTextInputTypeChanged(this);
+
+  const TextInputState* state = text_input_manager_->GetTextInputState();
+
+  if (state && state->show_ime_if_needed &&
+      state->type != ui::TEXT_INPUT_TYPE_NONE)
+    GetInputMethod()->ShowImeIfNeeded();
+}
+
+void RenderWidgetHostViewAura::OnImeCancelComposition(
+    TextInputManager* text_input_manager,
+    RenderWidgetHostViewBase* view) {
+  // |view| is not necessarily the one corresponding to
+  // TextInputManager::GetActiveWidget() as RenderWidgetHostViewAura can call
+  // this method to finish any ongoing composition in response to a mouse down
+  // event.
+  if (GetInputMethod())
+    GetInputMethod()->CancelComposition(this);
+  has_composition_text_ = false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

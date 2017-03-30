@@ -25,7 +25,8 @@
 #include "components/safe_browsing_db/util.h"
 #include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "net/url_request/url_fetcher_delegate.h"
-#include "url/gurl.h"
+
+class GURL;
 
 namespace net {
 class URLFetcher;
@@ -36,14 +37,11 @@ namespace safe_browsing {
 
 class V4UpdateProtocolManagerFactory;
 
-typedef FetchThreatListUpdatesRequest::ListUpdateRequest ListUpdateRequest;
-typedef FetchThreatListUpdatesResponse::ListUpdateResponse ListUpdateResponse;
-
 // V4UpdateCallback is invoked when a scheduled update completes.
 // Parameters:
 //   - The vector of update response protobufs received from the server for
 //     each list type.
-typedef base::Callback<void(const std::vector<ListUpdateResponse>&)>
+typedef base::Callback<void(std::unique_ptr<ParsedServerResponse>)>
     V4UpdateCallback;
 
 class V4UpdateProtocolManager : public net::URLFetcherDelegate,
@@ -61,24 +59,22 @@ class V4UpdateProtocolManager : public net::URLFetcherDelegate,
   static std::unique_ptr<V4UpdateProtocolManager> Create(
       net::URLRequestContextGetter* request_context_getter,
       const V4ProtocolConfig& config,
-      const base::hash_map<UpdateListIdentifier, std::string>&
-          current_list_states,
       V4UpdateCallback callback);
 
   // net::URLFetcherDelegate interface.
   void OnURLFetchComplete(const net::URLFetcher* source) override;
 
+  // Schedule the next update without backoff.
+  void ScheduleNextUpdate(std::unique_ptr<StoreStateMap> store_state_map);
+
  protected:
   // Constructs a V4UpdateProtocolManager that issues network requests using
-  // |request_context_getter|.
-  // Schedules an update to get the hash prefixes for the lists in
-  // |current_list_states|, and invoke |callback| when the results
-  // are retrieved. The callback may be invoked synchronously.
+  // |request_context_getter|. It schedules updates to get the hash prefixes for
+  // SafeBrowsing lists, and invoke |callback| when the results are retrieved.
+  // The callback may be invoked synchronously.
   V4UpdateProtocolManager(
       net::URLRequestContextGetter* request_context_getter,
       const V4ProtocolConfig& config,
-      const base::hash_map<UpdateListIdentifier, std::string>&
-          current_list_states,
       V4UpdateCallback callback);
 
  private:
@@ -89,26 +85,29 @@ class V4UpdateProtocolManager : public net::URLFetcherDelegate,
   FRIEND_TEST_ALL_PREFIXES(V4UpdateProtocolManagerTest, TestGetUpdatesNoError);
   FRIEND_TEST_ALL_PREFIXES(V4UpdateProtocolManagerTest,
                            TestGetUpdatesWithOneBackoff);
+  FRIEND_TEST_ALL_PREFIXES(V4UpdateProtocolManagerTest,
+                           TestBase64EncodingUsesUrlEncoding);
   friend class V4UpdateProtocolManagerFactoryImpl;
 
-  // The method to generate the URL for the request to be sent to the server.
+  // The method to populate |gurl| with the URL to be sent to the server.
   // |request_base64| is the base64 encoded form of an instance of the protobuf
-  // FetchThreatListUpdatesRequest.
-  GURL GetUpdateUrl(const std::string& request_base64) const;
+  // FetchThreatListUpdatesRequest. Also sets the appropriate header values for
+  // sending PVer4 requests in |headers|.
+  void GetUpdateUrlAndHeaders(const std::string& request_base64,
+                              GURL* gurl,
+                              net::HttpRequestHeaders* headers) const;
 
   // Fills a FetchThreatListUpdatesRequest protocol buffer for a request.
-  // Returns the serialized and base 64 encoded request as a string.
-  std::string GetBase64SerializedUpdateRequestProto(
-      const base::hash_map<UpdateListIdentifier, std::string>&
-          current_list_states);
+  // Returns the serialized and base64 URL encoded request as a string.
+  static std::string GetBase64SerializedUpdateRequestProto(
+      const StoreStateMap& store_state_map);
 
   // Parses the base64 encoded response received from the server as a
   // FetchThreatListUpdatesResponse protobuf and returns each of the
   // ListUpdateResponse protobufs contained in it as a vector.
   // Returns true if parsing is successful, false otherwise.
-  bool ParseUpdateResponse(
-      const std::string& data_base64,
-      std::vector<ListUpdateResponse>* list_update_responses);
+  bool ParseUpdateResponse(const std::string& data_base64,
+                           ParsedServerResponse* parsed_server_response);
 
   // Resets the update error counter and multiplier.
   void ResetUpdateErrors();
@@ -124,8 +123,8 @@ class V4UpdateProtocolManager : public net::URLFetcherDelegate,
   // Returns whether another update is currently scheduled.
   bool IsUpdateScheduled() const;
 
-  // Schedule the next update, considering whether we are in backoff.
-  void ScheduleNextUpdate(bool back_off);
+  // Schedule the next update with backoff specified.
+  void ScheduleNextUpdateWithBackoff(bool back_off);
 
   // Schedule the next update, after the given interval.
   void ScheduleNextUpdateAfterInterval(base::TimeDelta interval);
@@ -138,10 +137,8 @@ class V4UpdateProtocolManager : public net::URLFetcherDelegate,
   static V4UpdateProtocolManagerFactory* factory_;
 
   // The last known state of the lists.
-  // At init, this is read from the disk or is empty for no prior state.
-  // Each successful update from the server contains a new state for each
-  // requested list.
-  base::hash_map<UpdateListIdentifier, std::string> current_list_states_;
+  // Updated after every successful update of the database.
+  std::unique_ptr<StoreStateMap> store_state_map_;
 
   // The number of HTTP response errors since the the last successful HTTP
   // response, used for request backoff timing.
@@ -165,7 +162,7 @@ class V4UpdateProtocolManager : public net::URLFetcherDelegate,
   int url_fetcher_id_;
 
   // The callback that's called when GetUpdates completes.
-  V4UpdateCallback callback_;
+  V4UpdateCallback update_callback_;
 
   // The pending update request. The request must be canceled when the object is
   // destroyed.
@@ -173,6 +170,8 @@ class V4UpdateProtocolManager : public net::URLFetcherDelegate,
 
   // Timer to setup the next update request.
   base::OneShotTimer update_timer_;
+
+  base::Time last_response_time_;
 
   DISALLOW_COPY_AND_ASSIGN(V4UpdateProtocolManager);
 };
@@ -185,8 +184,6 @@ class V4UpdateProtocolManagerFactory {
   virtual std::unique_ptr<V4UpdateProtocolManager> CreateProtocolManager(
       net::URLRequestContextGetter* request_context_getter,
       const V4ProtocolConfig& config,
-      const base::hash_map<UpdateListIdentifier, std::string>&
-          current_list_states,
       V4UpdateCallback callback) = 0;
 
  private:

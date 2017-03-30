@@ -4,6 +4,7 @@
 
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 
+#include <tuple>
 #include <utility>
 
 #include "base/lazy_instance.h"
@@ -12,6 +13,7 @@
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_frame_trace_recorder.h"
 #include "content/browser/devtools/devtools_protocol_handler.h"
+#include "content/browser/devtools/protocol/browser_handler.h"
 #include "content/browser/devtools/protocol/dom_handler.h"
 #include "content/browser/devtools/protocol/emulation_handler.h"
 #include "content/browser/devtools/protocol/input_handler.h"
@@ -38,8 +40,8 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 
 #if defined(OS_ANDROID)
-#include "content/browser/power_save_blocker_impl.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "device/power_save_blocker/power_save_blocker.h"
 #endif
 
 namespace content {
@@ -345,7 +347,8 @@ void RenderFrameDevToolsAgentHost::OnBeforeNavigation(
 
 RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
     RenderFrameHostImpl* host)
-    : dom_handler_(new devtools::dom::DOMHandler()),
+    : browser_handler_(new devtools::browser::BrowserHandler()),
+      dom_handler_(new devtools::dom::DOMHandler()),
       input_handler_(new devtools::input::InputHandler()),
       inspector_handler_(new devtools::inspector::InspectorHandler()),
       io_handler_(new devtools::io::IOHandler(GetIOContext())),
@@ -366,6 +369,7 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
       pending_handle_(nullptr),
       frame_tree_node_(host->frame_tree_node()) {
   DevToolsProtocolDispatcher* dispatcher = protocol_handler_->dispatcher();
+  dispatcher->SetBrowserHandler(browser_handler_.get());
   dispatcher->SetDOMHandler(dom_handler_.get());
   dispatcher->SetInputHandler(input_handler_.get());
   dispatcher->SetInspectorHandler(inspector_handler_.get());
@@ -495,13 +499,7 @@ void RenderFrameDevToolsAgentHost::OnClientAttached() {
     return;
 
   frame_trace_recorder_.reset(new DevToolsFrameTraceRecorder());
-#if defined(OS_ANDROID)
-  power_save_blocker_.reset(static_cast<PowerSaveBlockerImpl*>(
-      PowerSaveBlocker::Create(
-          PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
-          PowerSaveBlocker::kReasonOther, "DevTools").release()));
-  power_save_blocker_->InitDisplaySleepBlocker(web_contents());
-#endif
+  CreatePowerSaveBlocker();
 
   // TODO(kaznacheev): Move this call back to DevToolsManager when
   // extensions::ProcessManager no longer relies on this notification.
@@ -654,6 +652,22 @@ void RenderFrameDevToolsAgentHost::DestroyOnRenderFrameGone() {
   Release();
 }
 
+void RenderFrameDevToolsAgentHost::CreatePowerSaveBlocker() {
+#if defined(OS_ANDROID)
+  power_save_blocker_.reset(new device::PowerSaveBlocker(
+      device::PowerSaveBlocker::kPowerSaveBlockPreventDisplaySleep,
+      device::PowerSaveBlocker::kReasonOther, "DevTools",
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
+  if (web_contents()->GetNativeView()) {
+    view_weak_factory_.reset(new base::WeakPtrFactory<ui::ViewAndroid>(
+        web_contents()->GetNativeView()));
+    power_save_blocker_->InitDisplaySleepBlocker(
+        view_weak_factory_->GetWeakPtr());
+  }
+#endif
+}
+
 void RenderFrameDevToolsAgentHost::RenderProcessGone(
     base::TerminationStatus status) {
   switch(status) {
@@ -745,6 +759,22 @@ void RenderFrameDevToolsAgentHost::DidFailProvisionalLoad(
     return;
   if (pending_ && pending_->host() == render_frame_host)
     DiscardPending();
+}
+
+void RenderFrameDevToolsAgentHost::WebContentsDestroyed() {
+#if defined(OS_ANDROID)
+  view_weak_factory_.reset();
+#endif
+}
+
+void RenderFrameDevToolsAgentHost::WasShown() {
+  CreatePowerSaveBlocker();
+}
+
+void RenderFrameDevToolsAgentHost::WasHidden() {
+#if defined(OS_ANDROID)
+  power_save_blocker_.reset();
+#endif
 }
 
 void RenderFrameDevToolsAgentHost::
@@ -852,20 +882,20 @@ void RenderFrameDevToolsAgentHost::OnSwapCompositorFrame(
   if (!ViewHostMsg_SwapCompositorFrame::Read(&message, &param))
     return;
   if (page_handler_)
-    page_handler_->OnSwapCompositorFrame(base::get<1>(param).metadata);
+    page_handler_->OnSwapCompositorFrame(
+        std::move(std::get<1>(param).metadata));
   if (input_handler_)
-    input_handler_->OnSwapCompositorFrame(base::get<1>(param).metadata);
+    input_handler_->OnSwapCompositorFrame(std::get<1>(param).metadata);
   if (frame_trace_recorder_ && tracing_handler_->did_initiate_recording()) {
     frame_trace_recorder_->OnSwapCompositorFrame(
-        current_ ? current_->host() : nullptr,
-        base::get<1>(param).metadata);
+        current_ ? current_->host() : nullptr, std::get<1>(param).metadata);
   }
 }
 
 void RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame(
-    const cc::CompositorFrameMetadata& frame_metadata) {
+    cc::CompositorFrameMetadata frame_metadata) {
   if (page_handler_)
-    page_handler_->OnSynchronousSwapCompositorFrame(frame_metadata);
+    page_handler_->OnSynchronousSwapCompositorFrame(std::move(frame_metadata));
   if (input_handler_)
     input_handler_->OnSwapCompositorFrame(frame_metadata);
   if (frame_trace_recorder_ && tracing_handler_->did_initiate_recording()) {

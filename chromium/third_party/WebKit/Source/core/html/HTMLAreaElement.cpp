@@ -28,9 +28,9 @@
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutImage.h"
-#include "core/layout/LayoutView.h"
 #include "platform/graphics/Path.h"
 #include "platform/transforms/AffineTransform.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -166,7 +166,7 @@ Path HTMLAreaElement::getPath(const LayoutObject* containerObject) const
         }
 
         // Cache the original path, not depending on containerObject.
-        m_path = adoptPtr(new Path(path));
+        m_path = wrapUnique(new Path(path));
     }
 
     // Zoom the path into coordinates of the container object.

@@ -755,8 +755,8 @@ class LayerTreeHostContextTestLostContextAndEvictTextures
   }
 
   void DrawLayersOnThread(LayerTreeHostImpl* impl) override {
-    FakePictureLayerImpl* picture_impl =
-        static_cast<FakePictureLayerImpl*>(impl->active_tree()->root_layer());
+    FakePictureLayerImpl* picture_impl = static_cast<FakePictureLayerImpl*>(
+        impl->active_tree()->root_layer_for_testing());
     EXPECT_TRUE(picture_impl->HighResTiling()
                     ->TileAt(0, 0)
                     ->draw_info()
@@ -855,7 +855,7 @@ class LayerTreeHostContextTestLayersNotified : public LayerTreeHostContextTest {
     FakePictureLayerImpl* grandchild_picture = NULL;
 
     root_picture = static_cast<FakePictureLayerImpl*>(
-        host_impl->active_tree()->root_layer());
+        host_impl->active_tree()->root_layer_for_testing());
     child_picture = static_cast<FakePictureLayerImpl*>(
         host_impl->active_tree()->LayerById(child_->id()));
     grandchild_picture = static_cast<FakePictureLayerImpl*>(
@@ -942,7 +942,7 @@ class LayerTreeHostContextTestDontUseLostResources
     ResourceId resource = child_resource_provider_->CreateResource(
         gfx::Size(4, 4), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888);
     ResourceProvider::ScopedWriteLockGL lock(child_resource_provider_.get(),
-                                             resource);
+                                             resource, false);
 
     gpu::Mailbox mailbox;
     gl->GenMailboxCHROMIUM(mailbox.name);

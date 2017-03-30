@@ -171,13 +171,10 @@ void AutocompleteResult::SortAndCull(
     // sure the type of destination is what the user would expect given the
     // input.
     if (default_match_->destination_url.is_valid()) {
-      // We shouldn't get query matches for URL inputs, or non-query matches
-      // for query inputs.
       if (AutocompleteMatch::IsSearchType(default_match_->type)) {
+        // We shouldn't get query matches for URL inputs.
         DCHECK_NE(metrics::OmniboxInputType::URL, input.type()) << debug_info;
       } else {
-        DCHECK_NE(metrics::OmniboxInputType::FORCED_QUERY, input.type())
-            << debug_info;
         // If the user explicitly typed a scheme, the default match should
         // have the same scheme.
         if ((input.type() == metrics::OmniboxInputType::URL) &&
@@ -282,7 +279,8 @@ GURL AutocompleteResult::ComputeAlternateNavUrl(
     const AutocompleteMatch& match) {
   return ((input.type() == metrics::OmniboxInputType::UNKNOWN) &&
           (AutocompleteMatch::IsSearchType(match.type)) &&
-          (match.transition != ui::PAGE_TRANSITION_KEYWORD) &&
+          !ui::PageTransitionCoreTypeIs(match.transition,
+                                        ui::PAGE_TRANSITION_KEYWORD) &&
           (input.canonicalized_url() != match.destination_url)) ?
       input.canonicalized_url() : GURL();
 }

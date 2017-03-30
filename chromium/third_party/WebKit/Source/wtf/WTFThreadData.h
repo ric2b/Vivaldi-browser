@@ -34,6 +34,7 @@
 #include "wtf/Threading.h"
 #include "wtf/WTFExport.h"
 #include "wtf/text/StringHash.h"
+#include <memory>
 
 namespace blink {
 
@@ -50,8 +51,6 @@ namespace WTF {
 class AtomicStringTable;
 struct ICUConverterWrapper;
 
-typedef void (*AtomicStringTableDestructor)(AtomicStringTable*);
-
 class WTF_EXPORT WTFThreadData {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
     WTF_MAKE_NONCOPYABLE(WTFThreadData);
@@ -59,9 +58,9 @@ public:
     WTFThreadData();
     ~WTFThreadData();
 
-    AtomicStringTable* getAtomicStringTable()
+    AtomicStringTable& getAtomicStringTable()
     {
-        return m_atomicStringTable;
+        return *m_atomicStringTable;
     }
 
     blink::CompressibleStringTable* compressibleStringTable()
@@ -72,15 +71,13 @@ public:
     ICUConverterWrapper& cachedConverterICU() { return *m_cachedConverterICU; }
 
 private:
-    AtomicStringTable* m_atomicStringTable;
-    AtomicStringTableDestructor m_atomicStringTableDestructor;
+    std::unique_ptr<AtomicStringTable> m_atomicStringTable;
     blink::CompressibleStringTable* m_compressibleStringTable;
     blink::CompressibleStringTableDestructor m_compressibleStringTableDestructor;
-    OwnPtr<ICUConverterWrapper> m_cachedConverterICU;
+    std::unique_ptr<ICUConverterWrapper> m_cachedConverterICU;
 
     static ThreadSpecific<WTFThreadData>* staticData;
     friend WTFThreadData& wtfThreadData();
-    friend class AtomicStringTable;
     friend class blink::CompressibleStringTable;
 };
 

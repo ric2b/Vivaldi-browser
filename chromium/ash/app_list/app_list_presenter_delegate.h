@@ -8,8 +8,8 @@
 #include <stdint.h>
 
 #include "ash/ash_export.h"
+#include "ash/common/shell_observer.h"
 #include "ash/shelf/shelf_icon_observer.h"
-#include "ash/shell_observer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "ui/app_list/presenter/app_list_presenter_delegate.h"
@@ -72,7 +72,7 @@ class ASH_EXPORT AppListPresenterDelegate
   void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
 
   // ShellObserver overrides:
-  void OnShelfAlignmentChanged(aura::Window* root_window) override;
+  void OnShelfAlignmentChanged(WmWindow* root_window) override;
   void OnMaximizeModeStarted() override;
   void OnMaximizeModeEnded() override;
 

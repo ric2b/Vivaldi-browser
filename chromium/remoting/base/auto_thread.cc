@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/lazy_instance.h"
+#include "base/run_loop.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/third_party/dynamic_annotations/dynamic_annotations.h"
 #include "base/threading/thread_local.h"
@@ -50,7 +51,9 @@ struct AutoThread::StartupData {
   base::WaitableEvent event;
 
   explicit StartupData(base::MessageLoop::Type type)
-      : loop_type(type), event(false, false) {}
+      : loop_type(type),
+        event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+              base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 };
 
 // static
@@ -186,7 +189,6 @@ void AutoThread::ThreadMain() {
   // Complete the initialization of our AutoThread object.
   base::PlatformThread::SetName(name_);
   ANNOTATE_THREAD_NAME(name_.c_str());  // Tell the name to race detector.
-  message_loop.set_thread_name(name_);
 
   // Return an AutoThreadTaskRunner that will cleanly quit this thread when
   // no more references to it remain.
@@ -206,7 +208,7 @@ void AutoThread::ThreadMain() {
       CreateComInitializer(com_init_type_));
 #endif
 
-  message_loop.Run();
+  base::RunLoop().Run();
 
   // Assert that MessageLoop::QuitWhenIdle was called by AutoThread::QuitThread.
   DCHECK(was_quit_properly_);

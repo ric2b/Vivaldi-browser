@@ -78,8 +78,10 @@
 #include "platform/PlatformTouchEvent.h"
 #include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "wtf/ListHashSet.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -115,7 +117,7 @@ Color parseColor(protocol::DOM::RGBA* rgba)
     return Color(r, g, b, static_cast<int>(a * 255));
 }
 
-bool parseQuad(PassOwnPtr<protocol::Array<double>> quadArray, FloatQuad* quad)
+bool parseQuad(std::unique_ptr<protocol::Array<double>> quadArray, FloatQuad* quad)
 {
     const size_t coordinatesInQuad = 8;
     if (!quadArray || quadArray->length() != coordinatesInQuad)
@@ -131,7 +133,7 @@ v8::Local<v8::Value> nodeV8Value(v8::Local<v8::Context> context, Node* node)
 {
     v8::Isolate* isolate = context->GetIsolate();
     ExceptionState exceptionState(ExceptionState::ExecutionContext, "nodeV8Value", "InjectedScriptHost", context->Global(), isolate);
-    if (!node || !BindingSecurity::shouldAllowAccessTo(isolate, callingDOMWindow(isolate), node, exceptionState))
+    if (!node || !BindingSecurity::shouldAllowAccessTo(isolate, currentDOMWindow(isolate), node, exceptionState))
         return v8::Null(isolate);
     return toV8(node, context->Global(), isolate);
 }
@@ -242,8 +244,7 @@ bool InspectorDOMAgent::getPseudoElementType(PseudoId pseudoId, protocol::DOM::P
 }
 
 InspectorDOMAgent::InspectorDOMAgent(v8::Isolate* isolate, InspectedFrames* inspectedFrames, V8InspectorSession* v8Session, Client* client)
-    : InspectorBaseAgent<InspectorDOMAgent, protocol::Frontend::DOM>("DOM")
-    , m_isolate(isolate)
+    : m_isolate(isolate)
     , m_inspectedFrames(inspectedFrames)
     , m_v8Session(v8Session)
     , m_client(client)
@@ -514,7 +515,7 @@ void InspectorDOMAgent::disable(ErrorString* errorString)
     setDocument(nullptr);
 }
 
-void InspectorDOMAgent::getDocument(ErrorString* errorString, OwnPtr<protocol::DOM::Node>* root)
+void InspectorDOMAgent::getDocument(ErrorString* errorString, std::unique_ptr<protocol::DOM::Node>* root)
 {
     // Backward compatibility. Mark agent as enabled when it requests document.
     if (!enabled())
@@ -553,7 +554,7 @@ void InspectorDOMAgent::pushChildNodesToFrontend(int nodeId, int depth)
         return;
     }
 
-    OwnPtr<protocol::Array<protocol::DOM::Node>> children = buildArrayForContainerChildren(node, depth, nodeMap);
+    std::unique_ptr<protocol::Array<protocol::DOM::Node>> children = buildArrayForContainerChildren(node, depth, nodeMap);
     frontend()->setChildNodes(nodeId, std::move(children));
 }
 
@@ -614,7 +615,7 @@ void InspectorDOMAgent::querySelector(ErrorString* errorString, int nodeId, cons
         *elementId = pushNodePathToFrontend(element);
 }
 
-void InspectorDOMAgent::querySelectorAll(ErrorString* errorString, int nodeId, const String& selectors, OwnPtr<protocol::Array<int>>* result)
+void InspectorDOMAgent::querySelectorAll(ErrorString* errorString, int nodeId, const String& selectors, std::unique_ptr<protocol::Array<int>>* result)
 {
     Node* node = assertNode(errorString, nodeId);
     if (!node || !node->isContainerNode())
@@ -685,7 +686,7 @@ int InspectorDOMAgent::pushNodePathToFrontend(Node* nodeToPush)
     NodeToIdMap* newMap = new NodeToIdMap;
     NodeToIdMap* danglingMap = newMap;
     m_danglingNodeToIdMaps.append(newMap);
-    OwnPtr<protocol::Array<protocol::DOM::Node>> children = protocol::Array<protocol::DOM::Node>::create();
+    std::unique_ptr<protocol::Array<protocol::DOM::Node>> children = protocol::Array<protocol::DOM::Node>::create();
     children->addItem(buildObjectForNode(node, 0, danglingMap));
     frontend()->setChildNodes(0, std::move(children));
 
@@ -892,13 +893,13 @@ static Node* nextNodeWithShadowDOMInMind(const Node& current, const Node* stayWi
             const ShadowRoot* shadowRoot = toShadowRoot(node);
             if (shadowRoot->olderShadowRoot())
                 return shadowRoot->olderShadowRoot();
-            Node* host = shadowRoot->host();
-            if (host && host->hasChildren())
-                return host->firstChild();
+            Element& host = shadowRoot->host();
+            if (host.hasChildren())
+                return host.firstChild();
         }
         if (node->nextSibling())
             return node->nextSibling();
-        node = node->isShadowRoot() ? toShadowRoot(node)->host() : node->parentNode();
+        node = node->isShadowRoot() ? &toShadowRoot(node)->host() : node->parentNode();
     } while (node);
 
     return nullptr;
@@ -1025,7 +1026,7 @@ void InspectorDOMAgent::performSearch(ErrorString*, const String& whitespaceTrim
     *resultCount = resultsIt->size();
 }
 
-void InspectorDOMAgent::getSearchResults(ErrorString* errorString, const String& searchId, int fromIndex, int toIndex, OwnPtr<protocol::Array<int>>* nodeIds)
+void InspectorDOMAgent::getSearchResults(ErrorString* errorString, const String& searchId, int fromIndex, int toIndex, std::unique_ptr<protocol::Array<int>>* nodeIds)
 {
     SearchResults::iterator it = m_searchResults.find(searchId);
     if (it == m_searchResults.end()) {
@@ -1090,7 +1091,7 @@ void InspectorDOMAgent::setSearchingForNode(ErrorString* errorString, SearchMode
         m_client->setInspectMode(searchMode, searchMode != NotSearching ? highlightConfigFromInspectorObject(errorString, highlightInspectorObject) : nullptr);
 }
 
-PassOwnPtr<InspectorHighlightConfig> InspectorDOMAgent::highlightConfigFromInspectorObject(ErrorString* errorString, const Maybe<protocol::DOM::HighlightConfig>& highlightInspectorObject)
+std::unique_ptr<InspectorHighlightConfig> InspectorDOMAgent::highlightConfigFromInspectorObject(ErrorString* errorString, const Maybe<protocol::DOM::HighlightConfig>& highlightInspectorObject)
 {
     if (!highlightInspectorObject.isJust()) {
         *errorString = "Internal error: highlight configuration parameter is missing";
@@ -1098,7 +1099,7 @@ PassOwnPtr<InspectorHighlightConfig> InspectorDOMAgent::highlightConfigFromInspe
     }
 
     protocol::DOM::HighlightConfig* config = highlightInspectorObject.fromJust();
-    OwnPtr<InspectorHighlightConfig> highlightConfig = adoptPtr(new InspectorHighlightConfig());
+    std::unique_ptr<InspectorHighlightConfig> highlightConfig = wrapUnique(new InspectorHighlightConfig());
     highlightConfig->showInfo = config->getShowInfo(false);
     highlightConfig->showRulers = config->getShowRulers(false);
     highlightConfig->showExtensionLines = config->getShowExtensionLines(false);
@@ -1139,13 +1140,13 @@ void InspectorDOMAgent::setInspectMode(ErrorString* errorString, const String& m
 
 void InspectorDOMAgent::highlightRect(ErrorString*, int x, int y, int width, int height, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor)
 {
-    OwnPtr<FloatQuad> quad = adoptPtr(new FloatQuad(FloatRect(x, y, width, height)));
+    std::unique_ptr<FloatQuad> quad = wrapUnique(new FloatQuad(FloatRect(x, y, width, height)));
     innerHighlightQuad(std::move(quad), color, outlineColor);
 }
 
-void InspectorDOMAgent::highlightQuad(ErrorString* errorString, PassOwnPtr<protocol::Array<double>> quadArray, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor)
+void InspectorDOMAgent::highlightQuad(ErrorString* errorString, std::unique_ptr<protocol::Array<double>> quadArray, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor)
 {
-    OwnPtr<FloatQuad> quad = adoptPtr(new FloatQuad());
+    std::unique_ptr<FloatQuad> quad = wrapUnique(new FloatQuad());
     if (!parseQuad(std::move(quadArray), quad.get())) {
         *errorString = "Invalid Quad format";
         return;
@@ -1153,9 +1154,9 @@ void InspectorDOMAgent::highlightQuad(ErrorString* errorString, PassOwnPtr<proto
     innerHighlightQuad(std::move(quad), color, outlineColor);
 }
 
-void InspectorDOMAgent::innerHighlightQuad(PassOwnPtr<FloatQuad> quad, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor)
+void InspectorDOMAgent::innerHighlightQuad(std::unique_ptr<FloatQuad> quad, const Maybe<protocol::DOM::RGBA>& color, const Maybe<protocol::DOM::RGBA>& outlineColor)
 {
-    OwnPtr<InspectorHighlightConfig> highlightConfig = adoptPtr(new InspectorHighlightConfig());
+    std::unique_ptr<InspectorHighlightConfig> highlightConfig = wrapUnique(new InspectorHighlightConfig());
     highlightConfig->content = parseColor(color.fromMaybe(nullptr));
     highlightConfig->contentOutline = parseColor(outlineColor.fromMaybe(nullptr));
     if (m_client)
@@ -1180,7 +1181,7 @@ Node* InspectorDOMAgent::nodeForRemoteId(ErrorString* errorString, const String&
     return node;
 }
 
-void InspectorDOMAgent::highlightNode(ErrorString* errorString, PassOwnPtr<protocol::DOM::HighlightConfig> highlightInspectorObject, const Maybe<int>& nodeId, const Maybe<int>& backendNodeId, const Maybe<String16>& objectId)
+void InspectorDOMAgent::highlightNode(ErrorString* errorString, std::unique_ptr<protocol::DOM::HighlightConfig> highlightInspectorObject, const Maybe<int>& nodeId, const Maybe<int>& backendNodeId, const Maybe<String>& objectId)
 {
     Node* node = nullptr;
     if (nodeId.isJust()) {
@@ -1195,7 +1196,7 @@ void InspectorDOMAgent::highlightNode(ErrorString* errorString, PassOwnPtr<proto
     if (!node)
         return;
 
-    OwnPtr<InspectorHighlightConfig> highlightConfig = highlightConfigFromInspectorObject(errorString, std::move(highlightInspectorObject));
+    std::unique_ptr<InspectorHighlightConfig> highlightConfig = highlightConfigFromInspectorObject(errorString, std::move(highlightInspectorObject));
     if (!highlightConfig)
         return;
 
@@ -1212,7 +1213,7 @@ void InspectorDOMAgent::highlightFrame(
     LocalFrame* frame = IdentifiersFactory::frameById(m_inspectedFrames, frameId);
     // FIXME: Inspector doesn't currently work cross process.
     if (frame && frame->deprecatedLocalOwner()) {
-        OwnPtr<InspectorHighlightConfig> highlightConfig = adoptPtr(new InspectorHighlightConfig());
+        std::unique_ptr<InspectorHighlightConfig> highlightConfig = wrapUnique(new InspectorHighlightConfig());
         highlightConfig->showInfo = true; // Always show tooltips for frames.
         highlightConfig->content = parseColor(color.fromMaybe(nullptr));
         highlightConfig->contentOutline = parseColor(outlineColor.fromMaybe(nullptr));
@@ -1321,7 +1322,7 @@ void InspectorDOMAgent::focus(ErrorString* errorString, int nodeId)
     element->focus();
 }
 
-void InspectorDOMAgent::setFileInputFiles(ErrorString* errorString, int nodeId, PassOwnPtr<protocol::Array<String>> files)
+void InspectorDOMAgent::setFileInputFiles(ErrorString* errorString, int nodeId, std::unique_ptr<protocol::Array<String>> files)
 {
     Node* node = assertNode(errorString, nodeId);
     if (!node)
@@ -1337,7 +1338,7 @@ void InspectorDOMAgent::setFileInputFiles(ErrorString* errorString, int nodeId, 
     toHTMLInputElement(node)->setFiles(fileList);
 }
 
-void InspectorDOMAgent::getBoxModel(ErrorString* errorString, int nodeId, OwnPtr<protocol::DOM::BoxModel>* model)
+void InspectorDOMAgent::getBoxModel(ErrorString* errorString, int nodeId, std::unique_ptr<protocol::DOM::BoxModel>* model)
 {
     Node* node = assertNode(errorString, nodeId);
     if (!node)
@@ -1365,7 +1366,7 @@ void InspectorDOMAgent::getNodeForLocation(ErrorString* errorString, int x, int 
     *nodeId = pushNodePathToFrontend(node);
 }
 
-void InspectorDOMAgent::resolveNode(ErrorString* errorString, int nodeId, const Maybe<String>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result)
+void InspectorDOMAgent::resolveNode(ErrorString* errorString, int nodeId, const Maybe<String>& objectGroup, std::unique_ptr<protocol::Runtime::RemoteObject>* result)
 {
     String objectGroupName = objectGroup.fromMaybe("");
     Node* node = nodeForId(nodeId);
@@ -1378,7 +1379,7 @@ void InspectorDOMAgent::resolveNode(ErrorString* errorString, int nodeId, const 
         *errorString = "Node with given id does not belong to the document";
 }
 
-void InspectorDOMAgent::getAttributes(ErrorString* errorString, int nodeId, OwnPtr<protocol::Array<String>>* result)
+void InspectorDOMAgent::getAttributes(ErrorString* errorString, int nodeId, std::unique_ptr<protocol::Array<String>>* result)
 {
     Element* element = assertElement(errorString, nodeId);
     if (!element)
@@ -1387,7 +1388,7 @@ void InspectorDOMAgent::getAttributes(ErrorString* errorString, int nodeId, OwnP
     *result = buildArrayForElementAttributes(element);
 }
 
-void InspectorDOMAgent::requestNode(ErrorString* errorString, const String16& objectId, int* nodeId)
+void InspectorDOMAgent::requestNode(ErrorString* errorString, const String& objectId, int* nodeId)
 {
     Node* node = nodeForRemoteId(errorString, objectId);
     if (node)
@@ -1424,7 +1425,7 @@ static protocol::DOM::ShadowRootType shadowRootType(ShadowRoot* shadowRoot)
     return protocol::DOM::ShadowRootTypeEnum::UserAgent;
 }
 
-PassOwnPtr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* node, int depth, NodeToIdMap* nodesMap)
+std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* node, int depth, NodeToIdMap* nodesMap)
 {
     int id = bind(node, nodesMap);
     String localName;
@@ -1448,7 +1449,7 @@ PassOwnPtr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* node
         break;
     }
 
-    OwnPtr<protocol::DOM::Node> value = protocol::DOM::Node::create()
+    std::unique_ptr<protocol::DOM::Node> value = protocol::DOM::Node::create()
         .setNodeId(id)
         .setNodeType(static_cast<int>(node->getNodeType()))
         .setNodeName(node->nodeName())
@@ -1476,7 +1477,7 @@ PassOwnPtr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* node
 
         ElementShadow* shadow = element->shadow();
         if (shadow) {
-            OwnPtr<protocol::Array<protocol::DOM::Node>> shadowRoots = protocol::Array<protocol::DOM::Node>::create();
+            std::unique_ptr<protocol::Array<protocol::DOM::Node>> shadowRoots = protocol::Array<protocol::DOM::Node>::create();
             for (ShadowRoot* root = &shadow->youngestShadowRoot(); root; root = root->olderShadowRoot())
                 shadowRoots->addItem(buildObjectForNode(root, 0, nodesMap));
             value->setShadowRoots(std::move(shadowRoots));
@@ -1500,7 +1501,7 @@ PassOwnPtr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* node
             if (InspectorDOMAgent::getPseudoElementType(element->getPseudoId(), &pseudoType))
                 value->setPseudoType(pseudoType);
         } else {
-            OwnPtr<protocol::Array<protocol::DOM::Node>> pseudoElements = buildArrayForPseudoElements(element, nodesMap);
+            std::unique_ptr<protocol::Array<protocol::DOM::Node>> pseudoElements = buildArrayForPseudoElements(element, nodesMap);
             if (pseudoElements) {
                 value->setPseudoElements(std::move(pseudoElements));
                 forcePushChildren = true;
@@ -1537,7 +1538,7 @@ PassOwnPtr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* node
             m_cachedChildCount.set(id, nodeCount);
         if (forcePushChildren && !depth)
             depth = 1;
-        OwnPtr<protocol::Array<protocol::DOM::Node>> children = buildArrayForContainerChildren(node, depth, nodesMap);
+        std::unique_ptr<protocol::Array<protocol::DOM::Node>> children = buildArrayForContainerChildren(node, depth, nodesMap);
         if (children->length() > 0 || depth) // Push children along with shadow in any case.
             value->setChildren(std::move(children));
     }
@@ -1545,9 +1546,9 @@ PassOwnPtr<protocol::DOM::Node> InspectorDOMAgent::buildObjectForNode(Node* node
     return value;
 }
 
-PassOwnPtr<protocol::Array<String>> InspectorDOMAgent::buildArrayForElementAttributes(Element* element)
+std::unique_ptr<protocol::Array<String>> InspectorDOMAgent::buildArrayForElementAttributes(Element* element)
 {
-    OwnPtr<protocol::Array<String>> attributesValue = protocol::Array<String>::create();
+    std::unique_ptr<protocol::Array<String>> attributesValue = protocol::Array<String>::create();
     // Go through all attributes and serialize them.
     AttributeCollection attributes = element->attributes();
     for (auto& attribute : attributes) {
@@ -1558,9 +1559,9 @@ PassOwnPtr<protocol::Array<String>> InspectorDOMAgent::buildArrayForElementAttri
     return attributesValue;
 }
 
-PassOwnPtr<protocol::Array<protocol::DOM::Node>> InspectorDOMAgent::buildArrayForContainerChildren(Node* container, int depth, NodeToIdMap* nodesMap)
+std::unique_ptr<protocol::Array<protocol::DOM::Node>> InspectorDOMAgent::buildArrayForContainerChildren(Node* container, int depth, NodeToIdMap* nodesMap)
 {
-    OwnPtr<protocol::Array<protocol::DOM::Node>> children = protocol::Array<protocol::DOM::Node>::create();
+    std::unique_ptr<protocol::Array<protocol::DOM::Node>> children = protocol::Array<protocol::DOM::Node>::create();
     if (depth == 0) {
         // Special-case the only text child - pretend that container's children have been requested.
         Node* firstChild = container->firstChild();
@@ -1582,12 +1583,12 @@ PassOwnPtr<protocol::Array<protocol::DOM::Node>> InspectorDOMAgent::buildArrayFo
     return children;
 }
 
-PassOwnPtr<protocol::Array<protocol::DOM::Node>> InspectorDOMAgent::buildArrayForPseudoElements(Element* element, NodeToIdMap* nodesMap)
+std::unique_ptr<protocol::Array<protocol::DOM::Node>> InspectorDOMAgent::buildArrayForPseudoElements(Element* element, NodeToIdMap* nodesMap)
 {
     if (!element->pseudoElement(PseudoIdBefore) && !element->pseudoElement(PseudoIdAfter))
         return nullptr;
 
-    OwnPtr<protocol::Array<protocol::DOM::Node>> pseudoElements = protocol::Array<protocol::DOM::Node>::create();
+    std::unique_ptr<protocol::Array<protocol::DOM::Node>> pseudoElements = protocol::Array<protocol::DOM::Node>::create();
     if (element->pseudoElement(PseudoIdBefore))
         pseudoElements->addItem(buildObjectForNode(element->pseudoElement(PseudoIdBefore), 0, nodesMap));
     if (element->pseudoElement(PseudoIdAfter))
@@ -1595,15 +1596,15 @@ PassOwnPtr<protocol::Array<protocol::DOM::Node>> InspectorDOMAgent::buildArrayFo
     return pseudoElements;
 }
 
-PassOwnPtr<protocol::Array<protocol::DOM::BackendNode>> InspectorDOMAgent::buildArrayForDistributedNodes(InsertionPoint* insertionPoint)
+std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>> InspectorDOMAgent::buildArrayForDistributedNodes(InsertionPoint* insertionPoint)
 {
-    OwnPtr<protocol::Array<protocol::DOM::BackendNode>> distributedNodes = protocol::Array<protocol::DOM::BackendNode>::create();
+    std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>> distributedNodes = protocol::Array<protocol::DOM::BackendNode>::create();
     for (size_t i = 0; i < insertionPoint->distributedNodesSize(); ++i) {
         Node* distributedNode = insertionPoint->distributedNodeAt(i);
         if (isWhitespace(distributedNode))
             continue;
 
-        OwnPtr<protocol::DOM::BackendNode> backendNode = protocol::DOM::BackendNode::create()
+        std::unique_ptr<protocol::DOM::BackendNode> backendNode = protocol::DOM::BackendNode::create()
             .setNodeType(distributedNode->getNodeType())
             .setNodeName(distributedNode->nodeName())
             .setBackendNodeId(DOMNodeIds::idForNode(distributedNode)).build();
@@ -1690,7 +1691,7 @@ void InspectorDOMAgent::invalidateFrameOwnerElement(LocalFrame* frame)
     frontend()->childNodeRemoved(parentId, frameOwnerId);
     unbind(frameOwner, m_documentNodeToIdMap.get());
 
-    OwnPtr<protocol::DOM::Node> value = buildObjectForNode(frameOwner, 0, m_documentNodeToIdMap.get());
+    std::unique_ptr<protocol::DOM::Node> value = buildObjectForNode(frameOwner, 0, m_documentNodeToIdMap.get());
     Node* previousSibling = innerPreviousSibling(frameOwner);
     int prevId = previousSibling ? m_documentNodeToIdMap->get(previousSibling) : 0;
     frontend()->childNodeInserted(parentId, prevId, std::move(value));
@@ -1732,7 +1733,7 @@ void InspectorDOMAgent::didInsertDOMNode(Node* node)
         // Children have been requested -> return value of a new child.
         Node* prevSibling = innerPreviousSibling(node);
         int prevId = prevSibling ? m_documentNodeToIdMap->get(prevSibling) : 0;
-        OwnPtr<protocol::DOM::Node> value = buildObjectForNode(node, 0, m_documentNodeToIdMap.get());
+        std::unique_ptr<protocol::DOM::Node> value = buildObjectForNode(node, 0, m_documentNodeToIdMap.get());
         frontend()->childNodeInserted(parentId, prevId, std::move(value));
     }
 }
@@ -1799,7 +1800,7 @@ void InspectorDOMAgent::didRemoveDOMAttr(Element* element, const QualifiedName& 
 
 void InspectorDOMAgent::styleAttributeInvalidated(const HeapVector<Member<Element>>& elements)
 {
-    OwnPtr<protocol::Array<int>> nodeIds = protocol::Array<int>::create();
+    std::unique_ptr<protocol::Array<int>> nodeIds = protocol::Array<int>::create();
     for (unsigned i = 0, size = elements.size(); i < size; ++i) {
         Element* element = elements.at(i);
         int id = boundNodeId(element);
@@ -1983,7 +1984,7 @@ void InspectorDOMAgent::pushNodeByPathToFrontend(ErrorString* errorString, const
         *errorString = "No node with given path found";
 }
 
-void InspectorDOMAgent::pushNodesByBackendIdsToFrontend(ErrorString* errorString, PassOwnPtr<protocol::Array<int>> backendNodeIds, OwnPtr<protocol::Array<int>>* result)
+void InspectorDOMAgent::pushNodesByBackendIdsToFrontend(ErrorString* errorString, std::unique_ptr<protocol::Array<int>> backendNodeIds, std::unique_ptr<protocol::Array<int>>* result)
 {
     *result = protocol::Array<int>::create();
     for (size_t index = 0; index < backendNodeIds->length(); ++index) {
@@ -2012,7 +2013,7 @@ void InspectorDOMAgent::setInspectedNode(ErrorString* errorString, int nodeId)
     Node* node = assertNode(errorString, nodeId);
     if (!node)
         return;
-    m_v8Session->addInspectedObject(adoptPtr(new InspectableNode(node)));
+    m_v8Session->addInspectedObject(wrapUnique(new InspectableNode(node)));
     if (m_client)
         m_client->setInspectedNode(node);
 }
@@ -2033,7 +2034,7 @@ void InspectorDOMAgent::getRelayoutBoundary(ErrorString* errorString, int nodeId
     *relayoutBoundaryNodeId = pushNodePathToFrontend(resultNode);
 }
 
-void InspectorDOMAgent::getHighlightObjectForTest(ErrorString* errorString, int nodeId, OwnPtr<protocol::DictionaryValue>* result)
+void InspectorDOMAgent::getHighlightObjectForTest(ErrorString* errorString, int nodeId, std::unique_ptr<protocol::DictionaryValue>* result)
 {
     Node* node = assertNode(errorString, nodeId);
     if (!node)
@@ -2042,7 +2043,7 @@ void InspectorDOMAgent::getHighlightObjectForTest(ErrorString* errorString, int 
     *result = highlight.asProtocolValue();
 }
 
-PassOwnPtr<protocol::Runtime::RemoteObject> InspectorDOMAgent::resolveNode(Node* node, const String16& objectGroup)
+std::unique_ptr<protocol::Runtime::RemoteObject> InspectorDOMAgent::resolveNode(Node* node, const String& objectGroup)
 {
     Document* document = node->isDocumentNode() ? &node->document() : node->ownerDocument();
     LocalFrame* frame = document ? document->frame() : nullptr;
@@ -2060,7 +2061,7 @@ PassOwnPtr<protocol::Runtime::RemoteObject> InspectorDOMAgent::resolveNode(Node*
 bool InspectorDOMAgent::pushDocumentUponHandlelessOperation(ErrorString* errorString)
 {
     if (!m_documentNodeToIdMap->contains(m_document)) {
-        OwnPtr<protocol::DOM::Node> root;
+        std::unique_ptr<protocol::DOM::Node> root;
         getDocument(errorString, &root);
         return errorString->isEmpty();
     }

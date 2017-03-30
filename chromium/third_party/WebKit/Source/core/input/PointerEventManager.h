@@ -21,6 +21,7 @@ class LocalFrame;
 // This class takes care of dispatching all pointer events and keeps track of
 // properties of active pointer events.
 class CORE_EXPORT PointerEventManager {
+    WTF_MAKE_NONCOPYABLE(PointerEventManager);
     DISALLOW_NEW();
 public:
     explicit PointerEventManager(LocalFrame*);
@@ -60,10 +61,14 @@ public:
     void setPointerCapture(int, EventTarget*);
     void releasePointerCapture(int, EventTarget*);
     bool isActive(const int) const;
-    WebPointerProperties::PointerType getPointerEventType(const int) const;
 
     // Returns whether there is any touch on the screen.
     bool isAnyTouchActive() const;
+
+    // Returns true if the primary pointerdown corresponding to the given
+    // |uniqueTouchEventId| was canceled. Also drops stale ids from
+    // |m_touchIdsForCanceledPointerdowns|.
+    bool primaryPointerdownCanceled(uint32_t uniqueTouchEventId);
 
 private:
     typedef HeapHashMap<int, Member<EventTarget>, WTF::IntHash<int>,
@@ -161,6 +166,8 @@ private:
     // all touch-points become inactive.
     bool m_inCanceledStateForPointerTypeTouch;
 
+    Deque<uint32_t> m_touchIdsForCanceledPointerdowns;
+
     // Note that this map keeps track of node under pointer with id=1 as well
     // which might be different than m_nodeUnderMouse in EventHandler. That one
     // keeps track of any compatibility mouse event positions but this map for
@@ -171,9 +178,9 @@ private:
 
     PointerCapturingMap m_pointerCaptureTarget;
     PointerCapturingMap m_pendingPointerCaptureTarget;
+
     PointerEventFactory m_pointerEventFactory;
     TouchEventManager m_touchEventManager;
-
 };
 
 } // namespace blink

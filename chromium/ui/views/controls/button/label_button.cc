@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/animation/throb_animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_utils.h"
@@ -19,7 +20,8 @@
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
-#include "ui/views/animation/ink_drop_hover.h"
+#include "ui/views/animation/ink_drop_highlight.h"
+#include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/painter.h"
@@ -30,6 +32,21 @@ namespace {
 
 // The default spacing between the icon and text.
 const int kSpacing = 5;
+
+gfx::Font::Weight GetValueBolderThan(gfx::Font::Weight weight) {
+  if (weight < gfx::Font::Weight::BOLD)
+    return gfx::Font::Weight::BOLD;
+  switch (weight) {
+    case gfx::Font::Weight::BOLD:
+      return gfx::Font::Weight::EXTRA_BOLD;
+    case gfx::Font::Weight::EXTRA_BOLD:
+    case gfx::Font::Weight::BLACK:
+      return gfx::Font::Weight::BLACK;
+    default:
+      NOTREACHED();
+  }
+  return gfx::Font::Weight::INVALID;
+}
 
 const gfx::FontList& GetDefaultNormalFontList() {
   static base::LazyInstance<gfx::FontList>::Leaky font_list =
@@ -43,11 +60,14 @@ const gfx::FontList& GetDefaultBoldFontList() {
 
   static base::LazyInstance<gfx::FontList>::Leaky font_list =
       LAZY_INSTANCE_INITIALIZER;
-  if ((font_list.Get().GetFontStyle() & gfx::Font::BOLD) == 0) {
-    font_list.Get() = font_list.Get().
-        DeriveWithStyle(font_list.Get().GetFontStyle() | gfx::Font::BOLD);
-    DCHECK_NE(font_list.Get().GetFontStyle() & gfx::Font::BOLD, 0);
-  }
+
+  static const gfx::Font::Weight default_bold_weight =
+      font_list.Get().GetFontWeight();
+
+  font_list.Get() = font_list.Get().DeriveWithWeight(
+      GetValueBolderThan(default_bold_weight));
+  DCHECK_GE(font_list.Get().GetFontWeight(), gfx::Font::Weight::BOLD);
+
   return font_list.Get();
 }
 
@@ -113,7 +133,7 @@ LabelButton::LabelButton(ButtonListener* listener, const base::string16& text)
 
 LabelButton::~LabelButton() {}
 
-const gfx::ImageSkia& LabelButton::GetImage(ButtonState for_state) {
+gfx::ImageSkia LabelButton::GetImage(ButtonState for_state) const {
   if (for_state != STATE_NORMAL && button_state_images_[for_state].isNull())
     return button_state_images_[STATE_NORMAL];
   return button_state_images_[for_state];
@@ -162,8 +182,8 @@ const gfx::FontList& LabelButton::GetFontList() const {
 void LabelButton::SetFontList(const gfx::FontList& font_list) {
   cached_normal_font_list_ = font_list;
   if (PlatformStyle::kDefaultLabelButtonHasBoldFont) {
-    cached_bold_font_list_ =
-        font_list.DeriveWithStyle(font_list.GetFontStyle() | gfx::Font::BOLD);
+    cached_bold_font_list_ = font_list.DeriveWithWeight(
+        GetValueBolderThan(font_list.GetFontWeight()));
     if (is_default_) {
       label_->SetFontList(cached_bold_font_list_);
       return;
@@ -193,7 +213,7 @@ void LabelButton::SetMaxSize(const gfx::Size& max_size) {
 }
 
 void LabelButton::SetIsDefault(bool is_default) {
-  DCHECK_EQ(STYLE_BUTTON, style_);
+  // TODO(estade): move this to MdTextButton once |style_| is removed.
   if (is_default == is_default_)
     return;
 
@@ -418,26 +438,26 @@ void LabelButton::RemoveInkDropLayer(ui::Layer* ink_drop_layer) {
 }
 
 std::unique_ptr<views::InkDropRipple> LabelButton::CreateInkDropRipple() const {
-  return GetText().empty() ? CustomButton::CreateInkDropRipple()
-                           : base::WrapUnique(new views::FloodFillInkDropRipple(
-                                 GetLocalBounds(), GetInkDropCenter(),
-                                 GetInkDropBaseColor()));
+  return GetText().empty()
+             ? CreateDefaultInkDropRipple(
+                   image()->GetMirroredBounds().CenterPoint())
+             : std::unique_ptr<views::InkDropRipple>(
+                   new views::FloodFillInkDropRipple(
+                       GetLocalBounds(), GetInkDropCenterBasedOnLastEvent(),
+                       GetInkDropBaseColor(), ink_drop_visible_opacity()));
 }
 
-std::unique_ptr<views::InkDropHover> LabelButton::CreateInkDropHover() const {
-  if (!ShouldShowInkDropHover())
+std::unique_ptr<views::InkDropHighlight> LabelButton::CreateInkDropHighlight()
+    const {
+  if (!ShouldShowInkDropHighlight())
     return nullptr;
-  return GetText().empty() ? CustomButton::CreateInkDropHover()
-                           : base::WrapUnique(new views::InkDropHover(
-                                 size(), kInkDropSmallCornerRadius,
-                                 GetInkDropCenter(), GetInkDropBaseColor()));
-}
-
-gfx::Point LabelButton::GetInkDropCenter() const {
-  // TODO(bruthig): Make the flood fill ink drops centered on the LocatedEvent
-  // that triggered them.
-  return GetText().empty() ? image()->GetMirroredBounds().CenterPoint()
-                           : CustomButton::GetInkDropCenter();
+  return GetText().empty()
+             ? CreateDefaultInkDropHighlight(
+                   gfx::RectF(image()->GetMirroredBounds()).CenterPoint())
+             : base::WrapUnique(new views::InkDropHighlight(
+                   size(), kInkDropSmallCornerRadius,
+                   gfx::RectF(GetLocalBounds()).CenterPoint(),
+                   GetInkDropBaseColor()));
 }
 
 void LabelButton::StateChanged() {

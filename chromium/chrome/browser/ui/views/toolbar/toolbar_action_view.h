@@ -74,7 +74,7 @@ class ToolbarActionView : public views::MenuButton,
       const override;
   bool IsTriggerableEvent(const ui::Event& event) override;
   SkColor GetInkDropBaseColor() const override;
-  bool ShouldShowInkDropHover() const override;
+  bool ShouldShowInkDropHighlight() const override;
 
   // ToolbarActionViewDelegateViews:
   content::WebContents* GetCurrentWebContents() const override;
@@ -163,8 +163,6 @@ class ToolbarActionView : public views::MenuButton,
 
   // The time the popup was last closed.
   base::TimeTicks popup_closed_time_;
-
-  std::unique_ptr<views::InkDropDelegate> ink_drop_delegate_;
 
   base::WeakPtrFactory<ToolbarActionView> weak_factory_;
 

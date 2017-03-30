@@ -39,6 +39,18 @@
         <item name="android:windowSharedElementExitTransition" tools:targetApi="21">@transition/move_image</item>
     </style>
 
+    <style name="TabbedModeTheme" parent="MainTheme">
+        <item name="android:windowBackground">@drawable/window_background</item>
+    </style>
+
+    <style name="FullscreenWhiteDialog" parent="Theme.AppCompat.Light" >
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:textColorLink">@color/light_active_color</item>
+        <item name="android:statusBarColor" tools:targetApi="21">@android:color/black</item>
+        <item name="colorPrimary">@color/light_active_color</item>
+        <item name="colorAccent">@color/light_active_color</item>
+    </style>
+
     <!-- Web app themes -->
     <style name="WebappTheme" parent="MainTheme">
         <item name="android:windowBackground">@null</item>
@@ -80,7 +92,7 @@
         <item name="floatLabelTextAppearance">@style/PreferenceFloatLabelTextAppearance</item>
         <item name="floatLabelPaddingLeft">@dimen/pref_autofill_field_horizontal_padding</item>
         <item name="floatLabelPaddingRight">@dimen/pref_autofill_field_horizontal_padding</item>
-        <item name="floatLabelPaddingTop">@dimen/pref_autofill_field_top_padding</item>
+        <item name="floatLabelPaddingTop">@dimen/pref_autofill_field_top_margin</item>
     </style>
     <style name="PreferenceTextAppearanceMedium">
         <item name="android:textSize">18sp</item>
@@ -113,8 +125,11 @@
     </style>
     <style name="PreferenceScreenLayout">
         <item name="android:paddingTop">16dp</item>
-        <item name="android:paddingStart">16dp</item>
-        <item name="android:paddingEnd">16dp</item>
+        
+        <!-- Additional padding is applied to each of the controls inside the layout, making this
+             a 16dp padding overall. -->
+        <item name="android:paddingStart">@dimen/pref_autofill_content_spacing</item>
+        <item name="android:paddingEnd">@dimen/pref_autofill_content_spacing</item>
     </style>
     <style name="PreferenceLayoutBase">
         <item name="android:background">?android:attr/activatedBackgroundIndicator</item>
@@ -129,8 +144,8 @@
         <item name="android:textSize">14sp</item>
     </style>
     <style name="PreferenceFloatLabelTextAppearance">
-        <item name="android:textColor">@color/float_label</item>
-        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">@color/descriptive_text_color</item>
+        <item name="android:textSize">12sp</item>
     </style>
     <style name="PreferenceSpinnerItem">
         <item name="android:textAppearance">@style/PreferenceTextAppearanceMedium</item>
@@ -139,7 +154,7 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">1dp</item>
         <item name="android:layout_marginTop">2dp</item>
-        <item name="android:background">@color/input_underline_color</item>
+        <item name="android:background">@color/google_grey_600</item>
     </style>
 
     <style name="ThemeWithActionBar" parent="Theme.AppCompat.Light.DarkActionBar">
@@ -150,6 +165,34 @@
         <item name="colorPrimaryDark">#161e21</item>
         <!-- Color of checkboxes, switches, buttons, etc. -->
         <item name="colorAccent">@color/pref_accent_color</item>
+    </style>
+
+    <style name="FlushFooterButton">
+      <item name="android:textColor">@color/light_normal_color</item>
+      <item name="android:background">@drawable/flush_footer_button</item>
+    </style>
+
+    <!-- Manage Space Activity -->
+    <style name="ManageSpaceActivityButton">
+      <item name="android:layout_width">wrap_content</item>
+      <item name="android:layout_height">wrap_content</item>
+      <item name="android:layout_gravity">end</item>
+      <item name="android:layout_marginTop">8dp</item>
+      <item name="android:paddingStart">32dp</item>
+      <item name="android:paddingEnd">32dp</item>
+    </style>
+    <style name="ManageSpaceActivityExplanationTextView">
+      <item name="android:textAppearance">?android:attr/textAppearanceMedium</item>
+      <item name="android:layout_width">match_parent</item>
+      <item name="android:layout_height">wrap_content</item>
+      <item name="android:paddingTop">6dp</item>
+    </style>
+    <style name="ManageSpaceActivitySizeTextView">
+      <item name="android:textAppearance">?android:attr/textAppearanceMedium</item>
+      <item name="android:layout_width">wrap_content</item>
+      <item name="android:layout_height">wrap_content</item>
+      <item name="android:paddingTop">6dp</item>
+      <item name="android:maxLines">1</item>
     </style>
 
     <!-- Alert dialogs -->
@@ -193,10 +236,12 @@
     </style>
 
     <!-- Button bar styles -->
-    <style name="ButtonBarTopSpacer">
+    <style name="ButtonBarTopSpacerLight">
         <item name="android:layout_width">0dp</item>
         <item name="android:layout_height">0dp</item>
         <item name="android:layout_weight">1</item>
+    </style>
+    <style name="ButtonBarTopSpacer" parent="ButtonBarTopSpacerLight">
         <item name="android:minHeight">5dp</item>
     </style>
     <style name="ButtonBarTopDivider">
@@ -343,8 +388,8 @@
         <item name="windowActionBar">false</item>
     </style>
 
-    <!-- Bookmarks -->
-    <style name="BookmarkDialog" parent="Theme.AppCompat.Light.DialogWhenLarge">
+    <!-- Drawer layouts -->
+    <style name="DrawerDialog" parent="Theme.AppCompat.Light.DialogWhenLarge">
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="colorPrimaryDark">@android:color/black</item>
         <item name="colorAccent">@color/light_active_color</item>
@@ -353,9 +398,11 @@
         <item name="windowNoTitle">true</item>
         <item name="windowActionBar">false</item>
     </style>
-    <style name="BookmarkDialogWhite" parent="BookmarkDialog">
+    <style name="DrawerDialogWhite" parent="DrawerDialog">
       <item name="android:windowBackground">@drawable/bg_white_dialog</item>
     </style>
+
+    <!-- Bookmarks -->
     <style name="BookmarkTitleBarButton">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
@@ -378,16 +425,12 @@
     </style>
 
     <!-- Signin promo dialog-->
-    <style name="SigninPromoDialog" parent="Theme.AppCompat.Light">
+    <style name="SigninPromoDialog" parent="FullscreenWhiteDialog">
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowFrame">@null</item>
         <item name="android:windowIsFloating">true</item>
         <item name="android:windowContentOverlay">@null</item>
         <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
-        <item name="android:windowBackground">@android:color/white</item>
-        <item name="android:textColorLink">@color/light_active_color</item>
-        <item name="colorPrimary">@color/light_active_color</item>
-        <item name="colorAccent">@color/light_active_color</item>
     </style>
 
     <!-- Contextual Search styles -->
@@ -455,10 +498,25 @@
         <item name="android:textColor">@color/default_text_color</item>
         <item name="android:textSize">16sp</item>
     </style>
+    <style name="PaymentsUiSectionDisabledText">
+        <item name="android:textColor">@color/explanation_text_color</item>
+        <item name="android:textSize">16sp</item>
+    </style>
     <style name="PaymentsUiSectionDescriptiveText">
         <item name="android:textColor">@color/descriptive_text_color</item>
         <item name="android:textSize">14sp</item>
+    </style>
+    <style name="PaymentsUiSectionWarningText">
+        <item name="android:textColor">@color/error_text_color</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+    <style name="PaymentsUiSectionDescriptiveTextEndAligned" parent="PaymentsUiSectionDescriptiveText">
         <item name="android:textAlignment">viewEnd</item>
+    </style>
+    <style name="PaymentsUiSectionAddButtonLabel">
+        <item name="android:textColor">@color/light_active_color</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textAllCaps">true</item>
     </style>
 
     <!-- Misc styles -->

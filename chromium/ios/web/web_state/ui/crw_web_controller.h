@@ -117,6 +117,9 @@ class WebStateImpl;
 // |CRWWebDelegate webControllerDidSuppressDialog:| will be called.
 @property(nonatomic, assign) BOOL shouldSuppressDialogs;
 
+// YES if Mojo should be used for WebUI, defaults to NO.
+@property(nonatomic, assign) BOOL useMojoForWebUI;
+
 // Designated initializer. Initializes web controller with |webState|. The
 // calling code must retain the ownership of |webState|.
 - (instancetype)initWithWebState:(web::WebStateImpl*)webState;
@@ -131,10 +134,6 @@ class WebStateImpl;
 // Clear the transient content view, if one is shown.
 - (void)clearTransientContentView;
 
-// Give the unload listeners a chance to fire. Returns YES if they complete
-// and the CRWWebController is in a state it may be closed.
-- (BOOL)runUnloadListenerBeforeClosing;
-
 // Call to stop the CRWWebController from doing stuff, in particular to
 // stop all network requests. Called as part of the close sequence if it hasn't
 // already been halted; also called from [Tab halt] as part of the shutdown
@@ -144,9 +143,8 @@ class WebStateImpl;
 // Dismisses all modals owned by the web view or native view.
 - (void)dismissModals;
 
-// Call when the CRWWebController needs go away. Do not call until first calling
-// |-runUnloadListenerBeforeClosing|. Caller must reset the delegate before
-// calling.
+// Call when the CRWWebController needs go away. Caller must reset the delegate
+// before calling.
 - (void)close;
 
 // Call when there is a need to free up memory.

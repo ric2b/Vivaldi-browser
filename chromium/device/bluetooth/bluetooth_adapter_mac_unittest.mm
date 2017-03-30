@@ -11,6 +11,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "build/build_config.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+#include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
 #include "device/bluetooth/bluetooth_low_energy_device_mac.h"
@@ -70,7 +71,7 @@ class BluetoothAdapterMacTest : public testing::Test {
     return [mock_peripheral.get().peripheral retain];
   }
 
-  NSDictionary* CreateAdvertisementData() {
+  NSDictionary* AdvertisementData() {
     NSDictionary* advertisement_data = @{
       CBAdvertisementDataIsConnectable : @(YES),
       CBAdvertisementDataServiceDataKey : [NSDictionary dictionary],
@@ -80,12 +81,6 @@ class BluetoothAdapterMacTest : public testing::Test {
 
   std::string GetHashAddress(CBPeripheral* peripheral) {
     return BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(peripheral);
-  }
-
-  void SetDeviceTimeGreaterThanTimeout(BluetoothLowEnergyDeviceMac* device) {
-    device->last_update_time_.reset([[NSDate
-        dateWithTimeInterval:-(BluetoothAdapterMac::kDiscoveryTimeoutSec + 1)
-                   sinceDate:[NSDate date]] retain]);
   }
 
   void AddLowEnergyDevice(BluetoothLowEnergyDeviceMac* device) {
@@ -100,8 +95,6 @@ class BluetoothAdapterMacTest : public testing::Test {
         BluetoothLowEnergyDeviceMac::GetPeripheralHashAddress(peripheral));
     return (device != NULL);
   }
-
-  void RemoveTimedOutDevices() { adapter_mac_->RemoveTimedOutDevices(); }
 
   bool SetMockCentralManager(CBCentralManagerState desired_state) {
     if (!BluetoothAdapterMac::IsLowEnergyAvailable()) {
@@ -165,8 +158,7 @@ TEST_F(BluetoothAdapterMacTest, AddDiscoverySessionWithLowEnergyFilter) {
   EXPECT_EQ(0, NumDiscoverySessions());
 
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(
-      new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE));
+      new BluetoothDiscoveryFilter(BLUETOOTH_TRANSPORT_LE));
   AddDiscoverySession(discovery_filter.get());
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
@@ -183,8 +175,7 @@ TEST_F(BluetoothAdapterMacTest, AddSecondDiscoverySessionWithLowEnergyFilter) {
   if (!SetMockCentralManager(CBCentralManagerStatePoweredOn))
     return;
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(
-      new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE));
+      new BluetoothDiscoveryFilter(BLUETOOTH_TRANSPORT_LE));
   AddDiscoverySession(discovery_filter.get());
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
@@ -207,8 +198,7 @@ TEST_F(BluetoothAdapterMacTest, RemoveDiscoverySessionWithLowEnergyFilter) {
   EXPECT_EQ(0, [mock_central_manager_ scanForPeripheralsCallCount]);
 
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(
-      new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE));
+      new BluetoothDiscoveryFilter(BLUETOOTH_TRANSPORT_LE));
   AddDiscoverySession(discovery_filter.get());
   EXPECT_EQ(1, callback_count_);
   EXPECT_EQ(0, error_callback_count_);
@@ -233,8 +223,7 @@ TEST_F(BluetoothAdapterMacTest, RemoveDiscoverySessionWithLowEnergyFilterFail) {
   EXPECT_EQ(0, NumDiscoverySessions());
 
   std::unique_ptr<BluetoothDiscoveryFilter> discovery_filter(
-      new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE));
+      new BluetoothDiscoveryFilter(BLUETOOTH_TRANSPORT_LE));
   RemoveDiscoverySession(discovery_filter.get());
   EXPECT_EQ(0, callback_count_);
   EXPECT_EQ(1, error_callback_count_);
@@ -261,72 +250,13 @@ TEST_F(BluetoothAdapterMacTest, LowEnergyDeviceUpdatedNewDevice) {
       CreateMockPeripheral(kTestNSUUID));
   if (mock_peripheral.get() == nil)
     return;
-  base::scoped_nsobject<NSDictionary> advertisement_data(
-      CreateAdvertisementData());
+  base::scoped_nsobject<NSDictionary> advertisement_data(AdvertisementData());
 
   EXPECT_EQ(0, NumDevices());
   EXPECT_FALSE(DevicePresent(mock_peripheral));
   LowEnergyDeviceUpdated(mock_peripheral, advertisement_data, kTestRssi);
   EXPECT_EQ(1, NumDevices());
   EXPECT_TRUE(DevicePresent(mock_peripheral));
-}
-
-TEST_F(BluetoothAdapterMacTest, LowEnergyDeviceUpdatedOldDevice) {
-  if (!SetMockCentralManager(CBCentralManagerStatePoweredOn))
-    return;
-  base::scoped_nsobject<CBPeripheral> mock_peripheral(
-      CreateMockPeripheral(kTestNSUUID));
-  if (mock_peripheral.get() == nil)
-    return;
-  base::scoped_nsobject<NSDictionary> advertisement_data(
-      CreateAdvertisementData());
-
-  // Update the device for the first time and check it was correctly added to
-  // |devices_|.
-  EXPECT_EQ(0, NumDevices());
-  EXPECT_FALSE(DevicePresent(mock_peripheral));
-  LowEnergyDeviceUpdated(mock_peripheral, advertisement_data, kTestRssi);
-  EXPECT_EQ(1, NumDevices());
-  EXPECT_TRUE(DevicePresent(mock_peripheral));
-  // Search for the device by the address corresponding to |kTestNSUUID|.
-  BluetoothDeviceMac* device =
-      static_cast<BluetoothDeviceMac*>(GetDevice(kTestHashAddress));
-  base::scoped_nsobject<NSDate> first_update_time(
-      [device->GetLastUpdateTime() retain]);
-
-  // Update the device a second time. The device should be updated in
-  // |devices_| so check the time returned by GetLastUpdateTime() has increased.
-  LowEnergyDeviceUpdated(mock_peripheral, advertisement_data, kTestRssi);
-  EXPECT_EQ(1, NumDevices());
-  EXPECT_TRUE(DevicePresent(mock_peripheral));
-  device = static_cast<BluetoothDeviceMac*>(GetDevice(kTestHashAddress));
-  EXPECT_TRUE([device->GetLastUpdateTime() compare:first_update_time] ==
-              NSOrderedDescending);
-}
-
-TEST_F(BluetoothAdapterMacTest, UpdateDevicesRemovesLowEnergyDevice) {
-  if (!SetMockCentralManager(CBCentralManagerStatePoweredOn))
-    return;
-  base::scoped_nsobject<CBPeripheral> mock_peripheral(
-      CreateMockPeripheral(kTestNSUUID));
-  if (mock_peripheral.get() == nil)
-    return;
-  base::scoped_nsobject<NSDictionary> advertisement_data(
-      CreateAdvertisementData());
-
-  BluetoothLowEnergyDeviceMac* device = new BluetoothLowEnergyDeviceMac(
-      adapter_mac_, mock_peripheral, advertisement_data, kTestRssi);
-  SetDeviceTimeGreaterThanTimeout(device);
-
-  EXPECT_EQ(0, NumDevices());
-  AddLowEnergyDevice(device);
-  EXPECT_EQ(1, NumDevices());
-  EXPECT_TRUE(DevicePresent(mock_peripheral));
-
-  // Check that object pointed to by |device| is deleted by the adapter.
-  RemoveTimedOutDevices();
-  EXPECT_EQ(0, NumDevices());
-  EXPECT_FALSE(DevicePresent(mock_peripheral));
 }
 
 }  // namespace device

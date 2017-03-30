@@ -50,13 +50,15 @@
 #include "public/web/WebSharedWorkerCreationErrors.h"
 #include "public/web/WebSharedWorkerRepositoryClient.h"
 #include "web/WebLocalFrameImpl.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
 // Callback class that keeps the SharedWorker and WebSharedWorker objects alive while connecting.
 class SharedWorkerConnector : private WebSharedWorkerConnector::ConnectListener {
 public:
-    SharedWorkerConnector(SharedWorker* worker, const KURL& url, const String& name, PassOwnPtr<WebMessagePortChannel> channel, PassOwnPtr<WebSharedWorkerConnector> webWorkerConnector)
+    SharedWorkerConnector(SharedWorker* worker, const KURL& url, const String& name, WebMessagePortChannelUniquePtr channel, std::unique_ptr<WebSharedWorkerConnector> webWorkerConnector)
         : m_worker(worker)
         , m_url(url)
         , m_name(name)
@@ -74,8 +76,8 @@ private:
     Persistent<SharedWorker> m_worker;
     KURL m_url;
     String m_name;
-    OwnPtr<WebSharedWorkerConnector> m_webWorkerConnector;
-    OwnPtr<WebMessagePortChannel> m_channel;
+    std::unique_ptr<WebSharedWorkerConnector> m_webWorkerConnector;
+    WebMessagePortChannelUniquePtr m_channel;
 };
 
 SharedWorkerConnector::~SharedWorkerConnector()
@@ -86,7 +88,7 @@ SharedWorkerConnector::~SharedWorkerConnector()
 void SharedWorkerConnector::connect()
 {
     m_worker->setIsBeingConnected(true);
-    m_webWorkerConnector->connect(m_channel.leakPtr(), this);
+    m_webWorkerConnector->connect(m_channel.release(), this);
 }
 
 void SharedWorkerConnector::connected()
@@ -108,7 +110,7 @@ static WebSharedWorkerRepositoryClient::DocumentID getId(void* document)
     return reinterpret_cast<WebSharedWorkerRepositoryClient::DocumentID>(document);
 }
 
-void SharedWorkerRepositoryClientImpl::connect(SharedWorker* worker, PassOwnPtr<WebMessagePortChannel> port, const KURL& url, const String& name, ExceptionState& exceptionState)
+void SharedWorkerRepositoryClientImpl::connect(SharedWorker* worker, WebMessagePortChannelUniquePtr port, const KURL& url, const String& name, ExceptionState& exceptionState)
 {
     DCHECK(m_client);
 
@@ -120,7 +122,7 @@ void SharedWorkerRepositoryClientImpl::connect(SharedWorker* worker, PassOwnPtr<
     // when multiple might have been sent. Fix by making the
     // SharedWorkerConnector interface take a map that can contain
     // multiple headers.
-    OwnPtr<Vector<CSPHeaderAndType>> headers = worker->getExecutionContext()->contentSecurityPolicy()->headers();
+    std::unique_ptr<Vector<CSPHeaderAndType>> headers = worker->getExecutionContext()->contentSecurityPolicy()->headers();
     WebString header;
     WebContentSecurityPolicyType headerType = WebContentSecurityPolicyTypeReport;
 
@@ -132,7 +134,7 @@ void SharedWorkerRepositoryClientImpl::connect(SharedWorker* worker, PassOwnPtr<
     WebWorkerCreationError creationError;
     String unusedSecureContextError;
     bool isSecureContext = worker->getExecutionContext()->isSecureContext(unusedSecureContextError);
-    OwnPtr<WebSharedWorkerConnector> webWorkerConnector = adoptPtr(m_client->createSharedWorkerConnector(url, name, getId(document), header, headerType, worker->getExecutionContext()->securityContext().addressSpace(), isSecureContext ? WebSharedWorkerCreationContextTypeSecure : WebSharedWorkerCreationContextTypeNonsecure, &creationError));
+    std::unique_ptr<WebSharedWorkerConnector> webWorkerConnector = wrapUnique(m_client->createSharedWorkerConnector(url, name, getId(document), header, headerType, worker->getExecutionContext()->securityContext().addressSpace(), isSecureContext ? WebSharedWorkerCreationContextTypeSecure : WebSharedWorkerCreationContextTypeNonsecure, &creationError));
     if (creationError != WebWorkerCreationErrorNone) {
         if (creationError == WebWorkerCreationErrorURLMismatch) {
             // Existing worker does not match this url, so return an error back to the caller.

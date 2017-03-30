@@ -66,6 +66,15 @@ chrome.autofillPrivate.AddressEntry;
 
 /**
  * @typedef {{
+ *   name: (string|undefined),
+ *   countryCode: (string|undefined)
+ * }}
+ * @see https://developer.chrome.com/extensions/autofillPrivate#type-CountryEntry
+ */
+chrome.autofillPrivate.CountryEntry;
+
+/**
+ * @typedef {{
  *   field: !chrome.autofillPrivate.AddressField,
  *   fieldName: string,
  *   isLongField: boolean,
@@ -125,6 +134,14 @@ chrome.autofillPrivate.ValidatePhoneParams;
 chrome.autofillPrivate.saveAddress = function(address) {};
 
 /**
+ * Gets the list of all countries.
+ * @param {function(!Array<!chrome.autofillPrivate.CountryEntry>):void} callback
+ *     Callback which will be called with the countries.
+ * @see https://developer.chrome.com/extensions/autofillPrivate#method-getCountryList
+ */
+chrome.autofillPrivate.getCountryList = function(callback) {};
+
+/**
  * Gets the address components for a given country code.
  * @param {string} countryCode A two-character string representing the address'
  *     country     whose components should be returned. See autofill_country.cc
@@ -134,6 +151,14 @@ chrome.autofillPrivate.saveAddress = function(address) {};
  * @see https://developer.chrome.com/extensions/autofillPrivate#method-getAddressComponents
  */
 chrome.autofillPrivate.getAddressComponents = function(countryCode, callback) {};
+
+/**
+ * Gets the list of addresses.
+ * @param {function(!Array<!chrome.autofillPrivate.AddressEntry>):void} callback
+ *     Callback which will be called with the list of addresses.
+ * @see https://developer.chrome.com/extensions/autofillPrivate#method-getAddressList
+ */
+chrome.autofillPrivate.getAddressList = function(callback) {};
 
 /**
  * Saves the given credit card. If |card| has an empty string as its ID, it will
@@ -163,6 +188,14 @@ chrome.autofillPrivate.removeEntry = function(guid) {};
 chrome.autofillPrivate.validatePhoneNumbers = function(params, callback) {};
 
 /**
+ * Gets the list of credit cards.
+ * @param {function(!Array<!chrome.autofillPrivate.CreditCardEntry>):void}
+ *     callback Callback which will be called with the list of credit cards.
+ * @see https://developer.chrome.com/extensions/autofillPrivate#method-getCreditCardList
+ */
+chrome.autofillPrivate.getCreditCardList = function(callback) {};
+
+/**
  * Clears the data associated with a wallet card which was saved locally so that
  * the saved copy is masked (e.g., "Card ending in 1234").
  * @param {string} guid GUID of the credit card to mask.
@@ -172,7 +205,7 @@ chrome.autofillPrivate.maskCreditCard = function(guid) {};
 
 /**
  * Fired when the address list has changed, meaning that an entry has been
- * added, removed, or changed.  |entries| The updated list of entries.
+ * added, removed, or changed. |entries| The updated list of entries.
  * @type {!ChromeEvent}
  * @see https://developer.chrome.com/extensions/autofillPrivate#event-onAddressListChanged
  */
@@ -180,7 +213,7 @@ chrome.autofillPrivate.onAddressListChanged;
 
 /**
  * Fired when the credit card list has changed, meaning that an entry has been
- * added, removed, or changed.  |entries| The updated list of entries.
+ * added, removed, or changed. |entries| The updated list of entries.
  * @type {!ChromeEvent}
  * @see https://developer.chrome.com/extensions/autofillPrivate#event-onCreditCardListChanged
  */

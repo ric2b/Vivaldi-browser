@@ -5,7 +5,6 @@
 #include "components/policy/core/common/policy_loader_win.h"
 
 #include <windows.h>
-#include <lm.h>       // For limits.
 #include <ntdsapi.h>  // For Ds[Un]Bind
 #include <rpc.h>      // For struct GUID
 #include <shlwapi.h>  // For PathIsUNC()
@@ -53,15 +52,7 @@ namespace {
 
 const char kKeyMandatory[] = "policy";
 const char kKeyRecommended[] = "recommended";
-const char kKeySchema[] = "schema";
 const char kKeyThirdParty[] = "3rdparty";
-
-// The Legacy Browser Support was the first user of the policy-for-extensions
-// API, and relied on behavior that will be phased out. If this extension is
-// present then its policies will be loaded in a special way.
-// TODO(joaodasilva): remove this for M35. http://crbug.com/325349
-const char kLegacyBrowserSupportExtensionId[] =
-    "heildphpnddilhkemkielfhnkaagiabh";
 
 // The web store url that is the only trusted source for extensions.
 const char kExpectedWebStoreUrl[] =
@@ -95,43 +86,11 @@ GUID kRegistrySettingsCSEGUID = REGISTRY_EXTENSION_GUID;
 //   (a) existing enumerated constants should never be deleted or reordered, and
 //   (b) new constants should only be appended at the end of the enumeration.
 enum DomainCheckErrors {
-  DOMAIN_CHECK_ERROR_GET_JOIN_INFO = 0,
+  // The check error below is no longer possible.
+  DEPRECATED_DOMAIN_CHECK_ERROR_GET_JOIN_INFO = 0,
   DOMAIN_CHECK_ERROR_DS_BIND = 1,
   DOMAIN_CHECK_ERROR_SIZE,  // Not a DomainCheckError.  Must be last.
 };
-
-// If the LBS extension is found and contains a schema in the registry then this
-// function is used to patch it, and make it compliant. The fix is to
-// add an "items" attribute to lists that don't declare it.
-std::string PatchSchema(const std::string& schema) {
-  base::JSONParserOptions options = base::JSON_PARSE_RFC;
-  std::unique_ptr<base::Value> json = base::JSONReader::Read(schema, options);
-  base::DictionaryValue* dict = NULL;
-  base::DictionaryValue* properties = NULL;
-  if (!json ||
-      !json->GetAsDictionary(&dict) ||
-      !dict->GetDictionary(schema::kProperties, &properties)) {
-    return schema;
-  }
-
-  for (base::DictionaryValue::Iterator it(*properties);
-       !it.IsAtEnd(); it.Advance()) {
-    base::DictionaryValue* policy_schema = NULL;
-    std::string type;
-    if (properties->GetDictionary(it.key(), &policy_schema) &&
-        policy_schema->GetString(schema::kType, &type) &&
-        type == schema::kArray &&
-        !policy_schema->HasKey(schema::kItems)) {
-      std::unique_ptr<base::DictionaryValue> items(new base::DictionaryValue());
-      items->SetString(schema::kType, schema::kString);
-      policy_schema->Set(schema::kItems, items.release());
-    }
-  }
-
-  std::string serialized;
-  base::JSONWriter::Write(*json, &serialized);
-  return serialized;
-}
 
 // Verifies that untrusted policies contain only safe values. Modifies the
 // |policy| in place.
@@ -334,32 +293,8 @@ void CollectEnterpriseUMAs() {
                             base::win::OSInfo::GetInstance()->version_type(),
                             base::win::SUITE_LAST);
 
-  // Get the computer's domain status.
-  LPWSTR domain;
-  NETSETUP_JOIN_STATUS join_status;
-  if (NERR_Success != ::NetGetJoinInformation(NULL, &domain, &join_status)) {
-    UMA_HISTOGRAM_ENUMERATION("EnterpriseCheck.DomainCheckFailed",
-                              DOMAIN_CHECK_ERROR_GET_JOIN_INFO,
-                              DOMAIN_CHECK_ERROR_SIZE);
-    return;
-  }
-  ::NetApiBufferFree(domain);
-
-  bool in_domain = join_status == NetSetupDomainName;
+  bool in_domain = base::win::IsEnrolledToDomain();
   UMA_HISTOGRAM_BOOLEAN("EnterpriseCheck.InDomain", in_domain);
-  if (in_domain) {
-    // This check will tell us how often are domain computers actually
-    // connected to the enterprise network while Chrome is running.
-    HANDLE server_bind;
-    if (ERROR_SUCCESS == ::DsBind(NULL, NULL, &server_bind)) {
-      UMA_HISTOGRAM_COUNTS("EnterpriseCheck.DomainBindSucceeded", 1);
-      ::DsUnBind(&server_bind);
-    } else {
-      UMA_HISTOGRAM_ENUMERATION("EnterpriseCheck.DomainCheckFailed",
-                                DOMAIN_CHECK_ERROR_DS_BIND,
-                                DOMAIN_CHECK_ERROR_SIZE);
-    }
-  }
 }
 
 }  // namespace
@@ -375,8 +310,12 @@ PolicyLoaderWin::PolicyLoaderWin(
       is_initialized_(false),
       chrome_policy_key_(chrome_policy_key),
       gpo_provider_(gpo_provider),
-      user_policy_changed_event_(false, false),
-      machine_policy_changed_event_(false, false),
+      user_policy_changed_event_(
+          base::WaitableEvent::ResetPolicy::AUTOMATIC,
+          base::WaitableEvent::InitialState::NOT_SIGNALED),
+      machine_policy_changed_event_(
+          base::WaitableEvent::ResetPolicy::AUTOMATIC,
+          base::WaitableEvent::InitialState::NOT_SIGNALED),
       user_policy_watcher_failed_(false),
       machine_policy_watcher_failed_(false) {
   if (!::RegisterGPNotification(user_policy_changed_event_.handle(), false)) {
@@ -631,20 +570,6 @@ void PolicyLoaderWin::Load3rdPartyPolicy(const RegistryDict* gpo_dict,
         continue;
       }
       Schema schema = *schema_from_map;
-
-      if (!schema.valid() &&
-          policy_namespace.domain == POLICY_DOMAIN_EXTENSIONS &&
-          policy_namespace.component_id == kLegacyBrowserSupportExtensionId) {
-        // TODO(joaodasilva): remove this special treatment for LBS by M35.
-        std::string schema_json;
-        const base::Value* value = component->second->GetValue(kKeySchema);
-        if (value && value->GetAsString(&schema_json)) {
-          std::string error;
-          schema = Schema::Parse(PatchSchema(schema_json), &error);
-          if (!schema.valid())
-            LOG(WARNING) << "Invalid schema in the registry for LBS: " << error;
-        }
-      }
 
       // Parse policy.
       for (size_t j = 0; j < arraysize(kLevels); j++) {

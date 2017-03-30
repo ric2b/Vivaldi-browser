@@ -151,8 +151,8 @@ void MediaSourceState::SetGroupStartTimestampIfInSequenceMode(
 void MediaSourceState::SetTracksWatcher(
     const Demuxer::MediaTracksUpdatedCB& tracks_updated_cb) {
   DCHECK(init_segment_received_cb_.is_null());
+  DCHECK(!tracks_updated_cb.is_null());
   init_segment_received_cb_ = tracks_updated_cb;
-  DCHECK(!init_segment_received_cb_.is_null());
 }
 
 bool MediaSourceState::Append(const uint8_t* data,
@@ -309,6 +309,23 @@ Ranges<TimeDelta> MediaSourceState::GetBufferedRanges(TimeDelta duration,
   }
 
   return ComputeRangesIntersection(ranges_list, ended);
+}
+
+TimeDelta MediaSourceState::GetHighestPresentationTimestamp() const {
+  TimeDelta max_pts;
+
+  if (audio_)
+    max_pts = std::max(max_pts, audio_->GetHighestPresentationTimestamp());
+
+  if (video_)
+    max_pts = std::max(max_pts, video_->GetHighestPresentationTimestamp());
+
+  for (TextStreamMap::const_iterator itr = text_stream_map_.begin();
+       itr != text_stream_map_.end(); ++itr) {
+    max_pts = std::max(max_pts, itr->second->GetHighestPresentationTimestamp());
+  }
+
+  return max_pts;
 }
 
 TimeDelta MediaSourceState::GetMaxBufferedDuration() const {
@@ -480,9 +497,38 @@ bool MediaSourceState::OnNewConfigs(
     const StreamParser::TextTrackConfigMap& text_configs) {
   DCHECK_GE(state_, PENDING_PARSER_CONFIG);
   DCHECK(tracks.get());
-  media_tracks_ = std::move(tracks);
-  const AudioDecoderConfig& audio_config = media_tracks_->getFirstAudioConfig();
-  const VideoDecoderConfig& video_config = media_tracks_->getFirstVideoConfig();
+
+  MediaTrack* audio_track = nullptr;
+  MediaTrack* video_track = nullptr;
+  AudioDecoderConfig audio_config;
+  VideoDecoderConfig video_config;
+  for (const auto& track : tracks->tracks()) {
+    const auto& track_id = track->bytestream_track_id();
+
+    if (track->type() == MediaTrack::Audio) {
+      if (audio_track) {
+        MEDIA_LOG(ERROR, media_log_)
+            << "Error: more than one audio track is currently not supported.";
+        return false;
+      }
+      audio_track = track.get();
+      audio_config = tracks->getAudioConfig(track_id);
+      DCHECK(audio_config.IsValidConfig());
+    } else if (track->type() == MediaTrack::Video) {
+      if (video_track) {
+        MEDIA_LOG(ERROR, media_log_)
+            << "Error: more than one video track is currently not supported.";
+        return false;
+      }
+      video_track = track.get();
+      video_config = tracks->getVideoConfig(track_id);
+      DCHECK(video_config.IsValidConfig());
+    } else {
+      MEDIA_LOG(ERROR, media_log_) << "Error: unsupported media track type "
+                                   << track->type();
+      return false;
+    }
+  }
 
   DVLOG(1) << "OnNewConfigs(" << allow_audio << ", " << allow_video << ", "
            << audio_config.IsValidConfig() << ", "
@@ -651,12 +697,21 @@ bool MediaSourceState::OnNewConfigs(
 
   frame_processor_->SetAllTrackBuffersNeedRandomAccessPoint();
 
+  if (audio_track) {
+    DCHECK(audio_);
+    audio_track->set_id(audio_->media_track_id());
+  }
+  if (video_track) {
+    DCHECK(video_);
+    video_track->set_id(video_->media_track_id());
+  }
+
   DVLOG(1) << "OnNewConfigs() : " << (success ? "success" : "failed");
   if (success) {
     if (state_ == PENDING_PARSER_CONFIG)
       state_ = PENDING_PARSER_INIT;
     DCHECK(!init_segment_received_cb_.is_null());
-    init_segment_received_cb_.Run(std::move(media_tracks_));
+    init_segment_received_cb_.Run(std::move(tracks));
   }
 
   return success;

@@ -160,8 +160,6 @@ void SSLConnectJob::GetAdditionalErrorState(ClientSocketHandle* handle) {
   handle->set_ssl_error_response_info(error_response_info_);
   if (!connect_timing_.ssl_start.is_null())
     handle->set_is_ssl_error(true);
-  if (ssl_socket_)
-    handle->set_ssl_failure_state(ssl_socket_->GetSSLFailureState());
 
   handle->set_connection_attempts(connection_attempts_);
 }
@@ -379,17 +377,16 @@ int SSLConnectJob::DoSSLConnectComplete(int result) {
                             cipher_suite);
     // UMA_HISTOGRAM_... macros cache the Histogram instance and thus only work
     // if the histogram name is constant, so don't generate it dynamically.
-    if (strcmp(str, "RSA") == 0) {
-      UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_KeyExchange.RSA",
-                                  ssl_info.key_exchange_info);
-    } else if (strncmp(str, "DHE_", 4) == 0) {
+    if (strncmp(str, "DHE_", 4) == 0) {
       UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_KeyExchange.DHE",
                                   ssl_info.key_exchange_info);
     } else if (strncmp(str, "ECDHE_", 6) == 0) {
       UMA_HISTOGRAM_SPARSE_SLOWLY("Net.SSL_KeyExchange.ECDHE",
                                   ssl_info.key_exchange_info);
+    } else if (strncmp(str, "CECPQ1_", 7) == 0) {
+      // Nothing.
     } else {
-      NOTREACHED();
+      DCHECK_EQ(0, strcmp(str, "RSA"));
     }
 
     if (ssl_info.handshake_type == SSLInfo::HANDSHAKE_RESUME) {

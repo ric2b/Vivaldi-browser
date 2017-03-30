@@ -215,6 +215,37 @@ class NET_EXPORT_PRIVATE QuicFixedTagVector : public QuicConfigValue {
   bool has_receive_values_;
 };
 
+// Stores IPEndPoint from CHLO or SHLO messages that are not negotiated.
+class QuicFixedIPEndPoint : public QuicConfigValue {
+ public:
+  QuicFixedIPEndPoint(QuicTag tag, QuicConfigPresence presence);
+  ~QuicFixedIPEndPoint() override;
+
+  bool HasSendValue() const;
+
+  const IPEndPoint& GetSendValue() const;
+
+  void SetSendValue(const IPEndPoint& value);
+
+  bool HasReceivedValue() const;
+
+  const IPEndPoint& GetReceivedValue() const;
+
+  void SetReceivedValue(const IPEndPoint& value);
+
+  void ToHandshakeMessage(CryptoHandshakeMessage* out) const override;
+
+  QuicErrorCode ProcessPeerHello(const CryptoHandshakeMessage& peer_hello,
+                                 HelloType hello_type,
+                                 std::string* error_details) override;
+
+ private:
+  IPEndPoint send_value_;
+  bool has_send_value_;
+  IPEndPoint receive_value_;
+  bool has_receive_value_;
+};
+
 // QuicConfig contains non-crypto configuration options that are negotiated in
 // the crypto handshake.
 class NET_EXPORT_PRIVATE QuicConfig {
@@ -258,6 +289,15 @@ class NET_EXPORT_PRIVATE QuicConfig {
   void SetMaxStreamsPerConnection(size_t max_streams, size_t default_streams);
 
   uint32_t MaxStreamsPerConnection() const;
+
+  void SetMaxIncomingDynamicStreamsToSend(
+      uint32_t max_incoming_dynamic_streams);
+
+  uint32_t GetMaxIncomingDynamicStreamsToSend();
+
+  bool HasReceivedMaxIncomingDynamicStreams();
+
+  uint32_t ReceivedMaxIncomingDynamicStreams();
 
   void set_max_time_before_crypto_handshake(
       QuicTime::Delta max_time_before_crypto_handshake) {
@@ -339,6 +379,13 @@ class NET_EXPORT_PRIVATE QuicConfig {
 
   bool DisableConnectionMigration() const;
 
+  void SetAlternateServerAddressToSend(
+      const IPEndPoint& alternate_server_address);
+
+  bool HasReceivedAlternateServerAddress() const;
+
+  const IPEndPoint& ReceivedAlternateServerAddress() const;
+
   bool negotiated() const;
 
   // ToHandshakeMessage serialises the settings in this object as a series of
@@ -372,7 +419,10 @@ class NET_EXPORT_PRIVATE QuicConfig {
   // Whether to use silent close.  Defaults to 0 (false) and is otherwise true.
   QuicNegotiableUint32 silent_close_;
   // Maximum number of streams that the connection can support.
+  // TODO(rjshade): Remove when removing QUIC_VERSION_34
   QuicNegotiableUint32 max_streams_per_connection_;
+  // Maximum number of incoming dynamic streams that the connection can support.
+  QuicFixedUint32 max_incoming_dynamic_streams_;
   // The number of bytes required for the connection ID.
   QuicFixedUint32 bytes_for_connection_id_;
   // Initial round trip time estimate in microseconds.
@@ -384,6 +434,7 @@ class NET_EXPORT_PRIVATE QuicConfig {
   QuicFixedUint32 initial_session_flow_control_window_bytes_;
 
   // Socket receive buffer in bytes.
+  // TODO(ianswett): Deprecate once QUIC_VERSION_34 is deprecated.
   QuicFixedUint32 socket_receive_buffer_;
 
   // Whether to support multipath for this connection.
@@ -391,6 +442,9 @@ class NET_EXPORT_PRIVATE QuicConfig {
 
   // Whether tell peer not to attempt connection migration.
   QuicFixedUint32 connection_migration_disabled_;
+
+  // An alternate server address the client could connect to.
+  QuicFixedIPEndPoint alternate_server_address_;
 };
 
 }  // namespace net

@@ -67,7 +67,6 @@
 #include "core/html/forms/InputType.h"
 #include "core/html/forms/SearchInputType.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/ChromeClient.h"
 #include "platform/Language.h"
@@ -98,14 +97,12 @@ private:
 // this, even when just clicking in the text field.
 const int HTMLInputElement::maximumLength = 524288;
 const int defaultSize = 20;
-const int maxSavedResults = 256;
 
 HTMLInputElement::HTMLInputElement(Document& document, HTMLFormElement* form, bool createdByParser)
     : HTMLTextFormControlElement(inputTag, document, form)
     , m_size(defaultSize)
     , m_maxLength(maximumLength)
     , m_minLength(-1)
-    , m_maxResults(-1)
     , m_isChecked(false)
     , m_dirtyCheckedness(false)
     , m_isIndeterminate(false)
@@ -699,7 +696,7 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
         // restore. We shouldn't call setChecked() even if this has the checked
         // attribute. So, delay the setChecked() call until
         // finishParsingChildren() is called if parsing is in progress.
-        if (!m_parsingInProgress && !m_dirtyCheckedness) {
+        if ((!m_parsingInProgress || !document().formController().hasFormStates()) && !m_dirtyCheckedness) {
             setChecked(!value.isNull());
             m_dirtyCheckedness = false;
         }
@@ -725,14 +722,6 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
     } else if (name == onsearchAttr) {
         // Search field and slider attributes all just cause updateFromElement to be called through style recalcing.
         setAttributeEventListener(EventTypeNames::search, createAttributeEventListener(this, name, value, eventParameterName()));
-    } else if (name == resultsAttr) {
-        int oldResults = m_maxResults;
-        m_maxResults = !value.isNull() ? std::min(value.toInt(), maxSavedResults) : -1;
-        // FIXME: Detaching just for maxResults change is not ideal.  We should figure out the right
-        // time to relayout for this change.
-        if ((m_maxResults < 0) != (oldResults < 0))
-            lazyReattachIfAttached();
-        Deprecation::countDeprecation(document(), UseCounter::ResultsAttribute);
     } else if (name == incrementalAttr) {
         UseCounter::count(document(), UseCounter::IncrementalAttribute);
     } else if (name == minAttr) {
@@ -755,9 +744,6 @@ void HTMLInputElement::parseAttribute(const QualifiedName& name, const AtomicStr
     } else if (name == patternAttr) {
         setNeedsValidityCheck();
         UseCounter::count(document(), UseCounter::PatternAttribute);
-    } else if (name == disabledAttr) {
-        HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
-        m_inputTypeView->disabledAttributeChanged();
     } else if (name == readonlyAttr) {
         HTMLTextFormControlElement::parseAttribute(name, oldValue, value);
         m_inputTypeView->readonlyAttributeChanged();
@@ -1223,7 +1209,7 @@ void HTMLInputElement::defaultEventHandler(Event* evt)
     if (m_inputTypeView->shouldSubmitImplicitly(evt)) {
         // FIXME: Remove type check.
         if (type() == InputTypeNames::search)
-            document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch, this));
+            document().postTask(BLINK_FROM_HERE, createSameThreadTask(&HTMLInputElement::onSearch, wrapPersistent(this)));
         // Form submission finishes editing, just as loss of focus does.
         // If there was a change, send the event now.
         if (wasChangedSinceLastFormControlChangeEvent())
@@ -1544,6 +1530,12 @@ void HTMLInputElement::requiredAttributeChanged()
     m_inputTypeView->requiredAttributeChanged();
 }
 
+void HTMLInputElement::disabledAttributeChanged()
+{
+    HTMLTextFormControlElement::disabledAttributeChanged();
+    m_inputTypeView->disabledAttributeChanged();
+}
+
 void HTMLInputElement::selectColorInColorChooser(const Color& color)
 {
     if (ColorChooserClient* client = m_inputType->colorChooserClient())
@@ -1844,7 +1836,6 @@ bool HTMLInputElement::setupDateTimeChooserParameters(DateTimeChooserParameters&
         parameters.stepBase = 0;
     }
 
-    parameters.anchorRectInRootFrame = document().view()->contentsToRootFrame(pixelSnappedBoundingBox());
     parameters.anchorRectInScreen = document().view()->contentsToScreen(pixelSnappedBoundingBox());
     parameters.currentValue = value();
     parameters.doubleValue = m_inputType->valueAsDouble();

@@ -130,6 +130,7 @@
 <translation id="4156740505453712750">为防止他人擅自访问此计算机，请选用一个<ph name="BOLD_START" />至少 6 位数<ph name="BOLD_END" />的 PIN。当从其他位置连接时，将需要输入此 PIN。</translation>
 <translation id="4176825807642096119">访问代码</translation>
 <translation id="4207623512727273241">请先运行该安装程序，再继续操作。</translation>
+<translation id="4227991223508142681">主机配置实用程序</translation>
 <translation id="4240294130679914010">Chrome 远程访问主机卸载程序</translation>
 <translation id="4277463233460010382">此计算机已配置为允许一个或多个客户端无需输入 PIN 即可进行连接。</translation>
 <translation id="4277736576214464567">访问代码无效，请重试。</translation>
@@ -229,7 +230,7 @@
 <translation id="6668065415969892472">您的 PIN 已更新。</translation>
 <translation id="6681800064886881394">版权所有2013 Google Inc。保留所有权利。</translation>
 <translation id="6746493157771801606">清除历史记录</translation>
-<translation id="6748108480210050150">来自</translation>
+<translation id="6748108480210050150">发件人</translation>
 <translation id="677755392401385740">已为用户<ph name="HOST_USERNAME" />启动主机。</translation>
 <translation id="6865175692670882333">查看/修改</translation>
 <translation id="6930242544192836755">持续时间</translation>
@@ -237,7 +238,7 @@
 <translation id="6944854424004126054">恢复窗口</translation>
 <translation id="6965382102122355670">确定</translation>
 <translation id="6985691951107243942">您确定要停用与“<ph name="HOSTNAME" />”的远程连接吗？如果您日后想要重新启用连接，需要访问该计算机。</translation>
-<translation id="6998989275928107238">指向</translation>
+<translation id="6998989275928107238">至</translation>
 <translation id="7019153418965365059">无法识别的主机错误：<ph name="HOST_OFFLINE_REASON" />。</translation>
 <translation id="701976023053394610">远程协助</translation>
 <translation id="7038683108611689168">允许我们收集使用情况统计信息和崩溃报告，以帮助改进 Chrome 远程访问。</translation>
@@ -261,6 +262,7 @@
 <translation id="7836926030608666805">缺少某些必需的组件。请确保您运行的是最新版本的 Chrome，然后重试。</translation>
 <translation id="7868137160098754906">请为远程计算机输入PIN码。</translation>
 <translation id="7869445566579231750">您无权运行该应用。</translation>
+<translation id="7895403300744144251">这台远程计算机的安全政策不允许从您的帐户进行连接。</translation>
 <translation id="7948001860594368197">屏幕选项</translation>
 <translation id="7970576581263377361">身份验证失败。请重新登录 Chromium。</translation>
 <translation id="7981525049612125370">远程会话已过期。</translation>

@@ -61,7 +61,6 @@ ShadowRoot::ShadowRoot(Document& document, ShadowRootType type)
     , m_registeredWithParentShadowRoot(false)
     , m_descendantInsertionPointsIsValid(false)
     , m_delegatesFocus(false)
-    , m_descendantSlotsIsValid(false)
 {
 }
 
@@ -107,14 +106,8 @@ void ShadowRoot::setOlderShadowRoot(ShadowRoot& root)
 SlotAssignment& ShadowRoot::ensureSlotAssignment()
 {
     if (!m_slotAssignment)
-        m_slotAssignment = SlotAssignment::create();
+        m_slotAssignment = SlotAssignment::create(*this);
     return *m_slotAssignment;
-}
-
-HTMLSlotElement* ShadowRoot::assignedSlotFor(const Node& node) const
-{
-    DCHECK(m_slotAssignment);
-    return m_slotAssignment->assignedSlotFor(node);
 }
 
 Node* ShadowRoot::cloneNode(bool, ExceptionState& exceptionState)
@@ -130,12 +123,7 @@ String ShadowRoot::innerHTML() const
 
 void ShadowRoot::setInnerHTML(const String& markup, ExceptionState& exceptionState)
 {
-    if (isOrphan()) {
-        exceptionState.throwDOMException(InvalidAccessError, "The ShadowRoot does not have a host.");
-        return;
-    }
-
-    if (DocumentFragment* fragment = createFragmentForInnerOuterHTML(markup, host(), AllowScriptingContent, "innerHTML", exceptionState))
+    if (DocumentFragment* fragment = createFragmentForInnerOuterHTML(markup, &host(), AllowScriptingContent, "innerHTML", exceptionState))
         replaceChildrenWithFragment(this, fragment, exceptionState);
 }
 
@@ -162,6 +150,13 @@ void ShadowRoot::attach(const AttachContext& context)
     DocumentFragment::attach(context);
 }
 
+void ShadowRoot::detach(const AttachContext& context)
+{
+    if (context.clearInvalidation)
+        document().styleEngine().styleInvalidator().clearInvalidation(*this);
+    DocumentFragment::detach(context);
+}
+
 Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode* insertionPoint)
 {
     DocumentFragment::insertedInto(insertionPoint);
@@ -175,7 +170,7 @@ Node::InsertionNotificationRequest ShadowRoot::insertedInto(ContainerNode* inser
     if (m_registeredWithParentShadowRoot)
         return InsertionDone;
 
-    if (ShadowRoot* root = host()->containingShadowRoot()) {
+    if (ShadowRoot* root = host().containingShadowRoot()) {
         root->addChildShadowRoot();
         m_registeredWithParentShadowRoot = true;
     }
@@ -188,13 +183,15 @@ void ShadowRoot::removedFrom(ContainerNode* insertionPoint)
     if (insertionPoint->inShadowIncludingDocument()) {
         document().styleEngine().shadowRootRemovedFromDocument(this);
         if (m_registeredWithParentShadowRoot) {
-            ShadowRoot* root = host()->containingShadowRoot();
+            ShadowRoot* root = host().containingShadowRoot();
             if (!root)
                 root = insertionPoint->containingShadowRoot();
             if (root)
                 root->removeChildShadowRoot();
             m_registeredWithParentShadowRoot = false;
         }
+        if (needsStyleInvalidation())
+            document().styleEngine().styleInvalidator().clearInvalidation(*this);
     }
 
     DocumentFragment::removedFrom(insertionPoint);
@@ -205,7 +202,7 @@ void ShadowRoot::childrenChanged(const ChildrenChange& change)
     ContainerNode::childrenChanged(change);
 
     if (change.isChildElementChange())
-        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, change.siblingBeforeChange, change.siblingAfterChange);
+        checkForSiblingStyleChanges(change.type == ElementRemoved ? SiblingElementRemoved : SiblingElementInserted, change.siblingChanged, change.siblingBeforeChange, change.siblingAfterChange);
 
     if (InsertionPoint* point = shadowInsertionPointOfYoungerShadowRoot()) {
         if (ShadowRoot* root = point->containingShadowRoot())
@@ -305,63 +302,9 @@ StyleSheetList& ShadowRoot::styleSheets()
     return *m_styleSheetList;
 }
 
-void ShadowRoot::didAddSlot()
-{
-    ensureSlotAssignment().didAddSlot();
-    invalidateDescendantSlots();
-}
-
-void ShadowRoot::didRemoveSlot()
-{
-    DCHECK(m_slotAssignment);
-    m_slotAssignment->didRemoveSlot();
-    invalidateDescendantSlots();
-}
-
-void ShadowRoot::invalidateDescendantSlots()
-{
-    DCHECK(m_slotAssignment);
-    m_descendantSlotsIsValid = false;
-    m_slotAssignment->clearDescendantSlots();
-}
-
-unsigned ShadowRoot::descendantSlotCount() const
-{
-    return m_slotAssignment ? m_slotAssignment->descendantSlotCount() : 0;
-}
-
-const HeapVector<Member<HTMLSlotElement>>& ShadowRoot::descendantSlots()
-{
-    DEFINE_STATIC_LOCAL(HeapVector<Member<HTMLSlotElement>>, emptyList, (new HeapVector<Member<HTMLSlotElement>>));
-    if (m_descendantSlotsIsValid) {
-        DCHECK(m_slotAssignment);
-        return m_slotAssignment->descendantSlots();
-    }
-    if (descendantSlotCount() == 0)
-        return emptyList;
-
-    DCHECK(m_slotAssignment);
-    HeapVector<Member<HTMLSlotElement>> slots;
-    slots.reserveCapacity(descendantSlotCount());
-    for (HTMLSlotElement& slot : Traversal<HTMLSlotElement>::descendantsOf(rootNode()))
-        slots.append(&slot);
-    m_slotAssignment->setDescendantSlots(slots);
-    m_descendantSlotsIsValid = true;
-    return m_slotAssignment->descendantSlots();
-}
-
-void ShadowRoot::assignV1()
-{
-    if (!m_slotAssignment)
-        m_slotAssignment = SlotAssignment::create();
-    m_slotAssignment->resolveAssignment(*this);
-}
-
 void ShadowRoot::distributeV1()
 {
-    if (!m_slotAssignment)
-        m_slotAssignment = SlotAssignment::create();
-    m_slotAssignment->resolveDistribution(*this);
+    ensureSlotAssignment().resolveDistribution();
 }
 
 DEFINE_TRACE(ShadowRoot)

@@ -9,11 +9,34 @@
 #include <stdint.h>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 
 namespace {
+
+// Errors that can occur during Shared Memory construction.
+// These match tools/metrics/histograms/histograms.xml.
+// This enum is append-only.
+enum CreateError {
+  SUCCESS = 0,
+  SIZE_ZERO = 1,
+  SIZE_TOO_LARGE = 2,
+  INITIALIZE_ACL_FAILURE = 3,
+  INITIALIZE_SECURITY_DESC_FAILURE = 4,
+  SET_SECURITY_DESC_FAILURE = 5,
+  CREATE_FILE_MAPPING_FAILURE = 6,
+  REDUCE_PERMISSIONS_FAILURE = 7,
+  ALREADY_EXISTS = 8,
+  CREATE_ERROR_LAST = ALREADY_EXISTS
+};
+
+// Emits an UMA metric.
+void LogError(CreateError error) {
+  UMA_HISTOGRAM_ENUMERATION("SharedMemory.CreateError", error,
+                            CREATE_ERROR_LAST + 1);
+}
 
 typedef enum _SECTION_INFORMATION_CLASS {
   SectionBasicInformation,
@@ -84,8 +107,10 @@ HANDLE CreateFileMappingWithReducedPermissions(SECURITY_ATTRIBUTES* sa,
                                                LPCWSTR name) {
   HANDLE h = CreateFileMapping(INVALID_HANDLE_VALUE, sa, PAGE_READWRITE, 0,
                                static_cast<DWORD>(rounded_size), name);
-  if (!h)
+  if (!h) {
+    LogError(CREATE_FILE_MAPPING_FAILURE);
     return nullptr;
+  }
 
   HANDLE h2;
   BOOL success = ::DuplicateHandle(
@@ -93,7 +118,13 @@ HANDLE CreateFileMappingWithReducedPermissions(SECURITY_ATTRIBUTES* sa,
       FILE_MAP_READ | FILE_MAP_WRITE | SECTION_QUERY, FALSE, 0);
   BOOL rv = ::CloseHandle(h);
   DCHECK(rv);
-  return success ? h2 : nullptr;
+
+  if (!success) {
+    LogError(REDUCE_PERMISSIONS_FAILURE);
+    return nullptr;
+  }
+
+  return h2;
 }
 
 }  // namespace.
@@ -109,7 +140,6 @@ SharedMemoryCreateOptions::SharedMemoryCreateOptions()
 
 SharedMemory::SharedMemory()
     : external_section_(false),
-      mapped_file_(NULL),
       mapped_size_(0),
       memory_(NULL),
       read_only_(false),
@@ -118,7 +148,6 @@ SharedMemory::SharedMemory()
 SharedMemory::SharedMemory(const std::wstring& name)
     : external_section_(false),
       name_(name),
-      mapped_file_(NULL),
       mapped_size_(0),
       memory_(NULL),
       read_only_(false),
@@ -126,12 +155,12 @@ SharedMemory::SharedMemory(const std::wstring& name)
 
 SharedMemory::SharedMemory(const SharedMemoryHandle& handle, bool read_only)
     : external_section_(true),
-      mapped_file_(handle.GetHandle()),
       mapped_size_(0),
       memory_(NULL),
       read_only_(read_only),
       requested_size_(0) {
   DCHECK(!handle.IsValid() || handle.BelongsToCurrentProcess());
+  mapped_file_.Set(handle.GetHandle());
 }
 
 SharedMemory::~SharedMemory() {
@@ -187,14 +216,18 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
   // wasting 32k per mapping on average.
   static const size_t kSectionMask = 65536 - 1;
   DCHECK(!options.executable);
-  DCHECK(!mapped_file_);
-  if (options.size == 0)
+  DCHECK(!mapped_file_.Get());
+  if (options.size == 0) {
+    LogError(SIZE_ZERO);
     return false;
+  }
 
   // Check maximum accounting for overflow.
   if (options.size >
-      static_cast<size_t>(std::numeric_limits<int>::max()) - kSectionMask)
+      static_cast<size_t>(std::numeric_limits<int>::max()) - kSectionMask) {
+    LogError(SIZE_TOO_LARGE);
     return false;
+  }
 
   size_t rounded_size = (options.size + kSectionMask) & ~kSectionMask;
   name_ = options.name_deprecated ?
@@ -206,12 +239,18 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
   if (name_.empty()) {
     // Add an empty DACL to enforce anonymous read-only sections.
     sa.lpSecurityDescriptor = &sd;
-    if (!InitializeAcl(&dacl, sizeof(dacl), ACL_REVISION))
+    if (!InitializeAcl(&dacl, sizeof(dacl), ACL_REVISION)) {
+      LogError(INITIALIZE_ACL_FAILURE);
       return false;
-    if (!InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION))
+    }
+    if (!InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION)) {
+      LogError(INITIALIZE_SECURITY_DESC_FAILURE);
       return false;
-    if (!SetSecurityDescriptorDacl(&sd, TRUE, &dacl, FALSE))
+    }
+    if (!SetSecurityDescriptorDacl(&sd, TRUE, &dacl, FALSE)) {
+      LogError(SET_SECURITY_DESC_FAILURE);
       return false;
+    }
 
     // Windows ignores DACLs on certain unnamed objects (like shared sections).
     // So, we generate a random name when we need to enforce read-only.
@@ -221,10 +260,12 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
                          rand_values[0], rand_values[1],
                          rand_values[2], rand_values[3]);
   }
-  mapped_file_ = CreateFileMappingWithReducedPermissions(
-      &sa, rounded_size, name_.empty() ? nullptr : name_.c_str());
-  if (!mapped_file_)
+  mapped_file_.Set(CreateFileMappingWithReducedPermissions(
+      &sa, rounded_size, name_.empty() ? nullptr : name_.c_str()));
+  if (!mapped_file_.IsValid()) {
+    // The error is logged within CreateFileMappingWithReducedPermissions().
     return false;
+  }
 
   requested_size_ = options.size;
 
@@ -236,10 +277,12 @@ bool SharedMemory::Create(const SharedMemoryCreateOptions& options) {
     external_section_ = true;
     if (!options.open_existing_deprecated) {
       Close();
+      LogError(ALREADY_EXISTS);
       return false;
     }
   }
 
+  LogError(SUCCESS);
   return true;
 }
 
@@ -249,15 +292,15 @@ bool SharedMemory::Delete(const std::string& name) {
 }
 
 bool SharedMemory::Open(const std::string& name, bool read_only) {
-  DCHECK(!mapped_file_);
+  DCHECK(!mapped_file_.Get());
   DWORD access = FILE_MAP_READ | SECTION_QUERY;
   if (!read_only)
     access |= FILE_MAP_WRITE;
   name_ = ASCIIToUTF16(name);
   read_only_ = read_only;
-  mapped_file_ =
-      OpenFileMapping(access, false, name_.empty() ? nullptr : name_.c_str());
-  if (!mapped_file_)
+  mapped_file_.Set(
+      OpenFileMapping(access, false, name_.empty() ? nullptr : name_.c_str()));
+  if (!mapped_file_.IsValid())
     return false;
   // If a name specified assume it's an external section.
   if (!name_.empty())
@@ -267,7 +310,7 @@ bool SharedMemory::Open(const std::string& name, bool read_only) {
 }
 
 bool SharedMemory::MapAt(off_t offset, size_t bytes) {
-  if (mapped_file_ == NULL)
+  if (!mapped_file_.Get())
     return false;
 
   if (bytes > static_cast<size_t>(std::numeric_limits<int>::max()))
@@ -276,11 +319,12 @@ bool SharedMemory::MapAt(off_t offset, size_t bytes) {
   if (memory_)
     return false;
 
-  if (external_section_ && !IsSectionSafeToMap(mapped_file_))
+  if (external_section_ && !IsSectionSafeToMap(mapped_file_.Get()))
     return false;
 
   memory_ = MapViewOfFile(
-      mapped_file_, read_only_ ? FILE_MAP_READ : FILE_MAP_READ | FILE_MAP_WRITE,
+      mapped_file_.Get(),
+      read_only_ ? FILE_MAP_READ : FILE_MAP_READ | FILE_MAP_WRITE,
       static_cast<uint64_t>(offset) >> 32, static_cast<DWORD>(offset), bytes);
   if (memory_ != NULL) {
     DCHECK_EQ(0U, reinterpret_cast<uintptr_t>(memory_) &
@@ -307,14 +351,15 @@ bool SharedMemory::ShareToProcessCommon(ProcessHandle process,
   *new_handle = SharedMemoryHandle();
   DWORD access = FILE_MAP_READ | SECTION_QUERY;
   DWORD options = 0;
-  HANDLE mapped_file = mapped_file_;
+  HANDLE mapped_file = mapped_file_.Get();
   HANDLE result;
   if (share_mode == SHARE_CURRENT_MODE && !read_only_)
     access |= FILE_MAP_WRITE;
   if (close_self) {
     // DUPLICATE_CLOSE_SOURCE causes DuplicateHandle to close mapped_file.
     options = DUPLICATE_CLOSE_SOURCE;
-    mapped_file_ = NULL;
+    HANDLE detached_handle = mapped_file_.Take();
+    DCHECK_EQ(detached_handle, mapped_file);
     Unmap();
   }
 
@@ -334,14 +379,11 @@ bool SharedMemory::ShareToProcessCommon(ProcessHandle process,
 
 
 void SharedMemory::Close() {
-  if (mapped_file_ != NULL) {
-    ::CloseHandle(mapped_file_);
-    mapped_file_ = NULL;
-  }
+  mapped_file_.Close();
 }
 
 SharedMemoryHandle SharedMemory::handle() const {
-  return SharedMemoryHandle(mapped_file_, base::GetCurrentProcId());
+  return SharedMemoryHandle(mapped_file_.Get(), base::GetCurrentProcId());
 }
 
 }  // namespace base

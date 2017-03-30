@@ -4,9 +4,10 @@
 
 #include "chrome/browser/chromeos/power/power_button_observer.h"
 
+#include "ash/common/login_status.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/user/login_status.h"
 #include "ash/wm/power_button_controller.h"
 #include "base/logging.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -23,19 +24,16 @@ namespace chromeos {
 
 namespace {
 
-ash::user::LoginStatus GetCurrentLoginStatus() {
-  if (!ash::Shell::GetInstance()->system_tray_delegate())
-    return ash::user::LOGGED_IN_NONE;
-  return ash::Shell::GetInstance()->system_tray_delegate()->
-      GetUserLoginStatus();
+ash::LoginStatus GetCurrentLoginStatus() {
+  if (ash::WmShell::Get()->system_tray_delegate())
+    return ash::WmShell::Get()->system_tray_delegate()->GetUserLoginStatus();
+
+  return ash::LoginStatus::NOT_LOGGED_IN;
 }
 
 }  // namespace
 
 PowerButtonObserver::PowerButtonObserver() {
-  // TODO: Remove after resolving crbug.com/452599.
-  VLOG(0) << "Creating PowerButtonObserver " << this;
-
   ash::Shell::GetInstance()->lock_state_controller()->SetDelegate(
       std::unique_ptr<ash::LockStateControllerDelegate>(
           new SessionStateControllerDelegateChromeos));
@@ -65,9 +63,6 @@ PowerButtonObserver::PowerButtonObserver() {
 }
 
 PowerButtonObserver::~PowerButtonObserver() {
-  // TODO: Remove after resolving crbug.com/452599.
-  VLOG(0) << "Destroying PowerButtonObserver " << this;
-
   DBusThreadManager::Get()->GetSessionManagerClient()->RemoveObserver(this);
   DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(this);
 }
@@ -84,9 +79,6 @@ void PowerButtonObserver::Observe(int type,
       ash::Shell::GetInstance()->OnAppTerminating();
       break;
     case chrome::NOTIFICATION_SCREEN_LOCK_STATE_CHANGED: {
-      // TODO(jdufault): Remove after resolving crbug.com/452599.
-      VLOG(0) << "PowerButtonObserver " << this
-              << "calling ash::Shell OnLockStateChanged";
       bool locked = *content::Details<bool>(details).ptr();
       ash::Shell::GetInstance()->OnLockStateChanged(locked);
       break;

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_local.h"
@@ -101,8 +102,6 @@ class GpuMemoryBufferMessageFilter : public IPC::MessageFilter {
     bool handled = true;
     IPC_BEGIN_MESSAGE_MAP(GpuMemoryBufferMessageFilter, message)
       IPC_MESSAGE_HANDLER(GpuMsg_CreateGpuMemoryBuffer, OnCreateGpuMemoryBuffer)
-      IPC_MESSAGE_HANDLER(GpuMsg_CreateGpuMemoryBufferFromHandle,
-                          OnCreateGpuMemoryBufferFromHandle)
       IPC_MESSAGE_UNHANDLED(handled = false)
     IPC_END_MESSAGE_MAP()
     return handled;
@@ -121,18 +120,6 @@ class GpuMemoryBufferMessageFilter : public IPC::MessageFilter {
         gpu_memory_buffer_factory_->CreateGpuMemoryBuffer(
             params.id, params.size, params.format, params.usage,
             params.client_id, params.surface_handle)));
-  }
-
-  void OnCreateGpuMemoryBufferFromHandle(
-      const GpuMsg_CreateGpuMemoryBufferFromHandle_Params& params) {
-    TRACE_EVENT2(
-        "gpu",
-        "GpuMemoryBufferMessageFilter::OnCreateGpuMemoryBufferFromHandle", "id",
-        params.id.id, "client_id", params.client_id);
-    sender_->Send(new GpuHostMsg_GpuMemoryBufferCreated(
-        gpu_memory_buffer_factory_->CreateGpuMemoryBufferFromHandle(
-            params.handle, params.id, params.size, params.format,
-            params.client_id)));
   }
 
   gpu::GpuMemoryBufferFactory* const gpu_memory_buffer_factory_;
@@ -238,13 +225,13 @@ void GpuChildThread::Init(const base::Time& process_start_time) {
   // Only set once per process instance.
   process_control_.reset(new GpuProcessControlImpl());
 
-  // Use of base::Unretained(this) is safe here because |service_registry()|
-  // will be destroyed before GpuChildThread is destructed.
-  service_registry()->AddService(base::Bind(
-      &GpuChildThread::BindProcessControlRequest, base::Unretained(this)));
-
   if (GetContentClient()->gpu())  // NULL in tests.
-    GetContentClient()->gpu()->RegisterMojoServices(service_registry());
+    GetContentClient()->gpu()->Initialize(this);
+}
+
+void GpuChildThread::OnFieldTrialGroupFinalized(const std::string& trial_name,
+                                                const std::string& group_name) {
+  Send(new GpuHostMsg_FieldTrialActivated(trial_name));
 }
 
 bool GpuChildThread::Send(IPC::Message* msg) {
@@ -307,6 +294,37 @@ bool GpuChildThread::OnMessageReceived(const IPC::Message& msg) {
   return false;
 }
 
+bool GpuChildThread::AcceptConnection(shell::Connection* connection) {
+  // Use of base::Unretained(this) is safe here because |service_registry()|
+  // will be destroyed before GpuChildThread is destructed.
+  connection->GetInterfaceRegistry()->AddInterface(base::Bind(
+      &GpuChildThread::BindProcessControlRequest, base::Unretained(this)));
+
+  if (GetContentClient()->gpu()) {  // NULL in tests.
+    GetContentClient()->gpu()->ExposeInterfacesToBrowser(
+        connection->GetInterfaceRegistry());
+  }
+
+  // We don't want to process any incoming interface requests until
+  // OnInitialize().
+  if (!gpu_channel_manager_) {
+    connection->GetInterfaceRegistry()->PauseBinding();
+    resume_interface_bindings_callback_ = base::Bind(
+        &shell::InterfaceRegistry::ResumeBinding,
+        connection->GetInterfaceRegistry()->GetWeakPtr());
+  }
+
+  return true;
+}
+
+shell::InterfaceRegistry* GpuChildThread::GetInterfaceRegistryForConnection() {
+  return nullptr;
+}
+
+shell::InterfaceProvider* GpuChildThread::GetInterfaceProviderForConnection() {
+  return nullptr;
+}
+
 void GpuChildThread::SetActiveURL(const GURL& url) {
   GetContentClient()->SetActiveURL(url);
 }
@@ -350,6 +368,9 @@ void GpuChildThread::StoreShaderToDisk(int32_t client_id,
 }
 
 void GpuChildThread::OnInitialize(const gpu::GpuPreferences& gpu_preferences) {
+  if (!resume_interface_bindings_callback_.is_null())
+    base::ResetAndReturn(&resume_interface_bindings_callback_).Run();
+
   gpu_preferences_ = gpu_preferences;
 
   gpu_info_.video_decode_accelerator_capabilities =
@@ -427,6 +448,9 @@ void GpuChildThread::StopWatchdog() {
 }
 
 void GpuChildThread::OnCollectGraphicsInfo() {
+  if (dead_on_arrival_)
+    return;
+
 #if defined(OS_WIN)
   // GPU full info collection should only happen on un-sandboxed GPU process
   // or single process/in-process gpu mode on Windows.
@@ -516,7 +540,8 @@ void GpuChildThread::OnDisableWatchdog() {
 void GpuChildThread::OnGpuSwitched() {
   DVLOG(1) << "GPU: GPU has switched";
   // Notify observers in the GPU process.
-  ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched();
+  if (!in_browser_process_)
+    ui::GpuSwitchingManager::GetInstance()->NotifyGpuSwitched();
 }
 
 void GpuChildThread::OnEstablishChannel(const EstablishChannelParams& params) {

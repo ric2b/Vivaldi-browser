@@ -40,7 +40,9 @@ class QuicSpdyClientStream : public QuicSpdyStream {
                                 const QuicHeaderList& header_list) override;
 
   // Override the base class to parse and store trailers.
-  void OnTrailingHeadersComplete(bool fin, size_t frame_len) override;
+  void OnTrailingHeadersComplete(bool fin,
+                                 size_t frame_len,
+                                 const QuicHeaderList& header_list) override;
 
   // Override the base class to handle creation of the push stream.
   void OnPromiseHeadersComplete(QuicStreamId promised_stream_id,
@@ -57,9 +59,7 @@ class QuicSpdyClientStream : public QuicSpdyStream {
 
   // Serializes the headers and body, sends it to the server, and
   // returns the number of bytes sent.
-  size_t SendRequest(const SpdyHeaderBlock& headers,
-                     base::StringPiece body,
-                     bool fin);
+  size_t SendRequest(SpdyHeaderBlock headers, base::StringPiece body, bool fin);
 
   // Returns the response data.
   const std::string& data() { return data_; }

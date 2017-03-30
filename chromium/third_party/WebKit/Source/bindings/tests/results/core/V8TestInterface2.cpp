@@ -309,7 +309,7 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
         thisArg = ScriptValue(ScriptState::current(info.GetIsolate()), info[1]);
     }
     ScriptState* scriptState = ScriptState::current(info.GetIsolate());
-    impl->forEachForBinding(scriptState, ScriptValue(scriptState, info.This()), callback, thisArg, exceptionState);
+    impl->forEachForBinding(scriptState, ScriptValue(scriptState, info.Holder()), callback, thisArg, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
         return;
@@ -641,6 +641,7 @@ v8::Local<v8::FunctionTemplate> V8TestInterface2::domTemplate(v8::Isolate* isola
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), V8TestInterface2::installV8TestInterface2TemplateFunction);
 }
 
+
 bool V8TestInterface2::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
@@ -653,7 +654,7 @@ v8::Local<v8::Object> V8TestInterface2::findInstanceInPrototypeChain(v8::Local<v
 
 TestInterface2* V8TestInterface2::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
 }
 
 ActiveScriptWrappable* V8TestInterface2::toActiveScriptWrappable(v8::Local<v8::Object> wrapper)

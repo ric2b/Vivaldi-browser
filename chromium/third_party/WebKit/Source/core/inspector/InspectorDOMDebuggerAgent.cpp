@@ -39,7 +39,6 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/inspector/InspectorDOMAgent.h"
 #include "platform/inspector_protocol/Values.h"
-#include "platform/v8_inspector/public/V8EventListenerInfo.h"
 #include "platform/v8_inspector/public/V8InspectorSession.h"
 
 namespace {
@@ -71,6 +70,82 @@ static const char eventTargetAny[] = "*";
 static const char pauseOnAllXHRs[] = "pauseOnAllXHRs";
 static const char xhrBreakpoints[] = "xhrBreakpoints";
 static const char enabled[] = "enabled";
+}
+
+static void removeEventListenerCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    v8::Isolate* isolate = info.GetIsolate();
+    v8::Local<v8::Context> context = isolate->GetCurrentContext();
+    v8::Local<v8::Object> data = info.Data().As<v8::Object>();
+
+    v8::Local<v8::Value> v8Target;
+    if (!data->Get(context, v8String(isolate, "target")).ToLocal(&v8Target) || !v8Target->IsObject())
+        return;
+    EventTarget* target = V8EventTarget::toImplWithTypeCheck(isolate, v8Target);
+    // We need to handle LocalDOMWindow specially, because LocalDOMWindow wrapper exists on prototype chain.
+    if (!target)
+        target = toDOMWindow(isolate, v8Target);
+    if (!target || !target->getExecutionContext())
+        return;
+
+    v8::Local<v8::Value> v8Handler;
+    if (!data->Get(context, v8String(isolate, "handler")).ToLocal(&v8Handler) || !v8Handler->IsObject())
+        return;
+    v8::Local<v8::Value> v8Type;
+    if (!data->Get(context, v8String(isolate, "type")).ToLocal(&v8Type) || !v8Type->IsString())
+        return;
+    AtomicString type = AtomicString(toCoreString(v8::Local<v8::String>::Cast(v8Type)));
+    v8::Local<v8::Value> v8UseCapture;
+    if (!data->Get(context, v8String(isolate, "useCapture")).ToLocal(&v8UseCapture) || !v8UseCapture->IsBoolean())
+        return;
+    bool useCapture = v8::Local<v8::Boolean>::Cast(v8UseCapture)->Value();
+
+    EventListener* eventListener = nullptr;
+    EventListenerVector* listeners = target->getEventListeners(type);
+    if (!listeners)
+        return;
+    for (size_t i = 0; i < listeners->size(); ++i) {
+        if (listeners->at(i).capture() != useCapture)
+            continue;
+        V8AbstractEventListener* v8Listener = V8AbstractEventListener::cast(listeners->at(i).listener());
+        if (!v8Listener)
+            continue;
+        if (!v8Listener->hasExistingListenerObject())
+            continue;
+        if (!v8Listener->getExistingListenerObject()->Equals(context, v8Handler).FromMaybe(false))
+            continue;
+        eventListener = v8Listener;
+        break;
+    }
+    if (!eventListener)
+        return;
+    EventListenerOptions options;
+    options.setCapture(useCapture);
+    target->removeEventListener(type, eventListener, options);
+}
+
+static void returnDataCallback(const v8::FunctionCallbackInfo<v8::Value>& info)
+{
+    info.GetReturnValue().Set(info.Data());
+}
+
+static v8::MaybeLocal<v8::Function> createRemoveFunction(v8::Local<v8::Context> context, v8::Local<v8::Value> object, v8::Local<v8::Object> handler, AtomicString type, bool useCapture)
+{
+    v8::Isolate* isolate = context->GetIsolate();
+    v8::Local<v8::Object> data = v8::Object::New(isolate);
+    if (!data->Set(context, v8String(isolate, "target"), object).FromMaybe(false))
+        return v8::MaybeLocal<v8::Function>();
+    if (!data->Set(context, v8String(isolate, "handler"), handler).FromMaybe(false))
+        return v8::MaybeLocal<v8::Function>();
+    if (!data->Set(context, v8String(isolate, "type"), v8String(isolate, type)).FromMaybe(false))
+        return v8::MaybeLocal<v8::Function>();
+    if (!data->Set(context, v8String(isolate, "useCapture"), v8Boolean(useCapture, isolate)).FromMaybe(false))
+        return v8::MaybeLocal<v8::Function>();
+    v8::Local<v8::Function> removeFunction = v8::Function::New(context, removeEventListenerCallback, data, 0, v8::ConstructorBehavior::kThrow).ToLocalChecked();
+    v8::Local<v8::Function> toStringFunction;
+    if (v8::Function::New(context, returnDataCallback, v8String(isolate, "function remove() { [Command Line API] }"), 0, v8::ConstructorBehavior::kThrow).ToLocal(&toStringFunction))
+        removeFunction->Set(v8String(context->GetIsolate(), "toString"), toStringFunction);
+    return removeFunction;
 }
 
 void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(v8::Isolate* isolate, v8::Local<v8::Value> value, V8EventListenerInfoList& eventInformation)
@@ -106,14 +181,14 @@ void InspectorDOMDebuggerAgent::eventListenersInfoForTarget(v8::Isolate* isolate
             v8::Local<v8::Object> handler = v8Listener->getListenerObject(executionContext);
             if (handler.IsEmpty())
                 continue;
-            eventInformation.append(V8EventListenerInfo(type, listeners->at(k).capture(), listeners->at(k).passive(), handler));
+            bool useCapture = listeners->at(k).capture();
+            eventInformation.append(V8EventListenerInfo(type, useCapture, listeners->at(k).passive(), handler, createRemoveFunction(context, value, handler, type, useCapture)));
         }
     }
 }
 
 InspectorDOMDebuggerAgent::InspectorDOMDebuggerAgent(v8::Isolate* isolate, InspectorDOMAgent* domAgent, V8InspectorSession* v8Session)
-    : InspectorBaseAgent<InspectorDOMDebuggerAgent, protocol::Frontend::DOMDebugger>("DOMDebugger")
-    , m_isolate(isolate)
+    : m_isolate(isolate)
     , m_domAgent(domAgent)
     , m_v8Session(v8Session)
 {
@@ -161,7 +236,7 @@ static protocol::DictionaryValue* ensurePropertyObject(protocol::DictionaryValue
     if (value)
         return protocol::DictionaryValue::cast(value);
 
-    OwnPtr<protocol::DictionaryValue> newResult = protocol::DictionaryValue::create();
+    std::unique_ptr<protocol::DictionaryValue> newResult = protocol::DictionaryValue::create();
     protocol::DictionaryValue* result = newResult.get();
     object->setObject(propertyName, std::move(newResult));
     return result;
@@ -171,7 +246,7 @@ protocol::DictionaryValue* InspectorDOMDebuggerAgent::eventListenerBreakpoints()
 {
     protocol::DictionaryValue* breakpoints = m_state->getObject(DOMDebuggerAgentState::eventListenerBreakpoints);
     if (!breakpoints) {
-        OwnPtr<protocol::DictionaryValue> newBreakpoints = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> newBreakpoints = protocol::DictionaryValue::create();
         breakpoints = newBreakpoints.get();
         m_state->setObject(DOMDebuggerAgentState::eventListenerBreakpoints, std::move(newBreakpoints));
     }
@@ -182,7 +257,7 @@ protocol::DictionaryValue* InspectorDOMDebuggerAgent::xhrBreakpoints()
 {
     protocol::DictionaryValue* breakpoints = m_state->getObject(DOMDebuggerAgentState::xhrBreakpoints);
     if (!breakpoints) {
-        OwnPtr<protocol::DictionaryValue> newBreakpoints = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> newBreakpoints = protocol::DictionaryValue::create();
         breakpoints = newBreakpoints.get();
         m_state->setObject(DOMDebuggerAgentState::xhrBreakpoints, std::move(newBreakpoints));
     }
@@ -232,7 +307,7 @@ void InspectorDOMDebuggerAgent::removeBreakpoint(ErrorString* error, const Strin
 void InspectorDOMDebuggerAgent::didInvalidateStyleAttr(Node* node)
 {
     if (hasBreakpoint(node, AttributeModified)) {
-        OwnPtr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
         descriptionForDOMEvent(node, AttributeModified, false, eventData.get());
         m_v8Session->breakProgram(protocol::Debugger::Paused::ReasonEnum::DOM, std::move(eventData));
     }
@@ -331,7 +406,7 @@ void InspectorDOMDebuggerAgent::removeDOMBreakpoint(ErrorString* errorString, in
     didRemoveBreakpoint();
 }
 
-void InspectorDOMDebuggerAgent::getEventListeners(ErrorString* errorString, const String16& objectId, OwnPtr<protocol::Array<protocol::DOMDebugger::EventListener>>* listenersArray)
+void InspectorDOMDebuggerAgent::getEventListeners(ErrorString* errorString, const String& objectId, std::unique_ptr<protocol::Array<protocol::DOMDebugger::EventListener>>* listenersArray)
 {
     v8::HandleScope handles(m_isolate);
 
@@ -352,20 +427,20 @@ void InspectorDOMDebuggerAgent::eventListeners(v8::Local<v8::Context> context, v
     for (const auto& info : eventInformation) {
         if (!info.useCapture)
             continue;
-        OwnPtr<protocol::DOMDebugger::EventListener> listenerObject = buildObjectForEventListener(context, info, objectGroup);
+        std::unique_ptr<protocol::DOMDebugger::EventListener> listenerObject = buildObjectForEventListener(context, info, objectGroup);
         if (listenerObject)
             listenersArray->addItem(std::move(listenerObject));
     }
     for (const auto& info : eventInformation) {
         if (info.useCapture)
             continue;
-        OwnPtr<protocol::DOMDebugger::EventListener> listenerObject = buildObjectForEventListener(context, info, objectGroup);
+        std::unique_ptr<protocol::DOMDebugger::EventListener> listenerObject = buildObjectForEventListener(context, info, objectGroup);
         if (listenerObject)
             listenersArray->addItem(std::move(listenerObject));
     }
 }
 
-PassOwnPtr<protocol::DOMDebugger::EventListener> InspectorDOMDebuggerAgent::buildObjectForEventListener(v8::Local<v8::Context> context, const V8EventListenerInfo& info, const String16& objectGroupId)
+std::unique_ptr<protocol::DOMDebugger::EventListener> InspectorDOMDebuggerAgent::buildObjectForEventListener(v8::Local<v8::Context> context, const V8EventListenerInfo& info, const String16& objectGroupId)
 {
     if (info.handler.IsEmpty())
         return nullptr;
@@ -380,11 +455,11 @@ PassOwnPtr<protocol::DOMDebugger::EventListener> InspectorDOMDebuggerAgent::buil
     int columnNumber;
     getFunctionLocation(function, scriptId, lineNumber, columnNumber);
 
-    OwnPtr<protocol::Debugger::Location> location = protocol::Debugger::Location::create()
+    std::unique_ptr<protocol::Debugger::Location> location = protocol::Debugger::Location::create()
         .setScriptId(scriptId)
         .setLineNumber(lineNumber).build();
     location->setColumnNumber(columnNumber);
-    OwnPtr<protocol::DOMDebugger::EventListener> value = protocol::DOMDebugger::EventListener::create()
+    std::unique_ptr<protocol::DOMDebugger::EventListener> value = protocol::DOMDebugger::EventListener::create()
         .setType(info.eventType)
         .setUseCapture(info.useCapture)
         .setPassive(info.passive)
@@ -392,6 +467,9 @@ PassOwnPtr<protocol::DOMDebugger::EventListener> InspectorDOMDebuggerAgent::buil
     if (!objectGroupId.isEmpty()) {
         value->setHandler(m_v8Session->wrapObject(context, function, objectGroupId));
         value->setOriginalHandler(m_v8Session->wrapObject(context, info.handler, objectGroupId));
+        v8::Local<v8::Function> removeFunction;
+        if (info.removeFunction.ToLocal(&removeFunction))
+            value->setRemoveFunction(m_v8Session->wrapObject(context, removeFunction, objectGroupId));
     }
     return value;
 }
@@ -404,7 +482,7 @@ void InspectorDOMDebuggerAgent::allowNativeBreakpoint(const String& breakpointNa
 void InspectorDOMDebuggerAgent::willInsertDOMNode(Node* parent)
 {
     if (hasBreakpoint(parent, SubtreeModified)) {
-        OwnPtr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
         descriptionForDOMEvent(parent, SubtreeModified, true, eventData.get());
         m_v8Session->breakProgram(protocol::Debugger::Paused::ReasonEnum::DOM, std::move(eventData));
     }
@@ -414,11 +492,11 @@ void InspectorDOMDebuggerAgent::willRemoveDOMNode(Node* node)
 {
     Node* parentNode = InspectorDOMAgent::innerParentNode(node);
     if (hasBreakpoint(node, NodeRemoved)) {
-        OwnPtr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
         descriptionForDOMEvent(node, NodeRemoved, false, eventData.get());
         m_v8Session->breakProgram(protocol::Debugger::Paused::ReasonEnum::DOM, std::move(eventData));
     } else if (parentNode && hasBreakpoint(parentNode, SubtreeModified)) {
-        OwnPtr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
         descriptionForDOMEvent(node, SubtreeModified, false, eventData.get());
         m_v8Session->breakProgram(protocol::Debugger::Paused::ReasonEnum::DOM, std::move(eventData));
     }
@@ -428,7 +506,7 @@ void InspectorDOMDebuggerAgent::willRemoveDOMNode(Node* node)
 void InspectorDOMDebuggerAgent::willModifyDOMAttr(Element* element, const AtomicString&, const AtomicString&)
 {
     if (hasBreakpoint(element, AttributeModified)) {
-        OwnPtr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
         descriptionForDOMEvent(element, AttributeModified, false, eventData.get());
         m_v8Session->breakProgram(protocol::Debugger::Paused::ReasonEnum::DOM, std::move(eventData));
     }
@@ -442,7 +520,7 @@ void InspectorDOMDebuggerAgent::descriptionForDOMEvent(Node* target, int breakpo
     if ((1 << breakpointType) & inheritableDOMBreakpointTypesMask) {
         // For inheritable breakpoint types, target node isn't always the same as the node that owns a breakpoint.
         // Target node may be unknown to frontend, so we need to push it first.
-        OwnPtr<protocol::Runtime::RemoteObject> targetNodeObject = m_domAgent->resolveNode(target, V8InspectorSession::backtraceObjectGroup);
+        std::unique_ptr<protocol::Runtime::RemoteObject> targetNodeObject = m_domAgent->resolveNode(target, V8InspectorSession::backtraceObjectGroup);
         description->setValue("targetNode", targetNodeObject->serialize());
 
         // Find breakpoint owner node.
@@ -493,7 +571,7 @@ void InspectorDOMDebuggerAgent::updateSubtreeBreakpoints(Node* node, uint32_t ro
         updateSubtreeBreakpoints(child, newRootMask, set);
 }
 
-void InspectorDOMDebuggerAgent::pauseOnNativeEventIfNeeded(PassOwnPtr<protocol::DictionaryValue> eventData, bool synchronous)
+void InspectorDOMDebuggerAgent::pauseOnNativeEventIfNeeded(std::unique_ptr<protocol::DictionaryValue> eventData, bool synchronous)
 {
     if (!eventData)
         return;
@@ -503,7 +581,7 @@ void InspectorDOMDebuggerAgent::pauseOnNativeEventIfNeeded(PassOwnPtr<protocol::
         m_v8Session->schedulePauseOnNextStatement(protocol::Debugger::Paused::ReasonEnum::EventListener, std::move(eventData));
 }
 
-PassOwnPtr<protocol::DictionaryValue> InspectorDOMDebuggerAgent::preparePauseOnNativeEventData(const String& eventName, const String* targetName)
+std::unique_ptr<protocol::DictionaryValue> InspectorDOMDebuggerAgent::preparePauseOnNativeEventData(const String& eventName, const String* targetName)
 {
     String fullEventName = (targetName ? listenerEventCategoryType : instrumentationEventCategoryType) + eventName;
     protocol::DictionaryValue* breakpoints = eventListenerBreakpoints();
@@ -518,7 +596,7 @@ PassOwnPtr<protocol::DictionaryValue> InspectorDOMDebuggerAgent::preparePauseOnN
     if (!match)
         return nullptr;
 
-    OwnPtr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
+    std::unique_ptr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
     eventData->setString("eventName", fullEventName);
     if (targetName)
         eventData->setString("targetName", *targetName);
@@ -527,7 +605,7 @@ PassOwnPtr<protocol::DictionaryValue> InspectorDOMDebuggerAgent::preparePauseOnN
 
 void InspectorDOMDebuggerAgent::didFireWebGLError(const String& errorName)
 {
-    OwnPtr<protocol::DictionaryValue> eventData = preparePauseOnNativeEventData(webglErrorFiredEventName, 0);
+    std::unique_ptr<protocol::DictionaryValue> eventData = preparePauseOnNativeEventData(webglErrorFiredEventName, 0);
     if (!eventData)
         return;
     if (!errorName.isEmpty())
@@ -571,7 +649,7 @@ void InspectorDOMDebuggerAgent::removeXHRBreakpoint(ErrorString* errorString, co
     didRemoveBreakpoint();
 }
 
-void InspectorDOMDebuggerAgent::willSendXMLHttpRequest(const String& url)
+void InspectorDOMDebuggerAgent::willSendXMLHttpOrFetchNetworkRequest(const String& url)
 {
     String breakpointURL;
     if (m_state->booleanProperty(DOMDebuggerAgentState::pauseOnAllXHRs, false))
@@ -590,7 +668,7 @@ void InspectorDOMDebuggerAgent::willSendXMLHttpRequest(const String& url)
     if (breakpointURL.isNull())
         return;
 
-    OwnPtr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
+    std::unique_ptr<protocol::DictionaryValue> eventData = protocol::DictionaryValue::create();
     eventData->setString("breakpointURL", breakpointURL);
     eventData->setString("url", url);
     m_v8Session->breakProgram(protocol::Debugger::Paused::ReasonEnum::XHR, std::move(eventData));

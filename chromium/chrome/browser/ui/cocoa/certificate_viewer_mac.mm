@@ -165,6 +165,7 @@ void ShowCertificateViewer(content::WebContents* web_contents,
 - (void)hideSheet {
   NSWindow* sheetWindow = [overlayWindow_ attachedSheet];
   [sheetWindow setAlphaValue:0.0];
+  [sheetWindow setIgnoresMouseEvents:YES];
 
   oldResizesSubviews_ = [[sheetWindow contentView] autoresizesSubviews];
   [[sheetWindow contentView] setAutoresizesSubviews:NO];
@@ -172,6 +173,7 @@ void ShowCertificateViewer(content::WebContents* web_contents,
 
 - (void)unhideSheet {
   NSWindow* sheetWindow = [overlayWindow_ attachedSheet];
+  [sheetWindow setIgnoresMouseEvents:NO];
 
   [[sheetWindow contentView] setAutoresizesSubviews:oldResizesSubviews_];
   [[overlayWindow_ attachedSheet] setAlphaValue:1.0];

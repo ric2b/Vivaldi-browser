@@ -20,7 +20,7 @@
 namespace views {
 
 class InkDropRipple;
-class InkDropHover;
+class InkDropHighlight;
 class LabelButtonBorder;
 class Painter;
 
@@ -41,18 +41,18 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // Gets or sets the image shown for the specified button state.
   // GetImage returns the image for STATE_NORMAL if the state's image is empty.
-  virtual const gfx::ImageSkia& GetImage(ButtonState for_state);
+  virtual gfx::ImageSkia GetImage(ButtonState for_state) const;
   void SetImage(ButtonState for_state, const gfx::ImageSkia& image);
 
   // Gets or sets the text shown on the button.
   const base::string16& GetText() const;
-  virtual void SetText(const base::string16& text);
+  void SetText(const base::string16& text);
 
   // Sets the text color shown for the specified button |for_state| to |color|.
   void SetTextColor(ButtonState for_state, SkColor color);
 
   // Sets the text colors shown for the non-disabled states to |color|.
-  void SetEnabledTextColors(SkColor color);
+  virtual void SetEnabledTextColors(SkColor color);
 
   // Sets drop shadows underneath the text.
   void SetTextShadows(const gfx::ShadowValues& shadows);
@@ -105,8 +105,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
   std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
-  std::unique_ptr<InkDropHover> CreateInkDropHover() const override;
-  gfx::Point GetInkDropCenter() const override;
+  std::unique_ptr<InkDropHighlight> CreateInkDropHighlight() const override;
 
  protected:
   ImageView* image() const { return image_; }

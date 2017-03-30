@@ -11,7 +11,4 @@ class GpuRasterizationExpectations(GpuTestExpectations):
     # Sample Usage:
     # self.Fail('GpuRasterization.BlueBox',
     #     ['mac', 'amd', ('nvidia', 0x1234)], bug=123)
-
-    # Failing on Nexus 5 and 6
-    self.Fail('GpuRasterization.ConcavePaths',
-              ['android', 'qualcomm'], bug=499555)
+    pass

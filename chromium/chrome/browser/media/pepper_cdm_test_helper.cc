@@ -8,32 +8,34 @@
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/media/pepper_cdm_test_constants.h"
+#include "content/public/browser/plugin_service.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/webplugininfo.h"
+#include "media/cdm/cdm_paths.h"
 
 #include "widevine_cdm_version.h"  //  In SHARED_INTERMEDIATE_DIR.
 
-const char kClearKeyCdmDisplayName[] = "Clear Key CDM";
-
-const char kClearKeyCdmAdapterFileName[] =
-#if defined(OS_MACOSX)
-    "clearkeycdmadapter.plugin";
-#elif defined(OS_WIN)
-    "clearkeycdmadapter.dll";
-#elif defined(OS_POSIX)
-    "libclearkeycdmadapter.so";
-#endif
-
-const char kClearKeyCdmPepperMimeType[] = "application/x-ppapi-clearkey-cdm";
+base::FilePath GetPepperCdmPath(const std::string& adapter_base_dir,
+                                const std::string& adapter_file_name) {
+  base::FilePath adapter_path;
+  PathService::Get(base::DIR_MODULE, &adapter_path);
+  adapter_path = adapter_path.Append(
+      media::GetPlatformSpecificDirectory(adapter_base_dir));
+  adapter_path = adapter_path.AppendASCII(adapter_file_name);
+  return adapter_path;
+}
 
 base::FilePath::StringType BuildPepperCdmRegistration(
+    const std::string& adapter_base_dir,
     const std::string& adapter_file_name,
     const std::string& display_name,
     const std::string& mime_type,
     bool expect_adapter_exists) {
-  base::FilePath adapter_path;
-  PathService::Get(base::DIR_MODULE, &adapter_path);
-  adapter_path = adapter_path.AppendASCII(adapter_file_name);
-  DCHECK_EQ(expect_adapter_exists, base::PathExists(adapter_path));
+  base::FilePath adapter_path =
+      GetPepperCdmPath(adapter_base_dir, adapter_file_name);
+  DCHECK_EQ(expect_adapter_exists, base::PathExists(adapter_path))
+      << adapter_path.MaybeAsASCII();
 
   base::FilePath::StringType pepper_cdm_registration = adapter_path.value();
 
@@ -52,15 +54,29 @@ base::FilePath::StringType BuildPepperCdmRegistration(
 }
 
 void RegisterPepperCdm(base::CommandLine* command_line,
+                       const std::string& adapter_base_dir,
                        const std::string& adapter_file_name,
                        const std::string& display_name,
                        const std::string& mime_type,
                        bool expect_adapter_exists) {
   base::FilePath::StringType pepper_cdm_registration =
-      BuildPepperCdmRegistration(adapter_file_name, display_name, mime_type,
+      BuildPepperCdmRegistration(adapter_base_dir, adapter_file_name,
+                                 display_name, mime_type,
                                  expect_adapter_exists);
 
   // Append the switch to register the CDM Adapter.
   command_line->AppendSwitchNative(switches::kRegisterPepperPlugins,
                                    pepper_cdm_registration);
+}
+
+bool IsPepperCdmRegistered(const std::string& mime_type) {
+  std::vector<content::WebPluginInfo> plugins;
+  content::PluginService::GetInstance()->GetInternalPlugins(&plugins);
+  for (const auto& plugin : plugins) {
+    for (const auto& plugin_mime_type : plugin.mime_types) {
+      if (plugin_mime_type.mime_type == mime_type)
+        return true;
+    }
+  }
+  return false;
 }

@@ -36,6 +36,7 @@ class VIEWS_EXPORT PrefixSelector : public ui::TextInputClient {
   void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   ui::TextInputMode GetTextInputMode() const override;
+  base::i18n::TextDirection GetTextDirection() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   gfx::Rect GetCaretBounds() const override;
@@ -55,8 +56,8 @@ class VIEWS_EXPORT PrefixSelector : public ui::TextInputClient {
   void ExtendSelectionAndDelete(size_t before, size_t after) override;
   void EnsureCaretInRect(const gfx::Rect& rect) override;
 
-  bool IsEditCommandEnabled(int command_id) override;
-  void SetEditCommandForNextKeyEvent(int command_id) override;
+  bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
+  void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override;
 
  private:
   // Invoked when text is typed. Tries to change the selection appropriately.

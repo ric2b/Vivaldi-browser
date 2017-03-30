@@ -4,9 +4,9 @@
 
 #include "ash/shell/toplevel_window.h"
 
+#include "ash/common/wm/window_positioner.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/shell.h"
-#include "ash/wm/common/window_positioner.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/aura/window.h"
@@ -50,11 +50,9 @@ void ToplevelWindow::ClearSavedStateForTest() {
   saved_state = NULL;
 }
 
-ToplevelWindow::ToplevelWindow(const CreateParams& params) : params_(params) {
-}
+ToplevelWindow::ToplevelWindow(const CreateParams& params) : params_(params) {}
 
-ToplevelWindow::~ToplevelWindow() {
-}
+ToplevelWindow::~ToplevelWindow() {}
 
 void ToplevelWindow::OnPaint(gfx::Canvas* canvas) {
   canvas->FillRect(GetLocalBounds(), SK_ColorDKGRAY);

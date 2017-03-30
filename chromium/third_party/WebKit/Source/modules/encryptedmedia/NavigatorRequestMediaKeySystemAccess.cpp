@@ -10,7 +10,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/OriginsUsingFeatures.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeySession.h"
@@ -25,6 +24,7 @@
 #include "public/platform/WebMediaKeySystemConfiguration.h"
 #include "public/platform/WebMediaKeySystemMediaCapability.h"
 #include "public/platform/WebVector.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
 #include <algorithm>
@@ -68,7 +68,7 @@ static WebMediaKeySystemConfiguration::Requirement convertMediaKeysRequirement(c
         return WebMediaKeySystemConfiguration::Requirement::NotAllowed;
 
     // Everything else gets the default value.
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return WebMediaKeySystemConfiguration::Requirement::Optional;
 }
 
@@ -148,9 +148,9 @@ MediaKeySystemAccessInitializer::MediaKeySystemAccessInitializer(ScriptState* sc
             webConfig.hasVideoCapabilities = true;
             webConfig.videoCapabilities = convertCapabilities(config.videoCapabilities());
         }
-        ASSERT(config.hasDistinctiveIdentifier());
+        DCHECK(config.hasDistinctiveIdentifier());
         webConfig.distinctiveIdentifier = convertMediaKeysRequirement(config.distinctiveIdentifier());
-        ASSERT(config.hasPersistentState());
+        DCHECK(config.hasPersistentState());
         webConfig.persistentState = convertMediaKeysRequirement(config.persistentState());
         if (config.hasSessionTypes()) {
             webConfig.hasSessionTypes = true;
@@ -168,7 +168,7 @@ void MediaKeySystemAccessInitializer::requestSucceeded(WebContentDecryptionModul
 {
     checkEmptyCodecs(access->getConfiguration());
 
-    m_resolver->resolve(new MediaKeySystemAccess(m_keySystem, adoptPtr(access)));
+    m_resolver->resolve(new MediaKeySystemAccess(m_keySystem, wrapUnique(access)));
     m_resolver.clear();
 }
 
@@ -251,7 +251,7 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
     const String& keySystem,
     const HeapVector<MediaKeySystemConfiguration>& supportedConfigurations)
 {
-    WTF_LOG(Media, "NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess()");
+    DVLOG(3) << __FUNCTION__;
 
     // From https://w3c.github.io/encrypted-media/#requestMediaKeySystemAccess
     // When this method is invoked, the user agent must run the following steps:

@@ -141,6 +141,7 @@ component("views") {
     ]
     libs = [
       "AppKit.framework",
+      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
       "CoreGraphics.framework",
       "Foundation.framework",
       "QuartzCore.framework",  # Required by bridged_native_widget.mm.
@@ -162,6 +163,7 @@ source_set("test_support_internal") {
   ]
   deps = [
     "//base",
+    "//base/test:test_support",
     "//ipc:test_support",
     "//skia",
     "//testing/gtest",
@@ -176,6 +178,7 @@ source_set("test_support_internal") {
     "//ui/events/platform",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//ui/gl:test_support",
   ]
 
   sources += [
@@ -311,8 +314,6 @@ if (is_mac) {
     sources = [
       "cocoa/bridged_native_widget_interactive_uitest.mm",
       "run_all_unittests_main.cc",
-      "views_test_suite.cc",
-      "views_test_suite.h",
       "widget/native_widget_mac_interactive_uitest.mm",
     ]
     deps = [

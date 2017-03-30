@@ -129,7 +129,7 @@ void AddOncCaCertsToPolicies(const policy::PolicyMap& policy_map,
 
   std::unique_ptr<base::ListValue> ca_certs(
       base::WrapUnique(new base::ListValue()));
-  for (const auto entry : certificates) {
+  for (const auto& entry : certificates) {
     const base::DictionaryValue* certificate = nullptr;
     if (!entry->GetAsDictionary(&certificate)) {
       DLOG(FATAL) << "Value of a certificate entry is not a dictionary "
@@ -202,6 +202,9 @@ std::string GetFilteredJSONPolicies(const policy::PolicyMap& policy_map) {
   // Keep them sorted by the ARC policy names.
   MapBoolToBool("cameraDisabled", policy::key::kVideoCaptureAllowed, policy_map,
                 true, &filtered_policies);
+  MapBoolToBool("debuggingFeaturesDisabled",
+                policy::key::kDeveloperToolsDisabled, policy_map, false,
+                &filtered_policies);
   MapBoolToBool("screenCaptureDisabled", policy::key::kDisableScreenshots,
                 policy_map, false, &filtered_policies);
   MapIntToBool("shareLocationDisabled", policy::key::kDefaultGeolocationSetting,
@@ -234,7 +237,7 @@ std::string GetFilteredJSONPolicies(const policy::PolicyMap& policy_map) {
 ArcPolicyBridge::ArcPolicyBridge(ArcBridgeService* bridge_service)
     : ArcService(bridge_service), binding_(this) {
   VLOG(2) << "ArcPolicyBridge::ArcPolicyBridge";
-  arc_bridge_service()->AddObserver(this);
+  arc_bridge_service()->policy()->AddObserver(this);
 }
 
 ArcPolicyBridge::ArcPolicyBridge(ArcBridgeService* bridge_service,
@@ -243,19 +246,19 @@ ArcPolicyBridge::ArcPolicyBridge(ArcBridgeService* bridge_service,
       binding_(this),
       policy_service_(policy_service) {
   VLOG(2) << "ArcPolicyBridge::ArcPolicyBridge(bridge_service, policy_service)";
-  arc_bridge_service()->AddObserver(this);
+  arc_bridge_service()->policy()->AddObserver(this);
 }
 
 ArcPolicyBridge::~ArcPolicyBridge() {
   VLOG(2) << "ArcPolicyBridge::~ArcPolicyBridge";
-  arc_bridge_service()->RemoveObserver(this);
+  arc_bridge_service()->policy()->RemoveObserver(this);
 }
 
 void ArcPolicyBridge::OverrideIsManagedForTesting(bool is_managed) {
   is_managed_ = is_managed;
 }
 
-void ArcPolicyBridge::OnPolicyInstanceReady() {
+void ArcPolicyBridge::OnInstanceReady() {
   VLOG(1) << "ArcPolicyBridge::OnPolicyInstanceReady";
   if (policy_service_ == nullptr) {
     InitializePolicyService();
@@ -263,7 +266,7 @@ void ArcPolicyBridge::OnPolicyInstanceReady() {
   policy_service_->AddObserver(policy::POLICY_DOMAIN_CHROME, this);
 
   mojom::PolicyInstance* const policy_instance =
-      arc_bridge_service()->policy_instance();
+      arc_bridge_service()->policy()->instance();
   if (!policy_instance) {
     LOG(ERROR) << "OnPolicyInstanceReady called, but no policy instance found";
     return;
@@ -272,7 +275,7 @@ void ArcPolicyBridge::OnPolicyInstanceReady() {
   policy_instance->Init(binding_.CreateInterfacePtrAndBind());
 }
 
-void ArcPolicyBridge::OnPolicyInstanceClosed() {
+void ArcPolicyBridge::OnInstanceClosed() {
   VLOG(1) << "ArcPolicyBridge::OnPolicyInstanceClosed";
   policy_service_->RemoveObserver(policy::POLICY_DOMAIN_CHROME, this);
   policy_service_ = nullptr;
@@ -296,8 +299,8 @@ void ArcPolicyBridge::OnPolicyUpdated(const policy::PolicyNamespace& ns,
                                       const policy::PolicyMap& previous,
                                       const policy::PolicyMap& current) {
   VLOG(1) << "ArcPolicyBridge::OnPolicyUpdated";
-  DCHECK(arc_bridge_service()->policy_instance());
-  arc_bridge_service()->policy_instance()->OnPolicyUpdated();
+  DCHECK(arc_bridge_service()->policy()->instance());
+  arc_bridge_service()->policy()->instance()->OnPolicyUpdated();
 }
 
 void ArcPolicyBridge::InitializePolicyService() {

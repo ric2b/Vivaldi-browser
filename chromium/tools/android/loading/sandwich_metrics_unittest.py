@@ -20,19 +20,25 @@ import tracing
 
 _BLINK_CAT = 'blink.user_timing'
 _MEM_CAT = sandwich_runner.MEMORY_DUMP_CATEGORY
-_START='requestStart'
-_LOADS='loadEventStart'
-_LOADE='loadEventEnd'
-_UNLOAD='unloadEventEnd'
+_START = 'requestStart'
+_LOADS = 'loadEventStart'
+_LOADE = 'loadEventEnd'
+_NAVIGATION_START = 'navigationStart'
+_PAINT = 'firstContentfulPaint'
+_LAYOUT = 'firstLayout'
 
 _MINIMALIST_TRACE_EVENTS = [
-    {'ph': 'R', 'cat': _BLINK_CAT, 'name': _UNLOAD, 'ts': 10000,
+    {'ph': 'R', 'cat': _BLINK_CAT, 'name': _NAVIGATION_START, 'ts': 10000,
         'args': {'frame': '0'}},
     {'ph': 'R', 'cat': _BLINK_CAT, 'name': _START,  'ts': 20000,
         'args': {}},
     {'cat': _MEM_CAT,   'name': 'periodic_interval', 'pid': 1, 'ph': 'v',
         'ts': 1, 'args': {'dumps': {'allocators': {'malloc': {'attrs': {'size':{
             'units': 'bytes', 'value': '1af2', }}}}}}},
+    {'ph': 'R', 'cat': _BLINK_CAT, 'name': _LAYOUT,  'ts': 24000,
+        'args': {'frame': '0'}},
+    {'ph': 'R', 'cat': _BLINK_CAT, 'name': _PAINT,  'ts': 31000,
+        'args': {'frame': '0'}},
     {'ph': 'R', 'cat': _BLINK_CAT, 'name': _LOADS,  'ts': 35000,
         'args': {'frame': '0'}},
     {'ph': 'R', 'cat': _BLINK_CAT, 'name': _LOADE,  'ts': 40000,
@@ -47,8 +53,8 @@ _MINIMALIST_TRACE_EVENTS = [
 def TracingTrack(events):
   return tracing.TracingTrack.FromJsonDict({
       'events': events,
-      'categories': (tracing.INITIAL_CATEGORIES +
-          (sandwich_runner.MEMORY_DUMP_CATEGORY,))})
+      'categories': (sandwich_runner._TRACING_CATEGORIES +
+          [sandwich_runner.MEMORY_DUMP_CATEGORY])})
 
 
 def LoadingTrace(events):
@@ -139,16 +145,12 @@ class PageTrackTest(unittest.TestCase):
             'name': _LOADS},
         {'ph': 'R', 'ts':  5000, 'args': {'frame': '0'}, 'cat': _BLINK_CAT,
             'name': _LOADE},
-        {'ph': 'R', 'ts':  6000, 'args': {'frame': '0'}, 'cat': 'whatever',
-            'name': _UNLOAD},
         {'ph': 'R', 'ts':  7000, 'args': {},             'cat': _BLINK_CAT,
             'name': _START},
         {'ph': 'R', 'ts':  8000, 'args': {'frame': '0'}, 'cat': _BLINK_CAT,
             'name': _LOADS},
         {'ph': 'R', 'ts':  9000, 'args': {'frame': '0'}, 'cat': _BLINK_CAT,
             'name': _LOADE},
-        {'ph': 'R', 'ts': 10000, 'args': {'frame': '0'}, 'cat': _BLINK_CAT,
-            'name': _UNLOAD},
         {'ph': 'R', 'ts': 11000, 'args': {'frame': '0'}, 'cat': 'whatever',
             'name': _START},
         {'ph': 'R', 'ts': 12000, 'args': {'frame': '0'}, 'cat': 'whatever',
@@ -157,6 +159,10 @@ class PageTrackTest(unittest.TestCase):
             'name': _LOADE},
         {'ph': 'R', 'ts': 14000, 'args': {},             'cat': _BLINK_CAT,
             'name': _START},
+        {'ph': 'R', 'ts': 10000, 'args': {'frame': '0'}, 'cat': _BLINK_CAT,
+            'name': _NAVIGATION_START}, # Event out of |start_msec| order.
+        {'ph': 'R', 'ts':  6000, 'args': {'frame': '0'}, 'cat': 'whatever',
+            'name': _NAVIGATION_START},
         {'ph': 'R', 'ts': 15000, 'args': {},             'cat': _BLINK_CAT,
             'name': _START},
         {'ph': 'R', 'ts': 16000, 'args': {'frame': '1'}, 'cat': _BLINK_CAT,
@@ -188,9 +194,24 @@ class PageTrackTest(unittest.TestCase):
   def testExtractDefaultMetrics(self):
     metrics = puller._ExtractDefaultMetrics(LoadingTrace(
         _MINIMALIST_TRACE_EVENTS))
-    self.assertEquals(2, len(metrics))
+    self.assertEquals(4, len(metrics))
     self.assertEquals(20, metrics['total_load'])
     self.assertEquals(5, metrics['js_onload_event'])
+    self.assertEquals(4, metrics['first_layout'])
+    self.assertEquals(11, metrics['first_contentful_paint'])
+
+  def testExtractDefaultMetricsBestEffort(self):
+    metrics = puller._ExtractDefaultMetrics(LoadingTrace([
+        {'ph': 'R', 'ts': 10000, 'args': {'frame': '0'}, 'cat': _BLINK_CAT,
+            'name': _NAVIGATION_START},
+        {'ph': 'R', 'ts': 11000, 'args': {'frame': '0'}, 'cat': 'whatever',
+            'name': _START}]))
+    self.assertEquals(4, len(metrics))
+    self.assertEquals(puller._FAILED_CSV_VALUE, metrics['total_load'])
+    self.assertEquals(puller._FAILED_CSV_VALUE, metrics['js_onload_event'])
+    self.assertEquals(puller._FAILED_CSV_VALUE, metrics['first_layout'])
+    self.assertEquals(puller._FAILED_CSV_VALUE,
+                      metrics['first_contentful_paint'])
 
   def testExtractMemoryMetrics(self):
     metrics = puller._ExtractMemoryMetrics(LoadingTrace(
@@ -211,7 +232,7 @@ class PageTrackTest(unittest.TestCase):
       point(400, 1.0),
     ]
     self.assertEqual(120 + 70 * 0.6 + 90 * 0.25,
-                     puller.ComputeSpeedIndex(completness_record))
+                     puller._ComputeSpeedIndex(completness_record))
 
     completness_record = [
       point(70, 0.0),
@@ -221,7 +242,7 @@ class PageTrackTest(unittest.TestCase):
       point(240, 1.0),
     ]
     self.assertEqual(80 + 60 * 0.7 + 10 * 0.4 + 20 * 0.1,
-                     puller.ComputeSpeedIndex(completness_record))
+                     puller._ComputeSpeedIndex(completness_record))
 
     completness_record = [
       point(90, 0.0),
@@ -230,7 +251,7 @@ class PageTrackTest(unittest.TestCase):
       point(230, 1.0),
     ]
     with self.assertRaises(ValueError):
-      puller.ComputeSpeedIndex(completness_record)
+      puller._ComputeSpeedIndex(completness_record)
 
 
 if __name__ == '__main__':

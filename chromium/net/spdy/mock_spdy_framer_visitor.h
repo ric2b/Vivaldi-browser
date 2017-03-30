@@ -10,6 +10,7 @@
 
 #include "base/strings/string_piece.h"
 #include "net/spdy/spdy_framer.h"
+#include "net/spdy/spdy_test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace net {
@@ -49,10 +50,11 @@ class MockSpdyFramerVisitor : public SpdyFramerVisitorInterface {
   MOCK_METHOD0(OnSettingsEnd, void());
   MOCK_METHOD2(OnGoAway, void(SpdyStreamId last_accepted_stream_id,
                               SpdyGoAwayStatus status));
+
   MOCK_METHOD7(OnHeaders,
                void(SpdyStreamId stream_id,
                     bool has_priority,
-                    SpdyPriority priority,
+                    int weight,
                     SpdyStreamId parent_stream_id,
                     bool exclusive,
                     bool fin,
@@ -72,9 +74,34 @@ class MockSpdyFramerVisitor : public SpdyFramerVisitorInterface {
   MOCK_METHOD4(OnPriority,
                void(SpdyStreamId stream_id,
                     SpdyStreamId parent_stream_id,
-                    uint8_t weight,
+                    int weight,
                     bool exclusive));
   MOCK_METHOD2(OnUnknownFrame, bool(SpdyStreamId stream_id, int frame_type));
+
+  void DelegateNewHeaderHandling() {
+    ON_CALL(*this, OnHeaderFrameStart(testing::_))
+        .WillByDefault(testing::Invoke(
+            this, &MockSpdyFramerVisitor::ReturnTestHeadersHandler));
+    ON_CALL(*this, OnHeaderFrameEnd(testing::_, testing::_))
+        .WillByDefault(testing::Invoke(
+            this, &MockSpdyFramerVisitor::ResetTestHeadersHandler));
+  }
+
+  SpdyHeadersHandlerInterface* ReturnTestHeadersHandler(
+      SpdyStreamId /* stream_id */) {
+    if (headers_handler_ == nullptr) {
+      headers_handler_.reset(new TestHeadersHandler);
+    }
+    return headers_handler_.get();
+  }
+
+  void ResetTestHeadersHandler(SpdyStreamId /* stream_id */, bool end) {
+    if (end) {
+      headers_handler_.reset();
+    }
+  }
+
+  std::unique_ptr<SpdyHeadersHandlerInterface> headers_handler_;
 };
 
 }  // namespace test

@@ -7,9 +7,11 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/message_loop/message_loop.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/arc/arc_policy_bridge.h"
 #include "components/arc/test/fake_arc_bridge_service.h"
+#include "components/arc/test/fake_policy_instance.h"
 #include "components/policy/core/common/mock_policy_service.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_namespace.h"
@@ -49,10 +51,42 @@ char kFakeONC[] =
     "\"GUID\":\"{00f79111-51e0-e6e0-76b3b55450d80a1b}\"}"
     "]}";
 
-}  // namespace
-namespace arc {
+// Helper class to define a PolicyStringCallback which verifies that it was run.
+// Wraps a bool initially set to |false| and verifies that it's been set to
+// |true| before destruction.
+class CheckedBoolean {
+ public:
+  CheckedBoolean() {}
+  ~CheckedBoolean() { EXPECT_TRUE(value_); }
 
+  void set_value(bool value) { value_ = value; }
+
+ private:
+  bool value_ = false;
+
+  DISALLOW_COPY_AND_ASSIGN(CheckedBoolean);
+};
+
+void ExpectPolicyString(std::unique_ptr<CheckedBoolean> was_run,
+                        mojo::String expected,
+                        mojo::String policies) {
+  EXPECT_EQ(expected, policies);
+  was_run->set_value(true);
+}
+
+arc::ArcPolicyBridge::GetPoliciesCallback PolicyStringCallback(
+    mojo::String expected) {
+  std::unique_ptr<CheckedBoolean> was_run(new CheckedBoolean);
+  return base::Bind(&ExpectPolicyString, base::Passed(&was_run),
+                    base::Passed(&expected));
+}
+
+}  // namespace
+
+using testing::_;
 using testing::ReturnRef;
+
+namespace arc {
 
 class ArcPolicyBridgeTest : public testing::Test {
  public:
@@ -68,35 +102,31 @@ class ArcPolicyBridgeTest : public testing::Test {
                 GetPolicies(policy::PolicyNamespace(
                     policy::POLICY_DOMAIN_CHROME, std::string())))
         .WillRepeatedly(ReturnRef(policy_map_));
+    EXPECT_CALL(policy_service_, AddObserver(policy::POLICY_DOMAIN_CHROME, _))
+        .Times(1);
+
+    mojom::PolicyInstancePtr policy_instance_ptr;
+    policy_instance_ = base::MakeUnique<FakePolicyInstance>(
+        GetProxy(&policy_instance_ptr), bridge_service_.get());
+    bridge_service_->policy()->OnInstanceReady(std::move(policy_instance_ptr));
+    policy_instance()->WaitForOnPolicyInstanceReady();
   }
 
  protected:
-  class PolicyStringRunnable
-      : public ArcPolicyBridge::GetPoliciesCallback::Runnable {
-   public:
-    explicit PolicyStringRunnable(mojo::String expected)
-        : expected_(expected) {}
-    void Run(const mojo::String& policies) override {
-      EXPECT_EQ(expected_, policies);
-    }
-
-   private:
-    mojo::String expected_;
-  };
-
-  class PolicyStringCallback : public ArcPolicyBridge::GetPoliciesCallback {
-   public:
-    explicit PolicyStringCallback(mojo::String expected)
-        : ArcPolicyBridge::GetPoliciesCallback(
-              new PolicyStringRunnable(expected)) {}
-  };
-
   ArcPolicyBridge* policy_bridge() { return policy_bridge_.get(); }
+  FakePolicyInstance* policy_instance() { return policy_instance_.get(); }
   policy::PolicyMap& policy_map() { return policy_map_; }
 
  private:
+  // Not an unused variable. Unit tests do not have a message loop by themselves
+  // and mojo needs a message loop for communication.
+  base::MessageLoop loop_;
   std::unique_ptr<arc::FakeArcBridgeService> bridge_service_;
   std::unique_ptr<arc::ArcPolicyBridge> policy_bridge_;
+  // Always keep policy_instance_ below bridge_service_, so that
+  // policy_instance_ is destructed first. It needs to remove itself as
+  // observer.
+  std::unique_ptr<arc::FakePolicyInstance> policy_instance_;
   policy::PolicyMap policy_map_;
   policy::MockPolicyService policy_service_;
 
@@ -129,11 +159,11 @@ TEST_F(ArcPolicyBridgeTest, ArcPolicyTest) {
       nullptr);
   policy_bridge()->GetPolicies(PolicyStringCallback(
       "{\"applications\":"
-          "[{\"installType\":\"REQUIRED\","
-            "\"lockTaskAllowed\":false,"
-            "\"packageName\":\"com.google.android.apps.youtube.kids\","
-            "\"permissionGrants\":[]"
-          "}],"
+      "[{\"installType\":\"REQUIRED\","
+      "\"lockTaskAllowed\":false,"
+      "\"packageName\":\"com.google.android.apps.youtube.kids\","
+      "\"permissionGrants\":[]"
+      "}],"
       "\"defaultPermissionPolicy\":\"GRANT\""
       "}"));
 }
@@ -266,6 +296,15 @@ TEST_F(ArcPolicyBridgeTest, CaCertificateTest) {
   policy_bridge()->GetPolicies(PolicyStringCallback("{}"));
 }
 
+TEST_F(ArcPolicyBridgeTest, DeveloperToolsDisabledTest) {
+  policy_map().Set(policy::key::kDeveloperToolsDisabled,
+                   policy::POLICY_LEVEL_MANDATORY, policy::POLICY_SCOPE_USER,
+                   policy::POLICY_SOURCE_CLOUD,
+                   base::WrapUnique(new base::FundamentalValue(true)), nullptr);
+  policy_bridge()->GetPolicies(
+      PolicyStringCallback("{\"debuggingFeaturesDisabled\":true}"));
+}
+
 TEST_F(ArcPolicyBridgeTest, MultiplePoliciesTest) {
   policy_map().Set(
       policy::key::kArcPolicy, policy::POLICY_LEVEL_MANDATORY,
@@ -289,14 +328,25 @@ TEST_F(ArcPolicyBridgeTest, MultiplePoliciesTest) {
       base::WrapUnique(new base::FundamentalValue(false)), nullptr);
   policy_bridge()->GetPolicies(PolicyStringCallback(
       "{\"applications\":"
-          "[{\"installType\":\"REQUIRED\","
-            "\"lockTaskAllowed\":false,"
-            "\"packageName\":\"com.google.android.apps.youtube.kids\","
-            "\"permissionGrants\":[]"
-          "}],"
-        "\"cameraDisabled\":true,"
-        "\"defaultPermissionPolicy\":\"GRANT\""
+      "[{\"installType\":\"REQUIRED\","
+      "\"lockTaskAllowed\":false,"
+      "\"packageName\":\"com.google.android.apps.youtube.kids\","
+      "\"permissionGrants\":[]"
+      "}],"
+      "\"cameraDisabled\":true,"
+      "\"defaultPermissionPolicy\":\"GRANT\""
       "}"));
+}
+
+// This and the following test send the policies through a mojo connection
+// between a PolicyInstance and the PolicyBridge.
+TEST_F(ArcPolicyBridgeTest, PolicyInstanceUnmanagedTest) {
+  policy_bridge()->OverrideIsManagedForTesting(false);
+  policy_instance()->CallGetPolicies(PolicyStringCallback(""));
+}
+
+TEST_F(ArcPolicyBridgeTest, PolicyInstanceManagedTest) {
+  policy_instance()->CallGetPolicies(PolicyStringCallback("{}"));
 }
 
 }  // namespace arc

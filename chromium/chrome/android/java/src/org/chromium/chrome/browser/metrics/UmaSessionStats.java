@@ -49,7 +49,7 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
         mContext = context;
         mIsMultiWindowCapable = context.getPackageManager().hasSystemFeature(
                 SAMSUNG_MULTWINDOW_PACKAGE);
-        mReportingPermissionManager = PrivacyPreferencesManager.getInstance(context);
+        mReportingPermissionManager = PrivacyPreferencesManager.getInstance();
     }
 
     private void recordPageLoadStats(Tab tab) {
@@ -158,7 +158,7 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
      * Updates the state of the MetricsService to account for the user's preferences.
      */
     public void updateMetricsServiceState() {
-        boolean mayRecordStats = !PrivacyPreferencesManager.getInstance(mContext)
+        boolean mayRecordStats = !PrivacyPreferencesManager.getInstance()
                 .isNeverUploadCrashDump();
         boolean mayUploadStats = mReportingPermissionManager.isUmaUploadPermitted();
 
@@ -171,12 +171,14 @@ public class UmaSessionStats implements NetworkChangeNotifier.ConnectionTypeObse
      * can be retrieved while native preferences are not accessible.
      */
     private void updatePreferences() {
-        PrivacyPreferencesManager prefManager = PrivacyPreferencesManager.getInstance(mContext);
+        PrivacyPreferencesManager prefManager = PrivacyPreferencesManager.getInstance();
 
-        // Update cellular experiment preference.
-        boolean cellularExperiment = TextUtils.equals("true",
-                VariationsAssociatedData.getVariationParamValue(
-                        "UMA_EnableCellularLogUpload", "Enabled"));
+        // Update cellular experiment preference. Cellular experiment is ON by default.
+        boolean cellularExperiment = true;
+        if (TextUtils.equals("false", VariationsAssociatedData.getVariationParamValue(
+                                            "UMA_EnableCellularLogUpload", "Enabled"))) {
+            cellularExperiment = false;
+        }
         prefManager.setCellularExperiment(cellularExperiment);
 
         // Migrate to new preferences for cellular experiment.

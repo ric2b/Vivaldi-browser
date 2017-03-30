@@ -6,12 +6,20 @@
 #define CHROME_BROWSER_UI_ASH_LAUNCHER_LAUNCHER_EXTENSION_APP_UPDATER_H_
 
 #include "base/macros.h"
+#include "chrome/browser/chromeos/arc/arc_auth_service.h"
+#include "chrome/browser/ui/app_list/arc/arc_app_list_prefs.h"
 #include "chrome/browser/ui/ash/launcher/launcher_app_updater.h"
 #include "extensions/browser/extension_registry_observer.h"
 
+namespace extensions {
+class ExtensionSet;
+}  // namespace extensions
+
 class LauncherExtensionAppUpdater
     : public LauncherAppUpdater,
-      public extensions::ExtensionRegistryObserver {
+      public extensions::ExtensionRegistryObserver,
+      public arc::ArcAuthService::Observer,
+      public ArcAppListPrefs::Observer {
  public:
   LauncherExtensionAppUpdater(Delegate* delegate,
                               content::BrowserContext* browser_context);
@@ -24,8 +32,30 @@ class LauncherExtensionAppUpdater
       content::BrowserContext* browser_context,
       const extensions::Extension* extension,
       extensions::UnloadedExtensionInfo::Reason reason) override;
+  void OnExtensionUninstalled(content::BrowserContext* browser_context,
+                              const extensions::Extension* extension,
+                              extensions::UninstallReason reason) override;
+  void OnShutdown(extensions::ExtensionRegistry* registry) override;
+
+  // arc::ArcAuthService::Observer:
+  void OnOptInChanged(arc::ArcAuthService::State state) override;
+
+  // ArcAppListPrefs::Observer
+  void OnPackageInstalled(
+      const arc::mojom::ArcPackageInfo& package_info) override;
+  void OnPackageRemoved(const std::string& package_name) override;
 
  private:
+  void StartObservingExtensionRegistry();
+  void StopObservingExtensionRegistry();
+
+  void UpdateHostedApps();
+  void UpdateHostedApps(const extensions::ExtensionSet& extensions);
+  void UpdateHostedApp(const std::string& app_id);
+  void UpdateEquivalentHostedApp(const std::string& arc_package_name);
+
+  extensions::ExtensionRegistry* extension_registry_ = nullptr;
+
   DISALLOW_COPY_AND_ASSIGN(LauncherExtensionAppUpdater);
 };
 

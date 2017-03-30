@@ -27,8 +27,7 @@ class AppDriver : public shell::ShellClient,
   ~AppDriver() override;
 
  private:
-  void OnAvailableCatalogEntries(
-      const mojo::Array<catalog::mojom::EntryPtr>& entries);
+  void OnAvailableCatalogEntries(mojo::Array<catalog::mojom::EntryPtr> entries);
 
   // shell::ShellClient:
   void Initialize(shell::Connector* connector,
@@ -38,7 +37,7 @@ class AppDriver : public shell::ShellClient,
   bool ShellConnectionLost() override;
 
   // mus::mojom::AcceleratorHandler:
-  void OnAccelerator(uint32_t id, mus::mojom::EventPtr event) override;
+  void OnAccelerator(uint32_t id, std::unique_ptr<ui::Event> event) override;
 
   void AddAccelerators();
 

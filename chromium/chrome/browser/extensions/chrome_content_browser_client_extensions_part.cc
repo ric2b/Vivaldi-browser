@@ -29,6 +29,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/api/web_request/web_request_api.h"
@@ -36,6 +37,7 @@
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_message_filter.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/extension_service_worker_message_filter.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/guest_view/extensions_guest_view_message_filter.h"
 #include "extensions/browser/guest_view/web_view/web_view_renderer_state.h"
@@ -43,12 +45,18 @@
 #include "extensions/browser/io_thread_extension_message_filter.h"
 #include "extensions/browser/view_type_utils.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/extensions_client.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/app_isolation_info.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/manifest_handlers/web_accessible_resources_info.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
+
+#if defined(OS_CHROMEOS)
+#include "extensions/browser/api/vpn_provider/vpn_service.h"
+#include "extensions/browser/api/vpn_provider/vpn_service_factory.h"
+#endif  // defined(OS_CHROMEOS)
 
 using content::BrowserContext;
 using content::BrowserThread;
@@ -191,15 +199,23 @@ bool ChromeContentBrowserClientExtensionsPart::DoesSiteRequireDedicatedProcess(
     content::BrowserContext* browser_context,
     const GURL& effective_site_url) {
   if (effective_site_url.SchemeIs(extensions::kExtensionScheme)) {
-    // --isolate-extensions should isolate extensions, except for hosted apps.
-    // Isolating hosted apps is a good idea, but ought to be a separate knob.
+    // --isolate-extensions should isolate extensions, except for a) hosted
+    // apps, b) platform apps.
+    // a) Isolating hosted apps is a good idea, but ought to be a separate knob.
+    // b) Sandbox pages in platform app can load web content in iframes;
+    //   isolating the app and the iframe leads to StoragePartition mismatch in
+    //   the two processes.
+    //   TODO(lazyboy): We should deprecate this behaviour and not let web
+    //   content load in platform app's process; see http://crbug.com/615585.
     if (IsIsolateExtensionsEnabled()) {
       const Extension* extension =
           ExtensionRegistry::Get(browser_context)
               ->enabled_extensions()
               .GetExtensionOrAppByURL(effective_site_url);
-      if (extension && !extension->is_hosted_app())
+      if (extension && !extension->is_hosted_app() &&
+          !extension->is_platform_app()) {
         return true;
+      }
     }
   }
   return false;
@@ -488,6 +504,21 @@ bool ChromeContentBrowserClientExtensionsPart::ShouldAllowOpenURL(
   return false;
 }
 
+// static
+std::unique_ptr<content::VpnServiceProxy>
+ChromeContentBrowserClientExtensionsPart::GetVpnServiceProxy(
+    content::BrowserContext* browser_context) {
+#if defined(OS_CHROMEOS)
+  chromeos::VpnService* vpn_service =
+      chromeos::VpnServiceFactory::GetForBrowserContext(browser_context);
+  if (!vpn_service)
+    return nullptr;
+  return vpn_service->GetVpnServiceProxy();
+#else
+  return nullptr;
+#endif
+}
+
 void ChromeContentBrowserClientExtensionsPart::RenderProcessWillLaunch(
     content::RenderProcessHost* host) {
   int id = host->GetID();
@@ -497,6 +528,10 @@ void ChromeContentBrowserClientExtensionsPart::RenderProcessWillLaunch(
   host->AddFilter(new ExtensionMessageFilter(id, profile));
   host->AddFilter(new IOThreadExtensionMessageFilter(id, profile));
   host->AddFilter(new ExtensionsGuestViewMessageFilter(id, profile));
+  if (extensions::ExtensionsClient::Get()
+          ->ExtensionAPIEnabledInExtensionServiceWorkers()) {
+    host->AddFilter(new ExtensionServiceWorkerMessageFilter(id, profile));
+  }
   extension_web_request_api_helpers::SendExtensionWebRequestStatusToHost(host);
 }
 

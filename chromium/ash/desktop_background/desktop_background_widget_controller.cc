@@ -5,9 +5,12 @@
 #include "ash/desktop_background/desktop_background_widget_controller.h"
 
 #include "ash/ash_export.h"
+#include "ash/common/wm_lookup.h"
+#include "ash/common/wm_window.h"
 #include "ash/desktop_background/user_wallpaper_delegate.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
+#include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -40,8 +43,7 @@ class ShowWallpaperAnimationObserver : public ui::ImplicitAnimationObserver,
   // Overridden from ui::ImplicitAnimationObserver:
   void OnImplicitAnimationsScheduled() override {
     if (is_initial_animation_) {
-      root_window_controller_->
-          HandleInitialDesktopBackgroundAnimationStarted();
+      root_window_controller_->HandleInitialDesktopBackgroundAnimationStarted();
     }
   }
 
@@ -65,26 +67,28 @@ class ShowWallpaperAnimationObserver : public ui::ImplicitAnimationObserver,
 }  // namespace
 
 DesktopBackgroundWidgetController::DesktopBackgroundWidgetController(
-    views::Widget* widget) : widget_(widget) {
+    views::Widget* widget)
+    : widget_(widget),
+      widget_parent_(WmLookup::Get()->GetWindowForWidget(widget)->GetParent()) {
   DCHECK(widget_);
   widget_->AddObserver(this);
+  widget_parent_->AddObserver(this);
 }
 
 DesktopBackgroundWidgetController::~DesktopBackgroundWidgetController() {
   if (widget_) {
-    widget_->RemoveObserver(this);
-    widget_->CloseNow();
-    widget_ = NULL;
+    views::Widget* widget = widget_;
+    RemoveObservers();
+    widget->CloseNow();
   }
 }
 
 void DesktopBackgroundWidgetController::OnWidgetDestroying(
     views::Widget* widget) {
-  widget_->RemoveObserver(this);
-  widget_ = NULL;
+  RemoveObservers();
 }
 
-void DesktopBackgroundWidgetController::SetBounds(gfx::Rect bounds) {
+void DesktopBackgroundWidgetController::SetBounds(const gfx::Rect& bounds) {
   if (widget_)
     widget_->SetBounds(bounds);
 }
@@ -93,12 +97,28 @@ bool DesktopBackgroundWidgetController::Reparent(aura::Window* root_window,
                                                  int src_container,
                                                  int dest_container) {
   if (widget_) {
-    views::Widget::ReparentNativeView(widget_->GetNativeView(),
-        root_window->GetChildById(dest_container));
+    widget_parent_->RemoveObserver(this);
+    views::Widget::ReparentNativeView(
+        widget_->GetNativeView(), root_window->GetChildById(dest_container));
+    widget_parent_ = WmLookup::Get()->GetWindowForWidget(widget_)->GetParent();
+    widget_parent_->AddObserver(this);
     return true;
   }
   // Nothing to reparent.
   return false;
+}
+
+void DesktopBackgroundWidgetController::RemoveObservers() {
+  widget_parent_->RemoveObserver(this);
+  widget_->RemoveObserver(this);
+  widget_ = nullptr;
+}
+
+void DesktopBackgroundWidgetController::OnWindowBoundsChanged(
+    WmWindow* window,
+    const gfx::Rect& old_bounds,
+    const gfx::Rect& new_bounds) {
+  SetBounds(new_bounds);
 }
 
 void DesktopBackgroundWidgetController::StartAnimating(
@@ -107,9 +127,9 @@ void DesktopBackgroundWidgetController::StartAnimating(
     ui::ScopedLayerAnimationSettings settings(
         widget_->GetNativeView()->layer()->GetAnimator());
     settings.AddObserver(new ShowWallpaperAnimationObserver(
-        root_window_controller, widget_,
-        Shell::GetInstance()->user_wallpaper_delegate()->
-            ShouldShowInitialAnimation()));
+        root_window_controller, widget_, Shell::GetInstance()
+                                             ->user_wallpaper_delegate()
+                                             ->ShouldShowInitialAnimation()));
     // When |widget_| shows, AnimateShowWindowCommon() is called to do the
     // animation. Sets transition duration to 0 to avoid animating to the
     // show animation's initial values.
@@ -123,8 +143,7 @@ AnimatingDesktopController::AnimatingDesktopController(
   controller_.reset(component);
 }
 
-AnimatingDesktopController::~AnimatingDesktopController() {
-}
+AnimatingDesktopController::~AnimatingDesktopController() {}
 
 void AnimatingDesktopController::StopAnimating() {
   if (controller_) {

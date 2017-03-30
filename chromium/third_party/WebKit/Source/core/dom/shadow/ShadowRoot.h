@@ -72,10 +72,8 @@ public:
     using TreeScope::setDocument;
     using TreeScope::setParentTreeScope;
 
-    // TODO(kochi): crbug.com/507413 In non-Oilpan, host() may return null during queued
-    // event handling (e.g. during execCommand()).
-    Element* host() const { return toElement(parentOrShadowHostNode()); }
-    ElementShadow* owner() const { return host() ? host()->shadow() : 0; }
+    Element& host() const { DCHECK(parentOrShadowHostNode()); return *toElement(parentOrShadowHostNode()); }
+    ElementShadow* owner() const { return host().shadow(); }
     ShadowRootType type() const { return static_cast<ShadowRootType>(m_type); }
     String mode() const { return (type() == ShadowRootType::V0 || type() == ShadowRootType::Open) ? "open" : "closed"; };
 
@@ -83,6 +81,7 @@ public:
     bool isV1() const { return type() == ShadowRootType::Open || type() == ShadowRootType::Closed; }
 
     void attach(const AttachContext& = AttachContext()) override;
+    void detach(const AttachContext& = AttachContext()) override;
 
     InsertionNotificationRequest insertedInto(ContainerNode*) override;
     void removedFrom(ContainerNode*) override;
@@ -116,14 +115,7 @@ public:
 
     SlotAssignment& ensureSlotAssignment();
 
-    void didAddSlot();
-    void didRemoveSlot();
-    const HeapVector<Member<HTMLSlotElement>>& descendantSlots();
-
-    void assignV1();
     void distributeV1();
-
-    HTMLSlotElement* assignedSlotFor(const Node&) const;
 
     Element* activeElement() const;
 
@@ -159,22 +151,15 @@ private:
     // ShadowRoots should never be cloned.
     Node* cloneNode(bool) override { return nullptr; }
 
-    // FIXME: This shouldn't happen. https://bugs.webkit.org/show_bug.cgi?id=88834
-    bool isOrphan() const { return !host(); }
-
-    void invalidateDescendantSlots();
-    unsigned descendantSlotCount() const;
-
     Member<ShadowRootRareDataV0> m_shadowRootRareDataV0;
     Member<StyleSheetList> m_styleSheetList;
     Member<SlotAssignment> m_slotAssignment;
-    unsigned m_numberOfStyles : 13;
+    unsigned m_numberOfStyles : 14;
     unsigned m_childShadowRootCount : 13;
     unsigned m_type : 2;
     unsigned m_registeredWithParentShadowRoot : 1;
     unsigned m_descendantInsertionPointsIsValid : 1;
     unsigned m_delegatesFocus : 1;
-    unsigned m_descendantSlotsIsValid : 1;
 };
 
 inline Element* ShadowRoot::activeElement() const

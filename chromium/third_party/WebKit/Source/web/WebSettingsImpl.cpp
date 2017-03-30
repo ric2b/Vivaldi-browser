@@ -203,11 +203,6 @@ void WebSettingsImpl::setWebSecurityEnabled(bool enabled)
     m_settings->setWebSecurityEnabled(enabled);
 }
 
-void WebSettingsImpl::setWheelGesturesEnabled(bool enabled)
-{
-    m_settings->setWheelGesturesEnabled(enabled);
-}
-
 void WebSettingsImpl::setJavaScriptCanOpenWindowsAutomatically(bool canOpenWindows)
 {
     m_settings->setJavaScriptCanOpenWindowsAutomatically(canOpenWindows);
@@ -290,6 +285,11 @@ void WebSettingsImpl::setLoadWithOverviewMode(bool enabled)
 void WebSettingsImpl::setShouldReuseGlobalForUnownedMainFrame(bool enabled)
 {
     m_settings->setShouldReuseGlobalForUnownedMainFrame(enabled);
+}
+
+void WebSettingsImpl::setProgressBarCompletion(ProgressBarCompletion progressBarCompletion)
+{
+    m_settings->setProgressBarCompletion(static_cast<blink::ProgressBarCompletion>(progressBarCompletion));
 }
 
 void WebSettingsImpl::setPluginsEnabled(bool enabled)
@@ -502,6 +502,11 @@ void WebSettingsImpl::setWebGLErrorsToConsoleEnabled(bool enabled)
     m_settings->setWebGLErrorsToConsoleEnabled(enabled);
 }
 
+void WebSettingsImpl::setAlwaysShowContextMenuOnTouch(bool enabled)
+{
+    m_settings->setAlwaysShowContextMenuOnTouch(enabled);
+}
+
 void WebSettingsImpl::setShowContextMenuOnMouseUp(bool enabled)
 {
     m_settings->setShowContextMenuOnMouseUp(enabled);
@@ -695,11 +700,6 @@ bool WebSettingsImpl::doubleTapToZoomEnabled() const
 bool WebSettingsImpl::mockGestureTapHighlightsEnabled() const
 {
     return m_settings->mockGestureTapHighlightsEnabled();
-}
-
-bool WebSettingsImpl::wheelGesturesEnabled() const
-{
-    return m_settings->wheelGesturesEnabled();
 }
 
 bool WebSettingsImpl::mainFrameResizesAreOrientationChanges() const

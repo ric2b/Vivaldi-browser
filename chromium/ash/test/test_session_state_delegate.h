@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-#include "ash/session/session_state_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "ui/gfx/image/image_skia.h"
@@ -45,8 +45,8 @@ class TestSessionStateDelegate : public SessionStateDelegate {
   SessionState GetSessionState() const override;
   const user_manager::UserInfo* GetUserInfo(
       ash::UserIndex index) const override;
-  bool ShouldShowAvatar(aura::Window* window) const override;
-  gfx::ImageSkia GetAvatarImageForWindow(aura::Window* window) const override;
+  bool ShouldShowAvatar(WmWindow* window) const override;
+  gfx::ImageSkia GetAvatarImageForWindow(WmWindow* window) const override;
   void SwitchActiveUser(const AccountId& account_id) override;
   void CycleActiveUser(CycleUser cycle_user) override;
   bool IsMultiProfileAllowedByPrimaryUserPolicy() const override;

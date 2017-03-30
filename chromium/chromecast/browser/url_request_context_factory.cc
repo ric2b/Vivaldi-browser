@@ -14,12 +14,15 @@
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/browser/cast_http_user_agent_settings.h"
 #include "chromecast/browser/cast_network_delegate.h"
+#include "components/network_session_configurator/switches.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/multi_log_ct_verifier.h"
 #include "net/cert_net/nss_ocsp.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/host_resolver.h"
@@ -200,12 +203,12 @@ void URLRequestContextFactory::InitializeSystemContextDependencies() {
     return;
 
   host_resolver_ = net::HostResolver::CreateDefaultResolver(NULL);
-
   cert_verifier_ = net::CertVerifier::CreateDefault();
-
   ssl_config_service_ = new net::SSLConfigServiceDefaults;
-
   transport_security_state_.reset(new net::TransportSecurityState());
+  cert_transparency_verifier_.reset(new net::MultiLogCTVerifier());
+  ct_policy_enforcer_.reset(new net::CTPolicyEnforcer());
+
   http_auth_handler_factory_ =
       net::HttpAuthHandlerFactory::CreateDefault(host_resolver_.get());
 
@@ -288,8 +291,10 @@ void URLRequestContextFactory::PopulateNetworkSessionParams(
   params->channel_id_service = channel_id_service_.get();
   params->ssl_config_service = ssl_config_service_.get();
   params->transport_security_state = transport_security_state_.get();
+  params->cert_transparency_verifier = cert_transparency_verifier_.get();
+  params->ct_policy_enforcer = ct_policy_enforcer_.get();
   params->http_auth_handler_factory = http_auth_handler_factory_.get();
-  params->http_server_properties = http_server_properties_->GetWeakPtr();
+  params->http_server_properties = http_server_properties_.get();
   params->ignore_certificate_errors = ignore_certificate_errors;
   params->proxy_service = proxy_service_.get();
 }
@@ -315,8 +320,7 @@ net::URLRequestContext* URLRequestContextFactory::CreateSystemRequestContext() {
       transport_security_state_.get());
   system_context->set_http_auth_handler_factory(
       http_auth_handler_factory_.get());
-  system_context->set_http_server_properties(
-      http_server_properties_->GetWeakPtr());
+  system_context->set_http_server_properties(http_server_properties_.get());
   system_context->set_http_transaction_factory(
       system_transaction_factory_.get());
   system_context->set_http_user_agent_settings(
@@ -382,8 +386,7 @@ net::URLRequestContext* URLRequestContextFactory::CreateMainRequestContext(
   main_context->set_transport_security_state(transport_security_state_.get());
   main_context->set_http_auth_handler_factory(
       http_auth_handler_factory_.get());
-  main_context->set_http_server_properties(
-      http_server_properties_->GetWeakPtr());
+  main_context->set_http_server_properties(http_server_properties_.get());
   main_context->set_cookie_store(main_cookie_store_.get());
   main_context->set_http_user_agent_settings(
       http_user_agent_settings_.get());

@@ -14,6 +14,7 @@
 #include "base/logging.h"
 #include "base/mac/objc_property_releaser.h"
 #import "base/mac/scoped_nsobject.h"
+#include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/web/history_state_util.h"
@@ -28,7 +29,6 @@
 #include "ios/web/public/browser_url_rewriter.h"
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/ssl_status.h"
-#include "ios/web/public/user_metrics.h"
 
 using base::UserMetricsAction;
 
@@ -333,13 +333,10 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
 - (CRWSessionEntry*)visibleEntry {
   if (_transientEntry)
     return _transientEntry.get();
-  // Only return the pending_entry for:
-  //   (a) new (non-history), browser-initiated navigations, and
-  //   (b) pending unsafe navigations (while showing the interstitial)
-  // in order to prevent URL spoof attacks.
+  // Only return the pending_entry for new (non-history), browser-initiated
+  // navigations in order to prevent URL spoof attacks.
   web::NavigationItemImpl* pendingItem = [_pendingEntry navigationItemImpl];
-  if (pendingItem &&
-      (!pendingItem->is_renderer_initiated() || pendingItem->IsUnsafe())) {
+  if (pendingItem && !pendingItem->is_renderer_initiated()) {
     return _pendingEntry.get();
   }
   return [self lastCommittedEntry];
@@ -383,18 +380,11 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   // Remove the workaround code from -presentSafeBrowsingWarningForResource:.
   CRWSessionEntry* currentEntry = self.currentEntry;
   if (currentEntry) {
-    // If the current entry is known-unsafe (and thus not visible and likely to
-    // be removed), ignore any renderer-initated updates and don't worry about
-    // sending a notification.
     web::NavigationItem* item = [currentEntry navigationItem];
-    if (item->IsUnsafe() && rendererInitiated) {
-      return;
-    }
     if (item->GetURL() == url &&
         (!PageTransitionCoreTypeIs(trans, ui::PAGE_TRANSITION_FORM_SUBMIT) ||
          PageTransitionCoreTypeIs(item->GetTransitionType(),
-                                  ui::PAGE_TRANSITION_FORM_SUBMIT) ||
-         item->IsUnsafe())) {
+                                  ui::PAGE_TRANSITION_FORM_SUBMIT))) {
       // Send the notification anyway, to preserve old behavior. It's unknown
       // whether anything currently relies on this, but since both this whole
       // hack and the content facade will both be going away, it's not worth
@@ -670,7 +660,7 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
   if (hadTransientEntry)
     return;
 
-  web::RecordAction(UserMetricsAction("Back"));
+  base::RecordAction(UserMetricsAction("Back"));
   _previousNavigationIndex = _currentNavigationIndex;
   // To stop the user getting 'stuck' on redirecting pages they weren't even
   // aware existed, it is necessary to pass over pages that would immediately
@@ -688,7 +678,7 @@ NSString* const kXCallbackParametersKey = @"xCallbackParameters";
 - (void)goForward {
   [self discardTransientEntry];
 
-  web::RecordAction(UserMetricsAction("Forward"));
+  base::RecordAction(UserMetricsAction("Forward"));
   if (_currentNavigationIndex + 1 < static_cast<NSInteger>([_entries count])) {
     _previousNavigationIndex = _currentNavigationIndex;
     ++_currentNavigationIndex;

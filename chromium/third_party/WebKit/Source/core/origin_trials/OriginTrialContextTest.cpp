@@ -18,7 +18,9 @@
 #include "public/platform/WebOriginTrialTokenStatus.h"
 #include "public/platform/WebTrialTokenValidator.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 namespace {
@@ -79,8 +81,8 @@ protected:
     OriginTrialContextTest()
         : m_frameworkWasEnabled(RuntimeEnabledFeatures::originTrialsEnabled())
         , m_executionContext(new NullExecutionContext())
-        , m_tokenValidator(adoptPtr(new MockTokenValidator()))
-        , m_originTrialContext(new OriginTrialContext(m_executionContext.get()))
+        , m_tokenValidator(wrapUnique(new MockTokenValidator()))
+        , m_originTrialContext(new OriginTrialContext(m_executionContext.get(), m_tokenValidator.get()))
         , m_histogramTester(new HistogramTester())
     {
         RuntimeEnabledFeatures::setOriginTrialsEnabled(true);
@@ -106,7 +108,7 @@ protected:
         updateSecurityOrigin(origin);
         // Need at least one token to ensure the token validator is called.
         m_originTrialContext->addToken(kTokenPlaceholder);
-        return m_originTrialContext->isFeatureEnabled(featureName, errorMessage, tokenValidator());
+        return m_originTrialContext->isFeatureEnabled(featureName, errorMessage);
     }
 
     bool isFeatureEnabledWithoutErrorMessage(const String& origin, const String& featureName)
@@ -139,7 +141,7 @@ protected:
 private:
     const bool m_frameworkWasEnabled;
     Persistent<NullExecutionContext> m_executionContext;
-    OwnPtr<MockTokenValidator> m_tokenValidator;
+    std::unique_ptr<MockTokenValidator> m_tokenValidator;
     Persistent<OriginTrialContext> m_originTrialContext;
     std::unique_ptr<HistogramTester> m_histogramTester;
 };

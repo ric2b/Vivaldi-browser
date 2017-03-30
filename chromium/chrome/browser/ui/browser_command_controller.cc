@@ -36,6 +36,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_utils.h"
 #include "chrome/browser/ui/webui/inspect_ui.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/profiling.h"
@@ -70,8 +71,8 @@
 #endif
 
 #if defined(OS_CHROMEOS)
+#include "ash/common/session/session_state_delegate.h"
 #include "ash/multi_profile_uma.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
@@ -79,7 +80,7 @@
 #endif
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/events/linux/text_edit_key_bindings_delegate_auralinux.h"
+#include "ui/base/ime/linux/text_edit_key_bindings_delegate_auralinux.h"
 #endif
 
 #include "app/vivaldi_command_controller.h"
@@ -119,10 +120,6 @@ bool HasInternalURL(const NavigationEntry* entry) {
 }  // namespace
 
 namespace chrome {
-
-const base::Feature kBackspaceGoesBackFeature {
-  "BackspaceGoesBack", base::FEATURE_DISABLED_BY_DEFAULT
-};
 
 ///////////////////////////////////////////////////////////////////////////////
 // BrowserCommandController, public:
@@ -323,7 +320,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
   switch (id) {
     // Navigation commands
     case IDC_BACKSPACE_BACK:
-      if (base::FeatureList::IsEnabled(kBackspaceGoesBackFeature))
+      if (base::FeatureList::IsEnabled(features::kBackspaceGoesBackFeature))
         GoBack(browser_, disposition);
       else
         browser_->window()->MaybeShowNewBackShortcutBubble(false);
@@ -333,7 +330,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       GoBack(browser_, disposition);
       break;
     case IDC_BACKSPACE_FORWARD:
-      if (base::FeatureList::IsEnabled(kBackspaceGoesBackFeature))
+      if (base::FeatureList::IsEnabled(features::kBackspaceGoesBackFeature))
         GoForward(browser_, disposition);
       else
         browser_->window()->MaybeShowNewBackShortcutBubble(true);
@@ -417,11 +414,7 @@ void BrowserCommandController::ExecuteCommandWithDisposition(
       ConvertPopupToTabbedBrowser(browser_);
       break;
     case IDC_FULLSCREEN:
-#if defined(OS_MACOSX)
-      chrome::ToggleFullscreenWithToolbarOrFallback(browser_);
-#else
       chrome::ToggleFullscreenMode(browser_);
-#endif
       break;
 
 #if defined(OS_CHROMEOS)

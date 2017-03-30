@@ -10,24 +10,26 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/system/cast/tray_cast.h"
-#include "ash/system/tray/system_tray_bubble.h"
-#include "ash/system/tray/tray_background_view.h"
-#include "ash/system/user/login_status.h"
-#include "base/compiler_specific.h"
+#include "ash/common/system/tray/system_tray_bubble.h"
+#include "ash/common/system/tray/tray_background_view.h"
 #include "base/macros.h"
 #include "base/memory/scoped_vector.h"
 #include "ui/views/bubble/tray_bubble_view.h"
 #include "ui/views/view.h"
 
 namespace ash {
+
+enum class LoginStatus;
 class ScreenTrayItem;
 class SystemBubbleWrapper;
 class SystemTrayDelegate;
 class SystemTrayItem;
 class TrayAccessibility;
+class TrayCast;
 class TrayDate;
+class TrayUpdate;
 class TrayUser;
+class WebNotificationTray;
 
 // There are different methods for creating bubble views.
 enum BubbleCreationType {
@@ -38,12 +40,16 @@ enum BubbleCreationType {
 class ASH_EXPORT SystemTray : public TrayBackgroundView,
                               public views::TrayBubbleView::Delegate {
  public:
-  explicit SystemTray(StatusAreaWidget* status_area_widget);
+  explicit SystemTray(WmShelf* wm_shelf);
   ~SystemTray() override;
 
   // Calls TrayBackgroundView::Initialize(), creates the tray items, and
   // adds them to SystemTrayNotifier.
-  void InitializeTrayItems(SystemTrayDelegate* delegate);
+  void InitializeTrayItems(SystemTrayDelegate* delegate,
+                           WebNotificationTray* web_notification_tray);
+
+  // Resets internal pointers.
+  void Shutdown();
 
   // Adds a new item in the tray.
   void AddTrayItem(SystemTrayItem* item);
@@ -81,10 +87,10 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   void HideNotificationView(SystemTrayItem* item);
 
   // Updates the items when the login status of the system changes.
-  void UpdateAfterLoginStatusChange(user::LoginStatus login_status);
+  void UpdateAfterLoginStatusChange(LoginStatus login_status);
 
   // Updates the items when the shelf alignment changes.
-  void UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment);
+  void UpdateAfterShelfAlignmentChange(ShelfAlignment alignment);
 
   // Temporarily hides/unhides the notification bubble.
   void SetHideNotifications(bool hidden);
@@ -124,14 +130,14 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   bool CloseNotificationBubbleForTest() const;
 
   // Overridden from TrayBackgroundView.
-  void SetShelfAlignment(wm::ShelfAlignment alignment) override;
+  void SetShelfAlignment(ShelfAlignment alignment) override;
   void AnchorUpdated() override;
   base::string16 GetAccessibleNameForTray() override;
   void BubbleResized(const views::TrayBubbleView* bubble_view) override;
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
 
-  // Overridden from message_center::TrayBubbleView::Delegate.
+  // views::TrayBubbleView::Delegate:
   void BubbleViewDestroyed() override;
   void OnMouseEnteredView() override;
   void OnMouseExitedView() override;
@@ -139,6 +145,10 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   gfx::Rect GetAnchorRect(views::Widget* anchor_widget,
                           AnchorType anchor_type,
                           AnchorAlignment anchor_alignment) const override;
+  void OnBeforeBubbleWidgetInit(
+      views::Widget* anchor_widget,
+      views::Widget* bubble_widget,
+      views::Widget::InitParams* params) const override;
   void HideBubble(const views::TrayBubbleView* bubble_view) override;
 
   ScreenTrayItem* GetScreenShareItem() { return screen_share_tray_item_; }
@@ -151,11 +161,9 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   // Get the tray item view (or NULL) for a given |tray_item| in a unit test.
   views::View* GetTrayItemViewForTest(SystemTrayItem* tray_item);
 
-  // Gets tray_cast_ for browser tests.
   TrayCast* GetTrayCastForTesting() const;
-
-  // Gets tray_date_ for browser tests.
   TrayDate* GetTrayDateForTesting() const;
+  TrayUpdate* GetTrayUpdateForTesting() const;
 
  private:
   // Creates the default set of items for the sytem tray.
@@ -210,6 +218,9 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   // Overridden from ActionableView.
   bool PerformAction(const ui::Event& event) override;
 
+  // The web notification tray view that appears adjacent to this view.
+  WebNotificationTray* web_notification_tray_;
+
   // Owned items.
   ScopedVector<SystemTrayItem> items_;
 
@@ -242,10 +253,11 @@ class ASH_EXPORT SystemTray : public TrayBackgroundView,
   TrayAccessibility* tray_accessibility_;  // not owned
   TrayCast* tray_cast_;
   TrayDate* tray_date_;
+  TrayUpdate* tray_update_;
 
   // A reference to the Screen share and capture item.
   ScreenTrayItem* screen_capture_tray_item_;  // not owned
-  ScreenTrayItem* screen_share_tray_item_;  // not owned
+  ScreenTrayItem* screen_share_tray_item_;    // not owned
 
   DISALLOW_COPY_AND_ASSIGN(SystemTray);
 };

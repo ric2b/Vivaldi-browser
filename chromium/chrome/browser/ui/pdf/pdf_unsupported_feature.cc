@@ -97,7 +97,8 @@ bool PDFEnableAdobeReaderPromptClient::ShouldExpire(
       ui::PageTransitionStripQualifier(details.entry->GetTransitionType());
   // We don't want to expire on a reload, because that is how we open the PDF in
   // Reader.
-  return !details.is_in_page && transition != ui::PAGE_TRANSITION_RELOAD;
+  return !details.is_in_page &&
+         !ui::PageTransitionCoreTypeIs(transition, ui::PAGE_TRANSITION_RELOAD);
 }
 
 void PDFEnableAdobeReaderPromptClient::Accept() {
@@ -211,7 +212,7 @@ class PDFUnsupportedFeatureInterstitial
     } else if (command == "2") {
       content::RecordAction(
           UserMetricsAction("PDF_ReaderInterstitialIgnore"));
-      // Pretend that the plugin is up-to-date so that we don't block it.
+      // Pretend that the plugin is up to date so that we don't block it.
       reader_webplugininfo_.version = base::ASCIIToUTF16("11.0.0.0");
       OpenUsingReader(web_contents_, reader_webplugininfo_, NULL);
     } else {

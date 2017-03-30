@@ -124,6 +124,7 @@ class WebSocketDispatcherHostTest : public ::testing::Test {
       params.socket_url = GURL("ws://example.com/test");
       params.origin = url::Origin(GURL("http://example.com"));
       params.first_party_for_cookies = GURL("http://example.com");
+      params.user_agent_override = "";
       params.render_frame_id = -3;
 
       WebSocketHostMsg_AddChannelRequest message(routing_id, params);
@@ -143,6 +144,7 @@ class WebSocketDispatcherHostTest : public ::testing::Test {
       params.socket_url = GURL("ws://example.com/test");
       params.origin = url::Origin(GURL("http://example.com"));
       params.first_party_for_cookies = GURL("http://example.com");
+      params.user_agent_override = "";
       params.render_frame_id = -3;
 
       WebSocketHostMsg_AddChannelRequest messageAddChannelRequest(
@@ -223,6 +225,7 @@ TEST_F(WebSocketDispatcherHostTest, AddChannelRequest) {
   params.requested_protocols = requested_protocols;
   params.origin = url::Origin(GURL("http://example.com"));
   params.first_party_for_cookies = GURL("http://example.com");
+  params.user_agent_override = "";
   params.render_frame_id = -2;
 
   WebSocketHostMsg_AddChannelRequest message(routing_id, params);
@@ -261,6 +264,7 @@ TEST_F(WebSocketDispatcherHostTest, SendFrame) {
   params.requested_protocols = requested_protocols;
   params.origin = url::Origin(GURL("http://example.com"));
   params.first_party_for_cookies = GURL("http://example.com");
+  params.user_agent_override = "";
   params.render_frame_id = -2;
 
   WebSocketHostMsg_AddChannelRequest add_channel_message(routing_id, params);
@@ -295,6 +299,7 @@ TEST_F(WebSocketDispatcherHostTest, Destruct) {
   params1.requested_protocols = std::vector<std::string>();
   params1.origin = url::Origin(GURL("http://example.com"));
   params1.first_party_for_cookies = GURL("http://example.com");
+  params1.user_agent_override = "";
   params1.render_frame_id = -1;
 
   WebSocketHostMsg_AddChannelRequest message1(123, params1);
@@ -304,6 +309,7 @@ TEST_F(WebSocketDispatcherHostTest, Destruct) {
   params2.requested_protocols = std::vector<std::string>();
   params2.origin = url::Origin(GURL("http://example.com"));
   params2.first_party_for_cookies = GURL("http://example.com");
+  params2.user_agent_override = "";
   params2.render_frame_id = -1;
 
   WebSocketHostMsg_AddChannelRequest message2(456, params2);
@@ -436,6 +442,7 @@ TEST_F(WebSocketDispatcherHostTest, InvalidScheme) {
   params.requested_protocols = requested_protocols;
   params.origin = url::Origin(GURL("http://example.com"));
   params.first_party_for_cookies = GURL("http://example.com");
+  params.user_agent_override = "";
   params.render_frame_id = -2;
 
   WebSocketHostMsg_AddChannelRequest message(routing_id, params);

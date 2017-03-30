@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/browser_commands_mac.h"
 
-#include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -13,16 +12,6 @@
 #include "components/prefs/pref_service.h"
 
 namespace chrome {
-
-void ToggleFullscreenWithToolbarOrFallback(Browser* browser) {
-  DCHECK(browser);
-  if (mac::SupportsSystemFullscreen())
-    browser->exclusive_access_manager()
-        ->fullscreen_controller()
-        ->ToggleBrowserFullscreenWithToolbar();
-  else
-    ToggleFullscreenMode(browser);
-}
 
 void ToggleFullscreenToolbar(Browser* browser) {
   DCHECK(browser);

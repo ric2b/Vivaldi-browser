@@ -14,7 +14,7 @@
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/crash_upload_list.h"
+#include "chrome/browser/crash_upload_list/crash_upload_list.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
@@ -178,7 +178,8 @@ void CrashesDOMHandler::UpdateUI() {
   args.push_back(&crash_list);
   args.push_back(&version);
   args.push_back(&os_string);
-  web_ui()->CallJavascriptFunction(crash::kCrashesUIUpdateCrashList, args);
+  web_ui()->CallJavascriptFunctionUnsafe(crash::kCrashesUIUpdateCrashList,
+                                         args);
 }
 
 }  // namespace

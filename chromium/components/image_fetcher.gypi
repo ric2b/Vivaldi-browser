@@ -7,17 +7,23 @@
     {
       # GN version: //components/image_fetcher
       'target_name': 'image_fetcher',
-      'type': 'none',
+      'type': 'static_library',
       'include_dirs': [
         '..',
       ],
       'dependencies': [
         '../base/base.gyp:base',
+        '../net/net.gyp:net',
         '../url/url.gyp:url_lib',
       ],
       'sources': [
+        'image_fetcher/image_data_fetcher.cc',
+        'image_fetcher/image_data_fetcher.h',
+        'image_fetcher/image_decoder.h',
         'image_fetcher/image_fetcher.h',
         'image_fetcher/image_fetcher_delegate.h',
+        'image_fetcher/image_fetcher_impl.cc',
+        'image_fetcher/image_fetcher_impl.h',
       ]
     },
   ],

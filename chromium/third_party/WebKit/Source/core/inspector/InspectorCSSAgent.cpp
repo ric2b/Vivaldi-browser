@@ -28,6 +28,7 @@
 #include "bindings/core/v8/ExceptionStatePlaceholder.h"
 #include "core/CSSPropertyNames.h"
 #include "core/StylePropertyShorthand.h"
+#include "core/animation/css/CSSAnimationData.h"
 #include "core/css/CSSColorValue.h"
 #include "core/css/CSSComputedStyleDeclaration.h"
 #include "core/css/CSSDefaultStyleSheets.h"
@@ -61,14 +62,13 @@
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorHistory.h"
-#include "core/inspector/InspectorResourceAgent.h"
+#include "core/inspector/InspectorNetworkAgent.h"
 #include "core/inspector/InspectorResourceContainer.h"
 #include "core/inspector/InspectorResourceContentLoader.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutObjectInlines.h"
 #include "core/layout/LayoutText.h"
-#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "core/loader/DocumentLoader.h"
@@ -81,7 +81,6 @@
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/GlyphBuffer.h"
 #include "platform/fonts/shaping/SimpleShaper.h"
-#include "platform/inspector_protocol/TypeBuilder.h"
 #include "platform/text/TextRun.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/text/CString.h"
@@ -103,7 +102,7 @@ String createShorthandValue(Document* document, const String& shorthand, const S
 {
     StyleSheetContents* styleSheetContents = StyleSheetContents::create(strictCSSParserContext());
     String text = " div { " + shorthand  + ": " + oldText + "; }";
-    CSSParser::parseSheet(CSSParserContext(*document, 0), styleSheetContents, text);
+    CSSParser::parseSheet(CSSParserContext(*document, nullptr), styleSheetContents, text);
 
     CSSStyleSheet* styleSheet = CSSStyleSheet::create(styleSheetContents);
     CSSStyleRule* rule = toCSSStyleRule(styleSheet->item(0));
@@ -264,7 +263,7 @@ namespace CSSAgentState {
 static const char cssAgentEnabled[] = "cssAgentEnabled";
 }
 
-typedef blink::protocol::Backend::CSS::EnableCallback EnableCallback;
+typedef blink::protocol::CSS::Backend::EnableCallback EnableCallback;
 
 namespace blink {
 
@@ -276,7 +275,7 @@ enum ForcePseudoClassFlags {
     PseudoVisited = 1 << 3
 };
 
-static unsigned computePseudoClassMask(PassOwnPtr<protocol::Array<String>> pseudoClassArray)
+static unsigned computePseudoClassMask(std::unique_ptr<protocol::Array<String>> pseudoClassArray)
 {
     DEFINE_STATIC_LOCAL(String, active, ("active"));
     DEFINE_STATIC_LOCAL(String, hover, ("hover"));
@@ -309,7 +308,7 @@ public:
     {
     }
 
-    virtual PassOwnPtr<protocol::CSS::CSSStyle> takeSerializedStyle()
+    virtual std::unique_ptr<protocol::CSS::CSSStyle> takeSerializedStyle()
     {
         return nullptr;
     }
@@ -437,7 +436,7 @@ public:
         return result;
     }
 
-    PassOwnPtr<protocol::CSS::CSSStyle> takeSerializedStyle() override
+    std::unique_ptr<protocol::CSS::CSSStyle> takeSerializedStyle() override
     {
         if (m_type != SetStyleText)
             return nullptr;
@@ -523,7 +522,7 @@ public:
         return String::format("SetElementStyleAction:%s", m_styleSheet->id().utf8().data());
     }
 
-    PassOwnPtr<protocol::CSS::CSSStyle> takeSerializedStyle() override
+    std::unique_ptr<protocol::CSS::CSSStyle> takeSerializedStyle() override
     {
         return m_styleSheet->buildObjectForStyle(m_styleSheet->inlineStyle());
     }
@@ -610,11 +609,10 @@ CSSMediaRule* InspectorCSSAgent::asCSSMediaRule(CSSRule* rule)
     return toCSSMediaRule(rule);
 }
 
-InspectorCSSAgent::InspectorCSSAgent(InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames, InspectorResourceAgent* resourceAgent, InspectorResourceContentLoader* resourceContentLoader, InspectorResourceContainer* resourceContainer)
-    : InspectorBaseAgent<InspectorCSSAgent, protocol::Frontend::CSS>("CSS")
-    , m_domAgent(domAgent)
+InspectorCSSAgent::InspectorCSSAgent(InspectorDOMAgent* domAgent, InspectedFrames* inspectedFrames, InspectorNetworkAgent* networkAgent, InspectorResourceContentLoader* resourceContentLoader, InspectorResourceContainer* resourceContainer)
+    : m_domAgent(domAgent)
     , m_inspectedFrames(inspectedFrames)
-    , m_resourceAgent(resourceAgent)
+    , m_networkAgent(networkAgent)
     , m_resourceContentLoader(resourceContentLoader)
     , m_resourceContainer(resourceContainer)
     , m_creatingViaInspectorStyleSheet(false)
@@ -660,17 +658,17 @@ void InspectorCSSAgent::resetNonPersistentData()
     resetPseudoStates();
 }
 
-void InspectorCSSAgent::enable(ErrorString* errorString, PassOwnPtr<EnableCallback> prpCallback)
+void InspectorCSSAgent::enable(ErrorString* errorString, std::unique_ptr<EnableCallback> prpCallback)
 {
     if (!m_domAgent->enabled()) {
         prpCallback->sendFailure("DOM agent needs to be enabled first.");
         return;
     }
     m_state->setBoolean(CSSAgentState::cssAgentEnabled, true);
-    m_resourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, bind(&InspectorCSSAgent::resourceContentLoaded, this, passed(std::move(prpCallback))));
+    m_resourceContentLoader->ensureResourcesContentLoaded(m_resourceContentLoaderClientId, WTF::bind(&InspectorCSSAgent::resourceContentLoaded, wrapPersistent(this), passed(std::move(prpCallback))));
 }
 
-void InspectorCSSAgent::resourceContentLoaded(PassOwnPtr<EnableCallback> callback)
+void InspectorCSSAgent::resourceContentLoaded(std::unique_ptr<EnableCallback> callback)
 {
     wasEnabled();
     callback->sendSuccess();
@@ -810,7 +808,7 @@ bool InspectorCSSAgent::forcePseudoState(Element* element, CSSSelector::PseudoTy
     }
 }
 
-void InspectorCSSAgent::getMediaQueries(ErrorString* errorString, OwnPtr<protocol::Array<protocol::CSS::CSSMedia>>* medias)
+void InspectorCSSAgent::getMediaQueries(ErrorString* errorString, std::unique_ptr<protocol::Array<protocol::CSS::CSSMedia>>* medias)
 {
     *medias = protocol::Array<protocol::CSS::CSSMedia>::create();
     for (auto& style : m_idToInspectorStyleSheet) {
@@ -888,7 +886,7 @@ void InspectorCSSAgent::getMatchedStylesForNode(ErrorString* errorString, int no
     while (parentElement) {
         StyleResolver& parentStyleResolver = parentElement->ownerDocument()->ensureStyleResolver();
         CSSRuleList* parentMatchedRules = parentStyleResolver.cssRulesForElement(parentElement, StyleResolver::AllCSSRules);
-        OwnPtr<protocol::CSS::InheritedStyleEntry> entry = protocol::CSS::InheritedStyleEntry::create()
+        std::unique_ptr<protocol::CSS::InheritedStyleEntry> entry = protocol::CSS::InheritedStyleEntry::create()
             .setMatchedCSSRules(buildArrayForMatchedRuleList(parentMatchedRules, parentElement, PseudoIdNone)).build();
         if (parentElement->style() && parentElement->style()->length()) {
             InspectorStyleSheetForInlineStyle* styleSheet = asInspectorStyleSheet(parentElement);
@@ -923,9 +921,9 @@ static CSSKeyframesRule* findKeyframesRule(CSSRuleCollection* cssRules, StyleRul
     return result;
 }
 
-PassOwnPtr<protocol::Array<protocol::CSS::CSSKeyframesRule>> InspectorCSSAgent::animationsForNode(Element* element)
+std::unique_ptr<protocol::Array<protocol::CSS::CSSKeyframesRule>> InspectorCSSAgent::animationsForNode(Element* element)
 {
-    OwnPtr<protocol::Array<protocol::CSS::CSSKeyframesRule>> cssKeyframesRules = protocol::Array<protocol::CSS::CSSKeyframesRule>::create();
+    std::unique_ptr<protocol::Array<protocol::CSS::CSSKeyframesRule>> cssKeyframesRules = protocol::Array<protocol::CSS::CSSKeyframesRule>::create();
     Document* ownerDocument = element->ownerDocument();
 
     StyleResolver& styleResolver = ownerDocument->ensureStyleResolver();
@@ -951,7 +949,7 @@ PassOwnPtr<protocol::Array<protocol::CSS::CSSKeyframesRule>> InspectorCSSAgent::
         if (!cssKeyframesRule)
             continue;
 
-        OwnPtr<protocol::Array<protocol::CSS::CSSKeyframeRule>> keyframes = protocol::Array<protocol::CSS::CSSKeyframeRule>::create();
+        std::unique_ptr<protocol::Array<protocol::CSS::CSSKeyframeRule>> keyframes = protocol::Array<protocol::CSS::CSSKeyframeRule>::create();
         for (unsigned j = 0; j < cssKeyframesRule->length(); ++j) {
             InspectorStyleSheet* inspectorStyleSheet = bindStyleSheet(cssKeyframesRule->parentStyleSheet());
             keyframes->addItem(inspectorStyleSheet->buildObjectForKeyframeRule(cssKeyframesRule->item(j)));
@@ -959,7 +957,7 @@ PassOwnPtr<protocol::Array<protocol::CSS::CSSKeyframesRule>> InspectorCSSAgent::
 
         InspectorStyleSheet* inspectorStyleSheet = bindStyleSheet(cssKeyframesRule->parentStyleSheet());
         CSSRuleSourceData* sourceData = inspectorStyleSheet->sourceDataForRule(cssKeyframesRule);
-        OwnPtr<protocol::CSS::Value> name = protocol::CSS::Value::create().setText(cssKeyframesRule->name()).build();
+        std::unique_ptr<protocol::CSS::Value> name = protocol::CSS::Value::create().setText(cssKeyframesRule->name()).build();
         if (sourceData)
             name->setRange(inspectorStyleSheet->buildSourceRangeObject(sourceData->ruleHeaderRange));
         cssKeyframesRules->addItem(protocol::CSS::CSSKeyframesRule::create()
@@ -983,7 +981,7 @@ void InspectorCSSAgent::getInlineStylesForNode(ErrorString* errorString, int nod
     *attributesStyle = buildObjectForAttributesStyle(element);
 }
 
-void InspectorCSSAgent::getComputedStyleForNode(ErrorString* errorString, int nodeId, OwnPtr<protocol::Array<protocol::CSS::CSSComputedStyleProperty>>* style)
+void InspectorCSSAgent::getComputedStyleForNode(ErrorString* errorString, int nodeId, std::unique_ptr<protocol::Array<protocol::CSS::CSSComputedStyleProperty>>* style)
 {
     Node* node = m_domAgent->assertNode(errorString, nodeId);
     if (!node)
@@ -1034,7 +1032,7 @@ void InspectorCSSAgent::collectPlatformFontsForLayoutObject(LayoutObject* layout
 }
 
 void InspectorCSSAgent::getPlatformFontsForNode(ErrorString* errorString, int nodeId,
-    OwnPtr<protocol::Array<protocol::CSS::PlatformFontUsage>>* platformFonts)
+    std::unique_ptr<protocol::Array<protocol::CSS::PlatformFontUsage>>* platformFonts)
 {
     Node* node = m_domAgent->assertNode(errorString, nodeId);
     if (!node)
@@ -1121,7 +1119,7 @@ static bool jsonRangeToSourceRange(ErrorString* errorString, InspectorStyleSheet
     return true;
 }
 
-void InspectorCSSAgent::setRuleSelector(ErrorString* errorString, const String& styleSheetId, PassOwnPtr<protocol::CSS::SourceRange> range, const String& selector, OwnPtr<protocol::CSS::SelectorList>* result)
+void InspectorCSSAgent::setRuleSelector(ErrorString* errorString, const String& styleSheetId, std::unique_ptr<protocol::CSS::SourceRange> range, const String& selector, std::unique_ptr<protocol::CSS::SelectorList>* result)
 {
     FrontendOperationScope scope;
     InspectorStyleSheet* inspectorStyleSheet = assertInspectorStyleSheetForId(errorString, styleSheetId);
@@ -1148,7 +1146,7 @@ void InspectorCSSAgent::setRuleSelector(ErrorString* errorString, const String& 
     *errorString = InspectorDOMAgent::toErrorString(exceptionState);
 }
 
-void InspectorCSSAgent::setKeyframeKey(ErrorString* errorString, const String& styleSheetId, PassOwnPtr<protocol::CSS::SourceRange> range, const String& keyText, OwnPtr<protocol::CSS::Value>* result)
+void InspectorCSSAgent::setKeyframeKey(ErrorString* errorString, const String& styleSheetId, std::unique_ptr<protocol::CSS::SourceRange> range, const String& keyText, std::unique_ptr<protocol::CSS::Value>* result)
 {
     FrontendOperationScope scope;
     InspectorStyleSheet* inspectorStyleSheet = assertInspectorStyleSheetForId(errorString, styleSheetId);
@@ -1181,7 +1179,7 @@ void InspectorCSSAgent::setKeyframeKey(ErrorString* errorString, const String& s
 }
 
 
-bool InspectorCSSAgent::multipleStyleTextsActions(ErrorString* errorString, PassOwnPtr<protocol::Array<protocol::CSS::StyleDeclarationEdit>> edits, HeapVector<Member<StyleSheetAction>>* actions)
+bool InspectorCSSAgent::multipleStyleTextsActions(ErrorString* errorString, std::unique_ptr<protocol::Array<protocol::CSS::StyleDeclarationEdit>> edits, HeapVector<Member<StyleSheetAction>>* actions)
 {
     int n = edits->length();
     if (n == 0) {
@@ -1213,7 +1211,7 @@ bool InspectorCSSAgent::multipleStyleTextsActions(ErrorString* errorString, Pass
     return true;
 }
 
-void InspectorCSSAgent::setStyleTexts(ErrorString* errorString, PassOwnPtr<protocol::Array<protocol::CSS::StyleDeclarationEdit>> edits, OwnPtr<protocol::Array<protocol::CSS::CSSStyle>>* result)
+void InspectorCSSAgent::setStyleTexts(ErrorString* errorString, std::unique_ptr<protocol::Array<protocol::CSS::StyleDeclarationEdit>> edits, std::unique_ptr<protocol::Array<protocol::CSS::CSSStyle>>* result)
 {
     FrontendOperationScope scope;
     HeapVector<Member<StyleSheetAction>> actions;
@@ -1223,7 +1221,7 @@ void InspectorCSSAgent::setStyleTexts(ErrorString* errorString, PassOwnPtr<proto
     TrackExceptionState exceptionState;
 
     int n = actions.size();
-    OwnPtr<protocol::Array<protocol::CSS::CSSStyle>> serializedStyles = protocol::Array<protocol::CSS::CSSStyle>::create();
+    std::unique_ptr<protocol::Array<protocol::CSS::CSSStyle>> serializedStyles = protocol::Array<protocol::CSS::CSSStyle>::create();
     for (int i = 0; i < n; ++i) {
         Member<StyleSheetAction> action = actions.at(i);
         bool success = action->perform(exceptionState);
@@ -1271,7 +1269,7 @@ CSSStyleDeclaration* InspectorCSSAgent::setStyleText(ErrorString* errorString, I
     return nullptr;
 }
 
-void InspectorCSSAgent::setMediaText(ErrorString* errorString, const String& styleSheetId, PassOwnPtr<protocol::CSS::SourceRange> range, const String& text, OwnPtr<protocol::CSS::CSSMedia>* result)
+void InspectorCSSAgent::setMediaText(ErrorString* errorString, const String& styleSheetId, std::unique_ptr<protocol::CSS::SourceRange> range, const String& text, std::unique_ptr<protocol::CSS::CSSMedia>* result)
 {
     FrontendOperationScope scope;
     InspectorStyleSheet* inspectorStyleSheet = assertInspectorStyleSheetForId(errorString, styleSheetId);
@@ -1321,7 +1319,7 @@ void InspectorCSSAgent::createStyleSheet(ErrorString* errorString, const String&
     *outStyleSheetId = inspectorStyleSheet->id();
 }
 
-void InspectorCSSAgent::addRule(ErrorString* errorString, const String& styleSheetId, const String& ruleText, PassOwnPtr<protocol::CSS::SourceRange> location, OwnPtr<protocol::CSS::CSSRule>* result)
+void InspectorCSSAgent::addRule(ErrorString* errorString, const String& styleSheetId, const String& ruleText, std::unique_ptr<protocol::CSS::SourceRange> location, std::unique_ptr<protocol::CSS::CSSRule>* result)
 {
     FrontendOperationScope scope;
     InspectorStyleSheet* inspectorStyleSheet = assertInspectorStyleSheetForId(errorString, styleSheetId);
@@ -1343,7 +1341,7 @@ void InspectorCSSAgent::addRule(ErrorString* errorString, const String& styleShe
     *result = buildObjectForRule(rule);
 }
 
-void InspectorCSSAgent::forcePseudoState(ErrorString* errorString, int nodeId, PassOwnPtr<protocol::Array<String>> forcedPseudoClasses)
+void InspectorCSSAgent::forcePseudoState(ErrorString* errorString, int nodeId, std::unique_ptr<protocol::Array<String>> forcedPseudoClasses)
 {
     Element* element = m_domAgent->assertElement(errorString, nodeId);
     if (!element)
@@ -1363,7 +1361,7 @@ void InspectorCSSAgent::forcePseudoState(ErrorString* errorString, int nodeId, P
     element->ownerDocument()->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::Inspector));
 }
 
-PassOwnPtr<protocol::CSS::CSSMedia> InspectorCSSAgent::buildMediaObject(const MediaList* media, MediaListSource mediaListSource, const String& sourceURL, CSSStyleSheet* parentStyleSheet)
+std::unique_ptr<protocol::CSS::CSSMedia> InspectorCSSAgent::buildMediaObject(const MediaList* media, MediaListSource mediaListSource, const String& sourceURL, CSSStyleSheet* parentStyleSheet)
 {
     // Make certain compilers happy by initializing |source| up-front.
     String source = protocol::CSS::CSSMedia::SourceEnum::InlineSheet;
@@ -1392,13 +1390,13 @@ PassOwnPtr<protocol::CSS::CSSMedia> InspectorCSSAgent::buildMediaObject(const Me
     MediaQueryEvaluator* mediaEvaluator = new MediaQueryEvaluator(frame);
 
     InspectorStyleSheet* inspectorStyleSheet = parentStyleSheet ? m_cssStyleSheetToInspectorStyleSheet.get(parentStyleSheet) : nullptr;
-    OwnPtr<protocol::Array<protocol::CSS::MediaQuery>> mediaListArray = protocol::Array<protocol::CSS::MediaQuery>::create();
+    std::unique_ptr<protocol::Array<protocol::CSS::MediaQuery>> mediaListArray = protocol::Array<protocol::CSS::MediaQuery>::create();
     MediaValues* mediaValues = MediaValues::createDynamicIfFrameExists(frame);
     bool hasMediaQueryItems = false;
     for (size_t i = 0; i < queryVector.size(); ++i) {
         MediaQuery* query = queryVector.at(i).get();
         const ExpressionHeapVector& expressions = query->expressions();
-        OwnPtr<protocol::Array<protocol::CSS::MediaQueryExpression>> expressionArray = protocol::Array<protocol::CSS::MediaQueryExpression>::create();
+        std::unique_ptr<protocol::Array<protocol::CSS::MediaQueryExpression>> expressionArray = protocol::Array<protocol::CSS::MediaQueryExpression>::create();
         bool hasExpressionItems = false;
         for (size_t j = 0; j < expressions.size(); ++j) {
             MediaQueryExp* mediaQueryExp = expressions.at(j).get();
@@ -1406,7 +1404,7 @@ PassOwnPtr<protocol::CSS::CSSMedia> InspectorCSSAgent::buildMediaObject(const Me
             if (!expValue.isValue)
                 continue;
             const char* valueName = CSSPrimitiveValue::unitTypeToString(expValue.unit);
-            OwnPtr<protocol::CSS::MediaQueryExpression> mediaQueryExpression = protocol::CSS::MediaQueryExpression::create()
+            std::unique_ptr<protocol::CSS::MediaQueryExpression> mediaQueryExpression = protocol::CSS::MediaQueryExpression::create()
                 .setValue(expValue.value)
                 .setUnit(String(valueName))
                 .setFeature(mediaQueryExp->mediaFeature()).build();
@@ -1423,14 +1421,14 @@ PassOwnPtr<protocol::CSS::CSSMedia> InspectorCSSAgent::buildMediaObject(const Me
         }
         if (!hasExpressionItems)
             continue;
-        OwnPtr<protocol::CSS::MediaQuery> mediaQuery = protocol::CSS::MediaQuery::create()
+        std::unique_ptr<protocol::CSS::MediaQuery> mediaQuery = protocol::CSS::MediaQuery::create()
             .setActive(mediaEvaluator->eval(query, nullptr))
             .setExpressions(std::move(expressionArray)).build();
         mediaListArray->addItem(std::move(mediaQuery));
         hasMediaQueryItems = true;
     }
 
-    OwnPtr<protocol::CSS::CSSMedia> mediaObject = protocol::CSS::CSSMedia::create()
+    std::unique_ptr<protocol::CSS::CSSMedia> mediaObject = protocol::CSS::CSSMedia::create()
         .setText(media->mediaText())
         .setSource(source).build();
     if (hasMediaQueryItems)
@@ -1498,11 +1496,11 @@ void InspectorCSSAgent::collectMediaQueriesFromRule(CSSRule* rule, protocol::Arr
         mediaArray->addItem(buildMediaObject(mediaList, isMediaRule ? MediaListSourceMediaRule : MediaListSourceImportRule, sourceURL, parentStyleSheet));
 }
 
-PassOwnPtr<protocol::Array<protocol::CSS::CSSMedia>> InspectorCSSAgent::buildMediaListChain(CSSRule* rule)
+std::unique_ptr<protocol::Array<protocol::CSS::CSSMedia>> InspectorCSSAgent::buildMediaListChain(CSSRule* rule)
 {
     if (!rule)
         return nullptr;
-    OwnPtr<protocol::Array<protocol::CSS::CSSMedia>> mediaArray = protocol::Array<protocol::CSS::CSSMedia>::create();
+    std::unique_ptr<protocol::Array<protocol::CSS::CSSMedia>> mediaArray = protocol::Array<protocol::CSS::CSSMedia>::create();
     CSSRule* parentRule = rule;
     while (parentRule) {
         collectMediaQueriesFromRule(parentRule, mediaArray.get());
@@ -1581,7 +1579,7 @@ InspectorStyleSheet* InspectorCSSAgent::bindStyleSheet(CSSStyleSheet* styleSheet
     InspectorStyleSheet* inspectorStyleSheet = m_cssStyleSheetToInspectorStyleSheet.get(styleSheet);
     if (!inspectorStyleSheet) {
         Document* document = styleSheet->ownerDocument();
-        inspectorStyleSheet = InspectorStyleSheet::create(m_resourceAgent, styleSheet, detectOrigin(styleSheet, document), InspectorDOMAgent::documentURLString(document), this, m_resourceContainer);
+        inspectorStyleSheet = InspectorStyleSheet::create(m_networkAgent, styleSheet, detectOrigin(styleSheet, document), InspectorDOMAgent::documentURLString(document), this, m_resourceContainer);
         m_idToInspectorStyleSheet.set(inspectorStyleSheet->id(), inspectorStyleSheet);
         m_cssStyleSheetToInspectorStyleSheet.set(styleSheet, inspectorStyleSheet);
         if (m_creatingViaInspectorStyleSheet)
@@ -1703,13 +1701,13 @@ protocol::CSS::StyleSheetOrigin InspectorCSSAgent::detectOrigin(CSSStyleSheet* p
     return origin;
 }
 
-PassOwnPtr<protocol::CSS::CSSRule> InspectorCSSAgent::buildObjectForRule(CSSStyleRule* rule)
+std::unique_ptr<protocol::CSS::CSSRule> InspectorCSSAgent::buildObjectForRule(CSSStyleRule* rule)
 {
     InspectorStyleSheet* inspectorStyleSheet = inspectorStyleSheetForRule(rule);
     if (!inspectorStyleSheet)
         return nullptr;
 
-    OwnPtr<protocol::CSS::CSSRule> result = inspectorStyleSheet->buildObjectForRuleWithoutMedia(rule);
+    std::unique_ptr<protocol::CSS::CSSRule> result = inspectorStyleSheet->buildObjectForRuleWithoutMedia(rule);
     result->setMedia(buildMediaListChain(rule));
     return result;
 }
@@ -1726,19 +1724,19 @@ static inline bool matchesPseudoElement(const CSSSelector* selector, PseudoId el
     return selectorPseudoId == elementPseudoId;
 }
 
-PassOwnPtr<protocol::Array<protocol::CSS::RuleMatch>> InspectorCSSAgent::buildArrayForMatchedRuleList(CSSRuleList* ruleList, Element* element, PseudoId matchesForPseudoId)
+std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> InspectorCSSAgent::buildArrayForMatchedRuleList(CSSRuleList* ruleList, Element* element, PseudoId matchesForPseudoId)
 {
-    OwnPtr<protocol::Array<protocol::CSS::RuleMatch>> result = protocol::Array<protocol::CSS::RuleMatch>::create();
+    std::unique_ptr<protocol::Array<protocol::CSS::RuleMatch>> result = protocol::Array<protocol::CSS::RuleMatch>::create();
     if (!ruleList)
         return result;
 
     HeapVector<Member<CSSStyleRule>> uniqRules = filterDuplicateRules(ruleList);
     for (unsigned i = 0; i < uniqRules.size(); ++i) {
         CSSStyleRule* rule = uniqRules.at(i).get();
-        OwnPtr<protocol::CSS::CSSRule> ruleObject = buildObjectForRule(rule);
+        std::unique_ptr<protocol::CSS::CSSRule> ruleObject = buildObjectForRule(rule);
         if (!ruleObject)
             continue;
-        OwnPtr<protocol::Array<int>> matchingSelectors = protocol::Array<int>::create();
+        std::unique_ptr<protocol::Array<int>> matchingSelectors = protocol::Array<int>::create();
         const CSSSelectorList& selectorList = rule->styleRule()->selectorList();
         long index = 0;
         PseudoId elementPseudoId = matchesForPseudoId ? matchesForPseudoId : element->getPseudoId();
@@ -1762,7 +1760,7 @@ PassOwnPtr<protocol::Array<protocol::CSS::RuleMatch>> InspectorCSSAgent::buildAr
     return result;
 }
 
-PassOwnPtr<protocol::CSS::CSSStyle> InspectorCSSAgent::buildObjectForAttributesStyle(Element* element)
+std::unique_ptr<protocol::CSS::CSSStyle> InspectorCSSAgent::buildObjectForAttributesStyle(Element* element)
 {
     if (!element->isStyledElement())
         return nullptr;
@@ -1892,7 +1890,7 @@ CSSStyleDeclaration* InspectorCSSAgent::findEffectiveDeclaration(CSSPropertyID p
 void InspectorCSSAgent::setLayoutEditorValue(ErrorString* errorString, Element* element, CSSStyleDeclaration* style, CSSPropertyID propertyId, const String& value, bool forceImportant)
 {
     InspectorStyleSheetBase* inspectorStyleSheet =  nullptr;
-    CSSRuleSourceData* sourceData = nullptr;
+    RefPtr<CSSRuleSourceData> sourceData;
     // An absence of the parent rule means that given style is an inline style.
     if (style->parentRule()) {
         InspectorStyleSheet* styleSheet = bindStyleSheet(style->parentStyleSheet());
@@ -1916,7 +1914,7 @@ void InspectorCSSAgent::setLayoutEditorValue(ErrorString* errorString, Element* 
     String longhand = getPropertyNameString(propertyId);
 
     int foundIndex = -1;
-    HeapVector<CSSPropertySourceData> properties = sourceData->styleSourceData->propertyData;
+    Vector<CSSPropertySourceData> properties = sourceData->styleSourceData->propertyData;
     for (unsigned i = 0; i < properties.size(); ++i) {
         CSSPropertySourceData property = properties[properties.size() - i - 1];
         String name = property.name;
@@ -1966,7 +1964,7 @@ void InspectorCSSAgent::setLayoutEditorValue(ErrorString* errorString, Element* 
 void InspectorCSSAgent::layoutEditorItemSelected(Element* element, CSSStyleDeclaration* style)
 {
     InspectorStyleSheetBase* inspectorStyleSheet =  nullptr;
-    CSSRuleSourceData* sourceData = nullptr;
+    RefPtr<CSSRuleSourceData> sourceData;
     if (style->parentRule()) {
         InspectorStyleSheet* styleSheet = bindStyleSheet(style->parentStyleSheet());
         inspectorStyleSheet = styleSheet;
@@ -2066,7 +2064,7 @@ DEFINE_TRACE(InspectorCSSAgent)
 {
     visitor->trace(m_domAgent);
     visitor->trace(m_inspectedFrames);
-    visitor->trace(m_resourceAgent);
+    visitor->trace(m_networkAgent);
     visitor->trace(m_resourceContentLoader);
     visitor->trace(m_resourceContainer);
     visitor->trace(m_idToInspectorStyleSheet);

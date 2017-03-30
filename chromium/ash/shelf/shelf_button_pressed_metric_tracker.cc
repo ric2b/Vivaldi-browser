@@ -4,8 +4,7 @@
 
 #include "ash/shelf/shelf_button_pressed_metric_tracker.h"
 
-#include "ash/metrics/user_metrics_recorder.h"
-#include "ash/shell.h"
+#include "ash/common/wm_shell.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_tick_clock.h"
 #include "ui/views/controls/button/button.h"
@@ -19,11 +18,9 @@ const char ShelfButtonPressedMetricTracker::
 ShelfButtonPressedMetricTracker::ShelfButtonPressedMetricTracker()
     : tick_clock_(new base::DefaultTickClock()),
       time_of_last_minimize_(base::TimeTicks()),
-      last_minimized_source_button_(nullptr) {
-}
+      last_minimized_source_button_(nullptr) {}
 
-ShelfButtonPressedMetricTracker::~ShelfButtonPressedMetricTracker() {
-}
+ShelfButtonPressedMetricTracker::~ShelfButtonPressedMetricTracker() {}
 
 void ShelfButtonPressedMetricTracker::ButtonPressed(
     const ui::Event& event,
@@ -51,10 +48,10 @@ void ShelfButtonPressedMetricTracker::ButtonPressed(
 void ShelfButtonPressedMetricTracker::RecordButtonPressedSource(
     const ui::Event& event) {
   if (event.IsMouseEvent()) {
-    Shell::GetInstance()->metrics()->RecordUserMetricsAction(
+    WmShell::Get()->RecordUserMetricsAction(
         UMA_LAUNCHER_BUTTON_PRESSED_WITH_MOUSE);
   } else if (event.IsGestureEvent()) {
-    Shell::GetInstance()->metrics()->RecordUserMetricsAction(
+    WmShell::Get()->RecordUserMetricsAction(
         UMA_LAUNCHER_BUTTON_PRESSED_WITH_TOUCH);
   }
 }
@@ -66,16 +63,13 @@ void ShelfButtonPressedMetricTracker::RecordButtonPressedAction(
     case ShelfItemDelegate::kAppListMenuShown:
       break;
     case ShelfItemDelegate::kNewWindowCreated:
-      Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-          UMA_LAUNCHER_LAUNCH_TASK);
+      WmShell::Get()->RecordUserMetricsAction(UMA_LAUNCHER_LAUNCH_TASK);
       break;
     case ShelfItemDelegate::kExistingWindowActivated:
-      Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-          UMA_LAUNCHER_SWITCH_TASK);
+      WmShell::Get()->RecordUserMetricsAction(UMA_LAUNCHER_SWITCH_TASK);
       break;
     case ShelfItemDelegate::kExistingWindowMinimized:
-      Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-          UMA_LAUNCHER_MINIMIZE_TASK);
+      WmShell::Get()->RecordUserMetricsAction(UMA_LAUNCHER_MINIMIZE_TASK);
       break;
   }
 }

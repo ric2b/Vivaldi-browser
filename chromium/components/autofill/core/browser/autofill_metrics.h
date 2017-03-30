@@ -13,6 +13,7 @@
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/common/form_field_data.h"
 
 namespace base {
 class TimeDelta;
@@ -259,6 +260,13 @@ class AutofillMetrics {
     NUM_FIELD_TYPE_QUALITY_METRICS,
   };
 
+  enum QualityMetricType {
+    TYPE_SUBMISSION = 0,      // Logged based on user's submitted data.
+    TYPE_NO_SUBMISSION,       // Logged based on user's entered data.
+    TYPE_AUTOCOMPLETE_BASED,  // Logged based on the value of autocomplete attr.
+    NUM_QUALITY_METRIC_TYPES,
+  };
+
   // Each of these is logged at most once per query to the server, which in turn
   // occurs at most once per page load.
   enum ServerQueryMetric {
@@ -400,13 +408,13 @@ class AutofillMetrics {
     // User chose to opt in (checked the checkbox when it was empty).
     // Only logged if there was an attempt to unmask.
     UNMASK_PROMPT_LOCAL_SAVE_DID_OPT_IN,
-    // User did not opt in when he had the chance (left the checkbox unchecked).
-    // Only logged if there was an attempt to unmask.
+    // User did not opt in when they had the chance (left the checkbox
+    // unchecked).  Only logged if there was an attempt to unmask.
     UNMASK_PROMPT_LOCAL_SAVE_DID_NOT_OPT_IN,
     // User chose to opt out (unchecked the checkbox when it was check).
     // Only logged if there was an attempt to unmask.
     UNMASK_PROMPT_LOCAL_SAVE_DID_OPT_OUT,
-    // User did not opt out when he had a chance (left the checkbox checked).
+    // User did not opt out when they had a chance (left the checkbox checked).
     // Only logged if there was an attempt to unmask.
     UNMASK_PROMPT_LOCAL_SAVE_DID_NOT_OPT_OUT,
     // The prompt was closed while chrome was unmasking the card (user pressed
@@ -521,13 +529,13 @@ class AutofillMetrics {
 
   static void LogHeuristicTypePrediction(FieldTypeQualityMetric metric,
                                          ServerFieldType field_type,
-                                         bool observed_submission);
+                                         QualityMetricType metric_type);
   static void LogOverallTypePrediction(FieldTypeQualityMetric metric,
                                        ServerFieldType field_type,
-                                       bool observed_submission);
+                                       QualityMetricType metric_type);
   static void LogServerTypePrediction(FieldTypeQualityMetric metric,
                                       ServerFieldType field_type,
-                                      bool observed_submission);
+                                      QualityMetricType metric_type);
 
   static void LogServerQueryMetric(ServerQueryMetric metric);
 
@@ -632,6 +640,12 @@ class AutofillMetrics {
   // This should be called when parsing each form.
   static void LogParseFormTiming(const base::TimeDelta& duration);
 
+  // Log how many profiles were considered for the deduplication process.
+  static void LogNumberOfProfilesConsideredForDedupe(size_t num_considered);
+
+  // Log how many profiles were removed as part of the deduplication process.
+  static void LogNumberOfProfilesRemovedDuringDedupe(size_t num_removed);
+
   // Utility to autofill form events in the relevant histograms depending on
   // the presence of server and/or local data.
   class FormEventLogger {
@@ -648,7 +662,7 @@ class AutofillMetrics {
 
     void OnDidInteractWithAutofillableForm();
 
-    void OnDidPollSuggestions();
+    void OnDidPollSuggestions(const FormFieldData& field);
 
     void OnDidShowSuggestions();
 
@@ -678,6 +692,9 @@ class AutofillMetrics {
     bool has_logged_submitted_;
     bool logged_suggestion_filled_was_server_data_;
     bool logged_suggestion_filled_was_masked_server_card_;
+
+    // The last field that was polled for suggestions.
+    FormFieldData last_polled_field_;
   };
 
  private:

@@ -5,17 +5,20 @@
 #include "platform/WaitableEvent.h"
 
 #include "base/synchronization/waitable_event.h"
-#include "wtf/PassOwnPtr.h"
-
+#include "wtf/PtrUtil.h"
 #include <vector>
 
 namespace blink {
 
 WaitableEvent::WaitableEvent(ResetPolicy policy, InitialState state)
 {
-    bool manualReset = policy == ResetPolicy::Manual;
-    bool initiallySignaled = state == InitialState::Signaled;
-    m_impl = adoptPtr(new base::WaitableEvent(manualReset, initiallySignaled));
+    m_impl = wrapUnique(new base::WaitableEvent(
+        policy == ResetPolicy::Manual
+            ? base::WaitableEvent::ResetPolicy::MANUAL
+            : base::WaitableEvent::ResetPolicy::AUTOMATIC,
+        state == InitialState::Signaled
+            ? base::WaitableEvent::InitialState::SIGNALED
+            : base::WaitableEvent::InitialState::NOT_SIGNALED));
 }
 
 WaitableEvent::~WaitableEvent() {}

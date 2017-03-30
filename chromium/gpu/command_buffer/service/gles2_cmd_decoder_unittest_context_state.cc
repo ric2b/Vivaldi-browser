@@ -31,7 +31,7 @@
 #define GL_DEPTH24_STENCIL8 0x88F0
 #endif
 
-using ::gfx::MockGLInterface;
+using ::gl::MockGLInterface;
 using ::testing::_;
 using ::testing::DoAll;
 using ::testing::InSequence;
@@ -52,10 +52,9 @@ namespace gles2 {
 
 namespace {
 
-void SetupUpdateES3UnpackParametersExpectations(
-    ::gfx::MockGLInterface* gl,
-    GLint row_length,
-    GLint image_height) {
+void SetupUpdateES3UnpackParametersExpectations(::gl::MockGLInterface* gl,
+                                                GLint row_length,
+                                                GLint image_height) {
   EXPECT_CALL(*gl, PixelStorei(GL_UNPACK_ROW_LENGTH, row_length))
       .Times(1)
       .RetiresOnSaturation();
@@ -448,6 +447,38 @@ TEST_P(GLES3DecoderTest, ES3PixelStoreiWithPixelUnpackBuffer) {
   // Bind a PIXEL_UNPACK_BUFFER again.
   SetupUpdateES3UnpackParametersExpectations(gl_.get(), 32, 0);
   DoBindBuffer(GL_PIXEL_UNPACK_BUFFER, client_buffer_id_, kServiceBufferId);
+}
+
+TEST_P(GLES2DecoderManualInitTest, MipmapHintOnCoreProfile) {
+  // On a core profile, glHint(GL_GENERATE_MIPMAP_HINT) should be a noop
+  InitState init;
+  init.gl_version = "3.2";
+  InitDecoder(init);
+
+  cmds::Hint cmd;
+  cmd.Init(GL_GENERATE_MIPMAP_HINT, GL_NICEST);
+
+  EXPECT_CALL(*gl_, Hint(GL_GENERATE_MIPMAP_HINT, GL_NICEST)).Times(0);
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
+}
+
+TEST_P(GLES2DecoderManualInitTest, MipmapHintOnCompatibilityProfile) {
+  // On a compatibility profile, glHint(GL_GENERATE_MIPMAP_HINT) should be go
+  // through
+  InitState init;
+  init.gl_version = "3.2";
+  init.extensions += " GL_ARB_compatibility";
+  InitDecoder(init);
+
+  cmds::Hint cmd;
+  cmd.Init(GL_GENERATE_MIPMAP_HINT, GL_NICEST);
+
+  EXPECT_CALL(*gl_, Hint(GL_GENERATE_MIPMAP_HINT, GL_NICEST))
+      .Times(1)
+      .RetiresOnSaturation();
+  EXPECT_EQ(error::kNoError, ExecuteCmd(cmd));
+  EXPECT_EQ(GL_NO_ERROR, GetGLError());
 }
 
 // TODO(vmiura): Tests for VAO restore.

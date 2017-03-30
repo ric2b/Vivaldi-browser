@@ -38,7 +38,6 @@
 #include "core/html/PluginDocument.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
-#include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutPart.h"
 #include "core/loader/FrameLoaderClient.h"
@@ -50,6 +49,7 @@
 #include "platform/MIMETypeFromURL.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/Widget.h"
+#include "platform/network/ResourceRequest.h"
 #include "platform/plugins/PluginData.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -89,7 +89,7 @@ void HTMLPlugInElement::setPersistedPluginWidget(Widget* widget)
     if (m_persistedPluginWidget) {
         if (m_persistedPluginWidget->isPluginView()) {
             m_persistedPluginWidget->hide();
-            m_persistedPluginWidget->dispose();
+            disposeWidgetSoon(m_persistedPluginWidget.release());
         } else {
             ASSERT(m_persistedPluginWidget->isFrameView() || m_persistedPluginWidget->isRemoteFrameView());
         }
@@ -100,6 +100,11 @@ void HTMLPlugInElement::setPersistedPluginWidget(Widget* widget)
 bool HTMLPlugInElement::canProcessDrag() const
 {
     return pluginWidget() && pluginWidget()->isPluginView() && toPluginView(pluginWidget())->canProcessDrag();
+}
+
+bool HTMLPlugInElement::canStartSelection() const
+{
+    return useFallbackContent() && Node::canStartSelection();
 }
 
 bool HTMLPlugInElement::willRespondToMouseClickEvents()
@@ -563,12 +568,13 @@ bool HTMLPlugInElement::allowedToLoadObject(const KURL& url, const String& mimeT
         fastGetAttribute(HTMLNames::typeAttr);
     if (!document().contentSecurityPolicy()->allowObjectFromSource(url)
         || !document().contentSecurityPolicy()->allowPluginTypeForDocument(document(), mimeType, declaredMimeType, url)) {
-        layoutEmbeddedItem().setPluginUnavailabilityReason(LayoutEmbeddedObject::PluginBlockedByContentSecurityPolicy);
+        if (LayoutEmbeddedItem layoutItem = layoutEmbeddedItem())
+            layoutItem.setPluginUnavailabilityReason(LayoutEmbeddedObject::PluginBlockedByContentSecurityPolicy);
         return false;
     }
     // If the URL is empty, a plugin could still be instantiated if a MIME-type
     // is specified.
-    return (!mimeType.isEmpty() && url.isEmpty()) || !MixedContentChecker::shouldBlockFetch(frame, WebURLRequest::RequestContextObject, WebURLRequest::FrameTypeNone, url);
+    return (!mimeType.isEmpty() && url.isEmpty()) || !MixedContentChecker::shouldBlockFetch(frame, WebURLRequest::RequestContextObject, WebURLRequest::FrameTypeNone, ResourceRequest::RedirectStatus::NoRedirect, url);
 }
 
 bool HTMLPlugInElement::allowedToLoadPlugin(const KURL& url, const String& mimeType)

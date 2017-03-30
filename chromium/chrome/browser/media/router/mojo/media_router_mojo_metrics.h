@@ -7,6 +7,7 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/time/time.h"
+#include "chrome/browser/media/router/route_request_result.h"
 
 namespace base {
 class Version;
@@ -19,7 +20,7 @@ class Extension;
 namespace media_router {
 
 // NOTE: Do not renumber enums as that would confuse interpretation of
-// previously logged data. When making changes, also update the enum list
+// previously logged data. When making changes, also update the enum lists
 // in tools/metrics/histograms/histograms.xml to keep it in sync.
 
 // Why the Media Route Provider process was woken up.
@@ -34,7 +35,7 @@ enum class MediaRouteProviderWakeReason {
   STOP_OBSERVING_MEDIA_SINKS = 7,
   START_OBSERVING_MEDIA_ROUTES = 8,
   STOP_OBSERVING_MEDIA_ROUTES = 9,
-  LISTEN_FOR_ROUTE_MESSAGES = 10,
+  START_LISTENING_FOR_ROUTE_MESSAGES = 10,
   STOP_LISTENING_FOR_ROUTE_MESSAGES = 11,
   CONNECTION_ERROR = 12,
   REGISTER_MEDIA_ROUTE_PROVIDER = 13,
@@ -85,6 +86,11 @@ class MediaRouterMojoMetrics {
   // Records the outcome of an attempt to wake the Media Router component event
   // page.
   static void RecordMediaRouteProviderWakeup(MediaRouteProviderWakeup wakeup);
+
+  // Records the outcome of a call to terminateRoute() on the Media Route
+  // Provider Manager.
+  static void RecordMediaRouteProviderTerminateRoute(
+      RouteRequestResult::ResultCode result_code);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(MediaRouterMojoMetricsTest,

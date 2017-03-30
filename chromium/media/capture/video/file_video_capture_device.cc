@@ -8,9 +8,12 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "media/base/video_capture_types.h"
 #include "media/filters/jpeg_parser.h"
 
@@ -310,7 +313,7 @@ void FileVideoCaptureDevice::AllocateAndStart(
   CHECK(!capture_thread_.IsRunning());
 
   capture_thread_.Start();
-  capture_thread_.message_loop()->PostTask(
+  capture_thread_.task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&FileVideoCaptureDevice::OnAllocateAndStart,
                  base::Unretained(this), params, base::Passed(&client)));
@@ -320,7 +323,7 @@ void FileVideoCaptureDevice::StopAndDeAllocate() {
   DCHECK(thread_checker_.CalledOnValidThread());
   CHECK(capture_thread_.IsRunning());
 
-  capture_thread_.message_loop()->PostTask(
+  capture_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&FileVideoCaptureDevice::OnStopAndDeAllocate,
                             base::Unretained(this)));
   capture_thread_.Stop();
@@ -329,7 +332,7 @@ void FileVideoCaptureDevice::StopAndDeAllocate() {
 void FileVideoCaptureDevice::OnAllocateAndStart(
     const VideoCaptureParams& params,
     std::unique_ptr<VideoCaptureDevice::Client> client) {
-  DCHECK_EQ(capture_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(capture_thread_.task_runner()->BelongsToCurrentThread());
 
   client_ = std::move(client);
 
@@ -343,20 +346,20 @@ void FileVideoCaptureDevice::OnAllocateAndStart(
   DVLOG(1) << "Opened video file " << capture_format_.frame_size.ToString()
            << ", fps: " << capture_format_.frame_rate;
 
-  capture_thread_.message_loop()->PostTask(
+  capture_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(&FileVideoCaptureDevice::OnCaptureTask,
                             base::Unretained(this)));
 }
 
 void FileVideoCaptureDevice::OnStopAndDeAllocate() {
-  DCHECK_EQ(capture_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(capture_thread_.task_runner()->BelongsToCurrentThread());
   file_parser_.reset();
   client_.reset();
   next_frame_time_ = base::TimeTicks();
 }
 
 void FileVideoCaptureDevice::OnCaptureTask() {
-  DCHECK_EQ(capture_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(capture_thread_.task_runner()->BelongsToCurrentThread());
   if (!client_)
     return;
 
@@ -366,8 +369,10 @@ void FileVideoCaptureDevice::OnCaptureTask() {
   DCHECK(frame_size);
   CHECK(frame_ptr);
   const base::TimeTicks current_time = base::TimeTicks::Now();
+  if (first_ref_time_.is_null())
+    first_ref_time_ = current_time;
   client_->OnIncomingCapturedData(frame_ptr, frame_size, capture_format_, 0,
-                                  current_time);
+                                  current_time, current_time - first_ref_time_);
   // Reschedule next CaptureTask.
   const base::TimeDelta frame_interval =
       base::TimeDelta::FromMicroseconds(1E6 / capture_format_.frame_rate);
@@ -380,7 +385,7 @@ void FileVideoCaptureDevice::OnCaptureTask() {
     if (next_frame_time_ < current_time)
       next_frame_time_ = current_time;
   }
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::Bind(&FileVideoCaptureDevice::OnCaptureTask,
                             base::Unretained(this)),
       next_frame_time_ - current_time);

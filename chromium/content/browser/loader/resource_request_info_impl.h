@@ -13,6 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/resource_type.h"
@@ -66,7 +67,9 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
       bool report_raw_headers,
       bool is_async,
       bool is_using_lofi,
-      const std::string& original_headers);
+      const std::string& original_headers,
+      const scoped_refptr<ResourceRequestBodyImpl> body,
+      bool initiated_in_secure_context);
   ~ResourceRequestInfoImpl() override;
 
   // ResourceRequestInfo implementation:
@@ -184,6 +187,16 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   }
   const std::string& original_headers() const { return original_headers_; }
 
+  const scoped_refptr<ResourceRequestBodyImpl>& body() const { return body_; }
+  void ResetBody();
+
+  bool initiated_in_secure_context() const {
+    return initiated_in_secure_context_;
+  }
+  void set_initiated_in_secure_context_for_testing(bool secure) {
+    initiated_in_secure_context_ = secure;
+  }
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ResourceDispatcherHostTest,
                            DeletedFilterDetached);
@@ -225,6 +238,8 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   bool is_async_;
   bool is_using_lofi_;
   const std::string original_headers_;
+  scoped_refptr<ResourceRequestBodyImpl> body_;
+  bool initiated_in_secure_context_;
 
   DISALLOW_COPY_AND_ASSIGN(ResourceRequestInfoImpl);
 };

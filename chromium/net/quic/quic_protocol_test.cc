@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "base/stl_util.h"
+#include "net/quic/quic_flags.h"
 #include "net/quic/quic_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -65,20 +66,6 @@ TEST(QuicProtocolTest, IsAawaitingPacket) {
 
   ack_frame2.packets.Remove(50);
   EXPECT_TRUE(IsAwaitingPacket(ack_frame2, 50u, 20u));
-}
-
-TEST(QuicProtocolTest, QuicDeprecatedErrorCodeCount) {
-  // If you deprecated any QuicErrorCode, you will need to update the
-  // deprecated QuicErrorCode count. Otherwise this test will fail.
-  int num_deprecated_errors = 0;
-  std::string invalid_error_code = "INVALID_ERROR_CODE";
-  for (int i = 0; i < QUIC_LAST_ERROR; ++i) {
-    if (QuicUtils::ErrorToString(static_cast<QuicErrorCode>(i)) ==
-        invalid_error_code) {
-      ++num_deprecated_errors;
-    }
-  }
-  EXPECT_EQ(kDeprecatedQuicErrorCount, num_deprecated_errors);
 }
 
 TEST(QuicProtocolTest, QuicVersionToQuicTag) {
@@ -294,6 +281,17 @@ TEST(QuicProtocolTest, PathCloseFrameToString) {
   std::ostringstream stream;
   stream << frame;
   EXPECT_EQ("{ path_id: 1 }\n", stream.str());
+}
+
+TEST(QuicProtocolTest, FilterSupportedVersions) {
+  QuicVersionVector all_versions = {QUIC_VERSION_25, QUIC_VERSION_26,
+                                    QUIC_VERSION_27, QUIC_VERSION_29,
+                                    QUIC_VERSION_30};
+
+  FLAGS_quic_disable_pre_30 = true;
+  QuicVersionVector filtered_versions = FilterSupportedVersions(all_versions);
+  ASSERT_EQ(1u, filtered_versions.size());
+  EXPECT_EQ(QUIC_VERSION_30, filtered_versions[0]);
 }
 
 // Tests that a queue contains the expected data after calls to Add().

@@ -28,6 +28,7 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/VisibleUnits.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/line/InlineTextBox.h"
@@ -175,7 +176,7 @@ VisiblePosition SelectionModifier::nextWordPositionForPlatform(const VisiblePosi
 static void adjustPositionForUserSelectAll(VisiblePosition& pos, bool isForward)
 {
     if (Node* rootUserSelectAll = EditingStrategy::rootUserSelectAllForNode(pos.deepEquivalent().anchorNode()))
-        pos = createVisiblePosition(isForward ? mostForwardCaretPosition(Position::afterNode(rootUserSelectAll), CanCrossEditingBoundary) : mostBackwardCaretPosition(positionBeforeNode(rootUserSelectAll), CanCrossEditingBoundary));
+        pos = createVisiblePosition(isForward ? mostForwardCaretPosition(Position::afterNode(rootUserSelectAll), CanCrossEditingBoundary) : mostBackwardCaretPosition(Position::beforeNode(rootUserSelectAll), CanCrossEditingBoundary));
 }
 
 VisiblePosition SelectionModifier::modifyExtendingRight(TextGranularity granularity)

@@ -52,6 +52,7 @@ namespace blink {
 
 class ExecutionContext;
 class NotificationAction;
+class NotificationManager;
 class NotificationOptions;
 class NotificationPermissionCallback;
 class NotificationResourcesLoader;
@@ -91,17 +92,16 @@ public:
     String tag() const;
     String icon() const;
     String badge() const;
-    NavigatorVibration::VibrationPattern vibrate(bool& isNull) const;
+    NavigatorVibration::VibrationPattern vibrate() const;
     DOMTimeStamp timestamp() const;
     bool renotify() const;
     bool silent() const;
     bool requireInteraction() const;
     ScriptValue data(ScriptState*);
-    HeapVector<NotificationAction> actions() const;
+    Vector<v8::Local<v8::Value>> actions(ScriptState*) const;
 
     static String permissionString(mojom::blink::PermissionStatus);
     static String permission(ExecutionContext*);
-    static mojom::blink::PermissionStatus checkPermission(ExecutionContext*);
     static ScriptPromise requestPermission(ScriptState*, NotificationPermissionCallback*);
 
     static size_t maxActions();

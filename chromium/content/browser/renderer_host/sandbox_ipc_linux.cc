@@ -27,6 +27,7 @@
 #include "content/common/set_process_title.h"
 #include "content/public/common/content_switches.h"
 #include "ppapi/c/trusted/ppb_browser_font_trusted.h"
+#include "skia/ext/skia_utils_base.h"
 #include "third_party/skia/include/ports/SkFontConfigInterface.h"
 #include "ui/gfx/font.h"
 #include "ui/gfx/font_fallback_linux.h"
@@ -283,8 +284,8 @@ void SandboxIPCHandler::HandleGetStyleForStrike(
   gfx::FontRenderParamsQuery query;
   query.families.push_back(family);
   query.pixel_size = pixel_size;
-  query.style = gfx::Font::NORMAL |
-      (bold ? gfx::Font::BOLD : 0) | (italic ? gfx::Font::ITALIC : 0);
+  query.style = italic ? gfx::Font::ITALIC : 0;
+  query.weight = bold ? gfx::Font::Weight::BOLD : gfx::Font::Weight::NORMAL;
   const gfx::FontRenderParams params = gfx::GetFontRenderParams(query, NULL);
 
   // These are passed as ints since they're interpreted as tri-state chars in

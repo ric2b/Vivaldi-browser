@@ -15,10 +15,14 @@ if (is_win) {
       "$root_out_dir/cdb/dbgeng.dll",
       "$root_out_dir/cdb/dbghelp.dll",
       "$root_out_dir/cdb/dbgmodel.dll",
+      "$root_out_dir/cdb/winext/ext.dll",
+      "$root_out_dir/cdb/winext/uext.dll",
+      "$root_out_dir/cdb/winxp/exts.dll",
+      "$root_out_dir/cdb/winxp/ntsdexts.dll",
     ]
     args = [
       rebase_path("$root_out_dir/cdb", root_out_dir),
-      target_cpu,
+      current_cpu,
     ]
   }
 }
@@ -28,30 +32,24 @@ group("telemetry_chrome_test") {
 
   if (is_android) {
     data_deps = [
-      "//content/shell:content_shell",
+      "//chrome/android:chrome_public_apk",
     ]
   } else {
     data_deps = [
       "//third_party/catapult/telemetry:bitmaptools",
     ]
 
-    if (!is_mac) {
-      # TODO(kbr): this used to be "//chrome". Had to change this to
-      # chrome_initial temporarily to work around crbug.com/536192.
-      data_deps += [ "//chrome:chrome_initial" ]
-    } else {
-      data_deps += [ "//chrome" ]
-    }
+    data_deps += [ "//chrome" ]
   }
 
   data = [
     "//tools/perf/chrome_telemetry_build/",
     "//third_party/catapult/",
+    "//components/crash/content/tools/generate_breakpad_symbols.py",
   ]
 
   if (is_win) {
     data_deps += [ "//chrome:reorder_imports" ]
-    data += [ "//components/crash/content/tools/generate_breakpad_symbols.py" ]
   }
 
   if (is_linux) {
@@ -59,7 +57,15 @@ group("telemetry_chrome_test") {
       "//tools/xdisplaycheck",
       "//breakpad:dump_syms($host_toolchain)",
     ]
-    data += [ "//components/crash/content/tools/generate_breakpad_symbols.py" ]
+  }
+
+  if (is_mac) {
+    data_deps += [
+      "//breakpad:dump_syms",
+      "//chrome:chrome_framework",
+      "//chrome:chrome_helper_app",
+      "//third_party/crashpad/crashpad/tools:crashpad_database_util",
+    ]
   }
 
   if (is_win && (symbol_level == 1 || symbol_level == 2)) {

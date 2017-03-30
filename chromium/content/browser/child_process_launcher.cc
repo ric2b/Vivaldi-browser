@@ -25,6 +25,8 @@
 #include "content/public/common/result_codes.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/named_platform_channel_pair.h"
+#include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 
 #if defined(OS_WIN)
@@ -142,9 +144,8 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
   base::Process process;
 #if defined(OS_WIN)
   if (launch_elevated) {
-    // TODO(rockot): We may want to support Mojo IPC to elevated processes as
-    // well, but this isn't currently feasible without sharing a pipe path on
-    // the command line as elevated process launch goes through ShellExecuteEx.
+    // When establishing a Mojo connection, the pipe path has already been added
+    // to the command line.
     base::LaunchOptions options;
     options.start_hidden = true;
     process = base::LaunchElevatedProcess(*cmd_line, options);
@@ -197,11 +198,8 @@ void LaunchOnLauncherThread(const NotifyCallback& callback,
     }
   };
   maybe_register(
-      kV8NativesDataDescriptor32,
-      gin::V8Initializer::GetOpenNativesFileForChildProcesses(&region, true));
-  maybe_register(
-      kV8NativesDataDescriptor64,
-      gin::V8Initializer::GetOpenNativesFileForChildProcesses(&region, false));
+      kV8NativesDataDescriptor,
+      gin::V8Initializer::GetOpenNativesFileForChildProcesses(&region));
   maybe_register(
       kV8SnapshotDataDescriptor32,
       gin::V8Initializer::GetOpenSnapshotFileForChildProcesses(&region, true));
@@ -394,12 +392,15 @@ ChildProcessLauncher::ChildProcessLauncher(
     base::CommandLine* cmd_line,
     int child_process_id,
     Client* client,
+    const std::string& mojo_child_token,
+    const mojo::edk::ProcessErrorCallback& process_error_callback,
     bool terminate_on_shutdown)
     : client_(client),
       termination_status_(base::TERMINATION_STATUS_NORMAL_TERMINATION),
       exit_code_(RESULT_CODE_NORMAL_EXIT),
       zygote_(nullptr),
       starting_(true),
+      process_error_callback_(process_error_callback),
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) ||  \
     defined(MEMORY_SANITIZER) || defined(THREAD_SANITIZER) || \
     defined(UNDEFINED_SANITIZER)
@@ -407,6 +408,7 @@ ChildProcessLauncher::ChildProcessLauncher(
 #else
       terminate_child_on_shutdown_(terminate_on_shutdown),
 #endif
+      mojo_child_token_(mojo_child_token),
       weak_factory_(this) {
   DCHECK(CalledOnValidThread());
   CHECK(BrowserThread::GetCurrentThreadIdentifier(&client_thread_id_));
@@ -454,8 +456,19 @@ void ChildProcessLauncher::Launch(
   NotifyCallback reply_callback(base::Bind(&ChildProcessLauncher::DidLaunch,
                                            weak_factory_.GetWeakPtr(),
                                            terminate_child_on_shutdown_));
-  mojo::edk::ScopedPlatformHandle client_handle =
-      mojo_platform_channel_.PassClientHandle();
+  mojo::edk::ScopedPlatformHandle client_handle;
+#if defined(OS_WIN)
+  if (delegate->ShouldLaunchElevated()) {
+    mojo::edk::NamedPlatformChannelPair named_pair;
+    mojo_host_platform_handle_ = named_pair.PassServerHandle();
+    named_pair.PrepareToPassClientHandleToChildProcess(cmd_line);
+  } else
+#endif
+  {
+    mojo::edk::PlatformChannelPair channel_pair;
+    mojo_host_platform_handle_ = channel_pair.PassServerHandle();
+    client_handle = channel_pair.PassClientHandle();
+  }
   BrowserThread::PostTask(
       BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
       base::Bind(&LaunchOnLauncherThread, reply_callback, client_thread_id_,
@@ -545,7 +558,9 @@ void ChildProcessLauncher::Notify(ZygoteHandle zygote,
   if (process_.IsValid()) {
     // Set up Mojo IPC to the new process.
     mojo::edk::ChildProcessLaunched(process_.Handle(),
-                                    mojo_platform_channel_.PassServerHandle());
+                                    std::move(mojo_host_platform_handle_),
+                                    mojo_child_token_,
+                                    process_error_callback_);
   }
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
@@ -554,6 +569,7 @@ void ChildProcessLauncher::Notify(ZygoteHandle zygote,
   if (process_.IsValid()) {
     client_->OnProcessLaunched();
   } else {
+    mojo::edk::ChildProcessLaunchFailed(mojo_child_token_);
     termination_status_ = base::TERMINATION_STATUS_LAUNCH_FAILED;
     client_->OnProcessLaunchFailed(error_code);
   }

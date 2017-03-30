@@ -17,17 +17,19 @@
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/process/process.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "build/build_config.h"
+#include "content/browser/bluetooth/bluetooth_adapter_factory_wrapper.h"
 #include "content/browser/child_process_launcher.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
 #include "content/browser/power_monitor_message_broadcaster.h"
 #include "content/common/content_export.h"
-#include "content/common/mojo/service_registry_impl.h"
 #include "content/public/browser/render_process_host.h"
 #include "ipc/ipc_channel_proxy.h"
 #include "ipc/ipc_platform_file.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
+#include "services/shell/public/interfaces/shell_client.mojom.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gl/gpu_switching_observer.h"
 
@@ -47,12 +49,10 @@ class ChannelMojoHost;
 namespace content {
 class AudioInputRendererHost;
 class AudioRendererHost;
-class BluetoothDispatcherHost;
 class BrowserCdmManager;
 class BrowserDemuxerAndroid;
 class InProcessChildThreadParams;
 class MessagePortMessageFilter;
-class MojoApplicationHost;
 class MojoChildConnection;
 class NotificationMessageFilter;
 #if defined(ENABLE_WEBRTC)
@@ -155,7 +155,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #endif
   void ResumeDeferredNavigation(const GlobalRequestID& request_id) override;
   void NotifyTimezoneChange(const std::string& timezone) override;
-  ServiceRegistry* GetServiceRegistry() override;
+  shell::InterfaceRegistry* GetInterfaceRegistry() override;
+  shell::InterfaceProvider* GetRemoteInterfaces() override;
   shell::Connection* GetChildConnection() override;
   std::unique_ptr<base::SharedPersistentMemoryAllocator> TakeMetricsAllocator()
       override;
@@ -261,7 +262,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void GetAudioOutputControllers(
       const GetAudioOutputControllersCallback& callback) const override;
 
-  BluetoothDispatcherHost* GetBluetoothDispatcherHost();
+  BluetoothAdapterFactoryWrapper* GetBluetoothAdapterFactoryWrapper();
 
 #if defined(OS_POSIX) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
   // Launch the zygote early in the browser startup.
@@ -291,8 +292,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   int32_t pending_views_;
 
  private:
-  friend class VisitRelayingRenderProcessHost;
   friend class ChildProcessLauncherBrowserTest_ChildSpawnFail_Test;
+  friend class VisitRelayingRenderProcessHost;
 
   std::unique_ptr<IPC::ChannelProxy> CreateChannelProxy(
       const std::string& channel_id);
@@ -300,8 +301,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Creates and adds the IO thread message filters.
   void CreateMessageFilters();
 
-  // Registers Mojo services to be exposed to the renderer.
-  void RegisterMojoServices();
+  // Registers Mojo interfaces to be exposed to the renderer.
+  void RegisterMojoInterfaces();
 
   void CreateStoragePartitionService(
       mojo::InterfaceRequest<mojom::StoragePartitionService> request);
@@ -362,8 +363,15 @@ class CONTENT_EXPORT RenderProcessHostImpl
   base::FilePath GetEventLogFilePathWithExtensions(const base::FilePath& file);
 #endif
 
+  static void OnMojoError(
+      base::WeakPtr<RenderProcessHostImpl> process,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      const std::string& error);
+
+  std::string child_token_;
+
   std::unique_ptr<MojoChildConnection> mojo_child_connection_;
-  std::unique_ptr<MojoApplicationHost> mojo_application_host_;
+  shell::mojom::ShellClientPtr test_shell_client_;
 
   // The registered IPC listener objects. When this list is empty, we should
   // delete ourselves.
@@ -467,7 +475,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   scoped_refptr<AudioInputRendererHost> audio_input_renderer_host_;
 
-  scoped_refptr<BluetoothDispatcherHost> bluetooth_dispatcher_host_;
+  BluetoothAdapterFactoryWrapper bluetooth_adapter_factory_wrapper_;
 
 #if defined(OS_ANDROID)
   scoped_refptr<BrowserDemuxerAndroid> browser_demuxer_android_;

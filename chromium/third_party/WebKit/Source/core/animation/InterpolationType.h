@@ -13,6 +13,7 @@
 #include "core/animation/UnderlyingValueOwner.h"
 #include "platform/heap/Handle.h"
 #include "wtf/Allocator.h"
+#include <memory>
 
 namespace blink {
 
@@ -26,7 +27,7 @@ class InterpolationType {
     USING_FAST_MALLOC(InterpolationType);
     WTF_MAKE_NONCOPYABLE(InterpolationType);
 public:
-    virtual ~InterpolationType() { ASSERT_NOT_REACHED(); }
+    virtual ~InterpolationType() { NOTREACHED(); }
 
     PropertyHandle getProperty() const { return m_property; }
 
@@ -46,7 +47,7 @@ public:
         { }
         const InterpolationType* m_type;
     };
-    using ConversionCheckers = Vector<OwnPtr<ConversionChecker>>;
+    using ConversionCheckers = Vector<std::unique_ptr<ConversionChecker>>;
 
     virtual PairwiseInterpolationValue maybeConvertPairwise(const PropertySpecificKeyframe& startKeyframe, const PropertySpecificKeyframe& endKeyframe, const InterpolationEnvironment& environment, const InterpolationValue& underlying, ConversionCheckers& conversionCheckers) const
     {

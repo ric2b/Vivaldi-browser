@@ -15,12 +15,14 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/i18n/icu_util.h"
+#include "base/i18n/message_formatter.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/time/time.h"
 #include "chrome/grit/chromium_strings.h"
 #include "ui/base/resource/data_pack.h"
 
@@ -240,6 +242,8 @@ int main(int argc, char* const argv[]) {
   char* const* lang_list = argv;
   int lang_list_count = argc;
 
+  base::i18n::InitializeICU();
+
   // Parse the version file and build our string
   NSString* version_string = ApplicationVersionString(version_file_path, vivaldi_version_file_path, vivaldi_build_num);
   if (!version_string) {
@@ -288,13 +292,9 @@ int main(int argc, char* const argv[]) {
                                IDS_AUTOFILL_ADDRESS_BOOK_PROMPT_DESCRIPTION,
                                "IDS_AUTOFILL_ADDRESS_BOOK_PROMPT_DESCRIPTION");
 
-    base::Time::Exploded exploded_time;
-    base::Time::Now().LocalExplode(&exploded_time);
-    std::vector<base::string16> replacements;
-    replacements.push_back(base::IntToString16(exploded_time.year));
     NSString* copyright = base::SysUTF16ToNSString(
-        base::ReplaceStringPlaceholders(
-            base::SysNSStringToUTF16(copyright_format), replacements, NULL));
+        base::i18n::MessageFormatter::FormatWithNumberedArgs(
+            base::SysNSStringToUTF16(copyright_format), base::Time::Now()));
 
     // For now, assume this is ok for all languages. If we need to, this could
     // be moved into generated_resources.grd and fetched.

@@ -198,6 +198,7 @@ bool UtilitiesClearAllRecentlyClosedSessionsFunction::RunAsync() {
     tab_restore_service->ClearEntries();
   }
   results_ = ClearAllRecentlyClosedSessions::Results::Create(result);
+  SendResponse(result);
   return result;
 }
 
@@ -264,6 +265,7 @@ bool UtilitiesBasicPrintFunction::RunAsync() {
   Browser *browser = chrome::FindAnyBrowser(profile, true);
   chrome::BasicPrint(browser);
 
+  SendResponse(true);
   return true;
 }
 

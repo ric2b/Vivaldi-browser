@@ -46,7 +46,7 @@ namespace views {
 
 namespace {
 
-// Action style arrow container padding widths
+// STYLE_ACTION arrow container padding widths.
 const int kActionLeftPadding = 12;
 const int kActionRightPadding = 11;
 
@@ -366,6 +366,7 @@ Combobox::Combobox(ui::ComboboxModel* model, Style style)
       menu_model_adapter_(new ComboboxMenuModelAdapter(this, model)),
       text_button_(new TransparentButton(this)),
       arrow_button_(new TransparentButton(this)),
+      size_to_largest_label_(style_ == STYLE_NORMAL),
       weak_ptr_factory_(this) {
   ModelChanged();
 #if defined(OS_MACOSX)
@@ -438,7 +439,12 @@ void Combobox::SetSelectedIndex(int index) {
     return;
 
   selected_index_ = index;
-  SchedulePaint();
+  if (size_to_largest_label_) {
+    SchedulePaint();
+  } else {
+    content_size_ = GetContentSize();
+    PreferredSizeChanged();
+  }
 }
 
 bool Combobox::SelectValue(const base::string16& value) {
@@ -471,7 +477,6 @@ void Combobox::SetInvalid(bool invalid) {
 void Combobox::Layout() {
   PrefixDelegate::Layout();
 
-  gfx::Insets insets = GetInsets();
   int text_button_width = 0;
   int arrow_button_width = 0;
 
@@ -736,7 +741,6 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
     selected_index_ = 0;
   base::string16 text = model()->GetItemAt(selected_index_);
 
-  gfx::Size arrow_size = ArrowSize();
   int disclosure_arrow_offset = width() - GetArrowContainerWidth();
 
   const gfx::FontList& font_list = Combobox::GetFontList();
@@ -880,7 +884,7 @@ gfx::Size Combobox::GetContentSize() const {
     if (model_->IsItemSeparatorAt(i))
       continue;
 
-    if (style_ != STYLE_ACTION || i == selected_index_) {
+    if (size_to_largest_label_ || i == selected_index_) {
       width = std::max(
           width,
           gfx::GetStringWidth(menu_model_adapter_->GetLabelAt(i), font_list));
@@ -896,9 +900,8 @@ PrefixSelector* Combobox::GetPrefixSelector() {
 }
 
 int Combobox::GetArrowContainerWidth() const {
-  const int kNormalPadding = 7;
   int padding = style_ == STYLE_NORMAL
-                    ? kNormalPadding * 2
+                    ? PlatformStyle::kComboboxNormalArrowPadding * 2
                     : kActionLeftPadding + kActionRightPadding;
   return ArrowSize().width() + padding;
 }

@@ -599,8 +599,9 @@ void WebFrameTestClient::willSendRequest(
   }
 
   // Set the new substituted URL.
-  request.setURL(
-      delegate_->RewriteLayoutTestsURL(request.url().string().utf8()));
+  request.setURL(delegate_->RewriteLayoutTestsURL(
+      request.url().string().utf8(),
+      test_runner_->is_web_platform_tests_mode()));
 }
 
 void WebFrameTestClient::didReceiveResponse(
@@ -749,6 +750,14 @@ void WebFrameTestClient::checkIfAudioSinkExistsAndIsAuthorized(
 void WebFrameTestClient::didClearWindowObject(blink::WebLocalFrame* frame) {
   web_test_proxy_base_->test_interfaces()->BindTo(frame);
   web_test_proxy_base_->BindTo(frame);
+}
+
+bool WebFrameTestClient::runFileChooser(
+    const blink::WebFileChooserParams& params,
+    blink::WebFileChooserCompletion* completion) {
+  delegate_->PrintMessage("Mock: Opening a file chooser.\n");
+  // FIXME: Add ability to set file names to a file upload control.
+  return false;
 }
 
 }  // namespace test_runner

@@ -10,10 +10,10 @@
 #include "content/public/browser/notification_service.h"
 
 #if defined(USE_ASH)
+#include "ash/common/system/system_notifier.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
-#include "ash/system/system_notifier.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
@@ -37,8 +37,9 @@ bool DoesFullscreenModeBlockNotifications() {
         controller->GetWindowForFullscreenMode();
     if (!fullscreen_window)
       return false;
-    return ash::wm::GetWindowState(fullscreen_window)->
-        hide_shelf_when_fullscreen();
+    return ash::wm::GetWindowState(fullscreen_window)
+               ->shelf_mode_in_fullscreen() ==
+           ash::wm::WindowState::SHELF_HIDDEN;
   }
 #endif
 

@@ -22,6 +22,7 @@
 #include "platform/graphics/skia/SkiaUtils.h"
 #include "third_party/skia/include/effects/SkDashPathEffect.h"
 #include "third_party/skia/include/effects/SkDropShadowImageFilter.h"
+#include <memory>
 
 static const char defaultFont[] = "10px sans-serif";
 static const char defaultFilter[] = "none";
@@ -305,7 +306,7 @@ SkImageFilter* CanvasRenderingContext2DState::getFilter(Element* styleResolution
         StyleResolverState resolverState(styleResolutionHost->document(), styleResolutionHost, filterStyle.get());
         resolverState.setStyle(filterStyle);
 
-        StyleBuilder::applyProperty(CSSPropertyWebkitFilter, resolverState, m_filterValue.get());
+        StyleBuilder::applyProperty(CSSPropertyFilter, resolverState, *m_filterValue);
         resolverState.loadPendingResources();
         FilterEffectBuilder* filterEffectBuilder = FilterEffectBuilder::create();
 
@@ -351,7 +352,7 @@ void CanvasRenderingContext2DState::clearResolvedFilter() const
 SkDrawLooper* CanvasRenderingContext2DState::emptyDrawLooper() const
 {
     if (!m_emptyDrawLooper) {
-        OwnPtr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
+        std::unique_ptr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
         m_emptyDrawLooper = drawLooperBuilder->detachDrawLooper();
     }
     return m_emptyDrawLooper.get();
@@ -360,7 +361,7 @@ SkDrawLooper* CanvasRenderingContext2DState::emptyDrawLooper() const
 SkDrawLooper* CanvasRenderingContext2DState::shadowOnlyDrawLooper() const
 {
     if (!m_shadowOnlyDrawLooper) {
-        OwnPtr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
+        std::unique_ptr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
         drawLooperBuilder->addShadow(m_shadowOffset, m_shadowBlur, m_shadowColor, DrawLooperBuilder::ShadowIgnoresTransforms, DrawLooperBuilder::ShadowRespectsAlpha);
         m_shadowOnlyDrawLooper = drawLooperBuilder->detachDrawLooper();
     }
@@ -370,7 +371,7 @@ SkDrawLooper* CanvasRenderingContext2DState::shadowOnlyDrawLooper() const
 SkDrawLooper* CanvasRenderingContext2DState::shadowAndForegroundDrawLooper() const
 {
     if (!m_shadowAndForegroundDrawLooper) {
-        OwnPtr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
+        std::unique_ptr<DrawLooperBuilder> drawLooperBuilder = DrawLooperBuilder::create();
         drawLooperBuilder->addShadow(m_shadowOffset, m_shadowBlur, m_shadowColor, DrawLooperBuilder::ShadowIgnoresTransforms, DrawLooperBuilder::ShadowRespectsAlpha);
         drawLooperBuilder->addUnmodifiedContent();
         m_shadowAndForegroundDrawLooper = drawLooperBuilder->detachDrawLooper();
@@ -428,7 +429,7 @@ void CanvasRenderingContext2DState::setShadowColor(SkColor shadowColor)
     shadowParameterChanged();
 }
 
-void CanvasRenderingContext2DState::setFilter(CSSValue* filterValue)
+void CanvasRenderingContext2DState::setFilter(const CSSValue* filterValue)
 {
     m_filterValue = filterValue;
     m_resolvedFilter.reset();

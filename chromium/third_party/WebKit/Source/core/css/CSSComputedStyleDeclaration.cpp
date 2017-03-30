@@ -25,10 +25,11 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/CSSPropertyNames.h"
+#include "core/css/CSSPrimitiveValue.h"
 #include "core/css/CSSPrimitiveValueMappings.h"
+#include "core/css/CSSPropertyIDTemplates.h"
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/CSSSelector.h"
-#include "core/css/CSSValuePool.h"
 #include "core/css/CSSVariableData.h"
 #include "core/css/ComputedStyleCSSValueMapping.h"
 #include "core/css/parser/CSSParser.h"
@@ -172,6 +173,7 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyTextIndent,
     CSSPropertyTextRendering,
     CSSPropertyTextShadow,
+    CSSPropertyTextSizeAdjust,
     CSSPropertyTextOverflow,
     CSSPropertyTextTransform,
     CSSPropertyTop,
@@ -218,7 +220,6 @@ static const CSSPropertyID staticComputableProperties[] = {
     CSSPropertyColumnRuleWidth,
     CSSPropertyColumnSpan,
     CSSPropertyColumnWidth,
-    CSSPropertyWebkitFilter,
     CSSPropertyBackdropFilter,
     CSSPropertyAlignContent,
     CSSPropertyAlignItems,
@@ -375,7 +376,7 @@ String CSSComputedStyleDeclaration::cssText() const
         if (i)
             result.append(' ');
         result.append(getPropertyName(properties[i]));
-        result.appendLiteral(": ");
+        result.append(": ");
         result.append(getPropertyValue(properties[i]));
         result.append(';');
     }
@@ -397,10 +398,10 @@ static CSSValueID cssIdentifierForFontSizeKeyword(int keywordSize)
 
 inline static CSSPrimitiveValue* zoomAdjustedPixelValue(double value, const ComputedStyle& style)
 {
-    return cssValuePool().createValue(adjustFloatForAbsoluteZoom(value, style), CSSPrimitiveValue::UnitType::Pixels);
+    return CSSPrimitiveValue::create(adjustFloatForAbsoluteZoom(value, style), CSSPrimitiveValue::UnitType::Pixels);
 }
 
-CSSValue* CSSComputedStyleDeclaration::getFontSizeCSSValuePreferringKeyword() const
+const CSSValue* CSSComputedStyleDeclaration::getFontSizeCSSValuePreferringKeyword() const
 {
     if (!m_node)
         return nullptr;
@@ -412,7 +413,7 @@ CSSValue* CSSComputedStyleDeclaration::getFontSizeCSSValuePreferringKeyword() co
         return nullptr;
 
     if (int keywordSize = style->getFontDescription().keywordSize())
-        return cssValuePool().createIdentifierValue(cssIdentifierForFontSizeKeyword(keywordSize));
+        return CSSPrimitiveValue::createIdentifier(cssIdentifierForFontSizeKeyword(keywordSize));
 
 
     return zoomAdjustedPixelValue(style->getFontDescription().computedPixelSize(), *style);
@@ -513,7 +514,7 @@ Node* CSSComputedStyleDeclaration::styledNode() const
     return m_node.get();
 }
 
-CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(AtomicString customPropertyName) const
+const CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(AtomicString customPropertyName) const
 {
     Node* styledNode = this->styledNode();
     if (!styledNode)
@@ -535,7 +536,7 @@ std::unique_ptr<HashMap<AtomicString, RefPtr<CSSVariableData>>> CSSComputedStyle
     return ComputedStyleCSSValueMapping::getVariables(*style);
 }
 
-CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(CSSPropertyID propertyID) const
+const CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(CSSPropertyID propertyID) const
 {
     Node* styledNode = this->styledNode();
     if (!styledNode)
@@ -565,7 +566,7 @@ CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(CSSPropertyID propert
     if (!style)
         return nullptr;
 
-    CSSValue* value = ComputedStyleCSSValueMapping::get(propertyID, *style, layoutObject, styledNode, m_allowVisitedStyle);
+    const CSSValue* value = ComputedStyleCSSValueMapping::get(propertyID, *style, layoutObject, styledNode, m_allowVisitedStyle);
     if (value)
         return value;
 
@@ -575,7 +576,7 @@ CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValue(CSSPropertyID propert
 
 String CSSComputedStyleDeclaration::getPropertyValue(CSSPropertyID propertyID) const
 {
-    CSSValue* value = getPropertyCSSValue(propertyID);
+    const CSSValue* value = getPropertyCSSValue(propertyID);
     if (value)
         return value->cssText();
     return "";
@@ -609,7 +610,7 @@ bool CSSComputedStyleDeclaration::cssPropertyMatches(CSSPropertyID propertyID, c
                 return true;
         }
     }
-    CSSValue* value = getPropertyCSSValue(propertyID);
+    const CSSValue* value = getPropertyCSSValue(propertyID);
     return value && propertyValue && value->equals(*propertyValue);
 }
 
@@ -623,9 +624,9 @@ MutableStylePropertySet* CSSComputedStyleDeclaration::copyPropertiesInSet(const 
     HeapVector<CSSProperty, 256> list;
     list.reserveInitialCapacity(properties.size());
     for (unsigned i = 0; i < properties.size(); ++i) {
-        CSSValue* value = getPropertyCSSValue(properties[i]);
+        const CSSValue* value = getPropertyCSSValue(properties[i]);
         if (value)
-            list.append(CSSProperty(properties[i], value, false));
+            list.append(CSSProperty(properties[i], *value, false));
     }
     return MutableStylePropertySet::create(list.data(), list.size());
 }
@@ -640,7 +641,7 @@ String CSSComputedStyleDeclaration::getPropertyValue(const String& propertyName)
     CSSPropertyID propertyID = cssPropertyID(propertyName);
     if (!propertyID) {
         if (RuntimeEnabledFeatures::cssVariablesEnabled() && CSSVariableParser::isValidVariableName(propertyName)) {
-            CSSValue* value = getPropertyCSSValue(AtomicString(propertyName));
+            const CSSValue* value = getPropertyCSSValue(AtomicString(propertyName));
             if (value)
                 return value->cssText();
         }
@@ -677,9 +678,14 @@ String CSSComputedStyleDeclaration::removeProperty(const String& name, Exception
     return String();
 }
 
-CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValueInternal(CSSPropertyID propertyID)
+const CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValueInternal(CSSPropertyID propertyID)
 {
     return getPropertyCSSValue(propertyID);
+}
+
+const CSSValue* CSSComputedStyleDeclaration::getPropertyCSSValueInternal(AtomicString customPropertyName)
+{
+    return getPropertyCSSValue(customPropertyName);
 }
 
 String CSSComputedStyleDeclaration::getPropertyValueInternal(CSSPropertyID propertyID)

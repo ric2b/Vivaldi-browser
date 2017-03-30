@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.preferences.website;
 
+import org.chromium.base.Callback;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.content_public.browser.WebContents;
@@ -17,22 +18,6 @@ import java.util.List;
  */
 public abstract class WebsitePreferenceBridge {
     private static final String LOG_TAG = "WebsiteSettingsUtils";
-
-    /**
-     * Interface for an object that listens to local storage info is ready callback.
-     */
-    public interface LocalStorageInfoReadyCallback {
-        @CalledByNative("LocalStorageInfoReadyCallback")
-        public void onLocalStorageInfoReady(HashMap map);
-    }
-
-    /**
-     * Interface for an object that listens to storage info is ready callback.
-     */
-    public interface StorageInfoReadyCallback {
-        @CalledByNative("StorageInfoReadyCallback")
-        public void onStorageInfoReady(ArrayList array);
-    }
 
     /**
      * Interface for an object that listens to storage info is cleared callback.
@@ -119,8 +104,9 @@ public abstract class WebsitePreferenceBridge {
     @SuppressWarnings("unchecked")
     @CalledByNative
     private static void insertLocalStorageInfoIntoMap(
-            HashMap map, String origin, String fullOrigin, long size) {
-        ((HashMap<String, LocalStorageInfo>) map).put(origin, new LocalStorageInfo(origin, size));
+            HashMap map, String origin, String fullOrigin, long size, boolean important) {
+        ((HashMap<String, LocalStorageInfo>) map)
+                .put(origin, new LocalStorageInfo(origin, size, important));
     }
 
     /**
@@ -226,11 +212,11 @@ public abstract class WebsitePreferenceBridge {
         return managedExceptions;
     }
 
-    public static void fetchLocalStorageInfo(LocalStorageInfoReadyCallback callback) {
+    public static void fetchLocalStorageInfo(Callback<HashMap> callback) {
         nativeFetchLocalStorageInfo(callback);
     }
 
-    public static void fetchStorageInfo(StorageInfoReadyCallback callback) {
+    public static void fetchStorageInfo(Callback<ArrayList> callback) {
         nativeFetchStorageInfo(callback);
     }
 
@@ -271,9 +257,9 @@ public abstract class WebsitePreferenceBridge {
             String origin, String embedder, int value, boolean isIncognito);
     private static native void nativeGetNotificationOrigins(Object list);
     static native int nativeGetNotificationSettingForOrigin(
-            String origin, String embedder, boolean isIncognito);
+            String origin, boolean isIncognito);
     static native void nativeSetNotificationSettingForOrigin(
-            String origin, String embedder, int value, boolean isIncognito);
+            String origin, int value, boolean isIncognito);
     private static native void nativeGetProtectedMediaIdentifierOrigins(Object list);
     static native int nativeGetProtectedMediaIdentifierSettingForOrigin(
             String origin, String embedder, boolean isIncognito);

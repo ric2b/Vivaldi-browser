@@ -50,12 +50,13 @@ private:
 
     bool supportsFocus() const override;
     void parseAttribute(const QualifiedName&, const AtomicString&, const AtomicString&) override;
-    void childrenChanged(const ChildrenChange&) override;
     void accessKeyAction(bool sendMouseEvents) override;
     void didAddUserAgentShadowRoot(ShadowRoot&) override;
     void attach(const AttachContext& = AttachContext()) override;
     void detach(const AttachContext& = AttachContext()) override;
     bool matchesEnabledPseudoClass() const override;
+    InsertionNotificationRequest insertedInto(ContainerNode*) override;
+    void removedFrom(ContainerNode*) override;
 
     // <optgroup> might not have a layoutObject so we manually manage a cached style.
     void updateNonComputedStyle();
@@ -63,7 +64,6 @@ private:
     PassRefPtr<ComputedStyle> customStyleForLayoutObject() override;
 
     void updateGroupLabel();
-    void recalcSelectOptions();
 
     RefPtr<ComputedStyle> m_style;
 };

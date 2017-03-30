@@ -30,9 +30,12 @@
     <item type="id" name="translate_infobar_target_spinner" />
 
     <!-- Menu items IDs in Settings -->
+    <item type="id" name="menu_id_close" />
     <item type="id" name="menu_id_general_help" />
     <item type="id" name="menu_id_targeted_help" />
     <item type="id" name="menu_id_reset" />
+    <item type="id" name="menu_id_refresh" />
+    <item type="id" name="menu_id_settings" />
 
     <!-- Menu item IDs for FullscreenActivities -->
     <item type="id" name="menu_id_open_in_chrome" />
@@ -52,4 +55,13 @@
     <!-- Keyboard shortcuts -->
     <item type="id" name="focus_url_bar" />
     <item type="id" name="show_menu" />
+
+    <!-- PaymentRequest -->
+    <item type="id" name="payments_section" />
+    <item type="id" name="payments_left_summary_label" />
+    <item type="id" name="payments_first_radio_button" />
+    <item type="id" name="payments_add_option_button" />
+    <item type="id" name="payments_edit_cancel_button" />
+    <item type="id" name="payments_edit_done_button" />
+    <item type="id" name="payments_edit_checkbox" />
 </resources>

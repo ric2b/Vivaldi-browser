@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/browser_process.h"
@@ -23,7 +24,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
+#include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/profiles/user_manager_view.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -34,6 +35,7 @@
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
 #include "ui/events/event_utils.h"
+#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/webview/webview.h"
 
 namespace {
@@ -132,15 +134,13 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
     views::View* button = browser_view->frame()->GetNewAvatarMenuButton();
     if (!button)
       NOTREACHED() << "NewAvatarButton not found.";
-    if (browser_view->frame()->GetAvatarMenuButton())
-      NOTREACHED() << "Old Avatar Menu Button found.";
 
     ProfileChooserView::close_on_deactivate_for_testing_ = false;
 
     ui::MouseEvent e(ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(),
                      ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON, 0);
     button->OnMouseReleased(e);
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(ProfileChooserView::IsShowing());
 
     // Create this observer before lock is pressed to avoid a race condition.
@@ -182,8 +182,8 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
     return ProfileChooserView::profile_bubble_;
   }
 
-  views::View* signin_current_profile_link() {
-    return ProfileChooserView::profile_bubble_->signin_current_profile_link_;
+  views::View* signin_current_profile_button() {
+    return ProfileChooserView::profile_bubble_->signin_current_profile_button_;
   }
 
   void ShowSigninView() {
@@ -193,7 +193,7 @@ class ProfileChooserViewExtensionsTest : public ExtensionBrowserTest {
     current_profile_bubble()->ShowView(
         profiles::BUBBLE_VIEW_MODE_GAIA_SIGNIN,
         current_profile_bubble()->avatar_menu_.get());
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
  private:
@@ -221,7 +221,7 @@ IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, SigninButtonHasFocus) {
   ASSERT_TRUE(profiles::IsMultipleProfilesEnabled());
   ASSERT_NO_FATAL_FAILURE(OpenProfileChooserView(browser()));
 
-  EXPECT_TRUE(signin_current_profile_link()->HasFocus());
+  EXPECT_TRUE(signin_current_profile_button()->HasFocus());
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileChooserViewExtensionsTest, ContentAreaHasFocus) {

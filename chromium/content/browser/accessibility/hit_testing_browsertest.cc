@@ -21,6 +21,7 @@
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
 #include "content/shell/browser/shell.h"
@@ -29,23 +30,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace content {
-
-namespace {
-
-bool AXTreeContainsNodeWithName(BrowserAccessibility* node,
-                                const std::string& name) {
-  if (node->GetStringAttribute(ui::AX_ATTR_NAME) == name)
-    return true;
-
-  for (unsigned i = 0; i < node->PlatformChildCount(); i++) {
-    if (AXTreeContainsNodeWithName(node->PlatformGetChild(i), name))
-      return true;
-  }
-
-  return false;
-}
-
-}  // namespace
 
 class AccessibilityHitTestingBrowserTest : public ContentBrowserTest {
  public:
@@ -61,7 +45,7 @@ class AccessibilityHitTestingBrowserTest : public ContentBrowserTest {
         web_contents->GetRootBrowserAccessibilityManager();
 
     AccessibilityNotificationWaiter hover_waiter(
-        shell(), AccessibilityModeComplete, ui::AX_EVENT_HOVER);
+        shell()->web_contents(), AccessibilityModeComplete, ui::AX_EVENT_HOVER);
     for (FrameTreeNode* node : frame_tree->Nodes())
       hover_waiter.ListenToAdditionalFrame(node->current_frame_host());
     manager->delegate()->AccessibilityHitTest(point);
@@ -82,7 +66,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
   NavigateToURL(shell(), GURL(url::kAboutBlankURL));
 
   // Load the page.
-  AccessibilityNotificationWaiter waiter(shell(), AccessibilityModeComplete,
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         AccessibilityModeComplete,
                                          ui::AX_EVENT_LOAD_COMPLETE);
   const char url_str[] =
       "data:text/html,"
@@ -110,27 +95,18 @@ IN_PROC_BROWSER_TEST_F(AccessibilityHitTestingBrowserTest,
 
   NavigateToURL(shell(), GURL(url::kAboutBlankURL));
 
-  AccessibilityNotificationWaiter waiter(shell(), AccessibilityModeComplete,
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         AccessibilityModeComplete,
                                          ui::AX_EVENT_LOAD_COMPLETE);
   GURL url(embedded_test_server()->GetURL(
       "/accessibility/html/iframe-coordinates.html"));
   NavigateToURL(shell(), url);
   waiter.WaitForNotification();
 
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(shell()->web_contents());
-  FrameTree* frame_tree = web_contents->GetFrameTree();
-  BrowserAccessibilityManager* manager =
-      web_contents->GetRootBrowserAccessibilityManager();
-  BrowserAccessibility* root = manager->GetRoot();
-  while (!AXTreeContainsNodeWithName(root, "Ordinary Button") ||
-         !AXTreeContainsNodeWithName(root, "Scrolled Button")) {
-    AccessibilityNotificationWaiter waiter(shell(), AccessibilityModeComplete,
-                                           ui::AX_EVENT_NONE);
-    for (FrameTreeNode* node : frame_tree->Nodes())
-      waiter.ListenToAdditionalFrame(node->current_frame_host());
-    waiter.WaitForNotification();
-  }
+  WaitForAccessibilityTreeToContainNodeWithName(
+      shell()->web_contents(), "Ordinary Button");
+  WaitForAccessibilityTreeToContainNodeWithName(
+      shell()->web_contents(), "Scrolled Button");
 
   // Send a series of hit test requests, and for each one
   // wait for the hover event in response, verifying we hit the

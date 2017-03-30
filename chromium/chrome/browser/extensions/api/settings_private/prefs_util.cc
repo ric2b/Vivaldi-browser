@@ -73,6 +73,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   // Appearance settings.
   (*s_whitelist)["extensions.theme.id"] =
       settings_private::PrefType::PREF_TYPE_STRING;
+  (*s_whitelist)["webkit.webprefs.default_fixed_font_size"] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["webkit.webprefs.default_font_size"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
   (*s_whitelist)["webkit.webprefs.minimum_font_size"] =
@@ -94,6 +96,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)["download.prompt_for_download"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["gdata.disabled"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
+  // Printing settings.
+  (*s_whitelist)["local_discovery.notifications_enabled"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   (*s_whitelist)["enable_do_not_track"] =
@@ -126,6 +132,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)["translate_blocked_languages"] =
       settings_private::PrefType::PREF_TYPE_LIST;
 
+  // Site Settings prefs.
+  (*s_whitelist)["profile.block_third_party_cookies"] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
   // Clear browsing data settings.
   (*s_whitelist)["browser.clear_data.browsing_history"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
@@ -141,7 +151,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["browser.clear_data.hosted_apps_data"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)["browser.clear_data.content_licenses"] =
+  (*s_whitelist)["browser.clear_data.media_licenses"] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)["browser.clear_data.time_period"] =
       settings_private::PrefType::PREF_TYPE_NUMBER;

@@ -5,10 +5,11 @@
 #include "content/renderer/media/midi_dispatcher.h"
 
 #include "base/bind.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/renderer/render_frame.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
+#include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/modules/webmidi/WebMIDIOptions.h"
 #include "third_party/WebKit/public/web/modules/webmidi/WebMIDIPermissionRequest.h"
 
@@ -24,12 +25,14 @@ MidiDispatcher::MidiDispatcher(RenderFrame* render_frame)
 
 MidiDispatcher::~MidiDispatcher() {}
 
+void MidiDispatcher::OnDestruct() {
+  delete this;
+}
+
 void MidiDispatcher::requestPermission(const WebMIDIPermissionRequest& request,
                                        const WebMIDIOptions& options) {
-  if (!permission_service_.get()) {
-    render_frame()->GetServiceRegistry()->ConnectToRemoteService(
-        mojo::GetProxy(&permission_service_));
-  }
+  if (!permission_service_.get())
+    render_frame()->GetRemoteInterfaces()->GetInterface(&permission_service_);
 
   int permission_request_id =
       requests_.Add(new WebMIDIPermissionRequest(request));
@@ -41,6 +44,7 @@ void MidiDispatcher::requestPermission(const WebMIDIPermissionRequest& request,
 
   permission_service_->RequestPermission(
       permission_name, request.getSecurityOrigin().toString().utf8(),
+      blink::WebUserGestureIndicator::isProcessingUserGesture(),
       base::Bind(&MidiDispatcher::OnPermissionSet, base::Unretained(this),
                  permission_request_id));
 }

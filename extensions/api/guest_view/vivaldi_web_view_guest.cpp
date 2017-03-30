@@ -165,10 +165,12 @@ void WebViewGuest::ExtendedLoadProgressChanged(WebContents* source,
 void WebViewGuest::InitListeners() {
   content::RenderViewHost* render_view_host =
           web_contents()->GetRenderViewHost();
+
+
   if (render_view_host && current_host_ != render_view_host) {
     // Add mouse event listener, only one for every new render_view_host
-    render_view_host->GetWidget()->AddMouseEventCallback(
-          base::Bind(&WebViewGuest::OnMouseEvent, base::Unretained(this)));
+    mouseevent_callback_ = base::Bind(&WebViewGuest::OnMouseEvent, base::Unretained(this));
+    render_view_host->GetWidget()->AddMouseEventCallback(mouseevent_callback_);
     current_host_ = render_view_host;
   }
 }

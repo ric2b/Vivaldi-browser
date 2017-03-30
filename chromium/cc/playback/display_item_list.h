@@ -26,9 +26,9 @@ class SkCanvas;
 class SkPictureRecorder;
 
 namespace cc {
+class ClientPictureCache;
 class DisplayItem;
 class DrawingDisplayItem;
-class ImageSerializationProcessor;
 
 namespace proto {
 class DisplayItemList;
@@ -51,18 +51,19 @@ class CC_EXPORT DisplayItemList
   // (crbug.com/548434).
   static scoped_refptr<DisplayItemList> CreateFromProto(
       const proto::DisplayItemList& proto,
-      ImageSerializationProcessor* image_serialization_processor);
+      ClientPictureCache* client_picture_cache,
+      std::vector<uint32_t>* used_engine_picture_ids);
 
   // Creates a Protobuf representing the state of this DisplayItemList.
-  // TODO(dtrainor): Don't resend DisplayItems that were already serialized
-  // (crbug.com/548434).
-  void ToProtobuf(proto::DisplayItemList* proto,
-                  ImageSerializationProcessor* image_serialization_processor);
+  void ToProtobuf(proto::DisplayItemList* proto);
 
+  // TODO(trchen): Deprecated. Apply clip and scale on the canvas instead.
   void Raster(SkCanvas* canvas,
               SkPicture::AbortCallback* callback,
               const gfx::Rect& canvas_target_playback_rect,
               float contents_scale) const;
+
+  void Raster(SkCanvas* canvas, SkPicture::AbortCallback* callback) const;
 
   // This is a fast path for use only if canvas_ is set and
   // retain_individual_display_items_ is false. This method also updates
@@ -108,6 +109,14 @@ class CC_EXPORT DisplayItemList
                                   std::vector<DrawImage>* images);
 
   gfx::Rect VisualRectForTesting(int index) { return visual_rects_[index]; }
+
+  ContiguousContainer<DisplayItem>::const_iterator begin() const {
+    return items_.begin();
+  }
+
+  ContiguousContainer<DisplayItem>::const_iterator end() const {
+    return items_.end();
+  }
 
  private:
   DisplayItemList(gfx::Rect layer_rect,

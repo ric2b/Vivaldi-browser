@@ -6,6 +6,7 @@
 #define DeviceOrientationInspectorAgent_h
 
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/DeviceOrientation.h"
 #include "modules/ModulesExport.h"
 #include "wtf/text/WTFString.h"
 
@@ -15,7 +16,7 @@ class DeviceOrientationController;
 class Page;
 
 
-class MODULES_EXPORT DeviceOrientationInspectorAgent final : public InspectorBaseAgent<DeviceOrientationInspectorAgent, protocol::Frontend::DeviceOrientation>, public protocol::Backend::DeviceOrientation {
+class MODULES_EXPORT DeviceOrientationInspectorAgent final : public InspectorBaseAgent<protocol::DeviceOrientation::Metainfo> {
     WTF_MAKE_NONCOPYABLE(DeviceOrientationInspectorAgent);
 public:
     static DeviceOrientationInspectorAgent* create(Page*);

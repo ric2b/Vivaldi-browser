@@ -14,15 +14,15 @@ namespace ui {
 using BlinkEventUtilTest = testing::Test;
 
 TEST(BlinkEventUtilTest, NoScalingWith1DSF) {
-  const ui::GestureEventDetails details(ui::ET_GESTURE_SCROLL_UPDATE,
-                                        1,
-                                        1);
+  ui::GestureEventDetails details(ui::ET_GESTURE_SCROLL_UPDATE, 1, 1);
+  details.set_device_type(ui::GestureDeviceType::DEVICE_TOUCHSCREEN);
   auto event =
       CreateWebGestureEvent(details,
-                            base::TimeDelta::FromMilliseconds(1),
+                            base::TimeTicks(),
                             gfx::PointF(1.f, 1.f),
                             gfx::PointF(1.f, 1.f),
-                            0);
+                            0,
+                            0U);
   EXPECT_FALSE(ScaleWebInputEvent(event, 1.f));
   EXPECT_TRUE(ScaleWebInputEvent(event, 2.f));
 }

@@ -33,6 +33,7 @@ namespace autofill {
 
 struct FormData;
 struct FormFieldData;
+struct PasswordFormFillData;
 class PasswordAutofillAgent;
 class PasswordGenerationAgent;
 
@@ -132,6 +133,15 @@ class AutofillAgent : public content::RenderFrameObserver,
   void FocusedNodeChanged(const blink::WebNode& node) override;
   void OnDestruct() override;
 
+  // Fires IPC messages for a given form submission. Will always fire
+  // AutofillHostMsg_WillSubmitForm,  and will also fire
+  // AutofillHostMsg_FormSubmitted if |form_submitted| is true. Respects
+  // submitted_forms_ contents to ensure no duplicate submissions of
+  // AutofillHostMsg_WillSubmitForm.
+  void FireHostSubmitEvents(const blink::WebFormElement& form,
+                            bool form_submitted);
+  void FireHostSubmitEvents(const FormData& form_data, bool form_submitted);
+
   // Shuts the AutofillAgent down on RenderFrame deletion. Safe to call multiple
   // times.
   void Shutdown();
@@ -175,9 +185,17 @@ class AutofillAgent : public content::RenderFrameObserver,
                                 const base::string16& password);
   void OnPreviewPasswordSuggestion(const base::string16& username,
                                    const base::string16& password);
+  void OnShowInitialPasswordAccountSuggestions(
+      int key,
+      const PasswordFormFillData& form_data);
 
   // Called when a same-page navigation is detected.
   void OnSamePageNavigationCompleted();
+  // Helper method which collects unowned elements (i.e., those not inside a
+  // form tag) and writes them into |output|. Returns true if the process is
+  // successful, and all conditions for firing events are true.
+  bool CollectFormlessElements(FormData* output);
+  FRIEND_TEST_ALL_PREFIXES(FormAutocompleteTest, CollectFormlessElements);
 
   // Called in a posted task by textFieldDidChange() to work-around a WebKit bug
   // http://bugs.webkit.org/show_bug.cgi?id=16976
@@ -260,12 +278,12 @@ class AutofillAgent : public content::RenderFrameObserver,
   // Last form which was interacted with by the user.
   blink::WebFormElement last_interacted_form_;
 
+  // When dealing with forms that don't use a <form> tag, we keep track of the
+  // elements the user has modified so we can determine when submission occurs.
+  std::set<blink::WebFormControlElement> formless_elements_user_edited_;
+
   // Was the query node autofilled prior to previewing the form?
   bool was_query_node_autofilled_;
-
-  // Have we already shown Autofill suggestions for the field the user is
-  // currently editing?  Used to keep track of state for metrics logging.
-  bool has_shown_autofill_popup_for_current_edit_;
 
   // Whether or not to ignore text changes.  Useful for when we're committing
   // a composition when we are defocusing the WebView and we don't want to

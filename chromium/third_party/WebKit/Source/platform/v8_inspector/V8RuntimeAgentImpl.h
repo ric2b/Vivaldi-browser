@@ -32,8 +32,10 @@
 #define V8RuntimeAgentImpl_h
 
 #include "platform/inspector_protocol/Allocator.h"
-#include "platform/inspector_protocol/Frontend.h"
-#include "platform/v8_inspector/public/V8RuntimeAgent.h"
+#include "platform/inspector_protocol/String16.h"
+#include "platform/v8_inspector/protocol/Runtime.h"
+
+#include <v8.h>
 
 namespace blink {
 
@@ -49,17 +51,12 @@ class DictionaryValue;
 
 using protocol::Maybe;
 
-class V8RuntimeAgentImpl : public V8RuntimeAgent {
+class V8RuntimeAgentImpl : public protocol::Runtime::Backend {
     PROTOCOL_DISALLOW_COPY(V8RuntimeAgentImpl);
 public:
-    explicit V8RuntimeAgentImpl(V8InspectorSessionImpl*);
+    V8RuntimeAgentImpl(V8InspectorSessionImpl*, protocol::FrontendChannel*, protocol::DictionaryValue* state);
     ~V8RuntimeAgentImpl() override;
-
-    // State management methods.
-    void setInspectorState(protocol::DictionaryValue*) override;
-    void setFrontend(protocol::Frontend::Runtime*) override;
-    void clearFrontend() override;
-    void restore() override;
+    void restore();
 
     // Part of the protocol.
     void enable(ErrorString*) override;
@@ -73,7 +70,7 @@ public:
         const Maybe<bool>& returnByValue,
         const Maybe<bool>& generatePreview,
         const Maybe<bool>& userGesture,
-        OwnPtr<protocol::Runtime::RemoteObject>* result,
+        std::unique_ptr<protocol::Runtime::RemoteObject>* result,
         Maybe<bool>* wasThrown,
         Maybe<protocol::Runtime::ExceptionDetails>*) override;
     void callFunctionOn(ErrorString*,
@@ -84,7 +81,7 @@ public:
         const Maybe<bool>& returnByValue,
         const Maybe<bool>& generatePreview,
         const Maybe<bool>& userGesture,
-        OwnPtr<protocol::Runtime::RemoteObject>* result,
+        std::unique_ptr<protocol::Runtime::RemoteObject>* result,
         Maybe<bool>* wasThrown) override;
     void releaseObject(ErrorString*, const String16& objectId) override;
     void getProperties(ErrorString*,
@@ -92,7 +89,7 @@ public:
         const Maybe<bool>& ownProperties,
         const Maybe<bool>& accessorPropertiesOnly,
         const Maybe<bool>& generatePreview,
-        OwnPtr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result,
+        std::unique_ptr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result,
         Maybe<protocol::Array<protocol::Runtime::InternalPropertyDescriptor>>* internalProperties,
         Maybe<protocol::Runtime::ExceptionDetails>*) override;
     void releaseObjectGroup(ErrorString*, const String16& objectGroup) override;
@@ -111,21 +108,21 @@ public:
         const Maybe<String16>& objectGroup,
         const Maybe<bool>& doNotPauseOnExceptionsAndMuteConsole,
         const Maybe<bool>& includeCommandLineAPI,
-        OwnPtr<protocol::Runtime::RemoteObject>* result,
+        std::unique_ptr<protocol::Runtime::RemoteObject>* result,
         Maybe<protocol::Runtime::ExceptionDetails>*) override;
 
     void reset();
     void reportExecutionContextCreated(InspectedContext*);
     void reportExecutionContextDestroyed(InspectedContext*);
-    void inspect(PassOwnPtr<protocol::Runtime::RemoteObject> objectToInspect, PassOwnPtr<protocol::DictionaryValue> hints);
+    void inspect(std::unique_ptr<protocol::Runtime::RemoteObject> objectToInspect, std::unique_ptr<protocol::DictionaryValue> hints);
 
 private:
     V8InspectorSessionImpl* m_session;
     protocol::DictionaryValue* m_state;
-    protocol::Frontend::Runtime* m_frontend;
+    protocol::Runtime::Frontend m_frontend;
     V8DebuggerImpl* m_debugger;
     bool m_enabled;
-    protocol::HashMap<String16, OwnPtr<v8::Global<v8::Script>>> m_compiledScripts;
+    protocol::HashMap<String16, std::unique_ptr<v8::Global<v8::Script>>> m_compiledScripts;
 };
 
 } // namespace blink

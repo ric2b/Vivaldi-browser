@@ -1,34 +1,28 @@
-<link rel="import" href="chrome://md-user-manager/profile_browser_proxy.html">
-<link rel="import" href="chrome://md-user-manager/shared_styles.html">
+<link rel="import" href="/profile_browser_proxy.html">
+<link rel="import" href="/shared_styles.html">
+<link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 
 <dom-module id="control-bar">
   <template>
-    <style include="shared-styles">
+    <style include="shared-styles iron-flex iron-flex-alignment iron-positioning">
       #container {
+        -webkit-padding-end: 8px;
+        -webkit-padding-start: 24px;
+        align-items: center;
         min-height: 32px;
-        padding: 12px 8px;
+        padding-bottom: 12px;
+        padding-top: 12px;
       }
 
       #logo {
-        content: -webkit-image-set(
-            url(../../../../../app/resources/theme/vivaldi/product_logo_48.png) 1x,
-            url(../../../../../app/resources/theme/vivaldi/product_logo_48.png) 2x);
-        height: 18px;
-        left: 24px;
-        position: absolute;
-        top: 19px;
-      }
-
-      :host-context([dir='rtl']) #logo {
-        left: auto;
-        right: 24px;
+        -webkit-margin-end: auto;
       }
     </style>
     <div id="container" class="layout horizontal end-justified">
-      <div id="logo"></div>
+      <div id="logo" class="product-logo" alt=""></div>
       <paper-button id="launchGuest" class="action secondary"
           on-tap="onLaunchGuestTap_"
           i18n-content="browseAsGuest" hidden="[[!showGuest]]"></paper-button>
@@ -36,5 +30,5 @@
           i18n-content="addUser" hidden="[[!showAddPerson]]"></paper-button>
     </div>
   </template>
-  <script src="chrome://md-user-manager/control_bar.js"></script>
+  <script src="control_bar.js"></script>
 </dom-module>

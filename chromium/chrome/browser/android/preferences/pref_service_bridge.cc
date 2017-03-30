@@ -71,6 +71,7 @@ using base::android::ScopedJavaGlobalRef;
 using content::BrowserThread;
 
 namespace {
+
 const size_t kMaxImportantSites = 5;
 
 Profile* GetOriginalProfile() {
@@ -156,12 +157,9 @@ static void SetContentSettingEnabled(JNIEnv* env,
                                      jboolean allow) {
   // Before we migrate functions over to this central function, we must verify
   // that the new category supports ALLOW/BLOCK pairs and, if not, handle them.
-  // IMAGES is included to allow migrating the setting back for users who had
-  // disabled images in M44 (see https://crbug.com/505844).
-  // TODO(bauerb): Remove this when the migration code is removed.
   DCHECK(content_settings_type == CONTENT_SETTINGS_TYPE_JAVASCRIPT ||
-         content_settings_type == CONTENT_SETTINGS_TYPE_POPUPS ||
-         content_settings_type == CONTENT_SETTINGS_TYPE_IMAGES);
+         content_settings_type == CONTENT_SETTINGS_TYPE_POPUPS);
+
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
   host_content_settings_map->SetDefaultContentSetting(
@@ -366,6 +364,12 @@ static jboolean GetProtectedMediaIdentifierEnabled(
 static jboolean GetNotificationsEnabled(JNIEnv* env,
                                         const JavaParamRef<jobject>& obj) {
   return GetBooleanForContentSetting(CONTENT_SETTINGS_TYPE_NOTIFICATIONS);
+}
+
+static jboolean GetNotificationsVibrateEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return GetPrefService()->GetBoolean(prefs::kNotificationsVibrateEnabled);
 }
 
 static jboolean GetAllowLocationEnabled(JNIEnv* env,
@@ -646,6 +650,11 @@ static void ClearBrowsingData(
     filter_builder.AddRegisterableDomain(domain);
   }
 
+  if (!excluding_domains.empty()) {
+    ImportantSitesUtil::RecordMetricsForBlacklistedSites(GetOriginalProfile(),
+                                                         excluding_domains);
+  }
+
   browsing_data_remover->RemoveWithFilter(
       BrowsingDataRemover::Period(
           static_cast<BrowsingDataRemover::TimePeriod>(time_period)),
@@ -660,13 +669,40 @@ static jboolean CanDeleteBrowsingHistory(JNIEnv* env,
 static void FetchImportantSites(JNIEnv* env,
                                 const JavaParamRef<jclass>& clazz,
                                 const JavaParamRef<jobject>& java_callback) {
+  std::vector<GURL> example_origins;
   std::vector<std::string> important_domains =
-      ImportantSitesUtil::GetImportantRegisterableDomains(GetOriginalProfile(),
-                                                          kMaxImportantSites);
-  ScopedJavaLocalRef<jobjectArray> string_array =
+      ImportantSitesUtil::GetImportantRegisterableDomains(
+          GetOriginalProfile(), kMaxImportantSites, &example_origins);
+  ScopedJavaLocalRef<jobjectArray> java_domains =
       base::android::ToJavaArrayOfStrings(env, important_domains);
+
+  // We reuse the important domains vector to convert example origins to
+  // strings.
+  important_domains.resize(example_origins.size());
+  std::transform(example_origins.begin(), example_origins.end(),
+                 important_domains.begin(),
+                 [](const GURL& origin) { return origin.spec(); });
+  ScopedJavaLocalRef<jobjectArray> java_origins =
+      base::android::ToJavaArrayOfStrings(env, important_domains);
+
   Java_ImportantSitesCallback_onImportantRegisterableDomainsReady(
-      env, java_callback.obj(), string_array.obj());
+      env, java_callback.obj(), java_domains.obj(), java_origins.obj());
+}
+
+// This value should not change during a sessions, as it's used for UMA metrics.
+static jint GetMaxImportantSites(JNIEnv* env,
+                                 const JavaParamRef<jclass>& clazz) {
+  return kMaxImportantSites;
+}
+
+static void MarkOriginAsImportantForTesting(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& jorigin) {
+  GURL origin(base::android::ConvertJavaStringToUTF8(jorigin));
+  CHECK(origin.is_valid());
+  ImportantSitesUtil::MarkOriginAsImportantForTesting(GetOriginalProfile(),
+                                                      origin);
 }
 
 static void ShowNoticeAboutOtherFormsOfBrowsingHistory(
@@ -820,6 +856,12 @@ static void SetNotificationsEnabled(JNIEnv* env,
   host_content_settings_map->SetDefaultContentSetting(
       CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
       allow ? CONTENT_SETTING_ASK : CONTENT_SETTING_BLOCK);
+}
+
+static void SetNotificationsVibrateEnabled(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj,
+                                           jboolean enabled) {
+  GetPrefService()->SetBoolean(prefs::kNotificationsVibrateEnabled, enabled);
 }
 
 static void SetCrashReportingEnabled(JNIEnv* env,
@@ -1096,6 +1138,9 @@ bool PrefServiceBridge::RegisterPrefServiceBridge(JNIEnv* env) {
 }
 
 // static
+// This logic should be kept in sync with prependToAcceptLanguagesIfNecessary in
+// chrome/android/java/src/org/chromium/chrome/browser/
+//     physicalweb/PwsClientImpl.java
 void PrefServiceBridge::PrependToAcceptLanguagesIfNecessary(
     const std::string& locale,
     std::string* accept_languages) {
@@ -1121,6 +1166,9 @@ void PrefServiceBridge::PrependToAcceptLanguagesIfNecessary(
     std::vector<std::string> parts;
     parts.push_back(language_region);
     // If language is not in the accept languages list, also add language code.
+    // This will work with the IDS_ACCEPT_LANGUAGE localized strings bundled
+    // with Chrome but may fail on arbitrary lists of language tags due to
+    // differences in case and whitespace.
     if (accept_languages->find(language + ",") == std::string::npos &&
         !std::equal(language.rbegin(), language.rend(),
                     accept_languages->rbegin())) {

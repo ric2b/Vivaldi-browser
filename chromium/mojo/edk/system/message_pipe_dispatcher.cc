@@ -7,6 +7,7 @@
 #include <limits>
 #include <memory>
 
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "mojo/edk/embedder/embedder_internal.h"
@@ -288,6 +289,8 @@ MojoResult MessagePipeDispatcher::ReadMessage(
         dispatcher_headers + header->num_dispatchers);
     size_t port_index = 0;
     size_t platform_handle_index = 0;
+    ScopedPlatformHandleVectorPtr msg_handles = msg->TakeHandles();
+    const size_t num_msg_handles = msg_handles ? msg_handles->size() : 0;
     for (size_t i = 0; i < header->num_dispatchers; ++i) {
       const DispatcherHeader& dh = dispatcher_headers[i];
       Type type = static_cast<Type>(dh.type);
@@ -304,13 +307,14 @@ MojoResult MessagePipeDispatcher::ReadMessage(
 
       size_t next_platform_handle_index =
           platform_handle_index + dh.num_platform_handles;
-      if (msg->num_handles() < next_platform_handle_index ||
+      if (num_msg_handles < next_platform_handle_index ||
           next_platform_handle_index < platform_handle_index) {
         return MOJO_RESULT_UNKNOWN;
       }
 
       PlatformHandle* out_handles =
-          msg->num_handles() ? msg->handles() + platform_handle_index : nullptr;
+          num_msg_handles ? msg_handles->data() + platform_handle_index
+                          : nullptr;
       dispatchers[i].dispatcher = Dispatcher::Deserialize(
           type, dispatcher_data, dh.num_bytes, msg->ports() + port_index,
           dh.num_ports, out_handles, dh.num_platform_handles);
@@ -521,7 +525,7 @@ void MessagePipeDispatcher::OnPortStatusChanged() {
   if (port_transferred_)
     return;
 
-#if !defined(NDEBUG)
+#if DCHECK_IS_ON()
   ports::PortStatus port_status;
   if (node_controller_->node()->GetStatus(port_, &port_status) == ports::OK) {
     if (port_status.has_messages) {

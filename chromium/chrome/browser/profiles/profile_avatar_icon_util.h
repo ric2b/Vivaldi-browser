@@ -7,12 +7,14 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 
 #include "third_party/skia/include/core/SkColor.h"
 
 namespace base {
 class FilePath;
+class ListValue;
 }
 
 namespace gfx {
@@ -37,12 +39,25 @@ extern const SkColor kAvatarBubbleAccountsBackgroundColor;
 extern const SkColor kAvatarBubbleGaiaBackgroundColor;
 extern const SkColor kUserManagerBackgroundColor;
 
+// Avatar shape.
+enum AvatarShape {
+  SHAPE_CIRCLE,  // Only available for desktop platforms
+  SHAPE_SQUARE,
+};
+
 // Returns a version of |image| of a specific size. Note that no checks are
 // done on the width/height so make sure they're reasonable values; in the
 // range of 16-256 is probably best.
 gfx::Image GetSizedAvatarIcon(const gfx::Image& image,
                               bool is_rectangle,
-                              int width, int height);
+                              int width,
+                              int height,
+                              AvatarShape shape);
+
+gfx::Image GetSizedAvatarIcon(const gfx::Image& image,
+                              bool is_rectangle,
+                              int width,
+                              int height);
 
 // Returns a version of |image| suitable for use in menus.
 gfx::Image GetAvatarIconForMenu(const gfx::Image& image,
@@ -81,6 +96,9 @@ int GetDefaultAvatarIconResourceIDAtIndex(size_t index);
 // Gets the resource filename of the default avatar icon at |index|.
 const char* GetDefaultAvatarIconFileNameAtIndex(size_t index);
 
+// Gets the resource ID of the default avatar label at |index|.
+int GetDefaultAvatarLabelResourceIDAtIndex(size_t index);
+
 // Gets the full path of the high res avatar icon at |index|.
 base::FilePath GetPathOfHighResAvatarAtIndex(size_t index);
 
@@ -103,6 +121,11 @@ bool IsDefaultAvatarIconUrl(const std::string& icon_url, size_t *icon_index);
 //   https://example.com/--Abc/AAAAAAAAAAI/AAAAAAAAACQ/Efg/s256-c/photo.jpg
 bool GetImageURLWithThumbnailSize(
     const GURL& old_url, int thumbnail_size, GURL* new_url);
+
+// Returns a list of dictionaries containing the default profile avatar icons as
+// well as avatar labels used for accessibility purposes. The list is ordered
+// according to the avatars' default order.
+std::unique_ptr<base::ListValue> GetDefaultProfileAvatarIconsAndLabels();
 
 }  // namespace profiles
 

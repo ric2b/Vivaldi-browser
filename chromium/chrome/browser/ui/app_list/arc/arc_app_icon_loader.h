@@ -43,7 +43,7 @@ class ArcAppIconLoader : public AppIconLoader,
   using AppIDToIconMap = std::map<std::string, std::unique_ptr<ArcAppIcon>>;
 
   // Unowned pointer.
-  ArcAppListPrefs* arc_prefs_;
+  ArcAppListPrefs* const arc_prefs_;
 
   AppIDToIconMap icon_map_;
 

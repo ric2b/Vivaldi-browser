@@ -10,7 +10,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:padding="@dimen/snippets_padding_and_peeking_card_height"
-    android:background="@color/snippets_background_color">
+    android:background="@drawable/ntp_card">
 
     <org.chromium.ui.widget.TextViewWithLeading
         android:id="@+id/article_headline"
@@ -49,7 +49,8 @@
         android:maxLines="1"
         android:ellipsize="end"
         android:textSize="12sp"
-        android:textColor="@color/snippets_publisher_name_color" />
+        android:textColor="@color/snippets_publisher_name_color"
+        android:textDirection="locale" />
 
     <ImageView
         android:id="@+id/article_thumbnail"

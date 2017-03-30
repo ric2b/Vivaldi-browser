@@ -63,7 +63,7 @@ void ErrorAndRegistrationCallback(
     blink::mojom::BackgroundSyncError* out_error,
     blink::mojom::SyncRegistrationPtr* out_registration,
     blink::mojom::BackgroundSyncError error,
-    const blink::mojom::SyncRegistrationPtr& registration) {
+    blink::mojom::SyncRegistrationPtr registration) {
   *called = true;
   *out_error = error;
   *out_registration = registration.Clone();
@@ -135,7 +135,7 @@ class BackgroundSyncServiceImplTest : public testing::Test {
     storage_partition_impl_.reset(new StoragePartitionImpl(
         embedded_worker_helper_->browser_context(), base::FilePath(), nullptr,
         nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-        nullptr, nullptr, nullptr, nullptr));
+        nullptr, nullptr, nullptr, nullptr, nullptr));
     embedded_worker_helper_->context_wrapper()->set_storage_partition(
         storage_partition_impl_.get());
   }

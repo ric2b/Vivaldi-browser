@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/run_loop.h"
 #include "components/nacl/loader/nacl_listener.h"
 
 #include <errno.h>
@@ -18,7 +19,9 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/rand_util.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/nacl/common/nacl_messages.h"
 #include "components/nacl/common/nacl_renderer_messages.h"
@@ -155,7 +158,8 @@ class BrowserValidationDBProxy : public NaClValidationDB {
 };
 
 NaClListener::NaClListener()
-    : shutdown_event_(true, false),
+    : shutdown_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                      base::WaitableEvent::InitialState::NOT_SIGNALED),
       io_thread_("NaCl_IOThread"),
 #if defined(OS_LINUX)
       prereserved_sandbox_size_(0),
@@ -163,7 +167,6 @@ NaClListener::NaClListener()
 #if defined(OS_POSIX)
       number_of_cores_(-1),  // unknown/error
 #endif
-      main_loop_(NULL),
       is_started_(false) {
   IPC::AttachmentBrokerUnprivileged::CreateBrokerIfNeeded();
   io_thread_.StartWithOptions(
@@ -179,8 +182,8 @@ NaClListener::~NaClListener() {
 }
 
 bool NaClListener::Send(IPC::Message* msg) {
-  DCHECK(main_loop_ != NULL);
-  if (base::MessageLoop::current() == main_loop_) {
+  DCHECK(!!main_task_runner_);
+  if (main_task_runner_->BelongsToCurrentThread()) {
     // This thread owns the channel.
     return channel_->Send(msg);
   } else {
@@ -229,8 +232,8 @@ void NaClListener::Listen() {
   if (global && !global->IsPrivilegedBroker())
     global->RegisterBrokerCommunicationChannel(channel_.get());
   channel_->Init(channel_name, IPC::Channel::MODE_CLIENT, true);
-  main_loop_ = base::MessageLoop::current();
-  main_loop_->Run();
+  main_task_runner_ = base::ThreadTaskRunnerHandle::Get();
+  base::RunLoop().Run();
 }
 
 bool NaClListener::OnMessageReceived(const IPC::Message& msg) {

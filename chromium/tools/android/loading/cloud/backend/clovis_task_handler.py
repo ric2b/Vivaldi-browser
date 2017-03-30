@@ -14,24 +14,31 @@ class ClovisTaskHandler(object):
   """Handles all the supported clovis tasks."""
 
   def __init__(self, project_name, base_path, failure_database,
-               google_storage_accessor, bigquery_service, binaries_path, logger,
+               google_storage_accessor, bigquery_service, binaries_path,
+               ad_rules_filename, tracking_rules_filename, logger,
                instance_name=None):
     """Creates a ClovisTaskHandler.
 
     Args:
+      project_name (str): Name of the project.
       base_path(str): Base path where results are written.
+      failure_database (FailureDatabase): Failure Database.
+      google_storage_accessor (GoogleStorageAccessor): Cloud storage accessor.
+      bigquery_service (googleapiclient.discovery.Resource): Bigquery service.
       binaries_path(str): Path to the directory where Chrome executables are.
+      ad_rules_filename (str): Path to the ad filtering rules.
+      tracking_rules_filename (str): Path to the tracking filtering rules.
       instance_name(str, optional): Name of the ComputeEngine instance.
     """
     self._failure_database = failure_database
-    trace_path = os.path.join(base_path, 'trace')
     self._handlers = {
         'trace': TraceTaskHandler(
-            trace_path, failure_database, google_storage_accessor,
-            binaries_path, logger, instance_name),
+            base_path, failure_database, google_storage_accessor, binaries_path,
+            logger, instance_name),
         'report': ReportTaskHandler(
             project_name, failure_database, google_storage_accessor,
-            bigquery_service, logger)}
+            bigquery_service, logger, ad_rules_filename,
+            tracking_rules_filename)}
 
   def Run(self, clovis_task):
     """Runs a clovis_task.

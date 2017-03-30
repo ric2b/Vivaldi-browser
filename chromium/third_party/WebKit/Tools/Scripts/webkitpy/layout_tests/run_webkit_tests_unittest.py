@@ -50,7 +50,6 @@ from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port import test
 from webkitpy.layout_tests.port.base import Port
 from webkitpy.tool import grammar
-from webkitpy.tool.mocktool import MockOptions
 
 
 def parse_args(extra_args=None, tests_included=False, new_results=False, print_nothing=True):
@@ -170,7 +169,7 @@ def parse_full_results(full_results_text):
 class StreamTestingMixin(object):
 
     def assertContains(self, stream, string):
-        self.assertTrue(string in stream.getvalue())
+        self.assertIn(string, stream.getvalue())
 
     def assertEmpty(self, stream):
         self.assertFalse(stream.getvalue())
@@ -219,7 +218,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
             expected_summary_str,
             len(details.initial_results.unexpected_results_by_name),
             test.TOTAL_CRASHES)
-        self.assertTrue(one_line_summary in logging_stream.buflist)
+        self.assertIn(one_line_summary, logging_stream.buflist)
 
         # Ensure the results were summarized properly.
         self.assertEqual(details.summarized_failing_results['num_regressions'], details.exit_code)
@@ -390,12 +389,12 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
     def test_ignore_flag(self):
         # Note that passes/image.html is expected to be run since we specified it directly.
         tests_run = get_tests_run(['-i', 'passes', 'passes/image.html'])
-        self.assertFalse('passes/text.html' in tests_run)
-        self.assertTrue('passes/image.html' in tests_run)
+        self.assertNotIn('passes/text.html', tests_run)
+        self.assertIn('passes/image.html', tests_run)
 
     def test_skipped_flag(self):
         tests_run = get_tests_run(['passes'])
-        self.assertFalse('passes/skipped/skip.html' in tests_run)
+        self.assertNotIn('passes/skipped/skip.html', tests_run)
         num_tests_run_by_default = len(tests_run)
 
         # Check that nothing changes when we specify skipped=default.
@@ -404,7 +403,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
 
         # Now check that we run one more test (the skipped one).
         tests_run = get_tests_run(['--skipped=ignore', 'passes'])
-        self.assertTrue('passes/skipped/skip.html' in tests_run)
+        self.assertIn('passes/skipped/skip.html', tests_run)
         self.assertEqual(len(tests_run), num_tests_run_by_default + 1)
 
         # Now check that we only run the skipped test.
@@ -459,8 +458,8 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         batches = get_test_batches(['--skip-failing-tests', '--additional-expectations', '/tmp/overrides.txt'], host=host)
         has_passes_text = False
         for batch in batches:
-            self.assertFalse('failures/expected/text.html' in batch)
-            self.assertFalse('passes/image.html' in batch)
+            self.assertNotIn('failures/expected/text.html', batch)
+            self.assertNotIn('passes/image.html', batch)
             has_passes_text = has_passes_text or ('passes/text.html' in batch)
         self.assertTrue(has_passes_text)
 
@@ -608,7 +607,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         self.assertEqual(details.exit_code, test_run_results.EARLY_EXIT_STATUS)
 
         # This checks that passes/text.html is considered Skip-ped.
-        self.assertTrue('"skipped":1' in host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json'))
+        self.assertIn('"skipped":1', host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json'))
 
         # This checks that we told the user we bailed out.
         self.assertTrue('Exiting early after 1 failures. 1 tests run.\n' in regular_output.getvalue())
@@ -672,12 +671,12 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         details, err, _ = logging_run(
             ['--debug-rwt-logging', 'failures/unexpected/text-image-checksum.html'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 1)
-        self.assertFalse('Retrying' in err.getvalue())
+        self.assertNotIn('Retrying', err.getvalue())
 
         host = MockHost()
         details, err, _ = logging_run(['--debug-rwt-logging', 'failures/unexpected'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, test.UNEXPECTED_FAILURES - 7)  # FIXME: This should be a constant in test.py .
-        self.assertTrue('Retrying' in err.getvalue())
+        self.assertIn('Retrying', err.getvalue())
 
     def test_retrying_default_value_test_list(self):
         host = MockHost()
@@ -685,20 +684,20 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         host.filesystem.write_text_file(filename, 'failures/unexpected/text-image-checksum.html\nfailures/unexpected/crash.html')
         details, err, _ = logging_run(['--debug-rwt-logging', '--test-list=%s' % filename], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 2)
-        self.assertFalse('Retrying' in err.getvalue())
+        self.assertNotIn('Retrying', err.getvalue())
 
         host = MockHost()
         filename = '/tmp/foo.txt'
         host.filesystem.write_text_file(filename, 'failures')
         details, err, _ = logging_run(['--debug-rwt-logging', '--test-list=%s' % filename], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 0)
-        self.assertTrue('Retrying' in err.getvalue())
+        self.assertIn('Retrying', err.getvalue())
 
     def test_retrying_and_flaky_tests(self):
         host = MockHost()
         details, err, _ = logging_run(['--debug-rwt-logging', '--retry-failures', 'failures/flaky'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 0)
-        self.assertTrue('Retrying' in err.getvalue())
+        self.assertIn('Retrying', err.getvalue())
         self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/failures/flaky/text-actual.txt'))
         self.assertFalse(host.filesystem.exists('/tmp/layout-test-results/retry_1/failures/flaky/text-actual.txt'))
         self.assertFalse(host.filesystem.exists('/tmp/layout-test-results/retry_2/failures/flaky/text-actual.txt'))
@@ -712,7 +711,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
                                        'failures/flaky'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 1)
         self.assertTrue('Clobbering old results' in err.getvalue())
-        self.assertTrue('flaky/text.html' in err.getvalue())
+        self.assertIn('flaky/text.html', err.getvalue())
         self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/failures/flaky/text-actual.txt'))
         self.assertFalse(host.filesystem.exists('retry_1'))
         self.assertFalse(host.filesystem.exists('retry_2'))
@@ -723,28 +722,34 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         host = MockHost()
         details, err, _ = logging_run(['--retry-failures', 'failures/unexpected/crash.html'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 1)
-        self.assertTrue('Retrying' in err.getvalue())
+        self.assertIn('Retrying', err.getvalue())
 
     def test_retrying_leak_tests(self):
         host = MockHost()
         details, err, _ = logging_run(['--retry-failures', 'failures/unexpected/leak.html'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 1)
-        self.assertTrue('Retrying' in err.getvalue())
+        self.assertIn('Retrying', err.getvalue())
 
     def test_retrying_force_pixel_tests(self):
         host = MockHost()
         details, err, _ = logging_run(['--no-pixel-tests', '--retry-failures',
                                        'failures/unexpected/text-image-checksum.html'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 1)
-        self.assertTrue('Retrying' in err.getvalue())
+        self.assertIn('Retrying', err.getvalue())
         self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/failures/unexpected/text-image-checksum-actual.txt'))
         self.assertFalse(host.filesystem.exists('/tmp/layout-test-results/failures/unexpected/text-image-checksum-actual.png'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_1/failures/unexpected/text-image-checksum-actual.txt'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_2/failures/unexpected/text-image-checksum-actual.txt'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.txt'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_1/failures/unexpected/text-image-checksum-actual.png'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_2/failures/unexpected/text-image-checksum-actual.png'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.png'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_1/failures/unexpected/text-image-checksum-actual.txt'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_2/failures/unexpected/text-image-checksum-actual.txt'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.txt'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_1/failures/unexpected/text-image-checksum-actual.png'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_2/failures/unexpected/text-image-checksum-actual.png'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.png'))
         json_string = host.filesystem.read_text_file('/tmp/layout-test-results/full_results.json')
         json = parse_full_results(json_string)
         self.assertEqual(json["tests"]["failures"]["unexpected"]["text-image-checksum.html"],
@@ -758,9 +763,12 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
                                        'failures/unexpected/text-image-checksum.html'], tests_included=True, host=host)
         self.assertEqual(details.exit_code, 1)
         self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/failures/unexpected/text-image-checksum-actual.txt'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_1/failures/unexpected/text-image-checksum-actual.txt'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_2/failures/unexpected/text-image-checksum-actual.txt'))
-        self.assertTrue(host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.txt'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_1/failures/unexpected/text-image-checksum-actual.txt'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_2/failures/unexpected/text-image-checksum-actual.txt'))
+        self.assertTrue(
+            host.filesystem.exists('/tmp/layout-test-results/retry_3/failures/unexpected/text-image-checksum-actual.txt'))
 
     def test_run_order__inline(self):
         # These next tests test that we run the tests in ascending alphabetical
@@ -892,13 +900,13 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
 
     def test_platform_directories_ignored_when_searching_for_tests(self):
         tests_run = get_tests_run(['--platform', 'test-mac-mac10.10'])
-        self.assertFalse('platform/test-mac-mac10.10/http/test.html' in tests_run)
-        self.assertFalse('platform/test-win-win7/http/test.html' in tests_run)
+        self.assertNotIn('platform/test-mac-mac10.10/http/test.html', tests_run)
+        self.assertNotIn('platform/test-win-win7/http/test.html', tests_run)
 
     def test_platform_directories_not_searched_for_additional_tests(self):
         tests_run = get_tests_run(['--platform', 'test-mac-mac10.10', 'http'])
-        self.assertFalse('platform/test-mac-mac10.10/http/test.html' in tests_run)
-        self.assertFalse('platform/test-win-win7/http/test.html' in tests_run)
+        self.assertNotIn('platform/test-mac-mac10.10/http/test.html', tests_run)
+        self.assertNotIn('platform/test-win-win7/http/test.html', tests_run)
 
     def test_output_diffs(self):
         # Test to ensure that we don't generate -wdiff.html or -pretty.html if wdiff and PrettyPatch
@@ -962,7 +970,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         host = Host()
         _, err, _ = logging_run(['--platform', 'mock-win', '--driver-logging', 'fast/harness/results.html'],
                                 tests_included=True, host=host)
-        self.assertTrue('OUT:' in err.getvalue())
+        self.assertIn('OUT:', err.getvalue())
 
     def test_write_full_results_to(self):
         host = MockHost()
@@ -1014,7 +1022,7 @@ class RebaselineTest(unittest.TestCase, StreamTestingMixin):
         for ext in extensions:
             baseline = file + "-expected" + ext
             baseline_msg = 'Writing new expected result "%s"\n' % baseline
-            self.assertTrue(any(f.find(baseline) != -1 for f in file_list))
+            self.assertTrue(any(baseline in f for f in file_list))
             self.assertContains(err, baseline_msg)
 
     # FIXME: Add tests to ensure that we're *not* writing baselines when we're not

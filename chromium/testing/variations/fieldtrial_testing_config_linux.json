@@ -40,10 +40,7 @@
     ],
     "ChromotingQUIC": [
         {
-            "group_name": "Enabled",
-            "params": {
-                "delay_tcp_race": "true"
-            }
+            "group_name": "Enabled"
         }
     ],
     "DisallowFetchForDocWrittenScriptsInMainFrame": [
@@ -123,6 +120,14 @@
             "group_name": "NetworkTimeQueriesEnabled"
         }
     ],
+    "NewAudioRenderingMixingStrategy": [
+        {
+            "enable_features": [
+                "NewAudioRenderingMixingStrategy"
+            ],
+            "group_name": "Enabled"
+        }
+    ],
     "OfferUploadCreditCards": [
         {
             "group_name": "Enabled"
@@ -166,7 +171,10 @@
     ],
     "QUIC": [
         {
-            "group_name": "Enabled"
+            "group_name": "Enabled",
+            "params": {
+                "delay_tcp_race": "true"
+            }
         }
     ],
     "RefreshTokenDeviceId": [
@@ -201,14 +209,6 @@
         },
         {
             "group_name": "DontShowAndDontSend"
-        }
-    ],
-    "ResourcePriorities": [
-        {
-            "group_name": "Launch50pct_11011_1_1_10"
-        },
-        {
-            "group_name": "Control50pct"
         }
     ],
     "SSLCommonNameMismatchHandling": [
@@ -267,6 +267,11 @@
             }
         }
     ],
+    "SafeBrowsingV4LocalDatabaseManagerEnabled": [
+        {
+            "group_name": "Enabled"
+        }
+    ],
     "SchedulerExpensiveTaskBlocking": [
         {
             "group_name": "Enabled"
@@ -308,15 +313,10 @@
             "group_name": "TokenBinding"
         }
     ],
-    "UsePredictorDNSQueue": [
-        {
-            "disable_features": [
-                "UsePredictorDNSQueue"
-            ],
-            "group_name": "Disabled"
-        }
-    ],
     "V8CacheStrategiesForCacheStorage": [
+        {
+            "group_name": "default"
+        },
         {
             "group_name": "none"
         },
@@ -333,11 +333,6 @@
             "params": {
                 "fetch_period_min": "30"
             }
-        }
-    ],
-    "WebFontsIntervention": [
-        {
-            "group_name": "Enabled"
         }
     ],
     "WebRTC-EnableWebRtcEcdsa": [

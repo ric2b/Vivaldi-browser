@@ -33,7 +33,6 @@
 #include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/input/EventHandler.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
@@ -85,7 +84,7 @@ static void paintInternal(Page& page, WebCanvas* canvas,
         IntRect dirtyRect(rect);
         FrameView* view = root.view();
         if (view) {
-            ClipRecorder clipRecorder(paintContext, pictureBuilder, DisplayItem::PageWidgetDelegateClip, LayoutRect(dirtyRect));
+            ClipRecorder clipRecorder(paintContext, pictureBuilder, DisplayItem::PageWidgetDelegateClip, dirtyRect);
             view->paint(paintContext, globalPaintFlags, CullRect(dirtyRect));
         } else {
             DrawingRecorder drawingRecorder(paintContext, pictureBuilder, DisplayItem::PageWidgetDelegateBackgroundFallback, dirtyRect);
@@ -109,6 +108,23 @@ void PageWidgetDelegate::paintIgnoringCompositing(Page& page, WebCanvas* canvas,
 
 WebInputEventResult PageWidgetDelegate::handleInputEvent(PageWidgetEventHandler& handler, const WebInputEvent& event, LocalFrame* root)
 {
+    if (event.modifiers & WebInputEvent::IsTouchAccessibility
+        && WebInputEvent::isMouseEventType(event.type)) {
+        PlatformMouseEventBuilder pme(root->view(), static_cast<const WebMouseEvent&>(event));
+
+        IntPoint docPoint(root->view()->rootFrameToContents(pme.position()));
+        HitTestResult result = root->eventHandler().hitTestResultAtPoint(docPoint, HitTestRequest::ReadOnly | HitTestRequest::Active);
+        result.setToShadowHostIfInUserAgentShadowRoot();
+        if (result.innerNodeFrame()) {
+            Document* document = result.innerNodeFrame()->document();
+            if (document) {
+                AXObjectCache* cache = document->existingAXObjectCache();
+                if (cache)
+                    cache->onTouchAccessibilityHover(result.roundedPointInInnerNodeFrame());
+            }
+        }
+    }
+
     switch (event.type) {
 
     // FIXME: WebKit seems to always return false on mouse events processing

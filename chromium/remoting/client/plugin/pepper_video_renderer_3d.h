@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-#include <deque>
+#include <list>
 #include <memory>
 #include <string>
 
@@ -34,14 +34,14 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
   ~PepperVideoRenderer3D() override;
 
   // PepperVideoRenderer interface.
-  bool Initialize(pp::Instance* instance,
-                  const ClientContext& context,
-                  EventHandler* event_handler,
-                  protocol::PerformanceTracker* perf_tracker) override;
+  void SetPepperContext(pp::Instance* instance,
+                        EventHandler* event_handler) override;
   void OnViewChanged(const pp::View& view) override;
   void EnableDebugDirtyRegion(bool enable) override;
 
   // VideoRenderer interface.
+  bool Initialize(const ClientContext& client_context,
+                  protocol::PerformanceTracker* perf_tracker) override;
   void OnSessionConfig(const protocol::SessionConfig& config) override;
   protocol::VideoStub* GetVideoStub() override;
   protocol::FrameConsumer* GetFrameConsumer() override;
@@ -51,13 +51,15 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
                           const base::Closure& done) override;
 
  private:
-  class PendingPacket;
+  // Class responsible for tracking state of a frame until it's rendered.
+  class FrameTracker;
+
   class Picture;
 
   // Callback for pp::VideoDecoder::Initialize().
   void OnInitialized(int32_t result);
 
-  // Passes one picture from |pending_packets_| to the |video_decoder_|.
+  // Passes one picture from |pending_frames_| to the |video_decoder_|.
   void DecodeNextPacket();
 
   // Callback for pp::VideoDecoder::Decode().
@@ -89,6 +91,7 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
   // CHECKs that the last OpenGL call has completed successfully.
   void CheckGLError();
 
+  pp::Instance* pp_instance_ = nullptr;
   EventHandler* event_handler_ = nullptr;
   protocol::PerformanceTracker* perf_tracker_ = nullptr;
 
@@ -105,18 +108,28 @@ class PepperVideoRenderer3D : public PepperVideoRenderer,
   bool get_picture_pending_ = false;
   bool paint_pending_ = false;
 
-  // Queue of packets that that have been received, but haven't been passed to
-  // the decoder yet.
-  std::deque<PendingPacket*> pending_packets_;
+  // Frames that have been received, but haven't been passed to the decoder yet.
+  std::list<std::unique_ptr<FrameTracker>> pending_frames_;
 
-  // The current picture shown on the screen or being rendered. Must be deleted
-  // before |video_decoder_|.
-  std::unique_ptr<Picture> current_picture_;
+  // Frames that have been decoded but for which we haven't received the
+  // pictures yet.
+  std::list<std::unique_ptr<FrameTracker>> decoded_frames_;
 
   // The next picture to be rendered. PaintIfNeeded() will copy it to
   // |current_picture_| and render it after that. Must be deleted
   // before |video_decoder_|.
   std::unique_ptr<Picture> next_picture_;
+
+  // FrameTracker instances in |next_picture_|.
+  std::list<std::unique_ptr<FrameTracker>> next_picture_frames_;
+
+  // The current picture shown on the screen or being rendered. Must be deleted
+  // before |video_decoder_|.
+  std::unique_ptr<Picture> current_picture_;
+
+  // FrameTrackers for frames in |current_picture_|. The queue is emptied once
+  // the |current_picture_| is rendered.
+  std::list<std::unique_ptr<FrameTracker>> current_picture_frames_;
 
   // Set to true if the screen has been resized and needs to be repainted.
   bool force_repaint_ = false;

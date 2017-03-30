@@ -2256,13 +2256,18 @@ void GLES2Implementation::CompressedTexImage2D(
     }
     return;
   }
-  SetBucketContents(kResultBucketId, data, image_size);
-  helper_->CompressedTexImage2DBucket(
-      target, level, internalformat, width, height, kResultBucketId);
-  // Free the bucket. This is not required but it does free up the memory.
-  // and we don't have to wait for the result so from the client's perspective
-  // it's cheap.
-  helper_->SetBucketSize(kResultBucketId, 0);
+  if (data) {
+    SetBucketContents(kResultBucketId, data, image_size);
+    helper_->CompressedTexImage2DBucket(target, level, internalformat, width,
+                                        height, kResultBucketId);
+    // Free the bucket. This is not required but it does free up the memory.
+    // and we don't have to wait for the result so from the client's perspective
+    // it's cheap.
+    helper_->SetBucketSize(kResultBucketId, 0);
+  } else {
+    helper_->CompressedTexImage2D(target, level, internalformat, width, height,
+                                  image_size, 0, 0);
+  }
   CheckGLError();
 }
 
@@ -2341,13 +2346,18 @@ void GLES2Implementation::CompressedTexImage3D(
     }
     return;
   }
-  SetBucketContents(kResultBucketId, data, image_size);
-  helper_->CompressedTexImage3DBucket(
-      target, level, internalformat, width, height, depth, kResultBucketId);
-  // Free the bucket. This is not required but it does free up the memory.
-  // and we don't have to wait for the result so from the client's perspective
-  // it's cheap.
-  helper_->SetBucketSize(kResultBucketId, 0);
+  if (data) {
+    SetBucketContents(kResultBucketId, data, image_size);
+    helper_->CompressedTexImage3DBucket(target, level, internalformat, width,
+                                        height, depth, kResultBucketId);
+    // Free the bucket. This is not required but it does free up the memory.
+    // and we don't have to wait for the result so from the client's perspective
+    // it's cheap.
+    helper_->SetBucketSize(kResultBucketId, 0);
+  } else {
+    helper_->CompressedTexImage3D(target, level, internalformat, width, height,
+                                  depth, image_size, 0, 0);
+  }
   CheckGLError();
 }
 
@@ -5924,6 +5934,7 @@ bool CreateImageValidInternalFormat(GLenum internalformat,
     case GL_RGBA:
     case GL_RGB_YCBCR_422_CHROMIUM:
     case GL_RGB_YCBCR_420V_CHROMIUM:
+    case GL_RGB_YCRCB_420_CHROMIUM:
     case GL_BGRA_EXT:
       return true;
     default:
@@ -6070,6 +6081,21 @@ GLuint GLES2Implementation::CreateGpuMemoryBufferImageCHROMIUM(
       width, height, internalformat, usage);
   CheckGLError();
   return image_id;
+}
+
+void GLES2Implementation::GetImageivCHROMIUM(GLuint image_id,
+                                             GLenum param,
+                                             GLint* data) {
+  GPU_CLIENT_SINGLE_THREAD_CHECK();
+  GPU_CLIENT_LOG("[" << GetLogPrefix() << "] GetImageivCHROMIUM(" << image_id
+                     << ", " << GLES2Util::GetStringImageInternalFormat(param)
+                     << ")");
+  if (param != GL_GPU_MEMORY_BUFFER_ID) {
+    SetGLError(GL_INVALID_VALUE, "GetImageivCHROMIUM", "param");
+    *data = -1;
+    return;
+  }
+  *data = gpu_control_->GetImageGpuMemoryBufferId(image_id);
 }
 
 bool GLES2Implementation::ValidateSize(const char* func, GLsizeiptr size) {

@@ -106,6 +106,7 @@ enum AcceleratorAction {
   TOGGLE_FULLSCREEN,
   TOGGLE_MAXIMIZED,
   TOGGLE_OVERVIEW,
+  UNPIN,
   WINDOW_MINIMIZE,
   WINDOW_POSITION_CENTER,
   WINDOW_CYCLE_SNAP_DOCK_LEFT,
@@ -114,8 +115,10 @@ enum AcceleratorAction {
   BRIGHTNESS_DOWN,
   BRIGHTNESS_UP,
   DEBUG_ADD_REMOVE_DISPLAY,
+  DEBUG_SHOW_TOAST,
   DEBUG_TOGGLE_TOUCH_PAD,
   DEBUG_TOGGLE_TOUCH_SCREEN,
+  DEBUG_TOGGLE_TOUCH_VIEW,
   DEBUG_TOGGLE_UNIFIED_DESKTOP,
   DISABLE_CAPS_LOCK,
   DISABLE_GPU_WATCHDOG,
@@ -136,7 +139,6 @@ enum AcceleratorAction {
   TOGGLE_CAPS_LOCK,
   TOGGLE_MIRROR_MODE,
   TOGGLE_SPOKEN_FEEDBACK,
-  TOGGLE_TOUCH_VIEW_TESTING,
   TOGGLE_WIFI,
   TOUCH_HUD_CLEAR,
   TOUCH_HUD_MODE_CHANGE,
@@ -235,9 +237,16 @@ ASH_EXPORT extern const size_t kActionsAllowedAtModalWindowLength;
 ASH_EXPORT extern const AcceleratorAction kNonrepeatableActions[];
 ASH_EXPORT extern const size_t kNonrepeatableActionsLength;
 
-// Actions allowed in app mode.
-ASH_EXPORT extern const AcceleratorAction kActionsAllowedInAppMode[];
-ASH_EXPORT extern const size_t kActionsAllowedInAppModeLength;
+// Actions allowed in app mode or pinned mode.
+ASH_EXPORT extern const AcceleratorAction
+    kActionsAllowedInAppModeOrPinnedMode[];
+ASH_EXPORT extern const size_t kActionsAllowedInAppModeOrPinnedModeLength;
+
+// Actions that can be performed in pinned mode.
+// In pinned mode, the action listed this or "in app mode or pinned mode" table
+// can be performed.
+ASH_EXPORT extern const AcceleratorAction kActionsAllowedInPinnedMode[];
+ASH_EXPORT extern const size_t kActionsAllowedInPinnedModeLength;
 
 // Actions that require at least 1 window.
 ASH_EXPORT extern const AcceleratorAction kActionsNeedingWindow[];

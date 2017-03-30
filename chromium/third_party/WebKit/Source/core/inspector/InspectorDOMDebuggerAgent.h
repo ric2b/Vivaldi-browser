@@ -31,13 +31,12 @@
 #ifndef InspectorDOMDebuggerAgent_h
 #define InspectorDOMDebuggerAgent_h
 
-
+#include "bindings/core/v8/V8EventListenerInfo.h"
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
 #include "core/inspector/InspectorDOMAgent.h"
-#include "platform/v8_inspector/public/V8EventListenerInfo.h"
+#include "core/inspector/protocol/DOMDebugger.h"
 #include "wtf/HashMap.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -54,8 +53,7 @@ class DictionaryValue;
 }
 
 class CORE_EXPORT InspectorDOMDebuggerAgent final
-    : public InspectorBaseAgent<InspectorDOMDebuggerAgent, protocol::Frontend::DOMDebugger>
-    , public protocol::Backend::DOMDebugger {
+    : public InspectorBaseAgent<protocol::DOMDebugger::Metainfo> {
     WTF_MAKE_NONCOPYABLE(InspectorDOMDebuggerAgent);
 public:
     static void eventListenersInfoForTarget(v8::Isolate*, v8::Local<v8::Value>, V8EventListenerInfoList& listeners);
@@ -64,7 +62,7 @@ public:
     ~InspectorDOMDebuggerAgent() override;
     DECLARE_VIRTUAL_TRACE();
 
-    // DOMDebugger API for InspectorFrontend
+    // DOMDebugger API for frontend
     void setDOMBreakpoint(ErrorString*, int nodeId, const String& type) override;
     void removeDOMBreakpoint(ErrorString*, int nodeId, const String& type) override;
     void setEventListenerBreakpoint(ErrorString*, const String& eventName, const Maybe<String>& targetName) override;
@@ -73,7 +71,7 @@ public:
     void removeInstrumentationBreakpoint(ErrorString*, const String& eventName) override;
     void setXHRBreakpoint(ErrorString*, const String& url) override;
     void removeXHRBreakpoint(ErrorString*, const String& url) override;
-    void getEventListeners(ErrorString*, const String16& objectId, OwnPtr<protocol::Array<protocol::DOMDebugger::EventListener>>* listeners) override;
+    void getEventListeners(ErrorString*, const String& objectId, std::unique_ptr<protocol::Array<protocol::DOMDebugger::EventListener>>* listeners) override;
 
     // InspectorInstrumentation API
     void willInsertDOMNode(Node* parent);
@@ -82,7 +80,7 @@ public:
     void willRemoveDOMNode(Node*);
     void didRemoveDOMNode(Node*);
     void willModifyDOMAttr(Element*, const AtomicString&, const AtomicString&);
-    void willSendXMLHttpRequest(const String& url);
+    void willSendXMLHttpOrFetchNetworkRequest(const String& url);
     void didFireWebGLError(const String& errorName);
     void didFireWebGLWarning();
     void didFireWebGLErrorOrWarning(const String& message);
@@ -94,8 +92,8 @@ public:
     void didCommitLoadForLocalFrame(LocalFrame*) override;
 
 private:
-    void pauseOnNativeEventIfNeeded(PassOwnPtr<protocol::DictionaryValue> eventData, bool synchronous);
-    PassOwnPtr<protocol::DictionaryValue> preparePauseOnNativeEventData(const String& eventName, const String* targetName);
+    void pauseOnNativeEventIfNeeded(std::unique_ptr<protocol::DictionaryValue> eventData, bool synchronous);
+    std::unique_ptr<protocol::DictionaryValue> preparePauseOnNativeEventData(const String& eventName, const String* targetName);
 
     protocol::DictionaryValue* eventListenerBreakpoints();
     protocol::DictionaryValue* xhrBreakpoints();
@@ -111,7 +109,7 @@ private:
     void setEnabled(bool);
 
     void eventListeners(v8::Local<v8::Context>, v8::Local<v8::Value>, const String16& objectGroup, protocol::Array<protocol::DOMDebugger::EventListener>* listenersArray);
-    PassOwnPtr<protocol::DOMDebugger::EventListener> buildObjectForEventListener(v8::Local<v8::Context>, const V8EventListenerInfo&, const String16& objectGroupId);
+    std::unique_ptr<protocol::DOMDebugger::EventListener> buildObjectForEventListener(v8::Local<v8::Context>, const V8EventListenerInfo&, const String16& objectGroupId);
 
     v8::Isolate* m_isolate;
     Member<InspectorDOMAgent> m_domAgent;

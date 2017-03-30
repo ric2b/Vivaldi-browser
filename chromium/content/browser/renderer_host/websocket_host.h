@@ -74,6 +74,7 @@ class CONTENT_EXPORT WebSocketHost {
                   const std::vector<std::string>& requested_protocols,
                   const url::Origin& origin,
                   const GURL& first_party_for_cookies,
+                  const std::string& user_agent_override,
                   int render_frame_id);
 
   void OnSendBlob(const std::string& uuid, uint64_t expected_size);

@@ -6,11 +6,13 @@
 #include <stdint.h>
 
 #include <memory>
+#include <tuple>
 
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
@@ -67,7 +69,7 @@ std::string GetInputMessageTypes(MockRenderProcessHost* process) {
     EXPECT_EQ(InputMsg_HandleInputEvent::ID, message->type());
     InputMsg_HandleInputEvent::Param params;
     EXPECT_TRUE(InputMsg_HandleInputEvent::Read(message, &params));
-    const WebInputEvent* event = base::get<0>(params);
+    const WebInputEvent* event = std::get<0>(params);
     if (i != 0)
       result += " ";
     result += WebInputEventTraits::GetName(event->type);
@@ -403,7 +405,8 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
     return handle_wheel_event_;
   }
 
-  void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host) override {
+  void RendererUnresponsive(RenderWidgetHostImpl* render_widget_host,
+                            RendererUnresponsiveType type) override {
     unresponsive_timer_fired_ = true;
   }
 
@@ -492,7 +495,7 @@ class RenderWidgetHostTest : public testing::Test {
 #endif
 
     // Process all pending tasks to avoid leaks.
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void SetInitialRenderSizeParams() {
@@ -587,7 +590,7 @@ class RenderWidgetHostTest : public testing::Test {
   }
 
   // Set the timestamp for the touch-event.
-  void SetTouchTimestamp(base::TimeDelta timestamp) {
+  void SetTouchTimestamp(base::TimeTicks timestamp) {
     touch_event_.SetTimestamp(timestamp);
   }
 
@@ -858,9 +861,9 @@ TEST_F(RenderWidgetHostTest, Background) {
       process_->sink().GetUniqueMessageMatching(
           ViewMsg_SetBackgroundOpaque::ID);
   ASSERT_TRUE(set_background);
-  base::Tuple<bool> sent_background;
+  std::tuple<bool> sent_background;
   ViewMsg_SetBackgroundOpaque::Read(set_background, &sent_background);
-  EXPECT_FALSE(base::get<0>(sent_background));
+  EXPECT_FALSE(std::get<0>(sent_background));
 
 #if defined(USE_AURA)
   // See the comment above |InitAsChild(NULL)|.
@@ -895,9 +898,9 @@ TEST_F(RenderWidgetHostTest, HiddenPaint) {
   const IPC::Message* restored = process_->sink().GetUniqueMessageMatching(
       ViewMsg_WasShown::ID);
   ASSERT_TRUE(restored);
-  base::Tuple<bool, ui::LatencyInfo> needs_repaint;
+  std::tuple<bool, ui::LatencyInfo> needs_repaint;
   ViewMsg_WasShown::Read(restored, &needs_repaint);
-  EXPECT_TRUE(base::get<0>(needs_repaint));
+  EXPECT_TRUE(std::get<0>(needs_repaint));
 }
 
 TEST_F(RenderWidgetHostTest, IgnoreKeyEventsHandledByRenderer) {
@@ -1068,11 +1071,15 @@ TEST_F(RenderWidgetHostTest, UnhandledGestureEvent) {
 // while one is in progress (see crbug.com/11007).
 TEST_F(RenderWidgetHostTest, DontPostponeHangMonitorTimeout) {
   // Start with a short timeout.
-  host_->StartHangMonitorTimeout(TimeDelta::FromMilliseconds(10));
+  host_->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(10),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Immediately try to add a long 30 second timeout.
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
-  host_->StartHangMonitorTimeout(TimeDelta::FromSeconds(30));
+  host_->StartHangMonitorTimeout(
+      TimeDelta::FromSeconds(30),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1086,12 +1093,16 @@ TEST_F(RenderWidgetHostTest, DontPostponeHangMonitorTimeout) {
 // and then started again.
 TEST_F(RenderWidgetHostTest, StopAndStartHangMonitorTimeout) {
   // Start with a short timeout, then stop it.
-  host_->StartHangMonitorTimeout(TimeDelta::FromMilliseconds(10));
+  host_->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(10),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
   host_->StopHangMonitorTimeout();
 
   // Start it again to ensure it still works.
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
-  host_->StartHangMonitorTimeout(TimeDelta::FromMilliseconds(10));
+  host_->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(10),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1105,11 +1116,15 @@ TEST_F(RenderWidgetHostTest, StopAndStartHangMonitorTimeout) {
 // updated to a shorter duration.
 TEST_F(RenderWidgetHostTest, ShorterDelayHangMonitorTimeout) {
   // Start with a timeout.
-  host_->StartHangMonitorTimeout(TimeDelta::FromMilliseconds(100));
+  host_->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(100),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Start it again with shorter delay.
   EXPECT_FALSE(delegate_->unresponsive_timer_fired());
-  host_->StartHangMonitorTimeout(TimeDelta::FromMilliseconds(20));
+  host_->StartHangMonitorTimeout(
+      TimeDelta::FromMilliseconds(20),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
 
   // Wait long enough for the second timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
@@ -1532,8 +1547,8 @@ void CheckLatencyInfoComponentInMessage(RenderWidgetHostProcess* process,
   InputMsg_HandleInputEvent::Param params;
   EXPECT_TRUE(InputMsg_HandleInputEvent::Read(message, &params));
 
-  const WebInputEvent* event = base::get<0>(params);
-  ui::LatencyInfo latency_info = base::get<1>(params);
+  const WebInputEvent* event = std::get<0>(params);
+  ui::LatencyInfo latency_info = std::get<1>(params);
 
   EXPECT_TRUE(event->type == expected_type);
   EXPECT_TRUE(latency_info.FindLatency(

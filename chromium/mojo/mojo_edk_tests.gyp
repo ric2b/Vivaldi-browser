@@ -3,9 +3,9 @@
 # found in the LICENSE file.
 
 {
-  'includes': [
-    'mojo_variables.gypi',
-  ],
+  'variables': {
+    'chromium_code': 1,
+  },
   'targets': [
     {
       'target_name': 'mojo_edk_tests',
@@ -35,12 +35,15 @@
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_public.gyp:mojo_cpp_bindings',
         'mojo_public.gyp:mojo_public_bindings_test_utils',
-        'mojo_public.gyp:mojo_public_test_associated_interfaces',
-        'mojo_public.gyp:mojo_public_test_interfaces',
-        'mojo_public.gyp:mojo_public_test_interfaces_blink',
-        'mojo_public.gyp:mojo_public_test_interfaces_struct_traits',
         'mojo_public.gyp:mojo_public_test_utils',
+        'mojo_public_tests.gyp:mojo_public_test_associated_interfaces',
+        'mojo_public_tests.gyp:mojo_public_test_interfaces',
+        'mojo_public_tests.gyp:mojo_public_test_interfaces_blink',
+        'mojo_public_tests.gyp:mojo_public_test_interfaces_struct_traits',
       ],
+      'variables': {
+        'clang_warning_flags_unset': [ '-Wglobal-constructors' ],
+      },
       'sources': [
         'public/cpp/bindings/tests/array_common_test.h',
         'public/cpp/bindings/tests/array_unittest.cc',
@@ -48,9 +51,7 @@
         'public/cpp/bindings/tests/bind_task_runner_unittest.cc',
         'public/cpp/bindings/tests/binding_callback_unittest.cc',
         'public/cpp/bindings/tests/binding_unittest.cc',
-        'public/cpp/bindings/tests/bounds_checker_unittest.cc',
         'public/cpp/bindings/tests/buffer_unittest.cc',
-        'public/cpp/bindings/tests/callback_unittest.cc',
         'public/cpp/bindings/tests/connector_unittest.cc',
         'public/cpp/bindings/tests/constant_unittest.cc',
         'public/cpp/bindings/tests/container_test_util.cc',
@@ -58,15 +59,16 @@
         'public/cpp/bindings/tests/equals_unittest.cc',
         'public/cpp/bindings/tests/handle_passing_unittest.cc',
         'public/cpp/bindings/tests/interface_ptr_unittest.cc',
+        'public/cpp/bindings/tests/map_common_test.h',
         'public/cpp/bindings/tests/map_unittest.cc',
         'public/cpp/bindings/tests/message_queue.cc',
         'public/cpp/bindings/tests/message_queue.h',
         'public/cpp/bindings/tests/multiplex_router_unittest.cc',
         'public/cpp/bindings/tests/pickle_unittest.cc',
-        'public/cpp/bindings/tests/pickled_struct_blink.cc',
-        'public/cpp/bindings/tests/pickled_struct_blink.h',
-        'public/cpp/bindings/tests/pickled_struct_chromium.cc',
-        'public/cpp/bindings/tests/pickled_struct_chromium.h',
+        'public/cpp/bindings/tests/pickled_types_blink.cc',
+        'public/cpp/bindings/tests/pickled_types_blink.h',
+        'public/cpp/bindings/tests/pickled_types_chromium.cc',
+        'public/cpp/bindings/tests/pickled_types_chromium.h',
         'public/cpp/bindings/tests/rect_blink.h',
         'public/cpp/bindings/tests/rect_blink_traits.h',
         'public/cpp/bindings/tests/rect_chromium.h',
@@ -88,20 +90,24 @@
         'public/cpp/bindings/tests/sync_method_unittest.cc',
         'public/cpp/bindings/tests/type_conversion_unittest.cc',
         'public/cpp/bindings/tests/union_unittest.cc',
+        'public/cpp/bindings/tests/validation_context_unittest.cc',
         'public/cpp/bindings/tests/validation_unittest.cc',
         'public/cpp/bindings/tests/variant_test_util.h',
       ],
       'conditions': [
+        # TODO(yzshen): Blink-flavor bindings tests should be moved into
+        # mojo_public_bindings_for_blink_tests (which should eventually be moved
+        # into blink).
         ['OS=="ios"', {
           'dependencies!': [
             'mojo_public.gyp:mojo_public_test_interfaces_blink',
           ],
           'sources!': [
             'public/cpp/bindings/tests/pickle_unittest.cc',
-            'public/cpp/bindings/tests/pickled_struct_blink.cc',
-            'public/cpp/bindings/tests/pickled_struct_blink.h',
-            'public/cpp/bindings/tests/pickled_struct_chromium.cc',
-            'public/cpp/bindings/tests/pickled_struct_chromium.h',
+            'public/cpp/bindings/tests/pickled_types_blink.cc',
+            'public/cpp/bindings/tests/pickled_types_blink.h',
+            'public/cpp/bindings/tests/pickled_types_chromium.cc',
+            'public/cpp/bindings/tests/pickled_types_chromium.h',
             'public/cpp/bindings/tests/rect_blink.h',
             'public/cpp/bindings/tests/rect_blink_traits.h',
             'public/cpp/bindings/tests/struct_traits_unittest.cc',
@@ -116,16 +122,21 @@
       'dependencies': [
         '../testing/gtest.gyp:gtest',
         'mojo_public.gyp:mojo_cpp_bindings',
-        'mojo_public.gyp:mojo_public_test_interfaces',
-        'mojo_public.gyp:mojo_public_test_wtf_types',
-        'mojo_public.gyp:mojo_public_test_wtf_types_blink',
+        'mojo_public_tests.gyp:mojo_public_test_interfaces',
+        'mojo_public_tests.gyp:mojo_public_test_wtf_types',
+        'mojo_public_tests.gyp:mojo_public_test_wtf_types_blink',
       ],
+      'variables': {
+         'clang_warning_flags_unset': [ '-Wglobal-constructors' ],
+      },
       'sources': [
         'public/cpp/bindings/tests/array_common_test.h',
         'public/cpp/bindings/tests/container_test_util.cc',
         'public/cpp/bindings/tests/container_test_util.h',
+        'public/cpp/bindings/tests/map_common_test.h',
         'public/cpp/bindings/tests/variant_test_util.h',
         'public/cpp/bindings/tests/wtf_array_unittest.cc',
+        'public/cpp/bindings/tests/wtf_map_unittest.cc',
         'public/cpp/bindings/tests/wtf_types_unittest.cc',
       ],
     },
@@ -140,8 +151,8 @@
         'mojo_edk.gyp:mojo_run_all_perftests',
         'mojo_public.gyp:mojo_cpp_bindings',
         'mojo_public.gyp:mojo_public_bindings_test_utils',
-        'mojo_public.gyp:mojo_public_test_interfaces',
         'mojo_public.gyp:mojo_public_test_utils',
+        'mojo_public_tests.gyp:mojo_public_test_interfaces',
       ],
       'sources': [
         'public/cpp/bindings/tests/bindings_perftest.cc',
@@ -160,7 +171,11 @@
         'mojo_public.gyp:mojo_public_test_utils',
       ],
       'sources': [
-        '<@(mojo_public_system_unittest_sources)',
+        '<(DEPTH)/mojo/public/c/system/tests/core_unittest.cc',
+        '<(DEPTH)/mojo/public/c/system/tests/core_unittest_pure_c.c',
+        '<(DEPTH)/mojo/public/c/system/tests/macros_unittest.cc',
+        '<(DEPTH)/mojo/public/cpp/system/tests/core_unittest.cc',
+        '<(DEPTH)/mojo/public/cpp/system/tests/watcher_unittest.cc',
       ],
     },
     {
@@ -171,6 +186,7 @@
         '../base/base.gyp:base',
         '../testing/gtest.gyp:gtest',
         'mojo_edk.gyp:mojo_run_all_perftests',
+        'mojo_public.gyp:mojo_public_system',
         'mojo_public.gyp:mojo_public_test_utils',
       ],
       'sources': [
@@ -188,6 +204,7 @@
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_edk.gyp:mojo_system_impl',
         'mojo_edk.gyp:mojo_system_ports',
+        'mojo_public.gyp:mojo_public_system',
       ],
       'sources': [
         'edk/embedder/embedder_unittest.cc',
@@ -201,6 +218,7 @@
         'edk/system/multiprocess_message_pipe_unittest.cc',
         'edk/system/options_validation_unittest.cc',
         'edk/system/platform_handle_dispatcher_unittest.cc',
+        'edk/system/platform_wrapper_unittest.cc',
         'edk/system/ports/ports_unittest.cc',
         'edk/system/shared_buffer_dispatcher_unittest.cc',
         'edk/system/shared_buffer_unittest.cc',
@@ -236,6 +254,7 @@
         'mojo_edk.gyp:mojo_common_test_support',
         'mojo_edk.gyp:mojo_run_all_perftests',
         'mojo_edk.gyp:mojo_system_impl',
+        'mojo_public.gyp:mojo_public_system',
       ],
       'sources': [
         'edk/system/message_pipe_perftest.cc',
@@ -253,7 +272,7 @@
         'mojo_edk.gyp:mojo_common_test_support',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_edk.gyp:mojo_js_lib',
-        'mojo_public.gyp:mojo_public_test_interfaces',
+        'mojo_public_tests.gyp:mojo_public_test_interfaces',
       ],
       'sources': [
         'edk/js/handle_unittest.cc',
@@ -271,7 +290,7 @@
         'mojo_edk.gyp:mojo_js_lib',
         'mojo_edk.gyp:mojo_run_all_unittests',
         'mojo_js_to_cpp_bindings',
-        'mojo_public.gyp:mojo_public_test_interfaces',
+        'mojo_public_tests.gyp:mojo_public_test_interfaces',
       ],
       'sources': [
         'edk/js/test/run_js_integration_tests.cc',

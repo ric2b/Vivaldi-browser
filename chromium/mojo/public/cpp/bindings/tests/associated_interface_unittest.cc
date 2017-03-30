@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
@@ -47,7 +48,7 @@ class IntegerSenderImpl : public IntegerSender {
 
   AssociatedBinding<IntegerSender>* binding() { return &binding_; }
 
-  void set_connection_error_handler(const Closure& handler) {
+  void set_connection_error_handler(const base::Closure& handler) {
     binding_.set_connection_error_handler(handler);
   }
 
@@ -67,7 +68,7 @@ class IntegerSenderConnectionImpl : public IntegerSenderConnection {
   void GetSender(AssociatedInterfaceRequest<IntegerSender> sender) override {
     IntegerSenderImpl* sender_impl = new IntegerSenderImpl(std::move(sender));
     sender_impl->set_connection_error_handler(
-        [sender_impl]() { delete sender_impl; });
+        base::Bind(&DeleteSender, sender_impl));
   }
 
   void AsyncGetSender(const AsyncGetSenderCallback& callback) override {
@@ -82,6 +83,8 @@ class IntegerSenderConnectionImpl : public IntegerSenderConnection {
   Binding<IntegerSenderConnection>* binding() { return &binding_; }
 
  private:
+  static void DeleteSender(IntegerSenderImpl* sender) { delete sender; }
+
   Binding<IntegerSenderConnection> binding_;
 };
 
@@ -129,6 +132,31 @@ class AssociatedInterfaceTest : public testing::Test {
   base::MessageLoop loop_;
 };
 
+void DoSetFlagAndRunClosure(bool* flag, const base::Closure& closure) {
+  *flag = true;
+  closure.Run();
+}
+
+void DoExpectValueSetFlagAndRunClosure(int32_t expected_value,
+                                       bool* flag,
+                                       const base::Closure& closure,
+                                       int32_t value) {
+  EXPECT_EQ(expected_value, value);
+  DoSetFlagAndRunClosure(flag, closure);
+}
+
+base::Closure SetFlagAndRunClosure(bool* flag, const base::Closure& closure) {
+  return base::Bind(&DoSetFlagAndRunClosure, flag, closure);
+}
+
+base::Callback<void(int32_t)> ExpectValueSetFlagAndRunClosure(
+    int32_t expected_value,
+    bool* flag,
+    const base::Closure& closure) {
+  return base::Bind(
+      &DoExpectValueSetFlagAndRunClosure, expected_value, flag, closure);
+}
+
 TEST_F(AssociatedInterfaceTest, InterfacesAtBothEnds) {
   // Bind to the same pipe two associated interfaces, whose implementation lives
   // at different ends. Test that the two don't interfere with each other.
@@ -160,18 +188,12 @@ TEST_F(AssociatedInterfaceTest, InterfacesAtBothEnds) {
 
   base::RunLoop run_loop, run_loop2;
   bool ptr0_callback_run = false;
-  ptr0->Echo(123, [&ptr0_callback_run, &run_loop](int32_t value) {
-    EXPECT_EQ(123, value);
-    ptr0_callback_run = true;
-    run_loop.Quit();
-  });
+  ptr0->Echo(123, ExpectValueSetFlagAndRunClosure(123, &ptr0_callback_run,
+                                                  run_loop.QuitClosure()));
 
   bool ptr1_callback_run = false;
-  ptr1->Echo(456, [&ptr1_callback_run, &run_loop2](int32_t value) {
-    EXPECT_EQ(456, value);
-    ptr1_callback_run = true;
-    run_loop2.Quit();
-  });
+  ptr1->Echo(456, ExpectValueSetFlagAndRunClosure(456, &ptr1_callback_run,
+                                                  run_loop2.QuitClosure()));
 
   run_loop.Run();
   run_loop2.Run();
@@ -180,10 +202,8 @@ TEST_F(AssociatedInterfaceTest, InterfacesAtBothEnds) {
 
   bool ptr0_error_callback_run = false;
   base::RunLoop run_loop3;
-  ptr0.set_connection_error_handler([&ptr0_error_callback_run, &run_loop3]() {
-    ptr0_error_callback_run = true;
-    run_loop3.Quit();
-  });
+  ptr0.set_connection_error_handler(
+      SetFlagAndRunClosure(&ptr0_error_callback_run, run_loop3.QuitClosure()));
 
   impl0.binding()->Close();
   run_loop3.Run();
@@ -192,10 +212,7 @@ TEST_F(AssociatedInterfaceTest, InterfacesAtBothEnds) {
   bool impl1_error_callback_run = false;
   base::RunLoop run_loop4;
   impl1.binding()->set_connection_error_handler(
-      [&impl1_error_callback_run, &run_loop4]() {
-        impl1_error_callback_run = true;
-        run_loop4.Quit();
-      });
+      SetFlagAndRunClosure(&impl1_error_callback_run, run_loop4.QuitClosure()));
 
   ptr1.reset();
   run_loop4.Run();
@@ -253,13 +270,13 @@ class TestSender {
 
 class TestReceiver {
  public:
-  TestReceiver() : receiver_thread_("TestReceiver"), max_value_to_receive_(-1) {
+  TestReceiver() : receiver_thread_("TestReceiver"), expected_calls_(0) {
     receiver_thread_.Start();
   }
 
   void SetUp(AssociatedInterfaceRequest<IntegerSender> request0,
              AssociatedInterfaceRequest<IntegerSender> request1,
-             int32_t max_value_to_receive,
+             size_t expected_calls,
              const base::Closure& notify_finish) {
     CHECK(receiver_thread_.task_runner()->BelongsToCurrentThread());
 
@@ -270,7 +287,7 @@ class TestReceiver {
     impl1_->set_notify_send_method_called(
         base::Bind(&TestReceiver::SendMethodCalled, base::Unretained(this)));
 
-    max_value_to_receive_ = max_value_to_receive;
+    expected_calls_ = expected_calls;
     notify_finish_ = notify_finish;
   }
 
@@ -288,12 +305,12 @@ class TestReceiver {
   void SendMethodCalled(int32_t value) {
     values_.push_back(value);
 
-    if (value >= max_value_to_receive_)
+    if (values_.size() >= expected_calls_)
       notify_finish_.Run();
   }
 
   base::Thread receiver_thread_;
-  int32_t max_value_to_receive_;
+  size_t expected_calls_;
 
   std::unique_ptr<IntegerSenderImpl> impl0_;
   std::unique_ptr<IntegerSenderImpl> impl1_;
@@ -360,7 +377,7 @@ TEST_F(AssociatedInterfaceTest, MultiThreadAccess) {
     senders[i].sender_thread()->task_runner()->PostTask(
         FROM_HERE, base::Bind(&TestSender::SetUp, base::Unretained(&senders[i]),
                               base::Passed(&ptr_infos[i]), nullptr,
-                              static_cast<int32_t>(kMaxValue * (i + 1) / 4)));
+                              kMaxValue * (i + 1) / 4));
   }
 
   base::RunLoop run_loop;
@@ -374,7 +391,7 @@ TEST_F(AssociatedInterfaceTest, MultiThreadAccess) {
         base::Bind(&TestReceiver::SetUp, base::Unretained(&receivers[i]),
                    base::Passed(&requests[2 * i]),
                    base::Passed(&requests[2 * i + 1]),
-                   static_cast<int32_t>((i + 1) * kMaxValue / 2),
+                   static_cast<size_t>(kMaxValue / 2),
                    base::Bind(&NotificationCounter::OnGotNotification,
                               base::Unretained(&counter))));
   }
@@ -382,7 +399,7 @@ TEST_F(AssociatedInterfaceTest, MultiThreadAccess) {
   for (size_t i = 0; i < 4; ++i) {
     senders[i].sender_thread()->task_runner()->PostTask(
         FROM_HERE, base::Bind(&TestSender::Send, base::Unretained(&senders[i]),
-                              static_cast<int32_t>(kMaxValue * i / 4 + 1)));
+                              kMaxValue * i / 4 + 1));
   }
 
   run_loop.Run();
@@ -455,15 +472,18 @@ TEST_F(AssociatedInterfaceTest, FIFO) {
 
   base::RunLoop run_loop;
   TestReceiver receivers[2];
+  NotificationCounter counter(
+      2, base::Bind(&AssociatedInterfaceTest::QuitRunLoop,
+                    base::Unretained(this), base::Unretained(&run_loop)));
   for (size_t i = 0; i < 2; ++i) {
     receivers[i].receiver_thread()->task_runner()->PostTask(
         FROM_HERE,
-        base::Bind(
-            &TestReceiver::SetUp, base::Unretained(&receivers[i]),
-            base::Passed(&requests[2 * i]), base::Passed(&requests[2 * i + 1]),
-            kMaxValue,
-            base::Bind(&AssociatedInterfaceTest::QuitRunLoop,
-                       base::Unretained(this), base::Unretained(&run_loop))));
+        base::Bind(&TestReceiver::SetUp, base::Unretained(&receivers[i]),
+                   base::Passed(&requests[2 * i]),
+                   base::Passed(&requests[2 * i + 1]),
+                   static_cast<size_t>(kMaxValue / 2),
+                   base::Bind(&NotificationCounter::OnGotNotification,
+                              base::Unretained(&counter))));
   }
 
   senders[0].sender_thread()->task_runner()->PostTask(
@@ -501,6 +521,20 @@ TEST_F(AssociatedInterfaceTest, FIFO) {
   }
 }
 
+void CaptureInt32(int32_t* storage,
+                  const base::Closure& closure,
+                  int32_t value) {
+  *storage = value;
+  closure.Run();
+}
+
+void CaptureSenderPtrInfo(IntegerSenderAssociatedPtr* storage,
+                          const base::Closure& closure,
+                          IntegerSenderAssociatedPtrInfo info) {
+  storage->Bind(std::move(info));
+  closure.Run();
+}
+
 TEST_F(AssociatedInterfaceTest, PassAssociatedInterfaces) {
   IntegerSenderConnectionPtr connection_ptr;
   IntegerSenderConnectionImpl connection(GetProxy(&connection_ptr));
@@ -511,28 +545,21 @@ TEST_F(AssociatedInterfaceTest, PassAssociatedInterfaces) {
 
   int32_t echoed_value = 0;
   base::RunLoop run_loop;
-  sender0->Echo(123, [&echoed_value, &run_loop](int32_t value) {
-    echoed_value = value;
-    run_loop.Quit();
-  });
+  sender0->Echo(123, base::Bind(&CaptureInt32, &echoed_value,
+                                run_loop.QuitClosure()));
   run_loop.Run();
   EXPECT_EQ(123, echoed_value);
 
   IntegerSenderAssociatedPtr sender1;
   base::RunLoop run_loop2;
   connection_ptr->AsyncGetSender(
-      [&sender1, &run_loop2](IntegerSenderAssociatedPtrInfo ptr_info) {
-        sender1.Bind(std::move(ptr_info));
-        run_loop2.Quit();
-      });
+      base::Bind(&CaptureSenderPtrInfo, &sender1, run_loop2.QuitClosure()));
   run_loop2.Run();
   EXPECT_TRUE(sender1);
 
   base::RunLoop run_loop3;
-  sender1->Echo(456, [&echoed_value, &run_loop3](int32_t value) {
-    echoed_value = value;
-    run_loop3.Quit();
-  });
+  sender1->Echo(456, base::Bind(&CaptureInt32, &echoed_value,
+                                run_loop3.QuitClosure()));
   run_loop3.Run();
   EXPECT_EQ(456, echoed_value);
 }

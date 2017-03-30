@@ -15,6 +15,7 @@
 
 #include "base/compiler_specific.h"
 #include "net/spdy/buffered_spdy_framer.h"
+#include "net/spdy/spdy_alt_svc_wire_format.h"
 #include "net/spdy/spdy_protocol.h"
 #include "net/tools/balsa/balsa_headers.h"
 #include "net/tools/balsa/balsa_visitor_interface.h"
@@ -85,7 +86,7 @@ class SpdySM : public BufferedSpdyFramerVisitorInterface, public SMInterface {
   // Called after all the header data for HEADERS control frame is received.
   void OnHeaders(SpdyStreamId stream_id,
                  bool has_priority,
-                 SpdyPriority priority,
+                 int weight,
                  SpdyStreamId parent_stream_id,
                  bool exclusive,
                  bool fin,
@@ -113,20 +114,6 @@ class SpdySM : public BufferedSpdyFramerVisitorInterface, public SMInterface {
   // |len| The number of padding octets.
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override;
 
-  // Called just before processing the payload of a frame containing header
-  // data. Should return an implementation of SpdyHeadersHandlerInterface that
-  // will receive headers for stream |stream_id|. The caller will not take
-  // ownership of the headers handler. The same instance should be returned
-  // for all header frames comprising a logical header block (i.e. until
-  // OnHeaderFrameEnd() is called with end_headers == true).
-  SpdyHeadersHandlerInterface* OnHeaderFrameStart(
-      SpdyStreamId stream_id) override;
-
-  // Called after processing the payload of a frame containing header data.
-  // |end_headers| is true if there will not be any subsequent CONTINUATION
-  // frames.
-  void OnHeaderFrameEnd(SpdyStreamId stream_id, bool end_headers) override;
-
   // Called when a SETTINGS frame is received.
   // |clear_persisted| True if the respective flag is set on the SETTINGS frame.
   void OnSettings(bool clear_persisted) override {}
@@ -153,6 +140,12 @@ class SpdySM : public BufferedSpdyFramerVisitorInterface, public SMInterface {
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
                      const SpdyHeaderBlock& headers) override {}
+
+  // Called when an ALTSVC frame has been parsed.
+  void OnAltSvc(SpdyStreamId stream_id,
+                base::StringPiece origin,
+                const SpdyAltSvcWireFormat::AlternativeServiceVector&
+                    altsvc_vector) override {}
 
   bool OnUnknownFrame(SpdyStreamId stream_id, int frame_type) override;
 

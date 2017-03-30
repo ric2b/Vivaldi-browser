@@ -44,6 +44,7 @@
 #include "content/public/browser/browser_plugin_guest_manager.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/guest_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/user_metrics.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -106,6 +107,7 @@ BrowserPluginGuest::BrowserPluginGuest(bool has_render_view,
       last_drag_status_(blink::WebDragStatusUnknown),
       seen_embedder_system_drag_ended_(false),
       seen_embedder_drag_source_ended_at_(false),
+      ignore_dragged_url_(true),
       delegate_(delegate),
       guest_routing_id_(MSG_ROUTING_NONE),
       weak_ptr_factory_(this) {
@@ -446,8 +448,8 @@ void BrowserPluginGuest::ResendEventToEmbedder(
     return;
 
   DCHECK(browser_plugin_instance_id_);
-  RenderWidgetHostImpl* host =
-      embedder_web_contents()->GetMainFrame()->GetRenderWidgetHost();
+  RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
+      embedder_web_contents()->GetMainFrame()->GetView());
 
   gfx::Vector2d offset_from_embedder = guest_window_rect_.OffsetFromOrigin();
   if (event.type == blink::WebInputEvent::GestureScrollUpdate) {
@@ -458,14 +460,17 @@ void BrowserPluginGuest::ResendEventToEmbedder(
     // Mark the resend source with the browser plugin's instance id, so the
     // correct browser_plugin will know to ignore the event.
     resent_gesture_event.resendingPluginId = browser_plugin_instance_id_;
-    host->ForwardGestureEvent(resent_gesture_event);
+    view->ProcessGestureEvent(resent_gesture_event, ui::LatencyInfo());
   } else if (event.type == blink::WebInputEvent::MouseWheel) {
     blink::WebMouseWheelEvent resent_wheel_event;
     memcpy(&resent_wheel_event, &event, sizeof(blink::WebMouseWheelEvent));
     resent_wheel_event.x += offset_from_embedder.x();
     resent_wheel_event.y += offset_from_embedder.y();
     resent_wheel_event.resendingPluginId = browser_plugin_instance_id_;
-    host->ForwardWheelEvent(resent_wheel_event);
+    // TODO(wjmaclean): Initialize latency info correctly for OOPIFs.
+    // https://crbug.com/613628
+    ui::LatencyInfo latency_info;
+    view->ProcessMouseWheelEvent(resent_wheel_event, latency_info);
   } else {
     NOTIMPLEMENTED();
   }
@@ -536,7 +541,7 @@ void BrowserPluginGuest::EndSystemDragIfApplicable() {
     last_drag_status_ = blink::WebDragStatusUnknown;
     seen_embedder_system_drag_ended_ = false;
     seen_embedder_drag_source_ended_at_ = false;
-    dragged_url_ = GURL();
+    ignore_dragged_url_ = true;
   }
 }
 
@@ -817,14 +822,16 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
                                             const gfx::Point& location) {
   RenderViewHost* host = GetWebContents()->GetRenderViewHost();
   auto embedder = owner_web_contents_->GetBrowserPluginEmbedder();
+  DropData filtered_data(drop_data);
+  host->FilterDropData(&filtered_data);
   switch (drag_status) {
     case blink::WebDragStatusEnter:
+      host->DragTargetDragEnter(filtered_data, location, location, mask,
+                                drop_data.key_modifiers);
       // Only track the URL being dragged over the guest if the link isn't
       // coming from the guest.
       if (!embedder->DragEnteredGuest(this))
-        dragged_url_ = drop_data.url;
-      host->DragTargetDragEnter(drop_data, location, location, mask,
-                                drop_data.key_modifiers);
+        ignore_dragged_url_ = false;
       break;
     case blink::WebDragStatusOver:
       host->DragTargetDragOver(location, location, mask,
@@ -833,15 +840,18 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
     case blink::WebDragStatusLeave:
       embedder->DragLeftGuest(this);
       host->DragTargetDragLeave();
+      ignore_dragged_url_ = true;
       break;
     case blink::WebDragStatusDrop:
-      host->DragTargetDrop(location, location, drop_data.key_modifiers);
-      if (dragged_url_.is_valid()) {
-        delegate_->DidDropLink(dragged_url_);
-        dragged_url_ = GURL();
-      }
+      host->DragTargetDrop(filtered_data, location, location,
+                           drop_data.key_modifiers);
+
+      if (!ignore_dragged_url_ && filtered_data.url.is_valid())
+        delegate_->DidDropLink(filtered_data.url);
+      ignore_dragged_url_ = true;
       break;
     case blink::WebDragStatusUnknown:
+      ignore_dragged_url_ = true;
       NOTREACHED();
   }
   last_drag_status_ = drag_status;
@@ -997,7 +1007,8 @@ void BrowserPluginGuest::OnShowPopup(
 
 void BrowserPluginGuest::OnShowWidget(int route_id,
                                       const gfx::Rect& initial_rect) {
-  GetWebContents()->ShowCreatedWidget(route_id, initial_rect);
+  int process_id = GetWebContents()->GetRenderProcessHost()->GetID();
+  GetWebContents()->ShowCreatedWidget(process_id, route_id, initial_rect);
 }
 
 void BrowserPluginGuest::OnTakeFocus(bool reverse) {

@@ -6,23 +6,36 @@
 
 #include <utility>
 
-#include "content/common/mojo/service_registry_impl.h"
+#include "base/bind.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
+#include "services/shell/public/cpp/interface_provider.h"
 
 namespace content {
 
 BlinkServiceRegistryImpl::BlinkServiceRegistryImpl(
-    base::WeakPtr<content::ServiceRegistry> service_registry)
-    : service_registry_(service_registry) {}
+    base::WeakPtr<shell::InterfaceProvider> remote_interfaces)
+    : remote_interfaces_(remote_interfaces),
+      main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      weak_ptr_factory_(this) {}
 
 BlinkServiceRegistryImpl::~BlinkServiceRegistryImpl() = default;
 
 void BlinkServiceRegistryImpl::connectToRemoteService(
     const char* name,
     mojo::ScopedMessagePipeHandle handle) {
-  if (!service_registry_)
+  if (!main_thread_task_runner_->BelongsToCurrentThread()) {
+    main_thread_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&BlinkServiceRegistryImpl::connectToRemoteService,
+                              weak_ptr_factory_.GetWeakPtr(), name,
+                              base::Passed(&handle)));
+    return;
+  }
+
+  if (!remote_interfaces_)
     return;
 
-  service_registry_->ConnectToRemoteService(name, std::move(handle));
+  remote_interfaces_->GetInterface(name, std::move(handle));
 }
 
 }  // namespace content

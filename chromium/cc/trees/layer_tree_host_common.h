@@ -77,8 +77,6 @@ class CC_EXPORT LayerTreeHostCommon {
         const gfx::Vector2dF& elastic_overscroll,
         const LayerImpl* elastic_overscroll_application_layer,
         int max_texture_size,
-        bool can_use_lcd_text,
-        bool layers_always_allowed_lcd_text,
         bool can_render_to_separate_surface,
         bool can_adjust_raster_scales,
         bool verify_clip_tree_calculations,
@@ -96,8 +94,6 @@ class CC_EXPORT LayerTreeHostCommon {
     gfx::Vector2dF elastic_overscroll;
     const LayerImpl* elastic_overscroll_application_layer;
     int max_texture_size;
-    bool can_use_lcd_text;
-    bool layers_always_allowed_lcd_text;
     bool can_render_to_separate_surface;
     bool can_adjust_raster_scales;
     bool verify_clip_tree_calculations;
@@ -163,31 +159,31 @@ struct CC_EXPORT ScrollAndScaleSet {
   DISALLOW_COPY_AND_ASSIGN(ScrollAndScaleSet);
 };
 
-template <typename LayerType, typename Function>
-static void CallFunctionForLayer(LayerType* layer, const Function& function) {
-  function(layer);
-
-  if (LayerType* mask_layer = layer->mask_layer())
-    function(mask_layer);
-  if (LayerType* replica_layer = layer->replica_layer()) {
-    function(replica_layer);
-    if (LayerType* mask_layer = replica_layer->mask_layer())
+template <typename Function>
+void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTreeHost* host,
+                                                    const Function& function) {
+  for (auto* layer : *host) {
+    function(layer);
+    if (Layer* mask_layer = layer->mask_layer())
       function(mask_layer);
+    if (Layer* replica_layer = layer->replica_layer()) {
+      function(replica_layer);
+      if (Layer* mask_layer = replica_layer->mask_layer())
+        function(mask_layer);
+    }
   }
 }
 
 template <typename Function>
-void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTreeHost* host,
+void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTreeImpl* tree_impl,
                                                     const Function& function) {
-  for (auto* layer : *host)
-    CallFunctionForLayer(layer, function);
-}
+  for (auto* layer : *tree_impl)
+    function(layer);
 
-template <typename Function>
-void LayerTreeHostCommon::CallFunctionForEveryLayer(LayerTreeImpl* host_impl,
-                                                    const Function& function) {
-  for (auto* layer : *host_impl)
-    CallFunctionForLayer(layer, function);
+  for (int id :
+       tree_impl->property_trees()->effect_tree.mask_replica_layer_ids()) {
+    function(tree_impl->LayerById(id));
+  }
 }
 
 CC_EXPORT PropertyTrees* GetPropertyTrees(Layer* layer);

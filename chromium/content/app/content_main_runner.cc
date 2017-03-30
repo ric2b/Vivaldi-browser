@@ -39,9 +39,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
-#include "components/tracing/trace_config_file.h"
-#include "components/tracing/trace_to_console.h"
-#include "components/tracing/tracing_switches.h"
+#include "components/tracing/browser/trace_config_file.h"
+#include "components/tracing/common/trace_to_console.h"
+#include "components/tracing/common/tracing_switches.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/browser/browser_main.h"
 #include "content/browser/gpu/gpu_process_host.h"
@@ -178,10 +178,8 @@ base::LazyInstance<ContentUtilityClient>
 
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA) && defined(OS_ANDROID)
 #if defined __LP64__
-#define kV8NativesDataDescriptor kV8NativesDataDescriptor64
 #define kV8SnapshotDataDescriptor kV8SnapshotDataDescriptor64
 #else
-#define kV8NativesDataDescriptor kV8NativesDataDescriptor32
 #define kV8SnapshotDataDescriptor kV8SnapshotDataDescriptor32
 #endif
 #endif

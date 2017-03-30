@@ -15,7 +15,7 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
@@ -37,13 +37,14 @@ ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBody> body)
+    scoped_refptr<ResourceRequestBodyImpl> body)
     : ServiceWorkerRequestHandler(context,
                                   provider_host,
                                   blob_storage_context,
                                   resource_type),
       is_main_resource_load_(
           ServiceWorkerUtils::IsMainResourceType(resource_type)),
+      is_main_frame_load_(resource_type == RESOURCE_TYPE_MAIN_FRAME),
       request_mode_(request_mode),
       credentials_mode_(credentials_mode),
       redirect_mode_(redirect_mode),
@@ -262,16 +263,14 @@ ServiceWorkerControlleeRequestHandler::DidLookupRegistrationForMainResource(
     return;
   }
 
-  ServiceWorkerMetrics::CountControlledPageLoad(stripped_url_);
+  ServiceWorkerMetrics::CountControlledPageLoad(
+      stripped_url_, active_version->has_fetch_handler(), is_main_frame_load_);
 
   job_->ForwardToServiceWorker();
   TRACE_EVENT_ASYNC_END2(
       "ServiceWorker",
       "ServiceWorkerControlleeRequestHandler::PrepareForMainResource",
-      job_.get(),
-      "Status", status,
-      "Info",
-      "Forwarded to the ServiceWorker");
+      job_.get(), "Status", status, "Info", "Forwarded to the ServiceWorker");
 }
 
 void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
@@ -290,7 +289,8 @@ void ServiceWorkerControlleeRequestHandler::OnVersionStatusChanged(
     return;
   }
 
-  ServiceWorkerMetrics::CountControlledPageLoad(stripped_url_);
+  ServiceWorkerMetrics::CountControlledPageLoad(
+      stripped_url_, version->has_fetch_handler(), is_main_frame_load_);
 
   provider_host_->AssociateRegistration(registration,
                                         false /* notify_controllerchange */);

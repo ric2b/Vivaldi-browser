@@ -5,14 +5,15 @@
 #ifndef V8StackTraceImpl_h
 #define V8StackTraceImpl_h
 
-#include "platform/inspector_protocol/Collections.h"
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/v8_inspector/public/V8StackTrace.h"
-#include "wtf/PassOwnPtr.h"
+
+#include <vector>
 
 namespace blink {
 
 class TracedValue;
-class V8DebuggerAgentImpl;
+class V8DebuggerImpl;
 
 // Note: async stack trace may have empty top stack with non-empty tail to indicate
 // that current native-only state had some async story.
@@ -20,6 +21,8 @@ class V8DebuggerAgentImpl;
 class V8StackTraceImpl final : public V8StackTrace {
     PROTOCOL_DISALLOW_COPY(V8StackTraceImpl);
 public:
+    static const size_t maxCallStackSizeToCapture = 200;
+
     class Frame  {
     public:
         Frame();
@@ -31,10 +34,11 @@ public:
         const String16& sourceURL() const { return m_scriptName; }
         int lineNumber() const { return m_lineNumber; }
         int columnNumber() const { return m_columnNumber; }
+        Frame isolatedCopy() const;
 
     private:
         friend class V8StackTraceImpl;
-        PassOwnPtr<protocol::Runtime::CallFrame> buildInspectorObject() const;
+        std::unique_ptr<protocol::Runtime::CallFrame> buildInspectorObject() const;
         void toTracedValue(TracedValue*) const;
 
         String16 m_functionName;
@@ -44,11 +48,15 @@ public:
         int m_columnNumber;
     };
 
-    static PassOwnPtr<V8StackTraceImpl> create(V8DebuggerAgentImpl*, v8::Local<v8::StackTrace>, size_t maxStackSize, const String16& description = String16());
-    static PassOwnPtr<V8StackTraceImpl> capture(V8DebuggerAgentImpl*, size_t maxStackSize, const String16& description = String16());
+    static void setCaptureStackTraceForUncaughtExceptions(v8::Isolate*, bool capture);
+    static std::unique_ptr<V8StackTraceImpl> create(V8DebuggerImpl*, int contextGroupId, v8::Local<v8::StackTrace>, size_t maxStackSize, const String16& description = String16());
+    static std::unique_ptr<V8StackTraceImpl> capture(V8DebuggerImpl*, int contextGroupId, size_t maxStackSize, const String16& description = String16());
 
-    PassOwnPtr<V8StackTraceImpl> clone();
-    PassOwnPtr<protocol::Runtime::StackTrace> buildInspectorObjectForTail(V8DebuggerAgentImpl*) const;
+    std::unique_ptr<V8StackTrace> clone() override;
+    std::unique_ptr<V8StackTraceImpl> cloneImpl();
+    std::unique_ptr<V8StackTrace> isolatedCopy() override;
+    std::unique_ptr<V8StackTraceImpl> isolatedCopyImpl();
+    std::unique_ptr<protocol::Runtime::StackTrace> buildInspectorObjectForTail(V8DebuggerImpl*) const;
     ~V8StackTraceImpl() override;
 
     // V8StackTrace implementation.
@@ -58,15 +66,16 @@ public:
     int topColumnNumber() const override;
     String16 topScriptId() const override;
     String16 topFunctionName() const override;
-    PassOwnPtr<protocol::Runtime::StackTrace> buildInspectorObject() const override;
+    std::unique_ptr<protocol::Runtime::StackTrace> buildInspectorObject() const override;
     String16 toString() const override;
 
 private:
-    V8StackTraceImpl(const String16& description, protocol::Vector<Frame>& frames, PassOwnPtr<V8StackTraceImpl> parent);
+    V8StackTraceImpl(int contextGroupId, const String16& description, std::vector<Frame>& frames, std::unique_ptr<V8StackTraceImpl> parent);
 
+    int m_contextGroupId;
     String16 m_description;
-    protocol::Vector<Frame> m_frames;
-    OwnPtr<V8StackTraceImpl> m_parent;
+    std::vector<Frame> m_frames;
+    std::unique_ptr<V8StackTraceImpl> m_parent;
 };
 
 } // namespace blink

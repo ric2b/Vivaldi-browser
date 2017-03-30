@@ -4,9 +4,10 @@
 
 #include "ash/display/screen_orientation_controller_chromeos.h"
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/display_configuration_controller.h"
-#include "ash/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
@@ -69,11 +70,11 @@ ScreenOrientationController::ScreenOrientationController()
       rotation_locked_orientation_(blink::WebScreenOrientationLockAny),
       user_rotation_(display::Display::ROTATE_0),
       current_rotation_(display::Display::ROTATE_0) {
-  Shell::GetInstance()->AddShellObserver(this);
+  WmShell::Get()->AddShellObserver(this);
 }
 
 ScreenOrientationController::~ScreenOrientationController() {
-  Shell::GetInstance()->RemoveShellObserver(this);
+  WmShell::Get()->RemoveShellObserver(this);
   chromeos::AccelerometerReader::GetInstance()->RemoveObserver(this);
   Shell::GetInstance()->window_tree_host_manager()->RemoveObserver(this);
   Shell::GetInstance()->activation_client()->RemoveObserver(this);
@@ -109,6 +110,16 @@ void ScreenOrientationController::UnlockOrientationForWindow(
     Shell::GetInstance()->activation_client()->RemoveObserver(this);
   window->RemoveObserver(this);
   ApplyLockForActiveWindow();
+}
+
+void ScreenOrientationController::UnlockAll() {
+  for (auto pair : locking_windows_)
+    pair.first->RemoveObserver(this);
+  locking_windows_.clear();
+  Shell::GetInstance()->activation_client()->RemoveObserver(this);
+  SetRotationLocked(false);
+  if (user_rotation_ != current_rotation_)
+    SetDisplayRotation(user_rotation_, display::Display::ROTATION_SOURCE_USER);
 }
 
 bool ScreenOrientationController::ScreenOrientationProviderSupported() const {
@@ -385,11 +396,13 @@ void ScreenOrientationController::LoadDisplayRotationProperties() {
 void ScreenOrientationController::ApplyLockForActiveWindow() {
   aura::Window* active_window =
       Shell::GetInstance()->activation_client()->GetActiveWindow();
-  for (auto const& windows : locking_windows_) {
-    if (windows.first->TargetVisibility() &&
-        active_window->Contains(windows.first)) {
-      LockRotationToOrientation(windows.second);
-      return;
+  if (active_window) {
+    for (auto const& windows : locking_windows_) {
+      if (windows.first->TargetVisibility() &&
+          active_window->Contains(windows.first)) {
+        LockRotationToOrientation(windows.second);
+        return;
+      }
     }
   }
   SetRotationLocked(false);

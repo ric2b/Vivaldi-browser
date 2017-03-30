@@ -61,7 +61,6 @@
         '../gpu/gpu.gyp:gpu_perftests',
         '../gpu/gpu.gyp:gpu_unittests',
         '../ipc/ipc.gyp:ipc_tests',
-        '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests',
         '../media/cast/cast.gyp:cast_unittests',
         '../media/media.gyp:media_perftests',
         '../media/media.gyp:media_unittests',
@@ -522,6 +521,7 @@
           'dependencies': [
             '../base/base.gyp:pe_image_test',
             '../chrome/chrome.gyp:installer_util_unittests',
+            '../chrome/chrome.gyp:install_static_unittests',
             '../chrome/chrome.gyp:setup',
             '../chrome/chrome.gyp:setup_unittests',
             '../chrome/installer/mini_installer.gyp:mini_installer',
@@ -648,7 +648,6 @@
             }],
             ['OS!="android" and OS!="ios" and chromecast==0', {
               'dependencies': [
-                '../ipc/mojo/ipc_mojo.gyp:ipc_mojo_unittests_run',
                 '../mojo/mojo_edk_tests.gyp:mojo_js_unittests_run',
                 '../mojo/mojo_edk_tests.gyp:mojo_js_integration_tests_run',
                 '../mojo/mojo_edk_tests.gyp:mojo_system_unittests_run',
@@ -665,7 +664,7 @@
                 '../ui/app_list/app_list.gyp:app_list_unittests_run',
               ],
             }],
-            ['enable_app_list==1 and use_aura==1', {
+            ['use_aura==1', {
               'dependencies': [
                 '../ui/app_list/presenter/app_list_presenter.gyp:app_list_presenter_unittests_run',
               ],

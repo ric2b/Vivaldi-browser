@@ -579,7 +579,7 @@ bool GpuChannelMessageFilter::MessageErrorHandler(const IPC::Message& message,
 GpuChannel::GpuChannel(GpuChannelManager* gpu_channel_manager,
                        SyncPointManager* sync_point_manager,
                        GpuWatchdog* watchdog,
-                       gfx::GLShareGroup* share_group,
+                       gl::GLShareGroup* share_group,
                        gles2::MailboxManager* mailbox,
                        PreemptionFlag* preempting_flag,
                        PreemptionFlag* preempted_flag,
@@ -793,8 +793,10 @@ void GpuChannel::HandleMessage(
   HandleMessageHelper(msg);
 
   // If we get descheduled or yield while processing a message.
-  if (stub && stub->HasUnprocessedCommands()) {
-    DCHECK_EQ((uint32_t)GpuCommandBufferMsg_AsyncFlush::ID, msg.type());
+  if ((stub && stub->HasUnprocessedCommands()) ||
+      !message_queue->IsScheduled()) {
+    DCHECK((uint32_t)GpuCommandBufferMsg_AsyncFlush::ID == msg.type() ||
+           (uint32_t)GpuCommandBufferMsg_WaitSyncToken::ID == msg.type());
     message_queue->PauseMessageProcessing();
   } else {
     message_queue->FinishMessageProcessing();
@@ -1044,7 +1046,8 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
     const gfx::GpuMemoryBufferHandle& handle,
     const gfx::Size& size,
     gfx::BufferFormat format,
-    uint32_t internalformat) {
+    uint32_t internalformat,
+    SurfaceHandle surface_handle) {
   switch (handle.type) {
     case gfx::SHARED_MEMORY_BUFFER: {
       if (!base::IsValueInRangeForNumericType<size_t>(handle.stride))
@@ -1065,11 +1068,8 @@ scoped_refptr<gl::GLImage> GpuChannel::CreateImageForGpuMemoryBuffer(
 
       return manager->gpu_memory_buffer_factory()
           ->AsImageFactory()
-          ->CreateImageForGpuMemoryBuffer(handle,
-                                          size,
-                                          format,
-                                          internalformat,
-                                          client_id_);
+          ->CreateImageForGpuMemoryBuffer(handle, size, format, internalformat,
+                                          client_id_, surface_handle);
     }
   }
 }

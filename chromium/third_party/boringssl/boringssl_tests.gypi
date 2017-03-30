@@ -399,13 +399,41 @@
       'msvs_disabled_warnings': [ 4267, ],
     },
     {
+      'target_name': 'boringssl_newhope_statistical_test',
+      'type': 'executable',
+      'dependencies': [
+        'boringssl.gyp:boringssl',
+      ],
+      'sources': [
+        'src/crypto/newhope/newhope_statistical_test.cc',
+        '<@(boringssl_test_support_sources)',
+      ],
+      # TODO(davidben): Fix size_t truncations in BoringSSL.
+      # https://crbug.com/429039
+      'msvs_disabled_warnings': [ 4267, ],
+    },
+    {
       'target_name': 'boringssl_newhope_test',
       'type': 'executable',
       'dependencies': [
         'boringssl.gyp:boringssl',
       ],
       'sources': [
-        'src/crypto/newhope/newhope_test.c',
+        'src/crypto/newhope/newhope_test.cc',
+        '<@(boringssl_test_support_sources)',
+      ],
+      # TODO(davidben): Fix size_t truncations in BoringSSL.
+      # https://crbug.com/429039
+      'msvs_disabled_warnings': [ 4267, ],
+    },
+    {
+      'target_name': 'boringssl_newhope_vectors_test',
+      'type': 'executable',
+      'dependencies': [
+        'boringssl.gyp:boringssl',
+      ],
+      'sources': [
+        'src/crypto/newhope/newhope_vectors_test.cc',
         '<@(boringssl_test_support_sources)',
       ],
       # TODO(davidben): Fix size_t truncations in BoringSSL.
@@ -598,8 +626,15 @@
   'variables': {
     'boringssl_test_support_sources': [
       'src/crypto/test/file_test.cc',
+      'src/crypto/test/file_test.h',
       'src/crypto/test/malloc.cc',
+      'src/crypto/test/scoped_types.h',
       'src/crypto/test/test_util.cc',
+      'src/crypto/test/test_util.h',
+      'src/ssl/test/async_bio.h',
+      'src/ssl/test/packeted_bio.h',
+      'src/ssl/test/scoped_types.h',
+      'src/ssl/test/test_config.h',
     ],
     'boringssl_test_targets': [
       'boringssl_aead_test',
@@ -627,7 +662,9 @@
       'boringssl_hkdf_test',
       'boringssl_hmac_test',
       'boringssl_lhash_test',
+      'boringssl_newhope_statistical_test',
       'boringssl_newhope_test',
+      'boringssl_newhope_vectors_test',
       'boringssl_obj_test',
       'boringssl_pbkdf_test',
       'boringssl_pkcs12_test',

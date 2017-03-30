@@ -5,22 +5,22 @@
 #include "core/css/cssom/CSSLengthValue.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/css/cssom/CalcDictionary.h"
-#include "core/css/cssom/SimpleLength.h"
-#include "core/css/cssom/StyleCalcLength.h"
+#include "core/css/CSSPrimitiveValue.h"
+#include "core/css/cssom/CSSCalcDictionary.h"
+#include "core/css/cssom/CSSCalcLength.h"
+#include "core/css/cssom/CSSSimpleLength.h"
 #include "wtf/HashMap.h"
 
 namespace blink {
 
 CSSPrimitiveValue::UnitType CSSLengthValue::unitFromName(const String& name)
 {
-    if (equalIgnoringASCIICase(name, "percent") || name == "%") {
+    if (equalIgnoringASCIICase(name, "percent") || name == "%")
         return CSSPrimitiveValue::UnitType::Percentage;
-    }
-    return CSSPrimitiveValue::fromName(name);
+    return CSSPrimitiveValue::stringToUnitType(name);
 }
 
-CSSLengthValue* CSSLengthValue::from(const String& cssString, ExceptionState& exceptionState)
+CSSLengthValue* CSSLengthValue::from(const String& cssText, ExceptionState& exceptionState)
 {
     // TODO: Implement
     return nullptr;
@@ -28,12 +28,12 @@ CSSLengthValue* CSSLengthValue::from(const String& cssString, ExceptionState& ex
 
 CSSLengthValue* CSSLengthValue::from(double value, const String& type, ExceptionState&)
 {
-    return SimpleLength::create(value, unitFromName(type));
+    return CSSSimpleLength::create(value, unitFromName(type));
 }
 
-CSSLengthValue* CSSLengthValue::from(const CalcDictionary& dictionary, ExceptionState& exceptionState)
+CSSLengthValue* CSSLengthValue::from(const CSSCalcDictionary& dictionary, ExceptionState& exceptionState)
 {
-    return StyleCalcLength::create(dictionary, exceptionState);
+    return CSSCalcLength::create(dictionary, exceptionState);
 }
 
 CSSLengthValue* CSSLengthValue::add(const CSSLengthValue* other, ExceptionState& exceptionState)
@@ -41,7 +41,7 @@ CSSLengthValue* CSSLengthValue::add(const CSSLengthValue* other, ExceptionState&
     if (type() == other->type() || type() == CalcLengthType)
         return addInternal(other, exceptionState);
 
-    StyleCalcLength* result = StyleCalcLength::create(this, exceptionState);
+    CSSCalcLength* result = CSSCalcLength::create(this, exceptionState);
     return result->add(other, exceptionState);
 }
 
@@ -50,7 +50,7 @@ CSSLengthValue* CSSLengthValue::subtract(const CSSLengthValue* other, ExceptionS
     if (type() == other->type() || type() == CalcLengthType)
         return subtractInternal(other, exceptionState);
 
-    StyleCalcLength* result = StyleCalcLength::create(this, exceptionState);
+    CSSCalcLength* result = CSSCalcLength::create(this, exceptionState);
     return result->subtract(other, exceptionState);
 }
 

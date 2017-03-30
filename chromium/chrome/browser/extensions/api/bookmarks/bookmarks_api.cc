@@ -64,8 +64,6 @@
 #if defined(OS_WIN)
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/jumplist_updater_win.h"
-#include "chrome/browser/jumplist_win.h"
 #endif
 
 using bookmarks::BookmarkModel;

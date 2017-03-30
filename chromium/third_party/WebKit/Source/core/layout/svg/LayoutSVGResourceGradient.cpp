@@ -22,6 +22,9 @@
 
 #include "core/layout/svg/LayoutSVGResourceGradient.h"
 
+#include "wtf/PtrUtil.h"
+#include <memory>
+
 namespace blink {
 
 LayoutSVGResourceGradient::LayoutSVGResourceGradient(SVGGradientElement* node)
@@ -70,13 +73,13 @@ SVGPaintServer LayoutSVGResourceGradient::preparePaintServer(const LayoutObject&
     if (gradientUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX && objectBoundingBox.isEmpty())
         return SVGPaintServer::invalid();
 
-    OwnPtr<GradientData>& gradientData = m_gradientMap.add(&object, nullptr).storedValue->value;
+    std::unique_ptr<GradientData>& gradientData = m_gradientMap.add(&object, nullptr).storedValue->value;
     if (!gradientData)
-        gradientData = adoptPtr(new GradientData);
+        gradientData = wrapUnique(new GradientData);
 
     // Create gradient object
     if (!gradientData->gradient) {
-        buildGradient(gradientData.get());
+        gradientData->gradient = buildGradient();
 
         // We want the text bounding box applied to the gradient space transform now, so the gradient shader can use it.
         if (gradientUnits() == SVGUnitTypes::SVG_UNIT_TYPE_OBJECTBOUNDINGBOX && !objectBoundingBox.isEmpty()) {
@@ -84,18 +87,14 @@ SVGPaintServer LayoutSVGResourceGradient::preparePaintServer(const LayoutObject&
             gradientData->userspaceTransform.scaleNonUniform(objectBoundingBox.width(), objectBoundingBox.height());
         }
 
-        AffineTransform gradientTransform;
-        calculateGradientTransform(gradientTransform);
-
+        AffineTransform gradientTransform = calculateGradientTransform();
         gradientData->userspaceTransform *= gradientTransform;
     }
 
     if (!gradientData->gradient)
         return SVGPaintServer::invalid();
 
-    gradientData->gradient->setGradientSpaceTransform(gradientData->userspaceTransform);
-
-    return SVGPaintServer(gradientData->gradient);
+    return SVGPaintServer(gradientData->gradient, gradientData->userspaceTransform);
 }
 
 bool LayoutSVGResourceGradient::isChildAllowed(LayoutObject* child, const ComputedStyle&) const
@@ -109,15 +108,13 @@ bool LayoutSVGResourceGradient::isChildAllowed(LayoutObject* child, const Comput
     return toLayoutSVGResourceContainer(child)->isSVGPaintServer();
 }
 
-void LayoutSVGResourceGradient::addStops(GradientData* gradientData, const Vector<Gradient::ColorStop>& stops) const
+void LayoutSVGResourceGradient::addStops(Gradient& gradient, const Vector<Gradient::ColorStop>& stops) const
 {
-    ASSERT(gradientData->gradient);
-
     for (const auto& stop : stops)
-        gradientData->gradient->addColorStop(stop);
+        gradient.addColorStop(stop);
 }
 
-GradientSpreadMethod LayoutSVGResourceGradient::platformSpreadMethodFromSVGType(SVGSpreadMethodType method) const
+GradientSpreadMethod LayoutSVGResourceGradient::platformSpreadMethodFromSVGType(SVGSpreadMethodType method)
 {
     switch (method) {
     case SVGSpreadMethodUnknown:

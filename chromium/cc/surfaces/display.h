@@ -18,7 +18,9 @@
 #include "cc/surfaces/surface_id.h"
 #include "cc/surfaces/surface_manager.h"
 #include "cc/surfaces/surfaces_export.h"
+#include "gpu/command_buffer/common/texture_in_use_response.h"
 #include "ui/events/latency_info.h"
+#include "ui/gfx/color_space.h"
 
 namespace gpu {
 class GpuMemoryBufferManager;
@@ -51,21 +53,27 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
                                    public RendererClient,
                                    public SurfaceDamageObserver {
  public:
-  Display(DisplayClient* client,
-          SurfaceManager* manager,
+  // The |begin_frame_source| and |scheduler| may be null (together). In that
+  // case, DrawAndSwap must be called externally when needed.
+  Display(SurfaceManager* manager,
           SharedBitmapManager* bitmap_manager,
           gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
           const RendererSettings& settings,
-          uint32_t compositor_surface_namespace);
+          uint32_t compositor_surface_namespace,
+          std::unique_ptr<BeginFrameSource> begin_frame_source,
+          std::unique_ptr<OutputSurface> output_surface,
+          std::unique_ptr<DisplayScheduler> scheduler,
+          std::unique_ptr<TextureMailboxDeleter> texture_mailbox_deleter);
+
   ~Display() override;
 
-  bool Initialize(std::unique_ptr<OutputSurface> output_surface,
-                  base::SingleThreadTaskRunner* task_runner);
+  void Initialize(DisplayClient* client);
 
   // device_scale_factor is used to communicate to the external window system
   // what scale this was rendered at.
   void SetSurfaceId(SurfaceId id, float device_scale_factor);
   void Resize(const gfx::Size& new_size);
+  void SetColorSpace(const gfx::ColorSpace& color_space);
   void SetExternalClip(const gfx::Rect& clip);
   void SetOutputIsSecure(bool secure);
 
@@ -76,11 +84,13 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
 
   // OutputSurfaceClient implementation.
   void CommitVSyncParameters(base::TimeTicks timebase,
-                             base::TimeDelta interval) override {}
+                             base::TimeDelta interval) override;
   void SetBeginFrameSource(BeginFrameSource* source) override;
   void SetNeedsRedrawRect(const gfx::Rect& damage_rect) override;
   void DidSwapBuffers() override;
   void DidSwapBuffersComplete() override;
+  void DidReceiveTextureInUseResponses(
+      const gpu::TextureInUseResponses& responses) override;
   void ReclaimResources(const CompositorFrameAck* ack) override;
   void DidLoseOutputSurface() override;
   void SetExternalTilePriorityConstraints(
@@ -99,10 +109,12 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   // SurfaceDamageObserver implementation.
   void OnSurfaceDamaged(SurfaceId surface, bool* changed) override;
 
- protected:
-  // Virtual for tests.
-  virtual void CreateScheduler(base::SingleThreadTaskRunner* task_runner);
+  void SetEnlargePassTextureAmountForTesting(
+      const gfx::Size& enlarge_texture_amount) {
+    enlarge_texture_amount_ = enlarge_texture_amount;
+  }
 
+ private:
   void InitializeRenderer();
   void UpdateRootSurfaceResourcesLocked();
 
@@ -114,23 +126,22 @@ class CC_SURFACES_EXPORT Display : public DisplaySchedulerClient,
   SurfaceId current_surface_id_;
   uint32_t compositor_surface_namespace_;
   gfx::Size current_surface_size_;
-  float device_scale_factor_;
-  bool swapped_since_resize_;
+  float device_scale_factor_ = 1.f;
+  gfx::ColorSpace device_color_space_;
+  bool swapped_since_resize_ = false;
   gfx::Rect external_clip_;
+  gfx::Size enlarge_texture_amount_;
   bool output_is_secure_ = false;
 
+  // The begin_frame_source_ is often known by the output_surface_ and
+  // the scheduler_.
+  std::unique_ptr<BeginFrameSource> begin_frame_source_;
   std::unique_ptr<OutputSurface> output_surface_;
-  // An internal synthetic BFS. May be null when not used.
-  std::unique_ptr<BeginFrameSource> internal_begin_frame_source_;
-  // The real BFS tied to vsync provided by the BrowserCompositorOutputSurface.
-  BeginFrameSource* vsync_begin_frame_source_;
-  // The current BFS driving the Display/DisplayScheduler.
-  BeginFrameSource* observed_begin_frame_source_;
   std::unique_ptr<DisplayScheduler> scheduler_;
   std::unique_ptr<ResourceProvider> resource_provider_;
   std::unique_ptr<SurfaceAggregator> aggregator_;
-  std::unique_ptr<DirectRenderer> renderer_;
   std::unique_ptr<TextureMailboxDeleter> texture_mailbox_deleter_;
+  std::unique_ptr<DirectRenderer> renderer_;
   std::vector<ui::LatencyInfo> stored_latency_info_;
 
  private:

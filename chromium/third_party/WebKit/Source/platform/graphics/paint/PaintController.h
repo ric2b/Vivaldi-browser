@@ -17,11 +17,15 @@
 #include "platform/graphics/paint/PaintChunker.h"
 #include "platform/graphics/paint/Transform3DDisplayItem.h"
 #include "wtf/Alignment.h"
+#include "wtf/Assertions.h"
 #include "wtf/HashMap.h"
 #include "wtf/HashSet.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
+#include <memory>
 #include <utility>
+
+class SkPicture;
 
 namespace blink {
 
@@ -36,22 +40,21 @@ class PLATFORM_EXPORT PaintController {
     WTF_MAKE_NONCOPYABLE(PaintController);
     USING_FAST_MALLOC(PaintController);
 public:
-    static PassOwnPtr<PaintController> create()
+    static std::unique_ptr<PaintController> create()
     {
-        return adoptPtr(new PaintController());
+        return wrapUnique(new PaintController());
     }
 
-    // These methods are called during paint invalidation (or paint if SlimmingPaintV2 is on).
-
-    void invalidate(const DisplayItemClient&);
-    void invalidateUntracked(const DisplayItemClient&);
-    void invalidateAll();
-
-    // Record when paint offsets change during paint.
-    void invalidatePaintOffset(const DisplayItemClient&);
-#if ENABLE(ASSERT)
-    bool paintOffsetWasInvalidated(const DisplayItemClient&) const;
+    ~PaintController()
+    {
+        // New display items should be committed before PaintController is destructed.
+        DCHECK(m_newDisplayItemList.isEmpty());
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+        DisplayItemClient::endShouldKeepAliveAllClients(this);
 #endif
+    }
+
+    void invalidateAll();
 
     // These methods are called during painting.
 
@@ -92,18 +95,12 @@ public:
             createAndAppend<DisplayItemClass>(std::forward<Args>(args)...);
     }
 
-    // Scopes must be used to avoid duplicated display item ids when we paint some object
-    // multiple times and generate multiple display items with the same type.
-    // We don't cache display items added in scopes.
-    void beginScope();
-    void endScope();
-
     // True if the last display item is a begin that doesn't draw content.
     bool lastDisplayItemIsNoopBegin() const;
     void removeLastDisplayItem();
 
     void beginSkippingCache() { ++m_skippingCacheCount; }
-    void endSkippingCache() { ASSERT(m_skippingCacheCount > 0); --m_skippingCacheCount; }
+    void endSkippingCache() { DCHECK(m_skippingCacheCount > 0); --m_skippingCacheCount; }
     bool skippingCache() const { return m_skippingCacheCount; }
 
     // Must be called when a painting is finished.
@@ -139,60 +136,30 @@ public:
     // the last commitNewDisplayItems(). Use with care.
     DisplayItemList& newDisplayItemList() { return m_newDisplayItemList; }
 
+    void appendDebugDrawingAfterCommit(const DisplayItemClient&, PassRefPtr<SkPicture>, const LayoutSize& offsetFromLayoutObject);
+
 #ifndef NDEBUG
     void showDebugData() const;
 #endif
 
-#if ENABLE(ASSERT)
-    bool hasInvalidations() { return !m_invalidations.isEmpty(); }
-#endif
-
-    void startTrackingPaintInvalidationObjects()
-    {
-        ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-        m_trackedPaintInvalidationObjects = adoptPtr(new Vector<String>());
-    }
-    void stopTrackingPaintInvalidationObjects()
-    {
-        ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-        m_trackedPaintInvalidationObjects = nullptr;
-    }
-    Vector<String> trackedPaintInvalidationObjects()
-    {
-        ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-        return m_trackedPaintInvalidationObjects ? *m_trackedPaintInvalidationObjects : Vector<String>();
-    }
-
-    bool clientHasCheckedPaintInvalidation(const DisplayItemClient& client) const
-    {
-        return m_clientsCheckedPaintInvalidation.contains(&client);
-    }
-    void setClientHasCheckedPaintInvalidation(const DisplayItemClient& client)
-    {
-        m_clientsCheckedPaintInvalidation.add(&client);
-    }
-
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     void assertDisplayItemClientsAreLive();
 #endif
 
 protected:
     PaintController()
         : m_newDisplayItemList(kInitialDisplayItemListCapacityBytes)
-        , m_validlyCachedClientsDirty(false)
         , m_constructionDisabled(false)
         , m_subsequenceCachingDisabled(false)
         , m_textPainted(false)
         , m_imagePainted(false)
         , m_skippingCacheCount(0)
         , m_numCachedNewItems(0)
-        , m_nextScope(1) { }
+    { }
 
 private:
-    // Set new item state (scopes, cache skipping, etc) for a new item.
+    // Set new item state (cache skipping, etc) for a new item.
     void processNewItem(DisplayItem&);
-
-    void updateValidlyCachedClientsIfNeeded() const;
 
 #ifndef NDEBUG
     WTF::String displayItemListAsDebugString(const DisplayItemList&) const;
@@ -210,15 +177,14 @@ private:
     DisplayItemList::iterator findOutOfOrderCachedItemForward(const DisplayItem::Id&, OutOfOrderIndexContext&);
     void copyCachedSubsequence(const DisplayItemList& currentList, DisplayItemList::iterator& currentIt, DisplayItemList& updatedList, SkPictureGpuAnalyzer&);
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     // The following two methods are for checking under-invalidations
     // (when RuntimeEnabledFeatures::slimmingPaintUnderInvalidationCheckingEnabled).
     void checkUnderInvalidation(DisplayItemList::iterator& newIt, DisplayItemList::iterator& currentIt);
     void checkCachedDisplayItemIsUnchanged(const char* messagePrefix, const DisplayItem& newItem, const DisplayItem& oldItem);
-    void checkNoRemainingCachedDisplayItems();
 #endif
 
-    void commitNewDisplayItemsInternal(const LayoutSize& offsetFromLayoutObject);
+    void updateCacheGeneration();
 
     // The last complete paint artifact.
     // In SPv2, this includes paint chunks as well as display items.
@@ -227,24 +193,6 @@ private:
     // Data being used to build the next paint artifact.
     DisplayItemList m_newDisplayItemList;
     PaintChunker m_newPaintChunks;
-
-    // Contains all clients having valid cached paintings if updated.
-    // It's lazily updated in updateValidlyCachedClientsIfNeeded().
-    // TODO(wangxianzhu): In the future we can replace this with client-side repaint flags
-    // to avoid the cost of building and querying the hash table.
-    mutable HashSet<const DisplayItemClient*> m_validlyCachedClients;
-    mutable bool m_validlyCachedClientsDirty;
-
-    // Used during painting. Contains clients that have checked paint invalidation and
-    // are known to be valid.
-    // TODO(wangxianzhu): Use client side flag to avoid const of hash table.
-    HashSet<const DisplayItemClient*> m_clientsCheckedPaintInvalidation;
-
-#if ENABLE(ASSERT)
-    // Set of clients which had paint offset changes since the last commit. This is used for
-    // ensuring paint offsets are only updated once and are the same in all phases.
-    HashSet<const DisplayItemClient*> m_clientsWithPaintOffsetInvalidations;
-#endif
 
     // Allow display item construction to be disabled to isolate the costs of construction
     // in performance metrics.
@@ -261,20 +209,19 @@ private:
 
     int m_numCachedNewItems;
 
-    unsigned m_nextScope;
-    Vector<unsigned> m_scopeStack;
-
-#if ENABLE(ASSERT)
-    // Record the debug names of invalidated clients for assertion and debugging.
-    Vector<String> m_invalidations;
-
+#if DCHECK_IS_ON()
     // This is used to check duplicated ids during add(). We could also check
     // during commitNewDisplayItems(), but checking during add() helps developer
     // easily find where the duplicated ids are from.
     DisplayItemIndicesByClientMap m_newDisplayItemIndicesByClient;
 #endif
 
-    OwnPtr<Vector<String>> m_trackedPaintInvalidationObjects;
+    DisplayItemClient::CacheGenerationOrInvalidationReason m_currentCacheGeneration;
+
+#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
+    // A stack recording subsequence clients that are currently painting.
+    Vector<const DisplayItemClient*> m_currentSubsequenceClients;
+#endif
 };
 
 } // namespace blink

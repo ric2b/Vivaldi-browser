@@ -51,6 +51,8 @@ source_set("base") {
     "audio_hardware_config.h",
     "audio_hash.cc",
     "audio_hash.h",
+    "audio_latency.cc",
+    "audio_latency.h",
     "audio_pull_fifo.cc",
     "audio_pull_fifo.h",
     "audio_push_fifo.cc",
@@ -61,6 +63,7 @@ source_set("base") {
     "audio_renderer_mixer.h",
     "audio_renderer_mixer_input.cc",
     "audio_renderer_mixer_input.h",
+    "audio_renderer_mixer_pool.h",
     "audio_renderer_sink.h",
     "audio_shifter.cc",
     "audio_shifter.h",
@@ -268,6 +271,7 @@ source_set("base") {
         "media_file_checker.cc",
         "media_file_checker.h",
       ]
+      deps += [ "//media:filters_common" ]
     }
 
     deps += [ "//third_party/ffmpeg" ]
@@ -399,6 +403,14 @@ source_set("test_support") {
     "//testing/gmock",
     "//ui/gfx:test_support",
   ]
+  if (is_android) {
+    deps += [
+      # Needed to register capture Java/Jni objects. TODO(mcasas): Remove when
+      # the dependency to capture is not needed, see https://crbug.com/618718.
+      "//media/capture",
+      "//media/capture/video/android",
+    ]
+  }
 }
 
 source_set("unittests") {
@@ -414,12 +426,14 @@ source_set("unittests") {
     "audio_fifo_unittest.cc",
     "audio_hardware_config_unittest.cc",
     "audio_hash_unittest.cc",
+    "audio_latency_unittest.cc",
     "audio_parameters_unittest.cc",
     "audio_point_unittest.cc",
     "audio_pull_fifo_unittest.cc",
     "audio_push_fifo_unittest.cc",
     "audio_renderer_mixer_input_unittest.cc",
     "audio_renderer_mixer_unittest.cc",
+    "audio_sample_types_unittest.cc",
     "audio_shifter_unittest.cc",
     "audio_splicer_unittest.cc",
     "audio_timestamp_helper_unittest.cc",
@@ -516,10 +530,6 @@ source_set("perftests") {
 
   if (media_use_ffmpeg) {
     sources += [ "demuxer_perftest.cc" ]
-  }
-
-  if (is_android) {
-    deps += [ "//ui/gl" ]
   }
 }
 

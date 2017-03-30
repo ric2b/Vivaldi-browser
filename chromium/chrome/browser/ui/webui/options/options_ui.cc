@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/webui/options/options_ui.h"
 
 #include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "base/callback.h"
@@ -97,6 +98,7 @@
 #include "chrome/browser/ui/webui/options/chromeos/power_handler.h"
 #include "chrome/browser/ui/webui/options/chromeos/proxy_handler.h"
 #include "chrome/browser/ui/webui/options/chromeos/stats_options_handler.h"
+#include "chrome/browser/ui/webui/options/chromeos/storage_manager_handler.h"
 #include "chrome/browser/ui/webui/options/chromeos/user_image_source.h"
 #endif
 
@@ -341,6 +343,8 @@ OptionsUI::OptionsUI(content::WebUI* web_ui)
       new chromeos::options::ChangePictureOptionsHandler());
   AddOptionsPageUIHandler(localized_strings,
                           new chromeos::options::StatsOptionsHandler());
+  AddOptionsPageUIHandler(localized_strings,
+                          new chromeos::options::StorageManagerHandler());
 
   policy::ConsumerManagementService* consumer_management =
       g_browser_process->platform_part()->browser_policy_connector_chromeos()->
@@ -411,19 +415,12 @@ void OptionsUI::ProcessAutocompleteSuggestions(
         type != AutocompleteMatchType::NAVSUGGEST_PERSONALIZED) {
       continue;
     }
-    base::DictionaryValue* entry = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
     entry->SetString("title", match.description);
     entry->SetString("displayURL", match.contents);
     entry->SetString("url", match.destination_url.spec());
-    suggestions->Append(entry);
+    suggestions->Append(std::move(entry));
   }
-}
-
-// static
-base::RefCountedMemory* OptionsUI::GetFaviconResourceBytes(
-      ui::ScaleFactor scale_factor) {
-  return ui::ResourceBundle::GetSharedInstance().
-      LoadDataResourceBytesForScale(IDR_SETTINGS_FAVICON, scale_factor);
 }
 
 void OptionsUI::DidStartProvisionalLoadForFrame(
@@ -476,7 +473,7 @@ void OptionsUI::InitializeHandlers() {
   for (size_t i = 0; i < handlers_.size(); ++i)
     handlers_[i]->InitializePage();
 
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "BrowserOptions.notifyInitializationComplete");
 }
 

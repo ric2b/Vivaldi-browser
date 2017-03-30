@@ -10,6 +10,7 @@
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/common/ime.mojom.h"
 #include "components/arc/ime/arc_ime_bridge.h"
+#include "components/arc/instance_holder.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
@@ -24,23 +25,26 @@ namespace arc {
 // Chromium and the ARC container.
 class ArcImeBridgeImpl : public ArcImeBridge,
                          public mojom::ImeHost,
-                         public ArcBridgeService::Observer {
+                         public InstanceHolder<mojom::ImeInstance>::Observer {
  public:
   ArcImeBridgeImpl(Delegate* delegate, ArcBridgeService* bridge_service);
   ~ArcImeBridgeImpl() override;
 
-  // arc::ArcBridgeService::Observer overrides:
-  void OnImeInstanceReady() override;
+  // arc::InstanceHolder<mojom::ImeInstance>::Observer overrides:
+  void OnInstanceReady() override;
 
-  // ArcImeHost overrides:
+  // ArcImeBridge overrides:
   void SendSetCompositionText(const ui::CompositionText& composition) override;
   void SendConfirmCompositionText() override;
   void SendInsertText(const base::string16& text) override;
+  void SendOnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
+  void SendExtendSelectionAndDelete(size_t before, size_t after) override;
 
   // arc::mojom::ImeHost overrides:
   void OnTextInputTypeChanged(arc::mojom::TextInputType type) override;
   void OnCursorRectChanged(arc::mojom::CursorRectPtr rect) override;
   void OnCancelComposition() override;
+  void ShowImeIfNeeded() override;
 
  private:
   mojo::Binding<mojom::ImeHost> binding_;

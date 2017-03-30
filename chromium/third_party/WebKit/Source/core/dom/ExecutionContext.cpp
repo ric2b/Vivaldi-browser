@@ -27,38 +27,34 @@
 
 #include "core/dom/ExecutionContext.h"
 
-#include "bindings/core/v8/ScriptCallStack.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/ExecutionContextTask.h"
 #include "core/events/ErrorEvent.h"
 #include "core/events/EventTarget.h"
 #include "core/fetch/MemoryCache.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/PublicURLManager.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerThread.h"
+#include "platform/weborigin/SecurityPolicy.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
 class ExecutionContext::PendingException {
     WTF_MAKE_NONCOPYABLE(PendingException);
 public:
-    PendingException(const String& errorMessage, int lineNumber, int columnNumber, int scriptId, const String& sourceURL, PassRefPtr<ScriptCallStack> callStack)
+    PendingException(const String& errorMessage, std::unique_ptr<SourceLocation> location)
         : m_errorMessage(errorMessage)
-        , m_lineNumber(lineNumber)
-        , m_columnNumber(columnNumber)
-        , m_scriptId(scriptId)
-        , m_sourceURL(sourceURL)
-        , m_callStack(callStack)
+        , m_location(std::move(location))
     {
     }
 
     String m_errorMessage;
-    int m_lineNumber;
-    int m_columnNumber;
-    int m_scriptId;
-    String m_sourceURL;
-    RefPtr<ScriptCallStack> m_callStack;
+    std::unique_ptr<SourceLocation> m_location;
 };
 
 ExecutionContext::ExecutionContext()
@@ -96,18 +92,18 @@ void ExecutionContext::stopActiveDOMObjects()
     notifyStoppingActiveDOMObjects();
 }
 
-void ExecutionContext::postSuspendableTask(PassOwnPtr<SuspendableTask> task)
+void ExecutionContext::postSuspendableTask(std::unique_ptr<SuspendableTask> task)
 {
     m_suspendedTasks.append(std::move(task));
     if (!m_activeDOMObjectsAreSuspended)
-        postTask(BLINK_FROM_HERE, createSameThreadTask(&ExecutionContext::runSuspendableTasks, this));
+        postTask(BLINK_FROM_HERE, createSameThreadTask(&ExecutionContext::runSuspendableTasks, wrapPersistent(this)));
 }
 
 void ExecutionContext::notifyContextDestroyed()
 {
-    Deque<OwnPtr<SuspendableTask>> suspendedTasks;
+    Deque<std::unique_ptr<SuspendableTask>> suspendedTasks;
     suspendedTasks.swap(m_suspendedTasks);
-    for (Deque<OwnPtr<SuspendableTask>>::iterator it = suspendedTasks.begin(); it != suspendedTasks.end(); ++it)
+    for (Deque<std::unique_ptr<SuspendableTask>>::iterator it = suspendedTasks.begin(); it != suspendedTasks.end(); ++it)
         (*it)->contextDestroyed();
     ContextLifecycleNotifier::notifyContextDestroyed();
 }
@@ -126,7 +122,7 @@ void ExecutionContext::resumeScheduledTasks()
     if (m_isRunSuspendableTasksScheduled)
         return;
     m_isRunSuspendableTasksScheduled = true;
-    postTask(BLINK_FROM_HERE, createSameThreadTask(&ExecutionContext::runSuspendableTasks, this));
+    postTask(BLINK_FROM_HERE, createSameThreadTask(&ExecutionContext::runSuspendableTasks, wrapPersistent(this)));
 }
 
 void ExecutionContext::suspendActiveDOMObjectIfNeeded(ActiveDOMObject* object)
@@ -146,27 +142,27 @@ bool ExecutionContext::shouldSanitizeScriptError(const String& sourceURL, Access
     return !(getSecurityOrigin()->canRequestNoSuborigin(completeURL(sourceURL)) || corsStatus == SharableCrossOrigin);
 }
 
-void ExecutionContext::reportException(ErrorEvent* errorEvent, int scriptId, PassRefPtr<ScriptCallStack> callStack, AccessControlStatus corsStatus)
+void ExecutionContext::reportException(ErrorEvent* errorEvent, AccessControlStatus corsStatus)
 {
     if (m_inDispatchErrorEvent) {
         if (!m_pendingExceptions)
-            m_pendingExceptions = adoptPtr(new Vector<OwnPtr<PendingException>>());
-        m_pendingExceptions->append(adoptPtr(new PendingException(errorEvent->messageForConsole(), errorEvent->lineno(), errorEvent->colno(), scriptId, errorEvent->filename(), callStack)));
+            m_pendingExceptions = wrapUnique(new Vector<std::unique_ptr<PendingException>>());
+        m_pendingExceptions->append(wrapUnique(new PendingException(errorEvent->messageForConsole(), errorEvent->location()->clone())));
         return;
     }
 
     // First report the original exception and only then all the nested ones.
     if (!dispatchErrorEvent(errorEvent, corsStatus))
-        logExceptionToConsole(errorEvent->messageForConsole(), scriptId, errorEvent->filename(), errorEvent->lineno(), errorEvent->colno(), callStack);
+        logExceptionToConsole(errorEvent->messageForConsole(), errorEvent->location()->clone());
 
     if (!m_pendingExceptions)
         return;
 
     for (size_t i = 0; i < m_pendingExceptions->size(); i++) {
         PendingException* e = m_pendingExceptions->at(i).get();
-        logExceptionToConsole(e->m_errorMessage, e->m_scriptId, e->m_sourceURL, e->m_lineNumber, e->m_columnNumber, e->m_callStack);
+        logExceptionToConsole(e->m_errorMessage, std::move(e->m_location));
     }
-    m_pendingExceptions.clear();
+    m_pendingExceptions.reset();
 }
 
 bool ExecutionContext::dispatchErrorEvent(ErrorEvent* errorEvent, AccessControlStatus corsStatus)
@@ -189,7 +185,7 @@ void ExecutionContext::runSuspendableTasks()
 {
     m_isRunSuspendableTasksScheduled = false;
     while (!m_activeDOMObjectsAreSuspended && m_suspendedTasks.size()) {
-        OwnPtr<SuspendableTask> task = m_suspendedTasks.takeFirst();
+        std::unique_ptr<SuspendableTask> task = m_suspendedTasks.takeFirst();
         task->run();
     }
 }
@@ -256,6 +252,27 @@ bool ExecutionContext::isSecureContext(const SecureContextCheck privilegeContext
 String ExecutionContext::outgoingReferrer() const
 {
     return url().strippedForUseAsReferrer();
+}
+
+void ExecutionContext::parseAndSetReferrerPolicy(const String& policies)
+{
+    ReferrerPolicy referrerPolicy = ReferrerPolicyDefault;
+
+    Vector<String> tokens;
+    policies.split(',', true, tokens);
+    for (const auto& token : tokens) {
+        ReferrerPolicy currentResult;
+        if (SecurityPolicy::referrerPolicyFromString(token, &currentResult)) {
+            referrerPolicy = currentResult;
+        }
+    }
+
+    if (referrerPolicy == ReferrerPolicyDefault) {
+        addConsoleMessage(ConsoleMessage::create(RenderingMessageSource, ErrorMessageLevel, "Failed to set referrer policy: The value '" + policies + "' is not one of 'always', 'default', 'never', 'no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-crossorigin', or 'unsafe-url'. The referrer policy has been left unchanged."));
+        return;
+    }
+
+    setReferrerPolicy(referrerPolicy);
 }
 
 void ExecutionContext::setReferrerPolicy(ReferrerPolicy referrerPolicy)

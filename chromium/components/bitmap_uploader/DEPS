@@ -1,10 +1,9 @@
 include_rules = [
+  "+cc/ipc",
+  "+cc/quads",
   "+components/mus/public",
   "+gpu/GLES2",
-  "+services/shell/public",
   "+mojo/common",
-  "+mojo/converters/geometry",
-  "+mojo/converters/surfaces",
   "+mojo/public",
   "+ui/gfx/geometry",
 ]

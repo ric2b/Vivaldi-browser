@@ -116,7 +116,7 @@ void SpellChecker::toggleContinuousSpellChecking()
     for (Frame* frame = this->frame().page()->mainFrame(); frame; frame = frame->tree().traverseNext()) {
         if (!frame->isLocalFrame())
             continue;
-        for (Node& node : NodeTraversal::startsAt(&toLocalFrame(frame)->document()->rootNode()))
+        for (Node& node : NodeTraversal::startsAt(toLocalFrame(frame)->document()->rootNode()))
             node.setAlreadySpellChecked(false);
     }
 }
@@ -140,6 +140,8 @@ void SpellChecker::didBeginEditing(Element* element)
         }
 
         if (isTextField || !parent->isAlreadySpellChecked()) {
+            if (EditingStrategy::editingIgnoresContent(element))
+                return;
             // We always recheck textfields because markers are removed from them on blur.
             VisibleSelection selection = VisibleSelection::selectionFromContentsOfNode(element);
             markMisspellingsAndBadGrammar(selection);
@@ -564,8 +566,17 @@ void SpellChecker::markAndReplaceFor(SpellCheckRequest* request, const Vector<Te
 {
     TRACE_EVENT0("blink", "SpellChecker::markAndReplaceFor");
     DCHECK(request);
+    if (!frame().selection().isAvailable()) {
+        // "editing/spelling/spellcheck-async-remove-frame.html" reaches here.
+        return;
+    }
     if (!request->isValid())
         return;
+    if (request->rootEditableElement()->document() != frame().selection().document()) {
+        // we ignore |request| made for another document.
+        // "editing/spelling/spellcheck-sequencenum.html" and others reach here.
+        return;
+    }
 
     TextCheckingTypeMask textCheckingOptions = request->data().mask();
     TextCheckingParagraph paragraph(request->checkingRange(), request->paragraphRange());
@@ -767,6 +778,18 @@ void SpellChecker::replaceMisspelledRange(const String& text)
     frame().editor().replaceSelectionWithText(text, false, false);
 }
 
+static bool shouldCheckOldSelection(const VisibleSelection& oldSelection)
+{
+    if (!oldSelection.start().inShadowIncludingDocument())
+        return false;
+    if (isSelectionInTextField(oldSelection))
+        return false;
+    if (isSelectionInTextArea(oldSelection))
+        return true;
+    oldSelection.start().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+    return oldSelection.isContentEditable();
+}
+
 void SpellChecker::respondToChangedSelection(const VisibleSelection& oldSelection, FrameSelection::SetSelectionOptions options)
 {
     TRACE_EVENT0("blink", "SpellChecker::respondToChangedSelection");
@@ -776,16 +799,19 @@ void SpellChecker::respondToChangedSelection(const VisibleSelection& oldSelectio
     bool closeTyping = options & FrameSelection::CloseTyping;
     bool isContinuousSpellCheckingEnabled = this->isContinuousSpellCheckingEnabled();
     bool isContinuousGrammarCheckingEnabled = isContinuousSpellCheckingEnabled;
-    if (isContinuousSpellCheckingEnabled) {
+    if (isContinuousSpellCheckingEnabled && closeTyping && shouldCheckOldSelection(oldSelection)) {
         VisibleSelection newAdjacentWords;
         bool caretBrowsing = frame().settings() && frame().settings()->caretBrowsingEnabled();
         const VisibleSelection newSelection = frame().selection().selection();
         if (isSelectionInTextFormControl(newSelection)) {
             Position newStart = newSelection.start();
             newAdjacentWords.setWithoutValidation(HTMLTextFormControlElement::startOfWord(newStart), HTMLTextFormControlElement::endOfWord(newStart));
-        } else if (newSelection.isContentEditable() || caretBrowsing) {
-            VisiblePosition newStart(newSelection.visibleStart());
-            newAdjacentWords = VisibleSelection(startOfWord(newStart, LeftWordIfOnBoundary), endOfWord(newStart, RightWordIfOnBoundary));
+        } else {
+            frame().document()->updateStyleAndLayoutIgnorePendingStylesheets();
+            if (newSelection.isContentEditable() || caretBrowsing) {
+                VisiblePosition newStart(newSelection.visibleStart());
+                newAdjacentWords = VisibleSelection(startOfWord(newStart, LeftWordIfOnBoundary), endOfWord(newStart, RightWordIfOnBoundary));
+            }
         }
 
         // When typing we check spelling elsewhere, so don't redo it here.
@@ -793,12 +819,7 @@ void SpellChecker::respondToChangedSelection(const VisibleSelection& oldSelectio
         // oldSelection may no longer be in the document.
         // FIXME(http://crbug.com/382809): if oldSelection is on a textarea
         // element, we cause synchronous layout.
-        if (closeTyping
-            && !isSelectionInTextField(oldSelection)
-            && (isSelectionInTextArea(oldSelection) || oldSelection.isContentEditable())
-            && oldSelection.start().inShadowIncludingDocument()) {
-            spellCheckOldSelection(oldSelection, newAdjacentWords);
-        }
+        spellCheckOldSelection(oldSelection, newAdjacentWords);
     }
 
     // When continuous spell checking is off, existing markers disappear after the selection changes.
@@ -842,7 +863,7 @@ void SpellChecker::spellCheckOldSelection(const VisibleSelection& oldSelection, 
 
     VisiblePosition oldStart(oldSelection.visibleStart());
     VisibleSelection oldAdjacentWords = VisibleSelection(startOfWord(oldStart, LeftWordIfOnBoundary), endOfWord(oldStart, RightWordIfOnBoundary));
-    if (!equalSelectionsInDOMTree(oldAdjacentWords, newAdjacentWords)) {
+    if (oldAdjacentWords != newAdjacentWords) {
         if (isContinuousSpellCheckingEnabled()) {
             VisibleSelection selectedSentence = VisibleSelection(startOfSentence(oldStart), endOfSentence(oldStart));
             markMisspellingsAndBadGrammar(oldAdjacentWords, true, selectedSentence);

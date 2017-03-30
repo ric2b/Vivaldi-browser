@@ -17,7 +17,7 @@ namespace {
 
 String16 findMagicComment(const String16& content, const String16& name, bool multiline, bool* deprecated)
 {
-    ASSERT(name.find("=") == kNotFound);
+    DCHECK(name.find("=") == kNotFound);
     if (deprecated)
         *deprecated = false;
 
@@ -60,8 +60,8 @@ String16 findMagicComment(const String16& content, const String16& name, bool mu
     if (deprecated && content[pos + 2] == '@')
         *deprecated = true;
 
-    ASSERT(equalSignPos);
-    ASSERT(!multiline || closingCommentPos);
+    DCHECK(equalSignPos);
+    DCHECK(!multiline || closingCommentPos);
     size_t urlPos = equalSignPos + 1;
     String16 match = multiline
         ? content.substring(urlPos, closingCommentPos - urlPos)
@@ -95,9 +95,9 @@ String16 createSearchRegexSource(const String16& text)
     return result.toString();
 }
 
-PassOwnPtr<protocol::Vector<unsigned>> lineEndings(const String16& text)
+std::unique_ptr<std::vector<unsigned>> lineEndings(const String16& text)
 {
-    OwnPtr<protocol::Vector<unsigned>> result(adoptPtr(new protocol::Vector<unsigned>()));
+    std::unique_ptr<std::vector<unsigned>> result(new std::vector<unsigned>());
 
     unsigned start = 0;
     while (start < text.length()) {
@@ -105,21 +105,21 @@ PassOwnPtr<protocol::Vector<unsigned>> lineEndings(const String16& text)
         if (lineEnd == kNotFound)
             break;
 
-        result->append(static_cast<unsigned>(lineEnd));
+        result->push_back(static_cast<unsigned>(lineEnd));
         start = lineEnd + 1;
     }
-    result->append(text.length());
+    result->push_back(text.length());
 
     return result;
 }
 
-protocol::Vector<std::pair<int, String16>> scriptRegexpMatchesByLines(const V8Regex& regex, const String16& text)
+std::vector<std::pair<int, String16>> scriptRegexpMatchesByLines(const V8Regex& regex, const String16& text)
 {
-    protocol::Vector<std::pair<int, String16>> result;
+    std::vector<std::pair<int, String16>> result;
     if (text.isEmpty())
         return result;
 
-    OwnPtr<protocol::Vector<unsigned>> endings(lineEndings(text));
+    std::unique_ptr<std::vector<unsigned>> endings(lineEndings(text));
     unsigned size = endings->size();
     unsigned start = 0;
     for (unsigned lineNumber = 0; lineNumber < size; ++lineNumber) {
@@ -130,14 +130,14 @@ protocol::Vector<std::pair<int, String16>> scriptRegexpMatchesByLines(const V8Re
 
         int matchLength;
         if (regex.match(line, 0, &matchLength) != -1)
-            result.append(std::pair<int, String16>(lineNumber, line));
+            result.push_back(std::pair<int, String16>(lineNumber, line));
 
         start = lineEnd + 1;
     }
     return result;
 }
 
-PassOwnPtr<protocol::Debugger::SearchMatch> buildObjectForSearchMatch(int lineNumber, const String16& lineContent)
+std::unique_ptr<protocol::Debugger::SearchMatch> buildObjectForSearchMatch(int lineNumber, const String16& lineContent)
 {
     return protocol::Debugger::SearchMatch::create()
         .setLineNumber(lineNumber)
@@ -145,10 +145,10 @@ PassOwnPtr<protocol::Debugger::SearchMatch> buildObjectForSearchMatch(int lineNu
         .build();
 }
 
-PassOwnPtr<V8Regex> createSearchRegex(V8DebuggerImpl* debugger, const String16& query, bool caseSensitive, bool isRegex)
+std::unique_ptr<V8Regex> createSearchRegex(V8DebuggerImpl* debugger, const String16& query, bool caseSensitive, bool isRegex)
 {
     String16 regexSource = isRegex ? query : createSearchRegexSource(query);
-    return adoptPtr(new V8Regex(debugger, regexSource, caseSensitive));
+    return wrapUnique(new V8Regex(debugger, regexSource, caseSensitive));
 }
 
 } // namespace
@@ -171,7 +171,7 @@ String16 toProtocolString(v8::Local<v8::String> value)
 {
     if (value.IsEmpty() || value->IsNull() || value->IsUndefined())
         return String16();
-    OwnPtr<UChar[]> buffer = adoptArrayPtr(new UChar[value->Length()]);
+    std::unique_ptr<UChar[]> buffer(new UChar[value->Length()]);
     value->Write(reinterpret_cast<uint16_t*>(buffer.get()), 0, value->Length());
     return String16(buffer.get(), value->Length());
 }
@@ -195,11 +195,11 @@ String16 findSourceMapURL(const String16& content, bool multiline, bool* depreca
     return findMagicComment(content, "sourceMappingURL", multiline, deprecated);
 }
 
-PassOwnPtr<protocol::Array<protocol::Debugger::SearchMatch>> searchInTextByLines(V8InspectorSession* session, const String16& text, const String16& query, const bool caseSensitive, const bool isRegex)
+std::unique_ptr<protocol::Array<protocol::Debugger::SearchMatch>> searchInTextByLines(V8InspectorSession* session, const String16& text, const String16& query, const bool caseSensitive, const bool isRegex)
 {
-    OwnPtr<protocol::Array<protocol::Debugger::SearchMatch>> result = protocol::Array<protocol::Debugger::SearchMatch>::create();
-    OwnPtr<V8Regex> regex = createSearchRegex(static_cast<V8InspectorSessionImpl*>(session)->debugger(), query, caseSensitive, isRegex);
-    protocol::Vector<std::pair<int, String16>> matches = scriptRegexpMatchesByLines(*regex.get(), text);
+    std::unique_ptr<protocol::Array<protocol::Debugger::SearchMatch>> result = protocol::Array<protocol::Debugger::SearchMatch>::create();
+    std::unique_ptr<V8Regex> regex = createSearchRegex(static_cast<V8InspectorSessionImpl*>(session)->debugger(), query, caseSensitive, isRegex);
+    std::vector<std::pair<int, String16>> matches = scriptRegexpMatchesByLines(*regex.get(), text);
 
     for (const auto& match : matches)
         result->addItem(buildObjectForSearchMatch(match.first, match.second));
@@ -209,10 +209,10 @@ PassOwnPtr<protocol::Array<protocol::Debugger::SearchMatch>> searchInTextByLines
 
 } // namespace V8ContentSearchUtil
 
-PassOwnPtr<protocol::Value> toProtocolValue(v8::Local<v8::Context> context, v8::Local<v8::Value> value, int maxDepth)
+std::unique_ptr<protocol::Value> toProtocolValue(v8::Local<v8::Context> context, v8::Local<v8::Value> value, int maxDepth)
 {
     if (value.IsEmpty()) {
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return nullptr;
     }
 
@@ -230,13 +230,13 @@ PassOwnPtr<protocol::Value> toProtocolValue(v8::Local<v8::Context> context, v8::
         return protocol::StringValue::create(toProtocolString(value.As<v8::String>()));
     if (value->IsArray()) {
         v8::Local<v8::Array> array = value.As<v8::Array>();
-        OwnPtr<protocol::ListValue> inspectorArray = protocol::ListValue::create();
+        std::unique_ptr<protocol::ListValue> inspectorArray = protocol::ListValue::create();
         uint32_t length = array->Length();
         for (uint32_t i = 0; i < length; i++) {
             v8::Local<v8::Value> value;
             if (!array->Get(context, i).ToLocal(&value))
                 return nullptr;
-            OwnPtr<protocol::Value> element = toProtocolValue(context, value, maxDepth);
+            std::unique_ptr<protocol::Value> element = toProtocolValue(context, value, maxDepth);
             if (!element)
                 return nullptr;
             inspectorArray->pushValue(std::move(element));
@@ -244,7 +244,7 @@ PassOwnPtr<protocol::Value> toProtocolValue(v8::Local<v8::Context> context, v8::
         return std::move(inspectorArray);
     }
     if (value->IsObject()) {
-        OwnPtr<protocol::DictionaryValue> jsonObject = protocol::DictionaryValue::create();
+        std::unique_ptr<protocol::DictionaryValue> jsonObject = protocol::DictionaryValue::create();
         v8::Local<v8::Object> object = v8::Local<v8::Object>::Cast(value);
         v8::Local<v8::Array> propertyNames;
         if (!object->GetPropertyNames(context).ToLocal(&propertyNames))
@@ -266,14 +266,14 @@ PassOwnPtr<protocol::Value> toProtocolValue(v8::Local<v8::Context> context, v8::
             v8::Local<v8::Value> property;
             if (!object->Get(context, name).ToLocal(&property))
                 return nullptr;
-            OwnPtr<protocol::Value> propertyValue = toProtocolValue(context, property, maxDepth);
+            std::unique_ptr<protocol::Value> propertyValue = toProtocolValue(context, property, maxDepth);
             if (!propertyValue)
                 return nullptr;
             jsonObject->setValue(toProtocolString(propertyName), std::move(propertyValue));
         }
         return std::move(jsonObject);
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return nullptr;
 }
 

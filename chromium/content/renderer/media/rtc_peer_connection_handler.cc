@@ -722,21 +722,6 @@ void ConvertConstraintsToWebrtcOfferOptions(
 base::LazyInstance<std::set<RTCPeerConnectionHandler*> >::Leaky
     g_peer_connection_handlers = LAZY_INSTANCE_INITIALIZER;
 
-void OverrideDefaultCertificateBasedOnExperiment(
-    webrtc::PeerConnectionInterface::RTCConfiguration* config) {
-  if (base::FeatureList::IsEnabled(features::kWebRtcEcdsaDefault)) {
-    if (config->certificates.empty()) {
-      rtc::scoped_refptr<rtc::RTCCertificate> certificate =
-          PeerConnectionDependencyFactory::GenerateDefaultCertificate();
-      config->certificates.push_back(certificate);
-    }
-  }
-  // If the ECDSA experiment is not running we rely on the default being RSA for
-  // the control group. See bug related to this: crbug.com/611698.
-  static_assert(rtc::KT_DEFAULT == rtc::KT_RSA, "This code relies on "
-      "KT_DEFAULT == KT_RSA for RSA certificate generation.");
-}
-
 }  // namespace
 
 // Implementation of LocalRTCStatsRequest.
@@ -811,7 +796,7 @@ class RTCPeerConnectionHandler::Observer
     }
   }
 
-  void OnAddStream(MediaStreamInterface* stream) override {
+  void OnAddStream(rtc::scoped_refptr<MediaStreamInterface> stream) override {
     DCHECK(stream);
     std::unique_ptr<RemoteMediaStreamImpl> remote_stream(
         new RemoteMediaStreamImpl(main_thread_, stream));
@@ -824,13 +809,16 @@ class RTCPeerConnectionHandler::Observer
             this, base::Passed(&remote_stream)));
   }
 
-  void OnRemoveStream(MediaStreamInterface* stream) override {
-    main_thread_->PostTask(FROM_HERE,
+  void OnRemoveStream(
+      rtc::scoped_refptr<MediaStreamInterface> stream) override {
+    main_thread_->PostTask(
+        FROM_HERE,
         base::Bind(&RTCPeerConnectionHandler::Observer::OnRemoveStreamImpl,
-            this, make_scoped_refptr(stream)));
+                   this, make_scoped_refptr(stream.get())));
   }
 
-  void OnDataChannel(DataChannelInterface* data_channel) override {
+  void OnDataChannel(
+      rtc::scoped_refptr<DataChannelInterface> data_channel) override {
     std::unique_ptr<RtcDataChannelHandler> handler(
         new RtcDataChannelHandler(main_thread_, data_channel));
     main_thread_->PostTask(FROM_HERE,
@@ -967,7 +955,6 @@ bool RTCPeerConnectionHandler::initialize(
 
   webrtc::PeerConnectionInterface::RTCConfiguration config;
   GetNativeRtcConfiguration(server_configuration, &config);
-  OverrideDefaultCertificateBasedOnExperiment(&config);
 
   // Choose between RTC smoothness algorithm and prerenderer smoothing.
   // Prerenderer smoothing is turned on if RTC smoothness is turned off.
@@ -1004,7 +991,6 @@ bool RTCPeerConnectionHandler::InitializeForTest(
   DCHECK(thread_checker_.CalledOnValidThread());
   webrtc::PeerConnectionInterface::RTCConfiguration config;
   GetNativeRtcConfiguration(server_configuration, &config);
-  OverrideDefaultCertificateBasedOnExperiment(&config);
 
   peer_connection_observer_ = new Observer(weak_factory_.GetWeakPtr());
   CopyConstraintsIntoRtcConfiguration(options, &config);
@@ -1268,6 +1254,12 @@ bool RTCPeerConnectionHandler::updateICE(
     peer_connection_tracker_->TrackUpdateIce(this, config);
 
   return native_peer_connection_->UpdateIce(config.servers);
+}
+
+void RTCPeerConnectionHandler::logSelectedRtcpMuxPolicy(
+    blink::RtcpMuxPolicy selectedRtcpMuxPolicy) {
+  UMA_HISTOGRAM_ENUMERATION("WebRTC.PeerConnection.SelectedRtcpMuxPolicy",
+                            selectedRtcpMuxPolicy, blink::RtcpMuxPolicyMax);
 }
 
 bool RTCPeerConnectionHandler::addICECandidate(
@@ -1779,7 +1771,8 @@ void RTCPeerConnectionHandler::RunSynchronousClosureOnSignalingThread(
     TRACE_EVENT0("webrtc", trace_event_name);
     closure.Run();
   } else {
-    base::WaitableEvent event(false, false);
+    base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                              base::WaitableEvent::InitialState::NOT_SIGNALED);
     thread->PostTask(FROM_HERE,
         base::Bind(&RunSynchronousClosure, closure,
                    base::Unretained(trace_event_name),

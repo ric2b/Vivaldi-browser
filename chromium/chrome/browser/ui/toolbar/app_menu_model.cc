@@ -10,9 +10,9 @@
 #include "base/command_line.h"
 #include "base/debug/debugging_flags.h"
 #include "base/debug/profiler.h"
+#include "base/i18n/number_formatting.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -27,7 +27,6 @@
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
-#include "chrome/browser/task_manager/task_manager.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -52,8 +51,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
-#include "components/ui/zoom/zoom_controller.h"
-#include "components/ui/zoom/zoom_event_manager.h"
+#include "components/zoom/zoom_controller.h"
+#include "components/zoom/zoom_event_manager.h"
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -78,7 +77,7 @@
 #if defined(OS_WIN)
 #include "base/win/shortcut.h"
 #include "base/win/windows_version.h"
-#include "chrome/browser/enumerate_modules_model_win.h"
+#include "chrome/browser/win/enumerate_modules_model.h"
 #include "content/public/browser/gpu_data_manager.h"
 #endif
 
@@ -300,7 +299,7 @@ AppMenuModel::AppMenuModel(ui::AcceleratorProvider* provider, Browser* browser)
   UpdateZoomControls();
 
   browser_zoom_subscription_ =
-      ui_zoom::ZoomEventManager::GetForBrowserContext(browser->profile())
+      zoom::ZoomEventManager::GetForBrowserContext(browser->profile())
           ->AddZoomLevelChangedCallback(base::Bind(
               &AppMenuModel::OnZoomLevelChanged, base::Unretained(this)));
 
@@ -746,7 +745,7 @@ void AppMenuModel::TabReplacedAt(TabStripModel* tab_strip_model,
 void AppMenuModel::Observe(int type,
                            const content::NotificationSource& source,
                            const content::NotificationDetails& details) {
-  DCHECK(type == content::NOTIFICATION_NAV_ENTRY_COMMITTED);
+  DCHECK_EQ(content::NOTIFICATION_NAV_ENTRY_COMMITTED, type);
   UpdateZoomControls();
 }
 
@@ -936,12 +935,11 @@ void AppMenuModel::UpdateZoomControls() {
   int zoom_percent = 100;
   if (browser_->tab_strip_model() &&
       browser_->tab_strip_model()->GetActiveWebContents()) {
-    zoom_percent = ui_zoom::ZoomController::FromWebContents(
+    zoom_percent = zoom::ZoomController::FromWebContents(
                        browser_->tab_strip_model()->GetActiveWebContents())
                        ->GetZoomPercent();
   }
-  zoom_label_ = l10n_util::GetStringFUTF16(
-      IDS_ZOOM_PERCENT, base::IntToString16(zoom_percent));
+  zoom_label_ = base::FormatPercent(zoom_percent);
 }
 
 void AppMenuModel::OnZoomLevelChanged(

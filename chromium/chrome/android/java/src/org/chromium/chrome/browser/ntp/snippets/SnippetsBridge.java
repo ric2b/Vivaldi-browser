@@ -23,21 +23,13 @@ public class SnippetsBridge {
     private SnippetsObserver mObserver;
 
     /**
-     * A callback that is called after a snippet image was fetched from the snippets service.
-     */
-    public interface FetchSnippetImageCallback {
-        @CalledByNative("FetchSnippetImageCallback")
-        void onSnippetImageAvailable(Bitmap image);
-    }
-
-    /**
      * An observer for events in the snippets service.
      */
     public interface SnippetsObserver {
         void onSnippetsReceived(List<SnippetArticle> snippets);
 
-        /** Called when the service has been disabled. */
-        void onSnippetsDisabled();
+        /** Called when the service is about to change its state. */
+        void onDisabledReasonChanged(int disabledReason);
     }
 
     /**
@@ -89,7 +81,7 @@ public class SnippetsBridge {
     /**
      * Fetches the thumbnail image for a snippet.
      */
-    public void fetchSnippetImage(SnippetArticle snippet, FetchSnippetImageCallback callback) {
+    public void fetchSnippetImage(SnippetArticle snippet, Callback<Bitmap> callback) {
         nativeFetchImage(mNativeSnippetsBridge, snippet.mId, callback);
     }
 
@@ -99,14 +91,6 @@ public class SnippetsBridge {
     public void getSnippedVisited(SnippetArticle snippet, Callback<Boolean> callback) {
         assert mNativeSnippetsBridge != 0;
         nativeSnippetVisited(mNativeSnippetsBridge, callback, snippet.mUrl);
-    }
-
-    /**
-     * {@link Callback#onResult} is not annotated with CalledByNative, so we must use this wrapper.
-     */
-    @CalledByNative
-    private static void runCallback(Callback<Boolean> callback, boolean result) {
-        callback.onResult(result);
     }
 
     /**
@@ -125,25 +109,30 @@ public class SnippetsBridge {
         nativeSetObserver(mNativeSnippetsBridge, observer == null ? null : this);
     }
 
+    public int getDisabledReason() {
+        assert mNativeSnippetsBridge != 0;
+        return nativeGetDisabledReason(mNativeSnippetsBridge);
+    }
+
     @CalledByNative
     private void onSnippetsAvailable(String[] ids, String[] titles, String[] urls, String[] ampUrls,
-            String[] thumbnailUrls, String[] previewText, long[] timestamps, String[] publishers) {
-        // Don't notify observer if we've already been destroyed.
-        if (mNativeSnippetsBridge == 0) return;
+            String[] thumbnailUrls, String[] previewText, long[] timestamps, String[] publishers,
+            float[] scores) {
+        assert mNativeSnippetsBridge != 0;
         assert mObserver != null;
 
         List<SnippetArticle> newSnippets = new ArrayList<>(ids.length);
         for (int i = 0; i < ids.length; i++) {
             newSnippets.add(new SnippetArticle(ids[i], titles[i], publishers[i], previewText[i],
-                    urls[i], ampUrls[i], thumbnailUrls[i], timestamps[i], i));
+                    urls[i], ampUrls[i], thumbnailUrls[i], timestamps[i], scores[i], i));
         }
 
         mObserver.onSnippetsReceived(newSnippets);
     }
 
     @CalledByNative
-    private void onSnippetsDisabled() {
-        if (mObserver != null) mObserver.onSnippetsDisabled();
+    private void onDisabledReasonChanged(int disabledReason) {
+        if (mObserver != null) mObserver.onDisabledReasonChanged(disabledReason);
     }
 
     private native long nativeInit(Profile profile);
@@ -155,5 +144,6 @@ public class SnippetsBridge {
     private static native void nativeSnippetVisited(long nativeNTPSnippetsBridge,
             Callback<Boolean> callback, String url);
     private native void nativeFetchImage(
-            long nativeNTPSnippetsBridge, String snippetId, FetchSnippetImageCallback callback);
+            long nativeNTPSnippetsBridge, String snippetId, Callback<Bitmap> callback);
+    private native int nativeGetDisabledReason(long nativeNTPSnippetsBridge);
 }

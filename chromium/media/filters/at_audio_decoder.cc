@@ -205,7 +205,7 @@ AudioConverterRef ATAudioDecoder::ScopedAudioConverterRefTraits::InvalidValue() 
 ATAudioDecoder::ATAudioDecoder(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner)
     : task_runner_(task_runner),
-      needs_eos_workaround_(base::mac::IsOSMavericksOrEarlier()) {}
+      needs_eos_workaround_(base::mac::IsOSMavericks()) {}
 
 ATAudioDecoder::~ATAudioDecoder() = default;
 
@@ -330,6 +330,12 @@ bool ATAudioDecoder::InitializeConverter(
 bool ATAudioDecoder::ConvertAudio(const scoped_refptr<DecoderBuffer>& input,
                                   size_t header_size,
                                   size_t max_output_frame_count) {
+
+  // NOTE(espen@vivaldi.com): Added as crash fix for OSX 10.12
+  if (input->data_size() == 0) {
+    return true;
+  }
+
   DCHECK(task_runner_->BelongsToCurrentThread());
   DCHECK(converter_);
 

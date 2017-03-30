@@ -121,7 +121,7 @@
       <output filename="java/res/values-uk/components_strings.xml" lang="uk" type="android" context="android_java" />
       <output filename="java/res/values-vi/components_strings.xml" lang="vi" type="android" context="android_java" />
       <output filename="java/res/values-zh-rCN/components_strings.xml" lang="zh-CN" type="android" context="android_java" />
-      <output filename="java/res/values-zh/components_strings.xml" lang="zh-TW" type="android" context="android_java" />
+      <output filename="java/res/values-zh-rTW/components_strings.xml" lang="zh-TW" type="android" context="android_java" />
     </if>
 
   </outputs>
@@ -197,12 +197,12 @@
       <part file="history_strings.grdp" />
       <part file="login_dialog_strings.grdp" />
       <part file="new_or_sad_tab_strings.grdp" />
+      <part file="ntp_snippets_strings.grdp" />
       <part file="omnibox_strings.grdp" />
       <part file="pageinfo_strings.grdp" />
       <part file="password_manager_strings.grdp" />
       <part file="pdf_strings.grdp" />
       <part file="policy_strings.grdp" />
-      <part file="search_engines_strings.grdp" />
       <part file="security_interstitials_strings.grdp" />
       <part file="ssl_errors_strings.grdp" />
       <part file="supervised_user_error_page_strings.grdp" />

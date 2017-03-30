@@ -67,6 +67,11 @@ void GainHandler::process(size_t framesToProcess)
                 float* gainValues = m_sampleAccurateGainValues.data();
                 m_gain->calculateSampleAccurateValues(gainValues, framesToProcess);
                 outputBus->copyWithSampleAccurateGainValuesFrom(*inputBus, gainValues, framesToProcess);
+                // Update m_lastGain so if the timeline ever ends, we get
+                // consistent data for the smoothing below.  (Without this,
+                // m_lastGain was the last value before the timeline started
+                // procesing.
+                m_lastGain = gainValues[framesToProcess - 1];
             }
         } else {
             // Apply the gain with de-zippering into the output bus.
@@ -114,16 +119,23 @@ void GainHandler::checkNumberOfChannelsForInput(AudioNodeInput* input)
 
 // ----------------------------------------------------------------
 
-GainNode::GainNode(AbstractAudioContext& context, float sampleRate)
+GainNode::GainNode(AbstractAudioContext& context)
     : AudioNode(context)
     , m_gain(AudioParam::create(context, ParamTypeGainGain, 1.0))
 {
-    setHandler(GainHandler::create(*this, sampleRate, m_gain->handler()));
+    setHandler(GainHandler::create(*this, context.sampleRate(), m_gain->handler()));
 }
 
-GainNode* GainNode::create(AbstractAudioContext& context, float sampleRate)
+GainNode* GainNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
 {
-    return new GainNode(context, sampleRate);
+    DCHECK(isMainThread());
+
+    if (context.isContextClosed()) {
+        context.throwExceptionForClosedState(exceptionState);
+        return nullptr;
+    }
+
+    return new GainNode(context);
 }
 
 AudioParam* GainNode::gain() const

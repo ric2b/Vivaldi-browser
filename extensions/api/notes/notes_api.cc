@@ -522,6 +522,9 @@ bool NotesSearchFunction::RunAsync() {
 
   std::vector<vivaldi::notes::NoteTreeNode> search_result;
 
+  bool can_examine_url =
+      searchstring.length() > 0 && params->query.compare(".") != 0;
+
   // loop through the tree and match on content
   Notes_Model* model = GetNotesModel();
   Notes_Node* root = model->root();
@@ -535,11 +538,24 @@ bool NotesSearchFunction::RunAsync() {
     // Note that the tree is flattened when searchstring has content.
     bool show_at_rootlevel =
         node->parent()->is_root() || (searchstring.length() > 0);
-    if (show_at_rootlevel &&
-        base::i18n::StringSearchIgnoringCaseAndAccents(
-            searchstring, node->GetContent(), NULL, NULL)) {
-      std::unique_ptr<vivaldi::notes::NoteTreeNode> note(CreateTreeNode(node));
-      search_result.push_back(std::move(*note));
+    if (show_at_rootlevel) {
+      bool match = base::i18n::StringSearchIgnoringCaseAndAccents(
+        searchstring, node->GetContent(), NULL, NULL);
+      if (!match && can_examine_url && node->GetURL().is_valid()) {
+        base::string16 host = base::UTF8ToUTF16(node->GetURL().host());
+        match = base::i18n::StringSearchIgnoringCaseAndAccents(
+          searchstring, host, NULL, NULL);
+        if (!match) {
+          base::string16 path = base::UTF8ToUTF16(node->GetURL().path());
+          match = base::i18n::StringSearchIgnoringCaseAndAccents(
+            searchstring, path, NULL, NULL);
+        }
+      }
+      if (match) {
+        std::unique_ptr<vivaldi::notes::NoteTreeNode>
+            note(CreateTreeNode(node));
+        search_result.push_back(std::move(*note));
+      }
     }
   }
 

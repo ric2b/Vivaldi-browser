@@ -6,12 +6,8 @@
 
 #include <cmath>
 
-#include "ash/display/display_info.h"
-#include "ash/display/display_manager.h"
-#include "ash/wm/window_util.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
-#include "ui/compositor/dip_util.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
@@ -26,11 +22,9 @@ const float kBoostForNonIntegrated = 1.20f;
 }  // namespace
 
 EventTransformationHandler::EventTransformationHandler()
-    : transformation_mode_(TRANSFORM_AUTO) {
-}
+    : transformation_mode_(TRANSFORM_AUTO) {}
 
-EventTransformationHandler::~EventTransformationHandler() {
-}
+EventTransformationHandler::~EventTransformationHandler() {}
 
 void EventTransformationHandler::OnScrollEvent(ui::ScrollEvent* event) {
   if (transformation_mode_ == TRANSFORM_NONE)

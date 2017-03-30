@@ -37,11 +37,11 @@
 #include "third_party/skia/include/core/SkSurface.h"
 #include "wtf/Allocator.h"
 #include "wtf/Deque.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/WeakPtr.h"
+#include <memory>
 
 class SkImage;
 struct SkImageInfo;
@@ -67,10 +67,7 @@ class SharedContextRateLimiter;
 #define CANVAS2D_HIBERNATION_ENABLED 0
 
 // IOSurfaces are a primitive only present on OS X.
-// IOSurfaces can't be used right now because the compositor returns them while
-// they are they still in use by the Window Server, and the SyncToken isn't
-// relevant. https://crbug.com/608026.
-#define USE_IOSURFACE_FOR_2D_CANVAS 0
+#define USE_IOSURFACE_FOR_2D_CANVAS 1
 #else
 #define CANVAS2D_HIBERNATION_ENABLED 1
 #define USE_IOSURFACE_FOR_2D_CANVAS 0
@@ -119,7 +116,7 @@ public:
 
     void beginDestruction();
     void hibernate();
-    bool isHibernating() const { return m_hibernationImage; }
+    bool isHibernating() const { return m_hibernationImage.get(); }
 
     PassRefPtr<SkImage> newImageSnapshot(AccelerationHint, SnapshotReason);
 
@@ -149,14 +146,14 @@ public:
         virtual ~Logger() { }
     };
 
-    void setLoggerForTesting(PassOwnPtr<Logger>);
+    void setLoggerForTesting(std::unique_ptr<Logger>);
 
 private:
 #if USE_IOSURFACE_FOR_2D_CANVAS
     // All information associated with a CHROMIUM image.
     struct ImageInfo {
         ImageInfo() {}
-        ImageInfo(GLuint imageId, GLuint textureId);
+        ImageInfo(GLuint imageId, GLuint textureId, GLint gpuMemoryBufferId);
 
         // Whether this structure holds references to a CHROMIUM image.
         bool empty();
@@ -166,6 +163,9 @@ private:
 
         // The id of the texture bound to the CHROMIUM image.
         GLuint m_textureId = 0;
+
+        // The id of the GpuMemoryBuffer backing the texture and CHROMIUM image.
+        GLint m_gpuMemoryBufferId = -1;
     };
 #endif // USE_IOSURFACE_FOR_2D_CANVAS
 
@@ -185,7 +185,7 @@ private:
         MailboxInfo() {}
     };
 
-    Canvas2DLayerBridge(PassOwnPtr<WebGraphicsContext3DProvider>, const IntSize&, int msaaSampleCount, OpacityMode, AccelerationMode);
+    Canvas2DLayerBridge(std::unique_ptr<WebGraphicsContext3DProvider>, const IntSize&, int msaaSampleCount, OpacityMode, AccelerationMode);
     gpu::gles2::GLES2Interface* contextGL();
     void startRecording();
     void skipQueuedDrawCommands();
@@ -233,14 +233,14 @@ private:
     // changing texture bindings.
     void resetSkiaTextureBinding();
 
-    OwnPtr<SkPictureRecorder> m_recorder;
+    std::unique_ptr<SkPictureRecorder> m_recorder;
     RefPtr<SkSurface> m_surface;
     RefPtr<SkImage> m_hibernationImage;
     int m_initialSurfaceSaveCount;
-    OwnPtr<WebExternalTextureLayer> m_layer;
-    OwnPtr<WebGraphicsContext3DProvider> m_contextProvider;
-    OwnPtr<SharedContextRateLimiter> m_rateLimiter;
-    OwnPtr<Logger> m_logger;
+    std::unique_ptr<WebExternalTextureLayer> m_layer;
+    std::unique_ptr<WebGraphicsContext3DProvider> m_contextProvider;
+    std::unique_ptr<SharedContextRateLimiter> m_rateLimiter;
+    std::unique_ptr<Logger> m_logger;
     WeakPtrFactory<Canvas2DLayerBridge> m_weakPtrFactory;
     ImageBuffer* m_imageBuffer;
     int m_msaaSampleCount;

@@ -9,10 +9,10 @@
   // Seems broken on Win64
   DISABLE(ChildThreadImplBrowserTest, LockDiscardableMemory)
 
-  //DISABLE(ExtensionFetchTest, ExtensionCannotFetchHostedResourceWithoutHostPermissions)
-
   // Flaky on Windows, fails on tester and works on local machine
-  //DISABLE(ExtensionSettingsApiTest, ExtensionsSchemas)
+  DISABLE(AutofillProfileComparatorTest, MergeAddresses)
+  DISABLE(OfflinePageModelImplTest, DetectThatOfflineCopyIsMissing)
+  DISABLE_ALL(NetworkQualityEstimatorTest)
 
   // Seems broken in Vivaldi
   DISABLE_ALL(ExtensionMessageBubbleViewBrowserTestRedesign)
@@ -23,9 +23,12 @@
   // Flaky on Windows
   DISABLE(NetworkQualityEstimatorTest, TestExternalEstimateProviderMergeEstimates)
 
-  //DISABLE(PluginPowerSaverBrowserTest, PluginMarkedEssentialAfterPosterClicked)
+  DISABLE(OfflinePageModelImplTest, DetectThatOfflineCopyIsMissingAfterLoad)
 
-  //DISABLE(SyncFileSystemTest, AuthorizationTest)
+  DISABLE(OmniboxViewTest, AcceptKeywordByTypingQuestionMark)
+
+  // Seems to require specific keyboard configuration
+  DISABLE(TextfieldTest, KeysWithModifiersTest)
 
   // Flaky in v51
   DISABLE_ALL(TabDesktopMediaListTest)
@@ -33,5 +36,7 @@
   //DISABLE(UnloadTest, BrowserCloseInfiniteUnload)
   DISABLE(UnloadTest, CrossSiteInfiniteBeforeUnloadAsync)
 
-  // failing in 51
-  DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
+  // Flaky in v53
+  DISABLE(BrowsingDataRemoverBrowserTest, Cache)
+
+  DISABLE(HistoryCounterTest, Synced)

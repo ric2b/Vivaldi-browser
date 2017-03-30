@@ -62,7 +62,7 @@ String CSSPageRule::selectorText() const
 
 void CSSPageRule::setSelectorText(const String& selectorText)
 {
-    CSSParserContext context(parserContext(), 0);
+    CSSParserContext context(parserContext(), nullptr);
     CSSSelectorList selectorList = CSSParser::parsePageSelector(context, parentStyleSheet() ? parentStyleSheet()->contents() : nullptr, selectorText);
     if (!selectorList.isValid())
         return;
@@ -75,12 +75,12 @@ void CSSPageRule::setSelectorText(const String& selectorText)
 String CSSPageRule::cssText() const
 {
     StringBuilder result;
-    result.appendLiteral("@page ");
+    result.append("@page ");
     String pageSelectors = selectorText();
     result.append(pageSelectors);
     if (!pageSelectors.isEmpty())
-        result.appendLiteral(" ");
-    result.appendLiteral("{ ");
+        result.append(" ");
+    result.append("{ ");
     String decls = m_pageRule->properties().asText();
     result.append(decls);
     if (!decls.isEmpty())

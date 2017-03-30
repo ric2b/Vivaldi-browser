@@ -63,16 +63,6 @@ AwMainDelegate::~AwMainDelegate() {
 bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   content::SetContentClient(&content_client_);
 
-  content::RegisterMediaUrlInterceptor(new AwMediaUrlInterceptor());
-
-  BrowserViewRenderer::CalculateTileMemoryPolicy();
-
-  // WebView apps can override WebView#computeScroll to achieve custom
-  // scroll/fling. As a result, fling animations may not be ticked, potentially
-  // confusing the tap suppression controller. Simply disable it for WebView.
-  ui::GestureConfiguration::GetInstance()
-      ->set_fling_touchscreen_tap_suppression_enabled(false);
-
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
   cl->AppendSwitch(cc::switches::kEnableBeginFrameScheduling);
 
@@ -120,16 +110,21 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
   if (cl->GetSwitchValueASCII(switches::kProcessType).empty()) {
     // Browser process (no type specified).
 
+    content::RegisterMediaUrlInterceptor(new AwMediaUrlInterceptor());
+    BrowserViewRenderer::CalculateTileMemoryPolicy();
+    // WebView apps can override WebView#computeScroll to achieve custom
+    // scroll/fling. As a result, fling animations may not be ticked,
+    // potentially
+    // confusing the tap suppression controller. Simply disable it for WebView
+    ui::GestureConfiguration::GetInstance()
+        ->set_fling_touchscreen_tap_suppression_enabled(false);
+
     base::android::RegisterApkAssetWithGlobalDescriptors(
-        kV8NativesDataDescriptor32,
-        gin::V8Initializer::GetNativesFilePath(true).AsUTF8Unsafe());
+        kV8NativesDataDescriptor,
+        gin::V8Initializer::GetNativesFilePath().AsUTF8Unsafe());
     base::android::RegisterApkAssetWithGlobalDescriptors(
         kV8SnapshotDataDescriptor32,
         gin::V8Initializer::GetSnapshotFilePath(true).AsUTF8Unsafe());
-
-    base::android::RegisterApkAssetWithGlobalDescriptors(
-        kV8NativesDataDescriptor64,
-        gin::V8Initializer::GetNativesFilePath(false).AsUTF8Unsafe());
     base::android::RegisterApkAssetWithGlobalDescriptors(
         kV8SnapshotDataDescriptor64,
         gin::V8Initializer::GetSnapshotFilePath(false).AsUTF8Unsafe());
@@ -140,10 +135,6 @@ bool AwMainDelegate::BasicStartupComplete(int* exit_code) {
     cl->AppendSwitchASCII(switches::kRendererProcessLimit, "1");
     cl->AppendSwitch(switches::kDisableRendererBackgrounding);
   }
-
-  // TODO(liberato, watk): Reenable after resolving fullscreen test failures.
-  // See http://crbug.com/597495
-  cl->AppendSwitch(switches::kDisableUnifiedMediaPipeline);
 
   return false;
 }

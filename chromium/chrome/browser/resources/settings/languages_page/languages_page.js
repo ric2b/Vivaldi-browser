@@ -71,10 +71,6 @@ Polymer({
     if (!cr.isChromeOS && !cr.isWindows)
       return;
 
-    // Taps on the paper-icon-button are handled in onShowLanguageDetailTap_.
-    if (e.target.tagName == 'PAPER-ICON-BUTTON')
-      return;
-
     // Set the prospective UI language. This won't take effect until a restart.
     if (e.model.item.language.supportsUI)
       this.languageHelper_.setUILanguage(e.model.item.language.code);
@@ -101,6 +97,54 @@ Polymer({
   onManageLanguagesTap_: function() {
     this.$.pages.setSubpageChain(['manage-languages']);
     this.forceRenderList_('settings-manage-languages-page');
+  },
+
+  /**
+   * @param {number} index Index of the language in the list of languages.
+   * @param {!Object} change Polymer change object for languages.enabled.*.
+   * @return {boolean} True if the given language is the first one in the list
+   *     of languages.
+   * @private
+   */
+  isFirstLanguage_: function(index, change) {
+    return index == 0;
+  },
+
+  /**
+   * @param {number} index Index of the language in the list of languages.
+   * @param {!Object} change Polymer change object for languages.enabled.*.
+   * @return {boolean} True if the given language is the last one in the list of
+   *     languages.
+   * @private
+   */
+  isLastLanguage_: function(index, change) {
+    return index == this.languages.enabled.length - 1;
+  },
+
+  /**
+   * @param {!Object} change Polymer change object for languages.enabled.*.
+   * @return {boolean} True if there are less than 2 languages.
+   */
+  isHelpTextHidden_: function(change) {
+    return this.languages.enabled.length <= 1;
+  },
+
+  /**
+   * Moves the language up in the list.
+   * @param {!{model: !{item: !LanguageState}}} e
+   * @private
+   */
+  onMoveUpTap_: function(e) {
+    this.languageHelper_.moveLanguage(e.model.item.language.code, -1);
+  },
+
+  /**
+   * Moves the language down in the list.
+   * @param {!{model: !{item: !LanguageState}}} e
+   * @private
+   */
+  onMoveDownTap_: function(e) {
+    this.languageHelper_.moveLanguage(e.model.item.language.code, 1);
   },
 
   /**
@@ -151,15 +195,41 @@ Polymer({
   },
 
   /**
-   * Returns the enabled languages which support spell check.
-   * @return {!Array<!LanguageState>}
+   * Returns the secondary text for the spell check subsection based on the
+   * enabled spell check languages, listing at most 2 languages.
+   * @return {string}
    * @private
    */
-  spellCheckLanguages_: function() {
-    assert(!cr.isMac);
-    return this.languages.enabled.filter(function(languageState) {
-      return languageState.language.supportsSpellcheck;
-    });
+  getSpellCheckSecondaryText_: function() {
+    var enabledSpellCheckLanguages =
+        this.languages.enabled.filter(function(languageState) {
+          return languageState.spellCheckEnabled &&
+                 languageState.language.supportsSpellcheck;
+        });
+    switch (enabledSpellCheckLanguages.length) {
+      case 0:
+        return '';
+      case 1:
+        return enabledSpellCheckLanguages[0].language.displayName;
+      case 2:
+        return loadTimeData.getStringF(
+            'spellCheckSummaryTwoLanguages',
+            enabledSpellCheckLanguages[0].language.displayName,
+            enabledSpellCheckLanguages[1].language.displayName);
+      case 3:
+        // "foo, bar, and 1 other"
+        return loadTimeData.getStringF(
+            'spellCheckSummaryThreeLanguages',
+            enabledSpellCheckLanguages[0].language.displayName,
+            enabledSpellCheckLanguages[1].language.displayName);
+      default:
+        // "foo, bar, and [N-2] others"
+        return loadTimeData.getStringF(
+            'spellCheckSummaryMultipleLanguages',
+            enabledSpellCheckLanguages[0].language.displayName,
+            enabledSpellCheckLanguages[1].language.displayName,
+            (enabledSpellCheckLanguages.length - 2).toLocaleString());
+    }
   },
 
   /**
@@ -202,15 +272,24 @@ Polymer({
    * selected on Chrome OS and Windows.
    * @param {string} languageCode The language code identifying a language.
    * @param {string} prospectiveUILanguage The prospective UI language.
+   * @param {boolean} supportsUI Whether Chrome's UI can be shown in this
+   *     language.
    * @return {string} The class name for the language item.
    * @private
    */
-  getLanguageItemClass_: function(languageCode, prospectiveUILanguage) {
-    if ((cr.isChromeOS || cr.isWindows) &&
-        this.isProspectiveUILanguage_(languageCode, prospectiveUILanguage)) {
-      return 'selected';
+  getLanguageItemClass_: function(languageCode, prospectiveUILanguage,
+      supportsUI) {
+    var classes = [];
+
+    if (cr.isChromeOS || cr.isWindows) {
+      if (supportsUI)
+        classes.push('list-button');  // Makes the item look "actionable".
+
+      if (this.isProspectiveUILanguage_(languageCode, prospectiveUILanguage))
+        classes.push('selected');
     }
-    return '';
+
+    return classes.join(' ');
   },
 
   /**

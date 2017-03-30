@@ -10,9 +10,10 @@
 #include "base/android/jni_string.h"
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
-#include "content/public/common/service_registry.h"
 #include "jni/ServiceRegistry_jni.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 
 using base::android::AttachCurrentThread;
 using base::android::ConvertJavaStringToUTF8;
@@ -39,8 +40,10 @@ void CreateImplAndAttach(
 
 // static
 std::unique_ptr<ServiceRegistryAndroid> ServiceRegistryAndroid::Create(
-    ServiceRegistry* registry) {
-  return base::WrapUnique(new ServiceRegistryAndroidImpl(registry));
+    shell::InterfaceRegistry* interface_registry,
+    shell::InterfaceProvider* remote_interfaces) {
+  return base::WrapUnique(new ServiceRegistryAndroidImpl(
+      interface_registry, remote_interfaces));
 }
 
 // static
@@ -54,8 +57,10 @@ ServiceRegistryAndroidImpl::~ServiceRegistryAndroidImpl() {
 
 // Constructor and destructor call into Java.
 ServiceRegistryAndroidImpl::ServiceRegistryAndroidImpl(
-    ServiceRegistry* service_registry)
-    : service_registry_(service_registry) {
+    shell::InterfaceRegistry* interface_registry,
+    shell::InterfaceProvider* remote_interfaces)
+    : interface_registry_(interface_registry),
+      remote_interfaces_(remote_interfaces) {
   JNIEnv* env = AttachCurrentThread();
   obj_.Reset(
       env,
@@ -85,9 +90,10 @@ void ServiceRegistryAndroidImpl::AddService(
   ScopedJavaGlobalRef<jobject> j_scoped_factory;
   j_scoped_factory.Reset(env, j_factory);
 
-  service_registry_->AddService(
+  interface_registry_->AddInterface(
       name, base::Bind(&CreateImplAndAttach, j_scoped_service_registry,
-                       j_scoped_manager, j_scoped_factory));
+                        j_scoped_manager, j_scoped_factory),
+      nullptr);
 }
 
 void ServiceRegistryAndroidImpl::RemoveService(
@@ -95,7 +101,7 @@ void ServiceRegistryAndroidImpl::RemoveService(
     const JavaParamRef<jobject>& j_service_registry,
     const JavaParamRef<jstring>& j_name) {
   std::string name(ConvertJavaStringToUTF8(env, j_name));
-  service_registry_->RemoveService(name);
+  interface_registry_->RemoveInterface(name);
 }
 
 void ServiceRegistryAndroidImpl::ConnectToRemoteService(
@@ -105,7 +111,7 @@ void ServiceRegistryAndroidImpl::ConnectToRemoteService(
     jint j_handle) {
   std::string name(ConvertJavaStringToUTF8(env, j_name));
   mojo::ScopedMessagePipeHandle handle((mojo::MessagePipeHandle(j_handle)));
-  service_registry_->ConnectToRemoteService(name, std::move(handle));
+  remote_interfaces_->GetInterface(name, std::move(handle));
 }
 
 }  // namespace content

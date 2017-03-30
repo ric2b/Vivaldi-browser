@@ -24,16 +24,17 @@
 #ifndef FloatingObjects_h
 #define FloatingObjects_h
 
-#include "core/layout/line/RootInlineBox.h"
 #include "platform/PODFreeListArena.h"
 #include "platform/PODIntervalTree.h"
+#include "platform/geometry/LayoutRect.h"
 #include "wtf/ListHashSet.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
 class LayoutBlockFlow;
 class LayoutBox;
+class RootInlineBox;
 
 class FloatingObject {
     WTF_MAKE_NONCOPYABLE(FloatingObject); USING_FAST_MALLOC(FloatingObject);
@@ -46,11 +47,11 @@ public:
     // Note that Type uses bits so you can use FloatLeftRight as a mask to query for both left and right.
     enum Type { FloatLeft = 1, FloatRight = 2, FloatLeftRight = 3 };
 
-    static PassOwnPtr<FloatingObject> create(LayoutBox*);
+    static std::unique_ptr<FloatingObject> create(LayoutBox*);
 
-    PassOwnPtr<FloatingObject> copyToNewContainer(LayoutSize, bool shouldPaint = false, bool isDescendant = false) const;
+    std::unique_ptr<FloatingObject> copyToNewContainer(LayoutSize, bool shouldPaint = false, bool isDescendant = false) const;
 
-    PassOwnPtr<FloatingObject> unsafeClone() const;
+    std::unique_ptr<FloatingObject> unsafeClone() const;
 
     Type getType() const { return static_cast<Type>(m_type); }
     LayoutBox* layoutObject() const { return m_layoutObject; }
@@ -90,7 +91,7 @@ public:
 
 private:
     explicit FloatingObject(LayoutBox*);
-    FloatingObject(LayoutBox*, Type, const LayoutRect&, bool shouldPaint, bool isDescendant, bool isLowestNonOverhangingFloatInChild);
+    FloatingObject(LayoutBox*, Type, const LayoutRect&, bool shouldPaint, bool isDescendant, bool isLowestNonOverhangingFloatInChild, bool performingUnsafeClone = false);
 
     bool shouldPaintForCompositedLayoutPart();
 
@@ -111,9 +112,9 @@ private:
 struct FloatingObjectHashFunctions {
     STATIC_ONLY(FloatingObjectHashFunctions);
     static unsigned hash(FloatingObject* key) { return DefaultHash<LayoutBox*>::Hash::hash(key->layoutObject()); }
-    static unsigned hash(const OwnPtr<FloatingObject>& key) { return hash(key.get()); }
-    static bool equal(OwnPtr<FloatingObject>& a, FloatingObject* b) { return a->layoutObject() == b->layoutObject(); }
-    static bool equal(OwnPtr<FloatingObject>& a, const OwnPtr<FloatingObject>& b) { return equal(a, b.get()); }
+    static unsigned hash(const std::unique_ptr<FloatingObject>& key) { return hash(key.get()); }
+    static bool equal(std::unique_ptr<FloatingObject>& a, FloatingObject* b) { return a->layoutObject() == b->layoutObject(); }
+    static bool equal(std::unique_ptr<FloatingObject>& a, const std::unique_ptr<FloatingObject>& b) { return equal(a, b.get()); }
 
     static const bool safeToCompareToEmptyOrDeleted = true;
 };
@@ -121,14 +122,14 @@ struct FloatingObjectHashTranslator {
     STATIC_ONLY(FloatingObjectHashTranslator);
     static unsigned hash(LayoutBox* key) { return DefaultHash<LayoutBox*>::Hash::hash(key); }
     static bool equal(FloatingObject* a, LayoutBox* b) { return a->layoutObject() == b; }
-    static bool equal(const OwnPtr<FloatingObject>& a, LayoutBox* b) { return a->layoutObject() == b; }
+    static bool equal(const std::unique_ptr<FloatingObject>& a, LayoutBox* b) { return a->layoutObject() == b; }
 };
-typedef ListHashSet<OwnPtr<FloatingObject>, 4, FloatingObjectHashFunctions> FloatingObjectSet;
+typedef ListHashSet<std::unique_ptr<FloatingObject>, 4, FloatingObjectHashFunctions> FloatingObjectSet;
 typedef FloatingObjectSet::const_iterator FloatingObjectSetIterator;
 typedef PODInterval<LayoutUnit, FloatingObject*> FloatingObjectInterval;
 typedef PODIntervalTree<LayoutUnit, FloatingObject*> FloatingObjectTree;
 typedef PODFreeListArena<PODRedBlackTree<FloatingObjectInterval>::Node> IntervalArena;
-typedef HashMap<LayoutBox*, OwnPtr<FloatingObject>> LayoutBoxToFloatInfoMap;
+typedef HashMap<LayoutBox*, std::unique_ptr<FloatingObject>> LayoutBoxToFloatInfoMap;
 
 class FloatingObjects {
     WTF_MAKE_NONCOPYABLE(FloatingObjects); USING_FAST_MALLOC(FloatingObjects);
@@ -138,7 +139,7 @@ public:
 
     void clear();
     void moveAllToFloatInfoMap(LayoutBoxToFloatInfoMap&);
-    FloatingObject* add(PassOwnPtr<FloatingObject>);
+    FloatingObject* add(std::unique_ptr<FloatingObject>);
     void remove(FloatingObject*);
     void addPlacedObject(FloatingObject&);
     void removePlacedObject(FloatingObject&);

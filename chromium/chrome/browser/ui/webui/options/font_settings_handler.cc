@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -208,7 +209,7 @@ void FontSettingsHandler::FontsListHasLoaded(
     bool has_value = font->GetString(1, &value);
     DCHECK(has_value);
     bool has_rtl_chars = base::i18n::StringContainsStrongRTLChars(value);
-    font->Append(new base::StringValue(has_rtl_chars ? "rtl" : "ltr"));
+    font->AppendString(has_rtl_chars ? "rtl" : "ltr");
   }
 
   base::ListValue encoding_list;
@@ -223,72 +224,71 @@ void FontSettingsHandler::FontsListHasLoaded(
 
   std::vector<CharacterEncoding::EncodingInfo>::const_iterator it;
   for (it = encodings->begin(); it != encodings->end(); ++it) {
-    base::ListValue* option = new base::ListValue();
+    std::unique_ptr<base::ListValue> option(new base::ListValue());
     if (it->encoding_id) {
       int cmd_id = it->encoding_id;
       std::string encoding =
       CharacterEncoding::GetCanonicalEncodingNameByCommandId(cmd_id);
       base::string16 name = it->encoding_display_name;
       bool has_rtl_chars = base::i18n::StringContainsStrongRTLChars(name);
-      option->Append(new base::StringValue(encoding));
-      option->Append(new base::StringValue(name));
-      option->Append(new base::StringValue(has_rtl_chars ? "rtl" : "ltr"));
+      option->AppendString(encoding);
+      option->AppendString(name);
+      option->AppendString(has_rtl_chars ? "rtl" : "ltr");
     } else {
       // Add empty name/value to indicate a separator item.
-      option->Append(new base::StringValue(std::string()));
-      option->Append(new base::StringValue(std::string()));
+      option->AppendString(std::string());
+      option->AppendString(std::string());
     }
-    encoding_list.Append(option);
+    encoding_list.Append(std::move(option));
   }
 
   base::ListValue selected_values;
-  selected_values.Append(new base::StringValue(MaybeGetLocalizedFontName(
-      standard_font_.GetValue())));
-  selected_values.Append(new base::StringValue(MaybeGetLocalizedFontName(
-      serif_font_.GetValue())));
-  selected_values.Append(new base::StringValue(MaybeGetLocalizedFontName(
-      sans_serif_font_.GetValue())));
-  selected_values.Append(new base::StringValue(MaybeGetLocalizedFontName(
-      fixed_font_.GetValue())));
-  selected_values.Append(new base::StringValue(font_encoding_.GetValue()));
+  selected_values.AppendString(
+      MaybeGetLocalizedFontName(standard_font_.GetValue()));
+  selected_values.AppendString(
+      MaybeGetLocalizedFontName(serif_font_.GetValue()));
+  selected_values.AppendString(
+      MaybeGetLocalizedFontName(sans_serif_font_.GetValue()));
+  selected_values.AppendString(
+      MaybeGetLocalizedFontName(fixed_font_.GetValue()));
+  selected_values.AppendString(font_encoding_.GetValue());
 
-  web_ui()->CallJavascriptFunction("FontSettings.setFontsData",
-                                   *list.get(), encoding_list,
-                                   selected_values);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "FontSettings.setFontsData", *list.get(), encoding_list, selected_values);
 }
 
 void FontSettingsHandler::SetUpStandardFontSample() {
   base::StringValue font_value(standard_font_.GetValue());
   base::FundamentalValue size_value(default_font_size_.GetValue());
-  web_ui()->CallJavascriptFunction(
-      "FontSettings.setUpStandardFontSample", font_value, size_value);
+  web_ui()->CallJavascriptFunctionUnsafe("FontSettings.setUpStandardFontSample",
+                                         font_value, size_value);
 }
 
 void FontSettingsHandler::SetUpSerifFontSample() {
   base::StringValue font_value(serif_font_.GetValue());
   base::FundamentalValue size_value(default_font_size_.GetValue());
-  web_ui()->CallJavascriptFunction(
-      "FontSettings.setUpSerifFontSample", font_value, size_value);
+  web_ui()->CallJavascriptFunctionUnsafe("FontSettings.setUpSerifFontSample",
+                                         font_value, size_value);
 }
 
 void FontSettingsHandler::SetUpSansSerifFontSample() {
   base::StringValue font_value(sans_serif_font_.GetValue());
   base::FundamentalValue size_value(default_font_size_.GetValue());
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "FontSettings.setUpSansSerifFontSample", font_value, size_value);
 }
 
 void FontSettingsHandler::SetUpFixedFontSample() {
   base::StringValue font_value(fixed_font_.GetValue());
   base::FundamentalValue size_value(default_fixed_font_size_.GetValue());
-  web_ui()->CallJavascriptFunction(
-      "FontSettings.setUpFixedFontSample", font_value, size_value);
+  web_ui()->CallJavascriptFunctionUnsafe("FontSettings.setUpFixedFontSample",
+                                         font_value, size_value);
 }
 
 void FontSettingsHandler::SetUpMinimumFontSample() {
   base::FundamentalValue size_value(minimum_font_size_.GetValue());
-  web_ui()->CallJavascriptFunction("FontSettings.setUpMinimumFontSample",
-                                   size_value);
+  web_ui()->CallJavascriptFunctionUnsafe("FontSettings.setUpMinimumFontSample",
+                                         size_value);
 }
 
 const extensions::Extension*
@@ -302,7 +302,7 @@ FontSettingsHandler::GetAdvancedFontSettingsExtension() {
 }
 
 void FontSettingsHandler::NotifyAdvancedFontSettingsAvailability() {
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "FontSettings.notifyAdvancedFontSettingsAvailability",
       base::FundamentalValue(GetAdvancedFontSettingsExtension() != NULL));
 }

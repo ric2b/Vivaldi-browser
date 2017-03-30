@@ -146,6 +146,12 @@ component("gpu") {
     ":*",
   ]
 
+  if (is_mac) {
+    # On Mac, content/common reaches into here to do some pre-sandbox
+    # initialization.
+    visibility += [ "//content/common" ]
+  }
+
   defines = [ "MEDIA_GPU_IMPLEMENTATION" ]
 
   sources = [
@@ -186,8 +192,9 @@ component("gpu") {
                ] + get_target_outputs(":libvt_generate_stubs")
     deps += [
       ":libvt_generate_stubs",
-      "//third_party/webrtc/common_video:common_video",
+      "//third_party/webrtc/system_wrappers",
     ]
+    public_deps += [ "//third_party/webrtc/common_video" ]
     libs += [
       "CoreFoundation.framework",
       "Foundation.framework",
@@ -306,6 +313,7 @@ component("gpu") {
       ]
       if (use_x11) {
         configs += [ "//build/config/linux:x11" ]
+        deps += [ "//ui/gfx/x" ]
         sources += [
           "vaapi_tfp_picture.cc",
           "vaapi_tfp_picture.h",
@@ -329,9 +337,11 @@ component("gpu") {
       "dxva_video_decode_accelerator_win.h",
     ]
     configs += [
+      # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
       "//build/config/compiler:no_size_t_to_int_warning",
       "//third_party/khronos:khronos_headers",
     ]
+    public_deps += [ "//media/base/win" ]
     deps += [ "//third_party/angle:includes" ]
     libs += [
       "d3d9.lib",
@@ -349,10 +359,6 @@ component("gpu") {
       "/DELAYLOAD:mf.dll",
       "/DELAYLOAD:mfplat.dll",
     ]
-  }
-
-  if (use_x11) {
-    deps += [ "//ui/gfx/x" ]
   }
 }
 
@@ -378,7 +384,7 @@ if (is_win || is_android || is_chromeos) {
     ]
 
     configs += [ "//third_party/khronos:khronos_headers" ]
-    if (is_chromeos && target_cpu != "arm") {
+    if (is_chromeos && current_cpu != "arm") {
       configs += [ "//third_party/libva:libva_config" ]
     }
 
@@ -389,7 +395,6 @@ if (is_win || is_android || is_chromeos) {
         "//media/base/android",
         "//media/base/android:media_java",
         "//media/capture/video/android:capture_java",
-        "//mojo/public/c/system:for_shared_library",
         "//testing/gmock",
         "//ui/android:ui_java",
       ]

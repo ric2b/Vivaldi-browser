@@ -5,13 +5,13 @@
 module mus.mojom;
 
 import "components/mus/public/interfaces/window_tree.mojom";
-import "ui/mojo/geometry/geometry.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
 
 // WindowTreeHost encapsulates a unique underlying platform window, with a tree
 // of windows.
 interface WindowTreeHost {
   // Sets the size of the platform window.
-  SetSize(mojo.Size size);
+  SetSize(gfx.mojom.Size size);
 
   // Sets a title string to be displayed on the platform window.
   SetTitle(string title);

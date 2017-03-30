@@ -37,6 +37,7 @@ class ScriptSourceCode;
 class LocalFrame;
 
 class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>, public ScriptResourceClient {
+    USING_GARBAGE_COLLECTED_MIXIN(ScriptLoader);
 public:
     static ScriptLoader* create(Element* element, bool createdByParser, bool isEvaluated, bool createdDuringDocumentWrite = false)
     {
@@ -49,6 +50,8 @@ public:
     Element* element() const { return m_element; }
 
     enum LegacyTypeSupport { DisallowLegacyTypeInTypeAttribute, AllowLegacyTypeInTypeAttribute };
+    static bool isValidScriptTypeAndLanguage(const String& typeAttributeValue, const String& languageAttributeValue, LegacyTypeSupport supportLegacyTypes);
+
     bool prepareScript(const TextPosition& scriptStartPosition = TextPosition::minimumPosition(), LegacyTypeSupport = DisallowLegacyTypeInTypeAttribute);
 
     String scriptCharset() const { return m_characterEncoding; }

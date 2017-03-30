@@ -40,6 +40,7 @@ class TreeScope;
 
 class StyleSheetInvalidationAnalysis {
     STACK_ALLOCATED();
+    WTF_MAKE_NONCOPYABLE(StyleSheetInvalidationAnalysis);
 public:
     StyleSheetInvalidationAnalysis(const TreeScope&, const HeapVector<Member<StyleSheetContents>>&);
 
@@ -55,6 +56,7 @@ private:
     HashSet<StringImpl*> m_classScopes;
 
     bool m_dirtiesAllStyle = false;
+    bool m_addsKeyframes = false;
 };
 
 } // namespace blink

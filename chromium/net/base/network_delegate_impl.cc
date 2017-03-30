@@ -14,21 +14,22 @@ int NetworkDelegateImpl::OnBeforeURLRequest(URLRequest* request,
   return OK;
 }
 
-int NetworkDelegateImpl::OnBeforeSendHeaders(URLRequest* request,
-                                             const CompletionCallback& callback,
-                                             HttpRequestHeaders* headers) {
+int NetworkDelegateImpl::OnBeforeStartTransaction(
+    URLRequest* request,
+    const CompletionCallback& callback,
+    HttpRequestHeaders* headers) {
   return OK;
 }
 
-void NetworkDelegateImpl::OnBeforeSendProxyHeaders(
+void NetworkDelegateImpl::OnBeforeSendHeaders(
     URLRequest* request,
     const ProxyInfo& proxy_info,
-    HttpRequestHeaders* headers) {
-}
+    const ProxyRetryInfoMap& proxy_retry_info,
+    HttpRequestHeaders* headers) {}
 
-void NetworkDelegateImpl::OnSendHeaders(URLRequest* request,
-                                        const HttpRequestHeaders& headers) {
-}
+void NetworkDelegateImpl::OnStartTransaction(
+    URLRequest* request,
+    const HttpRequestHeaders& headers) {}
 
 int NetworkDelegateImpl::OnHeadersReceived(
     URLRequest* request,

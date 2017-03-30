@@ -5,11 +5,13 @@
 #ifndef RejectedPromises_h
 #define RejectedPromises_h
 
+#include "bindings/core/v8/SourceLocation.h"
 #include "core/fetch/AccessControlStatus.h"
 #include "wtf/Deque.h"
 #include "wtf/Forward.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace v8 {
 class PromiseRejectMessage;
@@ -17,7 +19,6 @@ class PromiseRejectMessage;
 
 namespace blink {
 
-class ScriptCallStack;
 class ScriptState;
 
 class RejectedPromises final : public RefCounted<RejectedPromises> {
@@ -31,7 +32,7 @@ public:
     ~RejectedPromises();
     void dispose();
 
-    void rejectedWithNoHandler(ScriptState*, v8::PromiseRejectMessage, const String& errorMessage, const String& resourceName, int scriptId, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>, AccessControlStatus);
+    void rejectedWithNoHandler(ScriptState*, v8::PromiseRejectMessage, const String& errorMessage, std::unique_ptr<SourceLocation>, AccessControlStatus);
     void handlerAdded(v8::PromiseRejectMessage);
 
     void processQueue();
@@ -41,14 +42,14 @@ private:
 
     RejectedPromises();
 
-    using MessageQueue = Deque<OwnPtr<Message>>;
-    PassOwnPtr<MessageQueue> createMessageQueue();
+    using MessageQueue = Deque<std::unique_ptr<Message>>;
+    std::unique_ptr<MessageQueue> createMessageQueue();
 
-    void processQueueNow(PassOwnPtr<MessageQueue>);
-    void revokeNow(PassOwnPtr<Message>);
+    void processQueueNow(std::unique_ptr<MessageQueue>);
+    void revokeNow(std::unique_ptr<Message>);
 
     MessageQueue m_queue;
-    Vector<OwnPtr<Message>> m_reportedAsErrors;
+    Vector<std::unique_ptr<Message>> m_reportedAsErrors;
 };
 
 } // namespace blink

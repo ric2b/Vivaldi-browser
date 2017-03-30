@@ -124,8 +124,7 @@ void ConvertInspectorPoint(blink::LocalFrame* frame, const blink::IntPoint& poin
 namespace blink {
 
 InspectorInputAgent::InspectorInputAgent(InspectedFrames* inspectedFrames)
-    : InspectorBaseAgent<InspectorInputAgent, protocol::Frontend::Input>("Input")
-    , m_inspectedFrames(inspectedFrames)
+    : m_inspectedFrames(inspectedFrames)
 {
 }
 
@@ -133,7 +132,7 @@ InspectorInputAgent::~InspectorInputAgent()
 {
 }
 
-void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& type, PassOwnPtr<protocol::Array<protocol::Input::TouchPoint>> touchPoints, const protocol::Maybe<int>& modifiers, const protocol::Maybe<double>& timestamp)
+void InspectorInputAgent::dispatchTouchEvent(ErrorString* error, const String& type, std::unique_ptr<protocol::Array<protocol::Input::TouchPoint>> touchPoints, const protocol::Maybe<int>& modifiers, const protocol::Maybe<double>& timestamp)
 {
     PlatformEvent::EventType convertedType;
     if (type == "touchStart") {

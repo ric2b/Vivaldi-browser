@@ -5,8 +5,8 @@
 #ifndef REMOTING_HOST_CLIENT_SESSION_H_
 #define REMOTING_HOST_CLIENT_SESSION_H_
 
-#include <stdint.h>
-
+#include <cstdint>
+#include <memory>
 #include <string>
 
 #include "base/macros.h"
@@ -17,6 +17,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "remoting/host/client_session_control.h"
+#include "remoting/host/client_session_details.h"
 #include "remoting/host/host_extension_session_manager.h"
 #include "remoting/host/remote_input_filter.h"
 #include "remoting/protocol/clipboard_echo_filter.h"
@@ -29,6 +30,7 @@
 #include "remoting/protocol/input_stub.h"
 #include "remoting/protocol/mouse_input_filter.h"
 #include "remoting/protocol/pairing_registry.h"
+#include "remoting/protocol/video_stream.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 
 namespace base {
@@ -53,7 +55,9 @@ class VideoLayout;
 class ClientSession : public base::NonThreadSafe,
                       public protocol::HostStub,
                       public protocol::ConnectionToClient::EventHandler,
-                      public ClientSessionControl {
+                      public protocol::VideoStream::Observer,
+                      public ClientSessionControl,
+                      public ClientSessionDetails {
  public:
   // Callback interface for passing events to the ChromotingHost.
   class EventHandler {
@@ -132,6 +136,10 @@ class ClientSession : public base::NonThreadSafe,
   void OnLocalMouseMoved(const webrtc::DesktopVector& position) override;
   void SetDisableInputs(bool disable_inputs) override;
 
+  // ClientSessionDetails interface.
+  uint32_t desktop_session_id() const override;
+  ClientSessionControl* session_control() override;
+
   protocol::ConnectionToClient* connection() const { return connection_.get(); }
 
   bool is_authenticated() { return is_authenticated_; }
@@ -144,8 +152,13 @@ class ClientSession : public base::NonThreadSafe,
   // Creates a proxy for sending clipboard events to the client.
   std::unique_ptr<protocol::ClipboardStub> CreateClipboardProxy();
 
-  void OnScreenSizeChanged(const webrtc::DesktopSize& size,
-                           const webrtc::DesktopVector& dpi);
+  // protocol::VideoStream::Observer implementation.
+  void OnVideoSizeChanged(protocol::VideoStream* stream,
+                          const webrtc::DesktopSize& size,
+                          const webrtc::DesktopVector& dpi) override;
+  void OnVideoFrameSent(protocol::VideoStream* stream,
+                        uint32_t frame_id,
+                        int64_t input_event_timestamp) override;
 
   EventHandler* event_handler_;
 

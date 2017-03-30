@@ -5,7 +5,9 @@
 #include "chrome/browser/ui/webui/copresence_ui_handler.h"
 
 #include <map>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -168,20 +170,20 @@ void CopresenceUIHandler::DirectivesUpdated() {
         ui::TimeFormat::LENGTH_LONG,
         base::TimeDelta::FromMilliseconds(directive.ttl_millis())));
 
-    js_directives.Append(js_directive.release());
+    js_directives.Append(std::move(js_directive));
   }
 
-  web_ui()->CallJavascriptFunction("refreshDirectives", js_directives);
+  web_ui()->CallJavascriptFunctionUnsafe("refreshDirectives", js_directives);
 }
 
 void CopresenceUIHandler::TokenTransmitted(const TransmittedToken& token) {
-  web_ui()->CallJavascriptFunction("updateTransmittedToken",
-                                   *FormatToken(token));
+  web_ui()->CallJavascriptFunctionUnsafe("updateTransmittedToken",
+                                         *FormatToken(token));
 }
 
 void CopresenceUIHandler::TokenReceived(const ReceivedToken& token) {
-  web_ui()->CallJavascriptFunction("updateReceivedToken",
-                                   *FormatToken(token));
+  web_ui()->CallJavascriptFunctionUnsafe("updateReceivedToken",
+                                         *FormatToken(token));
 }
 
 void CopresenceUIHandler::HandlePopulateState(const ListValue* args) {
@@ -207,6 +209,6 @@ void CopresenceUIHandler::HandleClearState(const ListValue* args) {
   DCHECK(state_);
   state_->AddObserver(this);
 
-  web_ui()->CallJavascriptFunction("clearTokens");
+  web_ui()->CallJavascriptFunctionUnsafe("clearTokens");
   DirectivesUpdated();
 }

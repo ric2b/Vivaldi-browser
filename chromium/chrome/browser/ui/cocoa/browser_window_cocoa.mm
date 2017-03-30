@@ -23,7 +23,7 @@
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_command_controller.h"
-#include "chrome/browser/ui/browser_commands_mac.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
 #import "chrome/browser/ui/cocoa/autofill/save_card_bubble_view_bridge.h"
@@ -186,7 +186,7 @@ void BrowserWindowCocoa::Show() {
     [window() orderOut:controller_];
     [window() miniaturize:controller_];
   } else if (initial_show_state_ == ui::SHOW_STATE_FULLSCREEN) {
-    chrome::ToggleFullscreenWithToolbarOrFallback(browser_);
+    chrome::ToggleFullscreenMode(browser_);
   }
   initial_show_state_ = ui::SHOW_STATE_DEFAULT;
 
@@ -308,16 +308,20 @@ void BrowserWindowCocoa::UpdateTitleBar() {
 }
 
 NSString* BrowserWindowCocoa::WindowTitle() {
+  const bool include_app_name = true;
   if (alert_state_ == TabAlertState::AUDIO_PLAYING) {
     return l10n_util::GetNSStringF(IDS_WINDOW_AUDIO_PLAYING_MAC,
-                                   browser_->GetWindowTitleForCurrentTab(),
+                                   browser_->GetWindowTitleForCurrentTab(
+                                       include_app_name),
                                    base::SysNSStringToUTF16(@"🔊"));
   } else if (alert_state_ == TabAlertState::AUDIO_MUTING) {
     return l10n_util::GetNSStringF(IDS_WINDOW_AUDIO_MUTING_MAC,
-                                   browser_->GetWindowTitleForCurrentTab(),
+                                   browser_->GetWindowTitleForCurrentTab(
+                                       include_app_name),
                                    base::SysNSStringToUTF16(@"🔇"));
   }
-  return base::SysUTF16ToNSString(browser_->GetWindowTitleForCurrentTab());
+  return base::SysUTF16ToNSString(
+      browser_->GetWindowTitleForCurrentTab(include_app_name));
 }
 
 void BrowserWindowCocoa::BookmarkBarStateChanged(
@@ -680,9 +684,9 @@ void BrowserWindowCocoa::UserChangedTheme() {
 void BrowserWindowCocoa::ShowWebsiteSettings(
     Profile* profile,
     content::WebContents* web_contents,
-    const GURL& url,
+    const GURL& virtual_url,
     const security_state::SecurityStateModel::SecurityInfo& security_info) {
-  WebsiteSettingsUIBridge::Show(window(), profile, web_contents, url,
+  WebsiteSettingsUIBridge::Show(window(), profile, web_contents, virtual_url,
                                 security_info);
 }
 

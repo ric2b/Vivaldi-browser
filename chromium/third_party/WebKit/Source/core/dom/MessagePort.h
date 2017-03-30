@@ -35,11 +35,10 @@
 #include "core/events/EventTarget.h"
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebMessagePortChannelClient.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -49,8 +48,8 @@ class MessagePort;
 class ScriptState;
 class SerializedScriptValue;
 
-// Not to be confused with WebMessagePortChannelArray; this one uses Vector and OwnPtr instead of WebVector and raw pointers.
-typedef Vector<OwnPtr<WebMessagePortChannel>, 1> MessagePortChannelArray;
+// Not to be confused with WebMessagePortChannelArray; this one uses Vector and std::unique_ptr instead of WebVector and raw pointers.
+typedef Vector<WebMessagePortChannelUniquePtr, 1> MessagePortChannelArray;
 
 class CORE_EXPORT MessagePort
     : public EventTargetWithInlineData
@@ -68,20 +67,20 @@ public:
     void start();
     void close();
 
-    void entangle(PassOwnPtr<WebMessagePortChannel>);
-    PassOwnPtr<WebMessagePortChannel> disentangle();
+    void entangle(WebMessagePortChannelUniquePtr);
+    WebMessagePortChannelUniquePtr disentangle();
 
     // Returns nullptr if the passed-in array is nullptr/empty.
-    static PassOwnPtr<WebMessagePortChannelArray> toWebMessagePortChannelArray(PassOwnPtr<MessagePortChannelArray>);
+    static std::unique_ptr<WebMessagePortChannelArray> toWebMessagePortChannelArray(std::unique_ptr<MessagePortChannelArray>);
 
     // Returns an empty array if the passed array is empty.
     static MessagePortArray* toMessagePortArray(ExecutionContext*, const WebMessagePortChannelArray&);
 
     // Returns nullptr if there is an exception, or if the passed-in array is nullptr/empty.
-    static PassOwnPtr<MessagePortChannelArray> disentanglePorts(ExecutionContext*, const MessagePortArray&, ExceptionState&);
+    static std::unique_ptr<MessagePortChannelArray> disentanglePorts(ExecutionContext*, const MessagePortArray&, ExceptionState&);
 
     // Returns an empty array if the passed array is nullptr/empty.
-    static MessagePortArray* entanglePorts(ExecutionContext&, PassOwnPtr<MessagePortChannelArray>);
+    static MessagePortArray* entanglePorts(ExecutionContext&, std::unique_ptr<MessagePortChannelArray>);
 
     bool started() const { return m_started; }
 
@@ -112,14 +111,14 @@ public:
 
 protected:
     explicit MessagePort(ExecutionContext&);
-    bool tryGetMessage(RefPtr<SerializedScriptValue>& message, OwnPtr<MessagePortChannelArray>& channels);
+    bool tryGetMessage(RefPtr<SerializedScriptValue>& message, std::unique_ptr<MessagePortChannelArray>& channels);
 
 private:
     // WebMessagePortChannelClient implementation.
     void messageAvailable() override;
     void dispatchMessages();
 
-    OwnPtr<WebMessagePortChannel> m_entangledChannel;
+    WebMessagePortChannelUniquePtr m_entangledChannel;
 
     bool m_started;
     bool m_closed;

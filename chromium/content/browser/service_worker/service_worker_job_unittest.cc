@@ -3,15 +3,19 @@
 // found in the LICENSE file.
 
 #include <stdint.h>
+#include <tuple>
 
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/test_simple_task_runner.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
+#include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_disk_cache.h"
 #include "content/browser/service_worker/service_worker_job_coordinator.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -19,6 +23,7 @@
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/service_worker_messages.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "ipc/ipc_test_sink.h"
 #include "net/base/io_buffer.h"
@@ -654,15 +659,14 @@ TEST_F(ServiceWorkerJobTest, UnregisterWaitingSetsRedundant) {
 
   version->SetStatus(ServiceWorkerVersion::INSTALLED);
   registration->SetWaitingVersion(version);
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING,
-            version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::INSTALLED, version->status());
 
   RunUnregisterJob(GURL("http://www.example.com/"));
 
   // The version should be stopped since there is no controllee after
   // unregistration.
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version->status());
 }
 
@@ -675,14 +679,14 @@ TEST_F(ServiceWorkerJobTest, UnregisterActiveSetsRedundant) {
   ASSERT_TRUE(registration.get());
 
   scoped_refptr<ServiceWorkerVersion> version = registration->active_version();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, version->status());
 
   RunUnregisterJob(GURL("http://www.example.com/"));
 
   // The version should be stopped since there is no controllee after
   // unregistration.
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version->status());
 }
 
@@ -699,20 +703,20 @@ TEST_F(ServiceWorkerJobTest,
   registration->active_version()->AddControllee(host.get());
 
   scoped_refptr<ServiceWorkerVersion> version = registration->active_version();
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, version->status());
 
   RunUnregisterJob(GURL("http://www.example.com/"));
 
   // The version should be running since there is still a controllee.
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, version->status());
 
   registration->active_version()->RemoveControllee(host.get());
   base::RunLoop().RunUntilIdle();
 
   // The version should be stopped since there is no controllee.
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, version->status());
 }
 
@@ -726,7 +730,7 @@ const std::string kScript("script.js");
 void RunNestedUntilIdle() {
   base::MessageLoop::ScopedNestableTaskAllower allow(
       base::MessageLoop::current());
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 void OnIOComplete(int* rv_out, int rv) {
@@ -1226,6 +1230,9 @@ TEST_F(ServiceWorkerJobTest, RegisterWhileUninstalling) {
 
   scoped_refptr<ServiceWorkerRegistration> registration =
       RunRegisterJob(pattern, script1);
+  scoped_refptr<base::TestSimpleTaskRunner> runner(
+      new base::TestSimpleTaskRunner());
+  registration->SetTaskRunnerForTest(runner);
 
   // Add a controllee and queue an unregister to force the uninstalling state.
   std::unique_ptr<ServiceWorkerProviderHost> host = CreateControllee();
@@ -1246,7 +1253,7 @@ TEST_F(ServiceWorkerJobTest, RegisterWhileUninstalling) {
   // Verify the new version is installed but not activated yet.
   EXPECT_EQ(NULL, registration->installing_version());
   EXPECT_TRUE(new_version);
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::INSTALLED, new_version->status());
 
   old_version->RemoveControllee(host.get());
@@ -1259,7 +1266,11 @@ TEST_F(ServiceWorkerJobTest, RegisterWhileUninstalling) {
   EXPECT_EQ(NULL, registration->installing_version());
   EXPECT_EQ(NULL, registration->waiting_version());
   EXPECT_EQ(new_version, registration->active_version());
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(ServiceWorkerVersion::ACTIVATING, new_version->status());
+
+  runner->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, new_version->status());
 }
 
@@ -1294,9 +1305,9 @@ TEST_F(ServiceWorkerJobTest, RegisterAndUnregisterWhileUninstalling) {
   EXPECT_TRUE(registration->is_uninstalling());
   EXPECT_EQ(old_version, registration->active_version());
 
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, old_version->status());
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::INSTALLED, new_version->status());
 
   old_version->RemoveControllee(host.get());
@@ -1305,9 +1316,9 @@ TEST_F(ServiceWorkerJobTest, RegisterAndUnregisterWhileUninstalling) {
   EXPECT_FALSE(registration->is_uninstalling());
   EXPECT_TRUE(registration->is_uninstalled());
 
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, new_version->status());
 }
 
@@ -1318,6 +1329,9 @@ TEST_F(ServiceWorkerJobTest, RegisterSameScriptMultipleTimesWhileUninstalling) {
 
   scoped_refptr<ServiceWorkerRegistration> registration =
       RunRegisterJob(pattern, script1);
+  scoped_refptr<base::TestSimpleTaskRunner> runner(
+      new base::TestSimpleTaskRunner());
+  registration->SetTaskRunnerForTest(runner);
 
   // Add a controllee and queue an unregister to force the uninstalling state.
   std::unique_ptr<ServiceWorkerProviderHost> host = CreateControllee();
@@ -1351,7 +1365,11 @@ TEST_F(ServiceWorkerJobTest, RegisterSameScriptMultipleTimesWhileUninstalling) {
   EXPECT_EQ(NULL, registration->installing_version());
   EXPECT_EQ(NULL, registration->waiting_version());
   EXPECT_EQ(new_version, registration->active_version());
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(ServiceWorkerVersion::ACTIVATING, new_version->status());
+
+  runner->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, new_version->status());
 }
 
@@ -1363,6 +1381,9 @@ TEST_F(ServiceWorkerJobTest, RegisterMultipleTimesWhileUninstalling) {
 
   scoped_refptr<ServiceWorkerRegistration> registration =
       RunRegisterJob(pattern, script1);
+  scoped_refptr<base::TestSimpleTaskRunner> runner(
+      new base::TestSimpleTaskRunner());
+  registration->SetTaskRunnerForTest(runner);
 
   // Add a controllee and queue an unregister to force the uninstalling state.
   std::unique_ptr<ServiceWorkerProviderHost> host = CreateControllee();
@@ -1400,7 +1421,11 @@ TEST_F(ServiceWorkerJobTest, RegisterMultipleTimesWhileUninstalling) {
   EXPECT_EQ(NULL, registration->installing_version());
   EXPECT_EQ(NULL, registration->waiting_version());
   EXPECT_EQ(third_version, registration->active_version());
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, third_version->running_status());
+  EXPECT_EQ(ServiceWorkerVersion::ACTIVATING, third_version->status());
+
+  runner->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, third_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, third_version->status());
 }
 
@@ -1415,9 +1440,9 @@ class EventCallbackHelper : public EmbeddedWorkerTestHelper {
                       int request_id) override {
     if (!install_callback_.is_null())
       install_callback_.Run();
-    SimulateSend(
-        new ServiceWorkerHostMsg_InstallEventFinished(
-            embedded_worker_id, request_id, install_event_result_));
+    SimulateSend(new ServiceWorkerHostMsg_InstallEventFinished(
+        embedded_worker_id, request_id, install_event_result_,
+        has_fetch_handler_));
   }
   void OnActivateEvent(int embedded_worker_id, int request_id) override {
     SimulateSend(
@@ -1434,11 +1459,15 @@ class EventCallbackHelper : public EmbeddedWorkerTestHelper {
   void set_activate_event_result(blink::WebServiceWorkerEventResult result) {
     activate_event_result_ = result;
   }
+  void set_has_fetch_handler(bool has_fetch_handler) {
+    has_fetch_handler_ = has_fetch_handler;
+  }
 
  private:
   base::Closure install_callback_;
   blink::WebServiceWorkerEventResult install_event_result_;
   blink::WebServiceWorkerEventResult activate_event_result_;
+  bool has_fetch_handler_ = true;
 };
 
 TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall) {
@@ -1475,7 +1504,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall) {
   EXPECT_EQ(NULL, registration->installing_version());
   EXPECT_EQ(NULL, registration->waiting_version());
   EXPECT_EQ(new_version, registration->active_version());
-  EXPECT_EQ(ServiceWorkerVersion::RUNNING, new_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::RUNNING, new_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::ACTIVATED, new_version->status());
 
   EXPECT_EQ(registration, FindRegistrationForPattern(pattern));
@@ -1511,7 +1540,7 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringRejectedInstall) {
   EXPECT_FALSE(registration->is_uninstalling());
   EXPECT_TRUE(registration->is_uninstalled());
 
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
 
   FindRegistrationForPattern(pattern, SERVICE_WORKER_ERROR_NOT_FOUND);
@@ -1547,10 +1576,31 @@ TEST_F(ServiceWorkerJobTest, RemoveControlleeDuringInstall_RejectActivate) {
   EXPECT_FALSE(registration->is_uninstalling());
   EXPECT_FALSE(registration->is_uninstalled());
 
-  EXPECT_EQ(ServiceWorkerVersion::STOPPED, old_version->running_status());
+  EXPECT_EQ(EmbeddedWorkerStatus::STOPPED, old_version->running_status());
   EXPECT_EQ(ServiceWorkerVersion::REDUNDANT, old_version->status());
 
   FindRegistrationForPattern(pattern, SERVICE_WORKER_OK);
+}
+
+TEST_F(ServiceWorkerJobTest, HasFetchHandler) {
+  EventCallbackHelper* helper = new EventCallbackHelper;
+  helper_.reset(helper);
+
+  GURL pattern("http://www.example.com/");
+  GURL script("http://www.example.com/service_worker.js");
+  scoped_refptr<ServiceWorkerRegistration> registration;
+
+  helper->set_has_fetch_handler(true);
+  RunRegisterJob(pattern, script);
+  registration = FindRegistrationForPattern(pattern);
+  EXPECT_TRUE(registration->active_version()->has_fetch_handler());
+  RunUnregisterJob(pattern);
+
+  helper->set_has_fetch_handler(false);
+  RunRegisterJob(pattern, script);
+  registration = FindRegistrationForPattern(pattern);
+  EXPECT_FALSE(registration->active_version()->has_fetch_handler());
+  RunUnregisterJob(pattern);
 }
 
 TEST_F(ServiceWorkerJobTest, Update_PauseAfterDownload) {
@@ -1567,7 +1617,7 @@ TEST_F(ServiceWorkerJobTest, Update_PauseAfterDownload) {
     ASSERT_TRUE(start_msg);
     EmbeddedWorkerMsg_StartWorker::Param param;
     EmbeddedWorkerMsg_StartWorker::Read(start_msg, &param);
-    EmbeddedWorkerMsg_StartWorker_Params start_params = base::get<0>(param);
+    EmbeddedWorkerMsg_StartWorker_Params start_params = std::get<0>(param);
     EXPECT_FALSE(start_params.pause_after_download);
     sink->ClearMessages();
   }
@@ -1582,10 +1632,67 @@ TEST_F(ServiceWorkerJobTest, Update_PauseAfterDownload) {
     ASSERT_TRUE(start_msg);
     EmbeddedWorkerMsg_StartWorker::Param param;
     EmbeddedWorkerMsg_StartWorker::Read(start_msg, &param);
-    EmbeddedWorkerMsg_StartWorker_Params start_params = base::get<0>(param);
+    EmbeddedWorkerMsg_StartWorker_Params start_params = std::get<0>(param);
     EXPECT_TRUE(start_params.pause_after_download);
     sink->ClearMessages();
   }
+}
+
+// Test that activation doesn't complete if it's triggered by removing a
+// controllee and starting the worker failed due to shutdown.
+TEST_F(ServiceWorkerJobTest, ActivateCancelsOnShutdown) {
+  UpdateJobTestHelper* update_helper = new UpdateJobTestHelper;
+  helper_.reset(update_helper);
+  GURL pattern("http://www.example.com/");
+  GURL script("http://www.example.com/service_worker.js");
+
+  scoped_refptr<ServiceWorkerRegistration> registration =
+      RunRegisterJob(pattern, script);
+  scoped_refptr<base::TestSimpleTaskRunner> runner(
+      new base::TestSimpleTaskRunner());
+  registration->SetTaskRunnerForTest(runner);
+
+  // Add a controllee.
+  std::unique_ptr<ServiceWorkerProviderHost> host = CreateControllee();
+  scoped_refptr<ServiceWorkerVersion> first_version =
+      registration->active_version();
+  first_version->AddControllee(host.get());
+
+  // Update. The new version should be waiting.
+  registration->AddListener(update_helper);
+  first_version->StartUpdate();
+  base::RunLoop().RunUntilIdle();
+  scoped_refptr<ServiceWorkerVersion> new_version =
+      registration->waiting_version();
+  ASSERT_TRUE(new_version);
+  EXPECT_EQ(ServiceWorkerVersion::INSTALLED, new_version->status());
+
+  // Stop the worker so that it must start again when activation is attempted.
+  // (This is not strictly necessary to exercise the codepath, but it makes it
+  // easy to cause a failure with set_force_start_worker_failure after
+  // shutdown is simulated. Otherwise our test helper often fails on
+  // DCHECK(context)).
+  new_version->StopWorker(base::Bind(&ServiceWorkerUtils::NoOpStatusCallback));
+
+  // Remove the controllee. The new version should be activating, and delayed
+  // until the runner runs again.
+  first_version->RemoveControllee(host.get());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(new_version.get(), registration->active_version());
+  EXPECT_EQ(ServiceWorkerVersion::ACTIVATING, new_version->status());
+
+  // Shutdown.
+  update_helper->context()->wrapper()->Shutdown();
+  update_helper->set_force_start_worker_failure(true);
+
+  // Allow the activation to continue. It will fail, and the worker
+  // should not be promoted to ACTIVATED because failure occur
+  // during shutdown.
+  runner->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(new_version.get(), registration->active_version());
+  EXPECT_EQ(ServiceWorkerVersion::ACTIVATING, new_version->status());
+  registration->RemoveListener(update_helper);
 }
 
 }  // namespace content

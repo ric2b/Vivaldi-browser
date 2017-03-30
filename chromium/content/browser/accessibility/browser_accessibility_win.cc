@@ -8,6 +8,8 @@
 #include <UIAutomationCoreApi.h>
 
 #include <algorithm>
+#include <iterator>
+#include <utility>
 
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -64,6 +66,11 @@ class BrowserAccessibilityRelation
   CONTENT_EXPORT void Initialize(BrowserAccessibilityWin* owner,
                                  const base::string16& type);
   CONTENT_EXPORT void AddTarget(int target_id);
+  CONTENT_EXPORT void RemoveTarget(int target_id);
+
+  // Accessors.
+  const base::string16& get_type() const { return type_; }
+  const std::vector<int>& get_target_ids() const { return target_ids_; }
 
   // IAccessibleRelation methods.
   CONTENT_EXPORT STDMETHODIMP get_relationType(BSTR* relation_type) override;
@@ -93,6 +100,12 @@ void BrowserAccessibilityRelation::Initialize(BrowserAccessibilityWin* owner,
 
 void BrowserAccessibilityRelation::AddTarget(int target_id) {
   target_ids_.push_back(target_id);
+}
+
+void BrowserAccessibilityRelation::RemoveTarget(int target_id) {
+  target_ids_.erase(
+      std::remove(target_ids_.begin(), target_ids_.end(), target_id),
+      target_ids_.end());
 }
 
 STDMETHODIMP BrowserAccessibilityRelation::get_relationType(
@@ -209,8 +222,8 @@ BrowserAccessibilityWin::BrowserAccessibilityWin()
 }
 
 BrowserAccessibilityWin::~BrowserAccessibilityWin() {
-  for (size_t i = 0; i < relations_.size(); ++i)
-    relations_[i]->Release();
+  for (BrowserAccessibilityRelation* relation : relations_)
+    relation->Release();
 }
 
 //
@@ -729,7 +742,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_uniqueID(LONG* unique_id) {
   if (!unique_id)
     return E_INVALIDARG;
 
-  *unique_id = -unique_id_;
+  *unique_id = -this->unique_id();
   return S_OK;
 }
 
@@ -2409,7 +2422,8 @@ STDMETHODIMP BrowserAccessibilityWin::get_hyperlink(
   }
 
   int32_t id = hyperlinks()[index];
-  BrowserAccessibilityWin* link = GetFromID(id);
+  BrowserAccessibilityWin* link =
+      ToBrowserAccessibilityWin(GetFromUniqueID(id));
   if (!link)
     return E_FAIL;
 
@@ -2775,7 +2789,7 @@ STDMETHODIMP BrowserAccessibilityWin::get_nodeInfo(
   *name_space_id = 0;
   *node_value = SysAllocString(value().c_str());
   *num_children = PlatformChildCount();
-  *unique_id = -unique_id_;
+  *unique_id = -this->unique_id();
 
   if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA ||
     GetRole() == ui::AX_ROLE_WEB_AREA) {
@@ -3314,6 +3328,26 @@ void BrowserAccessibilityWin::ComputeStylesIfNeeded() {
   std::map<int, std::vector<base::string16>> attributes_map;
   if (PlatformIsLeaf()) {
     attributes_map[0] = ComputeTextAttributes();
+    std::map<int, std::vector<base::string16>> spelling_attributes =
+        GetSpellingAttributes();
+    for (auto& spelling_attribute : spelling_attributes) {
+      auto attributes_iterator = attributes_map.find(spelling_attribute.first);
+      if (attributes_iterator == attributes_map.end()) {
+        attributes_map[spelling_attribute.first] =
+            std::move(spelling_attribute.second);
+      } else {
+        std::vector<base::string16>& existing_attributes =
+            attributes_iterator->second;
+        auto existing_spelling_attribute =
+            std::find(existing_attributes.begin(), existing_attributes.end(),
+                      L"invalid:false");
+        if (existing_spelling_attribute != existing_attributes.end())
+          existing_attributes.erase(existing_spelling_attribute);
+        existing_attributes.insert(existing_attributes.end(),
+                                   spelling_attribute.second.begin(),
+                                   spelling_attribute.second.end());
+      }
+    }
     win_attributes_->offset_to_text_attributes.swap(attributes_map);
     return;
   }
@@ -3487,30 +3521,32 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
   win_attributes_->description = GetString16Attribute(ui::AX_ATTR_DESCRIPTION);
 
   base::string16 value = GetValue();
-
   // On Windows, the value of a document should be its url.
   if (GetRole() == ui::AX_ROLE_ROOT_WEB_AREA ||
       GetRole() == ui::AX_ROLE_WEB_AREA) {
     value = base::UTF8ToUTF16(manager()->GetTreeData().url);
   }
-
   // If this doesn't have a value and is linked then set its value to the url
   // attribute. This allows screen readers to read an empty link's destination.
   if (value.empty() && (ia_state() & STATE_SYSTEM_LINKED))
     value = GetString16Attribute(ui::AX_ATTR_URL);
-
   win_attributes_->value = value;
 
-  // Clear any old relationships between this node and other nodes.
-  for (size_t i = 0; i < relations_.size(); ++i)
-    relations_[i]->Release();
-  relations_.clear();
+  ClearOwnRelations();
+  AddBidirectionalRelations(IA2_RELATION_CONTROLLER_FOR,
+                            IA2_RELATION_CONTROLLED_BY,
+                            ui::AX_ATTR_CONTROLS_IDS);
+  AddBidirectionalRelations(IA2_RELATION_DESCRIBED_BY,
+                            IA2_RELATION_DESCRIPTION_FOR,
+                            ui::AX_ATTR_DESCRIBEDBY_IDS);
+  AddBidirectionalRelations(IA2_RELATION_FLOWS_TO, IA2_RELATION_FLOWS_FROM,
+                            ui::AX_ATTR_FLOWTO_IDS);
+  AddBidirectionalRelations(IA2_RELATION_LABELLED_BY, IA2_RELATION_LABEL_FOR,
+                            ui::AX_ATTR_LABELLEDBY_IDS);
 
-  // Handle title UI element.
-  AddRelations(ui::AX_ATTR_CONTROLS_IDS, IA2_RELATION_CONTROLLER_FOR);
-  AddRelations(ui::AX_ATTR_DESCRIBEDBY_IDS, IA2_RELATION_DESCRIBED_BY);
-  AddRelations(ui::AX_ATTR_FLOWTO_IDS, IA2_RELATION_FLOWS_TO);
-  AddRelations(ui::AX_ATTR_LABELLEDBY_IDS, IA2_RELATION_LABELLED_BY);
+  int member_of_id;
+  if (GetIntAttribute(ui::AX_ATTR_MEMBER_OF_ID, &member_of_id))
+    AddRelation(IA2_RELATION_MEMBER_OF, member_of_id);
 
   UpdateRequiredAttributes();
   // If this is a web area for a presentational iframe, give it a role of
@@ -3523,10 +3559,13 @@ void BrowserAccessibilityWin::UpdateStep1ComputeWinAttributes() {
 }
 
 void BrowserAccessibilityWin::UpdateStep2ComputeHypertext() {
-  if (PlatformIsLeaf()) {
-    if (IsSimpleTextControl())
+  if (!PlatformChildCount()) {
+    if (IsSimpleTextControl()) {
       win_attributes_->hypertext = value();
-    else {
+    } else if (IsRichTextControl()) {
+      // We don't want to expose any associated label in IA2 Hypertext.
+      return;
+    } else {
       win_attributes_->hypertext = name();
     }
 
@@ -3546,10 +3585,10 @@ void BrowserAccessibilityWin::UpdateStep2ComputeHypertext() {
       win_attributes_->hypertext += child->name();
     } else {
       int32_t char_offset = static_cast<int32_t>(GetText().size());
-      int32_t child_id = child->GetId();
+      int32_t child_unique_id = child->unique_id();
       int32_t index = hyperlinks().size();
       win_attributes_->hyperlink_offset_to_index[char_offset] = index;
-      win_attributes_->hyperlinks.push_back(child_id);
+      win_attributes_->hyperlinks.push_back(child_unique_id);
       win_attributes_->hypertext += kEmbeddedCharacter;
     }
   }
@@ -3581,18 +3620,6 @@ void BrowserAccessibilityWin::UpdateStep3FireEvents(bool is_subtree_creation) {
       FireNativeEvent(EVENT_OBJECT_VALUECHANGE);
     if (ia_state() != old_win_attributes_->ia_state)
       FireNativeEvent(EVENT_OBJECT_STATECHANGE);
-
-    // Normally focus events are handled elsewhere, however
-    // focus for managed descendants is platform-specific.
-    // Fire a focus event if the focused descendant in a multi-select
-    // list box changes.
-    if (GetRole() == ui::AX_ROLE_LIST_BOX_OPTION &&
-        (ia_state() & STATE_SYSTEM_FOCUSABLE) &&
-        (ia_state() & STATE_SYSTEM_SELECTABLE) &&
-        (ia_state() & STATE_SYSTEM_FOCUSED) &&
-        !(old_win_attributes_->ia_state & STATE_SYSTEM_FOCUSED)) {
-      FireNativeEvent(EVENT_OBJECT_FOCUS);
-    }
 
     // Handle selection being added or removed.
     bool is_selected_now = (ia_state() & STATE_SYSTEM_SELECTED) != 0;
@@ -3744,11 +3771,14 @@ std::vector<base::string16> BrowserAccessibilityWin::ComputeTextAttributes()
   auto text_style =
       static_cast<ui::AXTextStyle>(GetIntAttribute(ui::AX_ATTR_TEXT_STYLE));
   if (text_style == ui::AX_TEXT_STYLE_NONE) {
-    attributes.push_back(L"font-style:normal");
     attributes.push_back(L"font-weight:normal");
+    attributes.push_back(L"font-style:normal");
   } else {
-    if (text_style & ui::AX_TEXT_STYLE_BOLD)
+    if (text_style & ui::AX_TEXT_STYLE_BOLD) {
       attributes.push_back(L"font-weight:bold");
+    } else {
+      attributes.push_back(L"font-weight:normal");
+    }
 
     base::string16 font_style;
     if (text_style & ui::AX_TEXT_STYLE_ITALIC)
@@ -3854,6 +3884,60 @@ std::vector<base::string16> BrowserAccessibilityWin::ComputeTextAttributes()
 BrowserAccessibilityWin* BrowserAccessibilityWin::NewReference() {
   AddRef();
   return this;
+}
+
+std::map<int, std::vector<base::string16>>
+BrowserAccessibilityWin::GetSpellingAttributes() const {
+  std::map<int, std::vector<base::string16>> spelling_attributes;
+
+  // It doesn't make sense to expose spelling error information on anything
+  // other than a leaf object, because non-leaf objects do not expose text
+  // directly.
+  if (!PlatformIsLeaf())
+    return spelling_attributes;
+
+  if (IsTextOnlyObject()) {
+    const std::vector<int32_t>& marker_types =
+        GetIntListAttribute(ui::AX_ATTR_MARKER_TYPES);
+    const std::vector<int>& marker_starts =
+        GetIntListAttribute(ui::AX_ATTR_MARKER_STARTS);
+    const std::vector<int>& marker_ends =
+        GetIntListAttribute(ui::AX_ATTR_MARKER_ENDS);
+    for (size_t i = 0; i < marker_types.size(); ++i) {
+      if (!(static_cast<ui::AXMarkerType>(marker_types[i]) &
+            ui::AX_MARKER_TYPE_SPELLING))
+        continue;
+      int start_offset = marker_starts[i];
+      int end_offset = marker_ends[i];
+      std::vector<base::string16> start_attributes;
+      start_attributes.push_back(L"invalid:spelling");
+      std::vector<base::string16> end_attributes;
+      end_attributes.push_back(L"invalid:false");
+      spelling_attributes[start_offset] = start_attributes;
+      spelling_attributes[end_offset] = end_attributes;
+    }
+  }
+
+  if (IsSimpleTextControl()) {
+    int start_offset = 0;
+    for (const BrowserAccessibility* static_text =
+             BrowserAccessibilityManager::NextTextOnlyObject(
+                 InternalGetChild(0));
+         static_text; static_text = static_text->GetNextSibling()) {
+      auto text_win = ToBrowserAccessibilityWin(static_text);
+      if (text_win) {
+        std::map<int, std::vector<base::string16>> text_spelling_attributes =
+            text_win->GetSpellingAttributes();
+        for (auto& attribute : text_spelling_attributes) {
+          spelling_attributes[start_offset + attribute.first] =
+              std::move(attribute.second);
+        }
+        start_offset += static_cast<int>(text_win->GetText().length());
+      }
+    }
+  }
+
+  return spelling_attributes;
 }
 
 BrowserAccessibilityWin* BrowserAccessibilityWin::GetTargetFromChildID(
@@ -3965,7 +4049,8 @@ BrowserAccessibilityWin::GetHyperlinkFromHypertextOffset(int offset) const {
   DCHECK_GE(index, 0);
   DCHECK_LT(index, static_cast<int32_t>(hyperlinks().size()));
   int32_t id = hyperlinks()[index];
-  BrowserAccessibilityWin* hyperlink = GetFromID(id);
+  BrowserAccessibilityWin* hyperlink =
+      ToBrowserAccessibilityWin(GetFromUniqueID(id));
   if (!hyperlink)
     return nullptr;
   return hyperlink;
@@ -3976,8 +4061,8 @@ int32_t BrowserAccessibilityWin::GetHyperlinkIndexFromChild(
   if (hyperlinks().empty())
     return -1;
 
-  auto iterator = std::find(
-      hyperlinks().begin(), hyperlinks().end(), child.GetId());
+  auto iterator =
+      std::find(hyperlinks().begin(), hyperlinks().end(), child.unique_id());
   if (iterator == hyperlinks().end())
     return -1;
 
@@ -4337,6 +4422,7 @@ LONG BrowserAccessibilityWin::FindStartOfStyle(
     }
   }
 
+  NOTREACHED();
   return start_offset;
 }
 
@@ -4366,22 +4452,122 @@ bool BrowserAccessibilityWin::IsListBoxOptionOrMenuListOption() {
   return false;
 }
 
-void BrowserAccessibilityWin::AddRelations(
-    ui::AXIntListAttribute src_attr,
-    const base::string16& iaccessiblerelation_type) {
-  if (!HasIntListAttribute(src_attr))
+void BrowserAccessibilityWin::AddRelation(const base::string16& relation_type,
+                                          int target_id) {
+  // Reflexive relations don't need to be exposed through IA2.
+  if (target_id == GetId())
     return;
 
-  const std::vector<int32_t>& ids = GetIntListAttribute(src_attr);
-  for (size_t i = 0; i < ids.size(); ++i) {
-    CComObject<BrowserAccessibilityRelation>* relation;
-    HRESULT hr =
-        CComObject<BrowserAccessibilityRelation>::CreateInstance(&relation);
-    DCHECK(SUCCEEDED(hr));
-    relation->AddRef();
-    relation->Initialize(this, iaccessiblerelation_type);
-    relation->AddTarget(ids[i]);
-    relations_.push_back(relation);
+  CComObject<BrowserAccessibilityRelation>* relation;
+  HRESULT hr =
+      CComObject<BrowserAccessibilityRelation>::CreateInstance(&relation);
+  DCHECK(SUCCEEDED(hr));
+  relation->AddRef();
+  relation->Initialize(this, relation_type);
+  relation->AddTarget(target_id);
+  relations_.push_back(relation);
+}
+
+void BrowserAccessibilityWin::AddBidirectionalRelations(
+    const base::string16& relation_type,
+    const base::string16& reverse_relation_type,
+    ui::AXIntListAttribute attribute) {
+  if (!HasIntListAttribute(attribute))
+    return;
+
+  const std::vector<int32_t>& target_ids = GetIntListAttribute(attribute);
+  // Reflexive relations don't need to be exposed through IA2.
+  std::vector<int32_t> filtered_target_ids;
+  int32_t current_id = GetId();
+  std::copy_if(target_ids.begin(), target_ids.end(),
+               std::back_inserter(filtered_target_ids),
+               [current_id](int32_t id) { return id != current_id; });
+  if (filtered_target_ids.empty())
+    return;
+
+  CComObject<BrowserAccessibilityRelation>* relation;
+  HRESULT hr =
+      CComObject<BrowserAccessibilityRelation>::CreateInstance(&relation);
+  DCHECK(SUCCEEDED(hr));
+  relation->AddRef();
+  relation->Initialize(this, relation_type);
+
+  for (int target_id : filtered_target_ids) {
+    BrowserAccessibilityWin* target =
+        GetFromID(static_cast<int32_t>(target_id));
+    if (!target || !target->instance_active())
+      continue;
+    relation->AddTarget(target_id);
+    target->AddRelation(reverse_relation_type, GetId());
+  }
+
+  relations_.push_back(relation);
+}
+
+// Clears all the forward relations from this object to any other object and the
+// associated  reverse relations on the other objects, but leaves any reverse
+// relations on this object alone.
+void BrowserAccessibilityWin::ClearOwnRelations() {
+  RemoveBidirectionalRelationsOfType(IA2_RELATION_CONTROLLER_FOR,
+                                     IA2_RELATION_CONTROLLED_BY);
+  RemoveBidirectionalRelationsOfType(IA2_RELATION_DESCRIBED_BY,
+                                     IA2_RELATION_DESCRIPTION_FOR);
+  RemoveBidirectionalRelationsOfType(IA2_RELATION_FLOWS_TO,
+                                     IA2_RELATION_FLOWS_FROM);
+  RemoveBidirectionalRelationsOfType(IA2_RELATION_LABELLED_BY,
+                                     IA2_RELATION_LABEL_FOR);
+
+  relations_.erase(
+      std::remove_if(relations_.begin(), relations_.end(),
+                     [](BrowserAccessibilityRelation* relation) {
+                       if (relation->get_type() == IA2_RELATION_MEMBER_OF) {
+                         relation->Release();
+                         return true;
+                       }
+                       return false;
+                     }),
+      relations_.end());
+}
+
+void BrowserAccessibilityWin::RemoveBidirectionalRelationsOfType(
+    const base::string16& relation_type,
+    const base::string16& reverse_relation_type) {
+  for (auto iter = relations_.begin(); iter != relations_.end();) {
+    BrowserAccessibilityRelation* relation = *iter;
+    DCHECK(relation);
+    if (relation->get_type() == relation_type) {
+      for (int target_id : relation->get_target_ids()) {
+        BrowserAccessibilityWin* target =
+            GetFromID(static_cast<int32_t>(target_id));
+        if (!target || !target->instance_active())
+          continue;
+        DCHECK_NE(target, this);
+        target->RemoveTargetFromRelation(reverse_relation_type, GetId());
+      }
+      iter = relations_.erase(iter);
+      relation->Release();
+    } else {
+      ++iter;
+    }
+  }
+}
+
+void BrowserAccessibilityWin::RemoveTargetFromRelation(
+    const base::string16& relation_type,
+    int target_id) {
+  for (auto iter = relations_.begin(); iter != relations_.end();) {
+    BrowserAccessibilityRelation* relation = *iter;
+    DCHECK(relation);
+    if (relation->get_type() == relation_type) {
+      // If |target_id| is not present, |RemoveTarget| will do nothing.
+      relation->RemoveTarget(target_id);
+    }
+    if (relation->get_target_ids().empty()) {
+      iter = relations_.erase(iter);
+      relation->Release();
+    } else {
+      ++iter;
+    }
   }
 }
 

@@ -35,6 +35,7 @@
 #include "content/renderer/pepper/host_dispatcher_wrapper.h"
 #include "content/renderer/pepper/host_globals.h"
 #include "content/renderer/pepper/message_channel.h"
+#include "content/renderer/pepper/pepper_audio_controller.h"
 #include "content/renderer/pepper/pepper_browser_connection.h"
 #include "content/renderer/pepper/pepper_compositor_host.h"
 #include "content/renderer/pepper/pepper_file_ref_renderer_host.h"
@@ -529,6 +530,7 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
       isolate_(v8::Isolate::GetCurrent()),
       is_deleted_(false),
       initialized_(false),
+      audio_controller_(new PepperAudioController(this)),
       view_change_weak_ptr_factory_(this),
       weak_factory_(this) {
   pp_instance_ = HostGlobals::Get()->AddInstance(this);
@@ -536,8 +538,8 @@ PepperPluginInstanceImpl::PepperPluginInstanceImpl(
   memset(&current_print_settings_, 0, sizeof(current_print_settings_));
   module_->InstanceCreated(this);
 
-  if (render_frame) {  // NULL in tests
-    render_frame->PepperInstanceCreated(this);
+  if (render_frame_) {  // NULL in tests or if the frame has been destroyed.
+    render_frame_->PepperInstanceCreated(this);
     view_data_.is_page_visible = !render_frame_->GetRenderWidget()->is_hidden();
 
     // Set the initial focus.
@@ -584,6 +586,8 @@ PepperPluginInstanceImpl::~PepperPluginInstanceImpl() {
 
   if (TrackedCallback::IsPending(lock_mouse_callback_))
     lock_mouse_callback_->Abort();
+
+  audio_controller_->OnPepperInstanceDeleted();
 
   if (render_frame_)
     render_frame_->PepperInstanceDeleted(this);
@@ -684,7 +688,7 @@ void PepperPluginInstanceImpl::Delete() {
 
   // Force-unbind any Graphics. In the case of Graphics2D, if the plugin
   // leaks the graphics 2D, it may actually get cleaned up after our
-  // destruction, so we need its pointers to be up-to-date.
+  // destruction, so we need its pointers to be up to date.
   BindGraphics(pp_instance(), 0);
   container_ = NULL;
 }
@@ -756,20 +760,61 @@ void PepperPluginInstanceImpl::ScrollRect(int dx,
   }
 }
 
-void PepperPluginInstanceImpl::CommitBackingTexture() {
+void PepperPluginInstanceImpl::CommitTextureMailbox(
+    const cc::TextureMailbox& texture_mailbox) {
+  if (committed_texture_.IsValid() && !IsTextureInUse(committed_texture_)) {
+    committed_texture_graphics_3d_->ReturnFrontBuffer(
+        committed_texture_.mailbox(), committed_texture_consumed_sync_token_,
+        false);
+  }
+
+  committed_texture_ = texture_mailbox;
+  committed_texture_graphics_3d_ = bound_graphics_3d_;
+  committed_texture_consumed_sync_token_ = gpu::SyncToken();
+
   if (!texture_layer_) {
     UpdateLayer(true);
     return;
   }
 
-  gpu::Mailbox mailbox;
-  gpu::SyncToken sync_token;
-  bound_graphics_3d_->GetBackingMailbox(&mailbox, &sync_token);
-  DCHECK(!mailbox.IsZero());
-  DCHECK(sync_token.HasData());
-  texture_layer_->SetTextureMailboxWithoutReleaseCallback(
-      cc::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D));
+  PassCommittedTextureToTextureLayer();
   texture_layer_->SetNeedsDisplay();
+}
+
+void PepperPluginInstanceImpl::PassCommittedTextureToTextureLayer() {
+  DCHECK(bound_graphics_3d_);
+
+  if (!committed_texture_.IsValid())
+    return;
+
+  std::unique_ptr<cc::SingleReleaseCallback> callback(
+      cc::SingleReleaseCallback::Create(base::Bind(
+          &PepperPluginInstanceImpl::FinishedConsumingCommittedTexture,
+          weak_factory_.GetWeakPtr(), committed_texture_,
+          committed_texture_graphics_3d_)));
+
+  IncrementTextureReferenceCount(committed_texture_);
+  texture_layer_->SetTextureMailbox(committed_texture_, std::move(callback));
+}
+
+void PepperPluginInstanceImpl::FinishedConsumingCommittedTexture(
+    const cc::TextureMailbox& texture_mailbox,
+    scoped_refptr<PPB_Graphics3D_Impl> graphics_3d,
+    const gpu::SyncToken& sync_token,
+    bool is_lost) {
+  bool removed = DecrementTextureReferenceCount(texture_mailbox);
+  bool is_committed_texture =
+      committed_texture_.mailbox() == texture_mailbox.mailbox();
+
+  if (is_committed_texture && !is_lost) {
+    committed_texture_consumed_sync_token_ = sync_token;
+    return;
+  }
+
+  if (removed && !is_committed_texture) {
+    graphics_3d->ReturnFrontBuffer(texture_mailbox.mailbox(), sync_token,
+                                   is_lost);
+  }
 }
 
 void PepperPluginInstanceImpl::InstanceCrashed() {
@@ -843,6 +888,14 @@ bool PepperPluginInstanceImpl::Initialize(
     if (message_channel_)
       message_channel_->Start();
   }
+
+  if (success &&
+      render_frame_ &&
+      render_frame_->render_accessibility() &&
+      LoadPdfInterface()) {
+    plugin_pdf_interface_->EnableAccessibility(pp_instance());
+  }
+
   initialized_ = success;
   return success;
 }
@@ -1216,8 +1269,7 @@ PP_Var PepperPluginInstanceImpl::GetInstanceObject(v8::Isolate* isolate) {
 void PepperPluginInstanceImpl::ViewChanged(
     const gfx::Rect& window,
     const gfx::Rect& clip,
-    const gfx::Rect& unobscured,
-    const std::vector<gfx::Rect>& cut_outs_rects) {
+    const gfx::Rect& unobscured) {
   // WebKit can give weird (x,y) positions for empty clip rects (since the
   // position technically doesn't matter). But we want to make these
   // consistent since this is given to the plugin, so force everything to 0
@@ -1227,8 +1279,6 @@ void PepperPluginInstanceImpl::ViewChanged(
     new_clip = clip;
 
   unobscured_rect_ = unobscured;
-
-  cut_outs_rects_ = cut_outs_rects;
 
   view_data_.rect = PP_FromGfxRect(window);
   view_data_.clip_rect = PP_FromGfxRect(clip);
@@ -1251,9 +1301,7 @@ void PepperPluginInstanceImpl::ViewChanged(
                                           scroll_offset.height());
 
   if (desired_fullscreen_state_ || view_data_.is_fullscreen) {
-    WebElement element = container_->element();
-    WebDocument document = element.document();
-    bool is_fullscreen_element = (element == document.fullScreenElement());
+    bool is_fullscreen_element = container_->isFullscreenElement();
     if (!view_data_.is_fullscreen && desired_fullscreen_state_ &&
         render_frame()->GetRenderWidget()->is_fullscreen_granted() &&
         is_fullscreen_element) {
@@ -1424,12 +1472,13 @@ bool PepperPluginInstanceImpl::StartFind(const base::string16& search_text,
                                         PP_FromBool(case_sensitive)));
 }
 
-void PepperPluginInstanceImpl::SelectFindResult(bool forward) {
+void PepperPluginInstanceImpl::SelectFindResult(bool forward, int identifier) {
   // Keep a reference on the stack. See NOTE above.
   scoped_refptr<PepperPluginInstanceImpl> ref(this);
-  if (LoadFindInterface())
-    plugin_find_interface_->SelectFindResult(pp_instance(),
-                                             PP_FromBool(forward));
+  if (!LoadFindInterface())
+    return;
+  find_identifier_ = identifier;
+  plugin_find_interface_->SelectFindResult(pp_instance(), PP_FromBool(forward));
 }
 
 void PepperPluginInstanceImpl::StopFind() {
@@ -1921,9 +1970,9 @@ bool PepperPluginInstanceImpl::SetFullscreen(bool fullscreen) {
     // so we will tweak plugin's attributes to support the expected behavior.
     KeepSizeAttributesBeforeFullscreen();
     SetSizeAttributesForFullscreen();
-    container_->element().requestFullScreen();
+    container_->requestFullscreen();
   } else {
-    container_->document().cancelFullScreen();
+    container_->cancelFullscreen();
   }
   return true;
 }
@@ -2003,12 +2052,7 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
   if (!container_)
     return;
 
-  gpu::Mailbox mailbox;
-  gpu::SyncToken sync_token;
-  if (bound_graphics_3d_.get()) {
-    bound_graphics_3d_->GetBackingMailbox(&mailbox, &sync_token);
-  }
-  bool want_3d_layer = !mailbox.IsZero() && sync_token.HasData();
+  bool want_3d_layer = !!bound_graphics_3d_.get();
   bool want_2d_layer = !!bound_graphics_2d_platform_;
   bool want_texture_layer = want_3d_layer || want_2d_layer;
   bool want_compositor_layer = !!bound_compositor_;
@@ -2047,8 +2091,8 @@ void PepperPluginInstanceImpl::UpdateLayer(bool force_creation) {
       DCHECK(bound_graphics_3d_.get());
       texture_layer_ = cc::TextureLayer::CreateForMailbox(NULL);
       opaque = bound_graphics_3d_->IsOpaque();
-      texture_layer_->SetTextureMailboxWithoutReleaseCallback(
-          cc::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D));
+
+      PassCommittedTextureToTextureLayer();
     } else {
       DCHECK(bound_graphics_2d_platform_);
       texture_layer_ = cc::TextureLayer::CreateForMailbox(this);
@@ -2296,12 +2340,15 @@ PP_Bool PepperPluginInstanceImpl::BindGraphics(PP_Instance instance,
   if (compositor) {
     if (compositor->BindToInstance(this)) {
       bound_compositor_ = compositor;
+      bound_compositor_->set_viewport_to_dip_scale(viewport_to_dip_scale_);
       UpdateLayer(true);
       return PP_TRUE;
     }
   } else if (graphics_2d) {
     if (graphics_2d->BindToInstance(this)) {
       bound_graphics_2d_platform_ = graphics_2d;
+      bound_graphics_2d_platform_->set_viewport_to_dip_scale(
+          viewport_to_dip_scale_);
       UpdateLayer(true);
       return PP_TRUE;
     }
@@ -3338,6 +3385,49 @@ void PepperPluginInstanceImpl::ConvertDIPToViewport(gfx::Rect* rect) const {
   rect->set_y(rect->y() / viewport_to_dip_scale_);
   rect->set_width(rect->width() / viewport_to_dip_scale_);
   rect->set_height(rect->height() / viewport_to_dip_scale_);
+}
+
+void PepperPluginInstanceImpl::IncrementTextureReferenceCount(
+    const cc::TextureMailbox& mailbox) {
+  auto it =
+      std::find_if(texture_ref_counts_.begin(), texture_ref_counts_.end(),
+                   [&mailbox](const TextureMailboxRefCount& ref_count) {
+                     return ref_count.first.mailbox() == mailbox.mailbox();
+                   });
+  if (it == texture_ref_counts_.end()) {
+    texture_ref_counts_.push_back(std::make_pair(mailbox, 1));
+    return;
+  }
+
+  it->second++;
+}
+
+bool PepperPluginInstanceImpl::DecrementTextureReferenceCount(
+    const cc::TextureMailbox& mailbox) {
+  auto it =
+      std::find_if(texture_ref_counts_.begin(), texture_ref_counts_.end(),
+                   [&mailbox](const TextureMailboxRefCount& ref_count) {
+                     return ref_count.first.mailbox() == mailbox.mailbox();
+                   });
+  DCHECK(it != texture_ref_counts_.end());
+
+  if (it->second == 1) {
+    texture_ref_counts_.erase(it);
+    return true;
+  }
+
+  it->second--;
+  return false;
+}
+
+bool PepperPluginInstanceImpl::IsTextureInUse(
+    const cc::TextureMailbox& mailbox) const {
+  auto it =
+      std::find_if(texture_ref_counts_.begin(), texture_ref_counts_.end(),
+                   [&mailbox](const TextureMailboxRefCount& ref_count) {
+                     return ref_count.first.mailbox() == mailbox.mailbox();
+                   });
+  return it != texture_ref_counts_.end();
 }
 
 }  // namespace content

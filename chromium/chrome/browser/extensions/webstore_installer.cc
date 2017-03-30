@@ -245,7 +245,6 @@ WebstoreInstaller::Approval::Approval()
       use_app_installed_bubble(false),
       skip_post_install_ui(false),
       skip_install_dialog(false),
-      enable_launcher(false),
       manifest_check_level(MANIFEST_CHECK_LEVEL_STRICT) {
 }
 
@@ -373,28 +372,22 @@ void WebstoreInstaller::Start() {
 void WebstoreInstaller::Observe(int type,
                                 const content::NotificationSource& source,
                                 const content::NotificationDetails& details) {
-  switch (type) {
-    case extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR: {
-      CrxInstaller* crx_installer = content::Source<CrxInstaller>(source).ptr();
-      CHECK(crx_installer);
-      if (crx_installer != crx_installer_.get())
-        return;
+  DCHECK_EQ(extensions::NOTIFICATION_EXTENSION_INSTALL_ERROR, type);
 
-      // TODO(rdevlin.cronin): Continue removing std::string errors and
-      // replacing with base::string16. See crbug.com/71980.
-      const extensions::CrxInstallError* error =
-          content::Details<const extensions::CrxInstallError>(details).ptr();
-      const std::string utf8_error = base::UTF16ToUTF8(error->message());
-      crx_installer_ = NULL;
-      // ReportFailure releases a reference to this object so it must be the
-      // last operation in this method.
-      ReportFailure(utf8_error, FAILURE_REASON_OTHER);
-      break;
-    }
+  CrxInstaller* crx_installer = content::Source<CrxInstaller>(source).ptr();
+  CHECK(crx_installer);
+  if (crx_installer != crx_installer_.get())
+    return;
 
-    default:
-      NOTREACHED();
-  }
+  // TODO(rdevlin.cronin): Continue removing std::string errors and
+  // replacing with base::string16. See crbug.com/71980.
+  const extensions::CrxInstallError* error =
+      content::Details<const extensions::CrxInstallError>(details).ptr();
+  const std::string utf8_error = base::UTF16ToUTF8(error->message());
+  crx_installer_ = nullptr;
+  // ReportFailure releases a reference to this object so it must be the
+  // last operation in this method.
+  ReportFailure(utf8_error, FAILURE_REASON_OTHER);
 }
 
 void WebstoreInstaller::OnExtensionInstalled(

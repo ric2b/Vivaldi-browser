@@ -81,9 +81,6 @@ class AboutHandler : public settings::SettingsPageUIHandler,
   void PromoteUpdater(const base::ListValue* args);
 #endif
 
-  // Relaunches the browser. |args| must be empty.
-  void HandleRelaunchNow(const base::ListValue* args);
-
   // Opens the feedback dialog. |args| must be empty.
   void HandleOpenFeedbackDialog(const base::ListValue* args);
 
@@ -129,11 +126,11 @@ class AboutHandler : public settings::SettingsPageUIHandler,
   // Callback for when the directory with the regulatory label image and alt
   // text has been found.
   void OnRegulatoryLabelDirFound(std::string callback_id,
-                                 const base::FilePath& path);
+                                 const base::FilePath& label_dir_path);
 
   // Callback for when the regulatory text has been read.
   void OnRegulatoryLabelTextRead(std::string callback_id,
-                                 const base::FilePath& path,
+                                 const base::FilePath& label_dir_path,
                                  const std::string& text);
 #endif
 

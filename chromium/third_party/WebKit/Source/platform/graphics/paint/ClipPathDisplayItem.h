@@ -9,7 +9,6 @@
 #include "platform/graphics/Path.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "third_party/skia/include/core/SkPath.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
@@ -21,6 +20,8 @@ public:
 
     void replay(GraphicsContext&) const override;
     void appendToWebDisplayItemList(const IntRect&, WebDisplayItemList*) const override;
+
+    void analyzeForGpuRasterization(SkPictureGpuAnalyzer&) const override;
 
 private:
     const SkPath m_clipPath;

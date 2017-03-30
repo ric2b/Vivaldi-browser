@@ -25,6 +25,7 @@
 #include "base/gtest_prod_util.h"
 #include "core/CoreExport.h"
 #include "core/dom/AXObjectCache.h"
+#include "core/inspector/ConsoleTypes.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/NavigationPolicy.h"
 #include "core/style/ComputedStyleConstants.h"
@@ -33,14 +34,13 @@
 #include "platform/PopupMenu.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
-#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/WebDragOperation.h"
 #include "public/platform/WebEventListenerProperties.h"
 #include "public/platform/WebFocusType.h"
 #include "wtf/Forward.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
@@ -48,6 +48,7 @@ class AXObject;
 class ColorChooser;
 class ColorChooserClient;
 class CompositorAnimationTimeline;
+class CompositorProxyClient;
 class DateTimeChooser;
 class DateTimeChooserClient;
 class Element;
@@ -110,7 +111,7 @@ public:
     // created Page has its show method called.
     // The FrameLoadRequest parameter is only for ChromeClient to check if the
     // request could be fulfilled. The ChromeClient should not load the request.
-    virtual Page* createWindow(LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy, ShouldSetOpener) = 0;
+    virtual Page* createWindow(LocalFrame*, const FrameLoadRequest&, const WindowFeatures&, NavigationPolicy) = 0;
     virtual void show(NavigationPolicy = NavigationPolicyIgnore) = 0;
 
     void setWindowFeatures(const WindowFeatures&);
@@ -238,8 +239,8 @@ public:
 
     virtual bool isSVGImageChromeClient() const { return false; }
 
-    virtual bool requestPointerLock() { return false; }
-    virtual void requestPointerUnlock() { }
+    virtual bool requestPointerLock(LocalFrame*) { return false; }
+    virtual void requestPointerUnlock(LocalFrame*) {}
 
     virtual IntSize minimumWindowSize() const { return IntSize(100, 100); }
 
@@ -269,6 +270,8 @@ public:
     virtual void registerPopupOpeningObserver(PopupOpeningObserver*) = 0;
     virtual void unregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
 
+    virtual CompositorProxyClient* createCompositorProxyClient(LocalFrame*) = 0;
+
     virtual FloatSize elasticOverscroll() const { return FloatSize(); }
 
     // Called when observed XHR, fetch, and other fetch request with non-GET
@@ -276,7 +279,7 @@ public:
     // that this is comprehensive.
     virtual void didObserveNonGetFetchFromScript() const {}
 
-    virtual PassOwnPtr<WebFrameScheduler> createFrameScheduler(BlameContext*) = 0;
+    virtual std::unique_ptr<WebFrameScheduler> createFrameScheduler(BlameContext*) = 0;
 
     // Returns the time of the beginning of the last beginFrame, in seconds, if any, and 0.0 otherwise.
     virtual double lastFrameTimeMonotonic() const { return 0.0; }

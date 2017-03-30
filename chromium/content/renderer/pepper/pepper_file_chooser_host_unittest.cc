@@ -3,10 +3,12 @@
 // found in the LICENSE file.
 
 #include <stdint.h>
+#include <tuple>
 
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "content/common/frame_messages.h"
 #include "content/common/view_messages.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
@@ -91,11 +93,11 @@ TEST_F(PepperFileChooserHostTest, Show) {
   // The render view should have sent a chooser request to the browser
   // (caught by the render thread's test message sink).
   const IPC::Message* msg = render_thread_->sink().GetUniqueMessageMatching(
-      ViewHostMsg_RunFileChooser::ID);
+      FrameHostMsg_RunFileChooser::ID);
   ASSERT_TRUE(msg);
-  ViewHostMsg_RunFileChooser::Schema::Param call_msg_param;
-  ASSERT_TRUE(ViewHostMsg_RunFileChooser::Read(msg, &call_msg_param));
-  const FileChooserParams& chooser_params = base::get<0>(call_msg_param);
+  FrameHostMsg_RunFileChooser::Schema::Param call_msg_param;
+  ASSERT_TRUE(FrameHostMsg_RunFileChooser::Read(msg, &call_msg_param));
+  const FileChooserParams& chooser_params = std::get<0>(call_msg_param);
 
   // Basic validation of request.
   EXPECT_EQ(FileChooserParams::Open, chooser_params.mode);
@@ -109,10 +111,11 @@ TEST_F(PepperFileChooserHostTest, Show) {
   selected_info.file_path = base::FilePath(FILE_PATH_LITERAL("myp\\ath/foo"));
   std::vector<content::FileChooserFileInfo> selected_info_vector;
   selected_info_vector.push_back(selected_info);
-  RenderViewImpl* view_impl = static_cast<RenderViewImpl*>(view_);
-  ViewMsg_RunFileChooserResponse response(view_impl->GetRoutingID(),
-                                          selected_info_vector);
-  EXPECT_TRUE(view_impl->OnMessageReceived(response));
+  RenderFrameImpl* frame_impl =
+      static_cast<RenderFrameImpl*>(view_->GetMainRenderFrame());
+  FrameMsg_RunFileChooserResponse response(frame_impl->GetRoutingID(),
+                                           selected_info_vector);
+  EXPECT_TRUE(frame_impl->OnMessageReceived(response));
 
   // This should have sent the Pepper reply to our test sink.
   ppapi::proxy::ResourceMessageReplyParams reply_params;
@@ -127,7 +130,7 @@ TEST_F(PepperFileChooserHostTest, Show) {
   ASSERT_TRUE(
       PpapiPluginMsg_FileChooser_ShowReply::Read(&reply_msg, &reply_msg_param));
   const std::vector<ppapi::FileRefCreateInfo>& chooser_results =
-      base::get<0>(reply_msg_param);
+      std::get<0>(reply_msg_param);
   ASSERT_EQ(1u, chooser_results.size());
   EXPECT_EQ(FilePathToUTF8(selected_info.display_name),
             chooser_results[0].display_name);

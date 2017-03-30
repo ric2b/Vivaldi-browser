@@ -16,6 +16,10 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
+#include "components/data_reduction_proxy/core/browser/data_use_group.h"
+#include "components/data_reduction_proxy/core/browser/data_use_group_provider.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/lofi_decider.h"
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
@@ -26,6 +30,7 @@
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
+#include "url/gurl.h"
 
 namespace {
 
@@ -158,6 +163,16 @@ void DataReductionProxyNetworkDelegate::OnBeforeURLRequestInternal(
     net::URLRequest* request,
     const net::CompletionCallback& callback,
     GURL* new_url) {
+  if (data_use_group_provider_) {
+    // Creates and initializes a |DataUseGroup| for the |request| if it does not
+    // exist. Even though we do not use the |DataUseGroup| here, we want to
+    // associate one with a request as early as possible in case the frame
+    // associated with the request goes away before the request is completed.
+    scoped_refptr<DataUseGroup> data_use_group =
+        data_use_group_provider_->GetDataUseGroup(request);
+    data_use_group->Initialize();
+  }
+
   // |data_reduction_proxy_io_data_| can be NULL for Webview.
   if (data_reduction_proxy_io_data_ &&
       (request->load_flags() & net::LOAD_MAIN_FRAME)) {
@@ -165,14 +180,26 @@ void DataReductionProxyNetworkDelegate::OnBeforeURLRequestInternal(
   }
 }
 
-void DataReductionProxyNetworkDelegate::OnBeforeSendProxyHeadersInternal(
+void DataReductionProxyNetworkDelegate::OnBeforeSendHeadersInternal(
     net::URLRequest* request,
     const net::ProxyInfo& proxy_info,
+    const net::ProxyRetryInfoMap& proxy_retry_info,
     net::HttpRequestHeaders* headers) {
   DCHECK(data_reduction_proxy_config_);
-  if (!proxy_info.proxy_server().is_valid())
+  DCHECK(request);
+  if (params::IsIncludedInHoldbackFieldTrial()) {
+    if (!WasEligibleWithoutHoldback(*request, proxy_info, proxy_retry_info))
+      return;
+    // For the holdback field trial, still log UMA as if the proxy was used.
+    DataReductionProxyData* data =
+        DataReductionProxyData::GetDataAndCreateIfNecessary(request);
+    if (data)
+      data->set_used_data_reduction_proxy(true);
     return;
-  if (proxy_info.proxy_server().is_direct())
+  }
+
+  // The following checks rule out direct, invalid, and othe connection types.
+  if (!proxy_info.is_http() && !proxy_info.is_https() && !proxy_info.is_quic())
     return;
   if (proxy_info.proxy_server().host_port_pair().IsEmpty())
     return;
@@ -185,23 +212,26 @@ void DataReductionProxyNetworkDelegate::OnBeforeSendProxyHeadersInternal(
   // if needed.
   DataReductionProxyData* data =
       DataReductionProxyData::GetDataAndCreateIfNecessary(request);
-  if (data)
+  if (data) {
     data->set_used_data_reduction_proxy(true);
+    data->set_session_key(
+        data_reduction_proxy_request_options_->GetSecureSession());
+    data->set_original_request_url(request->original_url());
+  }
 
   if (data_reduction_proxy_io_data_ &&
-      data_reduction_proxy_io_data_->lofi_decider() && request) {
+      data_reduction_proxy_io_data_->lofi_decider()) {
     LoFiDecider* lofi_decider = data_reduction_proxy_io_data_->lofi_decider();
-    bool is_using_lofi_mode =
+    const bool is_using_lofi_mode =
         lofi_decider->MaybeAddLoFiDirectiveToHeaders(*request, headers);
 
     if ((request->load_flags() & net::LOAD_MAIN_FRAME)) {
       data_reduction_proxy_io_data_->SetLoFiModeActiveOnMainFrame(
           is_using_lofi_mode);
     }
-    // Retrieves DataReductionProxyData from a request.
-    DataReductionProxyData* data = DataReductionProxyData::GetData(*request);
+
     if (data)
-      data->set_lofi_requested(is_using_lofi_mode);
+      data->set_lofi_requested(lofi_decider->ShouldRecordLoFiUMA(*request));
   }
 
   if (data_reduction_proxy_request_options_) {
@@ -282,12 +312,11 @@ void DataReductionProxyNetworkDelegate::CalculateAndRecordDataUsage(
   if (request.response_headers())
     request.response_headers()->GetMimeType(&mime_type);
 
-  std::string data_usage_host =
-      request.first_party_for_cookies().HostNoBrackets();
-  if (data_usage_host.empty())
-    data_usage_host = request.url().HostNoBrackets();
-
-  AccumulateDataUsage(data_used, original_size, request_type, data_usage_host,
+  scoped_refptr<DataUseGroup> data_use_group =
+      data_use_group_provider_
+          ? data_use_group_provider_->GetDataUseGroup(&request)
+          : nullptr;
+  AccumulateDataUsage(data_used, original_size, request_type, data_use_group,
                       mime_type);
 }
 
@@ -295,14 +324,14 @@ void DataReductionProxyNetworkDelegate::AccumulateDataUsage(
     int64_t data_used,
     int64_t original_size,
     DataReductionProxyRequestType request_type,
-    const std::string& data_usage_host,
+    const scoped_refptr<DataUseGroup>& data_use_group,
     const std::string& mime_type) {
   DCHECK_GE(data_used, 0);
   DCHECK_GE(original_size, 0);
   if (data_reduction_proxy_io_data_) {
     data_reduction_proxy_io_data_->UpdateContentLengths(
         data_used, original_size, data_reduction_proxy_io_data_->IsEnabled(),
-        request_type, data_usage_host, mime_type);
+        request_type, data_use_group, mime_type);
   }
   total_received_bytes_ += data_used;
   total_original_received_bytes_ += original_size;
@@ -345,6 +374,30 @@ void DataReductionProxyNetworkDelegate::RecordLoFiTransformationType(
     LoFiTransformationType type) {
   UMA_HISTOGRAM_ENUMERATION("DataReductionProxy.LoFi.TransformationType", type,
                             LO_FI_TRANSFORMATION_TYPES_INDEX_BOUNDARY);
+}
+
+bool DataReductionProxyNetworkDelegate::WasEligibleWithoutHoldback(
+    const net::URLRequest& request,
+    const net::ProxyInfo& proxy_info,
+    const net::ProxyRetryInfoMap& proxy_retry_info) const {
+  DCHECK(proxy_info.is_empty() || proxy_info.is_direct() ||
+         !data_reduction_proxy_config_->IsDataReductionProxy(
+             proxy_info.proxy_server().host_port_pair(), nullptr));
+  if (!util::EligibleForDataReductionProxy(proxy_info, request.url(),
+                                           request.method())) {
+    return false;
+  }
+  net::ProxyConfig proxy_config =
+      data_reduction_proxy_config_->ProxyConfigIgnoringHoldback();
+  net::ProxyInfo data_reduction_proxy_info;
+  return util::ApplyProxyConfigToProxyInfo(proxy_config, proxy_retry_info,
+                                           request.url(),
+                                           &data_reduction_proxy_info);
+}
+
+void DataReductionProxyNetworkDelegate::SetDataUseGroupProvider(
+    std::unique_ptr<DataUseGroupProvider> data_use_group_provider) {
+  data_use_group_provider_.reset(data_use_group_provider.release());
 }
 
 }  // namespace data_reduction_proxy

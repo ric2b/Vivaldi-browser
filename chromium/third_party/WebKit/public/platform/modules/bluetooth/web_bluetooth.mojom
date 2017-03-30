@@ -4,6 +4,8 @@
 
 module blink.mojom;
 
+import "device/bluetooth/public/interfaces/bluetooth_uuid.mojom";
+
 // Errors that can occur during Web Bluetooth execution, which are transformed
 // to a DOMException in Source/modules/bluetooth/BluetoothError.cpp.
 //
@@ -46,8 +48,10 @@ enum WebBluetoothError {
   CHOOSER_NOT_SHOWN_API_LOCALLY_DISABLED,
   CHOOSER_NOT_SHOWN_USER_DENIED_PERMISSION_TO_SCAN,
   SERVICE_NOT_FOUND,
+  NO_SERVICES_FOUND,
   CHARACTERISTIC_NOT_FOUND,
   NO_CHARACTERISTICS_FOUND,
+  WEB_BLUETOOTH_NOT_SUPPORTED,
   // NotSupportedError:
   GATT_UNKNOWN_ERROR,
   GATT_UNKNOWN_FAILURE,
@@ -68,11 +72,28 @@ enum WebBluetoothError {
   ENUM_MAX_VALUE = REQUEST_DEVICE_WITHOUT_FRAME,
 };
 
+struct WebBluetoothScanFilter {
+  array<device.mojom.BluetoothUUID>? services;
+  string? name;
+  string? name_prefix;
+};
+
+struct WebBluetoothRequestDeviceOptions {
+  array<WebBluetoothScanFilter> filters;
+  array<device.mojom.BluetoothUUID> optional_services;
+};
+
 // Indicates if the function will return a single or multiple
 // GATT objects.
 enum WebBluetoothGATTQueryQuantity {
   SINGLE,
   MULTIPLE
+};
+
+struct WebBluetoothDevice {
+  string id;
+  string name;
+  array<string> uuids;
 };
 
 struct WebBluetoothRemoteGATTService {
@@ -86,9 +107,6 @@ struct WebBluetoothRemoteGATTCharacteristic {
   uint32 properties;
 };
 
-// TODO(ortuno): Define Bluetooth Service.
-// https://crbug.com/508771
-
 // Web Bluetooth Interface that Blink can use to perform
 // Bluetooth GATT Operations on Bluetooth Devices.
 interface WebBluetoothService {
@@ -96,6 +114,9 @@ interface WebBluetoothService {
   // client of device events e.g. when a Characteristic's value changes or when
   // a device disconnects.
   SetClient(associated WebBluetoothServiceClient client);
+
+  RequestDevice(WebBluetoothRequestDeviceOptions options)
+    => (WebBluetoothError error, WebBluetoothDevice? device);
 
   // Creates a GATT Connection to a Bluetooth Device with |device_id| if a
   // connection to the device didn't exist already. If a GATT connection existed
@@ -107,13 +128,16 @@ interface WebBluetoothService {
   // the ref count for that connection.
   RemoteServerDisconnect(string device_id);
 
-  // Returns the first GATT Service with |service_uuid| of a Bluetooth Device
-  // with |device_id|.
-  RemoteServerGetPrimaryService(
+  // If |services_uuid| is present, returns services with |services_uuid|.
+  // Otherwise returns all non-blacklisted services.
+  // If |quantity| == WebBluetoothGATTQueryQuantity::SINGLE, only one
+  // service will be returned.
+  RemoteServerGetPrimaryServices(
     string device_id,
-    string service_uuid) => (
+    WebBluetoothGATTQueryQuantity quantity,
+    device.mojom.BluetoothUUID? services_uuid) => (
       WebBluetoothError error,
-      WebBluetoothRemoteGATTService? service);
+      array<WebBluetoothRemoteGATTService>? services);
 
   // Returns the Characteristics of a GATT Service with |service_instance_id|.
   // If |quantity| == WebBluetoothGATTQueryQuantity::SINGLE, only one
@@ -121,7 +145,7 @@ interface WebBluetoothService {
   RemoteServiceGetCharacteristics(
     string service_instance_id,
     WebBluetoothGATTQueryQuantity quantity,
-    string? characteristics_uuid) => (
+    device.mojom.BluetoothUUID? characteristics_uuid) => (
       WebBluetoothError error,
       array<WebBluetoothRemoteGATTCharacteristic>? characteristics);
 

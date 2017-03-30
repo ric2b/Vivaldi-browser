@@ -31,7 +31,7 @@ int WindowFormat(gfx::BufferFormat format) {
     case gfx::BufferFormat::RGBX_8888:
     case gfx::BufferFormat::BGRX_8888:
     case gfx::BufferFormat::BGRA_8888:
-    case gfx::BufferFormat::YUV_420:
+    case gfx::BufferFormat::YVU_420:
     case gfx::BufferFormat::YUV_420_BIPLANAR:
     case gfx::BufferFormat::UYVY_422:
       NOTREACHED();
@@ -43,7 +43,7 @@ int WindowFormat(gfx::BufferFormat format) {
 }
 
 void FreeSurfaceTextureForTesting(
-    scoped_refptr<gfx::SurfaceTexture> surface_texture,
+    scoped_refptr<gl::SurfaceTexture> surface_texture,
     gfx::GpuMemoryBufferId id) {
   gpu::SurfaceTextureManager::GetInstance()->UnregisterSurfaceTexture(id.id, 0);
 }
@@ -97,8 +97,8 @@ base::Closure GpuMemoryBufferImplSurfaceTexture::AllocateForTesting(
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     gfx::GpuMemoryBufferHandle* handle) {
-  scoped_refptr<gfx::SurfaceTexture> surface_texture =
-      gfx::SurfaceTexture::Create(0);
+  scoped_refptr<gl::SurfaceTexture> surface_texture =
+      gl::SurfaceTexture::Create(0);
   DCHECK(surface_texture);
   const gfx::GpuMemoryBufferId kBufferId(1);
   gpu::SurfaceTextureManager::GetInstance()->RegisterSurfaceTexture(

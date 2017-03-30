@@ -35,6 +35,7 @@
 #include "public/platform/WebURLLoader.h"
 #include "public/platform/WebURLLoaderClient.h"
 #include "wtf/Forward.h"
+#include <memory>
 
 namespace blink {
 
@@ -48,7 +49,7 @@ public:
     ~ResourceLoader() override;
     DECLARE_TRACE();
 
-    void start(ResourceRequest&);
+    void start(const ResourceRequest&, WebTaskRunner* loadingTaskRunner, bool defersLoading);
     void cancel();
 
     void setDefersLoading(bool);
@@ -83,11 +84,11 @@ private:
     // Assumes ResourceFetcher and Resource are non-null.
     ResourceLoader(ResourceFetcher*, Resource*);
 
-    void requestSynchronously(ResourceRequest&);
+    void requestSynchronously(const ResourceRequest&);
 
     bool responseNeedsAccessControlCheck() const;
 
-    OwnPtr<WebURLLoader> m_loader;
+    std::unique_ptr<WebURLLoader> m_loader;
     Member<ResourceFetcher> m_fetcher;
     Member<Resource> m_resource;
 };

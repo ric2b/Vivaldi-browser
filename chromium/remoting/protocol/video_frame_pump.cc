@@ -107,12 +107,14 @@ void VideoFramePump::SetLosslessColor(bool want_lossless) {
                             base::Unretained(encoder_.get()), want_lossless));
 }
 
-void VideoFramePump::SetSizeCallback(const SizeCallback& size_callback) {
+void VideoFramePump::SetObserver(Observer* observer) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  size_callback_ = size_callback;
+  observer_ = observer;
 }
 
-void VideoFramePump::OnCaptureCompleted(webrtc::DesktopFrame* frame) {
+void VideoFramePump::OnCaptureResult(
+    webrtc::DesktopCapturer::Result result,
+    std::unique_ptr<webrtc::DesktopFrame> frame) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   capture_scheduler_.OnCaptureCompleted();
@@ -126,8 +128,8 @@ void VideoFramePump::OnCaptureCompleted(webrtc::DesktopFrame* frame) {
     if (!frame_size_.equals(frame->size()) || !frame_dpi_.equals(dpi)) {
       frame_size_ = frame->size();
       frame_dpi_ = dpi;
-      if (!size_callback_.is_null())
-        size_callback_.Run(frame_size_, frame_dpi_);
+      if (observer_)
+        observer_->OnVideoSizeChanged(this, frame_size_, frame_dpi_);
     }
   }
 
@@ -137,7 +139,7 @@ void VideoFramePump::OnCaptureCompleted(webrtc::DesktopFrame* frame) {
   base::PostTaskAndReplyWithResult(
       encode_task_runner_.get(), FROM_HERE,
       base::Bind(&VideoFramePump::EncodeFrame, encoder_.get(),
-                 base::Passed(base::WrapUnique(frame)),
+                 base::Passed(&frame),
                  base::Passed(&captured_frame_timestamps_)),
       base::Bind(&VideoFramePump::OnFrameEncoded, weak_factory_.GetWeakPtr()));
 }
@@ -205,6 +207,12 @@ void VideoFramePump::SendPacket(std::unique_ptr<PacketWithTimestamps> packet) {
 
   packet->timestamps->can_send_time = base::TimeTicks::Now();
   UpdateFrameTimers(packet->packet.get(), packet->timestamps.get());
+
+  if (observer_) {
+    observer_->OnVideoFrameSent(
+        this, packet->packet->frame_id(),
+        packet->timestamps->input_event_client_timestamp);
+  }
 
   send_pending_ = true;
   video_stub_->ProcessVideoPacket(std::move(packet->packet),

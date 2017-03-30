@@ -40,6 +40,7 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -58,7 +59,7 @@ protected:
     void setHtmlInnerHTML(const char*);
 
 private:
-    OwnPtr<DummyPageHolder> m_dummyPageHolder;
+    std::unique_ptr<DummyPageHolder> m_dummyPageHolder;
 };
 
 void DocumentTest::SetUp()
@@ -184,12 +185,18 @@ TEST_F(DocumentTest, referrerPolicyParsing)
         const char* policy;
         ReferrerPolicy expected;
     } tests[] = {
+        { "", ReferrerPolicyDefault },
+        // Test that invalid policy values are ignored.
+        { "not-a-real-policy", ReferrerPolicyDefault },
+        { "not-a-real-policy,also-not-a-real-policy", ReferrerPolicyDefault },
+        { "not-a-real-policy,unsafe-url", ReferrerPolicyAlways },
+        { "unsafe-url,not-a-real-policy", ReferrerPolicyAlways },
+        // Test parsing each of the policy values.
         { "always", ReferrerPolicyAlways },
         { "default", ReferrerPolicyNoReferrerWhenDowngrade },
         { "never", ReferrerPolicyNever },
         { "no-referrer", ReferrerPolicyNever },
         { "no-referrer-when-downgrade", ReferrerPolicyNoReferrerWhenDowngrade },
-        { "not-a-real-policy", ReferrerPolicyDefault },
         { "origin", ReferrerPolicyOrigin },
         { "origin-when-crossorigin", ReferrerPolicyOriginWhenCrossOrigin },
         { "origin-when-cross-origin", ReferrerPolicyOriginWhenCrossOrigin },
@@ -198,8 +205,7 @@ TEST_F(DocumentTest, referrerPolicyParsing)
 
     for (auto test : tests) {
         document().setReferrerPolicy(ReferrerPolicyDefault);
-
-        document().processReferrerPolicy(test.policy);
+        document().parseAndSetReferrerPolicy(test.policy);
         EXPECT_EQ(test.expected, document().getReferrerPolicy()) << test.policy;
     }
 }

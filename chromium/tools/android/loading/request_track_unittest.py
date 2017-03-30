@@ -4,10 +4,11 @@
 
 import copy
 import json
+import sys
 import unittest
 
 from request_track import (TimeBetween, Request, CachingPolicy, RequestTrack,
-                           Timing)
+                           Timing, _ParseStringToInt)
 
 
 class TimeBetweenTestCase(unittest.TestCase):
@@ -84,6 +85,47 @@ class RequestTestCase(unittest.TestCase):
                       r.GetRawResponseHeaders())
 
 
+class ParseStringToIntTestCase(unittest.TestCase):
+  def runTest(self):
+    MININT = -sys.maxint - 1
+    # Same test cases as in string_number_conversions_unittest.cc
+    CASES = [
+        ("0", 0),
+        ("42", 42),
+        ("-2147483648", -2147483648),
+        ("2147483647", 2147483647),
+        ("-2147483649", -2147483649),
+        ("-99999999999", -99999999999),
+        ("2147483648", 2147483648),
+        ("99999999999", 99999999999),
+        ("9223372036854775807", sys.maxint),
+        ("-9223372036854775808", MININT),
+        ("09", 9),
+        ("-09", -9),
+        ("", 0),
+        (" 42", 42),
+        ("42 ", 42),
+        ("0x42", 0),
+        ("\t\n\v\f\r 42", 42),
+        ("blah42", 0),
+        ("42blah", 42),
+        ("blah42blah", 0),
+        ("-273.15", -273),
+        ("+98.6", 98),
+        ("--123", 0),
+        ("++123", 0),
+        ("-+123", 0),
+        ("+-123", 0),
+        ("-", 0),
+        ("-9223372036854775809", MININT),
+        ("-99999999999999999999", MININT),
+        ("9223372036854775808", sys.maxint),
+        ("99999999999999999999", sys.maxint)]
+    for string, expected_int in CASES:
+      parsed_int = _ParseStringToInt(string)
+      self.assertEquals(expected_int, parsed_int)
+
+
 class CachingPolicyTestCase(unittest.TestCase):
   _REQUEST = {
       'encoded_data_length': 14726,
@@ -132,7 +174,7 @@ class CachingPolicyTestCase(unittest.TestCase):
 
   def testPolicyMaxAge(self):
     r = self._MakeRequest()
-    r.response_headers['Cache-Control'] = 'whatever,max-age=1000,whatever'
+    r.response_headers['Cache-Control'] = 'whatever,max-age=  1000,whatever'
     self.assertEqual(
         CachingPolicy.VALIDATION_NONE,
         CachingPolicy(r).PolicyAtDate(r.wall_time))
@@ -149,7 +191,7 @@ class CachingPolicyTestCase(unittest.TestCase):
         CachingPolicy.VALIDATION_NONE,
         CachingPolicy(r).PolicyAtDate(r.wall_time))
     # Max-Age < age
-    r.response_headers['Cache-Control'] = 'whatever,max-age=100,whatever'
+    r.response_headers['Cache-Control'] = 'whatever,max-age=100crap,whatever'
     self.assertEqual(
         CachingPolicy.VALIDATION_SYNC,
         CachingPolicy(r).PolicyAtDate(r.wall_time + 2))
@@ -174,13 +216,16 @@ class CachingPolicyTestCase(unittest.TestCase):
   def testStaleWhileRevalidate(self):
     r = self._MakeRequest()
     r.response_headers['Cache-Control'] = (
-        'whatever,max-age=100,stale-while-revalidate=2000')
+        'whatever,max-age=1000,stale-while-revalidate=2000')
     self.assertEqual(
         CachingPolicy.VALIDATION_ASYNC,
         CachingPolicy(r).PolicyAtDate(r.wall_time + 200))
     self.assertEqual(
-        CachingPolicy.VALIDATION_SYNC,
+        CachingPolicy.VALIDATION_ASYNC,
         CachingPolicy(r).PolicyAtDate(r.wall_time + 2000))
+    self.assertEqual(
+        CachingPolicy.VALIDATION_SYNC,
+        CachingPolicy(r).PolicyAtDate(r.wall_time + 3100))
     # must-revalidate overrides stale-while-revalidate.
     r.response_headers['Cache-Control'] += ',must-revalidate'
     self.assertEqual(
@@ -355,11 +400,24 @@ class RequestTrackTestCase(unittest.TestCase):
           "encodedDataLength": 32768,
           "requestId": "32493.1",
           "timestamp": 5571441.893121}}
+  _SERVED_FROM_CACHE = {
+      "method": "Network.requestServedFromCache",
+      "params": {
+          "requestId": "32493.1"}}
   _LOADING_FINISHED = {'method': 'Network.loadingFinished',
                        'params': {
                            'encodedDataLength': 101829,
                            'requestId': '32493.1',
                            'timestamp': 5571441.891189}}
+  _LOADING_FAILED = {'method': 'Network.loadingFailed',
+                     'params': {
+                         'canceled': False,
+                         'blockedReason': None,
+                         'encodedDataLength': 101829,
+                         'errorText': 'net::ERR_TOO_MANY_REDIRECTS',
+                         'requestId': '32493.1',
+                         'timestamp': 5571441.891189,
+                         'type': 'Document'}}
 
   def setUp(self):
     self.request_track = RequestTrack(None)
@@ -434,6 +492,13 @@ class RequestTrackTestCase(unittest.TestCase):
     with self.assertRaises(AssertionError):
       self.request_track.Handle('Network.requestWillBeSent', msg)
 
+  def testSequenceOfGeneratedResponse(self):
+    self.request_track.Handle('Network.requestServedFromCache',
+                              RequestTrackTestCase._SERVED_FROM_CACHE)
+    self.request_track.Handle('Network.loadingFinished',
+                              RequestTrackTestCase._LOADING_FINISHED)
+    self.assertEquals(0, len(self.request_track.GetEvents()))
+
   def testInvalidSequence(self):
     msg1 = RequestTrackTestCase._REQUEST_WILL_BE_SENT
     msg2 = RequestTrackTestCase._LOADING_FINISHED
@@ -503,6 +568,17 @@ class RequestTrackTestCase(unittest.TestCase):
     self.assertEquals(1, self.request_track.duplicates_count)
     with self.assertRaises(AssertionError):
       self.request_track.Handle('Network.responseReceived', msg2_different)
+
+  def testLoadingFailed(self):
+    self.request_track.Handle('Network.requestWillBeSent',
+                              RequestTrackTestCase._REQUEST_WILL_BE_SENT)
+    self.request_track.Handle('Network.responseReceived',
+                              RequestTrackTestCase._RESPONSE_RECEIVED)
+    self.request_track.Handle('Network.loadingFailed',
+                              RequestTrackTestCase._LOADING_FAILED)
+    r = self.request_track.GetEvents()[0]
+    self.assertTrue(r.failed)
+    self.assertEquals('net::ERR_TOO_MANY_REDIRECTS', r.error_text)
 
   def testCanSerialize(self):
     self._ValidSequence(self.request_track)

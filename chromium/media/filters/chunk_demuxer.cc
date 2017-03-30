@@ -15,10 +15,13 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/bind_to_current_loop.h"
+#include "media/base/media_tracks.h"
 #include "media/base/stream_parser_buffer.h"
 #include "media/base/timestamp_constants.h"
+#include "media/base/video_codecs.h"
 #include "media/base/video_decoder_config.h"
 #include "media/filters/frame_processor.h"
 #include "media/filters/stream_parser_factory.h"
@@ -28,13 +31,14 @@ using base::TimeDelta;
 namespace media {
 
 ChunkDemuxerStream::ChunkDemuxerStream(Type type,
-                                       bool splice_frames_enabled)
+                                       bool splice_frames_enabled,
+                                       MediaTrack::Id media_track_id)
     : type_(type),
       liveness_(DemuxerStream::LIVENESS_UNKNOWN),
+      media_track_id_(media_track_id),
       state_(UNINITIALIZED),
       splice_frames_enabled_(splice_frames_enabled),
-      partial_append_window_trimming_enabled_(false) {
-}
+      partial_append_window_trimming_enabled_(false) {}
 
 void ChunkDemuxerStream::StartReturningData() {
   DVLOG(1) << "ChunkDemuxerStream::StartReturningData()";
@@ -151,6 +155,10 @@ Ranges<TimeDelta> ChunkDemuxerStream::GetBufferedRanges(
   Ranges<TimeDelta> valid_time_range;
   valid_time_range.Add(range.start(0), duration);
   return range.IntersectionWith(valid_time_range);
+}
+
+TimeDelta ChunkDemuxerStream::GetHighestPresentationTimestamp() const {
+  return stream_->GetHighestPresentationTimestamp();
 }
 
 TimeDelta ChunkDemuxerStream::GetBufferedDuration() const {
@@ -589,6 +597,17 @@ Ranges<TimeDelta> ChunkDemuxer::GetBufferedRanges(const std::string& id) const {
   return itr->second->GetBufferedRanges(duration_, state_ == ENDED);
 }
 
+base::TimeDelta ChunkDemuxer::GetHighestPresentationTimestamp(
+    const std::string& id) const {
+  base::AutoLock auto_lock(lock_);
+  DCHECK(!id.empty());
+
+  MediaSourceStateMap::const_iterator itr = source_state_map_.find(id);
+
+  DCHECK(itr != source_state_map_.end());
+  return itr->second->GetHighestPresentationTimestamp();
+}
+
 bool ChunkDemuxer::EvictCodedFrames(const std::string& id,
                                     base::TimeDelta currentMediaTime,
                                     size_t newDataSize) {
@@ -612,7 +631,7 @@ bool ChunkDemuxer::EvictCodedFrames(const std::string& id,
   return itr->second->EvictCodedFrames(media_time_dts, newDataSize);
 }
 
-void ChunkDemuxer::AppendData(const std::string& id,
+bool ChunkDemuxer::AppendData(const std::string& id,
                               const uint8_t* data,
                               size_t length,
                               TimeDelta append_window_start,
@@ -634,7 +653,7 @@ void ChunkDemuxer::AppendData(const std::string& id,
     bool old_waiting_for_data = IsSeekWaitingForData_Locked();
 
     if (length == 0u)
-      return;
+      return true;
 
     DCHECK(data);
 
@@ -646,19 +665,16 @@ void ChunkDemuxer::AppendData(const std::string& id,
                                            append_window_end,
                                            timestamp_offset)) {
           ReportError_Locked(CHUNK_DEMUXER_ERROR_APPEND_FAILED);
-          return;
+          return false;
         }
         break;
 
       case PARSE_ERROR:
-        DVLOG(1) << "AppendData(): Ignoring data after a parse error.";
-        return;
-
       case WAITING_FOR_INIT:
       case ENDED:
       case SHUTDOWN:
         DVLOG(1) << "AppendData(): called in unexpected state " << state_;
-        return;
+        return false;
     }
 
     // Check to see if data was appended at the pending seek point. This
@@ -672,6 +688,7 @@ void ChunkDemuxer::AppendData(const std::string& id,
   }
 
   host_->OnBufferedTimeRangesChanged(ranges);
+  return true;
 }
 
 void ChunkDemuxer::ResetParserState(const std::string& id,
@@ -992,6 +1009,12 @@ void ChunkDemuxer::OnSourceInitDone(
   UMA_HISTOGRAM_COUNTS_100("Media.MSE.DetectedTrackCount.Text",
                            detected_text_track_count_);
 
+  if (video_) {
+    media_log_->RecordRapporWithSecurityOrigin(
+        "Media.OriginUrl.MSE.VideoCodec." +
+        GetCodecName(video_->video_decoder_config().codec()));
+  }
+
   SeekAllSources(GetStartTime());
   StartReturningData();
 
@@ -1003,26 +1026,39 @@ void ChunkDemuxer::OnSourceInitDone(
   base::ResetAndReturn(&init_cb_).Run(PIPELINE_OK);
 }
 
+// static
+MediaTrack::Id ChunkDemuxer::GenerateMediaTrackId() {
+  static unsigned g_track_count = 0;
+  return base::UintToString(++g_track_count);
+}
+
 ChunkDemuxerStream* ChunkDemuxer::CreateDemuxerStream(
     DemuxerStream::Type type) {
+  // New ChunkDemuxerStreams can be created only during initialization segment
+  // processing, which happens when a new chunk of data is appended and the
+  // lock_ must be held by ChunkDemuxer::AppendData.
+  lock_.AssertAcquired();
+
+  MediaTrack::Id media_track_id = GenerateMediaTrackId();
+
   switch (type) {
     case DemuxerStream::AUDIO:
       if (audio_)
         return NULL;
-      audio_.reset(
-          new ChunkDemuxerStream(DemuxerStream::AUDIO, splice_frames_enabled_));
+      audio_.reset(new ChunkDemuxerStream(
+          DemuxerStream::AUDIO, splice_frames_enabled_, media_track_id));
       return audio_.get();
       break;
     case DemuxerStream::VIDEO:
       if (video_)
         return NULL;
-      video_.reset(
-          new ChunkDemuxerStream(DemuxerStream::VIDEO, splice_frames_enabled_));
+      video_.reset(new ChunkDemuxerStream(
+          DemuxerStream::VIDEO, splice_frames_enabled_, media_track_id));
       return video_.get();
       break;
     case DemuxerStream::TEXT: {
-      return new ChunkDemuxerStream(DemuxerStream::TEXT,
-                                    splice_frames_enabled_);
+      return new ChunkDemuxerStream(DemuxerStream::TEXT, splice_frames_enabled_,
+                                    media_track_id);
       break;
     }
     case DemuxerStream::UNKNOWN:

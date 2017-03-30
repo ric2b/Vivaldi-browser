@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/sparse_histogram.h"
 #include "base/synchronization/lock.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/notification_source.h"
@@ -20,6 +21,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/browser/extension_message_filter.h"
+#include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension_api.h"
 #include "extensions/common/extension_messages.h"
@@ -32,6 +34,48 @@ using extensions::ExtensionAPI;
 using extensions::Feature;
 
 namespace {
+
+// Logs UMA about the performance for a given extension function run.
+void LogUma(bool success,
+            base::TimeDelta elapsed_time,
+            extensions::functions::HistogramValue histogram_value) {
+  // Note: Certain functions perform actions that are inherently slow - such as
+  // anything waiting on user action. As such, we can't always assume that a
+  // long execution time equates to a poorly-performing function.
+  if (success) {
+    if (elapsed_time < base::TimeDelta::FromMilliseconds(1)) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY(
+          "Extensions.Functions.SucceededTime.LessThan1ms", histogram_value);
+    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(5)) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.Functions.SucceededTime.1msTo5ms",
+                                  histogram_value);
+    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(10)) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY(
+          "Extensions.Functions.SucceededTime.5msTo10ms", histogram_value);
+    } else {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.Functions.SucceededTime.Over10ms",
+                                  histogram_value);
+    }
+    UMA_HISTOGRAM_TIMES("Extensions.Functions.SucceededTotalExecutionTime",
+                        elapsed_time);
+  } else {
+    if (elapsed_time < base::TimeDelta::FromMilliseconds(1)) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.Functions.FailedTime.LessThan1ms",
+                                  histogram_value);
+    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(5)) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.Functions.FailedTime.1msTo5ms",
+                                  histogram_value);
+    } else if (elapsed_time < base::TimeDelta::FromMilliseconds(10)) {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.Functions.FailedTime.5msTo10ms",
+                                  histogram_value);
+    } else {
+      UMA_HISTOGRAM_SPARSE_SLOWLY("Extensions.Functions.FailedTime.Over10ms",
+                                  histogram_value);
+    }
+    UMA_HISTOGRAM_TIMES("Extensions.Functions.FailedTotalExecutionTime",
+                        elapsed_time);
+  }
+}
 
 class ArgumentListResponseValue
     : public ExtensionFunction::ResponseValueObject {
@@ -179,6 +223,9 @@ void UserGestureForTests::DecrementCount() {
 }  // namespace
 
 // static
+bool ExtensionFunction::ignore_all_did_respond_for_testing_do_not_use = false;
+
+// static
 void ExtensionFunctionDeleteTraits::Destruct(const ExtensionFunction* x) {
   x->Destruct();
 }
@@ -229,8 +276,8 @@ ExtensionFunction::ExtensionFunction()
       histogram_value_(extensions::functions::UNKNOWN),
       source_tab_id_(-1),
       source_context_type_(Feature::UNSPECIFIED_CONTEXT),
-      source_process_id_(-1) {
-}
+      source_process_id_(-1),
+      did_respond_(false) {}
 
 ExtensionFunction::~ExtensionFunction() {
 }
@@ -263,12 +310,7 @@ void ExtensionFunction::OnQuotaExceeded(const std::string& violation_error) {
 
 void ExtensionFunction::SetArgs(const base::ListValue* args) {
   DCHECK(!args_.get());  // Should only be called once.
-  args_.reset(args->DeepCopy());
-}
-
-void ExtensionFunction::SetResult(base::Value* result) {
-  results_.reset(new base::ListValue());
-  results_->Append(result);
+  args_ = args->CreateDeepCopy();
 }
 
 void ExtensionFunction::SetResult(std::unique_ptr<base::Value> result) {
@@ -303,24 +345,19 @@ ExtensionFunction::ResponseValue ExtensionFunction::NoArguments() {
 }
 
 ExtensionFunction::ResponseValue ExtensionFunction::OneArgument(
-    base::Value* arg) {
+    std::unique_ptr<base::Value> arg) {
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(arg);
+  args->Append(std::move(arg));
   return ResponseValue(new ArgumentListResponseValue(name(), "OneArgument",
                                                      this, std::move(args)));
 }
 
-ExtensionFunction::ResponseValue ExtensionFunction::OneArgument(
-    std::unique_ptr<base::Value> arg) {
-  return OneArgument(arg.release());
-}
-
 ExtensionFunction::ResponseValue ExtensionFunction::TwoArguments(
-    base::Value* arg1,
-    base::Value* arg2) {
+    std::unique_ptr<base::Value> arg1,
+    std::unique_ptr<base::Value> arg2) {
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(arg1);
-  args->Append(arg2);
+  args->Append(std::move(arg1));
+  args->Append(std::move(arg2));
   return ResponseValue(new ArgumentListResponseValue(name(), "TwoArguments",
                                                      this, std::move(args)));
 }
@@ -391,6 +428,19 @@ void ExtensionFunction::Respond(ResponseValue result) {
   SendResponse(result->Apply());
 }
 
+bool ExtensionFunction::PreRunValidation(std::string* error) {
+  return true;
+}
+
+ExtensionFunction::ResponseAction ExtensionFunction::RunWithValidation() {
+  std::string error;
+  if (!PreRunValidation(&error)) {
+    DCHECK(!error.empty() || bad_message_);
+    return bad_message_ ? ValidationFailure(this) : RespondNow(Error(error));
+  }
+  return Run();
+}
+
 bool ExtensionFunction::ShouldSkipQuotaLimiting() const {
   return false;
 }
@@ -414,20 +464,7 @@ void ExtensionFunction::SendResponseImpl(bool success) {
     results_.reset(new base::ListValue());
 
   response_callback_.Run(type, *results_, GetError(), histogram_value());
-
-  // TODO(devlin): Once we have a baseline metric for how long functions take,
-  // we can create a handful of buckets and record the function name so that we
-  // can find what the fastest/slowest are. See crbug.com/608561.
-  // Note: Certain functions perform actions that are inherently slow - such as
-  // anything waiting on user action. As such, we can't always assume that a
-  // long execution time equates to a poorly-performing function.
-  if (success) {
-    UMA_HISTOGRAM_TIMES("Extensions.Functions.SucceededTotalExecutionTime",
-                        timer_.Elapsed());
-  } else {
-    UMA_HISTOGRAM_TIMES("Extensions.Functions.FailedTotalExecutionTime",
-                        timer_.Elapsed());
-  }
+  LogUma(success, timer_.Elapsed(), histogram_value_);
 }
 
 void ExtensionFunction::OnRespondingLater(ResponseValue value) {
@@ -437,17 +474,45 @@ void ExtensionFunction::OnRespondingLater(ResponseValue value) {
 UIThreadExtensionFunction::UIThreadExtensionFunction()
     : context_(nullptr),
       render_frame_host_(nullptr),
-      delegate_(nullptr) {
-}
+      is_from_service_worker_(false),
+      delegate_(nullptr) {}
 
 UIThreadExtensionFunction::~UIThreadExtensionFunction() {
   if (dispatcher() && render_frame_host())
     dispatcher()->OnExtensionFunctionCompleted(extension());
+  // The extension function should always respond to avoid leaks in the
+  // renderer, dangling callbacks, etc. The exception is if the system is
+  // shutting down.
+  // TODO(devlin): Duplicate this check in IOThreadExtensionFunction. It's
+  // tricky because checking IsShuttingDown has to be called from the UI thread.
+  DCHECK(extensions::ExtensionsBrowserClient::Get()->IsShuttingDown() ||
+         did_respond_ || ignore_all_did_respond_for_testing_do_not_use)
+      << name_;
 }
 
 UIThreadExtensionFunction*
 UIThreadExtensionFunction::AsUIThreadExtensionFunction() {
   return this;
+}
+
+bool UIThreadExtensionFunction::PreRunValidation(std::string* error) {
+  if (!ExtensionFunction::PreRunValidation(error))
+    return false;
+
+  // TODO(crbug.com/625646) This is a partial fix to avoid crashes when certain
+  // extension functions run during shutdown. Browser or Notification creation
+  // for example create a ScopedKeepAlive, which hit a CHECK if the browser is
+  // shutting down. This fixes the current problem as the known issues happen
+  // through synchronous calls from Run(), but posted tasks will not be covered.
+  // A possible fix would involve refactoring ExtensionFunction: unrefcount
+  // here and use weakptrs for the tasks, then have it owned by something that
+  // will be destroyed naturally in the course of shut down.
+  if (extensions::ExtensionsBrowserClient::Get()->IsShuttingDown()) {
+    *error = "The browser is shutting down.";
+    return false;
+  }
+
+  return true;
 }
 
 bool UIThreadExtensionFunction::OnMessageReceived(const IPC::Message& message) {
@@ -465,6 +530,12 @@ UIThreadExtensionFunction::render_view_host_do_not_use() const {
 
 void UIThreadExtensionFunction::SetRenderFrameHost(
     content::RenderFrameHost* render_frame_host) {
+  // An extension function from Service Worker does not have a RenderFrameHost.
+  if (is_from_service_worker_) {
+    DCHECK(!render_frame_host);
+    return;
+  }
+
   DCHECK_NE(render_frame_host_ == nullptr, render_frame_host == nullptr);
   render_frame_host_ = render_frame_host;
   tracker_.reset(
@@ -485,6 +556,8 @@ content::WebContents* UIThreadExtensionFunction::GetSenderWebContents() {
 }
 
 void UIThreadExtensionFunction::SendResponse(bool success) {
+  DCHECK(!did_respond_) << name_;
+  did_respond_ = true;
   if (delegate_)
     delegate_->OnSendResponse(this, success, bad_message_);
   else
@@ -529,6 +602,8 @@ void IOThreadExtensionFunction::Destruct() const {
 }
 
 void IOThreadExtensionFunction::SendResponse(bool success) {
+  DCHECK(!did_respond_) << name_;
+  did_respond_ = true;
   SendResponseImpl(success);
 }
 

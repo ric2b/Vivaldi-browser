@@ -4,9 +4,9 @@
 
 #include "ash/first_run/first_run_helper.h"
 
+#include "ash/common/shell_window_ids.h"
 #include "ash/first_run/desktop_cleaner.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/events/event_handler.h"
 #include "ui/events/test/event_generator.h"
@@ -54,8 +54,7 @@ class CountingEventHandler : public ui::EventHandler {
 
 }  // namespace
 
-class FirstRunHelperTest : public AshTestBase,
-                           public FirstRunHelper::Observer {
+class FirstRunHelperTest : public AshTestBase, public FirstRunHelper::Observer {
  public:
   FirstRunHelperTest() : cancelled_times_(0) {}
 

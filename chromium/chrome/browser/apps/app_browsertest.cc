@@ -41,6 +41,7 @@
 #include "content/public/browser/host_zoom_map.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_widget_host_view.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/app_window/app_window.h"
 #include "extensions/browser/app_window/app_window_registry.h"
@@ -458,8 +459,10 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest,
       message_;
   observer.Wait();
   ASSERT_EQ(kExpectedNumberOfTabs, observer.tabs().size());
+  content::WaitForLoadStop(observer.tabs()[kExpectedNumberOfTabs - 1]);
   EXPECT_EQ(GURL(kChromiumURL),
             observer.tabs()[kExpectedNumberOfTabs - 1]->GetURL());
+  content::WaitForLoadStop(observer.tabs()[kExpectedNumberOfTabs - 2]);
   EXPECT_EQ(GURL(kChromiumURL),
             observer.tabs()[kExpectedNumberOfTabs - 2]->GetURL());
 }
@@ -1383,6 +1386,16 @@ IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, AppsIgnoreDefaultZoom) {
       web_contents->GetSiteInstance());
   EXPECT_EQ(0, app_host_zoom_map->GetDefaultZoomLevel());
   EXPECT_EQ(0, app_host_zoom_map->GetZoomLevel(web_contents));
+}
+
+// This test will flake until we fix the underlying issue:
+// https://crbug.com/620194.
+#define MAYBE_AppWindowIframe DISABLED_AppWindowIframe
+// Sends chrome.test.sendMessage from chrome.app.window.create's callback.
+// The app window also adds an <iframe> to the page during window.onload.
+IN_PROC_BROWSER_TEST_F(PlatformAppBrowserTest, MAYBE_AppWindowIframe) {
+  LoadAndLaunchPlatformApp("app_window_send_message",
+                           "APP_WINDOW_CREATE_CALLBACK");
 }
 
 }  // namespace extensions

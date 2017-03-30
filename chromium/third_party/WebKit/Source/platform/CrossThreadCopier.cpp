@@ -35,6 +35,7 @@
 #include "platform/network/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -69,27 +70,26 @@ CrossThreadCopier<ResourceResponse>::Type CrossThreadCopier<ResourceResponse>::c
 class CopierThreadSafeRefCountedTest : public ThreadSafeRefCounted<CopierThreadSafeRefCountedTest> {
 };
 
+// Add a generic specialization which will let's us verify that no other template matches.
+template<typename T> struct CrossThreadCopierBase<T, false> {
+    typedef int Type;
+};
+
 static_assert((std::is_same<
     PassRefPtr<CopierThreadSafeRefCountedTest>,
     CrossThreadCopier<PassRefPtr<CopierThreadSafeRefCountedTest>>::Type
     >::value),
-    "PassRefPtr test");
+    "PassRefPtr + ThreadSafeRefCounted should pass CrossThreadCopier");
 static_assert((std::is_same<
-    PassRefPtr<CopierThreadSafeRefCountedTest>,
+    RefPtr<CopierThreadSafeRefCountedTest>,
     CrossThreadCopier<RefPtr<CopierThreadSafeRefCountedTest>>::Type
     >::value),
-    "RefPtr test");
+    "RefPtr + ThreadSafeRefCounted should pass CrossThreadCopier");
 static_assert((std::is_same<
-    PassRefPtr<CopierThreadSafeRefCountedTest>,
+    int,
     CrossThreadCopier<CopierThreadSafeRefCountedTest*>::Type
     >::value),
-    "RawPointer test");
-
-
-// Add a generic specialization which will let's us verify that no other template matches.
-template<typename T> struct CrossThreadCopierBase<T, false, false> {
-    typedef int Type;
-};
+    "Raw pointer + ThreadSafeRefCounted should NOT pass CrossThreadCopier");
 
 // Verify that RefCounted objects only match our generic template which exposes Type as int.
 class CopierRefCountedTest : public RefCounted<CopierRefCountedTest> {
@@ -97,27 +97,15 @@ class CopierRefCountedTest : public RefCounted<CopierRefCountedTest> {
 
 static_assert((std::is_same<
     int,
-    CrossThreadCopier<PassRefPtr<CopierRefCountedTest>>::Type
-    >::value),
-    "PassRefPtr<RefCountedTest> test");
-
-static_assert((std::is_same<
-    int,
-    CrossThreadCopier<RefPtr<CopierRefCountedTest>>::Type
-    >::value),
-    "RefPtr<RefCounted> test");
-
-static_assert((std::is_same<
-    int,
     CrossThreadCopier<CopierRefCountedTest*>::Type
     >::value),
-    "Raw pointer RefCounted test");
+    "Raw pointer + RefCounted should NOT pass CrossThreadCopier");
 
-// Verify that PassOwnPtr gets passed through.
+// Verify that std::unique_ptr gets passed through.
 static_assert((std::is_same<
-    PassOwnPtr<float>,
-    CrossThreadCopier<PassOwnPtr<float>>::Type
+    std::unique_ptr<float>,
+    CrossThreadCopier<std::unique_ptr<float>>::Type
     >::value),
-    "PassOwnPtr test");
+    "std::unique_ptr test");
 
 } // namespace blink

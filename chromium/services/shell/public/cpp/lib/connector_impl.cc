@@ -24,9 +24,16 @@ ConnectorImpl::ConnectorImpl(mojom::ConnectorPtrInfo unbound_state)
 ConnectorImpl::ConnectorImpl(mojom::ConnectorPtr connector)
     : connector_(std::move(connector)) {
   thread_checker_.reset(new base::ThreadChecker);
+  connector_.set_connection_error_handler(
+      base::Bind(&ConnectorImpl::OnConnectionError, base::Unretained(this)));
 }
 
 ConnectorImpl::~ConnectorImpl() {}
+
+void ConnectorImpl::OnConnectionError() {
+  DCHECK(thread_checker_->CalledOnValidThread());
+  connector_.reset();
+}
 
 std::unique_ptr<Connection> ConnectorImpl::Connect(const std::string& name) {
   ConnectParams params(name);
@@ -44,6 +51,8 @@ std::unique_ptr<Connection> ConnectorImpl::Connect(ConnectParams* params) {
       return nullptr;
     }
     connector_.Bind(std::move(unbound_state_));
+    connector_.set_connection_error_handler(
+        base::Bind(&ConnectorImpl::OnConnectionError, base::Unretained(this)));
     thread_checker_.reset(new base::ThreadChecker);
   }
   DCHECK(thread_checker_->CalledOnValidThread());
@@ -60,8 +69,25 @@ std::unique_ptr<Connection> ConnectorImpl::Connect(ConnectParams* params) {
   std::unique_ptr<internal::ConnectionImpl> registry(
       new internal::ConnectionImpl(
           params->target().name(), params->target(), mojom::kInvalidInstanceID,
-          std::move(remote_interfaces), std::move(local_request), request,
-          Connection::State::PENDING));
+          request, Connection::State::PENDING));
+  if (params->exposed_interfaces()) {
+    params->exposed_interfaces()->Bind(std::move(local_request));
+    registry->set_exposed_interfaces(params->exposed_interfaces());
+  } else {
+    std::unique_ptr<InterfaceRegistry> exposed_interfaces(
+        new InterfaceRegistry(registry.get()));
+    exposed_interfaces->Bind(std::move(local_request));
+    registry->SetExposedInterfaces(std::move(exposed_interfaces));
+  }
+  if (params->remote_interfaces()) {
+    params->remote_interfaces()->Bind(std::move(remote_interfaces));
+    registry->set_remote_interfaces(params->remote_interfaces());
+  } else {
+    std::unique_ptr<InterfaceProvider> remote_interface_provider(
+        new InterfaceProvider);
+    remote_interface_provider->Bind(std::move(remote_interfaces));
+    registry->SetRemoteInterfaces(std::move(remote_interface_provider));
+  }
 
   mojom::ShellClientPtr shell_client;
   mojom::PIDReceiverRequest pid_receiver_request;

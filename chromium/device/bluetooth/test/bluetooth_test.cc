@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "device/bluetooth/bluetooth_adapter.h"
+#include "device/bluetooth/bluetooth_common.h"
 
 namespace device {
 
@@ -22,6 +23,7 @@ const std::string BluetoothTestBase::kTestDeviceNameEmpty = "";
 
 const std::string BluetoothTestBase::kTestDeviceAddress1 = "01:00:00:90:1E:BE";
 const std::string BluetoothTestBase::kTestDeviceAddress2 = "02:00:00:8B:74:63";
+const std::string BluetoothTestBase::kTestDeviceAddress3 = "03:00:00:17:C0:57";
 
 const std::string BluetoothTestBase::kTestUUIDGenericAccess = "1800";
 const std::string BluetoothTestBase::kTestUUIDGenericAttribute = "1801";
@@ -35,8 +37,7 @@ BluetoothTestBase::~BluetoothTestBase() {
 
 void BluetoothTestBase::StartLowEnergyDiscoverySession() {
   adapter_->StartDiscoverySessionWithFilter(
-      base::WrapUnique(new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE)),
+      base::WrapUnique(new BluetoothDiscoveryFilter(BLUETOOTH_TRANSPORT_LE)),
       GetDiscoverySessionCallback(Call::EXPECTED),
       GetErrorCallback(Call::NOT_EXPECTED));
   base::RunLoop().RunUntilIdle();
@@ -44,8 +45,7 @@ void BluetoothTestBase::StartLowEnergyDiscoverySession() {
 
 void BluetoothTestBase::StartLowEnergyDiscoverySessionExpectedToFail() {
   adapter_->StartDiscoverySessionWithFilter(
-      base::WrapUnique(new BluetoothDiscoveryFilter(
-          BluetoothDiscoveryFilter::Transport::TRANSPORT_LE)),
+      base::WrapUnique(new BluetoothDiscoveryFilter(BLUETOOTH_TRANSPORT_LE)),
       GetDiscoverySessionCallback(Call::NOT_EXPECTED),
       GetErrorCallback(Call::EXPECTED));
   base::RunLoop().RunUntilIdle();
@@ -64,6 +64,11 @@ bool BluetoothTestBase::DenyPermission() {
 
 BluetoothDevice* BluetoothTestBase::SimulateLowEnergyDevice(
     int device_ordinal) {
+  NOTIMPLEMENTED();
+  return nullptr;
+}
+
+BluetoothDevice* BluetoothTestBase::SimulateClassicDevice() {
   NOTIMPLEMENTED();
   return nullptr;
 }
@@ -319,6 +324,10 @@ void BluetoothTestBase::ResetEventCounts() {
   gatt_write_characteristic_attempts_ = 0;
   gatt_read_descriptor_attempts_ = 0;
   gatt_write_descriptor_attempts_ = 0;
+}
+
+void BluetoothTestBase::RemoveTimedOutDevices() {
+  adapter_->RemoveTimedOutDevices();
 }
 
 }  // namespace device

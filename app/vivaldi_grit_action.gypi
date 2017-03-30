@@ -148,7 +148,7 @@
     ['chrome_migrate_sources', {
       'copies': [
         {
-          'destination': '<(combined_target_dir)',
+          'destination': '<(combined_target_dir)/chromium',
           'basepath': '<(main_resource_dir)',
           'files': [
             '<@(chrome_migrate_sources)',
@@ -159,7 +159,7 @@
     ['vivaldi_migrate_sources', {
       'copies': [
         {
-          'destination': '<(combined_target_dir)',
+          'destination': '<(combined_target_dir)/vivaldi',
           'basepath': '<(vivaldi_resource_path)',
           'files': [
             '<@(vivaldi_migrate_sources)',

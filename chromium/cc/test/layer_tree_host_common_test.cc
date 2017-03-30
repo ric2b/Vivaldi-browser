@@ -71,9 +71,7 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
     Layer* root_layer,
     float device_scale_factor,
     float page_scale_factor,
-    Layer* page_scale_layer,
-    bool can_use_lcd_text,
-    bool layers_always_allowed_lcd_text) {
+    Layer* page_scale_layer) {
   PropertyTreeBuilder::PreCalculateMetaInformation(root_layer);
 
   EXPECT_TRUE(page_scale_layer || (page_scale_factor == 1.f));
@@ -159,6 +157,7 @@ void LayerTreeHostCommonTestBase::
       gfx::Size(root_layer->bounds().width() * device_scale_factor,
                 root_layer->bounds().height() * device_scale_factor);
   update_layer_list_impl_.reset(new LayerImplList);
+  root_layer->layer_tree_impl()->BuildLayerListForTesting();
   draw_property_utils::BuildPropertyTreesAndComputeVisibleRects(
       root_layer, page_scale_layer, inner_viewport_scroll_layer,
       outer_viewport_scroll_layer, overscroll_elasticity_layer,
@@ -173,10 +172,14 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
     LayerImpl* root_layer,
     float device_scale_factor,
     float page_scale_factor,
-    LayerImpl* page_scale_layer,
-    bool can_use_lcd_text,
-    bool layers_always_allowed_lcd_text) {
+    LayerImpl* page_scale_layer) {
+  if (device_scale_factor !=
+      root_layer->layer_tree_impl()->device_scale_factor())
+    root_layer->layer_tree_impl()->property_trees()->needs_rebuild = true;
+
   root_layer->layer_tree_impl()->SetDeviceScaleFactor(device_scale_factor);
+
+  EXPECT_TRUE(page_scale_layer || (page_scale_factor == 1.f));
 
   gfx::Transform identity_matrix;
   gfx::Size device_viewport_size =
@@ -193,8 +196,6 @@ void LayerTreeHostCommonTestBase::ExecuteCalculateDrawProperties(
   inputs.device_scale_factor = device_scale_factor;
   inputs.page_scale_factor = page_scale_factor;
   inputs.page_scale_layer = page_scale_layer;
-  inputs.can_use_lcd_text = can_use_lcd_text;
-  inputs.layers_always_allowed_lcd_text = layers_always_allowed_lcd_text;
   inputs.can_adjust_raster_scales = true;
 
   LayerTreeHostCommon::CalculateDrawPropertiesForTesting(&inputs);

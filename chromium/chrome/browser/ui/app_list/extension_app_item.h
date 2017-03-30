@@ -81,6 +81,7 @@ class ExtensionAppItem : public ChromeAppListItem,
 
   // Overridden from extensions::IconImage::Observer:
   void OnExtensionIconImageChanged(extensions::IconImage* image) override;
+  void OnExtensionIconImageDestroyed(extensions::IconImage* image) override;
 
   // Overridden from ExtensionEnableFlowDelegate:
   void ExtensionEnableFlowFinished() override;
@@ -95,9 +96,6 @@ class ExtensionAppItem : public ChromeAppListItem,
 
   // Overridden from app_list::AppContextMenuDelegate:
   void ExecuteLaunchCommand(int event_flags) override;
-
-  // Set the position from the ordering.
-  void UpdatePositionFromOrdering();
 
   std::unique_ptr<extensions::IconImage> icon_;
   std::unique_ptr<app_list::ExtensionAppContextMenu> context_menu_;

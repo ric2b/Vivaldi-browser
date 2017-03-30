@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/chromeos/logging.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
@@ -24,16 +25,11 @@ namespace {
 // queue will consider this command expired if the command has not been started.
 const int kCommandExpirationTimeInMinutes = 10;
 
-// Determines the minimum uptime after which a reboot might be scheduled. Note:
-// |kCommandExpirationTimeInMinutes| >= |kMinimumUptimeInMinutes| as
-// otherwise, a valid command issued right after boot may time out.
-const int kMinimumUptimeInMinutes = 10;
-
 }  // namespace
 
 DeviceCommandRebootJob::DeviceCommandRebootJob(
     chromeos::PowerManagerClient* power_manager_client)
-    : power_manager_client_(power_manager_client), weak_ptr_factory_(this) {
+    : power_manager_client_(power_manager_client) {
   CHECK(power_manager_client_);
 }
 
@@ -53,6 +49,8 @@ bool DeviceCommandRebootJob::IsExpired(base::TimeTicks now) {
 void DeviceCommandRebootJob::RunImpl(
     const CallbackWithResult& succeeded_callback,
     const CallbackWithResult& failed_callback) {
+  CHROMEOS_SYSLOG(WARNING) << "Running reboot command.";
+
   // Determines the time delta between the command having been issued and the
   // boot time of the system.
   const base::TimeDelta uptime = base::SysInfo::Uptime();
@@ -60,33 +58,21 @@ void DeviceCommandRebootJob::RunImpl(
   const base::TimeDelta delta = boot_time - issued_time();
   // If the reboot command was issued before the system booted, we inform the
   // server that the reboot succeeded. Otherwise, the reboot must still be
-  // performed and we invoke it. |kMinimumUptimeInMinutes| defines a lower limit
-  // on the uptime to avoid uninterruptable reboot loops.
+  // performed and we invoke it.
   if (delta > base::TimeDelta()) {
+    CHROMEOS_SYSLOG(WARNING) << "Ignoring reboot command issued " << delta
+                             << " before current boot time";
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(succeeded_callback, nullptr));
     return;
   }
 
-  const base::TimeDelta kZeroTimeDelta;
-  reboot_timer_.Start(
-      FROM_HERE,
-      std::max(base::TimeDelta::FromMinutes(kMinimumUptimeInMinutes) - uptime,
-               kZeroTimeDelta),
-      base::Bind(&DeviceCommandRebootJob::Reboot,
-                 weak_ptr_factory_.GetWeakPtr()));
-}
-
-void DeviceCommandRebootJob::TerminateImpl() {
-  weak_ptr_factory_.InvalidateWeakPtrs();
+  CHROMEOS_SYSLOG(WARNING) << "Rebooting immediately.";
+  power_manager_client_->RequestRestart();
 }
 
 base::TimeDelta DeviceCommandRebootJob::GetCommmandTimeout() const {
-  return base::TimeDelta::FromMinutes(kMinimumUptimeInMinutes);
-}
-
-void DeviceCommandRebootJob::Reboot() const {
-  power_manager_client_->RequestRestart();
+  return base::TimeDelta::FromMinutes(kCommandExpirationTimeInMinutes);
 }
 
 }  // namespace policy

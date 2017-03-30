@@ -288,7 +288,7 @@ void TracedValue::SetBaseValueWithCopiedName(base::StringPiece name,
       const ListValue* list_value;
       value.GetAsList(&list_value);
       BeginArrayWithCopiedName(name);
-      for (base::Value* base_value : *list_value)
+      for (const auto& base_value : *list_value)
         AppendBaseValue(*base_value);
       EndArray();
     } break;
@@ -342,7 +342,7 @@ void TracedValue::AppendBaseValue(const base::Value& value) {
       const ListValue* list_value;
       value.GetAsList(&list_value);
       BeginArray();
-      for (base::Value* base_value : *list_value)
+      for (const auto& base_value : *list_value)
         AppendBaseValue(*base_value);
       EndArray();
     } break;
@@ -361,7 +361,7 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
     DCHECK((cur_dict && !cur_list) || (cur_list && !cur_dict));
     switch (*type) {
       case kTypeStartDict: {
-        auto new_dict = new DictionaryValue();
+        auto* new_dict = new DictionaryValue();
         if (cur_dict) {
           cur_dict->SetWithoutPathExpansion(ReadKeyName(it),
                                             WrapUnique(new_dict));
@@ -386,7 +386,7 @@ std::unique_ptr<base::Value> TracedValue::ToBaseValue() const {
       } break;
 
       case kTypeStartArray: {
-        auto new_list = new ListValue();
+        auto* new_list = new ListValue();
         if (cur_dict) {
           cur_dict->SetWithoutPathExpansion(ReadKeyName(it),
                                             WrapUnique(new_list));

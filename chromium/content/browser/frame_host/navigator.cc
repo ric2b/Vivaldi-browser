@@ -5,7 +5,7 @@
 #include "content/browser/frame_host/navigator.h"
 
 #include "base/time/time.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/stream_handle.h"
 
 namespace content {
@@ -35,11 +35,8 @@ base::TimeTicks Navigator::GetCurrentLoadStart() {
   return base::TimeTicks::Now();
 }
 
-void Navigator::OnBeginNavigation(
-    FrameTreeNode* frame_tree_node,
-    const CommonNavigationParams& common_params,
-    const BeginNavigationParams& begin_params,
-    scoped_refptr<ResourceRequestBody> body) {
-}
+void Navigator::OnBeginNavigation(FrameTreeNode* frame_tree_node,
+                                  const CommonNavigationParams& common_params,
+                                  const BeginNavigationParams& begin_params) {}
 
 }  // namespace content

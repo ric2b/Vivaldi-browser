@@ -56,7 +56,7 @@ TEST(RenderSurfaceTest, VerifySurfaceChangesAreTrackedProperly) {
   EXECUTE_AND_VERIFY_SURFACE_CHANGED(
       render_surface->SetContentRectForTesting(test_rect));
 
-  owning_layer->SetOpacity(0.5f);
+  owning_layer->OnOpacityAnimated(0.5f);
   EXPECT_TRUE(render_surface->SurfacePropertyChanged());
   host_impl.active_tree()->ResetAllChangeTracking();
 
@@ -102,9 +102,9 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectSharedQuadState) {
   owning_layer->SetBlendMode(blend_mode);
   RenderSurfaceImpl* render_surface = owning_layer->render_surface();
 
-  root_layer->AddChild(std::move(owning_layer));
-  host_impl.active_tree()->SetRootLayer(std::move(root_layer));
-  host_impl.active_tree()->BuildPropertyTreesForTesting();
+  root_layer->test_properties()->AddChild(std::move(owning_layer));
+  host_impl.active_tree()->SetRootLayerForTesting(std::move(root_layer));
+  host_impl.active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
   gfx::Rect content_rect(0, 0, 50, 50);
   gfx::Rect clip_rect(5, 5, 40, 40);
@@ -167,7 +167,7 @@ TEST(RenderSurfaceTest, SanityCheckSurfaceCreatesCorrectRenderPass) {
   ASSERT_TRUE(owning_layer->render_surface());
   RenderSurfaceImpl* render_surface = owning_layer->render_surface();
 
-  root_layer->AddChild(std::move(owning_layer));
+  root_layer->test_properties()->AddChild(std::move(owning_layer));
 
   gfx::Rect content_rect(0, 0, 50, 50);
   gfx::Transform origin;

@@ -6,7 +6,7 @@
 #define ScriptValueSerializerForModules_h
 
 #include "bindings/core/v8/ScriptValueSerializer.h"
-#include "modules/mediastream/RTCCertificate.h"
+#include "modules/peerconnection/RTCCertificate.h"
 #include "public/platform/WebCrypto.h"
 #include "public/platform/WebCryptoKey.h"
 #include "public/platform/WebCryptoKeyAlgorithm.h"
@@ -50,7 +50,7 @@ public:
     {
     }
 
-    bool read(v8::Local<v8::Value>*, ScriptValueCompositeCreator&) override;
+    bool read(v8::Local<v8::Value>*, ScriptValueDeserializer&) override;
 
 private:
     bool readDOMFileSystem(v8::Local<v8::Value>*);
@@ -73,14 +73,14 @@ class ScriptValueSerializerForModules final : public ScriptValueSerializer {
     STACK_ALLOCATED();
     WTF_MAKE_NONCOPYABLE(ScriptValueSerializerForModules);
 public:
-    ScriptValueSerializerForModules(SerializedScriptValueWriter&, const Transferables*, WebBlobInfoArray*, BlobDataHandleMap&, v8::TryCatch&, ScriptState*);
+    ScriptValueSerializerForModules(SerializedScriptValueWriter&, WebBlobInfoArray*, ScriptState*);
 
 private:
-    ScriptValueSerializer::StateBase* doSerializeObject(v8::Local<v8::Object>, ScriptValueSerializer::StateBase* next) override;
+    StateBase* doSerializeObject(v8::Local<v8::Object>, StateBase* next) override;
 
-    ScriptValueSerializer::StateBase* writeDOMFileSystem(v8::Local<v8::Value>, ScriptValueSerializer::StateBase* next);
+    StateBase* writeDOMFileSystem(v8::Local<v8::Value>, StateBase* next);
     bool writeCryptoKey(v8::Local<v8::Value>);
-    ScriptValueSerializer::StateBase* writeRTCCertificate(v8::Local<v8::Value>, ScriptValueSerializer::StateBase* next);
+    StateBase* writeRTCCertificate(v8::Local<v8::Value>, StateBase* next);
 };
 
 class ScriptValueDeserializerForModules final : public ScriptValueDeserializer {

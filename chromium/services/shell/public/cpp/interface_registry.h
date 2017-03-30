@@ -9,6 +9,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/shell/public/cpp/lib/callback_binder.h"
 #include "services/shell/public/cpp/lib/interface_factory_binder.h"
 #include "services/shell/public/interfaces/interface_provider.mojom.h"
 
@@ -50,10 +51,6 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
           base::WrapUnique(binder), interface_name);
     }
 
-    void RemoveInterfaceBinderForName(const std::string& interface_name) {
-      registry_->RemoveInterfaceBinderForName(interface_name);
-    }
-
    private:
     InterfaceRegistry* registry_;
     DISALLOW_COPY_AND_ASSIGN(TestApi);
@@ -65,16 +62,15 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
   // rules filtering which interfaces are allowed to be exposed to clients are
   // imposed on this registry. If null, they are not.
   explicit InterfaceRegistry(Connection* connection);
-  // Construct with an InterfaceProviderRequest and a Connection (which may be
-  // null, see note above about filtering).
-  InterfaceRegistry(mojom::InterfaceProviderRequest request,
-                    Connection* connection);
   ~InterfaceRegistry() override;
 
-  // Takes the client end of the InterfaceProvider pipe created in the
-  // constructor.
-  mojom::InterfaceProviderPtr TakeClientHandle();
+  void Bind(mojom::InterfaceProviderRequest local_interfaces_request);
 
+  base::WeakPtr<InterfaceRegistry> GetWeakPtr();
+
+  // Allows |Interface| to be exposed via this registry. Requests to bind will
+  // be handled by |factory|. Returns true if the interface was exposed, false
+  // if Connection policy prevented exposure.
   template <typename Interface>
   bool AddInterface(InterfaceFactory<Interface>* factory) {
     return SetInterfaceBinderForName(
@@ -82,6 +78,39 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
             new internal::InterfaceFactoryBinder<Interface>(factory)),
         Interface::Name_);
   }
+
+  // Like AddInterface above, except supplies a callback to bind the MP instead
+  // of an InterfaceFactory, and optionally provides a task runner where the
+  // callback will be run.
+  template <typename Interface>
+  bool AddInterface(
+      const base::Callback<void(mojo::InterfaceRequest<Interface>)>& callback,
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner =
+          nullptr) {
+    return SetInterfaceBinderForName(
+        base::WrapUnique(
+            new internal::CallbackBinder<Interface>(callback, task_runner)),
+        Interface::Name_);
+  }
+  bool AddInterface(
+      const std::string& name,
+      const base::Callback<void(mojo::ScopedMessagePipeHandle)>& callback,
+      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner =
+          nullptr);
+
+  template <typename Interface>
+  void RemoveInterface() {
+    RemoveInterface(Interface::Name_);
+  }
+  void RemoveInterface(const std::string& name);
+
+  // Temporarily prevent incoming interface requests from being bound. Incoming
+  // requests will be queued internally and dispatched once ResumeBinding() is
+  // called.
+  void PauseBinding();
+
+  // Resumes incoming interface request binding.
+  void ResumeBinding();
 
  private:
   using NameToInterfaceBinderMap =
@@ -96,13 +125,14 @@ class InterfaceRegistry : public mojom::InterfaceProvider {
   bool SetInterfaceBinderForName(std::unique_ptr<InterfaceBinder> binder,
                                  const std::string& name);
 
-  void RemoveInterfaceBinderForName(const std::string& interface_name);
+  mojom::InterfaceProviderRequest pending_request_;
 
-  mojom::InterfaceProviderPtr client_handle_;
   mojo::Binding<mojom::InterfaceProvider> binding_;
   Connection* connection_;
 
   NameToInterfaceBinderMap name_to_binder_;
+
+  base::WeakPtrFactory<InterfaceRegistry> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(InterfaceRegistry);
 };

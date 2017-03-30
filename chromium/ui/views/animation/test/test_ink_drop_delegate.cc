@@ -7,25 +7,28 @@
 namespace views {
 namespace test {
 
-TestInkDropDelegate::TestInkDropDelegate()
-    : state_(InkDropState::HIDDEN), is_hovered_(false) {}
+TestInkDropDelegate::TestInkDropDelegate() {}
 
 TestInkDropDelegate::~TestInkDropDelegate() {}
 
 void TestInkDropDelegate::OnAction(InkDropState state) {
-  state_ = state;
+  ink_drop_.AnimateToState(state);
 }
 
 void TestInkDropDelegate::SnapToActivated() {
-  state_ = InkDropState::ACTIVATED;
+  ink_drop_.SnapToActivated();
 }
 
 void TestInkDropDelegate::SetHovered(bool is_hovered) {
-  is_hovered_ = is_hovered;
+  ink_drop_.SetHovered(is_hovered);
 }
 
 InkDropState TestInkDropDelegate::GetTargetInkDropState() const {
-  return state_;
+  return ink_drop_.GetTargetInkDropState();
+}
+
+InkDrop* TestInkDropDelegate::GetInkDrop() {
+  return &ink_drop_;
 }
 
 }  // namespace test

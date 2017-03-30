@@ -50,9 +50,11 @@ ChildProcessHost::ChildProcessHost(base::TaskRunner* launch_process_runner,
       start_sandboxed_(start_sandboxed),
       target_(target),
       app_path_(app_path),
-      start_child_process_event_(false, false),
-      weak_factory_(this) {
-}
+      child_token_(mojo::edk::GenerateRandomToken()),
+      start_child_process_event_(
+          base::WaitableEvent::ResetPolicy::AUTOMATIC,
+          base::WaitableEvent::InitialState::NOT_SIGNALED),
+      weak_factory_(this) {}
 
 ChildProcessHost::~ChildProcessHost() {
   if (!app_path_.empty()) {
@@ -97,7 +99,8 @@ mojom::ShellClientPtr ChildProcessHost::Start(
       child_command_line.get(), &handle_passing_info_);
 
   mojom::ShellClientPtr client =
-      PassShellClientRequestOnCommandLine(child_command_line.get());
+      PassShellClientRequestOnCommandLine(child_command_line.get(),
+                                          child_token_);
   launch_process_runner_->PostTaskAndReply(
       FROM_HERE,
       base::Bind(&ChildProcessHost::DoLaunch, base::Unretained(this),
@@ -201,7 +204,8 @@ void ChildProcessHost::DoLaunch(
       mojo::edk::ChildProcessLaunched(
           child_process_.Handle(),
           mojo::edk::ScopedPlatformHandle(mojo::edk::PlatformHandle(
-              mojo_ipc_channel_->PassServerHandle().release().handle)));
+              mojo_ipc_channel_->PassServerHandle().release().handle)),
+          child_token_);
     }
   }
   start_child_process_event_.Signal();

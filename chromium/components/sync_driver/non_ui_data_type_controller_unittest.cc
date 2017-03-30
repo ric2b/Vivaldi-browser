@@ -13,6 +13,7 @@
 #include "base/compiler_specific.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
@@ -202,7 +203,8 @@ class SyncNonUIDataTypeControllerTest : public testing::Test,
   void TearDown() override { backend_thread_.Stop(); }
 
   void WaitForDTC() {
-    WaitableEvent done(true, false);
+    WaitableEvent done(base::WaitableEvent::ResetPolicy::MANUAL,
+                       base::WaitableEvent::InitialState::NOT_SIGNALED);
     backend_thread_.task_runner()->PostTask(
         FROM_HERE,
         base::Bind(&SyncNonUIDataTypeControllerTest::SignalDone, &done));
@@ -210,7 +212,7 @@ class SyncNonUIDataTypeControllerTest : public testing::Test,
     if (!done.IsSignaled()) {
       ADD_FAILURE() << "Timed out waiting for DB thread to finish.";
     }
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   SyncService* GetSyncService() override {
@@ -386,8 +388,12 @@ TEST_F(SyncNonUIDataTypeControllerTest,
 // Trigger a Stop() call when we check if the model associator has user created
 // nodes.
 TEST_F(SyncNonUIDataTypeControllerTest, AbortDuringAssociation) {
-  WaitableEvent wait_for_db_thread_pause(false, false);
-  WaitableEvent pause_db_thread(false, false);
+  WaitableEvent wait_for_db_thread_pause(
+      base::WaitableEvent::ResetPolicy::AUTOMATIC,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
+  WaitableEvent pause_db_thread(
+      base::WaitableEvent::ResetPolicy::AUTOMATIC,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
 
   SetStartExpectations();
   EXPECT_CALL(*change_processor_.get(), Connect(_, _, _, _, _, _))

@@ -106,6 +106,9 @@
         'autofill/core/browser/address_field.h',
         'autofill/core/browser/address_i18n.cc',
         'autofill/core/browser/address_i18n.h',
+        'autofill/core/browser/address_rewriter.cc',
+        'autofill/core/browser/address_rewriter.h',
+        'autofill/core/browser/address_rewriter_rules.cc',
         'autofill/core/browser/autocomplete_history_manager.cc',
         'autofill/core/browser/autocomplete_history_manager.h',
         'autofill/core/browser/autofill-inl.h',
@@ -135,6 +138,8 @@
         'autofill/core/browser/autofill_popup_delegate.h',
         'autofill/core/browser/autofill_profile.cc',
         'autofill/core/browser/autofill_profile.h',
+        'autofill/core/browser/autofill_profile_comparator.cc',
+        'autofill/core/browser/autofill_profile_comparator.h',
         'autofill/core/browser/autofill_regex_constants.cc',
         'autofill/core/browser/autofill_regex_constants.h',
         'autofill/core/browser/autofill_scanner.cc',
@@ -182,6 +187,8 @@
         'autofill/core/browser/payments/payments_client.cc',
         'autofill/core/browser/payments/payments_client.h',
         'autofill/core/browser/payments/payments_request.h',
+        'autofill/core/browser/payments/payments_service_url.cc',
+        'autofill/core/browser/payments/payments_service_url.h',
         'autofill/core/browser/personal_data_manager.cc',
         'autofill/core/browser/personal_data_manager.h',
         'autofill/core/browser/personal_data_manager_observer.h',
@@ -312,6 +319,64 @@
     ['OS != "ios"', {
       'targets': [
         {
+          # GN version: //components/autofill/content/public/interfaces:types
+          'target_name': 'autofill_content_types_mojo_bindings_mojom',
+          'type': 'none',
+          'variables': {
+            'mojom_files': [
+              'autofill/content/public/interfaces/autofill_types.mojom',
+            ],
+            'mojom_typemaps': [
+              'autofill/content/public/cpp/autofill_types.typemap',
+              '<(DEPTH)/url/mojo/gurl.typemap',
+            ],
+          },
+          'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
+          'dependencies': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+          ],
+        },
+        {
+          # GN version: //components/autofill/content/public/interfaces:types
+          'target_name': 'autofill_content_types_mojo_bindings',
+          'type': 'static_library',
+          'sources': [
+            'autofill/content/public/cpp/autofill_types_struct_traits.cc'
+          ],
+          'export_dependent_settings': [
+            '../url/url.gyp:url_mojom',
+           ],
+          'dependencies': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            '../url/url.gyp:url_mojom',
+            'autofill_content_types_mojo_bindings_mojom',
+          ],
+        },
+        {
+          # GN version: //components/autofill/content/public/interfaces:test_types
+          'target_name': 'autofill_content_test_types_mojo_bindings',
+          'type': 'static_library',
+          'variables': {
+            'mojom_typemaps': [
+              'autofill/content/public/cpp/autofill_types.typemap',
+              '<(DEPTH)/url/mojo/gurl.typemap',
+            ],
+          },
+          'sources': [
+            'autofill/content/public/interfaces/test_autofill_types.mojom',
+          ],
+          'export_dependent_settings': [
+            '../url/url.gyp:url_mojom',
+            'autofill_content_types_mojo_bindings',
+           ],
+          'dependencies': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            '../url/url.gyp:url_mojom',
+            'autofill_content_types_mojo_bindings',
+          ],
+          'includes': [ '../mojo/mojom_bindings_generator.gypi' ],
+        },
+        {
           # GN version: //components/autofill/content/public/interfaces
           'target_name': 'autofill_content_mojo_bindings_mojom',
           'type': 'none',
@@ -319,6 +384,9 @@
             'mojom_files': [
               'autofill/content/public/interfaces/autofill_agent.mojom',
               'autofill/content/public/interfaces/autofill_driver.mojom',
+            ],
+            'mojom_typemaps': [
+              'autofill/content/public/cpp/autofill_types.typemap',
             ],
           },
           'include_dirs': [
@@ -338,6 +406,7 @@
           'dependencies': [
             '../mojo/mojo_public.gyp:mojo_cpp_bindings',
             'autofill_content_mojo_bindings_mojom',
+            'autofill_content_types_mojo_bindings',
           ],
         },
         {
@@ -383,7 +452,6 @@
           'includes': [ '../build/protoc.gypi' ]
         },
        {
-         # GN version: //components/autofill/content/browser/wallet:test_support
          # GN version: //components/autofill/content/renderer:test_support
          'target_name': 'autofill_content_test_support',
          'type': 'static_library',
@@ -448,8 +516,6 @@
             'autofill/content/browser/content_autofill_driver_factory.h',
             'autofill/content/browser/risk/fingerprint.cc',
             'autofill/content/browser/risk/fingerprint.h',
-            'autofill/content/browser/wallet/wallet_service_url.cc',
-            'autofill/content/browser/wallet/wallet_service_url.h',
           ],
 
           # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -491,6 +557,8 @@
             'autofill/content/renderer/form_autofill_util.h',
             'autofill/content/renderer/form_cache.cc',
             'autofill/content/renderer/form_cache.h',
+            'autofill/content/renderer/form_classifier.cc',
+            'autofill/content/renderer/form_classifier.h',
             'autofill/content/renderer/page_click_listener.h',
             'autofill/content/renderer/page_click_tracker.cc',
             'autofill/content/renderer/page_click_tracker.h',

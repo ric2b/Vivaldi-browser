@@ -4,18 +4,19 @@
 
 #include "ash/system/chromeos/bluetooth/tray_bluetooth.h"
 
-#include "ash/session/session_state_delegate.h"
-#include "ash/shell.h"
-#include "ash/system/tray/fixed_sized_scroll_view.h"
-#include "ash/system/tray/hover_highlight_view.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/system/tray/fixed_sized_scroll_view.h"
+#include "ash/common/system/tray/hover_highlight_view.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_notifier.h"
+#include "ash/common/system/tray/throbber_view.h"
+#include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_details_view.h"
+#include "ash/common/system/tray/tray_item_more.h"
+#include "ash/common/system/tray/tray_popup_header_button.h"
+#include "ash/common/system/tray/view_click_listener.h"
+#include "ash/common/wm_shell.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/system_tray_notifier.h"
-#include "ash/system/tray/throbber_view.h"
-#include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_details_view.h"
-#include "ash/system/tray/tray_item_more.h"
-#include "ash/system/tray/tray_popup_header_button.h"
 #include "grit/ash_resources.h"
 #include "grit/ash_strings.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -74,8 +75,7 @@ class BluetoothDefaultView : public TrayItemMore {
   ~BluetoothDefaultView() override {}
 
   void UpdateLabel() {
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (delegate->GetBluetoothAvailable()) {
       ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
       const base::string16 label =
@@ -98,7 +98,7 @@ class BluetoothDetailedView : public TrayDetailsView,
                               public ViewClickListener,
                               public views::ButtonListener {
  public:
-  BluetoothDetailedView(SystemTrayItem* owner, user::LoginStatus login)
+  BluetoothDetailedView(SystemTrayItem* owner, LoginStatus login)
       : TrayDetailsView(owner),
         login_(login),
         manage_devices_(NULL),
@@ -130,8 +130,7 @@ class BluetoothDetailedView : public TrayDetailsView,
   }
 
   void BluetoothStartDiscovering() {
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     bool bluetooth_enabled = delegate->GetBluetoothEnabled();
     bool bluetooth_discovering = delegate->GetBluetoothDiscovering();
     if (bluetooth_discovering) {
@@ -145,8 +144,7 @@ class BluetoothDetailedView : public TrayDetailsView,
   }
 
   void BluetoothStopDiscovering() {
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (delegate && delegate->GetBluetoothDiscovering()) {
       delegate->BluetoothStopDiscovering();
       throbber_->Stop();
@@ -160,8 +158,7 @@ class BluetoothDetailedView : public TrayDetailsView,
     std::set<std::string> new_discovered_not_paired_devices;
 
     BluetoothDeviceList list;
-    Shell::GetInstance()->system_tray_delegate()->GetAvailableBluetoothDevices(
-        &list);
+    WmShell::Get()->system_tray_delegate()->GetAvailableBluetoothDevices(&list);
     for (size_t i = 0; i < list.size(); ++i) {
       if (list[i].connecting) {
         list[i].display_name = l10n_util::GetStringFUTF16(
@@ -194,7 +191,7 @@ class BluetoothDetailedView : public TrayDetailsView,
   void AppendHeaderEntry() {
     CreateSpecialRow(IDS_ASH_STATUS_TRAY_BLUETOOTH, this);
 
-    if (login_ == user::LOGGED_IN_LOCKED)
+    if (login_ == LoginStatus::LOCKED)
       return;
 
     throbber_ = new ThrobberView;
@@ -203,8 +200,7 @@ class BluetoothDetailedView : public TrayDetailsView,
     footer()->AddView(throbber_, false /* separator */);
 
     // Do not allow toggling bluetooth in the lock screen.
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     toggle_bluetooth_ =
         new TrayPopupHeaderButton(this, IDR_AURA_UBER_TRAY_BLUETOOTH_ENABLED,
                                   IDR_AURA_UBER_TRAY_BLUETOOTH_DISABLED,
@@ -222,9 +218,8 @@ class BluetoothDetailedView : public TrayDetailsView,
 
   void UpdateHeaderEntry() {
     if (toggle_bluetooth_) {
-      toggle_bluetooth_->SetToggled(!ash::Shell::GetInstance()
-                                         ->system_tray_delegate()
-                                         ->GetBluetoothEnabled());
+      toggle_bluetooth_->SetToggled(
+          !WmShell::Get()->system_tray_delegate()->GetBluetoothEnabled());
     }
   }
 
@@ -233,8 +228,7 @@ class BluetoothDetailedView : public TrayDetailsView,
     scroll_content()->RemoveAllChildViews(true);
     enable_bluetooth_ = NULL;
 
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     bool bluetooth_enabled = delegate->GetBluetoothEnabled();
     bool blueooth_available = delegate->GetBluetoothAvailable();
     if (blueooth_available && !bluetooth_enabled && toggle_bluetooth_) {
@@ -292,24 +286,17 @@ class BluetoothDetailedView : public TrayDetailsView,
 
   // Add settings entries.
   void AppendSettingsEntries() {
-    if (!ash::Shell::GetInstance()
-             ->system_tray_delegate()
-             ->ShouldShowSettings()) {
+    if (!WmShell::Get()->system_tray_delegate()->ShouldShowSettings())
       return;
-    }
 
     // Add bluetooth device requires a browser window, hide it for non logged in
     // user.
-    bool userAddingRunning = ash::Shell::GetInstance()
-                                 ->session_state_delegate()
-                                 ->IsInSecondaryLoginScreen();
-
-    if (login_ == user::LOGGED_IN_NONE || login_ == user::LOGGED_IN_LOCKED ||
-        userAddingRunning)
+    if (login_ == LoginStatus::NOT_LOGGED_IN || login_ == LoginStatus::LOCKED ||
+        WmShell::Get()->GetSessionStateDelegate()->IsInSecondaryLoginScreen()) {
       return;
+    }
 
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
     HoverHighlightView* container = new HoverHighlightView(this);
     container->AddLabel(
@@ -355,17 +342,15 @@ class BluetoothDetailedView : public TrayDetailsView,
 
   // Overridden from ViewClickListener.
   void OnViewClicked(views::View* sender) override {
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (sender == footer()->content()) {
       TransitionToDefaultView();
     } else if (sender == manage_devices_) {
       delegate->ManageBluetoothDevices();
     } else if (sender == enable_bluetooth_) {
-      Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-          delegate->GetBluetoothEnabled()
-              ? ash::UMA_STATUS_AREA_BLUETOOTH_DISABLED
-              : ash::UMA_STATUS_AREA_BLUETOOTH_ENABLED);
+      WmShell::Get()->RecordUserMetricsAction(
+          delegate->GetBluetoothEnabled() ? UMA_STATUS_AREA_BLUETOOTH_DISABLED
+                                          : UMA_STATUS_AREA_BLUETOOTH_ENABLED);
       delegate->ToggleBluetooth();
     } else {
       if (!delegate->GetBluetoothEnabled())
@@ -384,15 +369,14 @@ class BluetoothDetailedView : public TrayDetailsView,
 
   // Overridden from ButtonListener.
   void ButtonPressed(views::Button* sender, const ui::Event& event) override {
-    ash::SystemTrayDelegate* delegate =
-        ash::Shell::GetInstance()->system_tray_delegate();
+    SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
     if (sender == toggle_bluetooth_)
       delegate->ToggleBluetooth();
     else
       NOTREACHED();
   }
 
-  user::LoginStatus login_;
+  LoginStatus login_;
 
   std::map<views::View*, std::string> device_map_;
   views::View* manage_devices_;
@@ -410,30 +394,32 @@ class BluetoothDetailedView : public TrayDetailsView,
 }  // namespace tray
 
 TrayBluetooth::TrayBluetooth(SystemTray* system_tray)
-    : SystemTrayItem(system_tray), default_(NULL), detailed_(NULL) {
-  Shell::GetInstance()->system_tray_notifier()->AddBluetoothObserver(this);
+    : SystemTrayItem(system_tray, UMA_BLUETOOTH),
+      default_(NULL),
+      detailed_(NULL) {
+  WmShell::Get()->system_tray_notifier()->AddBluetoothObserver(this);
 }
 
 TrayBluetooth::~TrayBluetooth() {
-  Shell::GetInstance()->system_tray_notifier()->RemoveBluetoothObserver(this);
+  WmShell::Get()->system_tray_notifier()->RemoveBluetoothObserver(this);
 }
 
-views::View* TrayBluetooth::CreateTrayView(user::LoginStatus status) {
+views::View* TrayBluetooth::CreateTrayView(LoginStatus status) {
   return NULL;
 }
 
-views::View* TrayBluetooth::CreateDefaultView(user::LoginStatus status) {
+views::View* TrayBluetooth::CreateDefaultView(LoginStatus status) {
   CHECK(default_ == NULL);
   default_ =
-      new tray::BluetoothDefaultView(this, status != user::LOGGED_IN_LOCKED);
+      new tray::BluetoothDefaultView(this, status != LoginStatus::LOCKED);
   return default_;
 }
 
-views::View* TrayBluetooth::CreateDetailedView(user::LoginStatus status) {
-  if (!Shell::GetInstance()->system_tray_delegate()->GetBluetoothAvailable())
+views::View* TrayBluetooth::CreateDetailedView(LoginStatus status) {
+  if (!WmShell::Get()->system_tray_delegate()->GetBluetoothAvailable())
     return NULL;
-  Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-      ash::UMA_STATUS_AREA_DETAILED_BLUETOOTH_VIEW);
+  WmShell::Get()->RecordUserMetricsAction(
+      UMA_STATUS_AREA_DETAILED_BLUETOOTH_VIEW);
   CHECK(detailed_ == NULL);
   detailed_ = new tray::BluetoothDetailedView(this, status);
   detailed_->Update();
@@ -450,7 +436,7 @@ void TrayBluetooth::DestroyDetailedView() {
   detailed_ = NULL;
 }
 
-void TrayBluetooth::UpdateAfterLoginStatusChange(user::LoginStatus status) {}
+void TrayBluetooth::UpdateAfterLoginStatusChange(LoginStatus status) {}
 
 void TrayBluetooth::OnBluetoothRefresh() {
   if (default_)

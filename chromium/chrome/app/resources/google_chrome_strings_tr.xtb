@@ -7,7 +7,6 @@
 <translation id="1035334672863811645">Chrome'da oturum açın</translation>
 <translation id="1061441684050139317">Chrome'un mikrofonu bu siteyle paylaşması için mikrofon erişimine ihtiyacı var.</translation>
 <translation id="1065672644894730302">Tercihleriniz okunamıyor. Bazı özellikler kullanılamayabilir. Tercihlerde yapılan değişiklikler kaydedilmeyecektir.</translation>
-<translation id="1073391069195728457">Chrome - Bildirimler</translation>
 <translation id="1104959162601287462">&amp;Chrome OS hakkında</translation>
 <translation id="110877069173485804">Bu sizin Chrome'unuz</translation>
 <translation id="123620459398936149">Chrome OS, verilerinizi senkronize edemedi. Lütfen Senkronizasyon parolanızı güncelleyin.</translation>
@@ -25,6 +24,7 @@
 <translation id="1587223624401073077">Google Chrome kameranızı kullanıyor.</translation>
 <translation id="1619887657840448962">Chrome'u daha güvenli bir hale getirmek için <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> altında listelenmeyen ve bilginiz dışında eklenmiş olabilecek aşağıdaki uzantıyı devre dışı bıraktık.</translation>
 <translation id="163860049029591106">Chrome OS'yi Kullanmaya Başlayın</translation>
+<translation id="1653828314016431939">Tamam - Şimdi yeniden başlat</translation>
 <translation id="1682634494516646069">Google Chrome, veri dizini üzerinde okuma ve yazma işlemi yapamıyor: <ph name="USER_DATA_DIRECTORY" /></translation>
 <translation id="1698376642261615901">Google Chrome, web sayfalarını ve uygulamaları yıldırım hızıyla çalıştıran bir web tarayıcısıdır. Hızlı, dengeli ve kullanımı kolaydır. Kötü amaçlı yazılımlara ve e-dolandırıcılığa karşı Google Chrome'un içinde yerleşik olarak bulunan koruma özellikleriyle web'de daha güvenli bir şekilde gezinin.</translation>
 <translation id="174539241580958092">Oturum açmadaki bir hata nedeniyle Google Chrome, verilerinizi senkronize edemedi.</translation>
@@ -88,8 +88,8 @@ Daha fazla talimat için lütfen e-postanızı <ph name="ACCOUNT_EMAIL" /> kontr
 <translation id="3622797965165704966">Chrome'u Google Hesabınızla ve paylaşılan bilgisayarlarda kullanmak artık daha kolay.</translation>
 <translation id="3735758079232443276">"<ph name="EXTENSION_NAME" />" uzantısı, Chrome'u başlattığınızda gösterilen sayfayı değiştirdi.</translation>
 <translation id="3738139272394829648">Dokun ve Ara</translation>
+<translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
 <translation id="3784527566857328444">Chrome'dan Kaldır...</translation>
-<translation id="3836351788193713666">Az kaldı! Güncellemeyi tamamlamak için Google Chrome'u yeniden başlatın.</translation>
 <translation id="3847841918622877581">Google Chrome, tarama deneyiminizi iyileştirmek için Web hizmetlerinden yararlanabilir.</translation>
 <translation id="386202838227397562">Lütfen tüm Google Chrome pencerelerini kapatıp tekrar deneyin.</translation>
 <translation id="3870154837782082782">Google Inc.</translation>
@@ -101,7 +101,6 @@ Daha fazla talimat için lütfen e-postanızı <ph name="ACCOUNT_EMAIL" /> kontr
 <translation id="4053720452172726777">Google Chrome'u özelleştirin ve kontrol edin</translation>
 <translation id="4147555960264124640">Yönetilen bir hesapla oturum açıyor ve hesabın yöneticisine Google Chrome profilinizi denetleme izni veriyorsunuz. Uygulamalarınız, yer işaretleriniz, geçmişiniz, şifreleriniz ve diğer ayarlarınız gibi Chrome verileriniz kalıcı olarak <ph name="USER_NAME" /> ile bağlantılandırılacaktır. Google Hesapları Hesap Özeti'ni kullanarak bu verileri silebilecek, ancak bu verileri başka bir hesapla ilişkilendiremeyeceksiniz.<ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Yükleyici arşivi açamadı. Lütfen Google Chrome'u yeniden indirin.</translation>
-<translation id="4167057906098955729">Chrome uygulamaları, uzantılar ve web sitelerinden gelen tüm bildirimlerinizi burada görebilirsiniz.</translation>
 <translation id="423410644998903704">Chrome'un bu siteyle paylaşımda bulunabilmesi için izin erişimine ihtiyacı var.</translation>
 <translation id="4251615635259297716">Chrome verileriniz bu hesaba bağlansın mı?</translation>
 <translation id="4309555186815777032">(Chrome'un <ph name="BEGIN_BUTTON" />yeniden başlatılmasını<ph name="END_BUTTON" /> gerektirir)</translation>
@@ -114,6 +113,7 @@ Daha fazla talimat için lütfen e-postanızı <ph name="ACCOUNT_EMAIL" /> kontr
 <translation id="4567424176335768812"><ph name="USER_EMAIL_ADDRESS" /> olarak oturum açtınız. Şimdi oturum açtığınız tüm cihazlarda yer işaretlerinize, geçmişinize ve diğer ayarlarınıza erişebilirsiniz.</translation>
 <translation id="4631713731678262610">Chrome menüsünde gizle</translation>
 <translation id="4633000520311261472">Chrome'u daha güvenli bir hale getirmek için <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> altında listelenmeyen ve bilginiz dışında eklenmiş olabilecek bazı uzantıları devre dışı bıraktık.</translation>
+<translation id="4664415150087723341">Google Chrome için özel bir güvenlik güncellemesi uygulandı. Güncellemenin geçerli olması için Google Chrome'u şimdi yeniden başlatmalısınız (sekmeleriniz geri yüklenecektir).</translation>
 <translation id="4700157086864140907">Google Chrome, tarayıcıda yazdıklarınızı Google sunucularına gönderip akıllı yazım denetimi olanağı sağlayabilir ve Google arama tarafından kullanılan yazım denetimi teknolojisini kullanmanıza olanak tanır.</translation>
 <translation id="4728575227883772061">Belirlenemeyen bir hata nedeniyle yükleme başarısız oldu. Google Chrome şu anda çalışır durumdaysa, kapatıp yeniden deneyin.</translation>
 <translation id="4743926867934016338">Kabul Et ve Ara</translation>
@@ -124,6 +124,7 @@ Daha fazla talimat için lütfen e-postanızı <ph name="ACCOUNT_EMAIL" /> kontr
 <translation id="4921569541910214635">Bilgisayarı paylaşıyor musunuz? Artık Chrome'u tam olarak istediğiniz gibi kurabilirsiniz.</translation>
 <translation id="4925019873400497719">Chrome, bu web sitesi sertifikasının <ph name="ISSUER" /> tarafından yayınlandığını doğruladı. Sunucu Sertifika Şeffaflığı bilgilerini sağladı, ancak bu bilgiler geçersizdi.</translation>
 <translation id="4953650215774548573">Google Chrome'u varsayılan tarayıcım olarak ayarla</translation>
+<translation id="495931528404527476">Chrome'da</translation>
 <translation id="4987308747895123092">Lütfen, (Windows 8 modunda olanlar dahil) Google Chrome pencerelerinin tümünü kapatın ve tekrar deneyin.</translation>
 <translation id="4990567037958725628">Google Chrome Canary</translation>
 <translation id="5028489144783860647">Google Chrome, verilerinizi senkronize edemedi. Lütfen Senkronizasyon parolanızı güncelleyin.</translation>
@@ -136,6 +137,7 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="5204098752394657250">Google Chrome <ph name="TERMS_OF_SERVICE_LINK" />Hizmet Şartları<ph name="END_TERMS_OF_SERVICE_LINK" /></translation>
 <translation id="5251420635869119124">Misafirler Chrome'u geride hiçbir şey bırakmadan kullanabilirler.</translation>
 <translation id="5253588388888612165">Bu bilgisayarı <ph name="PROFILE_NAME" /> ile paylaşıyorsanız web'e ayrı olarak göz atmak için kendinizi Chrome'a ekleyin. Bunu yapmazsanız diğer kullanıcıların Google Hesaplarının bağlantısını kesebilirsiniz.</translation>
+<translation id="5284703908158630707">{SECONDS,plural, =1{Google Chrome 1 saniye içinde yeniden başlatılacak.}other{Google Chrome # saniye içinde yeniden başlatılacak.}}</translation>
 <translation id="5328989068199000832">Google Chrome Binaries</translation>
 <translation id="5334545119300433702">Bu modülün Google Chrome'la çakıştığı biliniyor.</translation>
 <translation id="5386244825306882791">Ayrıca, Chrome'u başlattığınızda veya Çok Amaçlı Adres Çubuğu'ndan arama yaptığınızda gösterilecek sayfayı da denetler.</translation>
@@ -149,8 +151,10 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="568643307450491754">Yer işaretlerinizi Chrome menüsünde veya yer işaretleri çubuğunda bulabilirsiniz.</translation>
 <translation id="573759479754913123">Chrome OS hakkında</translation>
 <translation id="5749068826913805084">Dosya indirmek için Chrome'un depolama alanına erişmesi gerekiyor.</translation>
+<translation id="5832596086758878896">{NUM_ITEMS,plural, =1{Bu işlem, bu cihazdan $1 öğeyi kalıcı olarak silecektir. Verilerinizi daha sonra geri almak için Chrome'da $2 olarak oturum açın.}other{Bu işlem, bu cihazdan $1 öğeyi kalıcı olarak silecektir. Verilerinizi daha sonra geri almak için Chrome'da $2 olarak oturum açın.}}</translation>
 <translation id="5855036575689098185">Bilgisayarınızda çalışan yazılım Google Chrome ile uyumsuz.</translation>
 <translation id="5877064549588274448">Kanal değişti. Değişikliklerin uygulanması için cihazınızı yeniden başlatın.</translation>
+<translation id="5906655207909574370">Az kaldı! Güncellemeyi tamamlamak için cihazınızı yeniden başlatın.</translation>
 <translation id="5931853610562009806">Mac bilgisayarlarda şifreler Keychain uygulamanızda saklanabilir ve bu OS X hesabını paylaşan diğer Chrome kullanıcıları bu şifrelere erişilebilir veya şifreleri senkronize edilebilir.</translation>
 <translation id="5940385492829620908">Web, yer işaretleri ve diğer Chrome öğeleriniz burada bulunur.</translation>
 <translation id="5941830788786076944">Google Chrome varsayılan tarayıcı olsun</translation>
@@ -188,11 +192,11 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="7125719106133729027">Chrome kendini en yeni sürüme güncelleyemedi, bundan dolayı yeni ve harika özelliklerin yanı sıra güvenlik düzeltmelerinden mahrum kalıyorsunuz. Chrome'u manuel olarak yeniden yüklemeniz gerekiyor.</translation>
 <translation id="7161904924553537242">Google Chrome'a Hoş Geldiniz</translation>
 <translation id="7164397146364144019">Olası güvenlik olaylarının ayrıntılarını Google'a otomatik olarak bildirerek Chrome'un daha güvenli ve kullanımı kolay bir hale gelmesine yardımcı olabilirsiniz.</translation>
+<translation id="7177347454226092725">Bu işlem tarama verilerinizi bu cihazdan kalıcı olarak silecektir. Verilerinizi daha sonra geri almak için Chrome'da $2 olarak oturum açın.</translation>
 <translation id="7185038942300673794"><ph name="EXTENSION_NAME" /> Chrome'a eklendi.</translation>
 <translation id="7191567847629796517">Google Chrome OS, <ph name="SCHEME" /> bağlantılarını işlemek için harici bir uygulamanın başlatılmasını desteklemiyor. İstenen bağlantı: <ph name="PROTOLINK" />.</translation>
 <translation id="7196020411877309443">Neden bunu görüyorum?</translation>
 <translation id="7242029209006116544">Yönetilen bir hesapla oturum açıyor ve hesabın yöneticisine Google Chrome profilinizi denetleme izni veriyorsunuz. Uygulamalarınız, yer işaretleriniz, geçmişiniz, şifreleriniz ve diğer ayarlarınız gibi Chrome verileriniz kalıcı olarak <ph name="USER_NAME" /> ile bağlantılandırılacaktır. Google Hesapları Hesap Özeti'ni kullanarak bu verileri silebilecek, ancak bu verileri başka bir hesapla ilişkilendiremeyeceksiniz. İsterseniz mevcut Chrome verilerinizi ayrı tutmak için yeni bir profil oluşturabilirsiniz.<ph name="LEARN_MORE" /></translation>
-<translation id="7282192067747128786">Chrome - Bildirimler (<ph name="QUANTITY" /> okunmamış)</translation>
 <translation id="729375352412857283">Windows XP ve Windows Vista artık desteklenmeyeceğinden, bu bilgisayar yakında Google Chrome güncellemeleri almayı durduracaktır.</translation>
 <translation id="7339898014177206373">Yeni pencere</translation>
 <translation id="7398801000654795464">Chrome'da <ph name="USER_EMAIL_ADDRESS" /> olarak oturum açtınız. Tekrar oturum açmak için lütfen aynı hesabı kullanın.</translation>
@@ -204,6 +208,7 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="7473136999113284234">Chrome otomatik olarak güncellenir, böylece her zaman en yeni sürüme sahip olursunuz.</translation>
 <translation id="7473891865547856676">Hayır, Teşekkürler</translation>
 <translation id="7494905215383356681">Chrome açık kaynak lisansları</translation>
+<translation id="7520096660192498279">{NUM_ITEMS,plural, =1{Bu işlem en az $1 öğeyi bu cihazdan kalıcı olarak silecektir. Verilerinizi daha sonra geri almak için Chrome'da $2 olarak oturum açın.}other{Bu işlem en az $1 öğeyi bu cihazdan kalıcı olarak silecektir. Verilerinizi daha sonra geri almak için Chrome'da $2 olarak oturum açın.}}</translation>
 <translation id="7592736734348559088">Hesap oturum açma ayrıntılarınız güncel olmadığından Google Chrome, verilerinizi senkronize edemedi.</translation>
 <translation id="7626032353295482388">Chrome'a Hoş Geldiniz</translation>
 <translation id="7747138024166251722">Yükleyici geçici bir dizin oluşturamadı. Lütfen, kullanılabilir disk alanını ve yazılım yükleme iznini kontrol edin.</translation>
@@ -214,6 +219,8 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="7808348361785373670">Chrome'dan kaldır...</translation>
 <translation id="7825851276765848807">Yükleme belirtilmeyen bir hata nedeniyle başarısız oldu. Lütfen Google Chrome'u tekrar yükleyin.</translation>
 <translation id="7890208801193284374">Bir bilgisayarı paylaşıyorsanız arkadaşlarınız ve aileniz web'e ayrı olarak göz atabilir ve Chrome'u tam olarak istedikleri şekilde ayarlayabilirler.</translation>
+<translation id="7908168227788431038">Az kaldı! Güncellemeyi tamamlamak için Google Chrome'u yeniden başlatın.</translation>
+<translation id="795025003224538582">Yeniden başlatma</translation>
 <translation id="8005540215158006229">Chrome neredeyse hazır.</translation>
 <translation id="8008534537613507642">Chrome'u yeniden yükle</translation>
 <translation id="8030318113982266900">Cihazınız <ph name="CHANNEL_NAME" /> kanalına güncelleniyor...</translation>
@@ -222,16 +229,15 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="8129812357326543296">&amp;Google Chrome hakkında</translation>
 <translation id="8183957050892517584">Chrome, kişisel bilgilerinizi güvenli şekilde depoladığından bu bilgileri tekrar yazmak zorunda kalmazsınız.</translation>
 <translation id="8205111949707227942">İsteğe Bağlı: Kullanıcı istatistiklerini ve çökme raporlarını Google'a otomatik olarak göndererek Chrome OS'in iyileştirilmesine yardımcı olun.</translation>
+<translation id="8211929904040702368">Bu işlem, en az <ph name="TOTAL_COUNT" /> öğeyi bu cihazdan kalıcı olarak silecektir. Verilerinizi daha sonra geri almak için Chrome'da $2 olarak oturum açın.</translation>
 <translation id="8227755444512189073">Google Chrome'un <ph name="SCHEME" /> bağlantılarını işleyebilmek için harici bir uygulama başlatması gerekiyor. İstenen bağlantı <ph name="PROTOLINK" />.</translation>
 <translation id="8255190535488645436">Google Chrome kameranızı ve mikrofonunuzu kullanıyor.</translation>
 <translation id="8286862437124483331">Google Chrome şifreleri göstermeye çalışıyor. Buna izin vermek için Windows şifrenizi yazın.</translation>
 <translation id="8290100596633877290">Hata! Google Chrome kilitlendi. Şimdi yeniden başlatılsın mı?</translation>
 <translation id="8406086379114794905">Chrome'u daha iyi hale getirmeye yardımcı olun</translation>
-<translation id="8460191995881063249">Chrome Bildirim Merkezi</translation>
 <translation id="853189717709780425">Yönetilen bir hesapla oturum açıyor ve hesabın yöneticisine Google Chrome profilinizi denetleme izni veriyorsunuz. Uygulamalarınız, yer işaretleriniz, geçmişiniz, şifreleriniz ve diğer ayarlarınız gibi Chrome verileriniz kalıcı olarak <ph name="USER_NAME" /> ile bağlantılandırılacaktır. İstediğinizde Google Hesapları Hesap Özeti'ni kullanarak bu verileri silebilecek, ancak bu verileri başka bir hesapla ilişkilendiremeyeceksiniz.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8547799825197623713">Chrome Uygulama Başlatıcısı Canary</translation>
-<translation id="8551886023433311834">Güncelleme neredeyse tamamlandı! Güncellemenin tamamlanması için cihazınızı yeniden başlatın.</translation>
 <translation id="8556340503434111824">Kullanabileceğiniz yeni bir Google Chrome sürümü var ve bu sürüm, her zamankinden daha hızlı.</translation>
 <translation id="8568392309447938879">Uygulamaları kullanmak için Chrome'da oturum açmış olmanız gerekir. Oturum açmanız, Chrome'un uygulamalarınızı, yer işaretlerinizi, geçmişinizi, şifrelerinizi ve diğer ayarlarınızı tüm cihazlarınızda senkronize etmesine olanak sağlar.</translation>
 <translation id="8614913330719544658">Google Chrome yanıt vermiyor. Yeniden başlatılsın mı?</translation>
@@ -239,6 +245,7 @@ Bazı özellikler kullanılamayabilir. Lütfen farklı bir profil dizini belirti
 <translation id="8669527147644353129">Google Chrome Helper</translation>
 <translation id="8679801911857917785">Ayrıca Chrome'u başlattığınızda gösterilecek sayfayı da denetler.</translation>
 <translation id="870251953148363156">&amp;Google Chrome'u güncelle</translation>
+<translation id="8796108026289707191">Google Chrome'u şimdi yeniden başlatmalısınız.</translation>
 <translation id="8823341990149967727">Chrome Sürümü Eski</translation>
 <translation id="884296878221830158">Ayrıca Chrome'u başlattığınızda veya Ana Sayfa düğmesini tıkladığınızda gösterilecek sayfayı da denetler.</translation>
 <translation id="8851136666856101339">main</translation>

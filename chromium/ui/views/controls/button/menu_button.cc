@@ -13,12 +13,12 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/event_utils.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
-#include "ui/views/animation/ink_drop_delegate.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/menu_button_listener.h"
 #include "ui/views/mouse_constants.h"
@@ -148,9 +148,9 @@ bool MenuButton::Activate(const ui::Event* event) {
 
     menu_closed_time_ = TimeTicks::Now();
 
-    if (ink_drop_delegate() && !increment_pressed_lock_called &&
-        pressed_lock_count_ == 0) {
-      ink_drop_delegate()->OnAction(InkDropState::ACTION_TRIGGERED);
+    if (!increment_pressed_lock_called && pressed_lock_count_ == 0) {
+      AnimateInkDrop(InkDropState::ACTION_TRIGGERED,
+                     ui::LocatedEvent::FromIfValid(event));
     }
 
     // We must return false here so that the RootView does not get stuck
@@ -159,8 +159,7 @@ bool MenuButton::Activate(const ui::Event* event) {
     return false;
   }
 
-  if (ink_drop_delegate())
-    ink_drop_delegate()->OnAction(InkDropState::HIDDEN);
+  AnimateInkDrop(InkDropState::HIDDEN, ui::LocatedEvent::FromIfValid(event));
   return true;
 }
 
@@ -226,8 +225,7 @@ void MenuButton::OnMouseReleased(const ui::MouseEvent& event) {
       HitTestPoint(event.location()) && !InDrag()) {
     Activate(&event);
   } else {
-    if (ink_drop_delegate())
-      ink_drop_delegate()->OnAction(InkDropState::HIDDEN);
+    AnimateInkDrop(InkDropState::HIDDEN, &event);
     LabelButton::OnMouseReleased(event);
   }
 }
@@ -377,11 +375,11 @@ void MenuButton::IncrementPressedLocked(bool snap_ink_drop_to_activated) {
   if (increment_pressed_lock_called_)
     *increment_pressed_lock_called_ = true;
   should_disable_after_press_ = state() == STATE_DISABLED;
-  if (state() != STATE_PRESSED && ink_drop_delegate()) {
+  if (state() != STATE_PRESSED) {
     if (snap_ink_drop_to_activated)
-      ink_drop_delegate()->SnapToActivated();
+      ink_drop()->SnapToActivated();
     else
-      ink_drop_delegate()->OnAction(InkDropState::ACTIVATED);
+      AnimateInkDrop(InkDropState::ACTIVATED, nullptr /* event */);
   }
   SetState(STATE_PRESSED);
 }
@@ -400,8 +398,10 @@ void MenuButton::DecrementPressedLocked() {
       desired_state = STATE_HOVERED;
     }
     SetState(desired_state);
-    if (ink_drop_delegate() && state() != STATE_PRESSED)
-      ink_drop_delegate()->OnAction(InkDropState::DEACTIVATED);
+    // The widget may be null during shutdown. If so, it doesn't make sense to
+    // try to add an ink drop effect.
+    if (GetWidget() && state() != STATE_PRESSED)
+      AnimateInkDrop(InkDropState::DEACTIVATED, nullptr /* event */);
   }
 }
 

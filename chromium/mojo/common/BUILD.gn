@@ -9,7 +9,6 @@ group("common") {
   public_deps = [
     ":common_base",
     ":common_custom_types",
-    ":url_type_converters",
   ]
 }
 
@@ -39,30 +38,9 @@ component("common_base") {
   defines = [ "MOJO_COMMON_IMPLEMENTATION" ]
 
   public_deps = [
+    "//base",
+    "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
-  ]
-
-  deps = [
-    "//base",
-    "//base/third_party/dynamic_annotations",
-    "//mojo/public/c/system:for_component",
-    "//mojo/public/cpp/bindings",
-  ]
-}
-
-# GYP version: mojo/mojo_base.gyp:mojo_url_type_converters
-source_set("url_type_converters") {
-  sources = [
-    "url_type_converters.cc",
-    "url_type_converters.h",
-  ]
-
-  deps = [
-    ":common_base",
-    "//base",
-    "//base/third_party/dynamic_annotations",
-    "//mojo/public/cpp/bindings",
-    "//url",
   ]
 }
 

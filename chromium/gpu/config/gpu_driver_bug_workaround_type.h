@@ -15,6 +15,8 @@
 #define GPU_DRIVER_BUG_WORKAROUNDS(GPU_OP)                   \
   GPU_OP(AVDA_DONT_COPY_PICTURES,                            \
          avda_dont_copy_pictures)                            \
+  GPU_OP(AVDA_NO_EGLIMAGE_FOR_LUMINANCE_TEX,                 \
+         avda_no_eglimage_for_luminance_tex)                 \
   GPU_OP(AVOID_EGL_IMAGE_TARGET_TEXTURE_REUSE,               \
          avoid_egl_image_target_texture_reuse)               \
   GPU_OP(BROKEN_EGL_IMAGE_REF_COUNTING,                      \
@@ -41,8 +43,14 @@
          disable_direct_composition)                         \
   GPU_OP(DISABLE_DISCARD_FRAMEBUFFER,                        \
          disable_discard_framebuffer)                        \
+  GPU_OP(DISABLE_DXGI_ZERO_COPY_VIDEO,                       \
+         disable_dxgi_zero_copy_video)                       \
+  GPU_OP(DISABLE_NV12_DXGI_VIDEO,                            \
+         disable_nv12_dxgi_video)                            \
   GPU_OP(DISABLE_EXT_DRAW_BUFFERS,                           \
          disable_ext_draw_buffers)                           \
+  GPU_OP(DISABLE_FRAMEBUFFER_CMAA,                           \
+         disable_framebuffer_cmaa)                           \
   GPU_OP(DISABLE_GL_RGB_FORMAT,                              \
          disable_gl_rgb_format)                              \
   GPU_OP(DISABLE_MULTIMONITOR_MULTISAMPLING,                 \
@@ -93,12 +101,6 @@
          max_copy_texture_chromium_size_1048576)             \
   GPU_OP(MAX_COPY_TEXTURE_CHROMIUM_SIZE_262144,              \
          max_copy_texture_chromium_size_262144)              \
-  GPU_OP(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_1024,               \
-         max_cube_map_texture_size_limit_1024)               \
-  GPU_OP(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_4096,               \
-         max_cube_map_texture_size_limit_4096)               \
-  GPU_OP(MAX_CUBE_MAP_TEXTURE_SIZE_LIMIT_512,                \
-         max_cube_map_texture_size_limit_512)                \
   GPU_OP(MAX_FRAGMENT_UNIFORM_VECTORS_32,                    \
          max_fragment_uniform_vectors_32)                    \
   GPU_OP(MAX_TEXTURE_SIZE_LIMIT_4096,                        \
@@ -149,10 +151,6 @@
          unpack_alignment_workaround_with_unpack_buffer)     \
   GPU_OP(UNPACK_OVERLAPPING_ROWS_SEPARATELY_UNPACK_BUFFER,   \
          unpack_overlapping_rows_separately_unpack_buffer)   \
-  GPU_OP(IOSURFACE_READBACK_WORKAROUND,                      \
-         iosurface_readback_workaround)                      \
-  GPU_OP(UNROLL_FOR_LOOP_WITH_SAMPLER_ARRAY_INDEX,           \
-         unroll_for_loop_with_sampler_array_index)           \
   GPU_OP(USE_CLIENT_SIDE_ARRAYS_FOR_STREAM_BUFFERS,          \
          use_client_side_arrays_for_stream_buffers)          \
   GPU_OP(USE_CURRENT_PROGRAM_AFTER_SUCCESSFUL_LINK,          \
@@ -161,6 +159,8 @@
          use_intermediary_for_copy_texture_image)            \
   GPU_OP(USE_NON_ZERO_SIZE_FOR_CLIENT_SIDE_STREAM_BUFFERS,   \
          use_non_zero_size_for_client_side_stream_buffers)   \
+  GPU_OP(USE_SHADOWED_TEX_LEVEL_PARAMS,                      \
+         use_shadowed_tex_level_params)                      \
   GPU_OP(USE_VIRTUALIZED_GL_CONTEXTS,                        \
          use_virtualized_gl_contexts)                        \
   GPU_OP(VALIDATE_MULTISAMPLE_BUFFER_ALLOCATION,             \

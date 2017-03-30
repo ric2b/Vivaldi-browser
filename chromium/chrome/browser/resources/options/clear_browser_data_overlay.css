@@ -36,11 +36,15 @@
   color: #999;
 }
 
-.clear-browser-data-counter:not(:empty)::before {
-  content: '–\00a0\00a0';
+input[type=checkbox] ~ span {
+  line-height: 1.4em;
 }
 
-input[type=checkbox]:not(:checked) ~ .clear-browser-data-counter {
+.clear-browser-data-counter:not(:empty)::before {
+  content: '\00a0–\00a0\00a0';
+}
+
+input[type=checkbox]:not(:checked) ~ span > .clear-browser-data-counter {
   display: none;
 }
 

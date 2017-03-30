@@ -51,7 +51,8 @@ DecoderStream<StreamType>::DecoderStream(
     const scoped_refptr<base::SingleThreadTaskRunner>& task_runner,
     ScopedVector<Decoder> decoders,
     const scoped_refptr<MediaLog>& media_log)
-    : task_runner_(task_runner),
+    : traits_(media_log),
+      task_runner_(task_runner),
       media_log_(media_log),
       state_(STATE_UNINITIALIZED),
       stream_(NULL),
@@ -120,6 +121,8 @@ void DecoderStream<StreamType>::Initialize(
   waiting_for_decryption_key_cb_ = waiting_for_decryption_key_cb;
   stream_ = stream;
 
+  traits_.OnStreamReset(stream_);
+
   state_ = STATE_INITIALIZING;
   SelectDecoder(cdm_context);
 }
@@ -175,6 +178,7 @@ void DecoderStream<StreamType>::Reset(const base::Closure& closure) {
   }
 
   ready_outputs_.clear();
+  traits_.OnStreamReset(stream_);
 
   // It's possible to have received a DECODE_ERROR and entered STATE_ERROR right
   // before a Reset() is executed. If we are still waiting for a demuxer read,
@@ -255,7 +259,7 @@ base::TimeDelta DecoderStream<StreamType>::AverageDuration() const {
 template <DemuxerStream::Type StreamType>
 void DecoderStream<StreamType>::SelectDecoder(CdmContext* cdm_context) {
   decoder_selector_->SelectDecoder(
-      stream_, cdm_context,
+      &traits_, stream_, cdm_context,
       base::Bind(&DecoderStream<StreamType>::OnDecoderSelected,
                  weak_factory_.GetWeakPtr()),
       base::Bind(&DecoderStream<StreamType>::OnDecodeOutputReady,
@@ -384,6 +388,8 @@ void DecoderStream<StreamType>::DecodeInternal(
   DCHECK(reset_cb_.is_null());
   DCHECK(buffer.get());
 
+  traits_.OnDecode(buffer);
+
   int buffer_size = buffer->end_of_stream() ? 0 : buffer->data_size();
 
   TRACE_EVENT_ASYNC_BEGIN2(
@@ -449,7 +455,7 @@ void DecoderStream<StreamType>::OnDecodeDone(int buffer_size,
 
         state_ = STATE_REINITIALIZING_DECODER;
         decoder_selector_->SelectDecoder(
-            stream_, nullptr,
+            &traits_, stream_, nullptr,
             base::Bind(&DecoderStream<StreamType>::OnDecoderSelected,
                        weak_factory_.GetWeakPtr()),
             base::Bind(&DecoderStream<StreamType>::OnDecodeOutputReady,
@@ -511,6 +517,8 @@ void DecoderStream<StreamType>::OnDecodeOutputReady(
   // The resetting process will be handled when the decoder is reset.
   if (!reset_cb_.is_null())
     return;
+
+  traits_.OnDecodeDone(output);
 
   ++decoded_frames_since_fallback_;
 
@@ -707,7 +715,7 @@ void DecoderStream<StreamType>::ReinitializeDecoder() {
 
   state_ = STATE_REINITIALIZING_DECODER;
   // Decoders should not need a new CDM during reinitialization.
-  DecoderStreamTraits<StreamType>::InitializeDecoder(
+  traits_.InitializeDecoder(
       decoder_.get(), stream_, nullptr,
       base::Bind(&DecoderStream<StreamType>::OnDecoderReinitialized,
                  weak_factory_.GetWeakPtr()),

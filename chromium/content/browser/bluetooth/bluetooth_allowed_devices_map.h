@@ -8,9 +8,11 @@
 #include <map>
 #include <memory>
 #include <set>
+#include <unordered_set>
 #include <vector>
 
 #include "content/common/content_export.h"
+#include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
 #include "url/origin.h"
 
 namespace device {
@@ -32,12 +34,13 @@ class CONTENT_EXPORT BluetoothAllowedDevicesMap final {
   ~BluetoothAllowedDevicesMap();
 
   // Adds the Bluetooth Device with |device_address| to the map of allowed
-  // devices for that origin. Generates and returns a device id.
+  // devices for that origin. Generates and returns a device id. Because
+  // unique origins generate the same hash, unique origins are not supported.
+  // Calling this function with a unique origin will CHECK-fail.
   const std::string& AddDevice(
       const url::Origin& origin,
       const std::string& device_address,
-      const std::vector<BluetoothScanFilter>& filters,
-      const std::vector<device::BluetoothUUID>& optional_services);
+      const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options);
 
   // Removes the Bluetooth Device with |device_address| from the map of allowed
   // devices for |origin|.
@@ -56,23 +59,31 @@ class CONTENT_EXPORT BluetoothAllowedDevicesMap final {
 
   // Returns true if the origin has previously been granted access to
   // the service.
-  bool IsOriginAllowedToAccessService(const url::Origin& origin,
-                                      const std::string& device_id,
-                                      const std::string& service_uuid) const;
+  bool IsOriginAllowedToAccessService(
+      const url::Origin& origin,
+      const std::string& device_id,
+      const device::BluetoothUUID& service_uuid) const;
 
  private:
   typedef std::map<std::string, std::string> DeviceAddressToIdMap;
   typedef std::map<std::string, std::string> DeviceIdToAddressMap;
-  typedef std::map<std::string, std::set<std::string>> DeviceIdToServicesMap;
+  typedef std::map<
+      std::string,
+      std::unordered_set<device::BluetoothUUID, device::BluetoothUUIDHash>>
+      DeviceIdToServicesMap;
 
   // Returns an id guaranteed to be unique for the map. The id is randomly
   // generated so that an origin can't guess the id used in another origin.
   std::string GenerateDeviceId();
   void AddUnionOfServicesTo(
-      const std::vector<BluetoothScanFilter>& filters,
-      const std::vector<device::BluetoothUUID>& optional_services,
-      std::set<std::string>* unionOfServices);
+      const blink::mojom::WebBluetoothRequestDeviceOptionsPtr& options,
+      std::unordered_set<device::BluetoothUUID, device::BluetoothUUIDHash>*
+          unionOfServices);
 
+  // TODO(ortuno): Now that there is only one instance of this class per frame
+  // and that this map gets destroyed when navigating consider removing the
+  // origin mapping.
+  // http://crbug.com/610343
   std::map<url::Origin, DeviceAddressToIdMap>
       origin_to_device_address_to_id_map_;
   std::map<url::Origin, DeviceIdToAddressMap>

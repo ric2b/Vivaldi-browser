@@ -9,11 +9,13 @@
 #include "bindings/core/v8/V8IdleTaskRunner.h"
 #include "bindings/core/v8/V8Initializer.h"
 #include "bindings/core/v8/V8PerIsolateData.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/ThreadSafeFunctional.h"
 #include "platform/WebThreadSupportingGC.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -61,30 +63,6 @@ WorkerBackingThread::WorkerBackingThread(WebThread* thread, bool shouldCallGCOnS
 
 WorkerBackingThread::~WorkerBackingThread()
 {
-#if DCHECK_IS_ON()
-    MutexLocker locker(m_mutex);
-    DCHECK_EQ(0u, m_workerScriptCount);
-#endif
-}
-
-void WorkerBackingThread::attach()
-{
-    {
-        MutexLocker locker(m_mutex);
-        if (++m_workerScriptCount > 1)
-            return;
-    }
-    initialize();
-}
-
-void WorkerBackingThread::detach()
-{
-    {
-        MutexLocker locker(m_mutex);
-        if (--m_workerScriptCount > 0)
-            return;
-    }
-    shutdown();
 }
 
 void WorkerBackingThread::initialize()
@@ -95,11 +73,13 @@ void WorkerBackingThread::initialize()
     V8Initializer::initializeWorker(m_isolate);
     m_backingThread->initialize();
 
-    OwnPtr<V8IsolateInterruptor> interruptor = adoptPtr(new V8IsolateInterruptor(m_isolate));
+    std::unique_ptr<V8IsolateInterruptor> interruptor = wrapUnique(new V8IsolateInterruptor(m_isolate));
     ThreadState::current()->addInterruptor(std::move(interruptor));
-    ThreadState::current()->registerTraceDOMWrappers(m_isolate, V8GCController::traceDOMWrappers);
+    ThreadState::current()->registerTraceDOMWrappers(m_isolate,
+        V8GCController::traceDOMWrappers,
+        nullptr);
     if (RuntimeEnabledFeatures::v8IdleTasksEnabled())
-        V8PerIsolateData::enableIdleTasks(m_isolate, adoptPtr(new V8IdleTaskRunner(backingThread().platformThread().scheduler())));
+        V8PerIsolateData::enableIdleTasks(m_isolate, wrapUnique(new V8IdleTaskRunner(backingThread().platformThread().scheduler())));
     if (m_isOwningThread)
         Platform::current()->didStartWorkerThread();
 }
@@ -129,6 +109,15 @@ void WorkerBackingThread::MemoryPressureNotificationToWorkerThreadIsolates(
     MutexLocker lock(isolatesMutex());
     for (v8::Isolate* isolate : isolates())
         isolate->MemoryPressureNotification(level);
+}
+
+// static
+void WorkerBackingThread::setRAILModeOnWorkerThreadIsolates(
+    v8::RAILMode railMode)
+{
+    MutexLocker lock(isolatesMutex());
+    for (v8::Isolate* isolate : isolates())
+        isolate->SetRAILMode(railMode);
 }
 
 } // namespace blink

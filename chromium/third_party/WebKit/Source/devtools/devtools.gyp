@@ -124,6 +124,7 @@
                             '<(PRODUCT_DIR)/resources/inspector/snippets_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/source_frame_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/sources_module.js',
+                            '<(PRODUCT_DIR)/resources/inspector/timeline_model_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/timeline_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/ui_lazy_module.js',
                             '<(PRODUCT_DIR)/resources/inspector/devtools_extension_api.js',
@@ -187,6 +188,9 @@
         {
           'target_name': 'frontend_protocol_sources',
           'type': 'none',
+          'dependencies': [
+            '../core/inspector/inspector.gyp:protocol_version'
+          ],
           'actions': [
             {
               'action_name': 'generateInspectorProtocolFrontendSources',
@@ -194,7 +198,7 @@
                 # The python script in action below.
                 'scripts/CodeGeneratorFrontend.py',
                 # Input file for the script.
-                'protocol.json',
+                '<(SHARED_INTERMEDIATE_DIR)/blink/core/inspector/protocol.json',
               ],
               'outputs': [
                 '<(PRODUCT_DIR)/resources/inspector/InspectorBackendCommands.js',
@@ -202,10 +206,10 @@
               'action': [
                 'python',
                 'scripts/CodeGeneratorFrontend.py',
-                'protocol.json',
+                '<(SHARED_INTERMEDIATE_DIR)/blink/core/inspector/protocol.json',
                 '--output_js_dir', '<(PRODUCT_DIR)/resources/inspector/',
               ],
-              'message': 'Generating Inspector protocol frontend sources from protocol.json',
+              'message': 'Generating Inspector protocol frontend sources from json definitions.',
             },
           ]
         },
@@ -294,6 +298,7 @@
                             '<(_output_path)/source_frame_module.js',
                             '<(_output_path)/sources_module.js',
                             '<(_output_path)/timeline_module.js',
+                            '<(_output_path)/timeline_model_module.js',
                             '<(_output_path)/ui_lazy_module.js',
                         ],
                     },

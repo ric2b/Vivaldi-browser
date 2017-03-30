@@ -56,10 +56,9 @@ class NotificationPromo {
   double EndTime() const;
 
   // Mark the promo as closed when the user dismisses it.
-  static void HandleClosed(PromoType promo_type, PrefService* local_state);
-  // Mark the promo has having been viewed. This returns true if views
-  // exceeds the maximum allowed.
-  static bool HandleViewed(PromoType promo_type, PrefService* local_state);
+  void HandleClosed();
+  // Mark the promo has having been viewed.
+  void HandleViewed();
 
   const std::string& promo_text() const { return promo_text_; }
   PromoType promo_type() const { return promo_type_; }
@@ -76,15 +75,11 @@ class NotificationPromo {
   // For testing.
   friend class NotificationPromoTest;
 
-  // Check if this promo notification is new based on if the promo id has
-  // changed.
-  void CheckForNewNotification();
-
-  // Actions on receiving a new promo notification.
-  void OnNewNotification();
-
-  // Flush data members to prefs for storage.
+  // Flush data from instance variables to prefs for storage.
   void WritePrefs();
+
+  // Flush given parameters to prefs for storage.
+  void WritePrefs(int promo_id, double first_view_time, int views, bool closed);
 
   // Tests views_ against max_views_.
   // When max_views_ is 0, we don't cap the number of views.
@@ -97,6 +92,12 @@ class NotificationPromo {
   // Returns whether the parameter associated with |param_name| is inside the
   // payload.
   bool IsPayloadParam(const std::string& param_name) const;
+
+  // Transition data saved in old prefs structure to new structure that supports
+  // storing multiple promos.
+  // TODO(crbug.com/623726) Remove this method when migration is no longer
+  // needed as most users have been upgraded to the new pref structure.
+  void MigrateOldPrefs();
 
   PrefService* local_state_;
 
@@ -121,8 +122,6 @@ class NotificationPromo {
 
   int views_;
   bool closed_;
-
-  bool new_notification_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationPromo);
 };

@@ -26,7 +26,6 @@
 #include "core/dom/StyleEngine.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutBlock.h"
-#include "core/layout/LayoutFlowThread.h"
 #include "core/layout/LayoutFullScreen.h"
 #include "core/layout/LayoutGeometryMap.h"
 #include "core/layout/LayoutTheme.h"
@@ -56,13 +55,6 @@ LayoutInline::LayoutInline(Element* element)
     : LayoutBoxModelObject(element)
 {
     setChildrenInline(true);
-}
-
-LayoutInline* LayoutInline::createAnonymous(Document* document)
-{
-    LayoutInline* layoutObject = new LayoutInline(nullptr);
-    layoutObject->setDocumentForAnonymous(document);
-    return layoutObject;
 }
 
 void LayoutInline::willBeDestroyed()
@@ -196,7 +188,7 @@ void LayoutInline::styleDidChange(StyleDifference diff, const ComputedStyle* old
         setAlwaysCreateLineBoxes(alwaysCreateLineBoxesNew);
     }
 
-    propagateStyleToAnonymousChildren(true);
+    propagateStyleToAnonymousChildren();
 }
 
 void LayoutInline::updateAlwaysCreateLineBoxes(bool fullLayout)
@@ -353,8 +345,8 @@ void LayoutInline::moveChildrenToIgnoringContinuation(LayoutInline* to, LayoutOb
     }
 }
 
-void LayoutInline::splitInlines(LayoutBlock* fromBlock, LayoutBlock* toBlock,
-    LayoutBlock* middleBlock, LayoutObject* beforeChild, LayoutBoxModelObject* oldCont)
+void LayoutInline::splitInlines(LayoutBlockFlow* fromBlock, LayoutBlockFlow* toBlock,
+    LayoutBlockFlow* middleBlock, LayoutObject* beforeChild, LayoutBoxModelObject* oldCont)
 {
     ASSERT(isDescendantOf(fromBlock));
 
@@ -434,39 +426,42 @@ void LayoutInline::splitInlines(LayoutBlock* fromBlock, LayoutBlock* toBlock,
     moveChildrenToIgnoringContinuation(cloneInline, beforeChild);
 }
 
-void LayoutInline::splitFlow(LayoutObject* beforeChild, LayoutBlock* newBlockBox,
+void LayoutInline::splitFlow(LayoutObject* beforeChild, LayoutBlockFlow* newBlockBox,
     LayoutObject* newChild, LayoutBoxModelObject* oldCont)
 {
-    LayoutBlockFlow* containingBlockFlow = toLayoutBlockFlow(containingBlock());
-    LayoutBlock* pre = nullptr;
-    LayoutBlock* block = containingBlockFlow;
+    LayoutBlockFlow* block = toLayoutBlockFlow(containingBlock());
+    LayoutBlockFlow* pre = nullptr;
 
     // Delete our line boxes before we do the inline split into continuations.
-    containingBlockFlow->deleteLineBoxTree();
+    block->deleteLineBoxTree();
 
-    bool madeNewBeforeBlock = false;
-    if (block->isAnonymousBlock() && (!block->parent() || !block->parent()->createsAnonymousWrapper())) {
-        // We can reuse this block and make it the preBlock of the next continuation.
-        containingBlockFlow->removePositionedObjects(nullptr);
-        containingBlockFlow->removeFloatingObjects();
-        pre = containingBlockFlow;
-        block = block->containingBlock();
-    } else {
-        // No anonymous block available for use.  Make one.
-        pre = block->createAnonymousBlock();
-        madeNewBeforeBlock = true;
+    bool reusedAnonymousBlock = false;
+    if (block->isAnonymousBlock()) {
+        LayoutBlock* outerContainingBlock = block->containingBlock();
+        if (outerContainingBlock
+            && outerContainingBlock->isLayoutBlockFlow()
+            && !outerContainingBlock->createsAnonymousWrapper()) {
+            // We can reuse this block and make it the preBlock of the next continuation.
+            block->removePositionedObjects(nullptr);
+            block->removeFloatingObjects();
+            pre = block;
+            block = toLayoutBlockFlow(outerContainingBlock);
+            reusedAnonymousBlock = true;
+        }
     }
+    if (!reusedAnonymousBlock)
+        pre = toLayoutBlockFlow(block->createAnonymousBlock()); // No anonymous block available for use. Make one.
 
-    LayoutBlock* post = toLayoutBlock(pre->createAnonymousBoxWithSameTypeAs(block));
+    LayoutBlockFlow* post = toLayoutBlockFlow(pre->createAnonymousBlock());
 
-    LayoutObject* boxFirst = madeNewBeforeBlock ? block->firstChild() : pre->nextSibling();
-    if (madeNewBeforeBlock)
+    LayoutObject* boxFirst = !reusedAnonymousBlock ? block->firstChild() : pre->nextSibling();
+    if (!reusedAnonymousBlock)
         block->children()->insertChildNode(block, pre, boxFirst);
     block->children()->insertChildNode(block, newBlockBox, boxFirst);
     block->children()->insertChildNode(block, post, boxFirst);
     block->setChildrenInline(false);
 
-    if (madeNewBeforeBlock) {
+    if (!reusedAnonymousBlock) {
         LayoutObject* o = boxFirst;
         while (o) {
             LayoutObject* no = o;
@@ -691,22 +686,22 @@ void LayoutInline::absoluteQuads(Vector<FloatQuad>& quads) const
         continuation->absoluteQuads(quads);
 }
 
-LayoutUnit LayoutInline::offsetLeft() const
+LayoutUnit LayoutInline::offsetLeft(const Element* parent) const
 {
     LayoutPoint topLeft;
     if (InlineBox* firstBox = firstLineBoxIncludingCulling()) {
         topLeft = firstBox->topLeft();
     }
-    return adjustedPositionRelativeToOffsetParent(topLeft).x();
+    return adjustedPositionRelativeTo(topLeft, parent).x();
 }
 
-LayoutUnit LayoutInline::offsetTop() const
+LayoutUnit LayoutInline::offsetTop(const Element* parent) const
 {
     LayoutPoint topLeft;
     if (InlineBox* firstBox = firstLineBoxIncludingCulling()) {
         topLeft = firstBox->topLeft();
     }
-    return adjustedPositionRelativeToOffsetParent(topLeft).y();
+    return adjustedPositionRelativeTo(topLeft, parent).y();
 }
 
 static LayoutUnit computeMargin(const LayoutInline* layoutObject, const Length& margin)
@@ -1067,9 +1062,15 @@ LayoutRect LayoutInline::visualOverflowRect() const
     LayoutUnit outlineOutset(style()->outlineOutsetExtent());
     if (outlineOutset) {
         Vector<LayoutRect> rects;
-        // We have already included outline extents of line boxes in linesVisualOverflowBoundingBox(),
-        // so the following just add outline rects for children and continuations.
-        addOutlineRectsForChildrenAndContinuations(rects, LayoutPoint(), outlineRectsShouldIncludeBlockVisualOverflow());
+        if (document().inNoQuirksMode()) {
+            // We have already included outline extents of line boxes in linesVisualOverflowBoundingBox(),
+            // so the following just add outline rects for children and continuations.
+            addOutlineRectsForChildrenAndContinuations(rects, LayoutPoint(), outlineRectsShouldIncludeBlockVisualOverflow());
+        } else {
+            // In non-standard mode, because the difference in LayoutBlock::minLineHeightForReplacedObject(),
+            // linesVisualOverflowBoundingBox() may not cover outline rects of lines containing replaced objects.
+            addOutlineRects(rects, LayoutPoint(), outlineRectsShouldIncludeBlockVisualOverflow());
+        }
         if (!rects.isEmpty()) {
             LayoutRect outlineRect = unionRectEvenIfEmpty(rects);
             outlineRect.inflate(outlineOutset);
@@ -1139,7 +1140,7 @@ void LayoutInline::updateDragState(bool dragOn)
 void LayoutInline::childBecameNonInline(LayoutObject* child)
 {
     // We have to split the parent flow.
-    LayoutBlock* newBox = containingBlock()->createAnonymousBlock();
+    LayoutBlockFlow* newBox = toLayoutBlockFlow(containingBlock()->createAnonymousBlock());
     LayoutBoxModelObject* oldContinuation = continuation();
     setContinuation(newBox);
     LayoutObject* beforeChild = child->nextSibling();
@@ -1358,12 +1359,12 @@ void LayoutInline::addAnnotatedRegions(Vector<AnnotatedRegionValue>& regions)
     regions.append(region);
 }
 
-void LayoutInline::invalidateDisplayItemClients(const LayoutBoxModelObject& paintInvalidationContainer, PaintInvalidationReason invalidationReason) const
+void LayoutInline::invalidateDisplayItemClients(PaintInvalidationReason invalidationReason) const
 {
-    LayoutBoxModelObject::invalidateDisplayItemClients(paintInvalidationContainer, invalidationReason);
+    LayoutBoxModelObject::invalidateDisplayItemClients(invalidationReason);
 
     for (InlineFlowBox* box = firstLineBox(); box; box = box->nextLineBox())
-        paintInvalidationContainer.invalidateDisplayItemClientOnBacking(*box, invalidationReason);
+        invalidateDisplayItemClient(*box, invalidationReason);
 }
 
 } // namespace blink

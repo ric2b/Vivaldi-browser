@@ -13,7 +13,6 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/profiler/scoped_profile.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -75,6 +74,7 @@
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/external_install_info.h"
 #include "extensions/browser/install_flag.h"
+#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/browser/update_observer.h"
@@ -312,6 +312,9 @@ ExtensionService::ExtensionService(Profile* profile,
       extensions_enabled_(extensions_enabled),
       ready_(ready),
       shared_module_service_(new extensions::SharedModuleService(profile_)),
+      renderer_helper_(
+          extensions::RendererStartupHelperFactory::GetForBrowserContext(
+              profile_)),
       app_data_migrator_(new extensions::AppDataMigrator(profile_, registry_)) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   TRACE_EVENT0("browser,startup", "ExtensionService::ExtensionService::ctor");
@@ -418,7 +421,6 @@ const Extension* ExtensionService::GetExtensionById(
 void ExtensionService::Init() {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
   TRACE_EVENT0("browser,startup", "ExtensionService::Init");
-  TRACK_SCOPED_REGION("Startup", "ExtensionService::Init");
   SCOPED_UMA_HISTOGRAM_TIMER("Extensions.ExtensionServiceInitTime");
 
   DCHECK(!is_ready());  // Can't redo init.
@@ -581,9 +583,6 @@ bool ExtensionService::UpdateExtension(const extensions::CRXFileInfo& file,
   if (extension && extension->was_installed_by_oem())
     creation_flags |= Extension::WAS_INSTALLED_BY_OEM;
 
-  if (extension && extension->was_installed_by_custodian())
-    creation_flags |= Extension::WAS_INSTALLED_BY_CUSTODIAN;
-
   if (extension)
     installer->set_do_not_sync(extension_prefs_->DoNotSync(id));
 
@@ -734,7 +733,7 @@ bool ExtensionService::UninstallExtension(
       (reason == extensions::UNINSTALL_REASON_ORPHANED_EXTERNAL_EXTENSION) ||
       (reason == extensions::UNINSTALL_REASON_ORPHANED_SHARED_MODULE) ||
       (reason == extensions::UNINSTALL_REASON_SYNC &&
-       extension->was_installed_by_custodian());
+       extensions::util::WasInstalledByCustodian(extension->id(), profile_));
   if (!external_uninstall &&
       (!by_policy->UserMayModifySettings(extension.get(), error) ||
        by_policy->MustRemainInstalled(extension.get(), error))) {
@@ -754,6 +753,8 @@ bool ExtensionService::UninstallExtension(
   // Unload before doing more cleanup to ensure that nothing is hanging on to
   // any of these resources.
   UnloadExtension(extension->id(), UnloadedExtensionInfo::REASON_UNINSTALL);
+  if (registry_->blacklisted_extensions().Contains(extension->id()))
+    registry_->RemoveBlacklisted(extension->id());
 
   // Tell the backend to start deleting installed extensions on the file thread.
   if (!Manifest::IsUnpackedLocation(extension->location())) {
@@ -830,7 +831,8 @@ bool ExtensionService::IsExtensionEnabled(
 void ExtensionService::EnableExtension(const std::string& extension_id) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
-  if (IsExtensionEnabled(extension_id))
+  if (IsExtensionEnabled(extension_id) ||
+      extension_prefs_->IsExtensionBlacklisted(extension_id))
     return;
   const Extension* extension =
       registry_->disabled_extensions().GetByID(extension_id);
@@ -864,6 +866,9 @@ void ExtensionService::DisableExtension(const std::string& extension_id,
                                         int disable_reasons) {
   CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
 
+  if (extension_prefs_->IsExtensionBlacklisted(extension_id))
+    return;
+
   // The extension may have been disabled already. Just add the disable reasons.
   if (!IsExtensionEnabled(extension_id)) {
     extension_prefs_->AddDisableReasons(extension_id, disable_reasons);
@@ -871,6 +876,12 @@ void ExtensionService::DisableExtension(const std::string& extension_id,
   }
 
   const Extension* extension = GetInstalledExtension(extension_id);
+
+  // Shared modules cannot be disabled, they are just resources used by other
+  // extensions, and are not user controlled.
+  if (extension && SharedModuleInfo::IsSharedModule(extension))
+    return;
+
   // |extension| can be nullptr if sync disables an extension that is not
   // installed yet.
   // EXTERNAL_COMPONENT extensions are not generally modifiable by users, but
@@ -1025,27 +1036,7 @@ void ExtensionService::NotifyExtensionLoaded(const Extension* extension) {
       base::Bind(&ExtensionService::OnExtensionRegisteredWithRequestContexts,
                  AsWeakPtr(), make_scoped_refptr(extension)));
 
-  // Tell renderers about the new extension, unless it's a theme (renderers
-  // don't need to know about themes).
-  if (!extension->is_theme()) {
-    for (content::RenderProcessHost::iterator i(
-            content::RenderProcessHost::AllHostsIterator());
-         !i.IsAtEnd(); i.Advance()) {
-      content::RenderProcessHost* host = i.GetCurrentValue();
-      Profile* host_profile =
-          Profile::FromBrowserContext(host->GetBrowserContext());
-      if (host_profile->GetOriginalProfile() ==
-          profile_->GetOriginalProfile()) {
-        // We don't need to include tab permisisons here, since the extension
-        // was just loaded.
-        std::vector<ExtensionMsg_Loaded_Params> loaded_extensions(
-            1, ExtensionMsg_Loaded_Params(extension,
-                                          false /* no tab permissions */));
-        host->Send(
-            new ExtensionMsg_Loaded(loaded_extensions));
-      }
-    }
-  }
+  renderer_helper_->OnExtensionLoaded(*extension);
 
   // Tell subsystems that use the EXTENSION_LOADED notification about the new
   // extension.
@@ -1125,15 +1116,7 @@ void ExtensionService::NotifyExtensionUnloaded(
       content::Source<Profile>(profile_),
       content::Details<UnloadedExtensionInfo>(&details));
 
-  for (content::RenderProcessHost::iterator i(
-          content::RenderProcessHost::AllHostsIterator());
-       !i.IsAtEnd(); i.Advance()) {
-    content::RenderProcessHost* host = i.GetCurrentValue();
-    Profile* host_profile =
-        Profile::FromBrowserContext(host->GetBrowserContext());
-    if (host_profile->GetOriginalProfile() == profile_->GetOriginalProfile())
-      host->Send(new ExtensionMsg_Unloaded(extension->id()));
-  }
+  renderer_helper_->OnExtensionUnloaded(*extension);
 
   system_->UnregisterExtensionWithRequestContexts(extension->id(), reason);
 
@@ -1416,8 +1399,6 @@ void ExtensionService::ReloadExtensionsForTest() {
 void ExtensionService::SetReadyAndNotifyListeners() {
   TRACE_EVENT0("browser,startup",
                "ExtensionService::SetReadyAndNotifyListeners");
-  TRACK_SCOPED_REGION(
-      "Startup", "ExtensionService::SetReadyAndNotifyListeners");
   SCOPED_UMA_HISTOGRAM_TIMER(
       "Extensions.ExtensionServiceNotifyReadyListenersTime");
 
@@ -1431,6 +1412,18 @@ void ExtensionService::SetReadyAndNotifyListeners() {
 void ExtensionService::OnLoadedInstalledExtensions() {
   if (updater_)
     updater_->Start();
+
+  // Enable any Shared Modules that incorrectly got disabled previously.
+  // This is temporary code to fix incorrect behavior from previous versions of
+  // Chrome and can be removed after several releases (perhaps M60).
+  extensions::ExtensionList to_enable;
+  for (const auto& extension : registry_->disabled_extensions()) {
+    if (SharedModuleInfo::IsSharedModule(extension.get()))
+      to_enable.push_back(extension);
+  }
+  for (const auto& extension : to_enable) {
+    EnableExtension(extension->id());
+  }
 
   OnBlacklistUpdated();
 }

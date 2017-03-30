@@ -44,6 +44,8 @@
 class SkBitmap;
 class SkCanvas;
 class SkImage;
+class SkMatrix;
+class SkPaint;
 
 namespace blink {
 
@@ -104,7 +106,7 @@ public:
 
     virtual String filenameExtension() const { return String(); } // null string if unknown
 
-    virtual void destroyDecodedData(bool destroyAll) = 0;
+    virtual void destroyDecodedData() = 0;
 
     SharedBuffer* data() { return m_encodedImageData.get(); }
 
@@ -112,7 +114,6 @@ public:
     // It will automatically pause once all observers no longer want to render the image anywhere.
     enum CatchUpAnimation { DoNotCatchUp, CatchUp };
     virtual void startAnimation(CatchUpAnimation = CatchUp) { }
-    virtual void stopAnimation() {}
     virtual void resetAnimation() {}
 
     // True if this image can potentially animate.
@@ -149,6 +150,19 @@ public:
     };
 
     virtual void draw(SkCanvas*, const SkPaint&, const FloatRect& dstRect, const FloatRect& srcRect, RespectImageOrientationEnum, ImageClampingMode) = 0;
+
+    virtual bool applyShader(SkPaint&, const SkMatrix& localMatrix);
+
+    // Compute the tile which contains a given point (assuming a repeating tile grid).
+    // The point and returned value are in destination grid space.
+    static FloatRect computeTileContaining(const FloatPoint&, const FloatSize& tileSize,
+        const FloatPoint& tilePhase, const FloatSize& tileSpacing);
+
+    // Compute the image subset which gets mapped onto dest, when the whole image is drawn into
+    // tile.  Assumes the tile contains dest.  The tile rect is in destination grid space while
+    // the return value is in image coordinate space.
+    static FloatRect computeSubsetForTile(const FloatRect& tile, const FloatRect& dest,
+        const FloatSize& imageSize);
 
 protected:
     Image(ImageObserver* = 0);

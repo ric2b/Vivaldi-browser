@@ -6,11 +6,11 @@
 
 #include <vector>
 
+#include "ash/common/wm/window_state.h"
 #include "ash/shell.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/sticky_keys/sticky_keys_overlay.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/command_line.h"
 #include "base/macros.h"
@@ -1860,7 +1860,7 @@ TEST_F(EventRewriterTest, TestRewriteNonNativeEvent) {
   const int kTouchId = 2;
   gfx::Point location(0, 0);
   ui::TouchEvent press(ui::ET_TOUCH_PRESSED, location, kTouchId,
-                       base::TimeDelta());
+                       base::TimeTicks());
   press.set_flags(ui::EF_CONTROL_DOWN);
 #if defined(USE_X11)
   ui::UpdateX11EventForFlags(&press);

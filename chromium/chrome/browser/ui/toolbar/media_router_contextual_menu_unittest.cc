@@ -49,6 +49,12 @@ class MediaRouterContextualMenuUnitTest : public BrowserWithTestWindowTest {
 TEST_F(MediaRouterContextualMenuUnitTest, Basic) {
   int expected_number_items = 7;
 
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+  // On all platforms except Linux, there's an additional menu item to access
+  // Cast device management.
+  expected_number_items++;
+#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
+
 #if defined(GOOGLE_CHROME_BUILD)
   // In official Chrome builds, there's an additional menu item to toggle cloud
   // services settings.

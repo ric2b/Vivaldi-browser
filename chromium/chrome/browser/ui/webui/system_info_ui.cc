@@ -59,7 +59,15 @@ class SystemInfoUIHTMLSource : public content::URLDataSource{
   std::string GetMimeType(const std::string&) const override {
     return "text/html";
   }
-  bool ShouldAddContentSecurityPolicy() const override { return false; }
+  std::string GetContentSecurityPolicyScriptSrc() const override {
+    // 'unsafe-inline' is added to script-src.
+    return "script-src 'self' chrome://resources 'unsafe-eval' "
+        "'unsafe-inline';";
+  }
+
+  std::string GetContentSecurityPolicyStyleSrc() const override {
+    return "style-src 'self' chrome://resources 'unsafe-inline';";
+  }
 
  private:
   ~SystemInfoUIHTMLSource() override {}
@@ -152,10 +160,10 @@ void SystemInfoUIHTMLSource::RequestComplete() {
     for (SystemLogsResponse::const_iterator it = response_->begin();
          it != response_->end();
          ++it) {
-      base::DictionaryValue* val = new base::DictionaryValue;
+      std::unique_ptr<base::DictionaryValue> val(new base::DictionaryValue);
       val->SetString("statName", it->first);
       val->SetString("statValue", it->second);
-      details->Append(val);
+      details->Append(std::move(val));
     }
   }
   static const base::StringPiece systeminfo_html(

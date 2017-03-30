@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/barrier_closure.h"
+#include "base/memory/ptr_util.h"
 #include "device/core/device_client.h"
 #include "device/usb/usb_descriptors.h"
 #include "device/usb/usb_device_handle.h"
@@ -248,14 +249,14 @@ const char* ConvertTransferStatusToApi(const UsbTransferStatus status) {
   }
 }
 
-base::Value* PopulateConnectionHandle(int handle,
-                                      int vendor_id,
-                                      int product_id) {
+std::unique_ptr<base::Value> PopulateConnectionHandle(int handle,
+                                                      int vendor_id,
+                                                      int product_id) {
   ConnectionHandle result;
   result.handle = handle;
   result.vendor_id = vendor_id;
   result.product_id = product_id;
-  return result.ToValue().release();
+  return result.ToValue();
 }
 
 TransferType ConvertTransferTypeToApi(const UsbTransferType& input) {
@@ -311,6 +312,12 @@ UsageType ConvertUsageTypeToApi(const UsbUsageType& input) {
       return usb::USAGE_TYPE_FEEDBACK;
     case device::USB_USAGE_EXPLICIT_FEEDBACK:
       return usb::USAGE_TYPE_EXPLICITFEEDBACK;
+    case device::USB_USAGE_PERIODIC:
+      return usb::USAGE_TYPE_PERIODIC;
+    case device::USB_USAGE_NOTIFICATION:
+      return usb::USAGE_TYPE_NOTIFICATION;
+    case device::USB_USAGE_RESERVED:
+      return usb::USAGE_TYPE_NONE;
     default:
       NOTREACHED();
       return usb::USAGE_TYPE_NONE;
@@ -611,7 +618,7 @@ ExtensionFunction::ResponseAction UsbGetUserSelectedDevicesFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
 
   if (!user_gesture()) {
-    return RespondNow(OneArgument(new base::ListValue()));
+    return RespondNow(OneArgument(base::MakeUnique<base::ListValue>()));
   }
 
   bool multiple = false;
@@ -684,7 +691,7 @@ ExtensionFunction::ResponseAction UsbGetConfigurationsFunction::Run() {
   }
 
   std::unique_ptr<base::ListValue> configs(new base::ListValue());
-  const UsbConfigDescriptor* active_config = device->GetActiveConfiguration();
+  const UsbConfigDescriptor* active_config = device->active_configuration();
   for (const UsbConfigDescriptor& config : device->configurations()) {
     ConfigDescriptor api_config = ConvertConfigDescriptor(config);
     if (active_config &&
@@ -706,7 +713,8 @@ ExtensionFunction::ResponseAction UsbRequestAccessFunction::Run() {
   std::unique_ptr<extensions::api::usb::RequestAccess::Params> parameters =
       RequestAccess::Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(parameters.get());
-  return RespondNow(OneArgument(new base::FundamentalValue(true)));
+  return RespondNow(
+      OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
 }
 
 UsbOpenDeviceFunction::UsbOpenDeviceFunction() {
@@ -812,7 +820,7 @@ ExtensionFunction::ResponseAction UsbGetConfigurationFunction::Run() {
   }
 
   const UsbConfigDescriptor* config_descriptor =
-      device_handle->GetDevice()->GetActiveConfiguration();
+      device_handle->GetDevice()->active_configuration();
   if (config_descriptor) {
     ConfigDescriptor config = ConvertConfigDescriptor(*config_descriptor);
     config.active = true;
@@ -840,7 +848,7 @@ ExtensionFunction::ResponseAction UsbListInterfacesFunction::Run() {
   }
 
   const UsbConfigDescriptor* config_descriptor =
-      device_handle->GetDevice()->GetActiveConfiguration();
+      device_handle->GetDevice()->active_configuration();
   if (config_descriptor) {
     ConfigDescriptor config = ConvertConfigDescriptor(*config_descriptor);
 
@@ -1252,7 +1260,7 @@ ExtensionFunction::ResponseAction UsbResetDeviceFunction::Run() {
 
 void UsbResetDeviceFunction::OnComplete(bool success) {
   if (success) {
-    Respond(OneArgument(new base::FundamentalValue(true)));
+    Respond(OneArgument(base::MakeUnique<base::FundamentalValue>(true)));
   } else {
     scoped_refptr<UsbDeviceHandle> device_handle =
         GetDeviceHandle(parameters_->handle);

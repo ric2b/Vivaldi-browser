@@ -7,6 +7,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -54,7 +55,7 @@ class DOMStorageContextImplTest : public testing::Test {
   void TearDown() override {
     if (context_)
       context_->Shutdown();
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
   }
 
   void VerifySingleOriginRemains(const GURL& origin) {
@@ -113,7 +114,7 @@ TEST_F(DOMStorageContextImplTest, UsageInfo) {
       OpenStorageArea(kOrigin)->SetItem(kKey, kValue, &old_value));
   context_->Shutdown();
   context_ = NULL;
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Create a new context that points to the same directory, see that
   // it knows about the origin that we stored data for.
@@ -146,7 +147,7 @@ TEST_F(DOMStorageContextImplTest, SessionOnly) {
       OpenStorageArea(kSessionOnlyOrigin)->SetItem(kKey, kValue, &old_value));
   context_->Shutdown();
   context_ = NULL;
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Verify that the session-only origin data is gone.
   VerifySingleOriginRemains(kOrigin);
@@ -164,7 +165,7 @@ TEST_F(DOMStorageContextImplTest, SetForceKeepSessionState) {
   context_->SetForceKeepSessionState();  // Should override clear behavior.
   context_->Shutdown();
   context_ = NULL;
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   VerifySingleOriginRemains(kSessionOnlyOrigin);
 }
@@ -225,7 +226,7 @@ TEST_F(DOMStorageContextImplTest, DeleteSessionStorage) {
   // Destroy and recreate the DOMStorageContextImpl.
   context_->Shutdown();
   context_ = NULL;
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   context_ = new DOMStorageContextImpl(
       temp_dir_.path(), temp_dir_.path(),
       storage_policy_.get(), task_runner_.get());
@@ -249,7 +250,7 @@ TEST_F(DOMStorageContextImplTest, DeleteSessionStorage) {
   // Destroy and recreate again.
   context_->Shutdown();
   context_ = NULL;
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   context_ = new DOMStorageContextImpl(
       temp_dir_.path(), temp_dir_.path(),
       storage_policy_.get(), task_runner_.get());
@@ -265,7 +266,38 @@ TEST_F(DOMStorageContextImplTest, DeleteSessionStorage) {
   dom_namespace->CloseStorageArea(area);
   context_->Shutdown();
   context_ = NULL;
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
+}
+
+TEST_F(DOMStorageContextImplTest, PurgeMemory) {
+  auto dom_namespace = context_->GetStorageNamespace(kLocalStorageNamespaceId);
+  auto area1 = dom_namespace->OpenStorageArea(kOrigin);
+  area1->InitialImportIfNeeded();
+
+  // PURGE_UNOPENED does not delete the open area.
+  context_->PurgeMemory(DOMStorageContextImpl::PURGE_UNOPENED);
+  EXPECT_EQ(1u, dom_namespace->GetUsageStatistics().total_area_count);
+  EXPECT_EQ(0u, dom_namespace->GetUsageStatistics().inactive_area_count);
+
+  // PURGE_UNOPENED deletes the unopened area.
+  dom_namespace->CloseStorageArea(area1);
+  EXPECT_EQ(1u, dom_namespace->GetUsageStatistics().inactive_area_count);
+  context_->PurgeMemory(DOMStorageContextImpl::PURGE_UNOPENED);
+  EXPECT_EQ(0u, dom_namespace->GetUsageStatistics().total_area_count);
+
+  // Add an item to the database and commit changes, and keep it open. So, cache
+  // is kept alive.
+  auto area2 = dom_namespace->OpenStorageArea(kOrigin);
+  base::NullableString16 old_value;
+  area2->SetItem(kKey, kValue, &old_value);
+  // Call commit directly instead of posting task.
+  area2->CommitChanges(area2->commit_batch_.get());
+  area2->commit_batch_ = nullptr;
+
+  // PURGE_AGGRESSIVE clears the cache in the open area.
+  EXPECT_NE(0u, dom_namespace->GetUsageStatistics().total_cache_size);
+  context_->PurgeMemory(DOMStorageContextImpl::PURGE_AGGRESSIVE);
+  EXPECT_EQ(0u, dom_namespace->GetUsageStatistics().total_cache_size);
 }
 
 }  // namespace content

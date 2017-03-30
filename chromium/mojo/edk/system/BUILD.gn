@@ -2,19 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/nacl/config.gni")
 import("//testing/test.gni")
 import("../../../mojo/public/tools/bindings/mojom.gni")
 
 if (is_android) {
   import("//build/config/android/config.gni")
   import("//build/config/android/rules.gni")
-}
-
-config("system_config") {
-  defines = [
-    # Ensures that dependent projects import the core functions on Windows.
-    "MOJO_USE_SYSTEM_IMPL",
-  ]
 }
 
 component("system") {
@@ -81,12 +75,7 @@ component("system") {
     "watcher_set.h",
   ]
 
-  defines = [
-    "MOJO_SYSTEM_IMPL_IMPLEMENTATION",
-    "MOJO_SYSTEM_IMPLEMENTATION",
-  ]
-
-  all_dependent_configs = [ ":system_config" ]
+  defines = [ "MOJO_SYSTEM_IMPL_IMPLEMENTATION" ]
 
   public_deps = [
     "//mojo/edk/embedder",
@@ -99,9 +88,11 @@ component("system") {
 
   deps = [
     "//base",
-    "//base/third_party/dynamic_annotations",
-    "//crypto",
   ]
+
+  if (!is_nacl) {
+    deps += [ "//crypto" ]
+  }
 
   if (is_win) {
     cflags = [ "/wd4324" ]  # Structure was padded due to __declspec(align()),
@@ -115,15 +106,33 @@ component("system") {
     ]
   }
 
+  if (is_nacl && !is_nacl_nonsfi) {
+    sources -= [
+      "broker_host_posix.cc",
+      "broker_posix.cc",
+      "channel_posix.cc",
+      "remote_message_pipe_bootstrap.cc",
+    ]
+  }
+
+  # Use target_os == "chromeos" instead of is_chromeos because we need to
+  # build NaCl targets (i.e. IRT) for ChromeOS the same as the rest of ChromeOS.
+  if (is_android || target_os == "chromeos") {
+    defines += [ "MOJO_EDK_LEGACY_PROTOCOL" ]
+  }
+
   allow_circular_includes_from = [ "//mojo/edk/embedder" ]
 }
 
 group("tests") {
   testonly = true
   deps = [
-    ":mojo_message_pipe_perftests",
     ":mojo_system_unittests",
   ]
+
+  if (!is_ios) {
+    deps += [ ":mojo_message_pipe_perftests" ]
+  }
 }
 
 source_set("test_utils") {
@@ -153,7 +162,6 @@ test("mojo_system_unittests") {
     "core_test_base.cc",
     "core_test_base.h",
     "core_unittest.cc",
-    "data_pipe_unittest.cc",
     "message_pipe_unittest.cc",
     "options_validation_unittest.cc",
     "platform_handle_dispatcher_unittest.cc",
@@ -167,7 +175,11 @@ test("mojo_system_unittests") {
   ]
 
   if (!is_ios) {
-    sources += [ "multiprocess_message_pipe_unittest.cc" ]
+    sources += [
+      "data_pipe_unittest.cc",
+      "multiprocess_message_pipe_unittest.cc",
+      "platform_wrapper_unittest.cc",
+    ]
   }
 
   deps = [
@@ -185,18 +197,20 @@ test("mojo_system_unittests") {
   allow_circular_includes_from = [ "//mojo/edk/embedder:embedder_unittests" ]
 }
 
-test("mojo_message_pipe_perftests") {
-  sources = [
-    "message_pipe_perftest.cc",
-  ]
+if (!is_ios) {
+  test("mojo_message_pipe_perftests") {
+    sources = [
+      "message_pipe_perftest.cc",
+    ]
 
-  deps = [
-    ":test_utils",
-    "//base",
-    "//base/test:test_support",
-    "//mojo/edk/system",
-    "//mojo/edk/test:run_all_perftests",
-    "//mojo/edk/test:test_support",
-    "//testing/gtest",
-  ]
+    deps = [
+      ":test_utils",
+      "//base",
+      "//base/test:test_support",
+      "//mojo/edk/system",
+      "//mojo/edk/test:run_all_perftests",
+      "//mojo/edk/test:test_support",
+      "//testing/gtest",
+    ]
+  }
 }

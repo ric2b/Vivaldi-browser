@@ -81,10 +81,8 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
                                    ? device_viewport_rect
                                    : external_device_clip_rect_;
   renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
-  renderer_->DrawFrame(pass_list,
-                       device_scale_factor,
-                       device_viewport_rect,
-                       device_clip_rect,
+  renderer_->DrawFrame(pass_list, device_scale_factor, gfx::ColorSpace(),
+                       device_viewport_rect, device_clip_rect,
                        disable_picture_quad_image_filtering_);
 
   // Wait for the readback to complete.
@@ -122,22 +120,22 @@ bool PixelTest::PixelsMatchReference(const base::FilePath& ref_file,
 
 void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
                                 bool flipped_output_surface) {
-  enable_pixel_output_.reset(new gfx::DisableNullDrawGLBindings);
+  enable_pixel_output_.reset(new gl::DisableNullDrawGLBindings);
 
   scoped_refptr<TestInProcessContextProvider> compositor(
       new TestInProcessContextProvider(nullptr));
   scoped_refptr<TestInProcessContextProvider> worker(
       new TestInProcessContextProvider(compositor.get()));
-  output_surface_.reset(
-      new PixelTestOutputSurface(std::move(compositor), std::move(worker),
-                                 flipped_output_surface, nullptr));
+  output_surface_.reset(new PixelTestOutputSurface(
+      std::move(compositor), std::move(worker), flipped_output_surface));
   output_surface_->BindToClient(output_surface_client_.get());
 
   shared_bitmap_manager_.reset(new TestSharedBitmapManager);
   gpu_memory_buffer_manager_.reset(new TestGpuMemoryBufferManager);
-  resource_provider_ = ResourceProvider::Create(
-      output_surface_.get(), shared_bitmap_manager_.get(),
+  resource_provider_ = base::MakeUnique<ResourceProvider>(
+      output_surface_->context_provider(), shared_bitmap_manager_.get(),
       gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0, 1,
+      output_surface_->capabilities().delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
       settings_.use_image_texture_targets);
 
@@ -175,12 +173,13 @@ void PixelTest::EnableExternalStencilTest() {
 void PixelTest::SetUpSoftwareRenderer() {
   std::unique_ptr<SoftwareOutputDevice> device(
       new PixelTestSoftwareOutputDevice());
-  output_surface_.reset(new PixelTestOutputSurface(std::move(device), nullptr));
+  output_surface_.reset(new PixelTestOutputSurface(std::move(device)));
   output_surface_->BindToClient(output_surface_client_.get());
   shared_bitmap_manager_.reset(new TestSharedBitmapManager());
-  resource_provider_ = ResourceProvider::Create(
-      output_surface_.get(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 0, 1,
+  bool delegated_sync_points_required = false;  // Meaningless for software.
+  resource_provider_ = base::MakeUnique<ResourceProvider>(
+      nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
+      main_thread_task_runner_.get(), 0, 1, delegated_sync_points_required,
       settings_.renderer_settings.use_gpu_memory_buffer_resources,
       settings_.use_image_texture_targets);
   renderer_ = SoftwareRenderer::Create(

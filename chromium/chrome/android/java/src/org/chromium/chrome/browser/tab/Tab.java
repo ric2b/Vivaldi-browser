@@ -5,11 +5,13 @@
 package org.chromium.chrome.browser.tab;
 
 import android.app.Activity;
+import android.app.Application;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Point;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -68,6 +70,7 @@ import org.chromium.chrome.browser.ntp.NativePageAssassin;
 import org.chromium.chrome.browser.ntp.NativePageFactory;
 import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
 import org.chromium.chrome.browser.policy.PolicyAuditor;
+import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.rlz.RevenueStats;
@@ -100,6 +103,7 @@ import org.chromium.content_public.browser.GestureStateListener;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.Referrer;
+import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.content_public.common.TopControlsState;
 import org.chromium.printing.PrintManagerDelegateImpl;
 import org.chromium.printing.PrintingController;
@@ -196,7 +200,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     private GestureStateListener mGestureStateListener;
 
     /** The parent view of the ContentView and the InfoBarContainer. */
-    private FrameLayout mContentViewParent;
+    private TabContentViewParent mContentViewParent;
 
     /** A list of Tab observers.  These are used to broadcast Tab events to listeners. */
     private final ObserverList<TabObserver> mObservers = new ObserverList<TabObserver>();
@@ -563,12 +567,12 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
                     PolicyAuditor.nativeGetCertificateFailure(getWebContents()),
                     getApplicationContext());
             updateFullscreenEnabledState();
-            updateThemeColorIfNeeded();
+            updateThemeColorIfNeeded(false);
         }
 
         @Override
         public void onUrlUpdated(Tab tab) {
-            updateThemeColorIfNeeded();
+            updateThemeColorIfNeeded(false);
         }
 
         @Override
@@ -639,7 +643,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             mDefaultThemeColor = mIncognito
                     ? ApiCompatibilityUtils.getColor(resources, R.color.incognito_primary_color)
                     : ApiCompatibilityUtils.getColor(resources, R.color.default_primary_color);
-            mThemeColor = calculateThemeColor();
+            mThemeColor = calculateThemeColor(false);
         } else {
             mIdealFaviconSize = 16;
             mDefaultThemeColor = 0;
@@ -706,6 +710,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         mShouldPreserve = state.shouldPreserve;
         mTimestampMillis = state.timestampMillis;
         mUrl = state.getVirtualUrlFromState();
+
+        mThemeColor = state.hasThemeColor() ? state.getThemeColor() : getDefaultThemeColor();
 
         mTitle = state.getDisplayTitleFromState();
         mIsTitleDirectionRtl = mTitle != null
@@ -929,6 +935,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         tabState.shouldPreserve = mShouldPreserve;
         tabState.syncId = mSyncId;
         tabState.timestampMillis = mTimestampMillis;
+        tabState.themeColor = getThemeColor();
         return tabState;
     }
 
@@ -1065,14 +1072,25 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         return mThemeColor;
     }
 
-    private int calculateThemeColor() {
+    /**
+     * Calculate the theme color based on if the page is native, the theme color changed, etc.
+     * @param didWebContentsThemeColorChange If the theme color of the web contents is known to have
+     *                                       changed.
+     * @return The theme color that should be used for this tab.
+     */
+    private int calculateThemeColor(boolean didWebContentsThemeColorChange) {
         // Theme color support is currently disabled for tablets.
         if (DeviceFormFactor.isTablet(getApplicationContext())) return getDefaultThemeColor();
 
         if (isNativePage()) return mNativePage.getThemeColor();
 
-        int themeColor = getDefaultThemeColor();
-        if (getWebContents() != null) {
+        // Start by assuming the current theme color is that one that should be used. This will
+        // either be transparent, the last theme color, or the color restored from TabState.
+        int themeColor = mThemeColor;
+
+        // Only use the web contents for the theme color if it is known to have changed, This
+        // corresponds to the didChangeThemeColor in WebContentsObserver.
+        if (getWebContents() != null && didWebContentsThemeColorChange) {
             themeColor = getWebContents().getThemeColor();
             if (themeColor != 0 && !ColorUtils.isValidThemeColor(themeColor)) themeColor = 0;
         }
@@ -1098,9 +1116,11 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
 
     /**
      * Determines if the theme color has changed and notifies the listeners if it has.
+     * @param didWebContentsThemeColorChange If the theme color of the web contents is known to have
+     *                                       changed.
      */
-    void updateThemeColorIfNeeded() {
-        int themeColor = calculateThemeColor();
+    void updateThemeColorIfNeeded(boolean didWebContentsThemeColorChange) {
+        int themeColor = calculateThemeColor(didWebContentsThemeColorChange);
         if (themeColor == mThemeColor) return;
         mThemeColor = themeColor;
         RewindableIterator<TabObserver> observers = getTabObservers();
@@ -1368,7 +1388,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
         // Notifying of theme color change before content change because some of
         // the observers depend on the theme information being correct in
         // onContentChanged().
-        updateThemeColorIfNeeded();
+        updateThemeColorIfNeeded(false);
         notifyContentChanged();
         destroyNativePageInternal(previousNativePage);
     }
@@ -1475,11 +1495,12 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
      * @param startActivityOptions Options to pass to {@link Activity#startActivity(Intent, Bundle)}
      * @param finalizeCallback A callback that will be called after the tab is attached to the new
      *                         host activity in {@link #attachAndFinishReparenting}.
+     * @param stayInChrome Whether the user should stay in Chrome after the tab is reparented.
      * @return Whether reparenting succeeded. If false, the tab was not removed and the intent was
      *         not fired.
      */
     public boolean detachAndStartReparenting(Intent intent, Bundle startActivityOptions,
-            Runnable finalizeCallback) {
+            Runnable finalizeCallback, boolean stayInChrome) {
         ChromeActivity activity = getActivity();
         if (activity == null) return false;
 
@@ -1503,7 +1524,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             // ensure the global count of tabs is correct. See crbug.com/611806.
             intent.putExtra(IntentHandler.EXTRA_TAB_ID, mId);
             AsyncTabParamsManager.add(mId,
-                    new TabReparentingParams(this, intent, finalizeCallback));
+                    new TabReparentingParams(this, intent, finalizeCallback, stayInChrome));
 
             tabModelSelector.getModel(mIncognito).removeTab(this);
 
@@ -1818,10 +1839,9 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
                 assert false;
                 mContentViewParent.removeAllViews();
             }
-            mContentViewParent = new FrameLayout(mThemedApplicationContext);
-            mContentViewParent.addView(cvc.getContainerView(),
-                    new FrameLayout.LayoutParams(
-                            LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+            mContentViewParent = new TabContentViewParent(mThemedApplicationContext);
+            mContentViewParent.addView(cvc.getContainerView(), 0, new FrameLayout.LayoutParams(
+                    LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
             mWebContentsDelegate = mDelegateFactory.createWebContentsDelegate(this);
             mWebContentsObserver =
@@ -1830,6 +1850,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             if (mContentViewClient != null) {
                 mContentViewCore.setContentViewClient(mContentViewClient);
             }
+
+            mDownloadDelegate = new ChromeDownloadDelegate(mThemedApplicationContext, this);
 
             assert mNativeTabAndroid != 0;
             nativeInitWebContents(
@@ -1852,17 +1874,13 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             mSwipeRefreshHandler = new SwipeRefreshHandler(mThemedApplicationContext);
             mSwipeRefreshHandler.setContentViewCore(mContentViewCore);
 
-            updateThemeColorIfNeeded();
+            updateThemeColorIfNeeded(false);
             notifyContentChanged();
 
             // For browser tabs, we want to set accessibility focus to the page
             // when it loads. This is not the default behavior for embedded
             // web views.
             mContentViewCore.setShouldSetAccessibilityFocusOnPageLoad(true);
-
-            mDownloadDelegate = new ChromeDownloadDelegate(
-                    mThemedApplicationContext, this);
-            cvc.setDownloadDelegate(mDownloadDelegate);
 
             setInterceptNavigationDelegate(mDelegateFactory.createInterceptNavigationDelegate(
                     this));
@@ -2488,17 +2506,26 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
             originalHeight = mContentViewCore.getViewportHeightPix();
             mContentViewCore.onHide();
         }
+
+        if (originalWidth == 0 && originalHeight == 0) {
+            Point size = ExternalPrerenderHandler.estimateContentSize(
+                    (Application) getApplicationContext(), false);
+            originalWidth = size.x;
+            originalHeight = size.y;
+        }
+
         destroyContentViewCore(deleteOldNativeWebContents);
         NativePage previousNativePage = mNativePage;
         mNativePage = null;
-        setContentViewCore(newContentViewCore);
         // Size of the new ContentViewCore is zero at this point. If we don't call onSizeChanged(),
         // next onShow() call would send a resize message with the current ContentViewCore size
         // (zero) to the renderer process, although the new size will be set soon.
         // However, this size fluttering may confuse Blink and rendered result can be broken
         // (see http://crbug.com/340987).
-        mContentViewCore.onSizeChanged(originalWidth, originalHeight, 0, 0);
-        mContentViewCore.onShow();
+        newContentViewCore.onSizeChanged(originalWidth, originalHeight, 0, 0);
+        newContentViewCore.onShow();
+        setContentViewCore(newContentViewCore);
+
         mContentViewCore.attachImeAdapter();
 
         // If the URL has already committed (e.g. prerendering), tell process management logic that
@@ -2914,8 +2941,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     }
 
     @CalledByNative
-    protected void openNewTab(String url, String extraHeaders, byte[] postData, int disposition,
-            boolean hasParent, boolean isRendererInitiated) {
+    protected void openNewTab(String url, String extraHeaders, ResourceRequestBody postData,
+            int disposition, boolean hasParent, boolean isRendererInitiated) {
         if (isClosing()) return;
 
         boolean incognito = isIncognito();
@@ -3120,7 +3147,8 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     /**
      * @return The default theme color for this tab.
      */
-    int getDefaultThemeColor() {
+    @VisibleForTesting
+    public int getDefaultThemeColor() {
         return mDefaultThemeColor;
     }
 
@@ -3237,7 +3265,7 @@ public class Tab implements ViewGroup.OnHierarchyChangeListener,
     private native void nativeDestroyWebContents(long nativeTabAndroid, boolean deleteNative);
     private native Profile nativeGetProfileAndroid(long nativeTabAndroid);
     private native int nativeLoadUrl(long nativeTabAndroid, String url, String extraHeaders,
-            byte[] postData, int transition, String referrerUrl, int referrerPolicy,
+            ResourceRequestBody postData, int transition, String referrerUrl, int referrerPolicy,
             boolean isRendererInitiated, boolean shoulReplaceCurrentEntry,
             long intentReceivedTimestamp, boolean hasUserGesture);
     private native void nativeSetActiveNavigationEntryTitleForUrl(long nativeTabAndroid, String url,

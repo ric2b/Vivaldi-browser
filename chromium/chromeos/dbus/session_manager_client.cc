@@ -345,13 +345,13 @@ class SessionManagerClientImpl : public SessionManagerClient {
                    weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
-  void StartArcInstance(const std::string& socket_path,
+  void StartArcInstance(const cryptohome::Identification& cryptohome_id,
                         const ArcCallback& callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerStartArcInstance);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendString(socket_path);
+    writer.AppendString(cryptohome_id.id());
     session_manager_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::Bind(&SessionManagerClientImpl::OnArcMethod,
@@ -378,6 +378,19 @@ class SessionManagerClientImpl : public SessionManagerClient {
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::Bind(&SessionManagerClientImpl::OnGetArcStartTime,
                    weak_ptr_factory_.GetWeakPtr(), callback));
+  }
+
+  void RemoveArcData(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override {
+    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
+                                 login_manager::kSessionManagerRemoveArcData);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(cryptohome_id.id());
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnArcMethod,
+                   weak_ptr_factory_.GetWeakPtr(),
+                   login_manager::kSessionManagerRemoveArcData, callback));
   }
 
  protected:
@@ -414,6 +427,13 @@ class SessionManagerClientImpl : public SessionManagerClient {
         login_manager::kSessionManagerInterface,
         login_manager::kScreenIsUnlockedSignal,
         base::Bind(&SessionManagerClientImpl::ScreenIsUnlockedReceived,
+                   weak_ptr_factory_.GetWeakPtr()),
+        base::Bind(&SessionManagerClientImpl::SignalConnected,
+                   weak_ptr_factory_.GetWeakPtr()));
+    session_manager_proxy_->ConnectToSignal(
+        login_manager::kSessionManagerInterface,
+        login_manager::kArcInstanceStopped,
+        base::Bind(&SessionManagerClientImpl::ArcInstanceStoppedReceived,
                    weak_ptr_factory_.GetWeakPtr()),
         base::Bind(&SessionManagerClientImpl::SignalConnected,
                    weak_ptr_factory_.GetWeakPtr()));
@@ -640,6 +660,16 @@ class SessionManagerClientImpl : public SessionManagerClient {
   void ScreenIsUnlockedReceived(dbus::Signal* signal) {
     screen_is_locked_ = false;
     FOR_EACH_OBSERVER(Observer, observers_, ScreenIsUnlocked());
+  }
+
+  void ArcInstanceStoppedReceived(dbus::Signal* signal) {
+    dbus::MessageReader reader(signal);
+    bool clean = false;
+    if (!reader.PopBool(&clean)) {
+      LOG(ERROR) << "Invalid signal: " << signal->ToString();
+      return;
+    }
+    FOR_EACH_OBSERVER(Observer, observers_, ArcInstanceStopped(clean));
   }
 
   // Called when the object is connected to the signal.
@@ -905,7 +935,7 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     callback.Run(false);
   }
 
-  void StartArcInstance(const std::string& socket_path,
+  void StartArcInstance(const cryptohome::Identification& cryptohome_id,
                         const ArcCallback& callback) override {
     callback.Run(false);
   }
@@ -916,6 +946,12 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
 
   void GetArcStartTime(const GetArcStartTimeCallback& callback) override {
     callback.Run(false, base::TimeTicks::Now());
+  }
+
+  void RemoveArcData(const cryptohome::Identification& cryptohome_id,
+                     const ArcCallback& callback) override {
+    if (!callback.is_null())
+      callback.Run(false);
   }
 
  private:

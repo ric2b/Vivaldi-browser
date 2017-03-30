@@ -18,7 +18,7 @@ typedef CanvasAsyncBlobCreator::IdleTaskStatus IdleTaskStatus;
 class MockCanvasAsyncBlobCreator : public CanvasAsyncBlobCreator {
 public:
     MockCanvasAsyncBlobCreator(DOMUint8ClampedArray* data, const IntSize& size, MimeType mimeType)
-        : CanvasAsyncBlobCreator(data, mimeType, size, nullptr)
+        : CanvasAsyncBlobCreator(data, mimeType, size, nullptr, 0)
     {
     }
 
@@ -34,7 +34,7 @@ protected:
     void createBlobAndInvokeCallback() override { };
     void createNullAndInvokeCallback() override { };
     void signalAlternativeCodePathFinishedForTesting() override;
-    void postDelayedTaskToMainThread(const WebTraceLocation&, std::unique_ptr<SameThreadClosure>, double delayMs) override;
+    void postDelayedTaskToMainThread(const WebTraceLocation&, std::unique_ptr<WTF::Closure>, double delayMs) override;
 };
 
 void MockCanvasAsyncBlobCreator::signalAlternativeCodePathFinishedForTesting()
@@ -42,7 +42,7 @@ void MockCanvasAsyncBlobCreator::signalAlternativeCodePathFinishedForTesting()
     testing::exitRunLoop();
 }
 
-void MockCanvasAsyncBlobCreator::postDelayedTaskToMainThread(const WebTraceLocation& location, std::unique_ptr<SameThreadClosure> task, double delayMs)
+void MockCanvasAsyncBlobCreator::postDelayedTaskToMainThread(const WebTraceLocation& location, std::unique_ptr<WTF::Closure> task, double delayMs)
 {
     DCHECK(isMainThread());
     Platform::current()->mainThread()->getWebTaskRunner()->postTask(location, std::move(task));
@@ -78,8 +78,7 @@ public:
 protected:
     void scheduleInitiatePngEncoding() override
     {
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE,
-        bind(&MockCanvasAsyncBlobCreatorWithoutCompletePng::initiatePngEncoding, this, std::numeric_limits<double>::max()));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&MockCanvasAsyncBlobCreatorWithoutCompletePng::initiatePngEncoding, wrapPersistent(this), std::numeric_limits<double>::max()));
     }
 
     void idleEncodeRowsPng(double deadlineSeconds) override
@@ -118,8 +117,7 @@ public:
 protected:
     void scheduleInitiateJpegEncoding(const double& quality) override
     {
-        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE,
-        bind(&MockCanvasAsyncBlobCreatorWithoutCompleteJpeg::initiateJpegEncoding, this, quality, std::numeric_limits<double>::max()));
+        Platform::current()->mainThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&MockCanvasAsyncBlobCreatorWithoutCompleteJpeg::initiateJpegEncoding, wrapPersistent(this), quality, std::numeric_limits<double>::max()));
     }
 
     void idleEncodeRowsJpeg(double deadlineSeconds) override

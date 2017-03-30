@@ -26,6 +26,8 @@ class MockCryptohomeClient : public CryptohomeClient {
                void(const AsyncCallStatusHandler& handler,
                     const AsyncCallStatusWithDataHandler& data_handler));
   MOCK_METHOD0(ResetAsyncCallStatusHandlers, void());
+  MOCK_METHOD1(SetLowDiskSpaceHandler,
+               void(const LowDiskSpaceHandler& handler));
   MOCK_METHOD1(WaitForServiceToBeAvailable,
                void(const WaitForServiceToBeAvailableCallback& callback));
   MOCK_METHOD1(IsMounted, void(const BoolDBusMethodCallback& callback));
@@ -45,6 +47,9 @@ class MockCryptohomeClient : public CryptohomeClient {
   MOCK_METHOD3(RenameCryptohome,
                void(const cryptohome::Identification& id_from,
                     const cryptohome::Identification& id_to,
+                    const ProtobufMethodCallback& callback));
+  MOCK_METHOD2(GetAccountDiskUsage,
+               void(const cryptohome::Identification& account_id,
                     const ProtobufMethodCallback& callback));
 
   MOCK_METHOD1(GetSystemSalt, void(const GetSystemSaltCallback& callback));

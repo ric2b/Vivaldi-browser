@@ -105,7 +105,8 @@ DataRequestHandler::DataRequestHandler(
       last_size_read_(IPCDataSource::kReadError),
       respond_with_data_cb_(respond_with_data_cb),
       finish_loading_cb_(finish_loading_cb),
-      read_complete_(false, false) {
+      read_complete_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                     base::WaitableEvent::InitialState::NOT_SIGNALED) {
   DCHECK(data_source_ != NULL);
   DCHECK(!respond_with_data_cb_.is_null());
   DCHECK(!finish_loading_cb_.is_null());

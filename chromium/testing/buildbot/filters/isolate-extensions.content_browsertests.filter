@@ -1,5 +1,3 @@
-# crbug.com/609963: Fix unload in subframes.
--*.RestoreSubframeFileAccessForHistoryNavigation
+# List below tests to be excluded from running.
 
-# crbug.com/612713: Fix in-page renderer kills.
--NavigationControllerBrowserTest.BackTwiceToIframeWithContent
+# This list is currently empty. Hooray!

@@ -21,7 +21,6 @@
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/ws/platform_display_delegate.h"
 #include "components/mus/ws/platform_display_init_params.h"
-#include "mojo/public/cpp/bindings/callback.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
@@ -58,6 +57,11 @@ class EventDispatcher;
 class PlatformDisplayFactory;
 class ServerWindow;
 
+struct ViewportMetrics {
+  gfx::Size size_in_pixels;
+  float device_scale_factor = 0.f;
+};
+
 // PlatformDisplay is used to connect the root ServerWindow to a display.
 class PlatformDisplay {
  public:
@@ -83,7 +87,7 @@ class PlatformDisplay {
 
   virtual mojom::Rotation GetRotation() = 0;
 
-  virtual const mojom::ViewportMetrics& GetViewportMetrics() = 0;
+  virtual float GetDeviceScaleFactor() = 0;
 
   virtual void UpdateTextInputState(const ui::TextInputState& state) = 0;
   virtual void SetImeVisibility(bool visible) = 0;
@@ -93,6 +97,8 @@ class PlatformDisplay {
 
   virtual void RequestCopyOfOutput(
       std::unique_ptr<cc::CopyOutputRequest> output_request) = 0;
+
+  virtual int64_t GetDisplayId() const = 0;
 
   // Overrides factory for testing. Default (NULL) value indicates regular
   // (non-test) environment.
@@ -122,13 +128,14 @@ class DefaultPlatformDisplay : public PlatformDisplay,
   void SetCapture() override;
   void ReleaseCapture() override;
   void SetCursorById(int32_t cursor) override;
-  const mojom::ViewportMetrics& GetViewportMetrics() override;
+  float GetDeviceScaleFactor() override;
   mojom::Rotation GetRotation() override;
   void UpdateTextInputState(const ui::TextInputState& state) override;
   void SetImeVisibility(bool visible) override;
   bool IsFramePending() const override;
   void RequestCopyOfOutput(
       std::unique_ptr<cc::CopyOutputRequest> output_request) override;
+  int64_t GetDisplayId() const override;
 
  private:
   void WantToDraw();
@@ -142,8 +149,8 @@ class DefaultPlatformDisplay : public PlatformDisplay,
   // for the display. TODO(fsamuel): Idle time processing should happen here
   // if there is budget for it.
   void DidDraw(cc::SurfaceDrawStatus status);
-  void UpdateMetrics(const gfx::Size& size, float device_pixel_ratio);
-  std::unique_ptr<cc::CompositorFrame> GenerateCompositorFrame();
+  void UpdateMetrics(const gfx::Size& size, float device_scale_factor);
+  cc::CompositorFrame GenerateCompositorFrame();
 
   // ui::PlatformWindowDelegate:
   void OnBoundsChanged(const gfx::Rect& new_bounds) override;
@@ -154,15 +161,17 @@ class DefaultPlatformDisplay : public PlatformDisplay,
   void OnWindowStateChanged(ui::PlatformWindowState new_state) override;
   void OnLostCapture() override;
   void OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget,
-                                    float device_pixel_ratio) override;
+                                    float device_scale_factor) override;
   void OnAcceleratedWidgetDestroyed() override;
   void OnActivationChanged(bool active) override;
+
+  int64_t display_id_;
 
   scoped_refptr<GpuState> gpu_state_;
   scoped_refptr<SurfacesState> surfaces_state_;
   PlatformDisplayDelegate* delegate_;
 
-  mojom::ViewportMetrics metrics_;
+  ViewportMetrics metrics_;
   gfx::Rect dirty_rect_;
   base::Timer draw_timer_;
   bool frame_pending_;

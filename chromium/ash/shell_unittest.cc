@@ -7,20 +7,20 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/desktop_background/desktop_background_widget_controller.h"
 #include "ash/display/mouse_cursor_event_filter.h"
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/root_window_controller.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
-#include "ash/wm/root_window_layout_manager.h"
 #include "ash/wm/window_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -148,9 +148,9 @@ class ShellTest : public test::AshTestBase {
     widget->Show();
 
     EXPECT_TRUE(
-        expected_container->Contains(widget->GetNativeWindow()->parent())) <<
-        "TestCreateWindow: type=" << type << ", always_on_top=" <<
-        always_on_top;
+        expected_container->Contains(widget->GetNativeWindow()->parent()))
+        << "TestCreateWindow: type=" << type
+        << ", always_on_top=" << always_on_top;
 
     widget->Close();
   }
@@ -165,12 +165,11 @@ class ShellTest : public test::AshTestBase {
     // Create a LockScreen window.
     views::Widget::InitParams widget_params(
         views::Widget::InitParams::TYPE_WINDOW);
-    SessionStateDelegate* delegate =
-        Shell::GetInstance()->session_state_delegate();
+    SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
     delegate->LockScreen();
     views::Widget* lock_widget = CreateTestWindow(widget_params);
-    ash::Shell::GetContainer(Shell::GetPrimaryRootWindow(),
-                             ash::kShellWindowId_LockScreenContainer)
+    Shell::GetContainer(Shell::GetPrimaryRootWindow(),
+                        kShellWindowId_LockScreenContainer)
         ->AddChild(lock_widget->GetNativeView());
     lock_widget->Show();
     EXPECT_TRUE(delegate->IsScreenLocked());
@@ -214,8 +213,8 @@ TEST_F(ShellTest, ChangeAlwaysOnTop) {
   widget->Show();
 
   // It should be in default container.
-  EXPECT_TRUE(GetDefaultContainer()->Contains(
-                  widget->GetNativeWindow()->parent()));
+  EXPECT_TRUE(
+      GetDefaultContainer()->Contains(widget->GetNativeWindow()->parent()));
 
   // Flip always-on-top flag.
   widget->SetAlwaysOnTop(true);
@@ -225,14 +224,14 @@ TEST_F(ShellTest, ChangeAlwaysOnTop) {
   // Flip always-on-top flag.
   widget->SetAlwaysOnTop(false);
   // It should go back to default container.
-  EXPECT_TRUE(GetDefaultContainer()->Contains(
-                  widget->GetNativeWindow()->parent()));
+  EXPECT_TRUE(
+      GetDefaultContainer()->Contains(widget->GetNativeWindow()->parent()));
 
   // Set the same always-on-top flag again.
   widget->SetAlwaysOnTop(false);
   // Should have no effect and we are still in the default container.
-  EXPECT_TRUE(GetDefaultContainer()->Contains(
-                  widget->GetNativeWindow()->parent()));
+  EXPECT_TRUE(
+      GetDefaultContainer()->Contains(widget->GetNativeWindow()->parent()));
 
   widget->Close();
 }
@@ -246,8 +245,8 @@ TEST_F(ShellTest, CreateModalWindow) {
   widget->Show();
 
   // It should be in default container.
-  EXPECT_TRUE(GetDefaultContainer()->Contains(
-                  widget->GetNativeWindow()->parent()));
+  EXPECT_TRUE(
+      GetDefaultContainer()->Contains(widget->GetNativeWindow()->parent()));
 
   // Create a modal window.
   views::Widget* modal_widget = views::Widget::CreateWindowWithParent(
@@ -281,21 +280,21 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
   EXPECT_TRUE(widget->GetNativeView()->HasFocus());
 
   // It should be in default container.
-  EXPECT_TRUE(GetDefaultContainer()->Contains(
-                  widget->GetNativeWindow()->parent()));
+  EXPECT_TRUE(
+      GetDefaultContainer()->Contains(widget->GetNativeWindow()->parent()));
 
-  Shell::GetInstance()->session_state_delegate()->LockScreen();
+  WmShell::Get()->GetSessionStateDelegate()->LockScreen();
   // Create a LockScreen window.
   views::Widget* lock_widget = CreateTestWindow(widget_params);
-  ash::Shell::GetContainer(Shell::GetPrimaryRootWindow(),
-                           ash::kShellWindowId_LockScreenContainer)
+  Shell::GetContainer(Shell::GetPrimaryRootWindow(),
+                      kShellWindowId_LockScreenContainer)
       ->AddChild(lock_widget->GetNativeView());
   lock_widget->Show();
   EXPECT_TRUE(lock_widget->GetNativeView()->HasFocus());
 
   // It should be in LockScreen container.
   aura::Window* lock_screen = Shell::GetContainer(
-      Shell::GetPrimaryRootWindow(), ash::kShellWindowId_LockScreenContainer);
+      Shell::GetPrimaryRootWindow(), kShellWindowId_LockScreenContainer);
   EXPECT_EQ(lock_screen, lock_widget->GetNativeWindow()->parent());
 
   // Create a modal window with a lock window as parent.
@@ -307,7 +306,7 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
   // It should be in LockScreen modal container.
   aura::Window* lock_modal_container =
       Shell::GetContainer(Shell::GetPrimaryRootWindow(),
-                          ash::kShellWindowId_LockSystemModalContainer);
+                          kShellWindowId_LockSystemModalContainer);
   EXPECT_EQ(lock_modal_container,
             lock_modal_widget->GetNativeWindow()->parent());
 
@@ -321,7 +320,7 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
 
   // It should be in non-LockScreen modal container.
   aura::Window* modal_container = Shell::GetContainer(
-      Shell::GetPrimaryRootWindow(), ash::kShellWindowId_SystemModalContainer);
+      Shell::GetPrimaryRootWindow(), kShellWindowId_SystemModalContainer);
   EXPECT_EQ(modal_container, modal_widget->GetNativeWindow()->parent());
 
   // Modal dialog without parent, caused crash see crbug.com/226141
@@ -341,8 +340,7 @@ TEST_F(ShellTest, CreateLockScreenModalWindow) {
 }
 
 TEST_F(ShellTest, IsScreenLocked) {
-  SessionStateDelegate* delegate =
-      Shell::GetInstance()->session_state_delegate();
+  SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
   delegate->LockScreen();
   EXPECT_TRUE(delegate->IsScreenLocked());
   delegate->UnlockScreen();
@@ -354,8 +352,8 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
   std::unique_ptr<ui::SimpleMenuModel> menu_model(
       new ui::SimpleMenuModel(&menu_delegate));
   menu_model->AddItem(0, base::ASCIIToUTF16("Menu item"));
-  views::Widget* widget = ash::Shell::GetPrimaryRootWindowController()->
-      wallpaper_controller()->widget();
+  views::Widget* widget =
+      Shell::GetPrimaryRootWindowController()->wallpaper_controller()->widget();
   std::unique_ptr<views::MenuRunner> menu_runner(
       new views::MenuRunner(menu_model.get(), views::MenuRunner::CONTEXT_MENU));
 
@@ -367,9 +365,7 @@ TEST_F(ShellTest, LockScreenClosesActiveMenu) {
                             base::Unretained(this)));
 
   EXPECT_EQ(views::MenuRunner::NORMAL_EXIT,
-            menu_runner->RunMenuAt(widget,
-                                   NULL,
-                                   gfx::Rect(),
+            menu_runner->RunMenuAt(widget, NULL, gfx::Rect(),
                                    views::MENU_ANCHOR_TOPLEFT,
                                    ui::MENU_SOURCE_MOUSE));
 }
@@ -420,31 +416,28 @@ TEST_F(ShellTest, FullscreenWindowHidesShelf) {
   EXPECT_FALSE(widget->IsMaximized());
 
   // Shelf defaults to visible.
-  EXPECT_EQ(
-      SHELF_VISIBLE,
-      Shell::GetPrimaryRootWindowController()->
-          GetShelfLayoutManager()->visibility_state());
+  EXPECT_EQ(SHELF_VISIBLE, Shell::GetPrimaryRootWindowController()
+                               ->GetShelfLayoutManager()
+                               ->visibility_state());
 
   // Fullscreen window hides it.
   widget->SetFullscreen(true);
-  EXPECT_EQ(
-      SHELF_HIDDEN,
-      Shell::GetPrimaryRootWindowController()->
-          GetShelfLayoutManager()->visibility_state());
+  EXPECT_EQ(SHELF_HIDDEN, Shell::GetPrimaryRootWindowController()
+                              ->GetShelfLayoutManager()
+                              ->visibility_state());
 
   // Restoring the window restores it.
   widget->Restore();
-  EXPECT_EQ(
-      SHELF_VISIBLE,
-      Shell::GetPrimaryRootWindowController()->
-          GetShelfLayoutManager()->visibility_state());
+  EXPECT_EQ(SHELF_VISIBLE, Shell::GetPrimaryRootWindowController()
+                               ->GetShelfLayoutManager()
+                               ->visibility_state());
 
   // Clean up.
   widget->Close();
 }
 
-// Various assertions around SetShelfAutoHideBehavior() and
-// GetShelfAutoHideBehavior().
+// Various assertions around auto-hide behavior.
+// TODO(jamescook): Move this to ShelfTest.
 TEST_F(ShellTest, ToggleAutoHide) {
   std::unique_ptr<aura::Window> window(new aura::Window(NULL));
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
@@ -454,27 +447,21 @@ TEST_F(ShellTest, ToggleAutoHide) {
   window->Show();
   wm::ActivateWindow(window.get());
 
-  Shell* shell = Shell::GetInstance();
-  aura::Window* root_window = Shell::GetPrimaryRootWindow();
-  shell->SetShelfAutoHideBehavior(ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
-                                  root_window);
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
-            shell->GetShelfAutoHideBehavior(root_window));
-  shell->SetShelfAutoHideBehavior(ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
-                                  root_window);
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
-            shell->GetShelfAutoHideBehavior(root_window));
+  Shelf* shelf = Shelf::ForPrimaryDisplay();
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+
   window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
-            shell->GetShelfAutoHideBehavior(root_window));
-  shell->SetShelfAutoHideBehavior(ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
-                                  root_window);
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS,
-            shell->GetShelfAutoHideBehavior(root_window));
-  shell->SetShelfAutoHideBehavior(ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
-                                  root_window);
-  EXPECT_EQ(ash::SHELF_AUTO_HIDE_BEHAVIOR_NEVER,
-            shell->GetShelfAutoHideBehavior(root_window));
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
+
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS);
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_ALWAYS, shelf->auto_hide_behavior());
+
+  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  EXPECT_EQ(SHELF_AUTO_HIDE_BEHAVIOR_NEVER, shelf->auto_hide_behavior());
 }
 
 // Tests that the cursor-filter is ahead of the drag-drop controller in the
@@ -487,9 +474,8 @@ TEST_F(ShellTest, TestPreTargetHandlerOrder) {
   const ui::EventHandlerList& handlers = test_api.pre_target_handlers();
   ui::EventHandlerList::const_iterator cursor_filter =
       std::find(handlers.begin(), handlers.end(), shell->mouse_cursor_filter());
-  ui::EventHandlerList::const_iterator drag_drop =
-      std::find(handlers.begin(), handlers.end(),
-                shell_test_api.drag_drop_controller());
+  ui::EventHandlerList::const_iterator drag_drop = std::find(
+      handlers.begin(), handlers.end(), shell_test_api.drag_drop_controller());
   EXPECT_NE(handlers.end(), cursor_filter);
   EXPECT_NE(handlers.end(), drag_drop);
   EXPECT_GT(drag_drop, cursor_filter);

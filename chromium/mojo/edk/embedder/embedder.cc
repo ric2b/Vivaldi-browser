@@ -10,14 +10,19 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
+#include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "crypto/random.h"
 #include "mojo/edk/embedder/embedder_internal.h"
+#include "mojo/edk/embedder/entrypoints.h"
 #include "mojo/edk/embedder/platform_channel_pair.h"
 #include "mojo/edk/embedder/process_delegate.h"
 #include "mojo/edk/system/core.h"
+
+#if !defined(OS_NACL)
+#include "crypto/random.h"
+#endif
 
 namespace mojo {
 namespace edk {
@@ -37,16 +42,25 @@ Core* GetCore() { return g_core; }
 void SetMaxMessageSize(size_t bytes) {
 }
 
-ScopedPlatformHandle ChildProcessLaunched(base::ProcessHandle child_process) {
-  PlatformChannelPair channel;
-  ChildProcessLaunched(child_process, channel.PassServerHandle());
-  return channel.PassClientHandle();
+void ChildProcessLaunched(base::ProcessHandle child_process,
+                          ScopedPlatformHandle server_pipe,
+                          const std::string& child_token) {
+  ChildProcessLaunched(child_process, std::move(server_pipe),
+                       child_token, ProcessErrorCallback());
 }
 
 void ChildProcessLaunched(base::ProcessHandle child_process,
-                          ScopedPlatformHandle server_pipe) {
+                          ScopedPlatformHandle server_pipe,
+                          const std::string& child_token,
+                          const ProcessErrorCallback& process_error_callback) {
   CHECK(internal::g_core);
-  internal::g_core->AddChild(child_process, std::move(server_pipe));
+  internal::g_core->AddChild(child_process, std::move(server_pipe),
+                             child_token, process_error_callback);
+}
+
+void ChildProcessLaunchFailed(const std::string& child_token) {
+  CHECK(internal::g_core);
+  internal::g_core->ChildLaunchFailed(child_token);
 }
 
 void SetParentPipeHandle(ScopedPlatformHandle pipe) {
@@ -63,6 +77,10 @@ void SetParentPipeHandleFromCommandLine() {
 }
 
 void Init() {
+  MojoSystemThunks thunks = MakeSystemThunks();
+  size_t expected_size = MojoEmbedderSetSystemThunks(&thunks);
+  DCHECK_EQ(expected_size, sizeof(thunks));
+
   internal::g_core = new Core();
 }
 
@@ -132,9 +150,10 @@ ScopedMessagePipeHandle CreateMessagePipe(
   return internal::g_core->CreateMessagePipe(std::move(platform_handle));
 }
 
-ScopedMessagePipeHandle CreateParentMessagePipe(const std::string& token) {
+ScopedMessagePipeHandle CreateParentMessagePipe(
+    const std::string& token, const std::string& child_token) {
   CHECK(internal::g_process_delegate);
-  return internal::g_core->CreateParentMessagePipe(token);
+  return internal::g_core->CreateParentMessagePipe(token, child_token);
 }
 
 ScopedMessagePipeHandle CreateChildMessagePipe(const std::string& token) {
@@ -144,8 +163,18 @@ ScopedMessagePipeHandle CreateChildMessagePipe(const std::string& token) {
 
 std::string GenerateRandomToken() {
   char random_bytes[16];
+#if defined(OS_NACL)
+  // Not secure. For NaCl only!
+  base::RandBytes(random_bytes, 16);
+#else
   crypto::RandBytes(random_bytes, 16);
+#endif
   return base::HexEncode(random_bytes, 16);
+}
+
+MojoResult SetProperty(MojoPropertyType type, const void* value) {
+  CHECK(internal::g_core);
+  return internal::g_core->SetProperty(type, value);
 }
 
 }  // namespace edk

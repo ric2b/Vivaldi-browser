@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/ios/ios_sdk.gni")
 import("//build/config/mac/base_rules.gni")
 
 # Generates Info.plist files for Mac apps and frameworks.
@@ -9,8 +10,13 @@ import("//build/config/mac/base_rules.gni")
 # Arguments
 #
 #     info_plist:
-#         string, the path to an plist file that will be included in the final
-#         Info.plist generated.
+#         (optional) string, path to the Info.plist file that will be used for
+#         the bundle.
+#
+#     info_plist_target:
+#         (optional) string, if the info_plist is generated from an action,
+#         rather than a regular source file, specify the target name in lieu
+#         of info_plist. The two arguments are mutually exclusive.
 #
 #     executable_name:
 #         string, name of the generated target used for the product
@@ -20,6 +26,17 @@ import("//build/config/mac/base_rules.gni")
 #         (optional) string array, 'key=value' pairs for extra fields which are
 #         specified in a source Info.plist template.
 template("ios_info_plist") {
+  assert(defined(invoker.info_plist) != defined(invoker.info_plist_target),
+         "Only one of info_plist or info_plist_target may be specified in " +
+             target_name)
+
+  if (defined(invoker.info_plist)) {
+    _info_plist = invoker.info_plist
+  } else {
+    _info_plist_target_output = get_target_outputs(invoker.info_plist_target)
+    _info_plist = _info_plist_target_output[0]
+  }
+
   info_plist(target_name) {
     format = "binary1"
     extra_substitutions = []
@@ -37,11 +54,17 @@ template("ios_info_plist") {
     ]
     plist_templates = [
       "//build/config/ios/BuildInfo.plist",
-      invoker.info_plist,
+      _info_plist,
     ]
+    if (defined(invoker.info_plist_target)) {
+      deps = [
+        invoker.info_plist_target,
+      ]
+    }
     forward_variables_from(invoker,
                            [
                              "executable_name",
+                             "output_name",
                              "visibility",
                            ])
   }
@@ -70,14 +93,29 @@ template("ios_info_plist") {
 #       the application Info.plist
 #
 #   info_plist:
-#       path to the template to use to generate the application Info.plist
-#       by performing variable substitutions.
+#       (optional) string, path to the Info.plist file that will be used for
+#       the bundle.
+#
+#   info_plist_target:
+#       (optional) string, if the info_plist is generated from an action,
+#       rather than a regular source file, specify the target name in lieu
+#       of info_plist. The two arguments are mutually exclusive.
+#
+#   entitlements_path:
+#       (optional) path to the template to use to generate the application
+#       entitlements by performing variable substitutions, defaults to
+#       $ios_sdk_path/Entitlements.plist.
+#
+#   bundle_extension:
+#       (optional) bundle extension including the dot, default to ".app".
+#
+#   product_type
+#       (optional) string, product type for the generated Xcode project,
+#       default to "com.apple.product-type.application". Should generally
+#       not be overridden.
 #
 # For more information, see "gn help executable".
 template("ios_app_bundle") {
-  assert(defined(invoker.info_plist),
-         "info_plist must be specified for target $target_name")
-
   _output_name = target_name
   _target_name = target_name
   if (defined(invoker.output_name)) {
@@ -93,6 +131,7 @@ template("ios_app_bundle") {
                            [
                              "extra_substitutions",
                              "info_plist",
+                             "info_plist_target",
                            ])
   }
 
@@ -109,41 +148,56 @@ template("ios_app_bundle") {
   }
 
   _generate_executable = target_name + "_generate_executable"
-  _bundle_data_executable = target_name + "_bundle_data_executable"
+  if (!ios_enable_code_signing) {
+    _bundle_data_executable = target_name + "_bundle_data_executable"
+  }
 
   executable(_generate_executable) {
-    visibility = [ ":$_bundle_data_executable" ]
+    if (ios_enable_code_signing) {
+      visibility = [ ":$_target_name" ]
+    } else {
+      visibility = [ ":$_bundle_data_executable" ]
+    }
     forward_variables_from(invoker,
                            "*",
                            [
-                             "assert_no_deps",
-                             "code_signing_identity",
+                             "bundle_extension",
                              "data_deps",
                              "entitlements_path",
                              "info_plist",
+                             "info_plist_target",
                              "output_name",
+                             "product_type",
                              "visibility",
                            ])
 
     output_name = rebase_path("$target_gen_dir/$_output_name", root_out_dir)
+    output_prefix_override = true
+
     if (!defined(libs)) {
       libs = []
     }
     libs += [ "UIKit.framework" ]
+    if (!defined(ldflags)) {
+      ldflags = []
+    }
+    ldflags += [ "-ObjC" ]
   }
 
-  bundle_data(_bundle_data_executable) {
-    forward_variables_from(invoker, [ "testonly" ])
-    visibility = [ ":$_target_name" ]
-    sources = [
-      "$target_gen_dir/$_output_name",
-    ]
-    outputs = [
-      "{{bundle_executable_dir}}/$_output_name",
-    ]
-    public_deps = [
-      ":$_generate_executable",
-    ]
+  if (!ios_enable_code_signing) {
+    bundle_data(_bundle_data_executable) {
+      forward_variables_from(invoker, [ "testonly" ])
+      visibility = [ ":$_target_name" ]
+      sources = [
+        "$target_gen_dir/$_output_name",
+      ]
+      outputs = [
+        "{{bundle_executable_dir}}/$_output_name",
+      ]
+      public_deps = [
+        ":$_generate_executable",
+      ]
+    }
   }
 
   create_bundle(target_name) {
@@ -159,10 +213,12 @@ template("ios_app_bundle") {
     if (!defined(deps)) {
       deps = []
     }
-    deps += [
-      ":$_bundle_data_executable",
-      ":$_bundle_data_info_plist",
-    ]
+    deps += [ ":$_bundle_data_info_plist" ]
+    if (ios_enable_code_signing) {
+      deps += [ ":$_generate_executable" ]
+    } else {
+      deps += [ ":$_bundle_data_executable" ]
+    }
 
     if (use_ios_simulator) {
       if (!defined(data_deps)) {
@@ -171,18 +227,103 @@ template("ios_app_bundle") {
       data_deps += [ "//testing/iossim" ]
     }
 
-    product_type = "com.apple.product-type.application"
-    bundle_root_dir = "$root_out_dir/$_output_name.app"
+    if (defined(invoker.product_type)) {
+      product_type = invoker.product_type
+    } else {
+      product_type = "com.apple.product-type.application"
+    }
+
+    if (defined(invoker.bundle_extension)) {
+      _bundle_extension = invoker.bundle_extension
+    } else {
+      _bundle_extension = ".app"
+    }
+
+    bundle_root_dir = "$root_out_dir/$_output_name$_bundle_extension"
     bundle_resources_dir = bundle_root_dir
     bundle_executable_dir = bundle_root_dir
-    bundle_plugins_dir = "$bundle_root_dir/Plugins"
-  }
+    bundle_plugins_dir = "$bundle_root_dir/PlugIns"
 
-  # TODO(crbug.com/297668):
-  # - add support for codesigning,
-  # - find a way to make "ninja -C out/Default base_unittests.app" work as
-  #   an alias to "ninja -C out/Default base_unittests" (for convenience
-  #   and compatibility with gyp),
+    if (defined(invoker.entitlements_path)) {
+      _entitlements_path = invoker.entitlements_path
+    } else {
+      _entitlements_path = "$ios_sdk_path/Entitlements.plist"
+    }
+
+    if (ios_enable_code_signing) {
+      code_signing_script = "//build/config/ios/codesign.py"
+      code_signing_sources = [
+        _entitlements_path,
+        "$target_gen_dir/$_output_name",
+      ]
+      code_signing_outputs = [
+        "$bundle_root_dir/$_output_name",
+        "$bundle_root_dir/_CodeSignature/CodeResources",
+        "$bundle_root_dir/embedded.mobileprovision",
+      ]
+      code_signing_args = [
+        "-i=" + ios_code_signing_identity,
+        "-b=" + rebase_path("$target_gen_dir/$_output_name", root_build_dir),
+        "-e=" + rebase_path(_entitlements_path, root_build_dir),
+        rebase_path(bundle_root_dir, root_build_dir),
+      ]
+    } else {
+      assert(_entitlements_path != "",
+             "force usage of _entitlements_path to avoid unused variable error")
+    }
+  }
+}
+
+# Template to build an application extension bundle for iOS.
+#
+# This should be used instead of "executable" built-in target type on iOS.
+# As the template forward the generation of the application executable to
+# an "executable" target, all arguments supported by "executable" targets
+# are also supported by this template.
+#
+# Arguments
+#
+#   output_name:
+#       (optional) string, name of the generated application, if omitted,
+#       defaults to the target_name.
+#
+#   extra_substitutions:
+#       (optional) list of string in "key=value" format, each value will
+#       be used as an additional variable substitution rule when generating
+#       the application Info.plist
+#
+#   info_plist:
+#       (optional) string, path to the Info.plist file that will be used for
+#       the bundle.
+#
+#   info_plist_target:
+#       (optional) string, if the info_plist is generated from an action,
+#       rather than a regular source file, specify the target name in lieu
+#       of info_plist. The two arguments are mutually exclusive.
+#
+# For more information, see "gn help executable".
+template("ios_appex_bundle") {
+  ios_app_bundle(target_name) {
+    forward_variables_from(invoker,
+                           "*",
+                           [
+                             "bundle_extension",
+                             "product_type",
+                           ])
+    bundle_extension = ".appex"
+    product_type = "com.apple.product-type.app-extension"
+
+    # Add linker flags required for an application extension (determined by
+    # inspecting the link command-line when using Xcode 9.0+).
+    if (!defined(ldflags)) {
+      ldflags = []
+    }
+    ldflags += [
+      "-e",
+      "_NSExtensionMain",
+      "-fapplication-extension",
+    ]
+  }
 }
 
 # Compile a xib or storyboard file and add it to a bundle_data so that it is
@@ -288,7 +429,7 @@ template("ios_framework_bundle") {
     _compile_headers_map_target = _target_name + "_compile_headers_map"
     action(_compile_headers_map_target) {
       visibility = [ ":$_framework_headers_target" ]
-      script = "$root_out_dir/gyp-mac-tool"
+      script = "//build/config/ios/write_framework_hmap.py"
       outputs = [
         _header_map_filename,
       ]
@@ -308,23 +449,19 @@ template("ios_framework_bundle") {
       set_sources_assignment_filter([])
 
       args = [
-               "compile-ios-framework-header-map",
                rebase_path(_header_map_filename),
-               rebase_path(_framework_root, root_out_dir),
-             ] + rebase_path(sources, root_out_dir)
+               rebase_path(_framework_root, root_build_dir),
+             ] + rebase_path(sources, root_build_dir)
     }
 
     _create_module_map_target = _target_name + "_module_map"
     action(_create_module_map_target) {
       visibility = [ ":$_framework_headers_target" ]
-      script = "$root_out_dir/gyp-mac-tool"
+      script = "//build/config/ios/write_framework_modulemap.py"
       outputs = [
         "$_framework_root/Modules/module.modulemap",
       ]
-      args = [
-        "package-ios-framework",
-        rebase_path("$_framework_root", root_out_dir),
-      ]
+      args = [ rebase_path("$_framework_root", root_build_dir) ]
     }
 
     _copy_public_headers_target = _target_name + "_copy_public_headers"
@@ -359,7 +496,7 @@ template("ios_framework_bundle") {
   config(_framework_public_config) {
     visibility = [ ":$_framework_public_config" ]
     if (defined(_public_headers)) {
-      common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_out_dir) ]
+      common_flags = [ "-F" + rebase_path("$root_out_dir/.", root_build_dir) ]
       cflags_objc = common_flags
       cflags_objcc = common_flags
     }

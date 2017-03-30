@@ -37,7 +37,7 @@
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerThread.h"
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/network/ResourceError.h"
@@ -46,14 +46,15 @@
 #include "platform/network/ResourceTimingInfo.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
-#include "wtf/OwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
 
-static PassOwnPtr<Vector<char>> createVectorFromMemoryRegion(const char* data, unsigned dataLength)
+static std::unique_ptr<Vector<char>> createVectorFromMemoryRegion(const char* data, unsigned dataLength)
 {
-    OwnPtr<Vector<char>> buffer = adoptPtr(new Vector<char>(dataLength));
+    std::unique_ptr<Vector<char>> buffer = wrapUnique(new Vector<char>(dataLength));
     memcpy(buffer->data(), data, dataLength);
     return buffer;
 }
@@ -72,7 +73,7 @@ WorkerThreadableLoader::WorkerThreadableLoader(WorkerGlobalScope& workerGlobalSc
 
 void WorkerThreadableLoader::loadResourceSynchronously(WorkerGlobalScope& workerGlobalScope, const ResourceRequest& request, ThreadableLoaderClient& client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
-    OwnPtr<WorkerThreadableLoader> loader = adoptPtr(new WorkerThreadableLoader(workerGlobalScope, &client, options, resourceLoaderOptions, LoadSynchronously));
+    std::unique_ptr<WorkerThreadableLoader> loader = wrapUnique(new WorkerThreadableLoader(workerGlobalScope, &client, options, resourceLoaderOptions, LoadSynchronously));
     loader->start(request);
 }
 
@@ -133,7 +134,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadCreateLoader(Thread
     ASSERT(m_mainThreadLoader);
 }
 
-void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadStart(PassOwnPtr<CrossThreadResourceRequestData> requestData)
+void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadStart(std::unique_ptr<CrossThreadResourceRequestData> requestData)
 {
     ASSERT(isMainThread());
     ASSERT(m_mainThreadLoader);
@@ -142,12 +143,12 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadStart(PassOwnPtr<Cr
 
 void WorkerThreadableLoader::MainThreadBridgeBase::createLoaderInMainThread(const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCreateLoader, AllowCrossThreadAccess(this), options, resourceLoaderOptions));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCreateLoader, crossThreadUnretained(this), options, resourceLoaderOptions));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::startInMainThread(const ResourceRequest& request, const WorkerGlobalScope& workerGlobalScope)
 {
-    loaderProxy()->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadStart, AllowCrossThreadAccess(this), request));
+    loaderProxy()->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadStart, crossThreadUnretained(this), request));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadDestroy(ExecutionContext* context)
@@ -163,7 +164,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::destroy()
     m_workerClientWrapper->clearClient();
 
     // "delete this" and m_mainThreadLoader::deref() on the worker object's thread.
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadDestroy, AllowCrossThreadAccess(this)));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadDestroy, crossThreadUnretained(this)));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadOverrideTimeout(unsigned long timeoutMilliseconds, ExecutionContext* context)
@@ -178,7 +179,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadOverrideTimeout(uns
 
 void WorkerThreadableLoader::MainThreadBridgeBase::overrideTimeout(unsigned long timeoutMilliseconds)
 {
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadOverrideTimeout, AllowCrossThreadAccess(this), timeoutMilliseconds));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadOverrideTimeout, crossThreadUnretained(this), timeoutMilliseconds));
 }
 
 void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadCancel(ExecutionContext* context)
@@ -194,7 +195,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::mainThreadCancel(ExecutionCon
 
 void WorkerThreadableLoader::MainThreadBridgeBase::cancel()
 {
-    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCancel, AllowCrossThreadAccess(this)));
+    m_loaderProxy->postTaskToLoader(createCrossThreadTask(&MainThreadBridgeBase::mainThreadCancel, crossThreadUnretained(this)));
     RefPtr<ThreadableLoaderClientWrapper> clientWrapper = m_workerClientWrapper;
     if (!clientWrapper->done()) {
         // If the client hasn't reached a termination state, then transition it by sending a cancellation error.
@@ -216,7 +217,7 @@ void WorkerThreadableLoader::MainThreadBridgeBase::didSendData(unsigned long lon
     forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didSendData, m_workerClientWrapper, bytesSent, totalBytesToBeSent));
 }
 
-void WorkerThreadableLoader::MainThreadBridgeBase::didReceiveResponse(unsigned long identifier, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void WorkerThreadableLoader::MainThreadBridgeBase::didReceiveResponse(unsigned long identifier, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     forwardTaskToWorker(createCrossThreadTask(&ThreadableLoaderClientWrapper::didReceiveResponse, m_workerClientWrapper, identifier, response, passed(std::move(handle))));
 }
@@ -304,7 +305,7 @@ WorkerThreadableLoader::MainThreadSyncBridge::MainThreadSyncBridge(
 void WorkerThreadableLoader::MainThreadSyncBridge::start(const ResourceRequest& request, const WorkerGlobalScope& workerGlobalScope)
 {
     WaitableEvent* terminationEvent = workerGlobalScope.thread()->terminationEvent();
-    m_loaderDoneEvent = adoptPtr(new WaitableEvent());
+    m_loaderDoneEvent = wrapUnique(new WaitableEvent());
 
     startInMainThread(request, workerGlobalScope);
 

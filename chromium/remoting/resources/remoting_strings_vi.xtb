@@ -130,6 +130,7 @@ trên Chrome</translation>
 <translation id="4156740505453712750">Để bảo vệ quyền truy cập vào máy tính này, vui lòng chọn một mã PIN <ph name="BOLD_START" />ít nhất sáu chữ số<ph name="BOLD_END" />. Mã PIN này sẽ được yêu cầu khi kết nối từ một vị trí khác.</translation>
 <translation id="4176825807642096119">Mã truy cập</translation>
 <translation id="4207623512727273241">Vui lòng chạy trình cài đặt trước khi tiếp tục.</translation>
+<translation id="4227991223508142681">Tiện ích cấp phép máy chủ</translation>
 <translation id="4240294130679914010">Trình gỡ cài đặt máy chủ kết nối từ xa trên Chrome</translation>
 <translation id="4277463233460010382">Máy tính này được định cấu hình để cho phép một hoặc nhiều ứng dụng khách kết nối mà không cần nhập mã PIN.</translation>
 <translation id="4277736576214464567">Mã truy cập không hợp lệ. Vui lòng thử lại.</translation>
@@ -261,6 +262,7 @@ Remote Desktop</translation>
 <translation id="7836926030608666805">Thiếu một số thành phần bắt buộc. Vui lòng đảm bảo rằng bạn đang chạy phiên bản Chrome mới nhất và thử lại.</translation>
 <translation id="7868137160098754906">Hãy nhập mã PIN của bạn cho máy tính từ xa.</translation>
 <translation id="7869445566579231750">Bạn không có quyền chạy ứng dụng này.</translation>
+<translation id="7895403300744144251">Chính sách bảo mật trên máy tính từ xa không cho phép các kết nối từ tài khoản của bạn.</translation>
 <translation id="7948001860594368197">Tùy chọn màn hình</translation>
 <translation id="7970576581263377361">Xác thực bị lỗi. Vui lòng đăng nhập lại vào Chromium.</translation>
 <translation id="7981525049612125370">Phiên từ xa đã hết hạn.</translation>

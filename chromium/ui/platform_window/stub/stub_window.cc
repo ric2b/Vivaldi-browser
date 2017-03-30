@@ -4,12 +4,17 @@
 
 #include "ui/platform_window/stub/stub_window.h"
 
+#include "base/logging.h"
 #include "ui/platform_window/platform_window_delegate.h"
 
 namespace ui {
 
-StubWindow::StubWindow(PlatformWindowDelegate* delegate) : delegate_(delegate) {
-  delegate_->OnAcceleratedWidgetAvailable(gfx::kNullAcceleratedWidget, 1.f);
+StubWindow::StubWindow(PlatformWindowDelegate* delegate,
+                       bool use_default_accelerated_widget)
+    : delegate_(delegate) {
+  DCHECK(delegate);
+  if (use_default_accelerated_widget)
+    delegate_->OnAcceleratedWidgetAvailable(gfx::kNullAcceleratedWidget, 1.f);
 }
 
 StubWindow::~StubWindow() {

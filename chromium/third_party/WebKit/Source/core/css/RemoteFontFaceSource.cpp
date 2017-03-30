@@ -8,16 +8,53 @@
 #include "core/css/CSSFontFace.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/dom/Document.h"
+#include "core/fetch/ResourceFetcher.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/loader/FrameLoaderClient.h"
 #include "core/page/NetworkStateNotifier.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontDescription.h"
 #include "platform/fonts/SimpleFontData.h"
+#include "public/platform/WebEffectiveConnectionType.h"
 #include "wtf/CurrentTime.h"
 
 namespace blink {
+
+namespace {
+
+bool isEffectiveConnectionTypeSlowFor(Document* document)
+{
+    WebEffectiveConnectionType type = document->frame()->loader().client()->getEffectiveConnectionType();
+
+    WebEffectiveConnectionType thresholdType = RuntimeEnabledFeatures::webFontsInterventionV2With2GEnabled()
+        ? WebEffectiveConnectionType::Type2G
+        : WebEffectiveConnectionType::TypeSlow2G;
+
+    return WebEffectiveConnectionType::TypeOffline <= type && type <= thresholdType;
+}
+
+bool isConnectionTypeSlow()
+{
+    return networkStateNotifier().connectionType() == WebConnectionTypeCellular2G;
+}
+
+bool shouldTriggerWebFontsIntervention(Document* document, FontDisplay display, bool isLoadedFromMemoryCache, bool isLoadedFromDataURL)
+{
+    if (RuntimeEnabledFeatures::webFontsInterventionTriggerEnabled())
+        return true;
+    if (isLoadedFromMemoryCache || isLoadedFromDataURL)
+        return false;
+
+    bool isV2Enabled = RuntimeEnabledFeatures::webFontsInterventionV2With2GEnabled() || RuntimeEnabledFeatures::webFontsInterventionV2WithSlow2GEnabled();
+
+    bool networkIsSlow = isV2Enabled ? isEffectiveConnectionTypeSlowFor(document) : isConnectionTypeSlow();
+
+    return networkIsSlow && display == FontDisplayAuto;
+}
+
+} // namespace
 
 RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font, CSSFontSelector* fontSelector, FontDisplay display)
     : m_font(font)
@@ -25,13 +62,13 @@ RemoteFontFaceSource::RemoteFontFaceSource(FontResource* font, CSSFontSelector* 
     , m_display(display)
     , m_period(display == FontDisplaySwap ? SwapPeriod : BlockPeriod)
     , m_isInterventionTriggered(false)
+    , m_isLoadedFromMemoryCache(font->isLoaded())
 {
     ThreadState::current()->registerPreFinalizer(this);
     m_font->addClient(this);
 
-    // TODO(crbug.com/578029): Connect NQE signal for V2 mode.
-    bool triggered = RuntimeEnabledFeatures::webFontsInterventionV2Enabled() ? false : networkStateNotifier().connectionType() == WebConnectionTypeCellular2G;
-    if (RuntimeEnabledFeatures::webFontsInterventionTriggerEnabled() || (triggered && display == FontDisplayAuto)) {
+    if (shouldTriggerWebFontsIntervention(m_fontSelector->document(), display, m_isLoadedFromMemoryCache, m_font->url().protocolIsData())) {
+
         m_isInterventionTriggered = true;
         m_period = SwapPeriod;
         m_fontSelector->document()->addConsoleMessage(ConsoleMessage::create(OtherMessageSource, InfoMessageLevel, "Slow network is detected. Fallback font will be used while loading: " + m_font->url().elidedString()));
@@ -80,7 +117,7 @@ bool RemoteFontFaceSource::isValid() const
 void RemoteFontFaceSource::notifyFinished(Resource*)
 {
     m_histograms.recordRemoteFont(m_font.get());
-    m_histograms.fontLoaded(m_isInterventionTriggered);
+    m_histograms.fontLoaded(m_isInterventionTriggered, !m_isLoadedFromMemoryCache && !m_font->url().protocolIsData() && !m_font->response().wasCached());
 
     m_font->ensureCustomFontData();
     // FIXME: Provide more useful message such as OTS rejection reason.
@@ -172,7 +209,7 @@ PassRefPtr<SimpleFontData> RemoteFontFaceSource::createLoadingFallbackFontData(c
 void RemoteFontFaceSource::beginLoadIfNeeded()
 {
     if (m_fontSelector->document() && m_font->stillNeedsLoad()) {
-        m_font->load(m_fontSelector->document()->fetcher());
+        m_fontSelector->document()->fetcher()->startLoad(m_font);
         m_histograms.loadStarted();
     }
     m_font->startLoadLimitTimersIfNeeded();
@@ -186,6 +223,7 @@ DEFINE_TRACE(RemoteFontFaceSource)
     visitor->trace(m_font);
     visitor->trace(m_fontSelector);
     CSSFontFaceSource::trace(visitor);
+    FontResourceClient::trace(visitor);
 }
 
 void RemoteFontFaceSource::FontLoadHistograms::loadStarted()
@@ -200,16 +238,16 @@ void RemoteFontFaceSource::FontLoadHistograms::fallbackFontPainted(DisplayPeriod
         m_blankPaintTime = currentTimeMS();
 }
 
-void RemoteFontFaceSource::FontLoadHistograms::fontLoaded(bool isInterventionTriggered)
+void RemoteFontFaceSource::FontLoadHistograms::fontLoaded(bool isInterventionTriggered, bool isLoadedFromNetwork)
 {
     if (!m_isLongLimitExceeded)
-        recordInterventionResult(isInterventionTriggered);
+        recordInterventionResult(isInterventionTriggered, isLoadedFromNetwork);
 }
 
 void RemoteFontFaceSource::FontLoadHistograms::longLimitExceeded(bool isInterventionTriggered)
 {
     m_isLongLimitExceeded = true;
-    recordInterventionResult(isInterventionTriggered);
+    recordInterventionResult(isInterventionTriggered, true);
 }
 
 void RemoteFontFaceSource::FontLoadHistograms::recordFallbackTime(const FontResource* font)
@@ -276,18 +314,21 @@ void RemoteFontFaceSource::FontLoadHistograms::recordLoadTimeHistogram(const Fon
     over1mbHistogram.count(duration);
 }
 
-void RemoteFontFaceSource::FontLoadHistograms::recordInterventionResult(bool triggered)
+void RemoteFontFaceSource::FontLoadHistograms::recordInterventionResult(bool isTriggered, bool isLoadedFromNetwork)
 {
     // interventionResult takes 0-3 values.
     int interventionResult = 0;
     if (m_isLongLimitExceeded)
         interventionResult |= 1 << 0;
-    if (triggered)
+    if (isTriggered)
         interventionResult |= 1 << 1;
     const int boundary = 1 << 2;
 
     DEFINE_STATIC_LOCAL(EnumerationHistogram, interventionHistogram, ("WebFont.InterventionResult", boundary));
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, missCachedInterventionHistogram, ("WebFont.MissCachedInterventionResult", boundary));
     interventionHistogram.count(interventionResult);
+    if (isLoadedFromNetwork)
+        missCachedInterventionHistogram.count(interventionResult);
 }
 
 } // namespace blink

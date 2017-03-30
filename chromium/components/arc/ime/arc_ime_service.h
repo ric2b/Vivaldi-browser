@@ -18,6 +18,8 @@
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/keyboard/keyboard_controller.h"
+#include "ui/keyboard/keyboard_controller_observer.h"
 
 namespace aura {
 class Window;
@@ -38,6 +40,7 @@ class ArcImeService : public ArcService,
                       public aura::EnvObserver,
                       public aura::WindowObserver,
                       public aura::client::FocusChangeObserver,
+                      public keyboard::KeyboardControllerObserver,
                       public ui::TextInputClient {
  public:
   explicit ArcImeService(ArcBridgeService* bridge_service);
@@ -63,6 +66,10 @@ class ArcImeService : public ArcService,
   void OnTextInputTypeChanged(ui::TextInputType type) override;
   void OnCursorRectChanged(const gfx::Rect& rect) override;
   void OnCancelComposition() override;
+  void ShowImeIfNeeded() override;
+
+  // Overridden from keyboard::KeyboardControllerObserver.
+  void OnKeyboardBoundsChanging(const gfx::Rect& rect) override;
 
   // Overridden from ui::TextInputClient:
   void SetCompositionText(const ui::CompositionText& composition) override;
@@ -77,6 +84,7 @@ class ArcImeService : public ArcService,
   // TODO(kinaba): Support each of these methods to the extent possible in
   // Android input method API.
   ui::TextInputMode GetTextInputMode() const override;
+  base::i18n::TextDirection GetTextDirection() const override;
   int GetTextInputFlags() const override;
   bool CanComposeInline() const override;
   bool GetCompositionCharacterBounds(uint32_t index,
@@ -92,10 +100,11 @@ class ArcImeService : public ArcService,
   void OnInputMethodChanged() override {}
   bool ChangeTextDirectionAndLayoutAlignment(
       base::i18n::TextDirection direction) override;
-  void ExtendSelectionAndDelete(size_t before, size_t after) override {}
+  void ExtendSelectionAndDelete(size_t before, size_t after) override;
   void EnsureCaretInRect(const gfx::Rect& rect) override {}
-  bool IsEditCommandEnabled(int command_id) override;
-  void SetEditCommandForNextKeyEvent(int command_id) override {}
+  bool IsTextEditCommandEnabled(ui::TextEditCommand command) const override;
+  void SetTextEditCommandForNextKeyEvent(ui::TextEditCommand command) override {
+  }
 
  private:
   ui::InputMethod* GetInputMethod();
@@ -108,6 +117,8 @@ class ArcImeService : public ArcService,
   aura::WindowTracker observing_root_windows_;
   aura::WindowTracker arc_windows_;
   aura::WindowTracker focused_arc_window_;
+
+  keyboard::KeyboardController* keyboard_controller_;
 
   ui::InputMethod* test_input_method_;
 

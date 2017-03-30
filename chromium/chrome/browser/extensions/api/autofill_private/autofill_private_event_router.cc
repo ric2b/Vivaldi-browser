@@ -25,8 +25,7 @@ AutofillPrivateEventRouter::AutofillPrivateEventRouter(
     content::BrowserContext* context)
     : context_(context),
       event_router_(nullptr),
-      personal_data_(nullptr),
-      listening_(false) {
+      personal_data_(nullptr) {
   // Register with the event router so we know when renderers are listening to
   // our events. We first check and see if there *is* an event router, because
   // some unit tests try to create all context services, but don't initialize
@@ -40,39 +39,21 @@ AutofillPrivateEventRouter::AutofillPrivateEventRouter(
   if (!personal_data_)
     return;
 
-  event_router_->RegisterObserver(
-      this,
-      api::autofill_private::OnAddressListChanged::kEventName);
-  event_router_->RegisterObserver(
-      this,
-      api::autofill_private::OnCreditCardListChanged::kEventName);
-  StartOrStopListeningForChanges();
+  personal_data_->AddObserver(this);
 }
 
 AutofillPrivateEventRouter::~AutofillPrivateEventRouter() {
 }
 
 void AutofillPrivateEventRouter::Shutdown() {
-  if (event_router_)
-    event_router_->UnregisterObserver(this);
-}
-
-void AutofillPrivateEventRouter::OnListenerAdded(
-    const EventListenerInfo& details) {
-  // Start listening to change events and propagate the original lists to
-  // listeners.
-  StartOrStopListeningForChanges();
-  OnPersonalDataChanged();
-}
-
-void AutofillPrivateEventRouter::OnListenerRemoved(
-    const EventListenerInfo& details) {
-  // Stop listening to events if there are no more listeners.
-  StartOrStopListeningForChanges();
+  if (personal_data_)
+    personal_data_->RemoveObserver(this);
 }
 
 void AutofillPrivateEventRouter::OnPersonalDataChanged() {
-  DCHECK(personal_data_ && personal_data_->IsDataLoaded());
+  // Ignore any updates before data is loaded. This can happen in tests.
+  if (!(personal_data_ && personal_data_->IsDataLoaded()))
+    return;
 
   autofill_util::AddressEntryList addressList =
       extensions::autofill_util::GenerateAddressList(*personal_data_);
@@ -95,25 +76,6 @@ void AutofillPrivateEventRouter::OnPersonalDataChanged() {
                 api::autofill_private::OnCreditCardListChanged::kEventName,
                 std::move(args)));
   event_router_->BroadcastEvent(std::move(extension_event));
-}
-
-void AutofillPrivateEventRouter::StartOrStopListeningForChanges() {
-  if (!personal_data_ || !personal_data_->IsDataLoaded())
-    return;
-
-  bool should_listen_for_address_changes = event_router_->HasEventListener(
-      api::autofill_private::OnAddressListChanged::kEventName);
-  bool should_listen_for_credit_card_changes = event_router_->HasEventListener(
-      api::autofill_private::OnCreditCardListChanged::kEventName);
-  bool should_listen = should_listen_for_address_changes ||
-      should_listen_for_credit_card_changes;
-
-  if (should_listen && !listening_)
-    personal_data_->AddObserver(this);
-  else if (!should_listen && listening_)
-    personal_data_->RemoveObserver(this);
-
-  listening_ = should_listen;
 }
 
 AutofillPrivateEventRouter* AutofillPrivateEventRouter::Create(

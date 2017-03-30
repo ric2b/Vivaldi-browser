@@ -51,7 +51,7 @@ GLenum GLInternalFormat(gfx::BufferFormat format) {
       GL_RGBA,                             // RGBA_8888
       GL_RGB,                              // BGRX_8888
       GL_BGRA_EXT,                         // BGRA_8888
-      GL_RGB_YUV_420_CHROMIUM,             // YUV_420
+      GL_RGB_YCRCB_420_CHROMIUM,           // YVU_420
       GL_INVALID_ENUM,                     // YUV_420_BIPLANAR
       GL_RGB_YCBCR_422_CHROMIUM,           // UYVY_422
   };
@@ -139,13 +139,13 @@ class Buffer::Texture {
   const unsigned texture_target_;
   const unsigned query_type_;
   const GLenum internalformat_;
-  unsigned image_id_;
-  unsigned query_id_;
-  unsigned texture_id_;
+  unsigned image_id_ = 0;
+  unsigned query_id_ = 0;
+  unsigned texture_id_ = 0;
   gpu::Mailbox mailbox_;
   base::Closure release_callback_;
   base::TimeTicks wait_for_release_time_;
-  bool wait_for_release_pending_;
+  bool wait_for_release_pending_ = false;
   base::WeakPtrFactory<Texture> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Texture);
@@ -156,10 +156,6 @@ Buffer::Texture::Texture(cc::ContextProvider* context_provider)
       texture_target_(GL_TEXTURE_2D),
       query_type_(GL_COMMANDS_COMPLETED_CHROMIUM),
       internalformat_(GL_RGBA),
-      image_id_(0),
-      query_id_(0),
-      texture_id_(0),
-      wait_for_release_pending_(false),
       weak_ptr_factory_(this) {
   gpu::gles2::GLES2Interface* gles2 = context_provider_->ContextGL();
   texture_id_ = CreateGLTexture(gles2, texture_target_);
@@ -175,16 +171,14 @@ Buffer::Texture::Texture(cc::ContextProvider* context_provider,
       texture_target_(texture_target),
       query_type_(query_type),
       internalformat_(GLInternalFormat(gpu_memory_buffer->GetFormat())),
-      image_id_(0),
-      query_id_(0),
-      texture_id_(0),
-      wait_for_release_pending_(false),
       weak_ptr_factory_(this) {
   gpu::gles2::GLES2Interface* gles2 = context_provider_->ContextGL();
   gfx::Size size = gpu_memory_buffer->GetSize();
   image_id_ =
       gles2->CreateImageCHROMIUM(gpu_memory_buffer->AsClientBuffer(),
                                  size.width(), size.height(), internalformat_);
+  DLOG_IF(WARNING, !image_id_) << "Failed to create GLImage";
+
   gles2->GenQueriesEXT(1, &query_id_);
   texture_id_ = CreateGLTexture(gles2, texture_target_);
 }
@@ -349,8 +343,7 @@ Buffer::Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer)
       texture_target_(GL_TEXTURE_2D),
       query_type_(GL_COMMANDS_COMPLETED_CHROMIUM),
       use_zero_copy_(true),
-      is_overlay_candidate_(false),
-      use_count_(0) {}
+      is_overlay_candidate_(false) {}
 
 Buffer::Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
                unsigned texture_target,
@@ -361,16 +354,16 @@ Buffer::Buffer(std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer,
       texture_target_(texture_target),
       query_type_(query_type),
       use_zero_copy_(use_zero_copy),
-      is_overlay_candidate_(is_overlay_candidate),
-      use_count_(0) {}
+      is_overlay_candidate_(is_overlay_candidate) {}
 
 Buffer::~Buffer() {}
 
 std::unique_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
     cc::TextureMailbox* texture_mailbox,
     bool secure_output_only,
-    bool lost_context) {
-  DLOG_IF(WARNING, use_count_)
+    bool client_usage) {
+  DCHECK(attach_count_);
+  DLOG_IF(WARNING, use_count_ && client_usage)
       << "Producing a texture mailbox for a buffer that has not been released";
 
   // Some clients think that they can reuse a buffer before it's released by
@@ -380,7 +373,7 @@ std::unique_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
   // buffer has been reused). We stop running the release callback when this
   // type of behavior is detected as having the buffer always be busy will
   // result in fewer drawing artifacts.
-  if (use_count_ && !lost_context)
+  if (use_count_ && client_usage)
     release_callback_.Reset();
 
   // Increment the use count for this buffer.
@@ -419,10 +412,10 @@ std::unique_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
     // This binds the latest contents of this buffer to |texture|.
     gpu::SyncToken sync_token = texture->BindTexImage();
 
-    *texture_mailbox = cc::TextureMailbox(
-        texture->mailbox(), sync_token, texture_target_,
-        gpu_memory_buffer_->GetSize(), gpu_memory_buffer_->GetId(),
-        is_overlay_candidate_, secure_output_only);
+    *texture_mailbox =
+        cc::TextureMailbox(texture->mailbox(), sync_token, texture_target_,
+                           gpu_memory_buffer_->GetSize(), is_overlay_candidate_,
+                           secure_output_only);
     // The contents texture will be released when no longer used by the
     // compositor.
     return cc::SingleReleaseCallback::Create(
@@ -444,16 +437,28 @@ std::unique_ptr<cc::SingleReleaseCallback> Buffer::ProduceTextureMailbox(
   gpu::SyncToken sync_token = contents_texture->CopyTexImage(
       texture, base::Bind(&Buffer::ReleaseContentsTexture, AsWeakPtr(),
                           base::Passed(&contents_texture_)));
-  *texture_mailbox = cc::TextureMailbox(
-      texture->mailbox(), sync_token, GL_TEXTURE_2D,
-      gpu_memory_buffer_->GetSize(), gfx::GpuMemoryBufferId(),
-      false /* is_overlay_candidate */, secure_output_only);
+  *texture_mailbox =
+      cc::TextureMailbox(texture->mailbox(), sync_token, GL_TEXTURE_2D,
+                         gpu_memory_buffer_->GetSize(),
+                         false /* is_overlay_candidate */, secure_output_only);
   // The mailbox texture will be released when no longer used by the
   // compositor.
   return cc::SingleReleaseCallback::Create(
       base::Bind(&Buffer::Texture::Release, base::Unretained(texture),
                  base::Bind(&Buffer::ReleaseTexture, AsWeakPtr(),
                             base::Passed(&texture_))));
+}
+
+void Buffer::OnAttach() {
+  DLOG_IF(WARNING, attach_count_ > 0u)
+      << "Reattaching a buffer that is already attached to another surface.";
+  attach_count_++;
+}
+
+void Buffer::OnDetach() {
+  DCHECK_GT(attach_count_, 0u);
+  --attach_count_;
+  CheckReleaseCallback();
 }
 
 gfx::Size Buffer::GetSize() const {
@@ -476,7 +481,12 @@ std::unique_ptr<base::trace_event::TracedValue> Buffer::AsTracedValue() const {
 
 void Buffer::Release() {
   DCHECK_GT(use_count_, 0u);
-  if (--use_count_)
+  --use_count_;
+  CheckReleaseCallback();
+}
+
+void Buffer::CheckReleaseCallback() {
+  if (attach_count_ || use_count_)
     return;
 
   // Run release callback to notify the client that buffer has been released.

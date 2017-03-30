@@ -30,3 +30,11 @@ per-file render_sandbox_host_linux.*=jln@chromium.org
 per-file render_sandbox_host_linux.*=jorgelo@chromium.org
 per-file sandbox_ipc_linux.*=jln@chromium.org
 per-file sandbox_ipc_linux.*=jorgelo@chromium.org
+
+# WebSQL
+per-file database_*=jsbell@chromium.org
+per-file database_*=michaeln@chromium.org
+
+# Offscreen Canvas
+per-file offscreen_canvas_surface_impl.*=junov@chromium.org
+per-file offscreen_canvas_surface_impl.*=xlai@chromium.org

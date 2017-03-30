@@ -5,16 +5,24 @@
 #include "ash/accelerators/accelerator_controller.h"
 
 #include "ash/accelerators/accelerator_table.h"
-#include "ash/accessibility_delegate.h"
-#include "ash/ash_switches.h"
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/accessibility_delegate.h"
+#include "ash/common/accessibility_types.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/volume_control_delegate.h"
+#include "ash/common/wm/panels/panel_layout_manager.h"
+#include "ash/common/wm/window_positioning_utils.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm/wm_event.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/ime_control_delegate.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/keyboard_brightness/keyboard_brightness_control_delegate.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/test_screenshot_delegate.h"
@@ -22,12 +30,6 @@
 #include "ash/test/test_shelf_delegate.h"
 #include "ash/test/test_shell_delegate.h"
 #include "ash/test/test_volume_control_delegate.h"
-#include "ash/volume_control_delegate.h"
-#include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/panels/panel_layout_manager.h"
-#include "ash/wm/common/window_positioning_utils.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_event.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
@@ -57,9 +59,7 @@ class TestTarget : public ui::AcceleratorTarget {
   TestTarget() : accelerator_pressed_count_(0), accelerator_repeat_count_(0) {}
   ~TestTarget() override {}
 
-  int accelerator_pressed_count() const {
-    return accelerator_pressed_count_;
-  }
+  int accelerator_pressed_count() const { return accelerator_pressed_count_; }
 
   int accelerator_repeat_count() const { return accelerator_repeat_count_; }
 
@@ -110,12 +110,8 @@ class DummyBrightnessControlDelegate : public BrightnessControlDelegate {
   int handle_brightness_down_count() const {
     return handle_brightness_down_count_;
   }
-  int handle_brightness_up_count() const {
-    return handle_brightness_up_count_;
-  }
-  const ui::Accelerator& last_accelerator() const {
-    return last_accelerator_;
-  }
+  int handle_brightness_up_count() const { return handle_brightness_up_count_; }
+  const ui::Accelerator& last_accelerator() const { return last_accelerator_; }
 
  private:
   int handle_brightness_down_count_;
@@ -135,9 +131,7 @@ class DummyImeControlDelegate : public ImeControlDelegate {
 
   bool CanCycleIme() override { return true; }
   void HandleNextIme() override { ++handle_next_ime_count_; }
-  void HandlePreviousIme() override {
-    ++handle_previous_ime_count_;
-  }
+  void HandlePreviousIme() override { ++handle_previous_ime_count_; }
   bool CanSwitchIme(const ui::Accelerator& accelerator) override {
     return true;
   }
@@ -145,15 +139,9 @@ class DummyImeControlDelegate : public ImeControlDelegate {
     ++handle_switch_ime_count_;
   }
 
-  int handle_next_ime_count() const {
-    return handle_next_ime_count_;
-  }
-  int handle_previous_ime_count() const {
-    return handle_previous_ime_count_;
-  }
-  int handle_switch_ime_count() const {
-    return handle_switch_ime_count_;
-  }
+  int handle_next_ime_count() const { return handle_next_ime_count_; }
+  int handle_previous_ime_count() const { return handle_previous_ime_count_; }
+  int handle_switch_ime_count() const { return handle_switch_ime_count_; }
 
  private:
   int handle_next_ime_count_;
@@ -190,9 +178,7 @@ class DummyKeyboardBrightnessControlDelegate
     return handle_keyboard_brightness_up_count_;
   }
 
-  const ui::Accelerator& last_accelerator() const {
-    return last_accelerator_;
-  }
+  const ui::Accelerator& last_accelerator() const { return last_accelerator_; }
 
  private:
   int handle_keyboard_brightness_down_count_;
@@ -238,19 +224,17 @@ class AcceleratorControllerTest : public test::AshTestBase {
       GetController()->accelerator_history()->StoreCurrentAccelerator(
           pressed_accelerator);
     }
-    GetController()->accelerator_history()->
-        StoreCurrentAccelerator(accelerator);
+    GetController()->accelerator_history()->StoreCurrentAccelerator(
+        accelerator);
     return GetController()->Process(accelerator);
   }
 
   static const ui::Accelerator& GetPreviousAccelerator() {
-    return GetController()->accelerator_history()->
-        previous_accelerator();
+    return GetController()->accelerator_history()->previous_accelerator();
   }
 
   static const ui::Accelerator& GetCurrentAccelerator() {
-    return GetController()->accelerator_history()->
-        current_accelerator();
+    return GetController()->accelerator_history()->current_accelerator();
   }
 
   // Several functions to access ExitWarningHandler (as friend).
@@ -263,9 +247,7 @@ class AcceleratorControllerTest : public test::AshTestBase {
   static void SimulateTimerExpired(ExitWarningHandler* ewh) {
     ewh->TimerAction();
   }
-  static bool is_ui_shown(ExitWarningHandler* ewh) {
-    return !!ewh->widget_;
-  }
+  static bool is_ui_shown(ExitWarningHandler* ewh) { return !!ewh->widget_; }
   static bool is_idle(ExitWarningHandler* ewh) {
     return ewh->state_ == ExitWarningHandler::IDLE;
   }
@@ -273,14 +255,13 @@ class AcceleratorControllerTest : public test::AshTestBase {
     return ewh->state_ == ExitWarningHandler::EXITING;
   }
   aura::Window* CreatePanel() {
-    aura::Window* window =
-      CreateTestWindowInShellWithDelegateAndType(NULL,
-        ui::wm::WINDOW_TYPE_PANEL, 0, gfx::Rect(5, 5, 20, 20));
+    aura::Window* window = CreateTestWindowInShellWithDelegateAndType(
+        NULL, ui::wm::WINDOW_TYPE_PANEL, 0, gfx::Rect(5, 5, 20, 20));
     test::TestShelfDelegate* shelf_delegate =
-      test::TestShelfDelegate::instance();
+        test::TestShelfDelegate::instance();
     shelf_delegate->AddShelfItem(window);
     PanelLayoutManager* manager =
-        PanelLayoutManager::Get(wm::WmWindowAura::Get(window));
+        PanelLayoutManager::Get(WmWindowAura::Get(window));
     manager->Relayout();
     return window;
   }
@@ -451,13 +432,13 @@ TEST_F(AcceleratorControllerTest, WindowSnap) {
   {
     GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
     gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-        wm::WmWindowAura::Get(window.get()));
+        WmWindowAura::Get(window.get()));
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
     GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
     gfx::Rect expected_bounds = wm::GetDefaultRightSnappedWindowBoundsInParent(
-        wm::WmWindowAura::Get(window.get()));
+        WmWindowAura::Get(window.get()));
     EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
   }
   {
@@ -506,7 +487,7 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftRestore) {
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
   gfx::Rect normal_bounds = window1_state->GetRestoreBoundsInParent();
   gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-      wm::WmWindowAura::Get(window1.get()));
+      WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
@@ -529,7 +510,7 @@ TEST_F(AcceleratorControllerTest, WindowSnapRightDockRightRestore) {
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
   gfx::Rect normal_bounds = window1_state->GetRestoreBoundsInParent();
   gfx::Rect expected_bounds = wm::GetDefaultRightSnappedWindowBoundsInParent(
-      wm::WmWindowAura::Get(window1.get()));
+      WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_RIGHT);
@@ -551,9 +532,9 @@ TEST_F(AcceleratorControllerTest, WindowSnapLeftDockLeftSnapRight) {
 
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
   gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-      wm::WmWindowAura::Get(window1.get()));
+      WmWindowAura::Get(window1.get()));
   gfx::Rect expected_bounds2 = wm::GetDefaultRightSnappedWindowBoundsInParent(
-      wm::WmWindowAura::Get(window1.get()));
+      WmWindowAura::Get(window1.get()));
   EXPECT_EQ(expected_bounds.ToString(), window1->bounds().ToString());
   EXPECT_TRUE(window1_state->IsSnapped());
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
@@ -623,9 +604,8 @@ TEST_F(AcceleratorControllerTest, WindowPanelDockLeftDockRightRestore) {
   gfx::Rect window_restore_bounds2 = window->bounds();
   GetController()->PerformActionIfEnabled(WINDOW_CYCLE_SNAP_DOCK_LEFT);
   gfx::Rect expected_bounds = wm::GetDefaultLeftSnappedWindowBoundsInParent(
-      wm::WmWindowAura::Get(window.get()));
-  gfx::Rect window_restore_bounds =
-      window_state->GetRestoreBoundsInScreen();
+      WmWindowAura::Get(window.get()));
+  gfx::Rect window_restore_bounds = window_state->GetRestoreBoundsInScreen();
   EXPECT_NE(expected_bounds.ToString(), window->bounds().ToString());
   EXPECT_FALSE(window_state->IsSnapped());
   EXPECT_FALSE(window_state->IsNormalOrSnapped());
@@ -652,11 +632,9 @@ TEST_F(AcceleratorControllerTest, CenterWindowAccelerator) {
                             ->GetDisplayNearestWindow(window.get())
                             .work_area();
   gfx::Rect bounds = window->GetBoundsInScreen();
-  EXPECT_NEAR(bounds.x() - work_area.x(),
-              work_area.right() - bounds.right(),
+  EXPECT_NEAR(bounds.x() - work_area.x(), work_area.right() - bounds.right(),
               1);
-  EXPECT_NEAR(bounds.y() - work_area.y(),
-              work_area.bottom() - bounds.bottom(),
+  EXPECT_NEAR(bounds.y() - work_area.y(), work_area.bottom() - bounds.bottom(),
               1);
 
   // Add the window to docked container and try to center it.
@@ -721,18 +699,14 @@ TEST_F(AcceleratorControllerTest, Previous) {
   generator.PressKey(ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
   generator.ReleaseKey(ui::VKEY_VOLUME_MUTE, ui::EF_NONE);
 
-  EXPECT_EQ(ui::VKEY_VOLUME_MUTE,
-            GetPreviousAccelerator().key_code());
-  EXPECT_EQ(ui::EF_NONE,
-            GetPreviousAccelerator().modifiers());
+  EXPECT_EQ(ui::VKEY_VOLUME_MUTE, GetPreviousAccelerator().key_code());
+  EXPECT_EQ(ui::EF_NONE, GetPreviousAccelerator().modifiers());
 
   generator.PressKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
   generator.ReleaseKey(ui::VKEY_TAB, ui::EF_CONTROL_DOWN);
 
-  EXPECT_EQ(ui::VKEY_TAB,
-            GetPreviousAccelerator().key_code());
-  EXPECT_EQ(ui::EF_CONTROL_DOWN,
-            GetPreviousAccelerator().modifiers());
+  EXPECT_EQ(ui::VKEY_TAB, GetPreviousAccelerator().key_code());
+  EXPECT_EQ(ui::EF_CONTROL_DOWN, GetPreviousAccelerator().modifiers());
 }
 
 TEST_F(AcceleratorControllerTest, DontRepeatToggleFullscreen) {
@@ -788,17 +762,17 @@ TEST_F(AcceleratorControllerTest, MAYBE_ProcessOnce) {
   ui::EventProcessor* dispatcher =
       Shell::GetPrimaryRootWindow()->GetHost()->event_processor();
 #if defined(OS_WIN)
-  MSG msg1 = { NULL, WM_KEYDOWN, ui::VKEY_A, 0 };
+  MSG msg1 = {NULL, WM_KEYDOWN, ui::VKEY_A, 0};
   ui::KeyEvent key_event1(msg1);
   ui::EventDispatchDetails details = dispatcher->OnEventFromSource(&key_event1);
   EXPECT_TRUE(key_event1.handled() || details.dispatcher_destroyed);
 
-  MSG msg2 = { NULL, WM_CHAR, L'A', 0 };
+  MSG msg2 = {NULL, WM_CHAR, L'A', 0};
   ui::KeyEvent key_event2(msg2);
   details = dispatcher->OnEventFromSource(&key_event2);
   EXPECT_FALSE(key_event2.handled() || details.dispatcher_destroyed);
 
-  MSG msg3 = { NULL, WM_KEYUP, ui::VKEY_A, 0 };
+  MSG msg3 = {NULL, WM_KEYUP, ui::VKEY_A, 0};
   ui::KeyEvent key_event3(msg3);
   details = dispatcher->OnEventFromSource(&key_event3);
   EXPECT_FALSE(key_event3.handled() || details.dispatcher_destroyed);
@@ -828,8 +802,7 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
       ui::Accelerator(ui::VKEY_TAB, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN)));
   // CycleForward
   EXPECT_TRUE(
-      ProcessInController(ui::Accelerator(
-          ui::VKEY_TAB, ui::EF_ALT_DOWN)));
+      ProcessInController(ui::Accelerator(ui::VKEY_TAB, ui::EF_ALT_DOWN)));
   // CycleLinear
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_NONE)));
@@ -843,8 +816,7 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
     EXPECT_TRUE(ProcessInController(
         ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
     EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(
-            ui::VKEY_PRINT, ui::EF_NONE)));
+        ProcessInController(ui::Accelerator(ui::VKEY_PRINT, ui::EF_NONE)));
     EXPECT_TRUE(ProcessInController(ui::Accelerator(
         ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
 
@@ -854,8 +826,7 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
         ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
     EXPECT_EQ(1, delegate->handle_take_screenshot_count());
     EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(
-            ui::VKEY_PRINT, ui::EF_NONE)));
+        ProcessInController(ui::Accelerator(ui::VKEY_PRINT, ui::EF_NONE)));
     EXPECT_EQ(2, delegate->handle_take_screenshot_count());
     EXPECT_TRUE(ProcessInController(ui::Accelerator(
         ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
@@ -866,7 +837,7 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
   const ui::Accelerator volume_up(ui::VKEY_VOLUME_UP, ui::EF_NONE);
   {
     TestVolumeControlDelegate* delegate = new TestVolumeControlDelegate;
-    ash::Shell::GetInstance()->system_tray_delegate()->SetVolumeControlDelegate(
+    WmShell::Get()->system_tray_delegate()->SetVolumeControlDelegate(
         std::unique_ptr<VolumeControlDelegate>(delegate));
     EXPECT_EQ(0, delegate->handle_volume_mute_count());
     EXPECT_TRUE(ProcessInController(volume_mute));
@@ -941,24 +912,24 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
 #endif
 
   // New tab
-  EXPECT_TRUE(ProcessInController(
-      ui::Accelerator(ui::VKEY_T, ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(
+      ProcessInController(ui::Accelerator(ui::VKEY_T, ui::EF_CONTROL_DOWN)));
 
   // New incognito window
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_N, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
 
   // New window
-  EXPECT_TRUE(ProcessInController(
-      ui::Accelerator(ui::VKEY_N, ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(
+      ProcessInController(ui::Accelerator(ui::VKEY_N, ui::EF_CONTROL_DOWN)));
 
   // Restore tab
   EXPECT_TRUE(ProcessInController(
       ui::Accelerator(ui::VKEY_T, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
 
   // Show task manager
-  EXPECT_TRUE(ProcessInController(
-      ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN)));
+  EXPECT_TRUE(
+      ProcessInController(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_SHIFT_DOWN)));
 
 #if defined(OS_CHROMEOS)
   // Open file manager
@@ -975,200 +946,94 @@ TEST_F(AcceleratorControllerTest, GlobalAccelerators) {
 }
 
 TEST_F(AcceleratorControllerTest, GlobalAcceleratorsToggleAppList) {
-  AccessibilityDelegate* delegate =
-          ash::Shell::GetInstance()->accessibility_delegate();
-  EXPECT_FALSE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
+  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
+  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
 
   // The press event should not open the AppList, the release should instead.
   EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
-  EXPECT_EQ(ui::VKEY_LWIN,
-            GetCurrentAccelerator().key_code());
+  EXPECT_EQ(ui::VKEY_LWIN, GetCurrentAccelerator().key_code());
 
-  EXPECT_FALSE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
 
   EXPECT_TRUE(
       ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
-  EXPECT_TRUE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
 
-  EXPECT_EQ(ui::VKEY_LWIN,
-            GetPreviousAccelerator().key_code());
+  EXPECT_EQ(ui::VKEY_LWIN, GetPreviousAccelerator().key_code());
 
   // When spoken feedback is on, the AppList should not toggle.
-  delegate->ToggleSpokenFeedback(ui::A11Y_NOTIFICATION_NONE);
+  delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
   EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   EXPECT_FALSE(
-      ProcessInController(ReleaseAccelerator(
-          ui::VKEY_LWIN, ui::EF_NONE)));
-  delegate->ToggleSpokenFeedback(ui::A11Y_NOTIFICATION_NONE);
-  EXPECT_TRUE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
+      ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
+  delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
+  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
 
   EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   EXPECT_TRUE(
-      ProcessInController(ReleaseAccelerator(
-          ui::VKEY_LWIN, ui::EF_NONE)));
-  EXPECT_FALSE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
+      ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
+  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
 
   // When spoken feedback is on, the AppList should not toggle.
-  delegate->ToggleSpokenFeedback(ui::A11Y_NOTIFICATION_NONE);
+  delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
   EXPECT_FALSE(
       ProcessInController(ui::Accelerator(ui::VKEY_LWIN, ui::EF_NONE)));
   EXPECT_FALSE(
-      ProcessInController(ReleaseAccelerator(
-          ui::VKEY_LWIN, ui::EF_NONE)));
-  delegate->ToggleSpokenFeedback(ui::A11Y_NOTIFICATION_NONE);
-  EXPECT_FALSE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
+      ProcessInController(ReleaseAccelerator(ui::VKEY_LWIN, ui::EF_NONE)));
+  delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
+  EXPECT_FALSE(Shell::GetInstance()->GetAppListTargetVisibility());
 
 #if defined(OS_CHROMEOS)
   // The press of VKEY_BROWSER_SEARCH should toggle the AppList
-  EXPECT_TRUE(ProcessInController(ui::Accelerator(ui::VKEY_BROWSER_SEARCH,
-                                              ui::EF_NONE)));
-  EXPECT_TRUE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
-  EXPECT_FALSE(ProcessInController(ReleaseAccelerator(ui::VKEY_BROWSER_SEARCH,
-                                                      ui::EF_NONE)));
-  EXPECT_TRUE(ash::Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_TRUE(ProcessInController(
+      ui::Accelerator(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE)));
+  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
+  EXPECT_FALSE(ProcessInController(
+      ReleaseAccelerator(ui::VKEY_BROWSER_SEARCH, ui::EF_NONE)));
+  EXPECT_TRUE(Shell::GetInstance()->GetAppListTargetVisibility());
 #endif
 }
 
 TEST_F(AcceleratorControllerTest, ImeGlobalAccelerators) {
   // Test IME shortcuts.
-  {
-     ui::Accelerator control_space_down(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
-    control_space_down.set_type(ui::ET_KEY_PRESSED);
-    ui::Accelerator control_space_up(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
-    control_space_up.set_type(ui::ET_KEY_RELEASED);
-    const ui::Accelerator convert(ui::VKEY_CONVERT, ui::EF_NONE);
-    const ui::Accelerator non_convert(ui::VKEY_NONCONVERT, ui::EF_NONE);
-    const ui::Accelerator wide_half_1(ui::VKEY_DBE_SBCSCHAR, ui::EF_NONE);
-    const ui::Accelerator wide_half_2(ui::VKEY_DBE_DBCSCHAR, ui::EF_NONE);
-    const ui::Accelerator hangul(ui::VKEY_HANGUL, ui::EF_NONE);
-    EXPECT_FALSE(ProcessInController(control_space_down));
-    EXPECT_FALSE(ProcessInController(control_space_up));
-    EXPECT_FALSE(ProcessInController(convert));
-    EXPECT_FALSE(ProcessInController(non_convert));
-    EXPECT_FALSE(ProcessInController(wide_half_1));
-    EXPECT_FALSE(ProcessInController(wide_half_2));
-    EXPECT_FALSE(ProcessInController(hangul));
-    DummyImeControlDelegate* delegate = new DummyImeControlDelegate;
-    GetController()->SetImeControlDelegate(
-        std::unique_ptr<ImeControlDelegate>(delegate));
-    EXPECT_EQ(0, delegate->handle_previous_ime_count());
-    EXPECT_TRUE(ProcessInController(control_space_down));
-    EXPECT_EQ(1, delegate->handle_previous_ime_count());
-    EXPECT_TRUE(ProcessInController(control_space_up));
-    EXPECT_EQ(1, delegate->handle_previous_ime_count());
-    EXPECT_EQ(0, delegate->handle_switch_ime_count());
-    EXPECT_TRUE(ProcessInController(convert));
-    EXPECT_EQ(1, delegate->handle_switch_ime_count());
-    EXPECT_TRUE(ProcessInController(non_convert));
-    EXPECT_EQ(2, delegate->handle_switch_ime_count());
-    EXPECT_TRUE(ProcessInController(wide_half_1));
-    EXPECT_EQ(3, delegate->handle_switch_ime_count());
-    EXPECT_TRUE(ProcessInController(wide_half_2));
-    EXPECT_EQ(4, delegate->handle_switch_ime_count());
-    EXPECT_TRUE(ProcessInController(hangul));
-    EXPECT_EQ(5, delegate->handle_switch_ime_count());
-  }
-
-  // Test IME shortcuts that are triggered on key release.
-  {
-    const ui::Accelerator shift_alt_press(ui::VKEY_MENU,
-                                          ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-    const ReleaseAccelerator shift_alt(ui::VKEY_MENU, ui::EF_SHIFT_DOWN);
-    const ui::Accelerator alt_shift_press(ui::VKEY_SHIFT,
-                                          ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-    const ReleaseAccelerator alt_shift(ui::VKEY_SHIFT, ui::EF_ALT_DOWN);
-
-    DummyImeControlDelegate* delegate = new DummyImeControlDelegate;
-    GetController()->SetImeControlDelegate(
-        std::unique_ptr<ImeControlDelegate>(delegate));
-    EXPECT_EQ(0, delegate->handle_next_ime_count());
-    EXPECT_FALSE(ProcessInController(shift_alt_press));
-    EXPECT_TRUE(ProcessInController(shift_alt));
-    EXPECT_EQ(1, delegate->handle_next_ime_count());
-    EXPECT_FALSE(ProcessInController(alt_shift_press));
-    EXPECT_TRUE(ProcessInController(alt_shift));
-    EXPECT_EQ(2, delegate->handle_next_ime_count());
-
-    // We should NOT switch IME when e.g. Shift+Alt+X is pressed and X is
-    // released.
-    const ui::Accelerator shift_alt_x_press(
-        ui::VKEY_X,
-        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-    const ReleaseAccelerator shift_alt_x(ui::VKEY_X,
-                                         ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-
-    EXPECT_FALSE(ProcessInController(shift_alt_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_x_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_x));
-    EXPECT_TRUE(ProcessInController(shift_alt));
-    EXPECT_EQ(3, delegate->handle_next_ime_count());
-
-    // But we _should_ if X is either VKEY_RETURN or VKEY_SPACE.
-    // TODO(nona|mazda): Remove this when crbug.com/139556 in a better way.
-    const ui::Accelerator shift_alt_return_press(
-        ui::VKEY_RETURN,
-        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-    const ReleaseAccelerator shift_alt_return(
-        ui::VKEY_RETURN,
-        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-
-    EXPECT_FALSE(ProcessInController(shift_alt_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_return_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_return));
-    EXPECT_TRUE(ProcessInController(shift_alt));
-    EXPECT_EQ(4, delegate->handle_next_ime_count());
-
-    const ui::Accelerator shift_alt_space_press(
-        ui::VKEY_SPACE,
-        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-    const ReleaseAccelerator shift_alt_space(
-        ui::VKEY_SPACE,
-        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-
-    EXPECT_FALSE(ProcessInController(shift_alt_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_space_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_space));
-    EXPECT_TRUE(ProcessInController(shift_alt));
-    EXPECT_EQ(5, delegate->handle_next_ime_count());
-  }
-
-#if defined(OS_CHROMEOS)
-  // Test IME shortcuts again with unnormalized accelerators (Chrome OS only).
-  {
-    const ui::Accelerator shift_alt_press(ui::VKEY_MENU, ui::EF_SHIFT_DOWN);
-    const ReleaseAccelerator shift_alt(ui::VKEY_MENU, ui::EF_SHIFT_DOWN);
-    const ui::Accelerator alt_shift_press(ui::VKEY_SHIFT, ui::EF_ALT_DOWN);
-    const ReleaseAccelerator alt_shift(ui::VKEY_SHIFT, ui::EF_ALT_DOWN);
-
-    DummyImeControlDelegate* delegate = new DummyImeControlDelegate;
-    GetController()->SetImeControlDelegate(
-        std::unique_ptr<ImeControlDelegate>(delegate));
-    EXPECT_EQ(0, delegate->handle_next_ime_count());
-    EXPECT_FALSE(ProcessInController(shift_alt_press));
-    EXPECT_TRUE(ProcessInController(shift_alt));
-    EXPECT_EQ(1, delegate->handle_next_ime_count());
-    EXPECT_FALSE(ProcessInController(alt_shift_press));
-    EXPECT_TRUE(ProcessInController(alt_shift));
-    EXPECT_EQ(2, delegate->handle_next_ime_count());
-
-    // We should NOT switch IME when e.g. Shift+Alt+X is pressed and X is
-    // released.
-    const ui::Accelerator shift_alt_x_press(
-        ui::VKEY_X,
-        ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-    const ReleaseAccelerator shift_alt_x(ui::VKEY_X,
-                                         ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-
-    EXPECT_FALSE(ProcessInController(shift_alt_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_x_press));
-    EXPECT_FALSE(ProcessInController(shift_alt_x));
-    EXPECT_TRUE(ProcessInController(shift_alt));
-    EXPECT_EQ(3, delegate->handle_next_ime_count());
-  }
-#endif
+  ui::Accelerator control_space_down(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
+  control_space_down.set_type(ui::ET_KEY_PRESSED);
+  ui::Accelerator control_space_up(ui::VKEY_SPACE, ui::EF_CONTROL_DOWN);
+  control_space_up.set_type(ui::ET_KEY_RELEASED);
+  const ui::Accelerator convert(ui::VKEY_CONVERT, ui::EF_NONE);
+  const ui::Accelerator non_convert(ui::VKEY_NONCONVERT, ui::EF_NONE);
+  const ui::Accelerator wide_half_1(ui::VKEY_DBE_SBCSCHAR, ui::EF_NONE);
+  const ui::Accelerator wide_half_2(ui::VKEY_DBE_DBCSCHAR, ui::EF_NONE);
+  const ui::Accelerator hangul(ui::VKEY_HANGUL, ui::EF_NONE);
+  EXPECT_FALSE(ProcessInController(control_space_down));
+  EXPECT_FALSE(ProcessInController(control_space_up));
+  EXPECT_FALSE(ProcessInController(convert));
+  EXPECT_FALSE(ProcessInController(non_convert));
+  EXPECT_FALSE(ProcessInController(wide_half_1));
+  EXPECT_FALSE(ProcessInController(wide_half_2));
+  EXPECT_FALSE(ProcessInController(hangul));
+  DummyImeControlDelegate* delegate = new DummyImeControlDelegate;
+  GetController()->SetImeControlDelegate(
+      std::unique_ptr<ImeControlDelegate>(delegate));
+  EXPECT_EQ(0, delegate->handle_previous_ime_count());
+  EXPECT_TRUE(ProcessInController(control_space_down));
+  EXPECT_EQ(1, delegate->handle_previous_ime_count());
+  EXPECT_TRUE(ProcessInController(control_space_up));
+  EXPECT_EQ(1, delegate->handle_previous_ime_count());
+  EXPECT_EQ(0, delegate->handle_switch_ime_count());
+  EXPECT_TRUE(ProcessInController(convert));
+  EXPECT_EQ(1, delegate->handle_switch_ime_count());
+  EXPECT_TRUE(ProcessInController(non_convert));
+  EXPECT_EQ(2, delegate->handle_switch_ime_count());
+  EXPECT_TRUE(ProcessInController(wide_half_1));
+  EXPECT_EQ(3, delegate->handle_switch_ime_count());
+  EXPECT_TRUE(ProcessInController(wide_half_2));
+  EXPECT_EQ(4, delegate->handle_switch_ime_count());
+  EXPECT_TRUE(ProcessInController(hangul));
+  EXPECT_EQ(5, delegate->handle_switch_ime_count());
 }
 
 // TODO(nona|mazda): Remove this when crbug.com/139556 in a better way.
@@ -1176,73 +1041,11 @@ TEST_F(AcceleratorControllerTest, ImeGlobalAcceleratorsWorkaround139556) {
   // The workaround for crbug.com/139556 depends on the fact that we don't
   // use Shift+Alt+Enter/Space with ET_KEY_PRESSED as an accelerator. Test it.
   const ui::Accelerator shift_alt_return_press(
-      ui::VKEY_RETURN,
-      ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
+      ui::VKEY_RETURN, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
   EXPECT_FALSE(ProcessInController(shift_alt_return_press));
   const ui::Accelerator shift_alt_space_press(
-      ui::VKEY_SPACE,
-      ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
+      ui::VKEY_SPACE, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
   EXPECT_FALSE(ProcessInController(shift_alt_space_press));
-}
-
-// Makes sure that the next IME accelerators doesn't conflict with other
-// accelerators that contain Alt+Shift when the wrong sequence is pressed.
-// crbug.com/527154.
-TEST_F(AcceleratorControllerTest, ImeGlobalAcceleratorsNoConflict) {
-  DummyImeControlDelegate* delegate = new DummyImeControlDelegate;
-  GetController()->SetImeControlDelegate(
-      std::unique_ptr<ImeControlDelegate>(delegate));
-  ui::test::EventGenerator& generator = GetEventGenerator();
-
-  // Correct sequence of a conflicting accelerator must not trigger next IME.
-  // Alt (press) + Shift (press) + S (press) + S (release) + Shift (release) +
-  // Alt (release).
-  generator.PressKey(ui::VKEY_MENU, ui::EF_ALT_DOWN);
-  generator.PressKey(ui::VKEY_SHIFT, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.PressKey(ui::VKEY_S, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_S, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_SHIFT, ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_MENU, ui::EF_NONE);
-  EXPECT_EQ(0, delegate->handle_next_ime_count());
-
-  // Neither wrong sequences.
-  // Wrong sequence 1:
-  // Alt (press) + Shift (press) + S (press) + Shift (release) + S (release) +
-  // Alt (release).
-  generator.PressKey(ui::VKEY_MENU, ui::EF_ALT_DOWN);
-  generator.PressKey(ui::VKEY_SHIFT, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.PressKey(ui::VKEY_S, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_SHIFT, ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_S, ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_MENU, ui::EF_NONE);
-  EXPECT_EQ(0, delegate->handle_next_ime_count());
-
-  // Wrong sequence 2:
-  // Alt (press) + Shift (press) + S (press) + Alt (release) + S (release) +
-  // Shift (release).
-  generator.PressKey(ui::VKEY_MENU, ui::EF_ALT_DOWN);
-  generator.PressKey(ui::VKEY_SHIFT, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.PressKey(ui::VKEY_S, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_MENU, ui::EF_SHIFT_DOWN);
-  generator.ReleaseKey(ui::VKEY_S, ui::EF_SHIFT_DOWN);
-  generator.ReleaseKey(ui::VKEY_SHIFT, ui::EF_NONE);
-  EXPECT_EQ(0, delegate->handle_next_ime_count());
-
-  // The two possible sequences of Alt+Shift both work for triggering the next
-  // IME.
-  // 1- Alt (press) + Shift (press) + Shift (release) + Alt (release).
-  generator.PressKey(ui::VKEY_MENU, ui::EF_ALT_DOWN);
-  generator.PressKey(ui::VKEY_SHIFT, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_MENU, ui::EF_SHIFT_DOWN);
-  generator.ReleaseKey(ui::VKEY_SHIFT, ui::EF_NONE);
-  EXPECT_EQ(1, delegate->handle_next_ime_count());
-
-  // 2- Shift (press) + Alt (press) + Alt (release) + Shift (release).
-  generator.PressKey(ui::VKEY_SHIFT, ui::EF_SHIFT_DOWN);
-  generator.PressKey(ui::VKEY_MENU,  ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_SHIFT, ui::EF_ALT_DOWN);
-  generator.ReleaseKey(ui::VKEY_MENU, ui::EF_NONE);
-  EXPECT_EQ(2, delegate->handle_next_ime_count());
 }
 
 TEST_F(AcceleratorControllerTest, PreferredReservedAccelerators) {
@@ -1268,14 +1071,14 @@ TEST_F(AcceleratorControllerTest, PreferredReservedAccelerators) {
       ui::Accelerator(ui::VKEY_PRINT, ui::EF_NONE)));
   EXPECT_FALSE(GetController()->IsPreferred(
       ui::Accelerator(ui::VKEY_PRINT, ui::EF_NONE)));
-  EXPECT_FALSE(GetController()->IsReserved(
-      ui::Accelerator(ui::VKEY_TAB, ui::EF_NONE)));
-  EXPECT_FALSE(GetController()->IsPreferred(
-      ui::Accelerator(ui::VKEY_TAB, ui::EF_NONE)));
-  EXPECT_FALSE(GetController()->IsReserved(
-      ui::Accelerator(ui::VKEY_A, ui::EF_NONE)));
-  EXPECT_FALSE(GetController()->IsPreferred(
-      ui::Accelerator(ui::VKEY_A, ui::EF_NONE)));
+  EXPECT_FALSE(
+      GetController()->IsReserved(ui::Accelerator(ui::VKEY_TAB, ui::EF_NONE)));
+  EXPECT_FALSE(
+      GetController()->IsPreferred(ui::Accelerator(ui::VKEY_TAB, ui::EF_NONE)));
+  EXPECT_FALSE(
+      GetController()->IsReserved(ui::Accelerator(ui::VKEY_A, ui::EF_NONE)));
+  EXPECT_FALSE(
+      GetController()->IsPreferred(ui::Accelerator(ui::VKEY_A, ui::EF_NONE)));
 }
 
 namespace {
@@ -1288,8 +1091,8 @@ class PreferredReservedAcceleratorsTest : public test::AshTestBase {
   // test::AshTestBase:
   void SetUp() override {
     AshTestBase::SetUp();
-    Shell::GetInstance()->lock_state_controller()->
-        set_animator_for_test(new test::TestSessionStateAnimator);
+    Shell::GetInstance()->lock_state_controller()->set_animator_for_test(
+        new test::TestSessionStateAnimator);
   }
 
  private:
@@ -1340,17 +1143,47 @@ TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithFullscreen) {
   ASSERT_EQ(w2, wm::GetActiveWindow());
 }
 
+TEST_F(PreferredReservedAcceleratorsTest, AcceleratorsWithPinned) {
+  aura::Window* w1 = CreateTestWindowInShellWithId(0);
+  aura::Window* w2 = CreateTestWindowInShellWithId(1);
+  wm::ActivateWindow(w1);
+
+  {
+    wm::WMEvent pin_event(wm::WM_EVENT_PIN);
+    wm::WindowState* w1_state = wm::GetWindowState(w1);
+    w1_state->OnWMEvent(&pin_event);
+    ASSERT_TRUE(w1_state->IsPinned());
+  }
+
+  ui::test::EventGenerator& generator = GetEventGenerator();
+#if defined(OS_CHROMEOS)
+  // Power key (reserved) should always be handled.
+  LockStateController::TestApi test_api(
+      Shell::GetInstance()->lock_state_controller());
+  EXPECT_FALSE(test_api.is_animating_lock());
+  generator.PressKey(ui::VKEY_POWER, ui::EF_NONE);
+  EXPECT_TRUE(test_api.is_animating_lock());
+#endif
+
+  // A pinned window can consume ALT-TAB (preferred), but no side effect.
+  ASSERT_EQ(w1, wm::GetActiveWindow());
+  generator.PressKey(ui::VKEY_TAB, ui::EF_ALT_DOWN);
+  generator.ReleaseKey(ui::VKEY_TAB, ui::EF_ALT_DOWN);
+  ASSERT_EQ(w1, wm::GetActiveWindow());
+  ASSERT_NE(w2, wm::GetActiveWindow());
+}
+
 #if defined(OS_CHROMEOS)
 TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   std::set<AcceleratorAction> all_actions;
-  for (size_t i = 0 ; i < kAcceleratorDataLength; ++i)
+  for (size_t i = 0; i < kAcceleratorDataLength; ++i)
     all_actions.insert(kAcceleratorData[i].action);
   std::set<AcceleratorAction> all_debug_actions;
-  for (size_t i = 0 ; i < kDebugAcceleratorDataLength; ++i)
+  for (size_t i = 0; i < kDebugAcceleratorDataLength; ++i)
     all_debug_actions.insert(kDebugAcceleratorData[i].action);
 
   std::set<AcceleratorAction> actionsAllowedAtModalWindow;
-  for (size_t k = 0 ; k < kActionsAllowedAtModalWindowLength; ++k)
+  for (size_t k = 0; k < kActionsAllowedAtModalWindowLength; ++k)
     actionsAllowedAtModalWindow.insert(kActionsAllowedAtModalWindow[k]);
   for (std::set<AcceleratorAction>::const_iterator it =
            actionsAllowedAtModalWindow.begin();
@@ -1364,7 +1197,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
   std::unique_ptr<aura::Window> window(
       CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
   wm::ActivateWindow(window.get());
-  Shell::GetInstance()->SimulateModalWindowOpenForTesting(true);
+  WmShell::Get()->SimulateModalWindowOpenForTesting(true);
   for (std::set<AcceleratorAction>::const_iterator it = all_actions.begin();
        it != all_actions.end(); ++it) {
     if (actionsAllowedAtModalWindow.find(*it) ==
@@ -1383,8 +1216,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
     EXPECT_TRUE(ProcessInController(
         ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
     EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(
-            ui::VKEY_PRINT, ui::EF_NONE)));
+        ProcessInController(ui::Accelerator(ui::VKEY_PRINT, ui::EF_NONE)));
     EXPECT_TRUE(ProcessInController(ui::Accelerator(
         ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
     delegate->set_can_take_screenshot(true);
@@ -1393,8 +1225,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
         ui::Accelerator(ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_CONTROL_DOWN)));
     EXPECT_EQ(1, delegate->handle_take_screenshot_count());
     EXPECT_TRUE(
-        ProcessInController(ui::Accelerator(
-            ui::VKEY_PRINT, ui::EF_NONE)));
+        ProcessInController(ui::Accelerator(ui::VKEY_PRINT, ui::EF_NONE)));
     EXPECT_EQ(2, delegate->handle_take_screenshot_count());
     EXPECT_TRUE(ProcessInController(ui::Accelerator(
         ui::VKEY_MEDIA_LAUNCH_APP1, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN)));
@@ -1426,7 +1257,7 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
     EXPECT_TRUE(ProcessInController(volume_down));
     EXPECT_TRUE(ProcessInController(volume_up));
     TestVolumeControlDelegate* delegate = new TestVolumeControlDelegate;
-    ash::Shell::GetInstance()->system_tray_delegate()->SetVolumeControlDelegate(
+    WmShell::Get()->system_tray_delegate()->SetVolumeControlDelegate(
         std::unique_ptr<VolumeControlDelegate>(delegate));
     EXPECT_EQ(0, delegate->handle_volume_mute_count());
     EXPECT_TRUE(ProcessInController(volume_mute));
@@ -1445,15 +1276,13 @@ TEST_F(AcceleratorControllerTest, DisallowedAtModalWindow) {
 #endif
 
 TEST_F(AcceleratorControllerTest, DisallowedWithNoWindow) {
-  AccessibilityDelegate* delegate =
-      ash::Shell::GetInstance()->accessibility_delegate();
+  AccessibilityDelegate* delegate = WmShell::Get()->GetAccessibilityDelegate();
 
   for (size_t i = 0; i < kActionsNeedingWindowLength; ++i) {
-    delegate->TriggerAccessibilityAlert(ui::A11Y_ALERT_NONE);
+    delegate->TriggerAccessibilityAlert(A11Y_ALERT_NONE);
     EXPECT_TRUE(
         GetController()->PerformActionIfEnabled(kActionsNeedingWindow[i]));
-    EXPECT_EQ(delegate->GetLastAccessibilityAlert(),
-              ui::A11Y_ALERT_WINDOW_NEEDED);
+    EXPECT_EQ(delegate->GetLastAccessibilityAlert(), A11Y_ALERT_WINDOW_NEEDED);
   }
 
   // Make sure we don't alert if we do have a window.
@@ -1461,10 +1290,9 @@ TEST_F(AcceleratorControllerTest, DisallowedWithNoWindow) {
   for (size_t i = 0; i < kActionsNeedingWindowLength; ++i) {
     window.reset(CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
     wm::ActivateWindow(window.get());
-    delegate->TriggerAccessibilityAlert(ui::A11Y_ALERT_NONE);
+    delegate->TriggerAccessibilityAlert(A11Y_ALERT_NONE);
     GetController()->PerformActionIfEnabled(kActionsNeedingWindow[i]);
-    EXPECT_NE(delegate->GetLastAccessibilityAlert(),
-              ui::A11Y_ALERT_WINDOW_NEEDED);
+    EXPECT_NE(delegate->GetLastAccessibilityAlert(), A11Y_ALERT_WINDOW_NEEDED);
   }
 
   // Don't alert if we have a minimized window either.
@@ -1472,10 +1300,9 @@ TEST_F(AcceleratorControllerTest, DisallowedWithNoWindow) {
     window.reset(CreateTestWindowInShellWithBounds(gfx::Rect(5, 5, 20, 20)));
     wm::ActivateWindow(window.get());
     GetController()->PerformActionIfEnabled(WINDOW_MINIMIZE);
-    delegate->TriggerAccessibilityAlert(ui::A11Y_ALERT_NONE);
+    delegate->TriggerAccessibilityAlert(A11Y_ALERT_NONE);
     GetController()->PerformActionIfEnabled(kActionsNeedingWindow[i]);
-    EXPECT_NE(delegate->GetLastAccessibilityAlert(),
-              ui::A11Y_ALERT_WINDOW_NEEDED);
+    EXPECT_NE(delegate->GetLastAccessibilityAlert(), A11Y_ALERT_WINDOW_NEEDED);
   }
 }
 
@@ -1505,9 +1332,8 @@ class DeprecatedAcceleratorTester : public AcceleratorControllerTest {
   }
 
   void ResetStateIfNeeded() {
-    Shell* shell = Shell::GetInstance();
-    if (shell->session_state_delegate()->IsScreenLocked() ||
-        shell->session_state_delegate()->IsUserSessionBlocked()) {
+    if (WmShell::Get()->GetSessionStateDelegate()->IsScreenLocked() ||
+        WmShell::Get()->GetSessionStateDelegate()->IsUserSessionBlocked()) {
       UnblockUserSession();
     }
   }

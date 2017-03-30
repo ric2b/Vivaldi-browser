@@ -51,9 +51,6 @@ Polymer({
   ],
 
   ready: function() {
-    this.$.blockList.categorySubtype = settings.PermissionValues.BLOCK;
-    this.$.allowList.categorySubtype = settings.PermissionValues.ALLOW;
-
     this.addWebUIListener('contentSettingCategoryChanged',
         this.defaultValueForCategoryChanged_.bind(this));
   },
@@ -74,9 +71,11 @@ Polymer({
    */
   onToggleChange_: function(event) {
     switch (this.category) {
+      case settings.ContentSettingsTypes.BACKGROUND_SYNC:
       case settings.ContentSettingsTypes.COOKIES:
       case settings.ContentSettingsTypes.IMAGES:
       case settings.ContentSettingsTypes.JAVASCRIPT:
+      case settings.ContentSettingsTypes.KEYGEN:
       case settings.ContentSettingsTypes.POPUPS:
         // "Allowed" vs "Blocked".
         this.browserProxy.setDefaultValueForContentType(
@@ -85,15 +84,25 @@ Polymer({
                 settings.PermissionValues.ALLOW :
                 settings.PermissionValues.BLOCK);
         break;
-      case settings.ContentSettingsTypes.NOTIFICATIONS:
+      case settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS:
       case settings.ContentSettingsTypes.GEOLOCATION:
       case settings.ContentSettingsTypes.CAMERA:
       case settings.ContentSettingsTypes.MIC:
+      case settings.ContentSettingsTypes.NOTIFICATIONS:
+      case settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS:
         // "Ask" vs "Blocked".
         this.browserProxy.setDefaultValueForContentType(
             this.category,
             this.categoryEnabled ?
                 settings.PermissionValues.ASK :
+                settings.PermissionValues.BLOCK);
+        break;
+      case settings.ContentSettingsTypes.PLUGINS:
+        // "Detect important" vs "Let me choose".
+        this.browserProxy.setDefaultValueForContentType(
+            this.category,
+            this.categoryEnabled ?
+                settings.PermissionValues.IMPORTANT_CONTENT :
                 settings.PermissionValues.BLOCK);
         break;
       default:
@@ -111,21 +120,5 @@ Polymer({
             this.category).then(function(enabled) {
               this.categoryEnabled = enabled;
             }.bind(this));
-  },
-
-  /**
-   * A handler for the Add Site button.
-   * @private
-   */
-  onAddSiteTap_: function() {
-    var dialog = document.createElement('add-site-dialog');
-    dialog.category = this.category;
-    this.shadowRoot.appendChild(dialog);
-
-    dialog.open();
-
-    dialog.addEventListener('iron-overlay-closed', function() {
-      dialog.remove();
-    });
   },
 });

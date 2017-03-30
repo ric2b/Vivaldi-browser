@@ -35,6 +35,8 @@ class AXMenuListOption;
 class HTMLElement;
 
 class AXMenuListPopup final : public AXMockObject {
+    WTF_MAKE_NONCOPYABLE(AXMenuListPopup);
+
 public:
     static AXMenuListPopup* create(AXObjectCacheImpl& axObjectCache) { return new AXMenuListPopup(axObjectCache); }
 
@@ -44,7 +46,7 @@ public:
     void didUpdateActiveOption(int optionIndex);
     void didShow();
     void didHide();
-    AXObject* activeChild();
+    AXObject* activeDescendant() final;
 
 private:
     explicit AXMenuListPopup(AXObjectCacheImpl&);

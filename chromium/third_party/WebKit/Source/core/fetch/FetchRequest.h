@@ -85,7 +85,9 @@ public:
     ClientHintsPreferences& clientHintsPreferences() { return m_clientHintPreferences; }
 
     bool forPreload() const { return m_forPreload; }
-    void setForPreload(bool forPreload) { m_forPreload = forPreload; }
+    void setForPreload(bool forPreload, double discoveryTime = 0);
+
+    double preloadDiscoveryTime() { return m_preloadDiscoveryTime; }
 
     bool isLinkPreload() { return m_linkPreload; }
     void setLinkPreload(bool isLinkPreload) { m_linkPreload = isLinkPreload; }
@@ -97,6 +99,9 @@ public:
     const IntegrityMetadataSet& integrityMetadata() const { return m_integrityMetadata; }
     void setIntegrityMetadata(const IntegrityMetadataSet& metadata) { m_integrityMetadata = metadata; }
 
+    String contentSecurityPolicyNonce() const { return m_options.contentSecurityPolicyNonce; }
+    void setContentSecurityPolicyNonce(const String& nonce) { m_options.contentSecurityPolicyNonce = nonce; }
+
 private:
     ResourceRequest m_resourceRequest;
     String m_charset;
@@ -104,6 +109,7 @@ private:
     ResourceLoadPriority m_priority;
     bool m_forPreload;
     bool m_linkPreload;
+    double m_preloadDiscoveryTime;
     DeferOption m_defer;
     OriginRestriction m_originRestriction;
     ResourceWidth m_resourceWidth;

@@ -351,6 +351,14 @@ cr.define('options', function() {
           chrome.send('coreOptionsUserMetricsAction',
                       ['Options_ShowTouchpadSettings']);
         };
+        if (loadTimeData.getBoolean('enableStorageManager')) {
+          $('storage-manager-button').hidden = false;
+          $('storage-manager-button').onclick = function(evt) {
+            PageManager.showPageByName('storage');
+            chrome.send('coreOptionsUserMetricsAction',
+                        ['Options_ShowStorageManager']);
+          };
+        }
       }
 
       // Search section.
@@ -821,6 +829,23 @@ cr.define('options', function() {
         if (button)
           chrome.send('disableExtension', [button.dataset.extensionId]);
       });
+
+      // Setup ARC section.
+      if (cr.isChromeOS) {
+        $('android-apps-settings-label').innerHTML =
+            loadTimeData.getString('androidAppsSettingsLabel');
+        Preferences.getInstance().addEventListener('arc.enabled', function(e) {
+          var settings = $('android-apps-settings');
+          // Only change settings visibility on committed settings changes.
+          if (!settings || e.value.uncommitted)
+            return;
+          settings.hidden = !e.value.value;
+        });
+
+        $('android-apps-settings-link').addEventListener('click', function(e) {
+            chrome.send('showAndroidAppsSettings');
+        });
+      }
     },
 
     /** @override */
@@ -1880,7 +1905,7 @@ cr.define('options', function() {
      * @private
      */
     setFontSize_: function(pref) {
-      var selectCtl = $('defaultFontSize');
+      var selectCtl = /** @type {HTMLSelectElement} */($('defaultFontSize'));
       selectCtl.disabled = pref.disabled;
       // Create a synthetic pref change event decorated as
       // CoreOptionsHandler::CreateValueForPref() does.
@@ -2405,10 +2430,24 @@ cr.define('options', function() {
      * Shows Android Apps settings when they are available.
      * (Chrome OS only).
      */
-    BrowserOptions.showAndroidAppsSection = function() {
+    BrowserOptions.showAndroidAppsSection = function(isArcEnabled) {
       var section = $('android-apps-section');
-      if (section)
-        section.hidden = false;
+      if (!section)
+        return;
+
+      section.hidden = false;
+    };
+
+    /**
+     * Shows/hides Android Settings app section.
+     * (Chrome OS only).
+     */
+    BrowserOptions.setAndroidAppsSettingsVisibility = function(isVisible) {
+      var settings = $('android-apps-settings');
+      if (!settings)
+        return;
+
+      settings.hidden = !isVisible;
     };
   }
 

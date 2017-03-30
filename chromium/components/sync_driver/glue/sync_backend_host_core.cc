@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
-#include "base/metrics/histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "components/data_use_measurement/core/data_use_user_data.h"
 #include "components/invalidation/public/invalidation_util.h"
@@ -47,15 +46,6 @@ class URLFetcher;
 
 namespace {
 
-// Enums for UMAs.
-enum SyncBackendInitState {
-    SETUP_COMPLETED_FOUND_RESTORED_TYPES = 0,
-    SETUP_COMPLETED_NO_RESTORED_TYPES,
-    FIRST_SETUP_NO_RESTORED_TYPES,
-    FIRST_SETUP_RESTORED_TYPES,
-    SYNC_BACKEND_INIT_STATE_COUNT
-};
-
 void BindFetcherToDataTracker(net::URLFetcher* fetcher) {
   data_use_measurement::DataUseUserData::AttachToFetcher(
       fetcher, data_use_measurement::DataUseUserData::SYNC);
@@ -87,7 +77,6 @@ DoInitializeOptions::DoInitializeOptions(
     const base::Closure& report_unrecoverable_error_function,
     std::unique_ptr<syncer::SyncEncryptionHandler::NigoriState>
         saved_nigori_state,
-    syncer::PassphraseTransitionClearDataOption clear_data_option,
     const std::map<syncer::ModelType, int64_t>& invalidation_versions)
     : sync_loop(sync_loop),
       registrar(registrar),
@@ -108,7 +97,6 @@ DoInitializeOptions::DoInitializeOptions(
       unrecoverable_error_handler(unrecoverable_error_handler),
       report_unrecoverable_error_function(report_unrecoverable_error_function),
       saved_nigori_state(std::move(saved_nigori_state)),
-      clear_data_option(clear_data_option),
       invalidation_versions(invalidation_versions) {}
 
 DoInitializeOptions::~DoInitializeOptions() {}
@@ -145,7 +133,7 @@ void SyncBackendHostCore::OnSyncCycleCompleted(
     const syncer::sessions::SyncSessionSnapshot& snapshot) {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
 
   host_.Call(
       FROM_HERE,
@@ -154,7 +142,7 @@ void SyncBackendHostCore::OnSyncCycleCompleted(
 }
 
 void SyncBackendHostCore::DoRefreshTypes(syncer::ModelTypeSet types) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->RefreshTypes(types);
 }
 
@@ -164,7 +152,7 @@ void SyncBackendHostCore::OnInitializationComplete(
         debug_info_listener,
     bool success,
     const syncer::ModelTypeSet restored_types) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
 
   if (!success) {
     DoDestroySyncManager(syncer::STOP_SYNC);
@@ -189,22 +177,6 @@ void SyncBackendHostCore::OnInitializationComplete(
   // the UI thread yet.
   js_backend_ = js_backend;
   debug_info_listener_ = debug_info_listener;
-
-  // Track whether or not sync DB and preferences were in sync.
-  SyncBackendInitState backend_init_state;
-  if (has_sync_setup_completed_ && !restored_types.Empty()) {
-    backend_init_state = SETUP_COMPLETED_FOUND_RESTORED_TYPES;
-  } else if (has_sync_setup_completed_ && restored_types.Empty()) {
-    backend_init_state = SETUP_COMPLETED_NO_RESTORED_TYPES;
-  } else if (!has_sync_setup_completed_ && restored_types.Empty()) {
-    backend_init_state = FIRST_SETUP_NO_RESTORED_TYPES;
-  } else {  // (!has_sync_setup_completed_ && !restored_types.Empty())
-    backend_init_state = FIRST_SETUP_RESTORED_TYPES;
-  }
-
-  UMA_HISTOGRAM_ENUMERATION("Sync.BackendInitializeRestoreState",
-                            backend_init_state,
-                            SYNC_BACKEND_INIT_STATE_COUNT);
 
   // Before proceeding any further, we need to download the control types and
   // purge any partial data (ie. data downloaded for a type that was on its way
@@ -247,7 +219,7 @@ void SyncBackendHostCore::OnConnectionStatusChange(
     syncer::ConnectionStatus status) {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::HandleConnectionStatusChangeOnFrontendLoop, status);
@@ -258,7 +230,7 @@ void SyncBackendHostCore::OnPassphraseRequired(
     const sync_pb::EncryptedData& pending_keys) {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::NotifyPassphraseRequired, reason, pending_keys);
@@ -267,7 +239,7 @@ void SyncBackendHostCore::OnPassphraseRequired(
 void SyncBackendHostCore::OnPassphraseAccepted() {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::NotifyPassphraseAccepted);
@@ -278,7 +250,7 @@ void SyncBackendHostCore::OnBootstrapTokenUpdated(
     syncer::BootstrapTokenType type) {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::PersistEncryptionBootstrapToken,
              bootstrap_token,
@@ -290,7 +262,7 @@ void SyncBackendHostCore::OnEncryptedTypesChanged(
     bool encrypt_everything) {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   // NOTE: We're in a transaction.
   host_.Call(
       FROM_HERE,
@@ -301,7 +273,7 @@ void SyncBackendHostCore::OnEncryptedTypesChanged(
 void SyncBackendHostCore::OnEncryptionComplete() {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   // NOTE: We're in a transaction.
   host_.Call(
       FROM_HERE,
@@ -360,7 +332,7 @@ void SyncBackendHostCore::OnActionableError(
     const syncer::SyncProtocolError& sync_error) {
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::HandleActionableErrorEventOnFrontendLoop,
@@ -368,7 +340,7 @@ void SyncBackendHostCore::OnActionableError(
 }
 
 void SyncBackendHostCore::OnMigrationRequested(syncer::ModelTypeSet types) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(
       FROM_HERE,
       &SyncBackendHostImpl::HandleMigrationRequestedOnFrontendLoop,
@@ -389,13 +361,13 @@ void SyncBackendHostCore::OnProtocolEvent(
 
 void SyncBackendHostCore::DoOnInvalidatorStateChange(
     syncer::InvalidatorState state) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->SetInvalidatorEnabled(state == syncer::INVALIDATIONS_ENABLED);
 }
 
 void SyncBackendHostCore::DoOnIncomingInvalidation(
     const syncer::ObjectIdInvalidationMap& invalidation_map) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
 
   syncer::ObjectIdSet ids = invalidation_map.GetObjectIds();
   for (const invalidation::ObjectId& object_id : ids) {
@@ -486,13 +458,12 @@ void SyncBackendHostCore::DoInitialize(
       options->report_unrecoverable_error_function;
   args.cancelation_signal = &stop_syncing_signal_;
   args.saved_nigori_state = std::move(options->saved_nigori_state);
-  args.clear_data_option = options->clear_data_option;
   sync_manager_->Init(&args);
 }
 
 void SyncBackendHostCore::DoUpdateCredentials(
     const syncer::SyncCredentials& credentials) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   // UpdateCredentials can be called during backend initialization, possibly
   // when backend initialization has failed but hasn't notified the UI thread
   // yet. In that case, the sync manager may have been destroyed on the sync
@@ -505,20 +476,20 @@ void SyncBackendHostCore::DoUpdateCredentials(
 void SyncBackendHostCore::DoStartSyncing(
     const syncer::ModelSafeRoutingInfo& routing_info,
     base::Time last_poll_time) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->StartSyncingNormally(routing_info, last_poll_time);
 }
 
 void SyncBackendHostCore::DoSetEncryptionPassphrase(
     const std::string& passphrase,
     bool is_explicit) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->GetEncryptionHandler()->SetEncryptionPassphrase(
       passphrase, is_explicit);
 }
 
 void SyncBackendHostCore::DoInitialProcessControlTypes() {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
 
   DVLOG(1) << "Initilalizing Control Types";
 
@@ -557,13 +528,13 @@ void SyncBackendHostCore::DoInitialProcessControlTypes() {
 
 void SyncBackendHostCore::DoSetDecryptionPassphrase(
     const std::string& passphrase) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->GetEncryptionHandler()->SetDecryptionPassphrase(
       passphrase);
 }
 
 void SyncBackendHostCore::DoEnableEncryptEverything() {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->GetEncryptionHandler()->EnableEncryptEverything();
 }
 
@@ -589,7 +560,7 @@ void SyncBackendHostCore::ShutdownOnUIThread() {
 }
 
 void SyncBackendHostCore::DoShutdown(syncer::ShutdownReason reason) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
 
   DoDestroySyncManager(reason);
 
@@ -603,7 +574,7 @@ void SyncBackendHostCore::DoShutdown(syncer::ShutdownReason reason) {
 }
 
 void SyncBackendHostCore::DoDestroySyncManager(syncer::ShutdownReason reason) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   if (sync_manager_) {
     DisableDirectoryTypeDebugInfoForwarding();
     save_changes_timer_.reset();
@@ -620,7 +591,7 @@ void SyncBackendHostCore::DoConfigureSyncer(
     const base::Callback<void(syncer::ModelTypeSet,
                               syncer::ModelTypeSet)>& ready_task,
     const base::Closure& retry_callback) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   DCHECK(!ready_task.is_null());
   DCHECK(!retry_callback.is_null());
   base::Closure chained_ready_task(
@@ -646,7 +617,7 @@ void SyncBackendHostCore::DoFinishConfigureDataTypes(
     syncer::ModelTypeSet types_to_config,
     const base::Callback<void(syncer::ModelTypeSet,
                               syncer::ModelTypeSet)>& ready_task) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
 
   // Update the enabled types for the bridge and sync manager.
   syncer::ModelSafeRoutingInfo routing_info;
@@ -668,14 +639,14 @@ void SyncBackendHostCore::DoFinishConfigureDataTypes(
 
 void SyncBackendHostCore::DoRetryConfiguration(
     const base::Closure& retry_callback) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(FROM_HERE,
              &SyncBackendHostImpl::RetryConfigurationOnFrontendLoop,
              retry_callback);
 }
 
 void SyncBackendHostCore::SendBufferedProtocolEventsAndEnableForwarding() {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   forward_protocol_events_ = true;
 
   if (sync_manager_) {
@@ -723,7 +694,7 @@ void SyncBackendHostCore::DisableDirectoryTypeDebugInfoForwarding() {
 }
 
 void SyncBackendHostCore::DeleteSyncDataFolder() {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   if (base::DirectoryExists(sync_data_folder_path_)) {
     if (!base::DeleteFile(sync_data_folder_path_, true))
       SLOG(DFATAL) << "Could not delete the Sync Data folder.";
@@ -761,7 +732,7 @@ void SyncBackendHostCore::StartSavingChanges() {
   // We may already be shut down.
   if (!sync_loop_)
     return;
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   DCHECK(!save_changes_timer_.get());
   save_changes_timer_.reset(new base::RepeatingTimer());
   save_changes_timer_->Start(FROM_HERE,
@@ -770,13 +741,13 @@ void SyncBackendHostCore::StartSavingChanges() {
 }
 
 void SyncBackendHostCore::SaveChanges() {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->SaveChanges();
 }
 
 void SyncBackendHostCore::DoClearServerData(
     const syncer::SyncManager::ClearServerDataCallback& frontend_callback) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   const syncer::SyncManager::ClearServerDataCallback callback =
       base::Bind(&SyncBackendHostCore::ClearServerDataDone,
                  weak_ptr_factory_.GetWeakPtr(), frontend_callback);
@@ -785,13 +756,13 @@ void SyncBackendHostCore::DoClearServerData(
 
 void SyncBackendHostCore::DoOnCookieJarChanged(bool account_mismatch,
                                                bool empty_jar) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   sync_manager_->OnCookieJarChanged(account_mismatch, empty_jar);
 }
 
 void SyncBackendHostCore::ClearServerDataDone(
     const base::Closure& frontend_callback) {
-  DCHECK_EQ(base::MessageLoop::current(), sync_loop_);
+  DCHECK(sync_loop_->task_runner()->BelongsToCurrentThread());
   host_.Call(FROM_HERE, &SyncBackendHostImpl::ClearServerDataDoneOnFrontendLoop,
              frontend_callback);
 }

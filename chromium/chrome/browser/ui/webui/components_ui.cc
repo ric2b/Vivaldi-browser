@@ -7,7 +7,9 @@
 #include <stddef.h>
 
 #include <algorithm>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/macros.h"
@@ -105,7 +107,7 @@ void ComponentsDOMHandler::HandleRequestComponentsData(
   base::ListValue* list = ComponentsUI::LoadComponents();
   base::DictionaryValue result;
   result.Set("components", list);
-  web_ui()->CallJavascriptFunction("returnComponentsData", result);
+  web_ui()->CallJavascriptFunctionUnsafe("returnComponentsData", result);
 }
 
 // This function is called when user presses button from html UI.
@@ -172,12 +174,13 @@ base::ListValue* ComponentsUI::LoadComponents() {
   for (size_t j = 0; j < component_ids.size(); ++j) {
     update_client::CrxUpdateItem item;
     if (cus->GetComponentDetails(component_ids[j], &item)) {
-      base::DictionaryValue* component_entry = new base::DictionaryValue();
+      std::unique_ptr<base::DictionaryValue> component_entry(
+          new base::DictionaryValue());
       component_entry->SetString("id", component_ids[j]);
       component_entry->SetString("name", item.component.name);
       component_entry->SetString("version", item.component.version.GetString());
       component_entry->SetString("status", ServiceStatusToString(item.state));
-      component_list->Append(component_entry);
+      component_list->Append(std::move(component_entry));
     }
   }
 
@@ -256,5 +259,5 @@ void ComponentsUI::OnEvent(Events event, const std::string& id) {
     }
     parameters.SetString("id", id);
   }
-  web_ui()->CallJavascriptFunction("onComponentEvent", parameters);
+  web_ui()->CallJavascriptFunctionUnsafe("onComponentEvent", parameters);
 }

@@ -21,9 +21,9 @@ namespace media {
 AVDACodecImage::AVDACodecImage(
     int picture_buffer_id,
     const scoped_refptr<AVDASharedState>& shared_state,
-    media::VideoCodecBridge* codec,
+    VideoCodecBridge* codec,
     const base::WeakPtr<gpu::gles2::GLES2Decoder>& decoder,
-    const scoped_refptr<gfx::SurfaceTexture>& surface_texture)
+    const scoped_refptr<gl::SurfaceTexture>& surface_texture)
     : shared_state_(shared_state),
       codec_buffer_index_(kInvalidCodecBufferIndex),
       media_codec_(codec),
@@ -147,7 +147,7 @@ void AVDACodecImage::UpdateSurface(UpdateMode update_mode) {
   UpdateSurfaceInternal(update_mode, kDoRestoreBindings);
 }
 
-void AVDACodecImage::CodecChanged(media::MediaCodecBridge* codec) {
+void AVDACodecImage::CodecChanged(MediaCodecBridge* codec) {
   media_codec_ = codec;
   codec_buffer_index_ = kInvalidCodecBufferIndex;
 }

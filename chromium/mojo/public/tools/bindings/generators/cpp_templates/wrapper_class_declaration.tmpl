@@ -2,11 +2,16 @@
 
 class {{struct.name}} {
  public:
+  using DataView = {{struct.name}}DataView;
   using Data_ = internal::{{struct.name}}_Data;
 
 {#--- Enums #}
 {%- for enum in struct.enums -%}
+{%-   if enum|is_native_only_kind %}
+  using {{enum.name}} = mojo::NativeEnum;
+{%-   else %}
   {{enum_decl(enum)|indent(2)}}
+{%-   endif %}
 {%- endfor %}
 
 {#--- Constants #}
@@ -33,21 +38,35 @@ class {{struct.name}} {
   {{struct.name}}();
   ~{{struct.name}}();
 
-{%  if struct|is_cloneable_kind %}
+  // Clone() is a template so it is only instantiated if it is used. Thus, the
+  // bindings generator does not need to know whether Clone() or copy
+  // constructor/assignment are available for members.
+  template <typename StructPtrType = {{struct.name}}Ptr>
   {{struct.name}}Ptr Clone() const;
-{%- endif %}
+
   // Equals() is a template so it is only instantiated if it is used. Thus, the
-  // bindings generator does not need to know whether typemapped native types
-  // support operator==.
+  // bindings generator does not need to know whether Equals() or == operator
+  // are available for members.
   template <typename T,
             typename std::enable_if<std::is_same<
                 T, {{struct.name}}>::value>::type* = nullptr>
-  bool Equals(const T& other) const {
-  {%-  for field in struct.fields %}
-    if (!mojo::internal::ValueTraits<{{field.kind|cpp_wrapper_type}}>::Equals(this->{{field.name}}, other.{{field.name}}))
-      return false;
-  {%-  endfor %}
-    return true;
+  bool Equals(const T& other) const;
+
+{%- set serialization_result_type = "mojo::WTFArray<uint8_t>"
+        if for_blink else "mojo::Array<uint8_t>" %}
+
+  template <typename UserType>
+  static {{serialization_result_type}} Serialize(UserType* input) {
+    return mojo::internal::StructSerializeImpl<
+        {{struct.name}}Ptr, {{serialization_result_type}}>(input);
+  }
+
+  template <typename UserType>
+  static bool Deserialize({{serialization_result_type}} input,
+                          UserType* output) {
+    return mojo::internal::StructDeserializeImpl<
+        {{struct.name}}Ptr, {{serialization_result_type}}>(
+            std::move(input), output);
   }
 
 {#--- Struct members #}

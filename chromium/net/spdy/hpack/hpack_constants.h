@@ -46,13 +46,10 @@ class HpackStaticTable;
 // Defined in RFC 7540 section 6.5.2.
 const uint32_t kDefaultHeaderTableSizeSetting = 4096;
 
-// Largest string literal an HpackDecoder/HpackEncoder will attempt to process
-// before returning an error.
-const uint32_t kDefaultMaxStringLiteralSize = 256 * 1024;
-
 // Maximum amount of encoded header buffer HpackDecoder will retain before
 // returning an error.
-// TODO(jgraettinger): Remove with SpdyHeadersHandlerInterface switch.
+// TODO(rjshade): Remove when deprecating
+// FLAGS_chromium_http2_flag_remove_hpack_decode_buffer_size_limit.
 const uint32_t kMaxDecodeBufferSize = 256 * 1024;
 
 // 6.2: Flag for a string literal that is stored unmodified (i.e.,

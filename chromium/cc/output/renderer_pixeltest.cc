@@ -1702,7 +1702,7 @@ TYPED_TEST(RendererPixelTest, EnlargedRenderPassTexture) {
   pass_list.push_back(std::move(child_pass));
   pass_list.push_back(std::move(root_pass));
 
-  this->renderer_->SetEnlargePassTextureAmountForTesting(gfx::Vector2d(50, 75));
+  this->renderer_->SetEnlargePassTextureAmount(gfx::Size(50, 75));
 
   EXPECT_TRUE(this->RunPixelTest(
       &pass_list,
@@ -1764,7 +1764,7 @@ TYPED_TEST(RendererPixelTest, EnlargedRenderPassTextureWithAntiAliasing) {
   pass_list.push_back(std::move(child_pass));
   pass_list.push_back(std::move(root_pass));
 
-  this->renderer_->SetEnlargePassTextureAmountForTesting(gfx::Vector2d(50, 75));
+  this->renderer_->SetEnlargePassTextureAmount(gfx::Size(50, 75));
 
   EXPECT_TRUE(this->RunPixelTest(
       &pass_list,
@@ -2084,7 +2084,7 @@ class ExternalStencilPixelTest : public GLRendererPixelTest {
   void ClearBackgroundToGreen() {
     GLES2Interface* gl = output_surface_->context_provider()->ContextGL();
     output_surface_->EnsureBackbuffer();
-    output_surface_->Reshape(device_viewport_size_, 1, true);
+    output_surface_->Reshape(device_viewport_size_, 1, gfx::ColorSpace(), true);
     gl->ClearColor(0.f, 1.f, 0.f, 1.f);
     gl->Clear(GL_COLOR_BUFFER_BIT);
   }
@@ -2093,7 +2093,7 @@ class ExternalStencilPixelTest : public GLRendererPixelTest {
     // Set two quadrants of the stencil buffer to 1.
     GLES2Interface* gl = output_surface_->context_provider()->ContextGL();
     output_surface_->EnsureBackbuffer();
-    output_surface_->Reshape(device_viewport_size_, 1, true);
+    output_surface_->Reshape(device_viewport_size_, 1, gfx::ColorSpace(), true);
     gl->ClearStencil(0);
     gl->Clear(GL_STENCIL_BUFFER_BIT);
     gl->Enable(GL_SCISSOR_TEST);
@@ -2903,8 +2903,6 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadNonIdentityScale) {
   scoped_refptr<FakeRasterSource> raster_source =
       FakeRasterSource::CreateFromRecordingSource(recording.get(), false);
 
-  gfx::Rect content_rect(
-      gfx::ScaleToEnclosingRect(layer_rect, contents_scale));
   gfx::Rect content_union_rect(
       gfx::ToEnclosingRect(gfx::ScaleRect(union_layer_rect, contents_scale)));
 

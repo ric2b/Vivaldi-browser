@@ -91,6 +91,9 @@
       'crypto_nacl_win64',
       #delegate_execute.gyp
       'delegate_execute_unittests',
+      #deqp
+      'angle_deqp_libegl',
+      'angle_deqp_libtester',
       #dll_hash.gypi
       'dll_hash_main',
       #events.gyp

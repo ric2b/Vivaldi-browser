@@ -479,7 +479,7 @@ class CommandsCompletedQuery : public QueryManager::Query {
   ~CommandsCompletedQuery() override;
 
  private:
-  std::unique_ptr<gfx::GLFence> fence_;
+  std::unique_ptr<gl::GLFence> fence_;
   base::TimeTicks begin_time_;
 };
 
@@ -508,7 +508,7 @@ bool CommandsCompletedQuery::End(base::subtle::Atomic32 submit_count) {
     fence_->ResetState();
   }
   else {
-    fence_.reset(gfx::GLFence::Create());
+    fence_.reset(gl::GLFence::Create());
   }
   DCHECK(fence_);
   return AddToPendingQueue(submit_count);
@@ -559,7 +559,7 @@ class TimeElapsedQuery : public QueryManager::Query {
   ~TimeElapsedQuery() override;
 
  private:
-  std::unique_ptr<gfx::GPUTimer> gpu_timer_;
+  std::unique_ptr<gl::GPUTimer> gpu_timer_;
 };
 
 TimeElapsedQuery::TimeElapsedQuery(QueryManager* manager,
@@ -636,7 +636,7 @@ class TimeStampQuery : public QueryManager::Query {
   ~TimeStampQuery() override;
 
  private:
-  std::unique_ptr<gfx::GPUTimer> gpu_timer_;
+  std::unique_ptr<gl::GPUTimer> gpu_timer_;
 };
 
 TimeStampQuery::TimeStampQuery(QueryManager* manager,
@@ -722,11 +722,11 @@ QueryManager::QueryManager(
   DCHECK(!(use_arb_occlusion_query_for_occlusion_query_boolean_ &&
            use_arb_occlusion_query2_for_occlusion_query_boolean_));
   DCHECK(decoder);
-  gfx::GLContext* context = decoder_->GetGLContext();
+  gl::GLContext* context = decoder_->GetGLContext();
   if (context) {
     gpu_timing_client_ = context->CreateGPUTimingClient();
   } else {
-    gpu_timing_client_ = new gfx::GPUTimingClient();
+    gpu_timing_client_ = new gl::GPUTimingClient();
   }
 }
 
@@ -750,18 +750,22 @@ void QueryManager::Destroy(bool have_context) {
   }
 }
 
-void QueryManager::SetDisjointSync(int32_t shm_id, uint32_t shm_offset) {
-  DCHECK(disjoint_notify_shm_id_ == -1);
-  DCHECK(shm_id != -1);
+error::Error QueryManager::SetDisjointSync(int32_t shm_id,
+                                           uint32_t shm_offset) {
+  if (disjoint_notify_shm_id_ != -1 || shm_id == -1)
+    return error::kInvalidArguments;
 
   DisjointValueSync* sync = decoder_->GetSharedMemoryAs<DisjointValueSync*>(
       shm_id, shm_offset, sizeof(*sync));
-  DCHECK(sync);
+  if (!sync)
+    return error::kOutOfBounds;
+
   sync->Reset();
   disjoints_notified_ = 0;
 
   disjoint_notify_shm_id_ = shm_id;
   disjoint_notify_shm_offset_ = shm_offset;
+  return error::kNoError;
 }
 
 QueryManager::Query* QueryManager::CreateQuery(GLenum target,
@@ -809,7 +813,7 @@ QueryManager::Query* QueryManager::CreateQuery(GLenum target,
   return query.get();
 }
 
-std::unique_ptr<gfx::GPUTimer> QueryManager::CreateGPUTimer(bool elapsed_time) {
+std::unique_ptr<gl::GPUTimer> QueryManager::CreateGPUTimer(bool elapsed_time) {
   return gpu_timing_client_->CreateGPUTimer(elapsed_time);
 }
 

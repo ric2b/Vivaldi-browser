@@ -6,12 +6,12 @@
 
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
+#include "core/inspector/InspectorInstrumentation.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "modules/fetch/FetchManager.h"
 #include "modules/fetch/Request.h"
 #include "platform/Supplementable.h"
 #include "platform/heap/Handle.h"
-#include "wtf/OwnPtr.h"
 
 namespace blink {
 
@@ -49,6 +49,9 @@ public:
         Request* r = Request::create(scriptState, input, init, exceptionState);
         if (exceptionState.hadException())
             return ScriptPromise();
+
+        if (ExecutionContext* executionContext = m_fetchManager->getExecutionContext())
+            InspectorInstrumentation::willSendXMLHttpOrFetchNetworkRequest(executionContext, r->url());
         return m_fetchManager->fetch(scriptState, r->passRequestData(scriptState));
     }
 

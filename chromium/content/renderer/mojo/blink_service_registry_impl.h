@@ -6,20 +6,27 @@
 #define CONTENT_RENDERER_MOJO_BLINK_SERVICE_REGISTRY_IMPL_H_
 
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "third_party/WebKit/public/platform/ServiceRegistry.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
+namespace shell {
+class InterfaceProvider;
+}
+
 namespace content {
 
-class ServiceRegistry;
-
 // An implementation of blink::ServiceRegistry that forwards to a
-// content::ServiceRegistry.
+// shell::InterfaceProvider.
 class BlinkServiceRegistryImpl : public blink::ServiceRegistry {
  public:
   explicit BlinkServiceRegistryImpl(
-      base::WeakPtr<content::ServiceRegistry> service_registry);
+      base::WeakPtr<shell::InterfaceProvider> remote_interfaces);
   ~BlinkServiceRegistryImpl();
 
   // blink::ServiceRegistry override.
@@ -27,7 +34,11 @@ class BlinkServiceRegistryImpl : public blink::ServiceRegistry {
                               mojo::ScopedMessagePipeHandle handle) override;
 
  private:
-  const base::WeakPtr<content::ServiceRegistry> service_registry_;
+  const base::WeakPtr<shell::InterfaceProvider> remote_interfaces_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner_;
+
+  base::WeakPtrFactory<BlinkServiceRegistryImpl> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BlinkServiceRegistryImpl);
 };

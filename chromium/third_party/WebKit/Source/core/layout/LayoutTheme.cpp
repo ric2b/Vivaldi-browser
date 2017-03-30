@@ -217,10 +217,6 @@ void LayoutTheme::adjustStyle(ComputedStyle& style, Element* e)
         return adjustSearchFieldStyle(style);
     case SearchFieldCancelButtonPart:
         return adjustSearchFieldCancelButtonStyle(style);
-    case SearchFieldDecorationPart:
-        return adjustSearchFieldDecorationStyle(style);
-    case SearchFieldResultsDecorationPart:
-        return adjustSearchFieldResultsDecorationStyle(style);
     default:
         break;
     }
@@ -230,7 +226,7 @@ String LayoutTheme::extraDefaultStyleSheet()
 {
     StringBuilder runtimeCSS;
     if (RuntimeEnabledFeatures::contextMenuEnabled())
-        runtimeCSS.appendLiteral("menu[type=\"popup\" i] { display: none; }");
+        runtimeCSS.append("menu[type=\"popup\" i] { display: none; }");
     return runtimeCSS.toString();
 }
 
@@ -648,14 +644,6 @@ void LayoutTheme::adjustSearchFieldCancelButtonStyle(ComputedStyle&) const
 {
 }
 
-void LayoutTheme::adjustSearchFieldDecorationStyle(ComputedStyle&) const
-{
-}
-
-void LayoutTheme::adjustSearchFieldResultsDecorationStyle(ComputedStyle&) const
-{
-}
-
 void LayoutTheme::platformColorsDidChange()
 {
     Page::platformColorsChanged();
@@ -834,8 +822,7 @@ String LayoutTheme::fileListNameForWidth(Locale& locale, const FileList* fileLis
     } else if (fileList->length() == 1) {
         string = fileList->item(0)->name();
     } else {
-        // FIXME: Localization of fileList->length().
-        return StringTruncator::rightTruncate(locale.queryString(WebLocalizedString::MultipleFileUploadText, String::number(fileList->length())), width, font);
+        return StringTruncator::rightTruncate(locale.queryString(WebLocalizedString::MultipleFileUploadText, locale.convertToLocalizedNumber(String::number(fileList->length()))), width, font);
     }
 
     return StringTruncator::centerTruncate(string, width, font);

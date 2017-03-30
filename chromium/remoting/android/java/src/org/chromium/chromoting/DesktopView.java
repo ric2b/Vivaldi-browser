@@ -10,9 +10,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Point;
-import android.graphics.RadialGradient;
-import android.graphics.Rect;
-import android.graphics.Shader;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.InputType;
@@ -26,6 +23,7 @@ import android.view.inputmethod.InputMethodManager;
 
 import org.chromium.base.Log;
 import org.chromium.chromoting.jni.Client;
+import org.chromium.chromoting.jni.Display;
 
 /**
  * The user interface for viewing and interacting with a specific remote host.
@@ -41,13 +39,15 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     private static final String TAG = "Chromoting";
 
     private final RenderData mRenderData;
-    private final TouchInputHandlerInterface mInputHandler;
+    private final TouchInputHandler mInputHandler;
 
     /** The parent Desktop activity. */
     private Desktop mDesktop;
 
     /** The Client connection, used to inject input and fetch the video frames. */
     private Client mClient;
+
+    private Display mDisplay;
 
 
     // Flag to prevent multiple repaint requests from being backed up. Requests for repainting will
@@ -60,102 +60,12 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     // synchronized on |mRenderData|.
     private boolean mSurfaceCreated = false;
 
-    /** Helper class for displaying the long-press feedback animation. This class is thread-safe. */
-    private static class FeedbackAnimator {
-        /** Total duration of the animation, in milliseconds. */
-        private static final float TOTAL_DURATION_MS = 220;
-
-        /** Start time of the animation, from {@link SystemClock#uptimeMillis()}. */
-        private long mStartTimeInMs = 0;
-
-        private boolean mRunning = false;
-
-        /** Contains the size of the feedback animation for the most recent request. */
-        private float mFeedbackSizeInPixels;
-
-        /** Lock to allow multithreaded access to {@link #mStartTimeInMs} and {@link #mRunning}. */
-        private final Object mLock = new Object();
-
-        private Paint mPaint = new Paint();
-
-        public boolean isAnimationRunning() {
-            synchronized (mLock) {
-                return mRunning;
-            }
-        }
-
-        /**
-         * Begins a new animation sequence. After calling this method, the caller should
-         * call {@link #render(Canvas, float, float, float)} periodically whilst
-         * {@link #isAnimationRunning()} returns true.
-         */
-        public void startAnimation(InputFeedbackType feedbackType) {
-            if (feedbackType == InputFeedbackType.NONE) {
-                return;
-            }
-
-            synchronized (mLock) {
-                mRunning = true;
-                mStartTimeInMs = SystemClock.uptimeMillis();
-                mFeedbackSizeInPixels = getInputFeedbackSizeInPixels(feedbackType);
-            }
-        }
-
-        public void render(Canvas canvas, float x, float y, float scale) {
-            // |progress| is 0 at the beginning, 1 at the end.
-            float progress;
-            float size;
-            synchronized (mLock) {
-                // |mStartTimeInMs| is set and accessed on different threads (hence the lock).  It
-                // is possible for |mStartTimeInMs| to be updated when an animation is in progress.
-                // When this occurs, |radius| will eventually be set to 0 and used to initialize
-                // RadialGradient which requires the radius to be > 0.  This will result in a crash.
-                // In order to avoid this problem, we return early if the elapsed time is 0.
-                float elapsedTimeInMs = SystemClock.uptimeMillis() - mStartTimeInMs;
-                if (elapsedTimeInMs < 1) {
-                    return;
-                }
-
-                progress = elapsedTimeInMs / TOTAL_DURATION_MS;
-                if (progress >= 1) {
-                    mRunning = false;
-                    return;
-                }
-                size = mFeedbackSizeInPixels / scale;
-            }
-
-            // Animation grows from 0 to |size|, and goes from fully opaque to transparent for a
-            // seamless fading-out effect. The animation needs to have more than one color so it's
-            // visible over any background color.
-            float radius = size * progress;
-            int alpha = (int) ((1 - progress) * 0xff);
-
-            int transparentBlack = Color.argb(0, 0, 0, 0);
-            int white = Color.argb(alpha, 0xff, 0xff, 0xff);
-            int black = Color.argb(alpha, 0, 0, 0);
-            mPaint.setShader(new RadialGradient(x, y, radius,
-                    new int[] {transparentBlack, white, black, transparentBlack},
-                    new float[] {0.0f, 0.8f, 0.9f, 1.0f}, Shader.TileMode.CLAMP));
-            canvas.drawCircle(x, y, radius, mPaint);
-        }
-
-        private float getInputFeedbackSizeInPixels(InputFeedbackType feedbackType) {
-            switch (feedbackType) {
-                case SMALL_ANIMATION:
-                    return 40.0f;
-
-                case LARGE_ANIMATION:
-                    return 160.0f;
-
-                default:
-                    // Unreachable, but required by Google Java style and findbugs.
-                    assert false : "Unreached";
-                    return 0.0f;
-            }
-        }
-    }
-
-    private FeedbackAnimator mFeedbackAnimator = new FeedbackAnimator();
+    private final Event.Raisable<PaintEventParameter> mOnPaint = new Event.Raisable<>();
+    private final Event.Raisable<SizeChangedEventParameter> mOnClientSizeChanged =
+            new Event.Raisable<>();
+    private final Event.Raisable<SizeChangedEventParameter> mOnHostSizeChanged =
+            new Event.Raisable<>();
+    private final Event.Raisable<TouchEventParameter> mOnTouch = new Event.Raisable<>();
 
     // Variables to control animation by the TouchInputHandler.
 
@@ -179,17 +89,35 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         getHolder().addCallback(this);
     }
 
-    public void setDesktop(Desktop desktop) {
+    @Override
+    public void init(Desktop desktop, Client client) {
+        Preconditions.isNull(mDesktop);
+        Preconditions.isNull(mClient);
+        Preconditions.isNull(mDisplay);
+        Preconditions.notNull(desktop);
+        Preconditions.notNull(client);
+        Preconditions.notNull(client.getDisplay());
+        Preconditions.isTrue(client.getDisplay() instanceof Display);
         mDesktop = desktop;
-    }
-
-    public void setClient(Client client) {
         mClient = client;
+        mDisplay = (Display) client.getDisplay();
+        mInputHandler.init(desktop, new InputEventSender(client));
     }
 
-    /** See {@link TouchInputHandler#onSoftInputMethodVisibilityChanged} for API details. */
-    public void onSoftInputMethodVisibilityChanged(boolean inputMethodVisible, Rect bounds) {
-        mInputHandler.onSoftInputMethodVisibilityChanged(inputMethodVisible, bounds);
+    public Event<PaintEventParameter> onPaint() {
+        return mOnPaint;
+    }
+
+    public Event<SizeChangedEventParameter> onClientSizeChanged() {
+        return mOnClientSizeChanged;
+    }
+
+    public Event<SizeChangedEventParameter> onHostSizeChanged() {
+        return mOnHostSizeChanged;
+    }
+
+    public Event<TouchEventParameter> onTouch() {
+        return mOnTouch;
     }
 
     /** Request repainting of the desktop view. */
@@ -200,7 +128,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             }
             mRepaintPending = true;
         }
-        mClient.redrawGraphics();
+        mDisplay.redrawGraphics();
     }
 
     /**
@@ -215,7 +143,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             Log.w(TAG, "Canvas being redrawn on UI thread");
         }
 
-        Bitmap image = mClient.getVideoFrame();
+        Bitmap image = mDisplay.getVideoFrame();
         if (image == null) {
             // This can happen if the client is connected, but a complete video frame has not yet
             // been decoded.
@@ -236,7 +164,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             }
         }
         if (sizeChanged) {
-            mInputHandler.onHostSizeChanged(width, height);
+            mOnHostSizeChanged.raise(new SizeChangedEventParameter(width, height));
         }
 
         Canvas canvas;
@@ -263,20 +191,16 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         canvas.drawColor(Color.BLACK);
         canvas.drawBitmap(image, 0, 0, new Paint());
 
-        // TODO(joedow): Replace the custom animation code with a standard Android implementation.
-        boolean feedbackAnimationRunning = mFeedbackAnimator.isAnimationRunning();
-        if (feedbackAnimationRunning) {
-            float scaleFactor;
-            synchronized (mRenderData) {
-                scaleFactor = mRenderData.transform.mapRadius(1);
-            }
-            mFeedbackAnimator.render(canvas, cursorPosition.x, cursorPosition.y, scaleFactor);
+        float scaleFactor;
+        synchronized (mRenderData) {
+            scaleFactor = mRenderData.transform.mapRadius(1);
         }
+        mOnPaint.raise(new PaintEventParameter(cursorPosition, canvas, scaleFactor));
 
         if (drawCursor) {
-            Bitmap cursorBitmap = mClient.getCursorBitmap();
+            Bitmap cursorBitmap = mDisplay.getCursorBitmap();
             if (cursorBitmap != null) {
-                Point hotspot = mClient.getCursorHotspot();
+                Point hotspot = mDisplay.getCursorHotspot();
                 canvas.drawBitmap(cursorBitmap, cursorPosition.x - hotspot.x,
                         cursorPosition.y - hotspot.y, new Paint());
             }
@@ -285,7 +209,7 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         getHolder().unlockCanvasAndPost(canvas);
 
         synchronized (mAnimationLock) {
-            if (mInputAnimationRunning || feedbackAnimationRunning) {
+            if (mInputAnimationRunning || !mOnPaint.isEmpty()) {
                 getHandler().postAtTime(new Runnable() {
                     @Override
                     public void run() {
@@ -303,9 +227,8 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         }
         if (running) {
             mInputHandler.processAnimation();
-        }
-        running |= mFeedbackAnimator.isAnimationRunning();
-        if (running) {
+            requestRepaint();
+        } else if (!mOnPaint.isEmpty()) {
             requestRepaint();
         }
     }
@@ -322,12 +245,12 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
         }
 
         attachRedrawCallback();
-        mInputHandler.onClientSizeChanged(width, height);
+        mOnClientSizeChanged.raise(new SizeChangedEventParameter(width, height));
         requestRepaint();
     }
 
     public void attachRedrawCallback() {
-        mClient.provideRedrawCallback(new Runnable() {
+        mDisplay.provideRedrawCallback(new Runnable() {
             @Override
             public void run() {
                 paint();
@@ -375,20 +298,22 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     /** Called whenever the user attempts to touch the canvas. */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        return mInputHandler.onTouchEvent(event);
+        TouchEventParameter parameter = new TouchEventParameter(event);
+        mOnTouch.raise(parameter);
+        return parameter.handled;
     }
 
     @Override
-    public void showInputFeedback(InputFeedbackType feedbackToShow) {
+    public void showInputFeedback(InputFeedbackType feedbackToShow, Point pos) {
         if (feedbackToShow != InputFeedbackType.NONE) {
-            mFeedbackAnimator.startAnimation(feedbackToShow);
+            FeedbackAnimator.startAnimation(this, pos, feedbackToShow);
             requestRepaint();
         }
     }
 
     @Override
     public void showActionBar() {
-        mDesktop.showActionBar();
+        mDesktop.showSystemUi();
     }
 
     @Override
@@ -404,6 +329,18 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
     }
 
     @Override
+    public void cursorMoved() {
+        // For current implementation, cursorMoved() is always followed by transformationChanged()
+        // even if the canvas isn't really changed. For future we should improve this by not calling
+        // transformationChanged() if the cursor is moved but the canvas is not changed.
+    }
+
+    @Override
+    public void cursorVisibilityChanged() {
+        requestRepaint();
+    }
+
+    @Override
     public void setAnimationEnabled(boolean enabled) {
         synchronized (mAnimationLock) {
             if (enabled && !mInputAnimationRunning) {
@@ -411,36 +348,5 @@ public class DesktopView extends SurfaceView implements DesktopViewInterface,
             }
             mInputAnimationRunning = enabled;
         }
-    }
-
-    /** Updates the current InputStrategy used by the TouchInputHandler. */
-    public void changeInputMode(
-            Desktop.InputMode inputMode, CapabilityManager.HostCapability hostTouchCapability) {
-        // We need both input mode and host input capabilities to select the input strategy.
-        if (!inputMode.isSet() || !hostTouchCapability.isSet()) {
-            return;
-        }
-
-        switch (inputMode) {
-            case TRACKPAD:
-                mInputHandler.setInputStrategy(new TrackpadInputStrategy(mRenderData, mClient));
-                break;
-
-            case TOUCH:
-                if (hostTouchCapability.isSupported()) {
-                    mInputHandler.setInputStrategy(new TouchInputStrategy(mRenderData, mClient));
-                } else {
-                    mInputHandler.setInputStrategy(
-                            new SimulatedTouchInputStrategy(mRenderData, mClient, getContext()));
-                }
-                break;
-
-            default:
-                // Unreachable, but required by Google Java style and findbugs.
-                assert false : "Unreached";
-        }
-
-        // Ensure the cursor state is updated appropriately.
-        requestRepaint();
     }
 }

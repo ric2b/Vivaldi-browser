@@ -24,6 +24,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <tuple>
 #include <utility>
 
 #include "base/at_exit.h"
@@ -33,9 +34,11 @@
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/md5.h"
 #include "base/process/process_handle.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -49,6 +52,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "media/filters/h264_parser.h"
 #include "media/gpu/fake_video_decode_accelerator.h"
 #include "media/gpu/gpu_video_decode_accelerator_factory_impl.h"
@@ -82,12 +86,9 @@
 #include "ui/ozone/public/surface_factory_ozone.h"
 #endif  // defined(USE_OZONE)
 
-using media::VideoDecodeAccelerator;
-
 namespace media {
-namespace {
 
-using base::MakeTuple;
+namespace {
 
 // Values optionally filled in from flags; see main() below.
 // The syntax of multiple test videos is:
@@ -104,7 +105,7 @@ using base::MakeTuple;
 // - |minFPSwithRender| and |minFPSnoRender| are minimum frames/second speeds
 //   expected to be achieved with and without rendering to the screen, resp.
 //   (the latter tests just decode speed).
-// - |profile| is the media::VideoCodecProfile set during Initialization.
+// - |profile| is the VideoCodecProfile set during Initialization.
 // An empty value for a numeric field means "ignore".
 const base::FilePath::CharType* g_test_video_data =
     // FILE_PATH_LITERAL("test-25fps.vp8:320:240:250:250:50:175:11");
@@ -165,7 +166,7 @@ struct TestVideoFile {
         num_fragments(-1),
         min_fps_render(-1),
         min_fps_no_render(-1),
-        profile(media::VIDEO_CODEC_PROFILE_UNKNOWN),
+        profile(VIDEO_CODEC_PROFILE_UNKNOWN),
         reset_after_frame_num(END_OF_STREAM_RESET) {}
 
   base::FilePath::StringType file_name;
@@ -175,7 +176,7 @@ struct TestVideoFile {
   int num_fragments;
   int min_fps_render;
   int min_fps_no_render;
-  media::VideoCodecProfile profile;
+  VideoCodecProfile profile;
   int reset_after_frame_num;
   std::string data_str;
 };
@@ -238,7 +239,8 @@ class VideoDecodeAcceleratorTestEnvironment : public ::testing::Environment {
   void SetUp() override {
     rendering_thread_.Start();
 
-    base::WaitableEvent done(false, false);
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     rendering_thread_.task_runner()->PostTask(
         FROM_HERE, base::Bind(&RenderingHelper::InitializeOneOff, &done));
     done.Wait();
@@ -286,10 +288,10 @@ class TextureRef : public base::RefCounted<TextureRef> {
   static scoped_refptr<TextureRef> CreatePreallocated(
       uint32_t texture_id,
       const base::Closure& no_longer_needed_cb,
-      media::VideoPixelFormat pixel_format,
+      VideoPixelFormat pixel_format,
       const gfx::Size& size);
 
-  std::vector<gfx::GpuMemoryBufferHandle> ExportGpuMemoryBufferHandles() const;
+  gfx::GpuMemoryBufferHandle ExportGpuMemoryBufferHandle() const;
 
   int32_t texture_id() const { return texture_id_; }
 
@@ -321,13 +323,13 @@ scoped_refptr<TextureRef> TextureRef::Create(
 
 #if defined(USE_OZONE)
 gfx::BufferFormat VideoPixelFormatToGfxBufferFormat(
-    media::VideoPixelFormat pixel_format) {
+    VideoPixelFormat pixel_format) {
   switch (pixel_format) {
-    case media::VideoPixelFormat::PIXEL_FORMAT_ARGB:
+    case VideoPixelFormat::PIXEL_FORMAT_ARGB:
       return gfx::BufferFormat::BGRA_8888;
-    case media::VideoPixelFormat::PIXEL_FORMAT_XRGB:
+    case VideoPixelFormat::PIXEL_FORMAT_XRGB:
       return gfx::BufferFormat::BGRX_8888;
-    case media::VideoPixelFormat::PIXEL_FORMAT_NV12:
+    case VideoPixelFormat::PIXEL_FORMAT_NV12:
       return gfx::BufferFormat::YUV_420_BIPLANAR;
     default:
       LOG_ASSERT(false) << "Unknown VideoPixelFormat";
@@ -340,7 +342,7 @@ gfx::BufferFormat VideoPixelFormatToGfxBufferFormat(
 scoped_refptr<TextureRef> TextureRef::CreatePreallocated(
     uint32_t texture_id,
     const base::Closure& no_longer_needed_cb,
-    media::VideoPixelFormat pixel_format,
+    VideoPixelFormat pixel_format,
     const gfx::Size& size) {
   scoped_refptr<TextureRef> texture_ref;
 #if defined(USE_OZONE)
@@ -360,20 +362,19 @@ scoped_refptr<TextureRef> TextureRef::CreatePreallocated(
   return texture_ref;
 }
 
-std::vector<gfx::GpuMemoryBufferHandle>
-TextureRef::ExportGpuMemoryBufferHandles() const {
-  std::vector<gfx::GpuMemoryBufferHandle> handles;
+gfx::GpuMemoryBufferHandle TextureRef::ExportGpuMemoryBufferHandle() const {
+  gfx::GpuMemoryBufferHandle handle;
 #if defined(USE_OZONE)
   CHECK(pixmap_);
-  int duped_fd = HANDLE_EINTR(dup(pixmap_->GetDmaBufFd()));
+  int duped_fd = HANDLE_EINTR(dup(pixmap_->GetDmaBufFd(0)));
   LOG_ASSERT(duped_fd != -1) << "Failed duplicating dmabuf fd";
-  gfx::GpuMemoryBufferHandle handle;
   handle.type = gfx::OZONE_NATIVE_PIXMAP;
-  handle.native_pixmap_handle.fd = base::FileDescriptor(duped_fd, true);
-  handle.native_pixmap_handle.stride = pixmap_->GetDmaBufPitch();
-  handles.push_back(handle);
+  handle.native_pixmap_handle.fds.emplace_back(
+      base::FileDescriptor(duped_fd, true));
+  handle.native_pixmap_handle.strides_and_offsets.emplace_back(
+      pixmap_->GetDmaBufPitch(0), pixmap_->GetDmaBufOffset(0));
 #endif
-  return handles;
+  return handle;
 }
 
 // Client that can accept callbacks from a VideoDecodeAccelerator and is used by
@@ -410,7 +411,7 @@ class GLRenderingVDAClient
                        int delete_decoder_state,
                        int frame_width,
                        int frame_height,
-                       media::VideoCodecProfile profile,
+                       VideoCodecProfile profile,
                        int fake_decoder,
                        bool suppress_rendering,
                        int delay_reuse_after_frame_num,
@@ -422,11 +423,12 @@ class GLRenderingVDAClient
   // VideoDecodeAccelerator::Client implementation.
   // The heart of the Client.
   void ProvidePictureBuffers(uint32_t requested_num_of_buffers,
+                             VideoPixelFormat format,
                              uint32_t textures_per_buffer,
                              const gfx::Size& dimensions,
                              uint32_t texture_target) override;
   void DismissPictureBuffer(int32_t picture_buffer_id) override;
-  void PictureReady(const media::Picture& picture) override;
+  void PictureReady(const Picture& picture) override;
   // Simple state changes.
   void NotifyEndOfBitstreamBuffer(int32_t bitstream_buffer_id) override;
   void NotifyFlushDone() override;
@@ -493,9 +495,10 @@ class GLRenderingVDAClient
   int num_decoded_frames_;
   int num_done_bitstream_buffers_;
   base::TimeTicks initialize_done_ticks_;
-  media::VideoCodecProfile profile_;
+  VideoCodecProfile profile_;
   int fake_decoder_;
   GLenum texture_target_;
+  VideoPixelFormat pixel_format_;
   bool suppress_rendering_;
   std::vector<base::TimeTicks> frame_delivery_times_;
   int delay_reuse_after_frame_num_;
@@ -549,7 +552,7 @@ GLRenderingVDAClient::GLRenderingVDAClient(
     int delete_decoder_state,
     int frame_width,
     int frame_height,
-    media::VideoCodecProfile profile,
+    VideoCodecProfile profile,
     int fake_decoder,
     bool suppress_rendering,
     int delay_reuse_after_frame_num,
@@ -574,6 +577,7 @@ GLRenderingVDAClient::GLRenderingVDAClient(
       num_done_bitstream_buffers_(0),
       fake_decoder_(fake_decoder),
       texture_target_(0),
+      pixel_format_(PIXEL_FORMAT_UNKNOWN),
       suppress_rendering_(suppress_rendering),
       delay_reuse_after_frame_num_(delay_reuse_after_frame_num),
       decode_calls_per_second_(decode_calls_per_second),
@@ -587,9 +591,8 @@ GLRenderingVDAClient::GLRenderingVDAClient(
     LOG_ASSERT(1 == num_in_flight_decodes_);
 
   // Default to H264 baseline if no profile provided.
-  profile_ = (profile != media::VIDEO_CODEC_PROFILE_UNKNOWN
-                  ? profile
-                  : media::H264PROFILE_BASELINE);
+  profile_ =
+      (profile != VIDEO_CODEC_PROFILE_UNKNOWN ? profile : H264PROFILE_BASELINE);
 
   weak_this_ = weak_this_factory_.GetWeakPtr();
 }
@@ -619,11 +622,12 @@ void GLRenderingVDAClient::CreateAndStartDecoder() {
 
     VideoDecodeAccelerator::Config config(profile_);
     if (g_test_import) {
-      config.output_mode =
-          media::VideoDecodeAccelerator::Config::OutputMode::IMPORT;
+      config.output_mode = VideoDecodeAccelerator::Config::OutputMode::IMPORT;
     }
+    gpu::GpuDriverBugWorkarounds workarounds;
     gpu::GpuPreferences gpu_preferences;
-    decoder_ = vda_factory_->CreateVDA(this, config, gpu_preferences);
+    decoder_ =
+        vda_factory_->CreateVDA(this, config, workarounds, gpu_preferences);
   }
 
   LOG_ASSERT(decoder_) << "Failed creating a VDA";
@@ -641,20 +645,28 @@ void GLRenderingVDAClient::CreateAndStartDecoder() {
 
 void GLRenderingVDAClient::ProvidePictureBuffers(
     uint32_t requested_num_of_buffers,
+    VideoPixelFormat pixel_format,
     uint32_t textures_per_buffer,
     const gfx::Size& dimensions,
     uint32_t texture_target) {
   if (decoder_deleted())
     return;
   LOG_ASSERT(textures_per_buffer == 1u);
-  std::vector<media::PictureBuffer> buffers;
+  std::vector<PictureBuffer> buffers;
 
   requested_num_of_buffers += kExtraPictureBuffers;
+  if (pixel_format == PIXEL_FORMAT_UNKNOWN)
+    pixel_format = PIXEL_FORMAT_ARGB;
+
+  LOG_ASSERT((pixel_format_ == PIXEL_FORMAT_UNKNOWN) ||
+             (pixel_format_ == pixel_format));
+  pixel_format_ = pixel_format;
 
   texture_target_ = texture_target;
   for (uint32_t i = 0; i < requested_num_of_buffers; ++i) {
     uint32_t texture_id;
-    base::WaitableEvent done(false, false);
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     rendering_helper_->CreateTexture(texture_target_, &texture_id, dimensions,
                                      &done);
     done.Wait();
@@ -665,9 +677,6 @@ void GLRenderingVDAClient::ProvidePictureBuffers(
                    base::Unretained(rendering_helper_), texture_id);
 
     if (g_test_import) {
-      media::VideoPixelFormat pixel_format = decoder_->GetOutputFormat();
-      if (pixel_format == media::PIXEL_FORMAT_UNKNOWN)
-        pixel_format = media::PIXEL_FORMAT_ARGB;
       texture_ref = TextureRef::CreatePreallocated(
           texture_id, delete_texture_cb, pixel_format, dimensions);
     } else {
@@ -681,9 +690,9 @@ void GLRenderingVDAClient::ProvidePictureBuffers(
         active_textures_.insert(std::make_pair(picture_buffer_id, texture_ref))
             .second);
 
-    media::PictureBuffer::TextureIds ids;
+    PictureBuffer::TextureIds ids;
     ids.push_back(texture_id);
-    buffers.push_back(media::PictureBuffer(picture_buffer_id, dimensions, ids));
+    buffers.push_back(PictureBuffer(picture_buffer_id, dimensions, ids));
   }
   decoder_->AssignPictureBuffers(buffers);
 
@@ -692,11 +701,10 @@ void GLRenderingVDAClient::ProvidePictureBuffers(
       TextureRefMap::iterator texture_it = active_textures_.find(buffer.id());
       ASSERT_NE(active_textures_.end(), texture_it);
 
-      std::vector<gfx::GpuMemoryBufferHandle> handles =
-          texture_it->second->ExportGpuMemoryBufferHandles();
-      LOG_ASSERT(!handles.empty()) << "Failed producing GMB handles";
-
-      decoder_->ImportBufferForPicture(buffer.id(), handles);
+      const gfx::GpuMemoryBufferHandle& handle =
+          texture_it->second->ExportGpuMemoryBufferHandle();
+      LOG_ASSERT(!handle.is_null()) << "Failed producing GMB handle";
+      decoder_->ImportBufferForPicture(buffer.id(), handle);
     }
   }
 }
@@ -705,7 +713,7 @@ void GLRenderingVDAClient::DismissPictureBuffer(int32_t picture_buffer_id) {
   LOG_ASSERT(1U == active_textures_.erase(picture_buffer_id));
 }
 
-void GLRenderingVDAClient::PictureReady(const media::Picture& picture) {
+void GLRenderingVDAClient::PictureReady(const Picture& picture) {
   // We shouldn't be getting pictures delivered after Reset has completed.
   LOG_ASSERT(state_ < CS_RESET);
 
@@ -767,7 +775,7 @@ void GLRenderingVDAClient::ReturnPicture(int32_t picture_buffer_id) {
   }
 
   if (num_decoded_frames_ > delay_reuse_after_frame_num_) {
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE, base::Bind(&VideoDecodeAccelerator::ReusePictureBuffer,
                               weak_vda_, picture_buffer_id),
         kReuseDelay);
@@ -902,7 +910,7 @@ void GLRenderingVDAClient::DeleteDecoder() {
 
 std::string GLRenderingVDAClient::GetBytesForFirstFragment(size_t start_pos,
                                                            size_t* end_pos) {
-  if (profile_ < media::H264PROFILE_MAX) {
+  if (profile_ < H264PROFILE_MAX) {
     *end_pos = start_pos;
     while (*end_pos + 4 < encoded_data_.size()) {
       if ((encoded_data_[*end_pos + 4] & 0x1f) == 0x7)  // SPS start frame
@@ -913,13 +921,13 @@ std::string GLRenderingVDAClient::GetBytesForFirstFragment(size_t start_pos,
     *end_pos = start_pos;
     return std::string();
   }
-  DCHECK_LE(profile_, media::VP9PROFILE_MAX);
+  DCHECK_LE(profile_, VP9PROFILE_MAX);
   return GetBytesForNextFragment(start_pos, end_pos);
 }
 
 std::string GLRenderingVDAClient::GetBytesForNextFragment(size_t start_pos,
                                                           size_t* end_pos) {
-  if (profile_ < media::H264PROFILE_MAX) {
+  if (profile_ < H264PROFILE_MAX) {
     *end_pos = start_pos;
     GetBytesForNextNALU(*end_pos, end_pos);
     if (start_pos != *end_pos) {
@@ -927,7 +935,7 @@ std::string GLRenderingVDAClient::GetBytesForNextFragment(size_t start_pos,
     }
     return encoded_data_.substr(start_pos, *end_pos - start_pos);
   }
-  DCHECK_LE(profile_, media::VP9PROFILE_MAX);
+  DCHECK_LE(profile_, VP9PROFILE_MAX);
   return GetBytesForNextFrame(start_pos, end_pos);
 }
 
@@ -963,20 +971,19 @@ std::string GLRenderingVDAClient::GetBytesForNextFrame(size_t start_pos,
 
 static bool FragmentHasConfigInfo(const uint8_t* data,
                                   size_t size,
-                                  media::VideoCodecProfile profile) {
-  if (profile >= media::H264PROFILE_MIN && profile <= media::H264PROFILE_MAX) {
-    media::H264Parser parser;
+                                  VideoCodecProfile profile) {
+  if (profile >= H264PROFILE_MIN && profile <= H264PROFILE_MAX) {
+    H264Parser parser;
     parser.SetStream(data, size);
-    media::H264NALU nalu;
-    media::H264Parser::Result result = parser.AdvanceToNextNALU(&nalu);
-    if (result != media::H264Parser::kOk) {
+    H264NALU nalu;
+    H264Parser::Result result = parser.AdvanceToNextNALU(&nalu);
+    if (result != H264Parser::kOk) {
       // Let the VDA figure out there's something wrong with the stream.
       return false;
     }
 
-    return nalu.nal_unit_type == media::H264NALU::kSPS;
-  } else if (profile >= media::VP8PROFILE_MIN &&
-             profile <= media::VP9PROFILE_MAX) {
+    return nalu.nal_unit_type == H264NALU::kSPS;
+  } else if (profile >= VP8PROFILE_MIN && profile <= VP9PROFILE_MAX) {
     return (size > 0 && !(data[0] & 0x01));
   }
   // Shouldn't happen at this point.
@@ -1020,8 +1027,8 @@ void GLRenderingVDAClient::DecodeNextFragment() {
   bool result =
       shm.ShareToProcess(base::GetCurrentProcessHandle(), &dup_handle);
   LOG_ASSERT(result);
-  media::BitstreamBuffer bitstream_buffer(next_bitstream_buffer_id_, dup_handle,
-                                          next_fragment_size);
+  BitstreamBuffer bitstream_buffer(next_bitstream_buffer_id_, dup_handle,
+                                   next_fragment_size);
   decode_start_time_[next_bitstream_buffer_id_] = base::TimeTicks::Now();
   // Mask against 30 bits, to avoid (undefined) wraparound on signed integer.
   next_bitstream_buffer_id_ = (next_bitstream_buffer_id_ + 1) & 0x3FFFFFFF;
@@ -1042,7 +1049,7 @@ void GLRenderingVDAClient::DecodeNextFragment() {
   }
 
   if (decode_calls_per_second_ > 0) {
-    base::MessageLoop::current()->PostDelayedTask(
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
         FROM_HERE,
         base::Bind(&GLRenderingVDAClient::DecodeNextFragment, AsWeakPtr()),
         base::TimeDelta::FromSeconds(1) / decode_calls_per_second_);
@@ -1113,7 +1120,8 @@ void VideoDecodeAcceleratorTest::TearDown() {
       FROM_HERE, base::Bind(&STLDeleteElements<std::vector<TestVideoFile*>>,
                             &test_video_files_));
 
-  base::WaitableEvent done(false, false);
+  base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED);
   g_env->GetRenderingTaskRunner()->PostTask(
       FROM_HERE, base::Bind(&RenderingHelper::UnInitialize,
                             base::Unretained(&rendering_helper_), &done));
@@ -1151,7 +1159,7 @@ void VideoDecodeAcceleratorTest::ParseAndReadTestVideoData(
     int profile = -1;
     if (!fields[7].empty())
       LOG_ASSERT(base::StringToInt(fields[7], &profile));
-    video_file->profile = static_cast<media::VideoCodecProfile>(profile);
+    video_file->profile = static_cast<VideoCodecProfile>(profile);
 
     // Read in the video data.
     base::FilePath filepath(video_file->file_name);
@@ -1191,7 +1199,8 @@ void VideoDecodeAcceleratorTest::InitializeRenderingHelper(
     const RenderingHelperParams& helper_params) {
   rendering_helper_.Setup();
 
-  base::WaitableEvent done(false, false);
+  base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED);
   g_env->GetRenderingTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&RenderingHelper::Initialize,
@@ -1217,7 +1226,8 @@ void VideoDecodeAcceleratorTest::WaitUntilDecodeFinish(
 }
 
 void VideoDecodeAcceleratorTest::WaitUntilIdle() {
-  base::WaitableEvent done(false, false);
+  base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED);
   g_env->GetRenderingTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&base::WaitableEvent::Signal, base::Unretained(&done)));
@@ -1245,7 +1255,7 @@ void VideoDecodeAcceleratorTest::OutputLogFile(
 class VideoDecodeAcceleratorParamTest
     : public VideoDecodeAcceleratorTest,
       public ::testing::WithParamInterface<
-          base::Tuple<int, int, int, ResetPoint, ClientState, bool, bool>> {};
+          std::tuple<int, int, int, ResetPoint, ClientState, bool, bool>> {};
 
 // Wait for |note| to report a state and if it's not |expected_state| then
 // assert |client| has deleted its decoder.
@@ -1269,13 +1279,13 @@ enum { kMinSupportedNumConcurrentDecoders = 3 };
 // Test the most straightforward case possible: data is decoded from a single
 // chunk and rendered to the screen.
 TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
-  size_t num_concurrent_decoders = base::get<0>(GetParam());
-  const size_t num_in_flight_decodes = base::get<1>(GetParam());
-  int num_play_throughs = base::get<2>(GetParam());
-  const int reset_point = base::get<3>(GetParam());
-  const int delete_decoder_state = base::get<4>(GetParam());
-  bool test_reuse_delay = base::get<5>(GetParam());
-  const bool render_as_thumbnails = base::get<6>(GetParam());
+  size_t num_concurrent_decoders = std::get<0>(GetParam());
+  const size_t num_in_flight_decodes = std::get<1>(GetParam());
+  int num_play_throughs = std::get<2>(GetParam());
+  const int reset_point = std::get<3>(GetParam());
+  const int delete_decoder_state = std::get<4>(GetParam());
+  bool test_reuse_delay = std::get<5>(GetParam());
+  const bool render_as_thumbnails = std::get<6>(GetParam());
 
   if (test_video_files_.size() > 1)
     num_concurrent_decoders = test_video_files_.size();
@@ -1424,7 +1434,8 @@ TEST_P(VideoDecodeAcceleratorParamTest, TestSimpleDecode) {
   if (render_as_thumbnails) {
     std::vector<unsigned char> rgb;
     bool alpha_solid;
-    base::WaitableEvent done(false, false);
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     g_env->GetRenderingTaskRunner()->PostTask(
         FROM_HERE, base::Bind(&RenderingHelper::GetThumbnailsAsRGB,
                               base::Unretained(&rendering_helper_), &rgb,
@@ -1490,26 +1501,30 @@ INSTANTIATE_TEST_CASE_P(
     ReplayAfterEOS,
     VideoDecodeAcceleratorParamTest,
     ::testing::Values(
-        MakeTuple(1, 1, 4, END_OF_STREAM_RESET, CS_RESET, false, false)));
+        std::make_tuple(1, 1, 4, END_OF_STREAM_RESET, CS_RESET, false, false)));
 
 // Test that Reset() before the first Decode() works fine.
-INSTANTIATE_TEST_CASE_P(
-    ResetBeforeDecode,
-    VideoDecodeAcceleratorParamTest,
-    ::testing::Values(
-        MakeTuple(1, 1, 1, START_OF_STREAM_RESET, CS_RESET, false, false)));
+INSTANTIATE_TEST_CASE_P(ResetBeforeDecode,
+                        VideoDecodeAcceleratorParamTest,
+                        ::testing::Values(std::make_tuple(1,
+                                                          1,
+                                                          1,
+                                                          START_OF_STREAM_RESET,
+                                                          CS_RESET,
+                                                          false,
+                                                          false)));
 
 // Test Reset() immediately after Decode() containing config info.
 INSTANTIATE_TEST_CASE_P(
     ResetAfterFirstConfigInfo,
     VideoDecodeAcceleratorParamTest,
-    ::testing::Values(MakeTuple(1,
-                                1,
-                                1,
-                                RESET_AFTER_FIRST_CONFIG_INFO,
-                                CS_RESET,
-                                false,
-                                false)));
+    ::testing::Values(std::make_tuple(1,
+                                      1,
+                                      1,
+                                      RESET_AFTER_FIRST_CONFIG_INFO,
+                                      CS_RESET,
+                                      false,
+                                      false)));
 
 // Test that Reset() mid-stream works fine and doesn't affect decoding even when
 // Decode() calls are made during the reset.
@@ -1517,13 +1532,13 @@ INSTANTIATE_TEST_CASE_P(
     MidStreamReset,
     VideoDecodeAcceleratorParamTest,
     ::testing::Values(
-        MakeTuple(1, 1, 1, MID_STREAM_RESET, CS_RESET, false, false)));
+        std::make_tuple(1, 1, 1, MID_STREAM_RESET, CS_RESET, false, false)));
 
 INSTANTIATE_TEST_CASE_P(
     SlowRendering,
     VideoDecodeAcceleratorParamTest,
     ::testing::Values(
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, true, false)));
+        std::make_tuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, true, false)));
 
 // Test that Destroy() mid-stream works fine (primarily this is testing that no
 // crashes occur).
@@ -1531,71 +1546,102 @@ INSTANTIATE_TEST_CASE_P(
     TearDownTiming,
     VideoDecodeAcceleratorParamTest,
     ::testing::Values(
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_DECODER_SET, false, false),
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_INITIALIZED, false, false),
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_FLUSHING, false, false),
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_FLUSHED, false, false),
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESETTING, false, false),
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, false, false),
-        MakeTuple(1,
-                  1,
-                  1,
-                  END_OF_STREAM_RESET,
-                  static_cast<ClientState>(-1),
-                  false,
-                  false),
-        MakeTuple(1,
-                  1,
-                  1,
-                  END_OF_STREAM_RESET,
-                  static_cast<ClientState>(-10),
-                  false,
-                  false),
-        MakeTuple(1,
-                  1,
-                  1,
-                  END_OF_STREAM_RESET,
-                  static_cast<ClientState>(-100),
-                  false,
-                  false)));
+        std::make_tuple(1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        CS_DECODER_SET,
+                        false,
+                        false),
+        std::make_tuple(1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        CS_INITIALIZED,
+                        false,
+                        false),
+        std::make_tuple(1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        CS_FLUSHING,
+                        false,
+                        false),
+        std::make_tuple(1, 1, 1, END_OF_STREAM_RESET, CS_FLUSHED, false, false),
+        std::make_tuple(1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        CS_RESETTING,
+                        false,
+                        false),
+        std::make_tuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, false, false),
+        std::make_tuple(1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        static_cast<ClientState>(-1),
+                        false,
+                        false),
+        std::make_tuple(1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        static_cast<ClientState>(-10),
+                        false,
+                        false),
+        std::make_tuple(1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        static_cast<ClientState>(-100),
+                        false,
+                        false)));
 
 // Test that decoding various variation works with multiple in-flight decodes.
 INSTANTIATE_TEST_CASE_P(
     DecodeVariations,
     VideoDecodeAcceleratorParamTest,
     ::testing::Values(
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, false, false),
-        MakeTuple(1, 10, 1, END_OF_STREAM_RESET, CS_RESET, false, false),
+        std::make_tuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, false, false),
+        std::make_tuple(1, 10, 1, END_OF_STREAM_RESET, CS_RESET, false, false),
         // Tests queuing.
-        MakeTuple(1, 15, 1, END_OF_STREAM_RESET, CS_RESET, false, false)));
+        std::make_tuple(1,
+                        15,
+                        1,
+                        END_OF_STREAM_RESET,
+                        CS_RESET,
+                        false,
+                        false)));
 
 // Find out how many concurrent decoders can go before we exhaust system
 // resources.
-INSTANTIATE_TEST_CASE_P(ResourceExhaustion,
-                        VideoDecodeAcceleratorParamTest,
-                        ::testing::Values(
-                            // +0 hack below to promote enum to int.
-                            MakeTuple(kMinSupportedNumConcurrentDecoders + 0,
-                                      1,
-                                      1,
-                                      END_OF_STREAM_RESET,
-                                      CS_RESET,
-                                      false,
-                                      false),
-                            MakeTuple(kMinSupportedNumConcurrentDecoders + 1,
-                                      1,
-                                      1,
-                                      END_OF_STREAM_RESET,
-                                      CS_RESET,
-                                      false,
-                                      false)));
+INSTANTIATE_TEST_CASE_P(
+    ResourceExhaustion,
+    VideoDecodeAcceleratorParamTest,
+    ::testing::Values(
+        // +0 hack below to promote enum to int.
+        std::make_tuple(kMinSupportedNumConcurrentDecoders + 0,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        CS_RESET,
+                        false,
+                        false),
+        std::make_tuple(kMinSupportedNumConcurrentDecoders + 1,
+                        1,
+                        1,
+                        END_OF_STREAM_RESET,
+                        CS_RESET,
+                        false,
+                        false)));
 
 // Thumbnailing test
 INSTANTIATE_TEST_CASE_P(
     Thumbnail,
     VideoDecodeAcceleratorParamTest,
     ::testing::Values(
-        MakeTuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, false, true)));
+        std::make_tuple(1, 1, 1, END_OF_STREAM_RESET, CS_RESET, false, true)));
 
 // Measure the median of the decode time when VDA::Decode is called 30 times per
 // second.

@@ -5,8 +5,8 @@
 #include "ash/accelerators/accelerator_delegate.h"
 
 #include "ash/accelerators/accelerator_controller.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/shell.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event.h"
@@ -15,19 +15,43 @@
 namespace ash {
 namespace {}  // namespace
 
-AcceleratorDelegate::AcceleratorDelegate() {
-}
-AcceleratorDelegate::~AcceleratorDelegate() {
+namespace {
+
+// Returns true if |key_code| is a key usually handled directly by the shell.
+bool IsSystemKey(ui::KeyboardCode key_code) {
+#if defined(OS_CHROMEOS)
+  switch (key_code) {
+    case ui::VKEY_MEDIA_LAUNCH_APP2:  // Fullscreen button.
+    case ui::VKEY_MEDIA_LAUNCH_APP1:  // Overview button.
+    case ui::VKEY_BRIGHTNESS_DOWN:
+    case ui::VKEY_BRIGHTNESS_UP:
+    case ui::VKEY_KBD_BRIGHTNESS_DOWN:
+    case ui::VKEY_KBD_BRIGHTNESS_UP:
+    case ui::VKEY_VOLUME_MUTE:
+    case ui::VKEY_VOLUME_DOWN:
+    case ui::VKEY_VOLUME_UP:
+    case ui::VKEY_POWER:
+      return true;
+    default:
+      return false;
+  }
+#endif  // defined(OS_CHROMEOS)
+  return false;
 }
 
-bool AcceleratorDelegate::ProcessAccelerator(const ui::KeyEvent& key_event,
-                                             const ui::Accelerator& accelerator,
-                                             KeyType key_type) {
+}  // namespace
+
+AcceleratorDelegate::AcceleratorDelegate() {}
+AcceleratorDelegate::~AcceleratorDelegate() {}
+
+bool AcceleratorDelegate::ProcessAccelerator(
+    const ui::KeyEvent& key_event,
+    const ui::Accelerator& accelerator) {
   // Special hardware keys like brightness and volume are handled in
   // special way. However, some windows can override this behavior
   // (e.g. Chrome v1 apps by default and Chrome v2 apps with
   // permission) by setting a window property.
-  if (key_type == KEY_TYPE_SYSTEM && !CanConsumeSystemKeys(key_event)) {
+  if (IsSystemKey(key_event.key_code()) && !CanConsumeSystemKeys(key_event)) {
     // System keys are always consumed regardless of whether they trigger an
     // accelerator to prevent windows from seeing unexpected key up events.
     Shell::GetInstance()->accelerator_controller()->Process(accelerator);

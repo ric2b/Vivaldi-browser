@@ -26,7 +26,9 @@ namespace media {
 // buffers back to driver in time.
 const uint32_t kNumVideoBuffers = 4;
 // Timeout in milliseconds v4l2_thread_ blocks waiting for a frame from the hw.
-const int kCaptureTimeoutMs = 200;
+// This value has been fine tuned. Before changing or modifying it see
+// https://crbug.com/470717
+const int kCaptureTimeoutMs = 1000;
 // The number of continuous timeouts tolerated before treated as error.
 const int kContinuousTimeoutLimit = 10;
 // MJPEG is preferred if the requested width or height is larger than this.
@@ -390,9 +392,13 @@ void V4L2CaptureDelegate::DoCapture() {
     buffer_tracker_pool_[buffer.index]->set_payload_size(buffer.bytesused);
     const scoped_refptr<BufferTracker>& buffer_tracker =
         buffer_tracker_pool_[buffer.index];
+
+    base::TimeDelta timestamp =
+        base::TimeDelta::FromSeconds(buffer.timestamp.tv_sec) +
+        base::TimeDelta::FromMicroseconds(buffer.timestamp.tv_usec);
     client_->OnIncomingCapturedData(
         buffer_tracker->start(), buffer_tracker->payload_size(),
-        capture_format_, rotation_, base::TimeTicks::Now());
+        capture_format_, rotation_, base::TimeTicks::Now(), timestamp);
 
     if (HANDLE_EINTR(ioctl(device_fd_.get(), VIDIOC_QBUF, &buffer)) < 0) {
       SetErrorState(FROM_HERE, "Failed to enqueue capture buffer");

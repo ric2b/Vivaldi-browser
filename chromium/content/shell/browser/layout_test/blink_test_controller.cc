@@ -42,6 +42,7 @@
 #include "content/public/common/url_constants.h"
 #include "content/shell/browser/layout_test/layout_test_bluetooth_chooser_factory.h"
 #include "content/shell/browser/layout_test/layout_test_devtools_frontend.h"
+#include "content/shell/browser/layout_test/layout_test_first_device_bluetooth_chooser.h"
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_content_browser_client.h"
@@ -399,7 +400,7 @@ std::unique_ptr<BluetoothChooser> BlinkTestController::RunBluetoothChooser(
     return bluetooth_chooser_factory_->RunBluetoothChooser(frame,
                                                            event_handler);
   }
-  return nullptr;
+  return base::MakeUnique<LayoutTestFirstDeviceBluetoothChooser>(event_handler);
 }
 
 bool BlinkTestController::OnMessageReceived(const IPC::Message& message) {
@@ -470,12 +471,6 @@ void BlinkTestController::RenderFrameCreated(
     RenderFrameHost* render_frame_host) {
   DCHECK(CalledOnValidThread());
   HandleNewRenderFrameHost(render_frame_host);
-}
-
-void BlinkTestController::RenderFrameHostChanged(RenderFrameHost* old_host,
-                                                 RenderFrameHost* new_host) {
-  DCHECK(CalledOnValidThread());
-  HandleNewRenderFrameHost(new_host);
 }
 
 void BlinkTestController::DevToolsProcessCrashed() {
@@ -770,7 +765,7 @@ void BlinkTestController::OnClearDevToolsLocalStorage() {
   StoragePartition* storage_partition =
       BrowserContext::GetStoragePartition(browser_context, NULL);
   storage_partition->GetDOMStorageContext()->DeleteLocalStorage(
-      content::LayoutTestDevToolsFrontend::GetDevToolsPathAsURL("", "")
+      content::LayoutTestDevToolsFrontend::GetDevToolsPathAsURL("")
           .GetOrigin());
 }
 
@@ -861,7 +856,7 @@ void BlinkTestController::OnCloseRemainingWindows() {
     if (open_windows[i] != main_window_ && open_windows[i] != devtools_shell)
       open_windows[i]->Close();
   }
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 void BlinkTestController::OnResetDone() {

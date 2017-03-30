@@ -77,18 +77,13 @@ void AuthPrewarmer::DefaultNetworkChanged(const NetworkState* network) {
 void AuthPrewarmer::Observe(int type,
                             const content::NotificationSource& source,
                             const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_PROFILE_URL_REQUEST_CONTEXT_GETTER_INITIALIZED:
-      registrar_.Remove(
-          this,
-          chrome::NOTIFICATION_PROFILE_URL_REQUEST_CONTEXT_GETTER_INITIALIZED,
-          content::Source<Profile>(ProfileHelper::GetSigninProfile()));
-      if (IsNetworkConnected())
-        DoPrewarm();
-      break;
-    default:
-      NOTREACHED();
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_PROFILE_URL_REQUEST_CONTEXT_GETTER_INITIALIZED,
+            type);
+  registrar_.Remove(
+      this, chrome::NOTIFICATION_PROFILE_URL_REQUEST_CONTEXT_GETTER_INITIALIZED,
+      content::Source<Profile>(ProfileHelper::GetSigninProfile()));
+  if (IsNetworkConnected())
+    DoPrewarm();
 }
 
 void AuthPrewarmer::DoPrewarm() {
@@ -97,8 +92,8 @@ void AuthPrewarmer::DoPrewarm() {
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
       base::Bind(&content::PreconnectUrl,
-                 base::RetainedRef(GetRequestContext()), url, url,
-                 kConnectionsNeeded, true,
+                 ProfileHelper::GetSigninProfile()->GetResourceContext(), url,
+                 url, kConnectionsNeeded, true,
                  net::HttpRequestInfo::EARLY_LOAD_MOTIVATED));
   if (!completion_callback_.is_null()) {
     content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,

@@ -50,7 +50,6 @@
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTheme.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/line/InlineTextBox.h"
 #include "platform/EventDispatchForbiddenScope.h"
 #include "platform/ScriptForbiddenScope.h"
@@ -589,7 +588,7 @@ void ContainerNode::removeChildren(SubtreeModificationAction action)
             }
         }
 
-        ChildrenChange change = {AllChildrenRemoved, nullptr, nullptr, ChildrenChangeSourceAPI};
+        ChildrenChange change = {AllChildrenRemoved, nullptr, nullptr, nullptr, ChildrenChangeSourceAPI};
         childrenChanged(change);
     }
 
@@ -693,6 +692,9 @@ void ContainerNode::notifyNodeInserted(Node& root, ChildrenChangeSource source)
 #endif
     DCHECK(!root.isShadowRoot());
 
+    if (document().containsV1ShadowTree())
+        root.checkSlotChangeAfterInserted();
+
     InspectorInstrumentation::didInsertDOMNode(&root);
 
     NodeVector postInsertionNotificationTargets;
@@ -773,8 +775,6 @@ void ContainerNode::detach(const AttachContext& context)
 void ContainerNode::childrenChanged(const ChildrenChange& change)
 {
     document().incDOMTreeVersion();
-    if (!change.byParser && change.type != TextChanged)
-        document().updateRangesAfterChildrenChanged(this);
     invalidateNodeListCachesInAncestors();
     if (change.isChildInsertion() && !childNeedsStyleRecalc()) {
         setChildNeedsStyleRecalc();
@@ -860,7 +860,7 @@ static inline LayoutObject* endOfContinuations(LayoutObject* layoutObject)
     LayoutObject* prev = nullptr;
     LayoutObject* cur = layoutObject;
 
-    if (!cur->isLayoutInline() && !cur->isLayoutBlock())
+    if (!cur->isLayoutInline() && !cur->isLayoutBlockFlow())
         return nullptr;
 
     while (cur) {
@@ -868,7 +868,7 @@ static inline LayoutObject* endOfContinuations(LayoutObject* layoutObject)
         if (cur->isLayoutInline())
             cur = toLayoutInline(cur)->continuation();
         else
-            cur = toLayoutBlock(cur)->continuation();
+            cur = toLayoutBlockFlow(cur)->continuation();
     }
 
     return prev;
@@ -1026,17 +1026,22 @@ void ContainerNode::setActive(bool down)
 
     Node::setActive(down);
 
-    // FIXME: Why does this not need to handle the display: none transition like :hover does?
-    if (layoutObject()) {
-        if (computedStyle()->affectedByActive()) {
-            StyleChangeType changeType = computedStyle()->hasPseudoStyle(PseudoIdFirstLetter) ? SubtreeStyleChange : LocalStyleChange;
-            setNeedsStyleRecalc(changeType, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Active));
-        }
+    if (!layoutObject()) {
         if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByActive())
             toElement(this)->pseudoStateChanged(CSSSelector::PseudoActive);
-
-        LayoutTheme::theme().controlStateChanged(*layoutObject(), PressedControlState);
+        else
+            setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Active));
+        return;
     }
+
+    if (computedStyle()->affectedByActive()) {
+        StyleChangeType changeType = computedStyle()->hasPseudoStyle(PseudoIdFirstLetter) ? SubtreeStyleChange : LocalStyleChange;
+        setNeedsStyleRecalc(changeType, StyleChangeReasonForTracing::createWithExtraData(StyleChangeReason::PseudoClass, StyleChangeExtraData::Active));
+    }
+    if (isElementNode() && toElement(this)->childrenOrSiblingsAffectedByActive())
+        toElement(this)->pseudoStateChanged(CSSSelector::PseudoActive);
+
+    LayoutTheme::theme().controlStateChanged(*layoutObject(), PressedControlState);
 }
 
 void ContainerNode::setHovered(bool over)
@@ -1216,7 +1221,7 @@ void ContainerNode::recalcChildStyle(StyleRecalcChange change)
     }
 }
 
-void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Node* nodeBeforeChange, Node* nodeAfterChange)
+void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Node* changedNode, Node* nodeBeforeChange, Node* nodeAfterChange)
 {
     if (!inActiveDocument() || document().hasPendingForcedStyleRecalc() || getStyleChangeType() >= SubtreeStyleChange)
         return;
@@ -1229,7 +1234,7 @@ void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Nod
     // |afterChange| is 0 in the parser callback case, so we won't do any work for the forward case if we don't have to.
     // For performance reasons we just mark the parent node as changed, since we don't want to make childrenChanged O(n^2) by crawling all our kids
     // here. recalcStyle will then force a walk of the children when it sees that this has happened.
-    if (((childrenAffectedByForwardPositionalRules() || childrenAffectedByIndirectAdjacentRules()) && nodeAfterChange)
+    if ((childrenAffectedByForwardPositionalRules() && nodeAfterChange)
         || (childrenAffectedByBackwardPositionalRules() && nodeBeforeChange)) {
         setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
         return;
@@ -1278,13 +1283,27 @@ void ContainerNode::checkForSiblingStyleChanges(SiblingCheckType changeType, Nod
             lastChildElement->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
     }
 
-    // The + selector. We need to invalidate the first element following the change. It is the only possible element
-    // that could be affected by this DOM change.
-    if (childrenAffectedByDirectAdjacentRules() && nodeAfterChange) {
-        Element* elementAfterChange = nodeAfterChange->isElementNode() ? toElement(nodeAfterChange) : ElementTraversal::nextSibling(*nodeAfterChange);
-        for (unsigned i = document().styleEngine().maxDirectAdjacentSelectors(); i && elementAfterChange; --i, elementAfterChange = ElementTraversal::nextSibling(*elementAfterChange))
-            elementAfterChange->setNeedsStyleRecalc(SubtreeStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::SiblingSelector));
-    }
+    // For ~ and + combinators, succeeding siblings may need style invalidation
+    // after an element is inserted or removed.
+
+    if (!nodeAfterChange)
+        return;
+    if (changeType != SiblingElementRemoved && changeType != SiblingElementInserted)
+        return;
+    if (!childrenAffectedByIndirectAdjacentRules() && !childrenAffectedByDirectAdjacentRules())
+        return;
+
+    Element* elementAfterChange = nodeAfterChange->isElementNode() ? toElement(nodeAfterChange) : ElementTraversal::nextSibling(*nodeAfterChange);
+    if (!elementAfterChange)
+        return;
+    Element* elementBeforeChange = nullptr;
+    if (nodeBeforeChange)
+        elementBeforeChange = nodeBeforeChange->isElementNode() ? toElement(nodeBeforeChange) : ElementTraversal::previousSibling(*nodeBeforeChange);
+
+    if (changeType == SiblingElementInserted)
+        document().styleEngine().scheduleInvalidationsForInsertedSibling(elementBeforeChange, *toElement(changedNode));
+    else
+        document().styleEngine().scheduleInvalidationsForRemovedSibling(elementBeforeChange, *toElement(changedNode), *elementAfterChange);
 }
 
 void ContainerNode::invalidateNodeListCachesInAncestors(const QualifiedName* attrName, Element* attributeOwnerElement)
@@ -1352,7 +1371,7 @@ Element* ContainerNode::getElementById(const AtomicString& id) const
     if (isInTreeScope()) {
         // Fast path if we are in a tree scope: call getElementById() on tree scope
         // and check if the matching element is in our subtree.
-        Element* element = treeScope().getElementById(id);
+        Element* element = containingTreeScope().getElementById(id);
         if (!element)
             return nullptr;
         if (element->isDescendantOf(this))

@@ -23,17 +23,11 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_synthetic_delay.h"
 #include "build/build_config.h"
-#include "cc/base/switches.h"
-#include "cc/debug/benchmark_instrumentation.h"
 #include "cc/output/output_surface.h"
-#include "cc/output/vulkan_in_process_context_provider.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/trees/layer_tree_host.h"
 #include "components/scheduler/renderer/render_widget_scheduling_state.h"
 #include "components/scheduler/renderer/renderer_scheduler.h"
 #include "content/common/content_switches_internal.h"
-#include "content/common/gpu/client/context_provider_command_buffer.h"
-#include "content/common/gpu_process_launch_causes.h"
 #include "content/common/input/synthetic_gesture_packet.h"
 #include "content/common/input/web_input_event_traits.h"
 #include "content/common/input_messages.h"
@@ -46,10 +40,7 @@
 #include "content/renderer/cursor_utils.h"
 #include "content/renderer/devtools/render_widget_screen_metrics_emulator.h"
 #include "content/renderer/external_popup_menu.h"
-#include "content/renderer/gpu/compositor_output_surface.h"
-#include "content/renderer/gpu/delegated_compositor_output_surface.h"
 #include "content/renderer/gpu/frame_swap_message_queue.h"
-#include "content/renderer/gpu/mailbox_output_surface.h"
 #include "content/renderer/gpu/queue_message_swap_promise.h"
 #include "content/renderer/gpu/render_widget_compositor.h"
 #include "content/renderer/ime_event_guard.h"
@@ -63,7 +54,6 @@
 #include "content/renderer/render_widget_owner_delegate.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/resizing_mode_selector.h"
-#include "gpu/command_buffer/client/shared_memory_limits.h"
 #include "ipc/ipc_sync_message.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
@@ -93,8 +83,6 @@
 
 #if defined(OS_ANDROID)
 #include <android/keycodes.h>
-#include "content/renderer/android/synchronous_compositor_filter.h"
-#include "content/renderer/android/synchronous_compositor_output_surface.h"
 #endif
 
 #if defined(OS_POSIX)
@@ -139,6 +127,29 @@ using blink::WebWidget;
 namespace {
 
 typedef std::map<std::string, ui::TextInputMode> TextInputModeMap;
+
+class WebWidgetLockTarget : public content::MouseLockDispatcher::LockTarget {
+ public:
+  explicit WebWidgetLockTarget(blink::WebWidget* webwidget)
+      : webwidget_(webwidget) {}
+
+  void OnLockMouseACK(bool succeeded) override {
+    if (succeeded)
+      webwidget_->didAcquirePointerLock();
+    else
+      webwidget_->didNotAcquirePointerLock();
+  }
+
+  void OnMouseLockLost() override { webwidget_->didLosePointerLock(); }
+
+  bool HandleMouseLockedInputEvent(const blink::WebMouseEvent& event) override {
+    // The WebWidget handles mouse lock in Blink's handleInputEvent().
+    return false;
+  }
+
+ private:
+  blink::WebWidget* webwidget_;
+};
 
 class TextInputModeMapSingleton {
  public:
@@ -189,7 +200,7 @@ content::RenderWidgetInputHandlerDelegate* GetRenderWidgetInputHandlerDelegate(
     content::RenderWidget* widget) {
 #if defined(MOJO_SHELL_CLIENT)
   const base::CommandLine& cmdline = *base::CommandLine::ForCurrentProcess();
-  if (content::MojoShellConnection::Get() &&
+  if (content::MojoShellConnection::GetForProcess() &&
       cmdline.HasSwitch(switches::kUseMusInRenderer)) {
     return content::RenderWidgetMusConnection::GetOrCreate(
         widget->routing_id());
@@ -239,7 +250,6 @@ RenderWidget::RenderWidget(CompositorDependencies* compositor_deps,
       pending_window_rect_count_(0),
       screen_info_(screen_info),
       device_scale_factor_(screen_info_.deviceScaleFactor),
-      next_output_surface_id_(0),
 #if defined(OS_ANDROID)
       text_field_is_dirty_(false),
 #endif
@@ -374,6 +384,8 @@ bool RenderWidget::DoInit(int32_t opener_id,
     opener_id_ = opener_id;
 
   webwidget_ = web_widget;
+  webwidget_mouse_lock_target_.reset(new WebWidgetLockTarget(webwidget_));
+  mouse_lock_dispatcher_.reset(new RenderWidgetMouseLockDispatcher(this));
 
   bool result = true;
   if (create_widget_message)
@@ -435,7 +447,7 @@ gfx::Rect RenderWidget::AdjustValidationMessageAnchor(const gfx::Rect& anchor) {
   return anchor;
 }
 
-#if defined(OS_MACOSX) || defined(OS_ANDROID)
+#if defined(USE_EXTERNAL_POPUP_MENU)
 void RenderWidget::SetExternalPopupOriginAdjustmentsForEmulation(
     ExternalPopupMenu* popup,
     RenderWidgetScreenMetricsEmulator* emulator) {
@@ -450,6 +462,10 @@ void RenderWidget::OnShowHostContextMenu(ContextMenuParams* params) {
 }
 
 bool RenderWidget::OnMessageReceived(const IPC::Message& message) {
+  if (mouse_lock_dispatcher_ &&
+      mouse_lock_dispatcher_->OnMessageReceived(message))
+    return true;
+
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(RenderWidget, message)
     IPC_MESSAGE_HANDLER(InputMsg_HandleInputEvent, OnHandleInputEvent)
@@ -467,7 +483,6 @@ bool RenderWidget::OnMessageReceived(const IPC::Message& message) {
                         OnEnableDeviceEmulation)
     IPC_MESSAGE_HANDLER(ViewMsg_DisableDeviceEmulation,
                         OnDisableDeviceEmulation)
-    IPC_MESSAGE_HANDLER(ViewMsg_ColorProfile, OnColorProfile)
     IPC_MESSAGE_HANDLER(ViewMsg_ChangeResizeRect, OnChangeResizeRect)
     IPC_MESSAGE_HANDLER(ViewMsg_WasHidden, OnWasHidden)
     IPC_MESSAGE_HANDLER(ViewMsg_WasShown, OnWasShown)
@@ -596,10 +611,6 @@ void RenderWidget::OnDisableDeviceEmulation() {
   screen_metrics_emulator_.reset();
 }
 
-void RenderWidget::OnColorProfile(const std::vector<char>& color_profile) {
-  SetDeviceColorProfile(color_profile);
-}
-
 void RenderWidget::OnChangeResizeRect(const gfx::Rect& resizer_rect) {
   if (resizer_rect_ == resizer_rect)
     return;
@@ -704,119 +715,9 @@ std::unique_ptr<cc::OutputSurface> RenderWidget::CreateOutputSurface(
   // For widgets that are never visible, we don't start the compositor, so we
   // never get a request for a cc::OutputSurface.
   DCHECK(!compositor_never_visible_);
-
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  bool use_software = fallback;
-  if (command_line.HasSwitch(switches::kDisableGpuCompositing))
-    use_software = true;
-
-#if defined(MOJO_SHELL_CLIENT)
-  if (MojoShellConnection::Get() && !use_software &&
-      command_line.HasSwitch(switches::kUseMusInRenderer)) {
-    RenderWidgetMusConnection* connection =
-        RenderWidgetMusConnection::GetOrCreate(routing_id());
-    return connection->CreateOutputSurface();
-  }
-#endif
-
-  uint32_t output_surface_id = next_output_surface_id_++;
-
-  if (command_line.HasSwitch(switches::kEnableVulkan)) {
-    scoped_refptr<cc::VulkanContextProvider> vulkan_context_provider =
-        cc::VulkanInProcessContextProvider::Create();
-    if (vulkan_context_provider) {
-      return base::WrapUnique(new DelegatedCompositorOutputSurface(
-          routing_id(), output_surface_id, nullptr, nullptr,
-          vulkan_context_provider, frame_swap_message_queue_));
-    }
-  }
-
-  // Create a gpu process channel and verify we want to use GPU compositing
-  // before creating any context providers.
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_host;
-  if (!use_software) {
-    gpu_channel_host = RenderThreadImpl::current()->EstablishGpuChannelSync(
-        CAUSE_FOR_GPU_LAUNCH_RENDERER_VERIFY_GPU_COMPOSITING);
-    if (!gpu_channel_host) {
-      // Cause the compositor to wait and try again.
-      return nullptr;
-    }
-    // We may get a valid channel, but with a software renderer. In that case,
-    // disable GPU compositing.
-    if (gpu_channel_host->gpu_info().software_rendering)
-      use_software = true;
-  }
-
-  if (use_software) {
-    return base::WrapUnique(new DelegatedCompositorOutputSurface(
-        routing_id(), output_surface_id, nullptr, nullptr, nullptr,
-        frame_swap_message_queue_));
-  }
-
-  scoped_refptr<ContextProviderCommandBuffer> worker_context_provider =
-      RenderThreadImpl::current()->SharedCompositorWorkerContextProvider();
-  if (!worker_context_provider) {
-    // Cause the compositor to wait and try again.
-    return nullptr;
-  }
-
-  // The renderer compositor context doesn't do a lot of stuff, so we don't
-  // expect it to need a lot of space for commands or transfer. Raster and
-  // uploads happen on the worker context instead.
-  gpu::SharedMemoryLimits limits = gpu::SharedMemoryLimits::ForMailboxContext();
-
-  // This is for an offscreen context for the compositor. So the default
-  // framebuffer doesn't need alpha, depth, stencil, antialiasing.
-  gpu::gles2::ContextCreationAttribHelper attributes;
-  attributes.alpha_size = -1;
-  attributes.depth_size = 0;
-  attributes.stencil_size = 0;
-  attributes.samples = 0;
-  attributes.sample_buffers = 0;
-  attributes.bind_generates_resource = false;
-  attributes.lose_context_when_out_of_memory = true;
-
-  constexpr bool automatic_flushes = false;
-  constexpr bool support_locking = false;
-
-  // The compositor context shares resources with the worker context unless
-  // the worker is async.
-  ContextProviderCommandBuffer* share_context = worker_context_provider.get();
-  if (compositor_deps_->IsAsyncWorkerContextEnabled())
-    share_context = nullptr;
-
-  scoped_refptr<ContextProviderCommandBuffer> context_provider(
-      new ContextProviderCommandBuffer(
-          std::move(gpu_channel_host), gpu::GPU_STREAM_DEFAULT,
-          gpu::GpuStreamPriority::NORMAL, gpu::kNullSurfaceHandle,
-          GetURLForGraphicsContext3D(), gfx::PreferIntegratedGpu,
-          automatic_flushes, support_locking, limits, attributes, share_context,
-          command_buffer_metrics::RENDER_COMPOSITOR_CONTEXT));
-
-#if defined(OS_ANDROID)
-  if (RenderThreadImpl::current()->sync_compositor_message_filter()) {
-    return base::WrapUnique(new SynchronousCompositorOutputSurface(
-        context_provider, worker_context_provider, routing_id(),
-        output_surface_id,
-        RenderThreadImpl::current()->sync_compositor_message_filter(),
-        frame_swap_message_queue_));
-  }
-#endif
-
-  // Composite-to-mailbox is currently used for layout tests in order to cause
-  // them to draw inside in the renderer to do the readback there. This should
-  // no longer be the case when crbug.com/311404 is fixed.
-  if (RenderThreadImpl::current()->layout_test_mode()) {
-    return base::WrapUnique(new MailboxOutputSurface(
-        routing_id(), output_surface_id, std::move(context_provider),
-        std::move(worker_context_provider), frame_swap_message_queue_,
-        cc::RGBA_8888));
-  }
-
-  return base::WrapUnique(new DelegatedCompositorOutputSurface(
-      routing_id(), output_surface_id, std::move(context_provider),
-      std::move(worker_context_provider), nullptr, frame_swap_message_queue_));
+  return RenderThreadImpl::current()->CreateCompositorOutputSurface(
+      fallback, routing_id_, frame_swap_message_queue_,
+      GetURLForGraphicsContext3D());
 }
 
 std::unique_ptr<cc::BeginFrameSource>
@@ -915,13 +816,6 @@ void RenderWidget::WillBeginCompositorFrame() {
                     WillBeginCompositorFrame());
 }
 
-void RenderWidget::ReportFixedRasterScaleUseCounters(
-    bool has_blurry_content,
-    bool has_potential_performance_regression) {
-  webwidget_->reportFixedRasterScaleUseCounters(
-      has_blurry_content, has_potential_performance_regression);
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // RenderWidgetInputHandlerDelegate
 
@@ -935,27 +829,6 @@ bool RenderWidget::HasTouchEventHandlersAt(const gfx::Point& point) const {
     return owner_delegate_->DoesRenderWidgetHaveTouchEventHandlersAt(point);
 
   return true;
-}
-
-void RenderWidget::ObserveWheelEventAndResult(
-    const blink::WebMouseWheelEvent& wheel_event,
-    const gfx::Vector2dF& wheel_unused_delta,
-    bool event_processed) {
-  if (!compositor_deps_->IsElasticOverscrollEnabled())
-    return;
-
-  cc::InputHandlerScrollResult scroll_result;
-  scroll_result.did_scroll = event_processed;
-  scroll_result.did_overscroll_root = !wheel_unused_delta.IsZero();
-  scroll_result.unused_scroll_delta = wheel_unused_delta;
-
-  RenderThreadImpl* render_thread = RenderThreadImpl::current();
-  InputHandlerManager* input_handler_manager =
-      render_thread ? render_thread->input_handler_manager() : NULL;
-  if (input_handler_manager) {
-    input_handler_manager->ObserveWheelEventAndResultOnMainThread(
-        routing_id_, wheel_event, scroll_result);
-  }
 }
 
 void RenderWidget::ObserveGestureEventAndResult(
@@ -2097,6 +1970,19 @@ float RenderWidget::GetOriginalDeviceScaleFactor() const {
       screen_metrics_emulator_ ?
       screen_metrics_emulator_->original_screen_info().deviceScaleFactor :
       device_scale_factor_;
+}
+
+bool RenderWidget::requestPointerLock() {
+  return mouse_lock_dispatcher_->LockMouse(webwidget_mouse_lock_target_.get());
+}
+
+void RenderWidget::requestPointerUnlock() {
+  mouse_lock_dispatcher_->UnlockMouse(webwidget_mouse_lock_target_.get());
+}
+
+bool RenderWidget::isPointerLocked() {
+  return mouse_lock_dispatcher_->IsMouseLockedTo(
+      webwidget_mouse_lock_target_.get());
 }
 
 }  // namespace content

@@ -14,6 +14,12 @@ source_set("android") {
   sources = [
     "capture_jni_registrar.cc",
     "capture_jni_registrar.h",
+    "photo_capabilities.cc",
+    "photo_capabilities.h",
+    "video_capture_device_android.cc",
+    "video_capture_device_android.h",
+    "video_capture_device_factory_android.cc",
+    "video_capture_device_factory_android.h",
   ]
   configs += [
     "//media:media_config",
@@ -21,11 +27,13 @@ source_set("android") {
   ]
   deps = [
     ":capture_jni_headers",
+    "//media/mojo/interfaces:image_capture",
   ]
 }
 
 generate_jni("capture_jni_headers") {
   sources = [
+    "java/src/org/chromium/media/PhotoCapabilities.java",
     "java/src/org/chromium/media/VideoCapture.java",
     "java/src/org/chromium/media/VideoCaptureFactory.java",
   ]
@@ -47,6 +55,7 @@ android_library("capture_java") {
   srcjar_deps = [ ":media_java_enums_srcjar" ]
 
   java_files = [
+    "java/src/org/chromium/media/PhotoCapabilities.java",
     "java/src/org/chromium/media/VideoCapture.java",
     "java/src/org/chromium/media/VideoCaptureAndroid.java",
     "java/src/org/chromium/media/VideoCaptureCamera.java",

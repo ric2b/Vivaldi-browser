@@ -18,6 +18,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/process/process.h"
+#include "cc/input/selection.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/surfaces/surface_factory_client.h"
 #include "cc/surfaces/surface_id.h"
@@ -35,6 +36,7 @@
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
+#include "ui/gfx/selection_bound.h"
 #include "ui/touch_selection/touch_selection_controller.h"
 
 namespace cc {
@@ -134,7 +136,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const base::Callback<void(const gfx::Rect&, bool)>& callback) override;
   bool CanCopyToVideoFrame() const override;
   void GetScreenInfo(blink::WebScreenInfo* results) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
@@ -147,9 +148,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  void OnSwapCompositorFrame(
-      uint32_t output_surface_id,
-      std::unique_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
+                             cc::CompositorFrame frame) override;
   void ClearCompositorFrame() override;
   void DidOverscroll(const DidOverscrollParams& params) override;
   void DidStopFlinging() override;
@@ -246,9 +246,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnShowingPastePopup(const gfx::PointF& point);
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
 
-  SynchronousCompositorHost* GetSynchronousCompositor();
-  void SynchronousFrameMetadata(
-      const cc::CompositorFrameMetadata& frame_metadata);
+  void SynchronousFrameMetadata(cc::CompositorFrameMetadata frame_metadata);
 
   void SetOverlayVideoMode(bool enabled);
 
@@ -265,9 +263,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void DestroyDelegatedContent();
   void CheckOutputSurfaceChanged(uint32_t output_surface_id);
-  void SubmitCompositorFrame(std::unique_ptr<cc::CompositorFrame> frame_data);
+  void SubmitCompositorFrame(cc::CompositorFrame frame_data);
   void SwapDelegatedFrame(uint32_t output_surface_id,
-                          std::unique_ptr<cc::CompositorFrame> frame_data);
+                          cc::CompositorFrame frame_data);
   void SendDelegatedFrameAck(uint32_t output_surface_id);
   void SendReturnedDelegatedResources(uint32_t output_surface_id);
 
@@ -284,6 +282,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Called after async screenshot task completes. Scales and crops the result
   // of the copy.
   static void PrepareTextureCopyOutputResult(
+      base::WeakPtr<RenderWidgetHostViewAndroid> rwhva,
+      scoped_refptr<cc::Layer> readback_layer,
       const gfx::Size& dst_size_in_pixel,
       SkColorType color_type,
       const base::TimeTicks& start_time,
@@ -303,11 +303,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   // Drop any incoming frames from the renderer when there are locks on the
   // current frame.
-  void RetainFrame(uint32_t output_surface_id,
-                   std::unique_ptr<cc::CompositorFrame> frame);
+  void RetainFrame(uint32_t output_surface_id, cc::CompositorFrame frame);
 
   void InternalSwapCompositorFrame(uint32_t output_surface_id,
-                                   std::unique_ptr<cc::CompositorFrame> frame);
+                                   cc::CompositorFrame frame);
   void OnLostResources();
 
   enum VSyncRequestType {
@@ -324,10 +323,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   bool SyncCompositorOnMessageReceived(const IPC::Message& message);
 
+  void ComputeEventLatencyOSTouchHistograms(const ui::MotionEvent& event);
+
   // The model object.
   RenderWidgetHostImpl* host_;
-
-  bool use_surfaces_;
 
   // Used to control action dispatch at the next |OnVSync()| call.
   uint32_t outstanding_vsync_requests_;
@@ -354,7 +353,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gfx::Size current_surface_size_;
   cc::ReturnedResourceArray surface_returned_resources_;
   gfx::Vector2dF location_bar_content_translation_;
-  cc::ViewportSelection current_viewport_selection_;
+  cc::Selection<gfx::SelectionBound> current_viewport_selection_;
 
   // The most recent texture size that was pushed to the texture layer.
   gfx::Size texture_size_in_layer_;
@@ -391,11 +390,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool observing_root_window_;
 
   struct LastFrameInfo {
-    LastFrameInfo(uint32_t output_id,
-                  std::unique_ptr<cc::CompositorFrame> output_frame);
+    LastFrameInfo(uint32_t output_id, cc::CompositorFrame output_frame);
     ~LastFrameInfo();
     uint32_t output_surface_id;
-    std::unique_ptr<cc::CompositorFrame> frame;
+    cc::CompositorFrame frame;
   };
 
   std::unique_ptr<LastFrameInfo> last_frame_info_;

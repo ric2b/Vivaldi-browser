@@ -84,7 +84,16 @@ class WebglConformanceValidator(gpu_test_base.ValidatorBase):
 
   def ValidateAndMeasurePage(self, page, tab, results):
     if not _DidWebGLTestSucceed(tab):
-      raise page_test.Failure(_WebGLTestMessages(tab))
+      messages = _WebGLTestMessages(tab)
+      is_valid_dump = False
+      # Problems have been seen attempting to get stack traces on
+      # Android via this API; see crbug.com/609252. Skip this logic
+      # there for the time being.
+      if tab.browser.platform.GetOSName() != 'android':
+        is_valid_dump, trace_output = tab.browser.GetStackTrace()
+      if is_valid_dump:
+        messages += '\nStack Trace:\n' + trace_output
+      raise page_test.Failure(messages)
 
   def CustomizeBrowserOptions(self, options):
     # --test-type=gpu is used only to suppress the "Google API Keys are missing"

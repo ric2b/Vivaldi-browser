@@ -130,6 +130,7 @@
 <translation id="4156740505453712750">如要保護這台電腦，避免不明人士入侵，請選擇一個<ph name="BOLD_START" />至少 6 位數<ph name="BOLD_END" />的 PIN。當使用者從其他位置連線時，必須先輸入這個 PIN 驗證身分。</translation>
 <translation id="4176825807642096119">存取碼</translation>
 <translation id="4207623512727273241">請先執行安裝程式，然後再繼續操作。</translation>
+<translation id="4227991223508142681">主機帳戶管理公用程式</translation>
 <translation id="4240294130679914010">Chromoting 主機解除安裝程式</translation>
 <translation id="4277463233460010382">這台電腦已設為允許一或多個用戶端可不輸入 PIN 進行連線。</translation>
 <translation id="4277736576214464567">存取碼無效，請再試一次。</translation>
@@ -229,7 +230,7 @@
 <translation id="6668065415969892472">您的 PIN 已更新。</translation>
 <translation id="6681800064886881394">Copyright 2013 Google Inc. 保留所有權利。</translation>
 <translation id="6746493157771801606">清除紀錄</translation>
-<translation id="6748108480210050150">來源電腦</translation>
+<translation id="6748108480210050150">寄件者</translation>
 <translation id="677755392401385740">已為下列使用者啟動主機：<ph name="HOST_USERNAME" />。</translation>
 <translation id="6865175692670882333">檢視/編輯</translation>
 <translation id="6930242544192836755">持續時間</translation>
@@ -237,7 +238,7 @@
 <translation id="6944854424004126054">還原視窗</translation>
 <translation id="6965382102122355670">確定</translation>
 <translation id="6985691951107243942">您是否確定要停用與 <ph name="HOSTNAME" /> 之間的遠端連線？如果之後改變心意的話，您必須親身前往該電腦所在位置並修改設定後，才能重新啟用連線。</translation>
-<translation id="6998989275928107238">目標電腦</translation>
+<translation id="6998989275928107238">收件者</translation>
 <translation id="7019153418965365059">不明主機錯誤：<ph name="HOST_OFFLINE_REASON" />。</translation>
 <translation id="701976023053394610">遠端協助</translation>
 <translation id="7038683108611689168">允許我們收集使用統計資料和當機報告，協助我們改善 Chromoting。</translation>
@@ -261,6 +262,7 @@
 <translation id="7836926030608666805">找不到部分必要元件。請確認您執行的是最新版本的 Chrome，然後再試一次。</translation>
 <translation id="7868137160098754906">請為遠端電腦輸入您的 PIN。</translation>
 <translation id="7869445566579231750">您沒有執行這個應用程式的權限。</translation>
+<translation id="7895403300744144251">遠端電腦的安全性政策禁止從您的帳戶連線。</translation>
 <translation id="7948001860594368197">螢幕選項</translation>
 <translation id="7970576581263377361">驗證失敗，請重新登入 Chromium。</translation>
 <translation id="7981525049612125370">遠端工作階段已逾時。</translation>

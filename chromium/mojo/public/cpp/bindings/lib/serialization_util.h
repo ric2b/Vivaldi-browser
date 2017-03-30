@@ -19,9 +19,10 @@
 #include "mojo/public/cpp/system/handle.h"
 
 namespace mojo {
-namespace internal {
 
-class MultiplexRouter;
+class AssociatedGroupController;
+
+namespace internal {
 
 size_t Align(size_t size);
 char* AlignPointer(char* ptr);
@@ -76,9 +77,9 @@ template <typename T>
 inline void AssociatedInterfaceDataToPtrInfo(
     AssociatedInterface_Data* input,
     AssociatedInterfacePtrInfo<T>* output,
-    MultiplexRouter* router) {
-  output->set_handle(
-      router->CreateLocalEndpointHandle(FetchAndReset(&input->interface_id)));
+    AssociatedGroupController* group_controller) {
+  output->set_handle(group_controller->CreateLocalEndpointHandle(
+      FetchAndReset(&input->interface_id)));
   output->set_version(input->version);
 }
 
@@ -213,18 +214,80 @@ struct CustomContextHelper<Traits, false> {
   }
 };
 
-template <typename ReturnType, typename ParamType, typename MaybeConstUserType>
+template <typename ReturnType, typename ParamType, typename InputUserType>
 ReturnType CallWithContext(ReturnType (*f)(ParamType, void*),
-                           MaybeConstUserType& input,
+                           InputUserType&& input,
                            void* context) {
-  return f(input, context);
+  return f(std::forward<InputUserType>(input), context);
 }
 
-template <typename ReturnType, typename ParamType, typename MaybeConstUserType>
+template <typename ReturnType, typename ParamType, typename InputUserType>
 ReturnType CallWithContext(ReturnType (*f)(ParamType),
-                           MaybeConstUserType& input,
+                           InputUserType&& input,
                            void* context) {
-  return f(input);
+  return f(std::forward<InputUserType>(input));
+}
+
+template <typename T, typename MaybeConstUserType>
+struct HasGetBeginMethod {
+  template <typename U>
+  static char Test(decltype(U::GetBegin(std::declval<MaybeConstUserType&>()))*);
+  template <typename U>
+  static int Test(...);
+  static const bool value = sizeof(Test<T>(0)) == sizeof(char);
+
+ private:
+  EnsureTypeIsComplete<T> check_t_;
+};
+
+template <
+    typename Traits,
+    typename MaybeConstUserType,
+    typename std::enable_if<
+        HasGetBeginMethod<Traits, MaybeConstUserType>::value>::type* = nullptr>
+decltype(Traits::GetBegin(std::declval<MaybeConstUserType&>()))
+CallGetBeginIfExists(MaybeConstUserType& input) {
+  return Traits::GetBegin(input);
+}
+
+template <
+    typename Traits,
+    typename MaybeConstUserType,
+    typename std::enable_if<
+        !HasGetBeginMethod<Traits, MaybeConstUserType>::value>::type* = nullptr>
+size_t CallGetBeginIfExists(MaybeConstUserType& input) {
+  return 0;
+}
+
+template <typename T, typename MaybeConstUserType>
+struct HasGetDataMethod {
+  template <typename U>
+  static char Test(decltype(U::GetData(std::declval<MaybeConstUserType&>()))*);
+  template <typename U>
+  static int Test(...);
+  static const bool value = sizeof(Test<T>(0)) == sizeof(char);
+
+ private:
+  EnsureTypeIsComplete<T> check_t_;
+};
+
+template <
+    typename Traits,
+    typename MaybeConstUserType,
+    typename std::enable_if<
+        HasGetDataMethod<Traits, MaybeConstUserType>::value>::type* = nullptr>
+decltype(Traits::GetData(std::declval<MaybeConstUserType&>()))
+CallGetDataIfExists(MaybeConstUserType& input) {
+  return Traits::GetData(input);
+}
+
+template <
+    typename Traits,
+    typename MaybeConstUserType,
+    typename std::enable_if<
+        !HasGetDataMethod<Traits, MaybeConstUserType>::value>::type* = nullptr>
+void* CallGetDataIfExists(MaybeConstUserType& input) {
+  return nullptr;
 }
 
 }  // namespace internal

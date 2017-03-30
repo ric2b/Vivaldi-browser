@@ -6,14 +6,14 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-radio-button/paper-radio-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
-<link rel="import" href="chrome://md-settings/appearance_page/appearance_browser_proxy.html">
-<link rel="import" href="chrome://md-settings/controls/settings_dropdown_menu.html">
-<link rel="import" href="chrome://md-settings/controls/settings_input.html">
-<link rel="import" href="chrome://md-settings/controls/settings_radio_group.html">
-<link rel="import" href="chrome://md-settings/icons.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_animated_pages.html">
-<link rel="import" href="chrome://md-settings/settings_page/settings_subpage.html">
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
+<link rel="import" href="/appearance_page/appearance_browser_proxy.html">
+<link rel="import" href="/controls/settings_dropdown_menu.html">
+<link rel="import" href="/controls/settings_input.html">
+<link rel="import" href="/controls/settings_radio_group.html">
+<link rel="import" href="/icons.html">
+<link rel="import" href="/settings_page/settings_animated_pages.html">
+<link rel="import" href="/settings_page/settings_subpage.html">
+<link rel="import" href="/settings_shared_css.html">
 <link rel="import" href="appearance_fonts_page.html">
 
 <dom-module id="settings-appearance-page">
@@ -30,7 +30,7 @@
       <neon-animatable id="main">
 <if expr="chromeos">
         <div class="settings-box first two-line" id="wallpaperButton"
-            on-tap="openWallpaperManager_">
+            on-tap="openWallpaperManager_" actionable>
           <iron-icon icon="settings:wallpaper"></iron-icon>
           <div class="start">
             <div>$i18n{setWallpaper}</div>
@@ -43,7 +43,7 @@
         <div class="settings-box two-line first">
 </if>
           <div class="layout horizontal center flex"
-              on-tap="openThemesGallery_">
+              on-tap="openThemesGallery_" actionable>
             <iron-icon icon="settings:palette"></iron-icon>
             <div>
               <div>$i18n{getThemes}</div>
@@ -92,7 +92,8 @@
               menu-options="[[fontSizeOptions_]]" no-label-float>
           </settings-dropdown-menu>
         </div>
-        <div class="settings-box two-line" on-tap="onCustomizeFontsTap_">
+        <div class="settings-box two-line" on-tap="onCustomizeFontsTap_"
+            actionable>
           <div class="start">
             <div>$i18n{customizeFonts}</div>
           <div class="secondary">$i18n{chooseFontsAndEncoding}</div>

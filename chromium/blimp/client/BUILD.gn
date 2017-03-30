@@ -25,6 +25,7 @@ source_set("session") {
   ]
 
   deps = [
+    ":compositor",
     "//base",
     "//blimp/common",
     "//blimp/common/proto",
@@ -44,16 +45,18 @@ source_set("client") {
   ]
 
   public_deps = [
-    ":compositor",
     ":session",
     ":switches",
     "//components/safe_json",
     "//components/url_formatter",
+    "//skia",
     "//ui/events",
   ]
 
   deps = [
+    ":compositor",
     "//base",
+    "//blimp/client/core",
     "//blimp/common",
     "//blimp/common/proto",
     "//blimp/net",
@@ -185,6 +188,8 @@ source_set("test_support") {
 
 source_set("compositor") {
   sources = [
+    "feature/compositor/blimp_client_picture_cache.cc",
+    "feature/compositor/blimp_client_picture_cache.h",
     "feature/compositor/blimp_compositor.cc",
     "feature/compositor/blimp_compositor.h",
     "feature/compositor/blimp_compositor_manager.cc",
@@ -203,8 +208,8 @@ source_set("compositor") {
     "feature/compositor/blimp_layer_tree_settings.h",
     "feature/compositor/blimp_output_surface.cc",
     "feature/compositor/blimp_output_surface.h",
-    "feature/compositor/client_image_serialization_processor.cc",
-    "feature/compositor/client_image_serialization_processor.h",
+    "feature/compositor/blob_image_serialization_processor.cc",
+    "feature/compositor/blob_image_serialization_processor.h",
     "feature/compositor/decoding_image_generator.cc",
     "feature/compositor/decoding_image_generator.h",
   ]
@@ -234,6 +239,7 @@ source_set("compositor") {
   public_deps = [
     ":feature",
     "//blimp/common/proto",
+    "//skia",
   ]
 }
 
@@ -241,6 +247,7 @@ source_set("feature_unit_tests") {
   testonly = true
 
   sources = [
+    "feature/compositor/blimp_client_picture_cache_unittest.cc",
     "feature/compositor/blimp_compositor_manager_unittest.cc",
     "feature/navigation_feature_unittest.cc",
     "feature/render_widget_feature_unittest.cc",
@@ -257,6 +264,7 @@ source_set("feature_unit_tests") {
     "//blimp/common/proto",
     "//blimp/net",
     "//blimp/net:test_support",
+    "//blimp/test:support",
     "//cc/proto",
     "//net",
     "//net:test_support",
@@ -286,8 +294,10 @@ if (is_linux && !is_chromeos && use_x11) {
     deps = [
       ":client",
       "//base",
+      "//blimp/client:compositor",
       "//blimp/net",
       "//net",
+      "//services/shell/public/cpp",
 
       # TODO(khushalsagar|scottmg): Remove this dependency from browser to
       # blink. See https://crbug.com/608114.
@@ -396,7 +406,7 @@ if (is_android) {
       "values-uk/android_blimp_strings.xml",
       "values-vi/android_blimp_strings.xml",
       "values-zh-rCN/android_blimp_strings.xml",
-      "values-zh/android_blimp_strings.xml",
+      "values-zh-rTW/android_blimp_strings.xml",
     ]
   }
 
@@ -412,6 +422,8 @@ if (is_android) {
     deps = [
       ":blimp_java_resources",
       "//base:base_java",
+      "//blimp/client/core:core_java",
+      "//blimp/client/core/public:public_java",
 
       # TODO(dtrainor): Remove the ui_java target once no more Android Toast
       # notifications are used.
@@ -424,6 +436,7 @@ if (is_android) {
       "app/android/java/src/org/chromium/blimp/auth/TokenSource.java",
       "app/android/java/src/org/chromium/blimp/auth/TokenSourceImpl.java",
       "app/android/java/src/org/chromium/blimp/BlimpApplication.java",
+      "app/android/java/src/org/chromium/blimp/BlimpClientSwitches.java",
       "app/android/java/src/org/chromium/blimp/BlimpLibraryLoader.java",
       "app/android/java/src/org/chromium/blimp/BlimpRendererActivity.java",
       "app/android/java/src/org/chromium/blimp/BlimpView.java",
@@ -436,6 +449,7 @@ if (is_android) {
       "app/android/java/src/org/chromium/blimp/settings/AboutBlimpPreferences.java",
       "app/android/java/src/org/chromium/blimp/settings/Preferences.java",
       "app/android/java/src/org/chromium/blimp/toolbar/Toolbar.java",
+      "app/android/java/src/org/chromium/blimp/toolbar/ToolbarMenu.java",
       "app/android/java/src/org/chromium/blimp/toolbar/UrlBar.java",
     ]
   }
@@ -445,15 +459,18 @@ if (is_android) {
 
     deps = [
       ":blimp_java",
-      ":blimp_java_resources",
       "//base:base_java",
       "//base:base_java_test_support",
+      "//blimp/client/core:core_java",
+      "//blimp/client/core/public:public_java",
       google_play_services_library,
     ]
 
     java_files = [
       "app/android/javatests/src/org/chromium/blimp/auth/MockTokenSource.java",
       "app/android/javatests/src/org/chromium/blimp/auth/RetryingTokenSourceTest.java",
+      "app/android/javatests/src/org/chromium/blimp/core/BlimpContentsTest.java",
+      "app/android/javatests/src/org/chromium/blimp/BlimpNativeInstrumentationTestCase.java",
     ]
   }
 
@@ -462,11 +479,14 @@ if (is_android) {
       ":client",
       ":jni_headers",
       "//base",
+      "//blimp/client:compositor",
+      "//blimp/client/core",
       "//blimp/common",
       "//blimp/common/proto",
       "//blimp/net",
       "//components/safe_json/android:safe_json_jni_headers",
       "//components/url_formatter",
+      "//components/version_info",
       "//net",
       "//skia",
       "//ui/base/ime:text_input_types",
@@ -501,28 +521,25 @@ if (is_android) {
 
   android_apk("blimp_apk") {
     deps = [
-      ":blimp_apk_manifest",
-      ":blimp_client_android",
       ":blimp_java",
-      ":blimp_java_resources",
       "//base:base_java",
+      "//blimp/client/core:core_java",
       "//components/safe_json/android:safe_json_java",
       "//net/android:net_java",
-      google_play_services_resources,
     ]
     apk_name = "Blimp"
     android_manifest = blimp_apk_manifest
-    native_libs = [ "libblimp_client_android.so" ]
+    android_manifest_dep = ":blimp_apk_manifest"
+    shared_libraries = [ ":blimp_client_android" ]
   }
 
   instrumentation_test_apk("blimp_test_apk") {
     apk_name = "BlimpTest"
     apk_under_test = ":blimp_apk"
     android_manifest = blimp_test_apk_manifest
+    android_manifest_dep = ":blimp_test_apk_manifest"
     deps = [
-      ":blimp_test_apk_manifest",
       ":blimp_test_java",
-      google_play_services_resources,
     ]
   }
 }

@@ -126,6 +126,7 @@ bool BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::RunAsync() {
     }
   }
 #endif
+  SendResponse(true);
   return true;
 }
 

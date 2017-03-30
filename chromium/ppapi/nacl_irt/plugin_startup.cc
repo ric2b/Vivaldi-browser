@@ -12,6 +12,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "ipc/ipc_channel_handle.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "ppapi/nacl_irt/manifest_service.h"
 #include "ppapi/shared_impl/ppb_audio_shared.h"
 
@@ -63,7 +64,12 @@ void StartUpPlugin() {
   DCHECK(!g_shutdown_event);
   DCHECK(!g_io_thread);
 
-  g_shutdown_event = new base::WaitableEvent(true, false);
+  // The Mojo EDK must be initialized before using IPC.
+  mojo::edk::Init();
+
+  g_shutdown_event =
+      new base::WaitableEvent(base::WaitableEvent::ResetPolicy::MANUAL,
+                              base::WaitableEvent::InitialState::NOT_SIGNALED);
   g_io_thread = new base::Thread("Chrome_NaClIOThread");
   g_io_thread->StartWithOptions(
       base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
@@ -75,7 +81,8 @@ void StartUpPlugin() {
     // TODO(hidehiko,dmichael): This works, but is probably not well designed
     // usage. Once a better approach is made, replace this by that way.
     // (crbug.com/364241).
-    base::WaitableEvent event(true, false);
+    base::WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
+                              base::WaitableEvent::InitialState::NOT_SIGNALED);
     g_io_thread->task_runner()->PostTask(
         FROM_HERE, base::Bind(StartUpManifestServiceOnIOThread, &event));
     event.Wait();

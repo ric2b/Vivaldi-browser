@@ -62,7 +62,7 @@ String CSSStyleRule::generateSelectorText() const
     StringBuilder builder;
     for (const CSSSelector* selector = m_styleRule->selectorList().first(); selector; selector = CSSSelectorList::next(*selector)) {
         if (selector != m_styleRule->selectorList().first())
-            builder.appendLiteral(", ");
+            builder.append(", ");
         builder.append(selector->selectorText());
     }
     return builder.toString();
@@ -84,7 +84,7 @@ String CSSStyleRule::selectorText() const
 
 void CSSStyleRule::setSelectorText(const String& selectorText)
 {
-    CSSParserContext context(parserContext(), 0);
+    CSSParserContext context(parserContext(), nullptr);
     CSSSelectorList selectorList = CSSParser::parseSelector(context, parentStyleSheet() ? parentStyleSheet()->contents() : nullptr, selectorText);
     if (!selectorList.isValid())
         return;
@@ -103,7 +103,7 @@ String CSSStyleRule::cssText() const
 {
     StringBuilder result;
     result.append(selectorText());
-    result.appendLiteral(" { ");
+    result.append(" { ");
     String decls = m_styleRule->properties().asText();
     result.append(decls);
     if (!decls.isEmpty())
@@ -125,6 +125,13 @@ DEFINE_TRACE(CSSStyleRule)
     visitor->trace(m_styleRule);
     visitor->trace(m_propertiesCSSOMWrapper);
     CSSRule::trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(CSSStyleRule)
+{
+    visitor->traceWrappers(parentRule());
+    visitor->traceWrappers(parentStyleSheet());
+    CSSRule::traceWrappers(visitor);
 }
 
 } // namespace blink

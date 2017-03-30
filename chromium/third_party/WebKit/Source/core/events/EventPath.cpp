@@ -50,12 +50,13 @@ EventTarget* EventPath::eventTargetRespectingTargetRules(Node& referenceNode)
 
 static inline bool shouldStopAtShadowRoot(Event& event, ShadowRoot& shadowRoot, EventTarget& target)
 {
-    // WebKit never allowed selectstart event to cross the the shadow DOM boundary.
-    // Changing this breaks existing sites.
-    // See https://bugs.webkit.org/show_bug.cgi?id=52195 for details.
-    const AtomicString eventType = event.type();
-    return target.toNode() && target.toNode()->shadowHost() == shadowRoot.host()
-        && event.scoped();
+    if (shadowRoot.isV1()) {
+        // In v1, an event is scoped by default unless event.composed flag is set.
+        return !event.composed() && target.toNode() && target.toNode()->shadowHost() == shadowRoot.host();
+    }
+    // Ignores event.composed() for v0.
+    // Instead, use event.isScopedInV0() for backward compatibility.
+    return event.isScopedInV0() && target.toNode() && target.toNode()->shadowHost() == shadowRoot.host();
 }
 
 EventPath::EventPath(Node& node, Event* event)
@@ -257,33 +258,28 @@ void EventPath::adjustForRelatedTarget(Node& target, EventTarget* relatedTarget)
         return;
     if (target.document() != relatedNode->document())
         return;
-    if (!target.inShadowIncludingDocument() || !relatedNode->inShadowIncludingDocument())
-        return;
+    retargetRelatedTarget(*relatedNode);
+    shrinkForRelatedTarget(target, *relatedNode);
+}
 
+void EventPath::retargetRelatedTarget(const Node& relatedTargetNode)
+{
     RelatedTargetMap relatedNodeMap;
-    buildRelatedNodeMap(*relatedNode, relatedNodeMap);
+    buildRelatedNodeMap(relatedTargetNode, relatedNodeMap);
 
     for (const auto& treeScopeEventContext : m_treeScopeEventContexts) {
         EventTarget* adjustedRelatedTarget = findRelatedNode(treeScopeEventContext->treeScope(), relatedNodeMap);
         ASSERT(adjustedRelatedTarget);
         treeScopeEventContext.get()->setRelatedTarget(adjustedRelatedTarget);
     }
-
-    shrinkIfNeeded(target, *relatedTarget);
 }
 
-void EventPath::shrinkIfNeeded(const Node& target, const EventTarget& relatedTarget)
+void EventPath::shrinkForRelatedTarget(const Node& target, const Node& relatedTarget)
 {
-    // Synthetic mouse events can have a relatedTarget which is identical to the target.
-    bool targetIsIdenticalToToRelatedTarget = (&target == &relatedTarget);
-
+    if (!target.isInShadowTree() && !relatedTarget.isInShadowTree())
+        return;
     for (size_t i = 0; i < size(); ++i) {
-        if (targetIsIdenticalToToRelatedTarget) {
-            if (target.treeScope().rootNode() == at(i).node()) {
-                shrink(i + 1);
-                break;
-            }
-        } else if (at(i).target() == at(i).relatedTarget()) {
+        if (at(i).target() == at(i).relatedTarget()) {
             // Event dispatching should be stopped here.
             shrink(i);
             break;

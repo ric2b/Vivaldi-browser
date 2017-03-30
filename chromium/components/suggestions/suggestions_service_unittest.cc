@@ -13,6 +13,7 @@
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "components/signin/core/browser/fake_profile_oauth2_token_service.h"
 #include "components/suggestions/blacklist_store.h"
 #include "components/suggestions/image_manager.h"
@@ -28,6 +29,7 @@
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/gfx/image/image.h"
 
 using testing::DoAll;
 using ::testing::AnyNumber;
@@ -153,7 +155,7 @@ class MockImageManager : public suggestions::ImageManager {
   MOCK_METHOD1(Initialize, void(const SuggestionsProfile&));
   MOCK_METHOD2(GetImageForURL,
                void(const GURL&,
-                    base::Callback<void(const GURL&, const SkBitmap*)>));
+                    base::Callback<void(const GURL&, const gfx::Image&)>));
   MOCK_METHOD2(AddImageURL, void(const GURL&, const GURL&));
 };
 
@@ -508,9 +510,9 @@ TEST_F(SuggestionsServiceTest, BlacklistURL) {
   // for future execution (note how both the SuggestionsService's scheduling
   // delay and the BlacklistStore's candidacy delay are zero). Then wait on
   // the blacklist request, then again on the next blacklist scheduling task.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   io_message_loop_.RunUntilIdle();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_EQ(2, suggestions_data_callback_count_);
   EXPECT_FALSE(blacklisting_failed_);
@@ -588,11 +590,11 @@ TEST_F(SuggestionsServiceTest, BlacklistURLRequestFails) {
   // second request and the third scheduling. Again, note that calling
   // RunUntilIdle on the MessageLoop only works when the task is not posted for
   // the future.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   io_message_loop_.RunUntilIdle();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   io_message_loop_.RunUntilIdle();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   CheckSuggestionsData();
 }
 
@@ -742,7 +744,7 @@ TEST_F(SuggestionsServiceTest, GetPageThumbnail) {
 
   GURL test_url(kTestUrl);
   GURL thumbnail_url("https://www.thumbnails.com/thumb.jpg");
-  base::Callback<void(const GURL&, const SkBitmap*)> dummy_callback;
+  base::Callback<void(const GURL&, const gfx::Image&)> dummy_callback;
 
   EXPECT_CALL(*mock_thumbnail_manager_, GetImageForURL(test_url, _));
   suggestions_service->GetPageThumbnail(test_url, dummy_callback);

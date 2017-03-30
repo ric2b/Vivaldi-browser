@@ -36,9 +36,7 @@
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/layout/LayoutListItem.h"
 #include "core/layout/LayoutTheme.h"
-#include "core/layout/LayoutView.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/text/PlatformLocale.h"
@@ -514,15 +512,14 @@ void AXObject::updateCachedAttributeValuesIfNeeded() const
         return;
 
     m_lastModificationCount = cache.modificationCount();
+    m_cachedBackgroundColor = computeBackgroundColor();
     m_cachedIsInertOrAriaHidden = computeIsInertOrAriaHidden();
     m_cachedIsDescendantOfLeafNode = (leafNodeAncestor() != 0);
     m_cachedIsDescendantOfDisabledNode = (disabledAncestor() != 0);
     m_cachedHasInheritedPresentationalRole = (inheritsPresentationalRoleFrom() != 0);
     m_cachedIsPresentationalChild = (ancestorForWhichThisIsAPresentationalChild() != 0);
     m_cachedIsIgnored = computeAccessibilityIsIgnored();
-    m_cachedLiveRegionRoot = isLiveRegion() ?
-        this :
-        (parentObjectIfExists() ? parentObjectIfExists()->liveRegionRoot() : 0);
+    m_cachedLiveRegionRoot = isLiveRegion() ? const_cast<AXObject*>(this) : (parentObjectIfExists() ? parentObjectIfExists()->liveRegionRoot() : 0);
     m_cachedAncestorExposesActiveDescendant = computeAncestorExposesActiveDescendant();
 }
 
@@ -750,6 +747,9 @@ String AXObject::name(NameSources* nameSources) const
 
 String AXObject::recursiveTextAlternative(const AXObject& axObj, bool inAriaLabelledByTraversal, AXObjectSet& visited)
 {
+    if (visited.contains(&axObj) && !inAriaLabelledByTraversal)
+        return String();
+
     AXNameFrom tmpNameFrom;
     return axObj.textAlternative(true, inAriaLabelledByTraversal, visited, tmpNameFrom, nullptr, nullptr);
 }
@@ -804,8 +804,10 @@ String AXObject::ariaTextAlternative(bool recursive, bool inAriaLabelledByTraver
             if (nameSources)
                 nameSources->last().attributeValue = ariaLabelledby;
 
-            textAlternative = textFromAriaLabelledby(visited, relatedObjects);
-
+            // Operate on a copy of |visited| so that if |nameSources| is not null,
+            // the set of visited objects is preserved unmodified for future calculations.
+            AXObjectSet visitedCopy = visited;
+            textAlternative = textFromAriaLabelledby(visitedCopy, relatedObjects);
             if (!textAlternative.isNull()) {
                 if (nameSources) {
                     NameSource& source = nameSources->last();
@@ -924,6 +926,12 @@ String AXObject::textFromAriaDescribedby(AXRelatedObjectVector* relatedObjects) 
     HeapVector<Member<Element>> elements;
     elementsFromAttribute(elements, aria_describedbyAttr);
     return textFromElements(true, visited, elements, relatedObjects);
+}
+
+RGBA32 AXObject::backgroundColor() const
+{
+    updateCachedAttributeValuesIfNeeded();
+    return m_cachedBackgroundColor;
 }
 
 AccessibilityOrientation AXObject::orientation() const
@@ -1089,7 +1097,7 @@ bool AXObject::isLiveRegion() const
     return equalIgnoringCase(liveRegion, "polite") || equalIgnoringCase(liveRegion, "assertive");
 }
 
-const AXObject* AXObject::liveRegionRoot() const
+AXObject* AXObject::liveRegionRoot() const
 {
     updateCachedAttributeValuesIfNeeded();
     return m_cachedLiveRegionRoot;
@@ -1337,6 +1345,13 @@ void AXObject::setScrollOffset(const IntPoint& offset) const
 
     // TODO(bokan): This should potentially be a UserScroll.
     area->setScrollPosition(DoublePoint(offset.x(), offset.y()), ProgrammaticScroll);
+}
+
+void AXObject::getRelativeBounds(AXObject** container, FloatRect& boundsInContainer, SkMatrix44& containerTransform) const
+{
+    *container = nullptr;
+    boundsInContainer = FloatRect();
+    containerTransform.setIdentity();
 }
 
 //

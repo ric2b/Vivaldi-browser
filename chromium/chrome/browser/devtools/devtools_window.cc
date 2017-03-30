@@ -33,8 +33,8 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
-#include "components/ui/zoom/page_zoom.h"
-#include "components/ui/zoom/zoom_controller.h"
+#include "components/zoom/page_zoom.h"
+#include "components/zoom/zoom_controller.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/native_web_keyboard_event.h"
@@ -51,6 +51,7 @@
 #include "net/base/escape.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/events/keycodes/dom/keycode_converter.h"
 #include "ui/events/keycodes/keyboard_code_conversion.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
@@ -89,6 +90,20 @@ bool FindInspectedBrowserAndTabIndex(
     }
   }
   return false;
+}
+
+void SetPreferencesFromJson(Profile* profile, const std::string& json) {
+  base::DictionaryValue* dict = nullptr;
+  std::unique_ptr<base::Value> parsed = base::JSONReader::Read(json);
+  if (!parsed || !parsed->GetAsDictionary(&dict))
+    return;
+  DictionaryPrefUpdate update(profile->GetPrefs(), prefs::kDevToolsPreferences);
+  for (base::DictionaryValue::Iterator it(*dict); !it.IsAtEnd(); it.Advance()) {
+    if (!it.value().IsType(base::Value::TYPE_STRING))
+      continue;
+    update.Get()->SetWithoutPathExpansion(
+        it.key(), it.value().CreateDeepCopy());
+  }
 }
 
 // DevToolsToolboxDelegate ----------------------------------------------------
@@ -274,7 +289,10 @@ bool DevToolsEventForwarder::ForwardEvent(
 
   base::DictionaryValue event_data;
   event_data.SetString("type", event_type);
-  event_data.SetString("keyIdentifier", event.keyIdentifier);
+  event_data.SetString("key", ui::KeycodeConverter::DomKeyToKeyString(
+                                  static_cast<ui::DomKey>(event.domKey)));
+  event_data.SetString("code", ui::KeycodeConverter::DomCodeToCodeString(
+                                   static_cast<ui::DomCode>(event.domCode)));
   event_data.SetInteger("keyCode", key_code);
   event_data.SetInteger("modifiers", modifiers);
   devtools_window_->bindings_->CallClientFunction(
@@ -730,8 +748,8 @@ DevToolsWindow::DevToolsWindow(Profile* profile,
   bindings_->SetDelegate(this);
   // DevTools uses PageZoom::Zoom(), so main_web_contents_ requires a
   // ZoomController.
-  ui_zoom::ZoomController::CreateForWebContents(main_web_contents_);
-  ui_zoom::ZoomController::FromWebContents(main_web_contents_)
+  zoom::ZoomController::CreateForWebContents(main_web_contents_);
+  zoom::ZoomController::FromWebContents(main_web_contents_)
       ->SetShowsNotificationBubble(false);
 
   g_instances.Get().push_back(this);
@@ -792,7 +810,7 @@ DevToolsWindow* DevToolsWindow::Create(
   GURL url(GetDevToolsURL(profile, frontend_url,
                           shared_worker_frontend,
                           remote_frontend,
-                          can_dock, settings));
+                          can_dock));
   std::unique_ptr<WebContents> main_web_contents(
       WebContents::Create(WebContents::CreateParams(profile)));
   main_web_contents->GetController().LoadURL(
@@ -802,7 +820,8 @@ DevToolsWindow* DevToolsWindow::Create(
       DevToolsUIBindings::ForWebContents(main_web_contents.get());
   if (!bindings)
     return nullptr;
-
+  if (!settings.empty())
+    SetPreferencesFromJson(profile, settings);
   return new DevToolsWindow(profile, main_web_contents.release(), bindings,
                             inspected_web_contents, can_dock);
 }
@@ -812,8 +831,7 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
                                     const GURL& base_url,
                                     bool shared_worker_frontend,
                                     const std::string& remote_frontend,
-                                    bool can_dock,
-                                    const std::string& settings) {
+                                    bool can_dock) {
   // Compatibility errors are encoded with data urls, pass them
   // through with no decoration.
   if (base_url.SchemeIs("data"))
@@ -835,8 +853,6 @@ GURL DevToolsWindow::GetDevToolsURL(Profile* profile,
   }
   if (can_dock)
     url_string += "&can_dock=true";
-  if (settings.size())
-    url_string += "&settings=" + settings;
   return GURL(url_string);
 }
 
@@ -965,8 +981,8 @@ void DevToolsWindow::CloseContents(WebContents* source) {
 
 void DevToolsWindow::ContentsZoomChange(bool zoom_in) {
   DCHECK(is_docked_);
-  ui_zoom::PageZoom::Zoom(main_web_contents_, zoom_in ? content::PAGE_ZOOM_IN
-                                                      : content::PAGE_ZOOM_OUT);
+  zoom::PageZoom::Zoom(main_web_contents_, zoom_in ? content::PAGE_ZOOM_IN
+                                                   : content::PAGE_ZOOM_OUT);
 }
 
 void DevToolsWindow::BeforeUnloadFired(WebContents* tab,
@@ -1032,9 +1048,9 @@ content::ColorChooser* DevToolsWindow::OpenColorChooser(
   return chrome::ShowColorChooser(web_contents, initial_color);
 }
 
-void DevToolsWindow::RunFileChooser(WebContents* web_contents,
+void DevToolsWindow::RunFileChooser(content::RenderFrameHost* render_frame_host,
                                     const content::FileChooserParams& params) {
-  FileSelectHelper::RunFileChooser(web_contents, params);
+  FileSelectHelper::RunFileChooser(render_frame_host, params);
 }
 
 bool DevToolsWindow::PreHandleGestureEvent(

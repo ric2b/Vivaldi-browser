@@ -11,15 +11,16 @@
       'variables': {
         'mojom_files': [
           # NOTE: Sources duplicated in //content/common/BUILD.gn:mojo_bindings.
-          'common/application_setup.mojom',
+          'common/frame.mojom',
           'common/image_downloader/image_downloader.mojom',
           'common/leveldb_wrapper.mojom',
           'common/process_control.mojom',
-          'common/render_frame_setup.mojom',
           'common/service_worker/embedded_worker_setup.mojom',
           'common/storage_partition_service.mojom',
         ],
         'mojom_typemaps': [
+          '../skia/public/interfaces/skbitmap.typemap',
+          '../ui/gfx/geometry/mojo/geometry.typemap',
           '../url/mojo/gurl.typemap',
           '../url/mojo/origin.typemap',
         ],
@@ -30,7 +31,7 @@
         '../services/shell/shell_public.gyp:shell_public',
         '../skia/skia.gyp:skia_mojo',
         '../third_party/WebKit/public/blink.gyp:mojo_bindings',
-        '../ui/mojo/geometry/mojo_bindings.gyp:mojo_geometry_bindings',
+        '../ui/gfx/gfx.gyp:mojo_geometry_bindings',
       ],
       'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
     },
@@ -42,9 +43,11 @@
       },
       'dependencies': [
         '../url/url.gyp:url_mojom',
+        '../skia/skia.gyp:skia',
         'content_common_mojo_bindings_mojom',
       ],
       'export_dependent_settings': [
+        '../skia/skia.gyp:skia',
         '../url/url.gyp:url_mojom',
       ],
     },

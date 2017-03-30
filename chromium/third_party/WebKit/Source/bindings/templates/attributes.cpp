@@ -24,18 +24,24 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     v8::Local<v8::Object> holder = info.Holder();
     {% endif %}
     {# impl #}
-    {% if not attribute.is_static %}
-    {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
-    {% endif %}
-    {% if attribute.is_same_object %}
-    v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "sameobject_{{attribute.name}}");
+    {% if attribute.is_save_same_object %}
+    {% set same_object_private_symbol = 'SameObject' + interface_name + attribute.name[0]|capitalize + attribute.name[1:] %}
+    // If you see a compile error that
+    //   V8PrivateProperty::get{{same_object_private_symbol}}
+    // is not defined, then you need to register your attribute at
+    // V8_PRIVATE_PROPERTY_FOR_EACH defined in V8PrivateProperty.h as
+    //   X(SameObject, {{interface_name}}{{attribute.name[0]|capitalize}}{{attribute.name[1:]}})
+    auto privateSameObject = V8PrivateProperty::getSameObject{{interface_name}}{{attribute.name[0]|capitalize}}{{attribute.name[1:]}}(info.GetIsolate());
     {
-        v8::Local<v8::Value> v8Value = V8HiddenValue::getHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName);
+        v8::Local<v8::Value> v8Value = privateSameObject.get(info.GetIsolate()->GetCurrentContext(), holder);
         if (!v8Value.IsEmpty()) {
             v8SetReturnValue(info, v8Value);
             return;
         }
     }
+    {% endif %}
+    {% if not attribute.is_static %}
+    {{cpp_class}}* impl = {{v8_class}}::toImpl(holder);
     {% endif %}
     {% if attribute.cached_attribute_validation_method %}
     v8::Local<v8::String> propertyName = v8AtomicString(info.GetIsolate(), "{{attribute.name}}");
@@ -82,7 +88,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {# Security checks #}
     {% if not attribute.is_data_type_property %}
     {% if attribute.is_check_security_for_receiver %}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         v8SetReturnValueNull(info);
         exceptionState.throwIfNeeded();
         return;
@@ -90,7 +96,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% endif %}
     {% endif %}
     {% if attribute.is_check_security_for_return_value %}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), {{attribute.cpp_value}}, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), {{attribute.cpp_value}}, exceptionState)) {
         v8SetReturnValueNull(info);
         exceptionState.throwIfNeeded();
         return;
@@ -130,8 +136,8 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% endif %}
     {{attribute.v8_set_return_value}};
     {% endif %}
-    {% if attribute.is_same_object %}
-    V8HiddenValue::setHiddenValue(ScriptState::current(info.GetIsolate()), holder, propertyName, info.GetReturnValue().Get());
+    {% if attribute.is_save_same_object %}
+    privateSameObject.set(info.GetIsolate()->GetCurrentContext(), holder, info.GetReturnValue().Get());
     {% endif %}
 }
 {% endmacro %}
@@ -282,7 +288,7 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
           not attribute.constructor_type %}
     {% if not attribute.is_data_type_property %}
     {% if attribute.is_check_security_for_receiver %}
-    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), callingDOMWindow(info.GetIsolate()), impl, exceptionState)) {
+    if (!BindingSecurity::shouldAllowAccessTo(info.GetIsolate(), currentDOMWindow(info.GetIsolate()), impl, exceptionState)) {
         v8SetReturnValue(info, v8Value);
         exceptionState.throwIfNeeded();
         return;
@@ -381,6 +387,9 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% endif %}
         contextData->activityLogger()->logSetter("{{interface_name}}.{{attribute.name}}", v8Value);
     }
+    {% endif %}
+    {% if attribute.is_ce_reactions %}
+    CEReactionsScope ceReactionsScope;
     {% endif %}
     {% if attribute.is_custom_element_callbacks or attribute.is_reflect %}
     V0CustomElementProcessingStack::CallbackDeliveryScope deliveryScope;

@@ -9,24 +9,32 @@
 #include "base/bind_helpers.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "media/base/audio_latency.h"
 #include "media/base/audio_renderer_mixer.h"
 #include "media/base/audio_renderer_mixer_input.h"
+#include "media/base/audio_renderer_mixer_pool.h"
 #include "media/base/fake_audio_render_callback.h"
 #include "media/base/mock_audio_renderer_sink.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+namespace {
+void LogUma(int value) {}
+}
 
 namespace media {
 
 static const int kBitsPerChannel = 16;
 static const int kSampleRate = 48000;
 static const int kBufferSize = 8192;
+static const int kRenderFrameId = 42;
 static const ChannelLayout kChannelLayout = CHANNEL_LAYOUT_STEREO;
-static const char kDefaultDeviceId[] = "";
+static const char kDefaultDeviceId[] = "default";
 static const char kUnauthorizedDeviceId[] = "unauthorized";
 static const char kNonexistentDeviceId[] = "nonexistent";
 
-class AudioRendererMixerInputTest : public testing::Test {
+class AudioRendererMixerInputTest : public testing::Test,
+                                    AudioRendererMixerPool {
  public:
   AudioRendererMixerInputTest() {
     audio_parameters_ = AudioParameters(
@@ -40,15 +48,14 @@ class AudioRendererMixerInputTest : public testing::Test {
   }
 
   void CreateMixerInput(const std::string& device_id) {
-    mixer_input_ = new AudioRendererMixerInput(
-        base::Bind(&AudioRendererMixerInputTest::GetMixer,
-                   base::Unretained(this)),
-        base::Bind(&AudioRendererMixerInputTest::RemoveMixer,
-                   base::Unretained(this)),
-        device_id, url::Origin());
+    mixer_input_ = new AudioRendererMixerInput(this, kRenderFrameId, device_id,
+                                               url::Origin(),
+                                               AudioLatency::LATENCY_PLAYBACK);
   }
 
-  AudioRendererMixer* GetMixer(const AudioParameters& params,
+  AudioRendererMixer* GetMixer(int owner_id,
+                               const AudioParameters& params,
+                               AudioLatency::LatencyType latency,
                                const std::string& device_id,
                                const url::Origin& security_origin,
                                OutputDeviceStatus* device_status) {
@@ -64,15 +71,17 @@ class AudioRendererMixerInputTest : public testing::Test {
       return nullptr;
     }
 
-    size_t idx = device_id.empty() ? 0 : 1;
+    size_t idx = (device_id == kDefaultDeviceId) ? 0 : 1;
     if (!mixers_[idx]) {
-      scoped_refptr<MockAudioRendererSink> sink = new MockAudioRendererSink();
-      EXPECT_CALL(*sink.get(), Start());
-      EXPECT_CALL(*sink.get(), Stop());
+      sinks_[idx] =
+          new MockAudioRendererSink(device_id, OUTPUT_DEVICE_STATUS_OK);
+      EXPECT_CALL(*(sinks_[idx].get()), Start());
+      EXPECT_CALL(*(sinks_[idx].get()), Stop());
 
-      mixers_[idx].reset(new AudioRendererMixer(audio_parameters_, sink));
+      mixers_[idx].reset(new AudioRendererMixer(
+          audio_parameters_, sinks_[idx].get(), base::Bind(&LogUma)));
     }
-    EXPECT_CALL(*this, RemoveMixer(testing::_, device_id, testing::_));
+    EXPECT_CALL(*this, ReturnMixer(mixers_[idx].get()));
 
     if (device_status)
       *device_status = OUTPUT_DEVICE_STATUS_OK;
@@ -80,15 +89,17 @@ class AudioRendererMixerInputTest : public testing::Test {
   }
 
   double ProvideInput() {
-    return mixer_input_->ProvideInput(audio_bus_.get(), base::TimeDelta());
+    return mixer_input_->ProvideInput(audio_bus_.get(), 0);
   }
 
-  MOCK_METHOD3(RemoveMixer,
-               void(const AudioParameters&,
-                    const std::string&,
-                    const url::Origin&));
+  MOCK_METHOD1(ReturnMixer, void(AudioRendererMixer*));
+
+  MOCK_METHOD4(
+      GetOutputDeviceInfo,
+      OutputDeviceInfo(int, int, const std::string&, const url::Origin&));
 
   MOCK_METHOD1(SwitchCallbackCalled, void(OutputDeviceStatus));
+
   void SwitchCallback(base::RunLoop* loop, OutputDeviceStatus result) {
     SwitchCallbackCalled(result);
     loop->Quit();
@@ -100,6 +111,7 @@ class AudioRendererMixerInputTest : public testing::Test {
   virtual ~AudioRendererMixerInputTest() {}
 
   AudioParameters audio_parameters_;
+  scoped_refptr<MockAudioRendererSink> sinks_[2];
   std::unique_ptr<AudioRendererMixer> mixers_[2];
   scoped_refptr<AudioRendererMixerInput> mixer_input_;
   std::unique_ptr<FakeAudioRenderCallback> fake_callback_;
@@ -108,6 +120,27 @@ class AudioRendererMixerInputTest : public testing::Test {
  private:
   DISALLOW_COPY_AND_ASSIGN(AudioRendererMixerInputTest);
 };
+
+TEST_F(AudioRendererMixerInputTest, GetDeviceInfo) {
+  ON_CALL(*this,
+          GetOutputDeviceInfo(testing::_, testing::_, testing::_, testing::_))
+      .WillByDefault(testing::Return(OutputDeviceInfo()));
+  EXPECT_CALL(*this, GetOutputDeviceInfo(kRenderFrameId, 0 /* session id */,
+                                         kDefaultDeviceId, testing::_))
+      .Times(testing::Exactly(1));
+
+  // Calling GetOutputDeviceInfo() should result in the mock call, since there
+  // is no mixer created yet for mixer input.
+  mixer_input_->GetOutputDeviceInfo();
+  mixer_input_->Start();
+
+  // This call should be directed to the mixer and should not result in the mock
+  // call.
+  EXPECT_STREQ(kDefaultDeviceId,
+               mixer_input_->GetOutputDeviceInfo().device_id().c_str());
+
+  mixer_input_->Stop();
+}
 
 // Test that getting and setting the volume work as expected.  The volume is
 // returned from ProvideInput() only when playing.

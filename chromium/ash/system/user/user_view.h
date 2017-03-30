@@ -7,9 +7,8 @@
 
 #include <memory>
 
-#include "ash/session/session_state_delegate.h"
-#include "ash/system/tray/tray_constants.h"
-#include "ash/system/user/login_status.h"
+#include "ash/common/session/session_types.h"
+#include "ash/common/system/tray/tray_constants.h"
 #include "ash/system/user/tray_user.h"
 #include "base/macros.h"
 #include "ui/views/controls/button/button.h"
@@ -29,6 +28,7 @@ class FocusManager;
 
 namespace ash {
 
+enum class LoginStatus;
 class PopupMessage;
 class SystemTrayItem;
 
@@ -40,9 +40,7 @@ class UserView : public views::View,
                  public views::MouseWatcherListener,
                  public views::FocusChangeListener {
  public:
-  UserView(SystemTrayItem* owner,
-           ash::user::LoginStatus login,
-           UserIndex index);
+  UserView(SystemTrayItem* owner, LoginStatus login, UserIndex index);
   ~UserView() override;
 
   // Overridden from MouseWatcherListener:
@@ -66,8 +64,8 @@ class UserView : public views::View,
   void OnWillChangeFocus(View* focused_before, View* focused_now) override;
   void OnDidChangeFocus(View* focused_before, View* focused_now) override;
 
-  void AddLogoutButton(user::LoginStatus login);
-  void AddUserCard(user::LoginStatus login);
+  void AddLogoutButton(LoginStatus login);
+  void AddUserCard(LoginStatus login);
 
   // Create the menu option to add another user. If |disabled| is set the user
   // cannot actively click on the item.

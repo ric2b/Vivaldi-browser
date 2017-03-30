@@ -23,6 +23,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/media_switches.h"
@@ -31,20 +32,22 @@
 #include "ui/gl/scoped_binders.h"
 
 #define LOGF(level) LOG(level) << __FUNCTION__ << "(): "
+#define DLOGF(level) DLOG(level) << __FUNCTION__ << "(): "
 #define DVLOGF(level) DVLOG(level) << __FUNCTION__ << "(): "
+#define PLOGF(level) PLOG(level) << __FUNCTION__ << "(): "
 
-#define NOTIFY_ERROR(x)                        \
-  do {                                         \
-    LOG(ERROR) << "Setting error state:" << x; \
-    SetErrorState(x);                          \
+#define NOTIFY_ERROR(x)                         \
+  do {                                          \
+    LOGF(ERROR) << "Setting error state:" << x; \
+    SetErrorState(x);                           \
   } while (0)
 
-#define IOCTL_OR_ERROR_RETURN_VALUE(type, arg, value, type_str)          \
-  do {                                                                   \
-    if (device_->Ioctl(type, arg) != 0) {                                \
-      PLOG(ERROR) << __FUNCTION__ << "(): ioctl() failed: " << type_str; \
-      return value;                                                      \
-    }                                                                    \
+#define IOCTL_OR_ERROR_RETURN_VALUE(type, arg, value, type_str) \
+  do {                                                          \
+    if (device_->Ioctl(type, arg) != 0) {                       \
+      PLOGF(ERROR) << "ioctl() failed: " << type_str;           \
+      return value;                                             \
+    }                                                           \
   } while (0)
 
 #define IOCTL_OR_ERROR_RETURN(type, arg) \
@@ -53,10 +56,10 @@
 #define IOCTL_OR_ERROR_RETURN_FALSE(type, arg) \
   IOCTL_OR_ERROR_RETURN_VALUE(type, arg, false, #type)
 
-#define IOCTL_OR_LOG_ERROR(type, arg)                                 \
-  do {                                                                \
-    if (device_->Ioctl(type, arg) != 0)                               \
-      PLOG(ERROR) << __FUNCTION__ << "(): ioctl() failed: " << #type; \
+#define IOCTL_OR_LOG_ERROR(type, arg)              \
+  do {                                             \
+    if (device_->Ioctl(type, arg) != 0)            \
+      PLOGF(ERROR) << "ioctl() failed: " << #type; \
   } while (0)
 
 namespace media {
@@ -226,15 +229,15 @@ V4L2SliceVideoDecodeAccelerator::EGLSyncKHRRef::~EGLSyncKHRRef() {
 }
 
 struct V4L2SliceVideoDecodeAccelerator::PictureRecord {
-  PictureRecord(bool cleared, const media::Picture& picture);
+  PictureRecord(bool cleared, const Picture& picture);
   ~PictureRecord();
   bool cleared;  // Whether the texture is cleared and safe to render from.
-  media::Picture picture;  // The decoded picture.
+  Picture picture;  // The decoded picture.
 };
 
 V4L2SliceVideoDecodeAccelerator::PictureRecord::PictureRecord(
     bool cleared,
-    const media::Picture& picture)
+    const Picture& picture)
     : cleared(cleared), picture(picture) {}
 
 V4L2SliceVideoDecodeAccelerator::PictureRecord::~PictureRecord() {}
@@ -248,16 +251,16 @@ class V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator
   // H264Decoder::H264Accelerator implementation.
   scoped_refptr<H264Picture> CreateH264Picture() override;
 
-  bool SubmitFrameMetadata(const media::H264SPS* sps,
-                           const media::H264PPS* pps,
+  bool SubmitFrameMetadata(const H264SPS* sps,
+                           const H264PPS* pps,
                            const H264DPB& dpb,
                            const H264Picture::Vector& ref_pic_listp0,
                            const H264Picture::Vector& ref_pic_listb0,
                            const H264Picture::Vector& ref_pic_listb1,
                            const scoped_refptr<H264Picture>& pic) override;
 
-  bool SubmitSlice(const media::H264PPS* pps,
-                   const media::H264SliceHeader* slice_hdr,
+  bool SubmitSlice(const H264PPS* pps,
+                   const H264SliceHeader* slice_hdr,
                    const H264Picture::Vector& ref_pic_list0,
                    const H264Picture::Vector& ref_pic_list1,
                    const scoped_refptr<H264Picture>& pic,
@@ -303,7 +306,7 @@ class V4L2SliceVideoDecodeAccelerator::V4L2VP8Accelerator
   scoped_refptr<VP8Picture> CreateVP8Picture() override;
 
   bool SubmitDecode(const scoped_refptr<VP8Picture>& pic,
-                    const media::Vp8FrameHeader* frame_hdr,
+                    const Vp8FrameHeader* frame_hdr,
                     const scoped_refptr<VP8Picture>& last_frame,
                     const scoped_refptr<VP8Picture>& golden_frame,
                     const scoped_refptr<VP8Picture>& alt_frame) override;
@@ -392,7 +395,7 @@ V4L2SliceVideoDecodeAccelerator::V4L2SliceVideoDecodeAccelerator(
       input_buffer_queued_count_(0),
       output_streamon_(false),
       output_buffer_queued_count_(0),
-      video_profile_(media::VIDEO_CODEC_PROFILE_UNKNOWN),
+      video_profile_(VIDEO_CODEC_PROFILE_UNKNOWN),
       output_format_fourcc_(0),
       state_(kUninitialized),
       output_mode_(Config::OutputMode::ALLOCATE),
@@ -470,12 +473,11 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
 
   video_profile_ = config.profile;
 
-  if (video_profile_ >= media::H264PROFILE_MIN &&
-      video_profile_ <= media::H264PROFILE_MAX) {
+  if (video_profile_ >= H264PROFILE_MIN && video_profile_ <= H264PROFILE_MAX) {
     h264_accelerator_.reset(new V4L2H264Accelerator(this));
     decoder_.reset(new H264Decoder(h264_accelerator_.get()));
-  } else if (video_profile_ >= media::VP8PROFILE_MIN &&
-             video_profile_ <= media::VP8PROFILE_MAX) {
+  } else if (video_profile_ >= VP8PROFILE_MIN &&
+             video_profile_ <= VP8PROFILE_MAX) {
     vp8_accelerator_.reset(new V4L2VP8Accelerator(this));
     decoder_.reset(new VP8Decoder(vp8_accelerator_.get()));
   } else {
@@ -488,23 +490,23 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
   output_planes_count_ = 1;
 
   if (egl_display_ == EGL_NO_DISPLAY) {
-    LOG(ERROR) << "Initialize(): could not get EGLDisplay";
+    LOGF(ERROR) << "could not get EGLDisplay";
     return false;
   }
 
   // We need the context to be initialized to query extensions.
   if (!make_context_current_cb_.is_null()) {
     if (!make_context_current_cb_.Run()) {
-      LOG(ERROR) << "Initialize(): could not make context current";
+      LOGF(ERROR) << "could not make context current";
       return false;
     }
 
-    if (!gfx::g_driver_egl.ext.b_EGL_KHR_fence_sync) {
-      LOG(ERROR) << "Initialize(): context does not have EGL_KHR_fence_sync";
+    if (!gl::g_driver_egl.ext.b_EGL_KHR_fence_sync) {
+      LOGF(ERROR) << "context does not have EGL_KHR_fence_sync";
       return false;
     }
   } else {
-    DVLOG(1) << "No GL callbacks provided, initializing without GL support";
+    DVLOGF(1) << "No GL callbacks provided, initializing without GL support";
   }
 
   // Capabilities check.
@@ -512,8 +514,8 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
   const __u32 kCapsRequired = V4L2_CAP_VIDEO_M2M_MPLANE | V4L2_CAP_STREAMING;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_QUERYCAP, &caps);
   if ((caps.capabilities & kCapsRequired) != kCapsRequired) {
-    LOG(ERROR) << "Initialize(): ioctl() failed: VIDIOC_QUERYCAP"
-               << ", caps check failed: 0x" << std::hex << caps.capabilities;
+    LOGF(ERROR) << "ioctl() failed: VIDIOC_QUERYCAP"
+                << ", caps check failed: 0x" << std::hex << caps.capabilities;
     return false;
   }
 
@@ -521,7 +523,7 @@ bool V4L2SliceVideoDecodeAccelerator::Initialize(const Config& config,
     return false;
 
   if (!decoder_thread_.Start()) {
-    DLOG(ERROR) << "Initialize(): device thread failed to start";
+    DLOGF(ERROR) << "device thread failed to start";
     return false;
   }
   decoder_thread_task_runner_ = decoder_thread_.task_runner();
@@ -623,8 +625,8 @@ bool V4L2SliceVideoDecodeAccelerator::SetupFormats() {
   }
 
   if (!is_format_supported) {
-    DVLOG(1) << "Input fourcc " << input_format_fourcc
-             << " not supported by device.";
+    DVLOGF(1) << "Input fourcc " << input_format_fourcc
+              << " not supported by device.";
     return false;
   }
 
@@ -651,7 +653,7 @@ bool V4L2SliceVideoDecodeAccelerator::SetupFormats() {
   }
 
   if (output_format_fourcc_ == 0) {
-    LOG(ERROR) << "Could not find a usable output format";
+    LOGF(ERROR) << "Could not find a usable output format";
     return false;
   }
 
@@ -679,7 +681,7 @@ bool V4L2SliceVideoDecodeAccelerator::CreateInputBuffers() {
   reqbufs.memory = V4L2_MEMORY_MMAP;
   IOCTL_OR_ERROR_RETURN_FALSE(VIDIOC_REQBUFS, &reqbufs);
   if (reqbufs.count < kNumInputBuffers) {
-    PLOG(ERROR) << "Could not allocate enough output buffers";
+    PLOGF(ERROR) << "Could not allocate enough output buffers";
     return false;
   }
   input_buffer_map_.resize(reqbufs.count);
@@ -703,7 +705,7 @@ bool V4L2SliceVideoDecodeAccelerator::CreateInputBuffers() {
                                   MAP_SHARED,
                                   buffer.m.planes[0].m.mem_offset);
     if (address == MAP_FAILED) {
-      PLOG(ERROR) << "CreateInputBuffers(): mmap() failed";
+      PLOGF(ERROR) << "mmap() failed";
       return false;
     }
     input_buffer_map_[i].address = address;
@@ -736,7 +738,7 @@ bool V4L2SliceVideoDecodeAccelerator::CreateOutputBuffers() {
   format.fmt.pix_mp.num_planes = input_planes_count_;
 
   if (device_->Ioctl(VIDIOC_S_FMT, &format) != 0) {
-    PLOG(ERROR) << "Failed setting format to: " << output_format_fourcc_;
+    PLOGF(ERROR) << "Failed setting format to: " << output_format_fourcc_;
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return false;
   }
@@ -747,7 +749,8 @@ bool V4L2SliceVideoDecodeAccelerator::CreateOutputBuffers() {
   DCHECK_EQ(coded_size_.height() % 16, 0);
 
   if (!gfx::Rect(coded_size_).Contains(gfx::Rect(visible_size_))) {
-    LOG(ERROR) << "Got invalid adjusted coded size: " << coded_size_.ToString();
+    LOGF(ERROR) << "Got invalid adjusted coded size: "
+                << coded_size_.ToString();
     return false;
   }
 
@@ -755,10 +758,17 @@ bool V4L2SliceVideoDecodeAccelerator::CreateOutputBuffers() {
             << ", visible size=" << visible_size_.ToString()
             << ", coded size=" << coded_size_.ToString();
 
+  // With ALLOCATE mode the client can sample it as RGB and doesn't need to
+  // know the precise format.
+  VideoPixelFormat pixel_format =
+      (output_mode_ == Config::OutputMode::IMPORT)
+          ? V4L2Device::V4L2PixFmtToVideoPixelFormat(output_format_fourcc_)
+          : PIXEL_FORMAT_UNKNOWN;
+
   child_task_runner_->PostTask(
       FROM_HERE,
       base::Bind(&VideoDecodeAccelerator::Client::ProvidePictureBuffers,
-                 client_, num_pictures, 1, coded_size_,
+                 client_, num_pictures, pixel_format, 1, coded_size_,
                  device_->GetTextureTarget()));
 
   // Go into kAwaitingPictureBuffers to prevent us from doing any more decoding
@@ -811,7 +821,7 @@ void V4L2SliceVideoDecodeAccelerator::DismissPictures(
 
 void V4L2SliceVideoDecodeAccelerator::DevicePollTask(bool poll_device) {
   DVLOGF(4);
-  DCHECK_EQ(device_poll_thread_.message_loop(), base::MessageLoop::current());
+  DCHECK(device_poll_thread_.task_runner()->BelongsToCurrentThread());
 
   bool event_pending;
   if (!device_->Poll(poll_device, &event_pending)) {
@@ -919,7 +929,7 @@ void V4L2SliceVideoDecodeAccelerator::Dequeue() {
         // EAGAIN if we're just out of buffers to dequeue.
         break;
       }
-      PLOG(ERROR) << "ioctl() failed: VIDIOC_DQBUF";
+      PLOGF(ERROR) << "ioctl() failed: VIDIOC_DQBUF";
       NOTIFY_ERROR(PLATFORM_FAILURE);
       return;
     }
@@ -947,7 +957,7 @@ void V4L2SliceVideoDecodeAccelerator::Dequeue() {
         // EAGAIN if we're just out of buffers to dequeue.
         break;
       }
-      PLOG(ERROR) << "ioctl() failed: VIDIOC_DQBUF";
+      PLOGF(ERROR) << "ioctl() failed: VIDIOC_DQBUF";
       NOTIFY_ERROR(PLATFORM_FAILURE);
       return;
     }
@@ -961,7 +971,7 @@ void V4L2SliceVideoDecodeAccelerator::Dequeue() {
     V4L2DecodeSurfaceByOutputId::iterator it =
         surfaces_at_device_.find(dqbuf.index);
     if (it == surfaces_at_device_.end()) {
-      DLOG(ERROR) << "Got invalid surface from device.";
+      DLOGF(ERROR) << "Got invalid surface from device.";
       NOTIFY_ERROR(PLATFORM_FAILURE);
     }
 
@@ -1143,7 +1153,7 @@ bool V4L2SliceVideoDecodeAccelerator::StartDevicePoll() {
 
   // Start up the device poll thread and schedule its first DevicePollTask().
   if (!device_poll_thread_.Start()) {
-    DLOG(ERROR) << "StartDevicePoll(): Device thread failed to start";
+    DLOGF(ERROR) << "Device thread failed to start";
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return false;
   }
@@ -1173,7 +1183,7 @@ bool V4L2SliceVideoDecodeAccelerator::StopDevicePoll(bool keep_input_state) {
 
   // Signal the DevicePollTask() to stop, and stop the device poll thread.
   if (!device_->SetDevicePollInterrupt()) {
-    PLOG(ERROR) << "SetDevicePollInterrupt(): failed";
+    PLOGF(ERROR) << "SetDevicePollInterrupt(): failed";
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return false;
   }
@@ -1234,13 +1244,13 @@ bool V4L2SliceVideoDecodeAccelerator::StopDevicePoll(bool keep_input_state) {
 }
 
 void V4L2SliceVideoDecodeAccelerator::Decode(
-    const media::BitstreamBuffer& bitstream_buffer) {
+    const BitstreamBuffer& bitstream_buffer) {
   DVLOGF(3) << "input_id=" << bitstream_buffer.id()
             << ", size=" << bitstream_buffer.size();
   DCHECK(decode_task_runner_->BelongsToCurrentThread());
 
   if (bitstream_buffer.id() < 0) {
-    LOG(ERROR) << "Invalid bitstream_buffer, id: " << bitstream_buffer.id();
+    LOGF(ERROR) << "Invalid bitstream_buffer, id: " << bitstream_buffer.id();
     if (base::SharedMemory::IsHandleValid(bitstream_buffer.handle()))
       base::SharedMemory::CloseHandle(bitstream_buffer.handle());
     NOTIFY_ERROR(INVALID_ARGUMENT);
@@ -1253,7 +1263,7 @@ void V4L2SliceVideoDecodeAccelerator::Decode(
 }
 
 void V4L2SliceVideoDecodeAccelerator::DecodeTask(
-    const media::BitstreamBuffer& bitstream_buffer) {
+    const BitstreamBuffer& bitstream_buffer) {
   DVLOGF(3) << "input_id=" << bitstream_buffer.id()
             << " size=" << bitstream_buffer.size();
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
@@ -1401,7 +1411,7 @@ bool V4L2SliceVideoDecodeAccelerator::FinishSurfaceSetChange() {
   }
 
   surface_set_change_pending_ = false;
-  DVLOG(3) << "Surface set change finished";
+  DVLOGF(3) << "Surface set change finished";
   return true;
 }
 
@@ -1433,7 +1443,8 @@ bool V4L2SliceVideoDecodeAccelerator::DestroyOutputs(bool dismiss) {
 
   if (dismiss) {
     DVLOGF(2) << "Scheduling picture dismissal";
-    base::WaitableEvent done(false, false);
+    base::WaitableEvent done(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                             base::WaitableEvent::InitialState::NOT_SIGNALED);
     child_task_runner_->PostTask(
         FROM_HERE, base::Bind(&V4L2SliceVideoDecodeAccelerator::DismissPictures,
                               weak_this_, picture_buffers_to_dismiss, &done));
@@ -1487,7 +1498,7 @@ bool V4L2SliceVideoDecodeAccelerator::DestroyOutputBuffers() {
 }
 
 void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffers(
-    const std::vector<media::PictureBuffer>& buffers) {
+    const std::vector<PictureBuffer>& buffers) {
   DVLOGF(3);
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
@@ -1498,7 +1509,7 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffers(
 }
 
 void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
-    const std::vector<media::PictureBuffer>& buffers) {
+    const std::vector<PictureBuffer>& buffers) {
   DVLOGF(3);
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
   DCHECK_EQ(state_, kAwaitingPictureBuffers);
@@ -1524,7 +1535,7 @@ void V4L2SliceVideoDecodeAccelerator::AssignPictureBuffersTask(
   IOCTL_OR_ERROR_RETURN(VIDIOC_REQBUFS, &reqbufs);
 
   if (reqbufs.count != buffers.size()) {
-    DLOG(ERROR) << "Could not allocate enough output buffers";
+    DLOGF(ERROR) << "Could not allocate enough output buffers";
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return;
   }
@@ -1590,19 +1601,19 @@ void V4L2SliceVideoDecodeAccelerator::CreateEGLImageFor(
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
   if (get_gl_context_cb_.is_null() || make_context_current_cb_.is_null()) {
-    DLOG(ERROR) << "GL callbacks required for binding to EGLImages";
+    DLOGF(ERROR) << "GL callbacks required for binding to EGLImages";
     NOTIFY_ERROR(INVALID_ARGUMENT);
     return;
   }
 
-  gfx::GLContext* gl_context = get_gl_context_cb_.Run();
+  gl::GLContext* gl_context = get_gl_context_cb_.Run();
   if (!gl_context || !make_context_current_cb_.Run()) {
-    DLOG(ERROR) << "No GL context";
+    DLOGF(ERROR) << "No GL context";
     NOTIFY_ERROR(PLATFORM_FAILURE);
     return;
   }
 
-  gfx::ScopedTextureBinder bind_restore(GL_TEXTURE_EXTERNAL_OES, 0);
+  gl::ScopedTextureBinder bind_restore(GL_TEXTURE_EXTERNAL_OES, 0);
 
   EGLImageKHR egl_image =
       device_->CreateEGLImage(egl_display_, gl_context->GetHandle(), texture_id,
@@ -1666,17 +1677,15 @@ void V4L2SliceVideoDecodeAccelerator::AssignEGLImage(
 
 void V4L2SliceVideoDecodeAccelerator::ImportBufferForPicture(
     int32_t picture_buffer_id,
-    const std::vector<gfx::GpuMemoryBufferHandle>& gpu_memory_buffer_handles) {
+    const gfx::GpuMemoryBufferHandle& gpu_memory_buffer_handle) {
   DVLOGF(3) << "picture_buffer_id=" << picture_buffer_id;
   DCHECK(child_task_runner_->BelongsToCurrentThread());
 
   auto passed_dmabuf_fds(base::WrapUnique(new std::vector<base::ScopedFD>()));
 #if defined(USE_OZONE)
-  for (const auto& handle : gpu_memory_buffer_handles) {
-    int fd = -1;
-    fd = handle.native_pixmap_handle.fd.fd;
-    DCHECK_NE(fd, -1);
-    passed_dmabuf_fds->push_back(base::ScopedFD(fd));
+  for (const auto& fd : gpu_memory_buffer_handle.native_pixmap_handle.fds) {
+    DCHECK_NE(fd.fd, -1);
+    passed_dmabuf_fds->push_back(base::ScopedFD(fd.fd));
   }
 #endif
 
@@ -1705,8 +1714,12 @@ void V4L2SliceVideoDecodeAccelerator::ImportBufferForPictureTask(
                      return output_record.picture_id == picture_buffer_id;
                    });
   if (iter == output_buffer_map_.end()) {
-    LOGF(ERROR) << "Invalid picture_buffer_id=" << picture_buffer_id;
-    NOTIFY_ERROR(INVALID_ARGUMENT);
+    // It's possible that we've already posted a DismissPictureBuffer for this
+    // picture, but it has not yet executed when this ImportBufferForPicture was
+    // posted to us by the client. In that case just ignore this (we've already
+    // dismissed it and accounted for that).
+    DVLOGF(3) << "got picture id=" << picture_buffer_id
+              << " not in use (anymore?).";
     return;
   }
 
@@ -1829,17 +1842,12 @@ void V4L2SliceVideoDecodeAccelerator::FlushTask() {
   DVLOGF(3);
   DCHECK(decoder_thread_task_runner_->BelongsToCurrentThread());
 
-  if (!decoder_input_queue_.empty()) {
-    // We are not done with pending inputs, so queue an empty buffer,
-    // which - when reached - will trigger flush sequence.
-    decoder_input_queue_.push(
-        linked_ptr<BitstreamBufferRef>(new BitstreamBufferRef(
-            decode_client_, decode_task_runner_, nullptr, kFlushBufferId)));
-    return;
-  }
+  // Queue an empty buffer which - when reached - will trigger flush sequence.
+  decoder_input_queue_.push(
+      linked_ptr<BitstreamBufferRef>(new BitstreamBufferRef(
+          decode_client_, decode_task_runner_, nullptr, kFlushBufferId)));
 
-  // No more inputs pending, so just finish flushing here.
-  InitiateFlush();
+  ScheduleDecodeBufferTaskIfNeeded();
 }
 
 void V4L2SliceVideoDecodeAccelerator::InitiateFlush() {
@@ -2026,7 +2034,7 @@ void V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator::H264DPBToV4L2DPB(
   size_t i = 0;
   for (const auto& pic : dpb) {
     if (i >= arraysize(v4l2_decode_param_.dpb)) {
-      DVLOG(1) << "Invalid DPB size";
+      DVLOGF(1) << "Invalid DPB size";
       break;
     }
 
@@ -2050,8 +2058,8 @@ void V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator::H264DPBToV4L2DPB(
 }
 
 bool V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator::SubmitFrameMetadata(
-    const media::H264SPS* sps,
-    const media::H264PPS* pps,
+    const H264SPS* sps,
+    const H264PPS* pps,
     const H264DPB& dpb,
     const H264Picture::Vector& ref_pic_listp0,
     const H264Picture::Vector& ref_pic_listb0,
@@ -2209,8 +2217,8 @@ bool V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator::SubmitFrameMetadata(
 }
 
 bool V4L2SliceVideoDecodeAccelerator::V4L2H264Accelerator::SubmitSlice(
-    const media::H264PPS* pps,
-    const media::H264SliceHeader* slice_hdr,
+    const H264PPS* pps,
+    const H264SliceHeader* slice_hdr,
     const H264Picture::Vector& ref_pic_list0,
     const H264Picture::Vector& ref_pic_list1,
     const scoped_refptr<H264Picture>& pic,
@@ -2440,7 +2448,7 @@ V4L2SliceVideoDecodeAccelerator::V4L2VP8Accelerator::CreateVP8Picture() {
   } while (0)
 
 static void FillV4L2SegmentationHeader(
-    const media::Vp8SegmentationHeader& vp8_sgmnt_hdr,
+    const Vp8SegmentationHeader& vp8_sgmnt_hdr,
     struct v4l2_vp8_sgmnt_hdr* v4l2_sgmnt_hdr) {
 #define SET_V4L2_SGMNT_HDR_FLAG_IF(cond, flag) \
   v4l2_sgmnt_hdr->flags |= ((vp8_sgmnt_hdr.cond) ? (flag) : 0)
@@ -2462,7 +2470,7 @@ static void FillV4L2SegmentationHeader(
 }
 
 static void FillV4L2LoopfilterHeader(
-    const media::Vp8LoopFilterHeader& vp8_loopfilter_hdr,
+    const Vp8LoopFilterHeader& vp8_loopfilter_hdr,
     struct v4l2_vp8_loopfilter_hdr* v4l2_lf_hdr) {
 #define SET_V4L2_LF_HDR_FLAG_IF(cond, flag) \
   v4l2_lf_hdr->flags |= ((vp8_loopfilter_hdr.cond) ? (flag) : 0)
@@ -2484,7 +2492,7 @@ static void FillV4L2LoopfilterHeader(
 }
 
 static void FillV4L2QuantizationHeader(
-    const media::Vp8QuantizationHeader& vp8_quant_hdr,
+    const Vp8QuantizationHeader& vp8_quant_hdr,
     struct v4l2_vp8_quantization_hdr* v4l2_quant_hdr) {
   v4l2_quant_hdr->y_ac_qi = vp8_quant_hdr.y_ac_qi;
   v4l2_quant_hdr->y_dc_delta = vp8_quant_hdr.y_dc_delta;
@@ -2495,7 +2503,7 @@ static void FillV4L2QuantizationHeader(
 }
 
 static void FillV4L2EntropyHeader(
-    const media::Vp8EntropyHeader& vp8_entropy_hdr,
+    const Vp8EntropyHeader& vp8_entropy_hdr,
     struct v4l2_vp8_entropy_hdr* v4l2_entropy_hdr) {
   ARRAY_MEMCPY_CHECKED(v4l2_entropy_hdr->coeff_probs,
                        vp8_entropy_hdr.coeff_probs);
@@ -2508,7 +2516,7 @@ static void FillV4L2EntropyHeader(
 
 bool V4L2SliceVideoDecodeAccelerator::V4L2VP8Accelerator::SubmitDecode(
     const scoped_refptr<VP8Picture>& pic,
-    const media::Vp8FrameHeader* frame_hdr,
+    const Vp8FrameHeader* frame_hdr,
     const scoped_refptr<VP8Picture>& last_frame,
     const scoped_refptr<VP8Picture>& golden_frame,
     const scoped_refptr<VP8Picture>& alt_frame) {
@@ -2692,8 +2700,8 @@ void V4L2SliceVideoDecodeAccelerator::OutputSurface(
   // TODO(posciak): Use visible size from decoder here instead
   // (crbug.com/402760). Passing (0, 0) results in the client using the
   // visible size extracted from the container instead.
-  media::Picture picture(output_record.picture_id, dec_surface->bitstream_id(),
-                         gfx::Rect(0, 0), false);
+  Picture picture(output_record.picture_id, dec_surface->bitstream_id(),
+                  gfx::Rect(0, 0), false);
   DVLOGF(3) << dec_surface->ToString()
             << ", bitstream_id: " << picture.bitstream_buffer_id()
             << ", picture_id: " << picture.picture_buffer_id();
@@ -2736,7 +2744,7 @@ void V4L2SliceVideoDecodeAccelerator::SendPictureReady() {
   bool resetting_or_flushing = (decoder_resetting_ || decoder_flushing_);
   while (!pending_picture_ready_.empty()) {
     bool cleared = pending_picture_ready_.front().cleared;
-    const media::Picture& picture = pending_picture_ready_.front().picture;
+    const Picture& picture = pending_picture_ready_.front().picture;
     if (cleared && picture_clearing_count_ == 0) {
       DVLOGF(4) << "Posting picture ready to decode task runner for: "
                 << picture.picture_buffer_id();
@@ -2786,18 +2794,13 @@ void V4L2SliceVideoDecodeAccelerator::PictureCleared() {
 bool V4L2SliceVideoDecodeAccelerator::TryToSetupDecodeOnSeparateThread(
     const base::WeakPtr<Client>& decode_client,
     const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner) {
-  decode_client_ = decode_client_;
+  decode_client_ = decode_client;
   decode_task_runner_ = decode_task_runner;
   return true;
 }
 
-media::VideoPixelFormat V4L2SliceVideoDecodeAccelerator::GetOutputFormat()
-    const {
-  return V4L2Device::V4L2PixFmtToVideoPixelFormat(output_format_fourcc_);
-}
-
 // static
-media::VideoDecodeAccelerator::SupportedProfiles
+VideoDecodeAccelerator::SupportedProfiles
 V4L2SliceVideoDecodeAccelerator::GetSupportedProfiles() {
   scoped_refptr<V4L2Device> device = V4L2Device::Create(V4L2Device::kDecoder);
   if (!device)

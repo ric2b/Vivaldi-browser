@@ -322,12 +322,17 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           codec, sample_format, channel_layout, sample_per_second, extra_data,
           is_audio_track_encrypted_ ? AesCtrEncryptionScheme() : Unencrypted(),
           base::TimeDelta(), 0);
+      if (!audio_config.IsValidConfig()) {
+        MEDIA_LOG(ERROR, media_log_) << "Invalid audio decoder config: "
+                                     << audio_config.AsHumanReadableString();
+        return false;
+      }
       audio_config.set_input_samples_per_second(input_samples_per_second);
       has_audio_ = true;
       audio_track_id_ = track->header.track_id;
-      media_tracks->AddAudioTrack(
-          audio_config, base::UintToString(audio_track_id_), "main",
-          track->media.handler.name, track->media.header.language());
+      media_tracks->AddAudioTrack(audio_config, audio_track_id_, "main",
+                                  track->media.handler.name,
+                                  track->media.header.language());
       continue;
     }
 
@@ -374,11 +379,16 @@ bool MP4StreamParser::ParseMoov(BoxReader* reader) {
           // SPS/PPS are embedded in the video stream
           EmptyExtraData(),
           is_video_track_encrypted_ ? AesCtrEncryptionScheme() : Unencrypted());
+      if (!video_config.IsValidConfig()) {
+        MEDIA_LOG(ERROR, media_log_) << "Invalid video decoder config: "
+                                     << video_config.AsHumanReadableString();
+        return false;
+      }
       has_video_ = true;
       video_track_id_ = track->header.track_id;
-      media_tracks->AddVideoTrack(
-          video_config, base::UintToString(video_track_id_), "main",
-          track->media.handler.name, track->media.header.language());
+      media_tracks->AddVideoTrack(video_config, video_track_id_, "main",
+                                  track->media.handler.name,
+                                  track->media.header.language());
       continue;
     }
 

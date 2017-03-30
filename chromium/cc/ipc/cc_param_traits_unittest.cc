@@ -299,7 +299,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
 
   SharedQuadState* shared_state1_cmp =
       pass_cmp->CreateAndAppendSharedQuadState();
-  shared_state1_cmp->CopyFrom(shared_state1_in);
+  *shared_state1_cmp = *shared_state1_in;
 
   DebugBorderDrawQuad* debugborder_in =
       pass_in->CreateAndAppendDrawQuad<DebugBorderDrawQuad>();
@@ -316,7 +316,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
                            arbitrary_blend_mode2, arbitrary_context_id2);
   SharedQuadState* shared_state2_cmp =
       pass_cmp->CreateAndAppendSharedQuadState();
-  shared_state2_cmp->CopyFrom(shared_state2_in);
+  *shared_state2_cmp = *shared_state2_in;
 
   RenderPassDrawQuad* renderpass_in =
       pass_in->CreateAndAppendDrawQuad<RenderPassDrawQuad>();
@@ -335,7 +335,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
                            arbitrary_blend_mode3, arbitrary_context_id3);
   SharedQuadState* shared_state3_cmp =
       pass_cmp->CreateAndAppendSharedQuadState();
-  shared_state3_cmp->CopyFrom(shared_state3_in);
+  *shared_state3_cmp = *shared_state3_in;
 
   SolidColorDrawQuad* solidcolor_in =
       pass_in->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
@@ -355,7 +355,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   pass_cmp->CopyFromAndAppendDrawQuad(streamvideo_in,
                                       streamvideo_in->shared_quad_state);
 
-  cc::SurfaceId arbitrary_surface_id(3);
+  cc::SurfaceId arbitrary_surface_id(0, 3, 0);
   SurfaceDrawQuad* surface_in =
       pass_in->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   surface_in->SetAll(shared_state3_in, arbitrary_rect2,

@@ -7,34 +7,32 @@
 #include <stdint.h>
 
 #include "base/logging.h"
-#include "mojo/gles2/gles2_context.h"
-#include "mojo/gpu/mojo_gles2_impl_autogen.h"
+#include "components/mus/public/cpp/gles2_context.h"
+#include "services/shell/public/cpp/connector.h"
 
 namespace mus {
 
-ContextProvider::ContextProvider(
-    mojo::ScopedMessagePipeHandle command_buffer_handle)
-    : command_buffer_handle_(std::move(command_buffer_handle)),
-      context_(nullptr) {
-}
+ContextProvider::ContextProvider(shell::Connector* connector)
+    : connector_(connector->Clone()) {}
 
 bool ContextProvider::BindToCurrentThread() {
-  DCHECK(command_buffer_handle_.is_valid());
-  context_ = MojoGLES2CreateContext(command_buffer_handle_.release().value(),
-                                    nullptr, &ContextLostThunk, this);
-  context_gl_.reset(new mojo::MojoGLES2Impl(context_));
+  if (connector_) {
+    context_ = GLES2Context::CreateOffscreenContext(std::vector<int32_t>(),
+                                                    connector_.get());
+    // We don't need the connector anymore, so release it.
+    connector_.reset();
+  }
   return !!context_;
 }
 
 gpu::gles2::GLES2Interface* ContextProvider::ContextGL() {
-  return context_gl_.get();
+  return context_->interface();
 }
 
 gpu::ContextSupport* ContextProvider::ContextSupport() {
   if (!context_)
     return NULL;
-  // TODO(rjkroege): Ensure that UIP does not take this code path.
-  return static_cast<gles2::GLES2Context*>(context_)->context_support();
+  return context_->context_support();
 }
 
 class GrContext* ContextProvider::GrContext() {
@@ -58,11 +56,6 @@ base::Lock* ContextProvider::GetLock() {
 }
 
 ContextProvider::~ContextProvider() {
-  context_gl_.reset();
-  if (context_)
-    MojoGLES2DestroyContext(context_);
 }
-
-void ContextProvider::ContextLost() {}
 
 }  // namespace mus

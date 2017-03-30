@@ -6,9 +6,9 @@
 
 #include <set>
 
-#include "ash/ash_constants.h"
+#include "ash/common/ash_constants.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/shell.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/resize_handle_window_targeter.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/metrics/histogram.h"
@@ -249,8 +249,7 @@ ImmersiveFullscreenController::ImmersiveFullscreenController()
       gesture_begun_(false),
       animation_(new gfx::SlideAnimation(this)),
       animations_disabled_for_test_(false),
-      weak_ptr_factory_(this) {
-}
+      weak_ptr_factory_(this) {}
 
 ImmersiveFullscreenController::~ImmersiveFullscreenController() {
   EnableWindowObservers(false);
@@ -277,7 +276,9 @@ void ImmersiveFullscreenController::SetEnabled(WindowType window_type,
 
   ash::wm::WindowState* window_state = wm::GetWindowState(native_window_);
   // Auto hide the shelf in immersive fullscreen instead of hiding it.
-  window_state->set_hide_shelf_when_fullscreen(!enabled);
+  window_state->set_shelf_mode_in_fullscreen(
+      enabled ? ash::wm::WindowState::SHELF_AUTO_HIDE_VISIBLE
+              : ash::wm::WindowState::SHELF_HIDDEN);
 
   // Update the window's immersive mode state for the window manager.
   window_state->set_in_immersive_fullscreen(enabled);
@@ -315,8 +316,7 @@ void ImmersiveFullscreenController::SetEnabled(WindowType window_type,
   }
 
   if (enabled_) {
-    UMA_HISTOGRAM_ENUMERATION("Ash.ImmersiveFullscreen.WindowType",
-                              window_type,
+    UMA_HISTOGRAM_ENUMERATION("Ash.ImmersiveFullscreen.WindowType", window_type,
                               WINDOW_TYPE_COUNT);
   }
 }
@@ -441,8 +441,7 @@ void ImmersiveFullscreenController::OnGestureEvent(ui::GestureEvent* event) {
 
 void ImmersiveFullscreenController::OnWillChangeFocus(
     views::View* focused_before,
-    views::View* focused_now) {
-}
+    views::View* focused_now) {}
 
 void ImmersiveFullscreenController::OnDidChangeFocus(
     views::View* focused_before,
@@ -512,8 +511,8 @@ void ImmersiveFullscreenController::OnTransientChildRemoved(
 void ImmersiveFullscreenController::LockRevealedState(
     AnimateReveal animate_reveal) {
   ++revealed_lock_count_;
-  Animate animate = (animate_reveal == ANIMATE_REVEAL_YES) ?
-      ANIMATE_FAST : ANIMATE_NO;
+  Animate animate =
+      (animate_reveal == ANIMATE_REVEAL_YES) ? ANIMATE_FAST : ANIMATE_NO;
   MaybeStartReveal(animate);
 }
 
@@ -540,16 +539,14 @@ void ImmersiveFullscreenController::EnableWindowObservers(bool enable) {
     widget_->AddObserver(this);
     focus_manager->AddFocusChangeListener(this);
     Shell::GetInstance()->AddPreTargetHandler(this);
-    ::wm::TransientWindowManager::Get(native_window_)->
-        AddObserver(this);
+    ::wm::TransientWindowManager::Get(native_window_)->AddObserver(this);
 
     RecreateBubbleObserver();
   } else {
     widget_->RemoveObserver(this);
     focus_manager->RemoveFocusChangeListener(this);
     Shell::GetInstance()->RemovePreTargetHandler(this);
-    ::wm::TransientWindowManager::Get(native_window_)->
-        RemoveObserver(this);
+    ::wm::TransientWindowManager::Get(native_window_)->RemoveObserver(this);
 
     // We have stopped observing whether transient children are added or removed
     // to |native_window_|. The set of bubbles that BubbleObserver is observing
@@ -607,8 +604,7 @@ void ImmersiveFullscreenController::UpdateTopEdgeHoverTimer(
   top_edge_hover_timer_.Stop();
   // Timer is stopped when |this| is destroyed, hence Unretained() is safe.
   top_edge_hover_timer_.Start(
-      FROM_HERE,
-      base::TimeDelta::FromMilliseconds(kMouseRevealDelayMs),
+      FROM_HERE, base::TimeDelta::FromMilliseconds(kMouseRevealDelayMs),
       base::Bind(
           &ImmersiveFullscreenController::AcquireLocatedEventRevealedLock,
           base::Unretained(this)));
@@ -642,8 +638,8 @@ void ImmersiveFullscreenController::UpdateLocatedEventRevealedLock(
   if (event && event->type() != ui::ET_MOUSE_CAPTURE_CHANGED) {
     location_in_screen = GetEventLocationInScreen(*event);
   } else {
-    aura::client::CursorClient* cursor_client = aura::client::GetCursorClient(
-        native_window_->GetRootWindow());
+    aura::client::CursorClient* cursor_client =
+        aura::client::GetCursorClient(native_window_->GetRootWindow());
     if (!cursor_client->IsMouseEventsEnabled()) {
       // If mouse events are disabled, the user's last interaction was probably
       // via touch. Do no do further processing in this case as there is no easy
@@ -703,8 +699,9 @@ void ImmersiveFullscreenController::UpdateFocusRevealedLock() {
     if (top_container_->Contains(focused_view))
       hold_lock = true;
   } else {
-    aura::Window* active_window = aura::client::GetActivationClient(
-        native_window_->GetRootWindow())->GetActiveWindow();
+    aura::Window* active_window =
+        aura::client::GetActivationClient(native_window_->GetRootWindow())
+            ->GetActiveWindow();
     if (GetAnchorView(active_window)) {
       // BubbleObserver will already have locked the top-of-window views if the
       // bubble is anchored to a child of |top_container_|. Don't acquire

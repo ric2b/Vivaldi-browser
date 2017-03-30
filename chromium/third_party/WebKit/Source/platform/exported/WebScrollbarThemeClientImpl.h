@@ -80,11 +80,6 @@ public:
     float elasticOverscroll() const override;
     void setElasticOverscroll(float) override;
 
-    // DisplayItemClient methods.
-    String debugName() const final;
-    // TODO(chrishtr): fix this.
-    LayoutRect visualRect() const override { return LayoutRect(); }
-
 private:
     WebScrollbar& m_scrollbar;
 };

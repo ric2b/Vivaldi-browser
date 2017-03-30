@@ -43,6 +43,20 @@ VaapiDrmPicture::~VaapiDrmPicture() {
   }
 }
 
+static unsigned BufferFormatToInternalFormat(gfx::BufferFormat format) {
+  switch (format) {
+    case gfx::BufferFormat::BGRA_8888:
+      return GL_BGRA_EXT;
+
+    case gfx::BufferFormat::YVU_420:
+      return GL_RGB_YCRCB_420_CHROMIUM;
+
+    default:
+      NOTREACHED();
+      return GL_BGRA_EXT;
+  }
+}
+
 bool VaapiDrmPicture::Initialize() {
   DCHECK(pixmap_);
 
@@ -59,11 +73,15 @@ bool VaapiDrmPicture::Initialize() {
     if (!make_context_current_cb_.Run())
       return false;
 
-    gfx::ScopedTextureBinder texture_binder(GL_TEXTURE_EXTERNAL_OES,
-                                            texture_id_);
-    scoped_refptr<gfx::GLImageOzoneNativePixmap> image(
-        new gfx::GLImageOzoneNativePixmap(size_, GL_BGRA_EXT));
-    if (!image->Initialize(pixmap_.get(), pixmap_->GetBufferFormat())) {
+    gl::ScopedTextureBinder texture_binder(GL_TEXTURE_EXTERNAL_OES,
+                                           texture_id_);
+
+    gfx::BufferFormat format = pixmap_->GetBufferFormat();
+
+    scoped_refptr<gl::GLImageOzoneNativePixmap> image(
+        new gl::GLImageOzoneNativePixmap(size_,
+                                         BufferFormatToInternalFormat(format)));
+    if (!image->Initialize(pixmap_.get(), format)) {
       LOG(ERROR) << "Failed to create GLImage";
       return false;
     }
@@ -105,7 +123,8 @@ bool VaapiDrmPicture::ImportGpuMemoryBufferHandle(
   ui::SurfaceFactoryOzone* factory = platform->GetSurfaceFactoryOzone();
   // CreateNativePixmapFromHandle() will take ownership of the handle.
   pixmap_ = factory->CreateNativePixmapFromHandle(
-      size_, format, gpu_memory_buffer_handle.native_pixmap_handle);
+      gfx::kNullAcceleratedWidget, size_, format,
+      gpu_memory_buffer_handle.native_pixmap_handle);
   if (!pixmap_) {
     DVLOG(1) << "Failed creating a pixmap from a native handle";
     return false;

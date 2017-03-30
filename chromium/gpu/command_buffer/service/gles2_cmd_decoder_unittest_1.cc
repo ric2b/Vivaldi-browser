@@ -14,7 +14,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gl/gl_mock.h"
 
-using ::gfx::MockGLInterface;
+using ::gl::MockGLInterface;
 using ::testing::_;
 using ::testing::DoAll;
 using ::testing::InSequence;
@@ -172,6 +172,18 @@ void GLES2DecoderTestBase::SpecializedSetup<cmds::GetProgramiv, 0>(
         .RetiresOnSaturation();
     EXPECT_CALL(*gl_, GetError())
         .WillOnce(Return(GL_NO_ERROR))
+        .RetiresOnSaturation();
+  }
+}
+
+template <>
+void GLES2DecoderTestBase::
+    SpecializedSetup<cmds::GenTransformFeedbacksImmediate, 0>(bool valid) {
+  if (valid) {
+    // Transform feedbacks are per-context, not per-group, so they get cleaned
+    // up at the end of the test.
+    EXPECT_CALL(*gl_, DeleteTransformFeedbacks(_, _))
+        .Times(1)
         .RetiresOnSaturation();
   }
 }

@@ -21,6 +21,7 @@
 #include "components/network_time/network_time_tracker.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/prefs/pref_service.h"
+#include "components/subresource_filter/core/browser/ruleset_service.h"
 #include "content/public/browser/notification_service.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -65,6 +66,7 @@ void TestingBrowserProcess::DeleteInstance() {
 TestingBrowserProcess::TestingBrowserProcess()
     : notification_service_(content::NotificationService::Create()),
       app_locale_("en"),
+      is_shutting_down_(false),
       local_state_(nullptr),
       io_thread_(nullptr),
       system_request_context_(nullptr),
@@ -196,6 +198,11 @@ TestingBrowserProcess::safe_browsing_detection_service() {
   return nullptr;
 }
 
+subresource_filter::RulesetService*
+TestingBrowserProcess::subresource_filter_ruleset_service() {
+  return subresource_filter_ruleset_service_.get();
+}
+
 net::URLRequestContextGetter* TestingBrowserProcess::system_request_context() {
   return system_request_context_;
 }
@@ -243,7 +250,7 @@ void TestingBrowserProcess::CreateDevToolsAutoOpener() {
 }
 
 bool TestingBrowserProcess::IsShuttingDown() {
-  return false;
+  return is_shutting_down_;
 }
 
 printing::PrintJobManager* TestingBrowserProcess::print_job_manager() {
@@ -418,9 +425,18 @@ void TestingBrowserProcess::SetSafeBrowsingService(
   sb_service_ = sb_service;
 }
 
+void TestingBrowserProcess::SetRulesetService(
+    std::unique_ptr<subresource_filter::RulesetService> ruleset_service) {
+  subresource_filter_ruleset_service_.swap(ruleset_service);
+}
+
 void TestingBrowserProcess::SetRapporService(
     rappor::RapporService* rappor_service) {
   rappor_service_ = rappor_service;
+}
+
+void TestingBrowserProcess::SetShuttingDown(bool is_shutting_down) {
+  is_shutting_down_ = is_shutting_down;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

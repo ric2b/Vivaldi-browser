@@ -127,6 +127,8 @@ cr.define('options', function() {
       for (var i = 0; i < indicators.length; i++) {
         indicators[i].handlePrefChange(event);
       }
+      if (controlledBy)
+        this.getExceptionsList(group, 'normal').setOverruledBy(controlledBy);
     }
   };
 
@@ -201,19 +203,6 @@ cr.define('options', function() {
     assert(['default', 'exceptions'].indexOf(linkType) >= 0);
     assert(['mic', 'camera'].indexOf(contentType) >= 0);
     $('media-pepper-flash-' + linkType + '-' + contentType).hidden = !show;
-  };
-
-  /**
-   * Shows/hides parts of the fullscreen and mouselock sections.
-   * @param {boolean} deprecationVisible Whether to show (or hide) the
-   *    deprecation warning labels.
-   * @param {boolean} globalsVisible Whether to show (or hide) global settings.
-   */
-  ContentSettings.setExclusiveAccessVisible = function(
-      deprecationVisible, globalsVisible) {
-    $('fullscreen-deprecated').hidden = !deprecationVisible;
-    $('mouselock-deprecated').hidden = !deprecationVisible;
-    $('mouselock-global-settings').hidden = !globalsVisible;
   };
 
   /**

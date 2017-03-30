@@ -29,6 +29,8 @@
 
 #include "core/html/track/vtt/VTTScanner.h"
 
+#include "wtf/text/StringToNumber.h"
+
 namespace blink {
 
 VTTScanner::VTTScanner(const String& line) : m_is8Bit(line.is8Bit())
@@ -67,10 +69,10 @@ bool VTTScanner::scan(const LChar* characters, size_t charactersCount)
 
 bool VTTScanner::scanRun(const Run& run, const String& toMatch)
 {
-    ASSERT(run.start() == getPosition());
-    ASSERT(run.start() <= end());
-    ASSERT(run.end() >= run.start());
-    ASSERT(run.end() <= end());
+    DCHECK_EQ(run.start(), getPosition());
+    DCHECK_LE(run.start(), end());
+    DCHECK_GE(run.end(), run.start());
+    DCHECK_LE(run.end(), end());
     size_t matchLength = run.length();
     if (toMatch.length() > matchLength)
         return false;
@@ -86,18 +88,18 @@ bool VTTScanner::scanRun(const Run& run, const String& toMatch)
 
 void VTTScanner::skipRun(const Run& run)
 {
-    ASSERT(run.start() <= end());
-    ASSERT(run.end() >= run.start());
-    ASSERT(run.end() <= end());
+    DCHECK_LE(run.start(), end());
+    DCHECK_GE(run.end(), run.start());
+    DCHECK_LE(run.end(), end());
     seekTo(run.end());
 }
 
 String VTTScanner::extractString(const Run& run)
 {
-    ASSERT(run.start() == getPosition());
-    ASSERT(run.start() <= end());
-    ASSERT(run.end() >= run.start());
-    ASSERT(run.end() <= end());
+    DCHECK_EQ(run.start(), getPosition());
+    DCHECK_LE(run.start(), end());
+    DCHECK_GE(run.end(), run.start());
+    DCHECK_LE(run.end(), end());
     String s;
     if (m_is8Bit)
         s = String(m_data.characters8, run.length());

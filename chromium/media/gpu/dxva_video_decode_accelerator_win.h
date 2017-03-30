@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_H_
-#define MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_H_
+#ifndef MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_WIN_H_
+#define MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_WIN_H_
 
 #include <d3d11.h>
 #include <d3d9.h>
@@ -39,11 +39,12 @@
 interface IMFSample;
 interface IDirect3DSurface9;
 
-namespace gfx {
+namespace gl {
 class GLContext;
 }
 
 namespace gpu {
+class GpuDriverBugWorkarounds;
 struct GpuPreferences;
 }
 
@@ -53,6 +54,7 @@ typedef HRESULT(WINAPI* CreateDXGIDeviceManager)(
 
 namespace media {
 class DXVAPictureBuffer;
+class EGLStreamCopyPictureBuffer;
 class EGLStreamPictureBuffer;
 class PbufferPictureBuffer;
 
@@ -85,7 +87,7 @@ class H264ConfigChangeDetector {
   // we want to honor after we see an IDR slice.
   bool pending_config_changed_;
 
-  std::unique_ptr<media::H264Parser> parser_;
+  std::unique_ptr<H264Parser> parser_;
 
   DISALLOW_COPY_AND_ASSIGN(H264ConfigChangeDetector);
 };
@@ -95,7 +97,7 @@ class H264ConfigChangeDetector {
 // This class lives on a single thread and DCHECKs that it is never accessed
 // from any other.
 class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
-    : public media::VideoDecodeAccelerator {
+    : public VideoDecodeAccelerator {
  public:
   enum State {
     kUninitialized,  // un-initialized.
@@ -110,14 +112,14 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   DXVAVideoDecodeAccelerator(
       const GetGLContextCallback& get_gl_context_cb,
       const MakeGLContextCurrentCallback& make_context_current_cb,
+      const gpu::GpuDriverBugWorkarounds& workarounds,
       const gpu::GpuPreferences& gpu_preferences);
   ~DXVAVideoDecodeAccelerator() override;
 
-  // media::VideoDecodeAccelerator implementation.
+  // VideoDecodeAccelerator implementation.
   bool Initialize(const Config& config, Client* client) override;
-  void Decode(const media::BitstreamBuffer& bitstream_buffer) override;
-  void AssignPictureBuffers(
-      const std::vector<media::PictureBuffer>& buffers) override;
+  void Decode(const BitstreamBuffer& bitstream_buffer) override;
+  void AssignPictureBuffers(const std::vector<PictureBuffer>& buffers) override;
   void ReusePictureBuffer(int32_t picture_buffer_id) override;
   void Flush() override;
   void Reset() override;
@@ -128,26 +130,24 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
       override;
   GLenum GetSurfaceInternalFormat() const override;
 
-  static media::VideoDecodeAccelerator::SupportedProfiles
-  GetSupportedProfiles();
+  static VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles();
 
   // Preload dlls required for decoding.
   static void PreSandboxInitialization();
 
  private:
   friend class DXVAPictureBuffer;
+  friend class EGLStreamCopyPictureBuffer;
   friend class EGLStreamPictureBuffer;
   friend class PbufferPictureBuffer;
   typedef void* EGLConfig;
   typedef void* EGLSurface;
 
   // Returns the minimum resolution for the |profile| passed in.
-  static std::pair<int, int> GetMinResolution(
-      const media::VideoCodecProfile profile);
+  static std::pair<int, int> GetMinResolution(const VideoCodecProfile profile);
 
   // Returns the maximum resolution for the |profile| passed in.
-  static std::pair<int, int> GetMaxResolution(
-      const media::VideoCodecProfile profile);
+  static std::pair<int, int> GetMaxResolution(const VideoCodecProfile profile);
 
   // Returns the maximum resolution for H264 video.
   static std::pair<int, int> GetMaxH264Resolution();
@@ -169,7 +169,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   bool CreateDX11DevManager();
 
   // Creates, initializes and sets the media codec types for the decoder.
-  bool InitDecoder(media::VideoCodecProfile profile);
+  bool InitDecoder(VideoCodecProfile profile);
 
   // Validates whether the decoder supports hardware video acceleration.
   bool CheckDecoderDxvaSupport();
@@ -206,7 +206,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   void ProcessPendingSamples();
 
   // Helper function to notify the accelerator client about the error.
-  void StopOnError(media::VideoDecodeAccelerator::Error error);
+  void StopOnError(VideoDecodeAccelerator::Error error);
 
   // Transitions the decoder to the uninitialized state. The decoder will stop
   // accepting requests in this state.
@@ -287,15 +287,22 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
                                  int input_buffer_id);
 
   // Copies the source texture |src_texture| to the destination |dest_texture|.
-  // The copying is done on the decoder thread. The |video_frame| parameter
-  // is the sample containing the frame to be copied.
+  // The copying is done on the decoder thread.
   void CopyTexture(ID3D11Texture2D* src_texture,
                    ID3D11Texture2D* dest_texture,
                    base::win::ScopedComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
                    uint64_t keyed_mutex_value,
-                   IMFSample* video_frame,
                    int picture_buffer_id,
                    int input_buffer_id);
+
+  // Copies the |video_frame| to the destination |dest_texture|.
+  void CopyTextureOnDecoderThread(
+      ID3D11Texture2D* dest_texture,
+      base::win::ScopedComPtr<IDXGIKeyedMutex> dest_keyed_mutex,
+      uint64_t keyed_mutex_value,
+      IMFSample* video_frame,
+      int picture_buffer_id,
+      int input_buffer_id);
 
   // Flushes the decoder device to ensure that the decoded surface is copied
   // to the target surface. |iterations| helps to maintain an upper limit on
@@ -345,7 +352,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   void ConfigChanged(const Config& config);
 
   // To expose client callbacks from VideoDecodeAccelerator.
-  media::VideoDecodeAccelerator::Client* client_;
+  VideoDecodeAccelerator::Client* client_;
 
   base::win::ScopedComPtr<IMFTransform> decoder_;
   base::win::ScopedComPtr<IMFTransform> video_format_converter_mft_;
@@ -356,6 +363,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   base::win::ScopedComPtr<IDirect3DQuery9> query_;
 
   base::win::ScopedComPtr<ID3D11Device> d3d11_device_;
+  base::win::ScopedComPtr<ID3D11Device> angle_device_;
   base::win::ScopedComPtr<IMFDXGIDeviceManager> d3d11_device_manager_;
   base::win::ScopedComPtr<ID3D10Multithread> multi_threaded_;
   base::win::ScopedComPtr<ID3D11DeviceContext> d3d11_device_context_;
@@ -434,7 +442,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   MakeGLContextCurrentCallback make_context_current_cb_;
 
   // Which codec we are decoding with hardware acceleration.
-  media::VideoCodec codec_;
+  VideoCodec codec_;
   // Thread on which the decoder operations like passing input frames,
   // getting output frames are performed. One instance of this thread
   // is created per decoder instance.
@@ -460,6 +468,9 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   bool pending_flush_;
 
   bool share_nv12_textures_;
+
+  // Copy NV12 texture to another NV12 texture.
+  bool copy_nv12_textures_;
 
   // Defaults to false. Indicates if we should use D3D or DX11 interfaces for
   // H/W decoding.
@@ -503,4 +514,4 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
 
 }  // namespace media
 
-#endif  // MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_H_
+#endif  // MEDIA_GPU_DXVA_VIDEO_DECODE_ACCELERATOR_WIN_H_

@@ -25,8 +25,8 @@
 #include "base/win/windows_version.h"
 #include "chrome/app/chrome_crash_reporter_client_win.h"
 #include "chrome/app/main_dll_loader_win.h"
-#include "chrome/browser/chrome_process_finder_win.h"
 #include "chrome/browser/policy/policy_path_parser.h"
+#include "chrome/browser/win/chrome_process_finder.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/installer/util/browser_distribution.h"
@@ -45,8 +45,8 @@ namespace {
 base::LazyInstance<ChromeCrashReporterClient>::Leaky g_chrome_crash_client =
     LAZY_INSTANCE_INITIALIZER;
 
-base::LazyInstance<std::vector<crash_reporter::UploadedReport>>::Leaky
-    g_uploaded_reports = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<std::vector<crash_reporter::Report>>::Leaky g_crash_reports =
+    LAZY_INSTANCE_INITIALIZER;
 
 // List of switches that it's safe to rendezvous early with. Fast start should
 // not be done if a command line contains a switch not in this set.
@@ -200,12 +200,12 @@ bool RemoveAppCompatFlagsEntry() {
 // CrashUploadListCrashpad. Note that we do not pass an std::vector here,
 // because we do not want to allocate/free in different modules. The returned
 // pointer is read-only.
-extern "C" __declspec(dllexport) void GetUploadedReportsImpl(
-    const crash_reporter::UploadedReport** reports,
+extern "C" __declspec(dllexport) void GetCrashReportsImpl(
+    const crash_reporter::Report** reports,
     size_t* report_count) {
-  crash_reporter::GetUploadedReports(g_uploaded_reports.Pointer());
-  *reports = g_uploaded_reports.Pointer()->data();
-  *report_count = g_uploaded_reports.Pointer()->size();
+  crash_reporter::GetReports(g_crash_reports.Pointer());
+  *reports = g_crash_reports.Pointer()->data();
+  *report_count = g_crash_reports.Pointer()->size();
 }
 
 #if !defined(WIN_CONSOLE_APP)
@@ -229,8 +229,7 @@ int main() {
   // except for the browser process. Any new process type will have to assign
   // itself a prefetch id. See kPrefetchArgument* constants in
   // content_switches.cc for details.
-  DCHECK(!startup_metric_utils::GetPreReadOptions().use_prefetch_argument ||
-         process_type.empty() ||
+  DCHECK(process_type.empty() ||
          HasValidWindowsPrefetchArgument(*command_line));
 
   if (process_type == crash_reporter::switches::kCrashpadHandler) {

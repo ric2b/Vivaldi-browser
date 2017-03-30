@@ -17,7 +17,7 @@ VivaldiAPIPermissions::GetAllPermissions() const {
       {APIPermission::kBookmarksPrivate, "bookmarksPrivate"},
       {APIPermission::kEditCommand, "editcommand" },
       {APIPermission::kExtensionActionUtils, "extensionActionUtils"},
-      {APIPermission::kHistorySearch, "historySearch" },
+      {APIPermission::kHistoryPrivate, "historyPrivate" },
       {APIPermission::kImportData, "importData"},
       {APIPermission::kNotes, "notes"},
       {APIPermission::kRuntimePrivate, "runtimePrivate" },

@@ -95,6 +95,10 @@ enum SnapshotReason {
     SnapshotReasonCanvasListenerCapture,
     SnapshotReasonDrawImage,
     SnapshotReasonCreatePattern,
+    SnapshotReasonTransferToImageBitmap,
+    SnapshotReasonUnitTests,
+    SnapshotReasonGetCopiedImage,
+    SnapshotReasonWebGLDrawImageIntoBuffer,
 };
 
 // Note: enum used directly for histogram, values must not change
@@ -105,6 +109,7 @@ enum DisableDeferralReason {
     DisableDeferralReasonDrawImageOfVideo = 3,
     DisableDeferralReasonDrawImageOfAnimated2dCanvas = 4,
     DisableDeferralReasonSubPixelTextAntiAliasingSupport = 5,
+    DisableDeferralDrawImageWithTextureBackedSourceImage = 6,
     DisableDeferralReasonCount,
 };
 

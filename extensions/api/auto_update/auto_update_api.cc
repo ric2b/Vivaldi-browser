@@ -25,6 +25,7 @@ bool AutoUpdateCheckForUpdatesFunction::RunAsync() {
 #elif defined(OS_MACOSX)
   LOG(INFO) << "Sparkle hook";
 #endif
+  SendResponse(true);
   return true;
 }
 

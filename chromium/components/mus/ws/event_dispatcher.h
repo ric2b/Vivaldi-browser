@@ -12,6 +12,7 @@
 #include <utility>
 
 #include "base/macros.h"
+#include "components/mus/common/types.h"
 #include "components/mus/public/interfaces/event_matcher.mojom.h"
 #include "components/mus/ws/modal_window_controller.h"
 #include "components/mus/ws/server_window_observer.h"
@@ -40,8 +41,6 @@ class EventDispatcher : public ServerWindowObserver {
   explicit EventDispatcher(EventDispatcherDelegate* delegate);
   ~EventDispatcher() override;
 
-  void set_root(ServerWindow* root) { root_ = root; }
-
   // Cancels capture and stops tracking any pointer events. This does not send
   // any events to the delegate.
   void Reset();
@@ -61,7 +60,13 @@ class EventDispatcher : public ServerWindowObserver {
   const ServerWindow* capture_window() const { return capture_window_; }
   // Setting capture can fail if the window is blocked by a modal window
   // (indicated by returning |false|).
-  bool SetCaptureWindow(ServerWindow* capture_window, bool in_nonclient_area);
+  bool SetCaptureWindow(ServerWindow* capture_window,
+                        ClientSpecificId client_id);
+
+  // Id of the client that capture events are sent to.
+  ClientSpecificId capture_window_client_id() const {
+    return capture_window_client_id_;
+  }
 
   // Adds a system modal window. The window remains modal to system until it is
   // destroyed. There can exist multiple system modal windows, in which case the
@@ -156,7 +161,7 @@ class EventDispatcher : public ServerWindowObserver {
                               const ui::LocatedEvent& event);
 
   // Returns a PointerTarget from the supplied event.
-  PointerTarget PointerTargetForEvent(const ui::LocatedEvent& event) const;
+  PointerTarget PointerTargetForEvent(const ui::LocatedEvent& event);
 
   // Returns true if any pointers are in the pressed/down state.
   bool AreAnyPointersDown() const;
@@ -164,6 +169,11 @@ class EventDispatcher : public ServerWindowObserver {
   // If |target->window| is valid, then passes the event to the delegate.
   void DispatchToPointerTarget(const PointerTarget& target,
                                const ui::LocatedEvent& event);
+
+  // Dispatch |event| to the delegate.
+  void DispatchToClient(ServerWindow* window,
+                        ClientSpecificId client_id,
+                        const ui::LocatedEvent& event);
 
   // Stops sending pointer events to |window|. This does not remove the entry
   // for |window| from |pointer_targets_|, rather it nulls out the window. This
@@ -179,7 +189,9 @@ class EventDispatcher : public ServerWindowObserver {
   // Returns an Accelerator bound to the specified code/flags, and of the
   // matching |phase|. Otherwise returns null.
   Accelerator* FindAccelerator(const ui::KeyEvent& event,
-                               const mojom::AcceleratorPhase phase);
+                               const ui::mojom::AcceleratorPhase phase);
+
+  ServerWindow* FindDeepestVisibleWindowForEvents(gfx::Point* location);
 
   // ServerWindowObserver:
   void OnWillChangeWindowHierarchy(ServerWindow* window,
@@ -189,10 +201,9 @@ class EventDispatcher : public ServerWindowObserver {
   void OnWindowDestroyed(ServerWindow* window) override;
 
   EventDispatcherDelegate* delegate_;
-  ServerWindow* root_;
 
   ServerWindow* capture_window_;
-  bool capture_window_in_nonclient_area_;
+  ClientSpecificId capture_window_client_id_;
 
   ModalWindowController modal_window_controller_;
 
@@ -204,7 +215,6 @@ class EventDispatcher : public ServerWindowObserver {
   // bounds of |mouse_cursor_source_window_|, which can capture the cursor.
   gfx::Point mouse_pointer_last_location_;
 
-  using Entry = std::pair<uint32_t, std::unique_ptr<Accelerator>>;
   std::map<uint32_t, std::unique_ptr<Accelerator>> accelerators_;
 
   using PointerIdToTargetMap = std::map<int32_t, PointerTarget>;

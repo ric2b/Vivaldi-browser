@@ -35,12 +35,12 @@
 #include "mojo/edk/test/scoped_ipc_support.h"
 #include "platform/EventTracer.h"
 #include "platform/HTTPNames.h"
-#include "platform/graphics/CompositorFactory.h"
 #include "platform/heap/Heap.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "public/platform/Platform.h"
 #include "wtf/CryptographicallyRandomNumber.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/WTF.h"
 #include "wtf/allocator/Partitions.h"
 #include <base/bind.h>
@@ -50,6 +50,7 @@
 #include <base/test/launcher/unit_test_launcher.h>
 #include <base/test/test_suite.h>
 #include <cc/blink/web_compositor_support_impl.h>
+#include <memory>
 
 namespace {
 
@@ -81,13 +82,12 @@ int main(int argc, char** argv)
 
     base::StatisticsRecorder::Initialize();
 
-    OwnPtr<DummyPlatform> platform = adoptPtr(new DummyPlatform);
+    std::unique_ptr<DummyPlatform> platform = wrapUnique(new DummyPlatform);
     blink::Platform::setCurrentPlatformForTesting(platform.get());
 
     WTF::Partitions::initialize(nullptr);
     WTF::setTimeFunctionsForTesting(dummyCurrentTime);
     WTF::initialize(nullptr);
-    blink::CompositorFactory::initializeDefault();
     int result = 0;
     {
         blink::TestingPlatformSupport::Config platformConfig;
@@ -97,7 +97,7 @@ int main(int argc, char** argv)
 
         blink::ProcessHeap::init();
         blink::ThreadState::attachMainThread();
-        blink::ThreadState::current()->registerTraceDOMWrappers(nullptr, nullptr);
+        blink::ThreadState::current()->registerTraceDOMWrappers(nullptr, nullptr, nullptr);
         blink::EventTracer::initialize();
         blink::HTTPNames::init();
 
@@ -105,13 +105,12 @@ int main(int argc, char** argv)
 
         mojo::edk::Init();
         base::TestIOThread testIoThread(base::TestIOThread::kAutoStart);
-        WTF::OwnPtr<mojo::edk::test::ScopedIPCSupport> ipcSupport(adoptPtr(new mojo::edk::test::ScopedIPCSupport(testIoThread.task_runner())));
+        std::unique_ptr<mojo::edk::test::ScopedIPCSupport> ipcSupport(wrapUnique(new mojo::edk::test::ScopedIPCSupport(testIoThread.task_runner())));
         result = base::LaunchUnitTests(argc, argv, base::Bind(runTestSuite, base::Unretained(&testSuite)));
 
         blink::ThreadState::detachMainThread();
         blink::ProcessHeap::shutdown();
     }
-    blink::CompositorFactory::shutdown();
     WTF::shutdown();
     WTF::Partitions::shutdown();
     return result;

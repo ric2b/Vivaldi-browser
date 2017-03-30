@@ -87,6 +87,10 @@ class MetaBuildWrapper(object):
                             '(default is //tools/mb/mb_config.pyl)')
       subp.add_argument('-g', '--goma-dir',
                         help='path to goma directory')
+      subp.add_argument('--gyp-script', metavar='PATH',
+                        default=self.PathJoin('build', 'gyp_chromium'),
+                        help='path to gyp script relative to project root '
+                             '(default is %(default)s)')
       subp.add_argument('--android-version-code',
                         help='Sets GN arg android_default_version_code and '
                              'GYP_DEFINE app_manifest_version_code')
@@ -532,8 +536,9 @@ class MetaBuildWrapper(object):
 
     mb_type_path = self.PathJoin(self.ToAbsPath(build_dir), 'mb_type')
     if not self.Exists(mb_type_path):
-      gn_args_path = self.PathJoin(self.ToAbsPath(build_dir), 'args.gn')
-      if not self.Exists(gn_args_path):
+      toolchain_path = self.PathJoin(self.ToAbsPath(build_dir),
+                                     'toolchain.ninja')
+      if not self.Exists(toolchain_path):
         self.Print('Must either specify a path to an existing GN build dir '
                    'or pass in a -m/-b pair or a -c flag to specify the '
                    'configuration')
@@ -552,8 +557,10 @@ class MetaBuildWrapper(object):
     return vals
 
   def GNValsFromDir(self, build_dir):
-    args_contents = self.ReadFile(
-        self.PathJoin(self.ToAbsPath(build_dir), 'args.gn'))
+    args_contents = ""
+    gn_args_path = self.PathJoin(self.ToAbsPath(build_dir), 'args.gn')
+    if self.Exists(gn_args_path):
+      args_contents = self.ReadFile(gn_args_path)
     gn_args = []
     for l in args_contents.splitlines():
       fields = l.split(' ')
@@ -1006,6 +1013,7 @@ class MetaBuildWrapper(object):
       cmdline = [
           self.PathJoin('bin', 'run_%s' % target_name),
           '--logcat-output-dir', '${ISOLATED_OUTDIR}/logcats',
+          '--target-devices-file', '${SWARMING_BOT_FILE}',
           '-v',
       ]
     elif use_x11 and test_type == 'windowed_test_launcher':
@@ -1120,7 +1128,7 @@ class MetaBuildWrapper(object):
 
     cmd = [
         self.executable,
-        self.PathJoin('build', 'gyp_chromium'),
+        self.args.gyp_script,
         '-G',
         'output_dir=' + output_dir,
     ]
@@ -1139,9 +1147,19 @@ class MetaBuildWrapper(object):
     # to get rid of the arg and add the old var in, instead.
     # See crbug.com/582737 for more on this. This can hopefully all
     # go away with GYP.
-    if 'llvm_force_head_revision=1' in gyp_defines:
+    m = re.search('llvm_force_head_revision=1\s*', gyp_defines)
+    if m:
       env['LLVM_FORCE_HEAD_REVISION'] = '1'
-      gyp_defines = gyp_defines.replace('llvm_force_head_revision=1', '')
+      gyp_defines = gyp_defines.replace(m.group(0), '')
+
+    # This is another terrible hack to work around the fact that
+    # GYP sets the link concurrency to use via the GYP_LINK_CONCURRENCY
+    # environment variable, and not via a proper GYP_DEFINE. See
+    # crbug.com/611491 for more on this.
+    m = re.search('gyp_link_concurrency=(\d+)(\s*)', gyp_defines)
+    if m:
+      env['GYP_LINK_CONCURRENCY'] = m.group(1)
+      gyp_defines = gyp_defines.replace(m.group(0), '')
 
     env['GYP_GENERATORS'] = 'ninja'
     if 'GYP_CHROMIUM_NO_ACTION' in env:
@@ -1335,6 +1353,8 @@ class MetaBuildWrapper(object):
 
     print_env('GYP_CROSSCOMPILE')
     print_env('GYP_DEFINES')
+    print_env('GYP_LINK_CONCURRENCY')
+    print_env('LLVM_FORCE_HEAD_REVISION')
 
     if cmd[0] == self.executable:
       cmd = ['python'] + cmd[1:]

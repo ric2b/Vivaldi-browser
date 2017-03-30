@@ -30,12 +30,11 @@
 
 #include "public/platform/WebRTCStatsRequest.h"
 
-#include "platform/mediastream/RTCStatsRequest.h"
-#include "platform/mediastream/RTCStatsResponseBase.h"
+#include "platform/peerconnection/RTCStatsRequest.h"
+#include "platform/peerconnection/RTCStatsResponseBase.h"
 #include "public/platform/WebMediaStream.h"
 #include "public/platform/WebMediaStreamTrack.h"
 #include "public/platform/WebRTCStatsResponse.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 

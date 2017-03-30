@@ -15,15 +15,14 @@
 #include "content/public/common/console_message_level.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 
 class GURL;
 
 namespace blink {
-class WebElement;
 class WebFrame;
 class WebLocalFrame;
-class WebNode;
 class WebPlugin;
 class WebURLRequest;
 class WebURLResponse;
@@ -33,6 +32,11 @@ struct WebPluginParams;
 namespace gfx {
 class Range;
 class Size;
+}
+
+namespace shell {
+class InterfaceRegistry;
+class InterfaceProvider;
 }
 
 namespace url {
@@ -48,8 +52,8 @@ class Isolate;
 namespace content {
 class ContextMenuClient;
 class PluginInstanceThrottler;
+class RenderAccessibility;
 class RenderView;
-class ServiceRegistry;
 struct ContextMenuParams;
 struct WebPluginInfo;
 struct WebPreferences;
@@ -86,6 +90,9 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
 
   // Returns the RenderView associated with this frame.
   virtual RenderView* GetRenderView() = 0;
+
+  // Return the RenderAccessibility associated with this frame.
+  virtual RenderAccessibility* GetRenderAccessibility() = 0;
 
   // Get the routing ID of the frame.
   virtual int GetRoutingID() = 0;
@@ -135,8 +142,13 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
   // Return true if this frame is hidden.
   virtual bool IsHidden() = 0;
 
-  // Returns the ServiceRegistry for this frame.
-  virtual ServiceRegistry* GetServiceRegistry() = 0;
+  // Returns the InterfaceRegistry that this process uses to expose interfaces
+  // to the application running in this frame.
+  virtual shell::InterfaceRegistry* GetInterfaceRegistry() = 0;
+
+  // Returns the InterfaceProvider that this process can use to bind
+  // interfaces exposed to it by the application running in this frame.
+  virtual shell::InterfaceProvider* GetRemoteInterfaces() = 0;
 
 #if defined(ENABLE_PLUGINS)
   // Registers a plugin that has been marked peripheral. If the origin
@@ -202,6 +214,9 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
 
   // Whether or not this frame is currently pasting.
   virtual bool IsPasting() const = 0;
+
+  // Returns the current visibility of the frame.
+  virtual blink::WebPageVisibilityState GetVisibilityState() const = 0;
 
  protected:
   ~RenderFrame() override {}

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/chromeos/extensions/file_manager/private_api_strings.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "chrome/browser/browser_process.h"
@@ -73,6 +76,8 @@ void AddStringsForFileTypes(base::DictionaryValue* dict) {
              IDS_FILE_BROWSER_GMAP_DOCUMENT_FILE_TYPE);
   SET_STRING("GSHEET_DOCUMENT_FILE_TYPE",
              IDS_FILE_BROWSER_GSHEET_DOCUMENT_FILE_TYPE);
+  SET_STRING("GSITE_DOCUMENT_FILE_TYPE",
+             IDS_FILE_BROWSER_GSITE_DOCUMENT_FILE_TYPE);
   SET_STRING("GSLIDES_DOCUMENT_FILE_TYPE",
              IDS_FILE_BROWSER_GSLIDES_DOCUMENT_FILE_TYPE);
   SET_STRING("GTABLE_DOCUMENT_FILE_TYPE",
@@ -343,18 +348,17 @@ FileManagerPrivateGetStringsFunction::~FileManagerPrivateGetStringsFunction() {
 }
 
 bool FileManagerPrivateGetStringsFunction::RunSync() {
-  base::DictionaryValue* dict = new base::DictionaryValue();
-  SetResult(dict);
+  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
 
-  AddStringsForDrive(dict);
-  AddStringsForFileTypes(dict);
-  AddStringsForGallery(dict);
-  AddStringsForMediaPlayer(dict);
-  AddStringsForVideoPlayer(dict);
-  AddStringsForAudioPlayer(dict);
-  AddStringsForCloudImport(dict);
-  AddStringsForCrUiMenuItemShortcuts(dict);
-  AddStringsForFileErrors(dict);
+  AddStringsForDrive(dict.get());
+  AddStringsForFileTypes(dict.get());
+  AddStringsForGallery(dict.get());
+  AddStringsForMediaPlayer(dict.get());
+  AddStringsForVideoPlayer(dict.get());
+  AddStringsForAudioPlayer(dict.get());
+  AddStringsForCloudImport(dict.get());
+  AddStringsForCrUiMenuItemShortcuts(dict.get());
+  AddStringsForFileErrors(dict.get());
 
   SET_STRING("ADD_NEW_SERVICES_BUTTON_LABEL",
              IDS_FILE_BROWSER_ADD_NEW_SERVICES_BUTTON_LABEL);
@@ -472,6 +476,11 @@ bool FileManagerPrivateGetStringsFunction::RunSync() {
              IDS_FILE_BROWSER_MANY_DIRECTORIES_SELECTED);
   SET_STRING("MANY_ENTRIES_SELECTED", IDS_FILE_BROWSER_MANY_ENTRIES_SELECTED);
   SET_STRING("MANY_FILES_SELECTED", IDS_FILE_BROWSER_MANY_FILES_SELECTED);
+  SET_STRING("METADATA_BOX_FILE_SIZE", IDS_FILE_BROWSER_METADATA_BOX_FILE_SIZE);
+  SET_STRING("METADATA_BOX_GENERAL_INFO",
+             IDS_FILE_BROWSER_METADATA_BOX_GENERAL_INFO);
+  SET_STRING("METADATA_BOX_MODIFICATION_TIME",
+             IDS_FILE_BROWSER_METADATA_BOX_MODIFICATION_TIME);
   SET_STRING("MOUNT_ARCHIVE", IDS_FILE_BROWSER_MOUNT_ARCHIVE);
   SET_STRING("MOVE_FILESYSTEM_ERROR", IDS_FILE_BROWSER_MOVE_FILESYSTEM_ERROR);
   SET_STRING("MOVE_FILE_NAME", IDS_FILE_BROWSER_MOVE_FILE_NAME);
@@ -517,11 +526,28 @@ bool FileManagerPrivateGetStringsFunction::RunSync() {
   SET_STRING("OPEN_IN_OTHER_DESKTOP_MESSAGE_PLURAL",
              IDS_FILE_BROWSER_OPEN_IN_OTHER_DESKTOP_MESSAGE_PLURAL);
   SET_STRING("OPEN_LABEL", IDS_FILE_BROWSER_OPEN_LABEL);
-  SET_STRING("OPEN_WITH_BUTTON_LABEL", IDS_FILE_BROWSER_OPEN_WITH_BUTTON_LABEL);
+  SET_STRING("MORE_ACTIONS_BUTTON_LABEL",
+             IDS_FILE_BROWSER_MORE_ACTIONS_BUTTON_LABEL);
+  SET_STRING("OPEN_WITH_VERB_BUTTON_LABEL",
+             IDS_FILE_BROWSER_OPEN_WITH_VERB_BUTTON_LABEL);
+  SET_STRING("ADD_TO_VERB_BUTTON_LABEL",
+             IDS_FILE_BROWSER_ADD_TO_VERB_BUTTON_LABEL);
+  SET_STRING("PACK_WITH_VERB_BUTTON_LABEL",
+             IDS_FILE_BROWSER_PACK_WITH_VERB_BUTTON_LABEL);
+  SET_STRING("SHARE_WITH_VERB_BUTTON_LABEL",
+             IDS_FILE_BROWSER_SHARE_WITH_VERB_BUTTON_LABEL);
   SET_STRING("PASTE_BUTTON_LABEL", IDS_FILE_BROWSER_PASTE_BUTTON_LABEL);
   SET_STRING("PASTE_INTO_FOLDER_BUTTON_LABEL",
              IDS_FILE_BROWSER_PASTE_INTO_FOLDER_BUTTON_LABEL);
   SET_STRING("PREPARING_LABEL", IDS_FILE_BROWSER_PREPARING_LABEL);
+  SET_STRING("QUICK_VIEW_NO_PLAYBACK_AVAILABLE",
+             IDS_FILE_BROWSER_QUICK_VIEW_NO_PLAYBACK_AVAILABLE);
+  SET_STRING("QUICK_VIEW_NO_PREVIEW_AVAILABLE",
+             IDS_FILE_BROWSER_QUICK_VIEW_NO_PREVIEW_AVAILABLE);
+  SET_STRING("QUICK_VIEW_OPEN_IN_NEW_BUTTON_LABEL",
+             IDS_FILE_BROWSER_QUICK_VIEW_OPEN_IN_NEW_BUTTON_LABEL);
+  SET_STRING("QUICK_VIEW_TOGGLE_METADATA_BOX_BUTTON_LABEL",
+             IDS_FILE_BROWSER_QUICK_VIEW_TOGGLE_METADATA_BOX_BUTTON_LABEL);
   SET_STRING("REFRESH_BUTTON_LABEL", IDS_FILE_BROWSER_REFRESH_BUTTON_LABEL);
   SET_STRING("REMOVABLE_DEVICE_DETECTION_TITLE",
              IDS_REMOVABLE_DEVICE_DETECTION_TITLE);
@@ -551,7 +577,8 @@ bool FileManagerPrivateGetStringsFunction::RunSync() {
              IDS_FILE_BROWSER_CHANGE_TO_THUMBNAILVIEW_BUTTON_LABEL);
   SET_STRING("CANCEL_SELECTION_BUTTON_LABEL",
              IDS_FILE_BROWSER_CANCEL_SELECTION_BUTTON_LABEL);
-  SET_STRING("SET_WALLPAPER_BUTTON_LABEL", IDS_SET_WALLPAPER_BUTTON);
+  SET_STRING("SET_WALLPAPER_BUTTON_LABEL",
+             IDS_FILE_BROWSER_SET_WALLPAPER_BUTTON_LABEL);
   SET_STRING("SHARE_ERROR", IDS_FILE_BROWSER_SHARE_ERROR);
 
   SET_STRING("SIZE_BYTES", IDS_FILE_BROWSER_SIZE_BYTES);
@@ -642,7 +669,8 @@ bool FileManagerPrivateGetStringsFunction::RunSync() {
   dict->SetString("UI_LOCALE", extension_l10n_util::CurrentLocaleOrDefault());
 
   const std::string& app_locale = g_browser_process->GetApplicationLocale();
-  webui::SetLoadTimeDataDefaults(app_locale, dict);
+  webui::SetLoadTimeDataDefaults(app_locale, dict.get());
+  SetResult(std::move(dict));
 
   return true;
 }

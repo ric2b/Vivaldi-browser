@@ -25,20 +25,20 @@ namespace ui {
 class CALayerTreeCoordinator;
 }
 
-namespace gfx {
+namespace gl {
 class GLFence;
 }
 
 namespace gpu {
 
-class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
+class ImageTransportSurfaceOverlayMac : public gl::GLSurface,
                                         public ui::GpuSwitchingObserver {
  public:
   ImageTransportSurfaceOverlayMac(GpuCommandBufferStub* stub,
                                   SurfaceHandle handle);
 
   // GLSurface implementation
-  bool Initialize(gfx::GLSurface::Format format) override;
+  bool Initialize(gl::GLSurface::Format format) override;
   void Destroy() override;
   bool Resize(const gfx::Size& size,
               float scale_factor,
@@ -49,7 +49,7 @@ class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
   bool SupportsPostSubBuffer() override;
   gfx::Size GetSize() override;
   void* GetHandle() override;
-  bool OnMakeCurrent(gfx::GLContext* context) override;
+  bool OnMakeCurrent(gl::GLContext* context) override;
   bool ScheduleOverlayPlane(int z_order,
                             gfx::OverlayTransform transform,
                             gl::GLImage* image,
@@ -66,6 +66,8 @@ class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
                        const gfx::Transform& transform,
                        int sorting_context_id,
                        unsigned filter) override;
+  void ScheduleCALayerInUseQuery(
+      std::vector<CALayerInUseQuery> queries) override;
   bool IsSurfaceless() const override;
 
   // ui::GpuSwitchingObserver implementation.
@@ -98,10 +100,12 @@ class ImageTransportSurfaceOverlayMac : public gfx::GLSurface,
   gfx::Size pixel_size_;
   float scale_factor_;
 
+  std::vector<CALayerInUseQuery> ca_layer_in_use_queries_;
+
   // A GLFence marking the end of the previous frame. Must only be accessed
   // while in a ScopedSetGLToRealGLApi, and while the associated
   // |previous_frame_context_| is bound.
-  std::unique_ptr<gfx::GLFence> previous_frame_fence_;
+  std::unique_ptr<gl::GLFence> previous_frame_fence_;
   base::ScopedTypeRef<CGLContextObj> fence_context_obj_;
 
   // The renderer ID that all contexts made current to this surface should be

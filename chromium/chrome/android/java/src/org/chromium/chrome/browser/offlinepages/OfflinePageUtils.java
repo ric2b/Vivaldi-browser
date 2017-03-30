@@ -11,10 +11,12 @@ import android.os.BatteryManager;
 import android.os.Environment;
 
 import org.chromium.base.Log;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.snackbar.Snackbar;
 import org.chromium.chrome.browser.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.snackbar.SnackbarManager.SnackbarController;
@@ -27,6 +29,8 @@ import org.chromium.net.ConnectionType;
 import org.chromium.net.NetworkChangeNotifier;
 import org.chromium.ui.base.PageTransition;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * A class holding static util functions for offline pages.
  */
@@ -38,6 +42,15 @@ public class OfflinePageUtils {
     private static final int SNACKBAR_DURATION = 6 * 1000; // 6 second
 
     private static final long STORAGE_ALMOST_FULL_THRESHOLD_BYTES = 10L * (1 << 20); // 10M
+
+    private static OfflinePageUtils sInstance;
+
+    private static OfflinePageUtils getInstance() {
+        if (sInstance == null) {
+            sInstance = new OfflinePageUtils();
+        }
+        return sInstance;
+    }
 
     /**
      * Returns the number of free bytes on the storage.
@@ -77,7 +90,7 @@ public class OfflinePageUtils {
         // Making sure tab is worth keeping.
         if (shouldSkipSavingTabOffline(tab)) return;
 
-        OfflinePageBridge offlinePageBridge = OfflinePageBridge.getForProfile(tab.getProfile());
+        OfflinePageBridge offlinePageBridge = getInstance().getOfflinePageBridge(tab.getProfile());
         if (offlinePageBridge == null) return;
 
         WebContents webContents = tab.getWebContents();
@@ -199,30 +212,42 @@ public class OfflinePageUtils {
         };
     }
 
+    public static DeviceConditions getDeviceConditions(Context context) {
+        return getInstance().getDeviceConditionsImpl(context);
+    }
+
     /**
      * Records UMA data when the Offline Pages Background Load service awakens.
      * @param context android context
      */
-    public static void recordWakeupUMA(Context context) {
-        IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        // Note this is a sticky intent, so we aren't really registering a receiver, just getting
-        // the sticky intent.  That means that we don't need to unregister the filter later.
-        Intent batteryStatus = context.registerReceiver(null, filter);
-        if (batteryStatus == null) return;
+    public static void recordWakeupUMA(Context context, long taskScheduledTimeMillis) {
+        DeviceConditions deviceConditions = getDeviceConditions(context);
+        if (deviceConditions == null) return;
 
         // Report charging state.
         RecordHistogram.recordBooleanHistogram(
-                "OfflinePages.Wakeup.ConnectedToPower", isPowerConnected(batteryStatus));
+                "OfflinePages.Wakeup.ConnectedToPower", deviceConditions.isPowerConnected());
 
         // Report battery percentage.
         RecordHistogram.recordPercentageHistogram(
-                "OfflinePages.Wakeup.BatteryPercentage", batteryPercentage(batteryStatus));
+                "OfflinePages.Wakeup.BatteryPercentage", deviceConditions.getBatteryPercentage());
 
         // Report the default network found (or none, if we aren't connected).
-        int connectionType = NetworkChangeNotifier.getInstance().getCurrentConnectionType();
-        Log.d(TAG, "Found single network of type " + connectionType);
+        int connectionType = deviceConditions.getNetConnectionType();
+        Log.d(TAG, "Found default network of type " + connectionType);
         RecordHistogram.recordEnumeratedHistogram("OfflinePages.Wakeup.NetworkAvailable",
                 connectionType, ConnectionType.CONNECTION_LAST + 1);
+
+        // Collect UMA on the time since the request started.
+        long nowMillis = System.currentTimeMillis();
+        long delayInMilliseconds = nowMillis - taskScheduledTimeMillis;
+        if (delayInMilliseconds <= 0) {
+            return;
+        }
+        RecordHistogram.recordLongTimesHistogram(
+                "OfflinePages.Wakeup.DelayTime",
+                delayInMilliseconds,
+                TimeUnit.MILLISECONDS);
     }
 
     private static boolean isPowerConnected(Intent batteryStatus) {
@@ -241,5 +266,27 @@ public class OfflinePageUtils {
         int percentage = Math.round(100 * level / (float) scale);
         Log.d(TAG, "Battery Percentage is " + percentage);
         return percentage;
+    }
+
+    protected OfflinePageBridge getOfflinePageBridge(Profile profile) {
+        return OfflinePageBridge.getForProfile(profile);
+    }
+
+    /** Returns the current device conditions. May be overridden for testing. */
+    protected DeviceConditions getDeviceConditionsImpl(Context context) {
+        IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+        // Note this is a sticky intent, so we aren't really registering a receiver, just getting
+        // the sticky intent.  That means that we don't need to unregister the filter later.
+        Intent batteryStatus = context.registerReceiver(null, filter);
+        if (batteryStatus == null) return null;
+
+        return new DeviceConditions(isPowerConnected(batteryStatus),
+                batteryPercentage(batteryStatus),
+                NetworkChangeNotifier.getInstance().getCurrentConnectionType());
+    }
+
+    @VisibleForTesting
+    static void setInstanceForTesting(OfflinePageUtils instance) {
+        sInstance = instance;
     }
 }

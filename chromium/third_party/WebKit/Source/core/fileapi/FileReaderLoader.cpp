@@ -43,12 +43,13 @@
 #include "platform/network/ResourceRequest.h"
 #include "platform/network/ResourceResponse.h"
 #include "public/platform/WebURLRequest.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
 #include "wtf/Vector.h"
 #include "wtf/text/Base64.h"
 #include "wtf/text/StringBuilder.h"
+#include <memory>
 
 namespace blink {
 
@@ -166,14 +167,14 @@ void FileReaderLoader::cleanup()
 
     // If we get any error, we do not need to keep a buffer around.
     if (m_errorCode) {
-        m_rawData.clear();
+        m_rawData.reset();
         m_stringResult = "";
         m_isRawDataConverted = true;
-        m_decoder.clear();
+        m_decoder.reset();
     }
 }
 
-void FileReaderLoader::didReceiveResponse(unsigned long, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void FileReaderLoader::didReceiveResponse(unsigned long, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT_UNUSED(handle, !handle);
     if (response.httpStatusCode() != 200) {
@@ -211,9 +212,9 @@ void FileReaderLoader::didReceiveResponse(unsigned long, const ResourceResponse&
         }
 
         if (initialBufferLength < 0)
-            m_rawData = adoptPtr(new ArrayBufferBuilder());
+            m_rawData = wrapUnique(new ArrayBufferBuilder());
         else
-            m_rawData = adoptPtr(new ArrayBufferBuilder(static_cast<unsigned>(initialBufferLength)));
+            m_rawData = wrapUnique(new ArrayBufferBuilder(static_cast<unsigned>(initialBufferLength)));
 
         if (!m_rawData || !m_rawData->isValid()) {
             failed(FileError::NOT_READABLE_ERR);
@@ -248,7 +249,7 @@ void FileReaderLoader::didReceiveData(const char* data, unsigned dataLength)
 
     unsigned bytesAppended = m_rawData->append(data, dataLength);
     if (!bytesAppended) {
-        m_rawData.clear();
+        m_rawData.reset();
         m_bytesLoaded = 0;
         failed(FileError::NOT_READABLE_ERR);
         return;
@@ -384,7 +385,7 @@ void FileReaderLoader::convertToDataURL()
     m_isRawDataConverted = true;
 
     StringBuilder builder;
-    builder.appendLiteral("data:");
+    builder.append("data:");
 
     if (!m_bytesLoaded) {
         m_stringResult = builder.toString();
@@ -392,7 +393,7 @@ void FileReaderLoader::convertToDataURL()
     }
 
     builder.append(m_dataType);
-    builder.appendLiteral(";base64,");
+    builder.append(";base64,");
 
     Vector<char> out;
     base64Encode(static_cast<const char*>(m_rawData->data()), m_rawData->byteLength(), out);

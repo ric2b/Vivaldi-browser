@@ -46,7 +46,7 @@
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_view_cocoa.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/browser/ui/toolbar/app_menu_badge_controller.h"
+#include "chrome/browser/ui/toolbar/app_menu_icon_controller.h"
 #include "chrome/browser/ui/toolbar/app_menu_model.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
@@ -54,6 +54,7 @@
 #include "components/metrics/proto/omnibox_event.pb.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url_service.h"
@@ -192,21 +193,18 @@ class CommandObserverBridge : public CommandObserver {
 // A class registered for C++ notifications. This is used to detect changes in
 // preferences and upgrade available notifications. Bridges the notification
 // back to the ToolbarController.
-class NotificationBridge : public AppMenuBadgeController::Delegate {
+class NotificationBridge : public AppMenuIconController::Delegate {
  public:
   explicit NotificationBridge(ToolbarController* controller)
       : controller_(controller),
-        badge_controller_([controller browser]->profile(), this) {
-  }
+        app_menu_icon_controller_([controller browser]->profile(), this) {}
   ~NotificationBridge() override {}
 
-  void UpdateBadgeSeverity() {
-    badge_controller_.UpdateDelegate();
-  }
+  void UpdateSeverity() { app_menu_icon_controller_.UpdateDelegate(); }
 
-  void UpdateBadgeSeverity(AppMenuBadgeController::BadgeType type,
-                           AppMenuIconPainter::Severity severity,
-                           bool animate) override {
+  void UpdateSeverity(AppMenuIconController::IconType type,
+                      AppMenuIconPainter::Severity severity,
+                      bool animate) override {
     [controller_ updateAppMenuButtonSeverity:severity animate:animate];
   }
 
@@ -217,7 +215,7 @@ class NotificationBridge : public AppMenuBadgeController::Delegate {
  private:
   ToolbarController* controller_;  // weak, owns us
 
-  AppMenuBadgeController badge_controller_;
+  AppMenuIconController app_menu_icon_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(NotificationBridge);
 };
@@ -435,7 +433,7 @@ class NotificationBridge : public AppMenuBadgeController::Delegate {
 
   notificationBridge_.reset(
       new ToolbarControllerInternal::NotificationBridge(self));
-  notificationBridge_->UpdateBadgeSeverity();
+  notificationBridge_->UpdateSeverity();
 
   [appMenuButton_ setOpenMenuOnClick:YES];
 
@@ -453,6 +451,20 @@ class NotificationBridge : public AppMenuBadgeController::Delegate {
   locationBarView_.reset(new LocationBarViewMac(locationBar_, commands_,
                                                 profile_, browser_));
   [locationBar_ setFont:[NSFont systemFontOfSize:14]];
+
+  // Add the location bar's accessibility views as direct subviews of the
+  // toolbar. They are logical children of the location bar, but the location
+  // bar's actual Cocoa control is an NSCell, so it cannot have child views.
+  // The |locationBarView_| is responsible for positioning the accessibility
+  // views.
+  std::vector<NSView*> accessibility_views =
+      locationBarView_->GetDecorationAccessibilityViews();
+  for (const auto& view : accessibility_views) {
+    [[self toolbarView] addSubview:view
+                        positioned:NSWindowAbove
+                        relativeTo:locationBar_];
+  }
+
   if (!isModeMaterial) {
     [locationBar_ setFont:[NSFont systemFontOfSize:[NSFont systemFontSize]]];
   }
@@ -1102,6 +1114,11 @@ class NotificationBridge : public AppMenuBadgeController::Delegate {
 
 - (AppMenuController*)appMenuController {
   return appMenuController_.get();
+}
+
+- (BOOL)isLocationBarFocused {
+  OmniboxEditModel* model = locationBarView_->GetOmniboxView()->model();
+  return model->has_focus();
 }
 
 // (URLDropTargetController protocol)

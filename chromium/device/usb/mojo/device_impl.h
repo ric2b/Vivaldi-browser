@@ -16,7 +16,6 @@
 #include "device/usb/public/interfaces/device.mojom.h"
 #include "device/usb/usb_device.h"
 #include "device/usb/usb_device_handle.h"
-#include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
@@ -52,6 +51,7 @@ class DeviceImpl : public Device, public device::UsbDevice::Observer {
   // Handles completion of an open request.
   void OnOpen(const OpenCallback& callback,
               scoped_refptr<device::UsbDeviceHandle> handle);
+  void OnPermissionGrantedForOpen(const OpenCallback& callback, bool granted);
 
   // Device implementation:
   void GetDeviceInfo(const GetDeviceInfoCallback& callback) override;

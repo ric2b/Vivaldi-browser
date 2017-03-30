@@ -8,7 +8,7 @@
  */
 WebInspector.AXNodeSubPane = function()
 {
-    WebInspector.AccessibilitySubPane.call(this, WebInspector.UIString("Accessibility Node"));
+    WebInspector.AccessibilitySubPane.call(this, WebInspector.UIString("Computed Properties"));
 
     this._noNodeInfo = this.createInfo(WebInspector.UIString("No accessibility node"));
     this._ignoredInfo = this.createInfo(WebInspector.UIString("Accessibility node not exposed"), "ax-ignored-info hidden");
@@ -135,9 +135,10 @@ WebInspector.AXNodePropertyTreeElement.createSimpleValueElement = function(type,
     else
         valueElement = createElementWithClass("span", "monospace");
     var valueText;
-    if (type === AXValueType.String || type === AXValueType.ComputedString || type === AXValueType.IdrefList || type === AXValueType.Idref) {
+    var isStringProperty = type && WebInspector.AXNodePropertyTreeElement.StringProperties.has(type);
+    if (isStringProperty) {
         // Render \n as a nice unicode cr symbol.
-        valueText = value.replace(/\n/g, "\u21B5");
+        valueText = "\"" + value.replace(/\n/g, "\u21B5") + "\"";
         valueElement._originalTextContent = value;
     } else {
         valueText = String(value);
@@ -212,6 +213,7 @@ WebInspector.AXNodePropertyTreeElement.prototype = {
 
     /**
      * @param {!AccessibilityAgent.AXValue} value
+     * @return {?Element}
      */
     appendValueElement: function(value)
     {
@@ -219,7 +221,8 @@ WebInspector.AXNodePropertyTreeElement.prototype = {
         if (value.type === AXValueType.Idref || value.type === AXValueType.Node ||
             value.type === AXValueType.IdrefList || value.type === AXValueType.NodeList) {
             this.appendRelatedNodeListValueElement(value);
-            return;
+            if (!value.value)
+                return null;
         } else if (value.sources) {
             var sources = value.sources;
             for (var i = 0; i < sources.length; i++) {
@@ -229,12 +232,9 @@ WebInspector.AXNodePropertyTreeElement.prototype = {
             }
             this.expand();
         }
-        var isStringProperty = WebInspector.AXNodePropertyTreeElement.StringProperties.has(value.type);
-        if (isStringProperty)
-            this.listItemElement.createTextChild("\"");
-        this.listItemElement.appendChild(WebInspector.AXNodePropertyTreeElement.createSimpleValueElement(value.type, String(value.value)));
-        if (isStringProperty)
-            this.listItemElement.createTextChild("\"");
+        var element = WebInspector.AXNodePropertyTreeElement.createSimpleValueElement(value.type, String(value.value));
+        this.listItemElement.appendChild(element);
+        return element;
     },
 
     /**
@@ -243,9 +243,16 @@ WebInspector.AXNodePropertyTreeElement.prototype = {
      */
     appendRelatedNode: function(relatedNode, index)
     {
-        if (index > 0)
-            this.listItemElement.createTextChild(",\u00a0");
+        var deferredNode = new WebInspector.DeferredDOMNode(this._target, relatedNode.backendNodeId);
+        var nodeTreeElement = new WebInspector.AXRelatedNodeSourceTreeElement({ deferredNode: deferredNode }, relatedNode);
+        this.appendChild(nodeTreeElement);
+    },
 
+    /**
+     * @param {!AccessibilityAgent.AXRelatedNode} relatedNode
+     */
+    appendRelatedNodeInline: function(relatedNode)
+    {
         var deferredNode = new WebInspector.DeferredDOMNode(this._target, relatedNode.backendNodeId);
         var linkedNode = new WebInspector.AXRelatedNodeElement({ deferredNode: deferredNode }, relatedNode);
         this.listItemElement.appendChild(linkedNode.render());
@@ -256,7 +263,16 @@ WebInspector.AXNodePropertyTreeElement.prototype = {
      */
     appendRelatedNodeListValueElement: function(value)
     {
+        if (value.relatedNodes.length === 1 && !value.value) {
+            this.appendRelatedNodeInline(value.relatedNodes[0]);
+            return;
+        }
+
         value.relatedNodes.forEach(this.appendRelatedNode, this);
+        if (value.relatedNodes.length <= 3)
+            this.expand();
+        else
+            this.collapse();
     },
 
     __proto__: TreeElement.prototype
@@ -295,7 +311,9 @@ WebInspector.AXNodePropertyTreePropertyElement.prototype = {
 
         this.listItemElement.createChild("span", "separator").textContent = ":\u00A0";
 
-        this.appendValueElement(this._property.value);
+        var valueElement = this.appendValueElement(this._property.value);
+        if (this._property.name === "name")
+            valueElement.classList.add("ax-computed-text");
     },
 
     __proto__: WebInspector.AXNodePropertyTreeElement.prototype
@@ -321,18 +339,6 @@ WebInspector.AXValueSourceTreeElement.prototype = {
     onattach: function()
     {
         this._update();
-    },
-
-    /**
-     * @param {!AccessibilityAgent.AXRelatedNode} relatedNode
-     * @param {number} index
-     * @override
-     */
-    appendRelatedNode: function(relatedNode, index)
-    {
-        var deferredNode = new WebInspector.DeferredDOMNode(this._target, relatedNode.backendNodeId);
-        var nodeTreeElement = new WebInspector.AXRelatedNodeSourceTreeElement({ deferredNode: deferredNode }, relatedNode);
-        this.appendChild(nodeTreeElement);
     },
 
     /**
@@ -462,17 +468,31 @@ WebInspector.AXValueSourceTreeElement.prototype = {
         } else if (this._source.nativeSourceValue) {
             this.appendValueElement(this._source.nativeSourceValue);
             this.listItemElement.createTextChild("\u00a0");
-        }
-
-        if (this._source.value) {
+        } else if (this._source.value) {
             this.appendValueElement(this._source.value);
-            if (this._source.superseded)
-                this.listItemElement.classList.add("ax-value-source-superseded");
         } else {
             var valueElement = WebInspector.AXNodePropertyTreeElement.createSimpleValueElement(AccessibilityAgent.AXValueType.ValueUndefined, WebInspector.UIString("Not specified"));
             this.listItemElement.appendChild(valueElement);
             this.listItemElement.classList.add("ax-value-source-unused");
         }
+
+        if (this._source.value && this._source.superseded)
+            this.listItemElement.classList.add("ax-value-source-superseded");
+    },
+
+    /**
+     * @param {!AccessibilityAgent.AXValue} value
+     * @return {!Element}
+     * @override
+     */
+    appendValueElement: function(value)
+    {
+        var element = WebInspector.AXNodePropertyTreeElement.prototype.appendValueElement.call(this, value);
+        if (!element) {
+            element = WebInspector.AXNodePropertyTreeElement.createSimpleValueElement(value.type, String(value.value));
+            this.listItemElement.appendChild(element);
+        }
+        return element;
     },
 
     __proto__: WebInspector.AXNodePropertyTreeElement.prototype
@@ -504,10 +524,8 @@ WebInspector.AXRelatedNodeSourceTreeElement.prototype = {
         if (!this._value)
             return;
 
-        this.listItemElement.createTextChild("\u00a0\"");
         if (this._value.text)
             this.listItemElement.appendChild(WebInspector.AXNodePropertyTreeElement.createSimpleValueElement(AccessibilityAgent.AXValueType.ComputedString, this._value.text));
-        this.listItemElement.createTextChild("\"");
     },
 
     __proto__: TreeElement.prototype

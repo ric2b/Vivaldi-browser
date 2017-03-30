@@ -6,6 +6,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/process/process.h"
+#include "base/run_loop.h"
 #include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -123,7 +124,7 @@ class ChromeRenderProcessHostTest : public InProcessBrowserTest {
     content::BrowserThread::PostTaskAndReply(
         content::BrowserThread::PROCESS_LAUNCHER, FROM_HERE,
         base::Bind(&base::DoNothing), base::MessageLoop::QuitWhenIdleClosure());
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
   }
 
   // Implicitly waits for the renderer process associated with the specified
@@ -592,8 +593,15 @@ class ChromeRenderProcessHostBackgroundingTest
 
 // Test to make sure that a process is backgrounded when the audio stops playing
 // from the active tab and there is an immediate tab switch.
+// Disable on Windows due to ongoing flakiness. (crbug.com/616421)
+#if defined(OS_WIN)
+#define MAYBE_ProcessPriorityAfterStoppedAudio \
+  DISABLED_ProcessPriorityAfterStoppedAudio
+#else
+#define MAYBE_ProcessPriorityAfterStoppedAudio ProcessPriorityAfterStoppedAudio
+#endif
 IN_PROC_BROWSER_TEST_F(ChromeRenderProcessHostBackgroundingTest,
-                       ProcessPriorityAfterStoppedAudio) {
+                       MAYBE_ProcessPriorityAfterStoppedAudio) {
   // This test is invalid on platforms that can't background.
   if (!base::Process::CanBackgroundProcesses())
     return;

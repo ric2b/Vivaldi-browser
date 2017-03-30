@@ -3,9 +3,15 @@
   "name": "exe:content_renderer",
   "display_name": "Content Renderer",
   "capabilities": {
+    "provided": {
+      "all_interfaces": [ "*" ]
+    },
     "required": {
       "mojo:mus": {
-        "interfaces":  [ "mus::mojom::Gpu" ]
+        "interfaces":  [
+          "mus::mojom::Gpu",
+          "mus::mojom::GpuService"
+        ]
       }
     }
   }

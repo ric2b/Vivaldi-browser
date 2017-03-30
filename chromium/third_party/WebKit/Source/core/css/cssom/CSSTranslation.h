@@ -6,13 +6,13 @@
 #define CSSTranslation_h
 
 #include "core/css/cssom/CSSLengthValue.h"
-#include "core/css/cssom/TransformComponent.h"
+#include "core/css/cssom/CSSTransformComponent.h"
 
 namespace blink {
 
 class ExceptionState;
 
-class CORE_EXPORT CSSTranslation final : public TransformComponent {
+class CORE_EXPORT CSSTranslation final : public CSSTransformComponent {
     WTF_MAKE_NONCOPYABLE(CSSTranslation);
     DEFINE_WRAPPERTYPEINFO();
 public:
@@ -22,6 +22,8 @@ public:
     }
     static CSSTranslation* create(CSSLengthValue* x, CSSLengthValue* y, CSSLengthValue* z, ExceptionState&);
 
+    static CSSTranslation* fromCSSValue(const CSSFunctionValue& value) { return nullptr; }
+
     CSSLengthValue* x() const { return m_x; }
     CSSLengthValue* y() const { return m_y; }
     CSSLengthValue* z() const { return m_z; }
@@ -29,7 +31,7 @@ public:
     TransformComponentType type() const override { return is2D() ? TranslationType : Translation3DType; }
 
     // TODO: Implement asMatrix for CSSTranslation.
-    MatrixTransformComponent* asMatrix() const override { return nullptr; }
+    CSSMatrixTransformComponent* asMatrix() const override { return nullptr; }
 
     CSSFunctionValue* toCSSValue() const override;
 
@@ -38,12 +40,12 @@ public:
         visitor->trace(m_x);
         visitor->trace(m_y);
         visitor->trace(m_z);
-        TransformComponent::trace(visitor);
+        CSSTransformComponent::trace(visitor);
     }
 
 private:
     CSSTranslation(CSSLengthValue* x, CSSLengthValue* y, CSSLengthValue* z)
-        : TransformComponent()
+        : CSSTransformComponent()
         , m_x(x)
         , m_y(y)
         , m_z(z)

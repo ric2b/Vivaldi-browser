@@ -58,7 +58,7 @@ class CC_SURFACES_EXPORT SurfaceFactory
   // The callback is called the first time this frame is used to draw, or if
   // the frame is discarded.
   void SubmitCompositorFrame(SurfaceId surface_id,
-                             std::unique_ptr<CompositorFrame> frame,
+                             CompositorFrame frame,
                              const DrawCallback& callback);
   void RequestCopyOfSurface(SurfaceId surface_id,
                             std::unique_ptr<CopyOutputRequest> copy_request);
@@ -78,6 +78,10 @@ class CC_SURFACES_EXPORT SurfaceFactory
   // example if the Display shares a context with the creator.
   bool needs_sync_points() const { return needs_sync_points_; }
   void set_needs_sync_points(bool needs) { needs_sync_points_ = needs; }
+
+  // SurfaceFactory's owner can call this when it finds out that SurfaceManager
+  // is no longer alive during destruction.
+  void DidDestroySurfaceManager() { manager_ = nullptr; }
 
  private:
   SurfaceManager* manager_;

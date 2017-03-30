@@ -10,11 +10,11 @@
 #include "base/macros.h"
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 
-class ChromeLauncherController;
+class ChromeLauncherControllerImpl;
 
 namespace ash {
-class Shelf;
 struct ShelfItem;
+class WmShelf;
 }
 
 namespace extensions {
@@ -25,9 +25,9 @@ class ContextMenuMatcher;
 // shelf.
 class ExtensionLauncherContextMenu : public LauncherContextMenu {
  public:
-  ExtensionLauncherContextMenu(ChromeLauncherController* controller,
+  ExtensionLauncherContextMenu(ChromeLauncherControllerImpl* controller,
                                const ash::ShelfItem* item,
-                               ash::Shelf* shelf);
+                               ash::WmShelf* wm_shelf);
   ~ExtensionLauncherContextMenu() override;
 
   // ui::SimpleMenuModel::Delegate overrides:

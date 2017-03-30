@@ -35,9 +35,12 @@ android_library("content_java") {
     "//device/battery:mojo_bindings_java",
     "//device/battery/android:battery_monitor_android",
     "//device/bluetooth:java",
+    "//device/gamepad:java",
+    "//device/power_save_blocker:java",
     "//device/usb:java",
     "//device/vibration:mojo_bindings_java",
     "//device/vibration/android:vibration_manager_android",
+    "//device/vr:java",
     "//media/base/android:media_java",
     "//media/capture/video/android:capture_java",
     "//media/midi:midi_java",
@@ -64,6 +67,7 @@ android_library("content_java") {
 
   java_files = [
     "java/src/org/chromium/content/app/ChildProcessService.java",
+    "java/src/org/chromium/content/app/ChildProcessServiceImpl.java",
     "java/src/org/chromium/content/app/ChromiumLinkerParams.java",
     "java/src/org/chromium/content/app/ContentApplication.java",
     "java/src/org/chromium/content/app/ContentMain.java",
@@ -109,14 +113,11 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/ContentView.java",
     "java/src/org/chromium/content/browser/ContentViewClient.java",
     "java/src/org/chromium/content/browser/ContentViewCore.java",
-    "java/src/org/chromium/content/browser/ContentViewDownloadDelegate.java",
     "java/src/org/chromium/content/browser/ContentViewRenderView.java",
     "java/src/org/chromium/content/browser/ContentViewStatics.java",
     "java/src/org/chromium/content/browser/ContextualSearchClient.java",
     "java/src/org/chromium/content/browser/DeviceSensors.java",
     "java/src/org/chromium/content/browser/DeviceUtils.java",
-    "java/src/org/chromium/content/browser/DownloadController.java",
-    "java/src/org/chromium/content/browser/DownloadInfo.java",
     "java/src/org/chromium/content/browser/FileDescriptorInfo.java",
     "java/src/org/chromium/content/browser/FloatingWebActionModeCallback.java",
     "java/src/org/chromium/content/browser/InterstitialPageDelegateAndroid.java",
@@ -131,7 +132,6 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/PepperPluginManager.java",
     "java/src/org/chromium/content/browser/PopupZoomer.java",
     "java/src/org/chromium/content/browser/PositionObserver.java",
-    "java/src/org/chromium/content/browser/PowerSaveBlocker.java",
     "java/src/org/chromium/content/browser/RenderCoordinates.java",
     "java/src/org/chromium/content/browser/SPenSupport.java",
     "java/src/org/chromium/content/browser/ScreenOrientationListener.java",
@@ -159,14 +159,10 @@ android_library("content_java") {
     "java/src/org/chromium/content/browser/crypto/CipherFactory.java",
     "java/src/org/chromium/content/browser/framehost/NavigationControllerImpl.java",
     "java/src/org/chromium/content/browser/input/AnimationIntervalProvider.java",
-    "java/src/org/chromium/content/browser/input/CardboardVRDevice.java",
     "java/src/org/chromium/content/browser/input/ChromiumBaseInputConnection.java",
     "java/src/org/chromium/content/browser/input/CursorAnchorInfoController.java",
     "java/src/org/chromium/content/browser/input/DateTimeChooserAndroid.java",
     "java/src/org/chromium/content/browser/input/FloatingPastePopupMenu.java",
-    "java/src/org/chromium/content/browser/input/GamepadDevice.java",
-    "java/src/org/chromium/content/browser/input/GamepadList.java",
-    "java/src/org/chromium/content/browser/input/GamepadMappings.java",
     "java/src/org/chromium/content/browser/input/HandleViewResources.java",
     "java/src/org/chromium/content/browser/input/ImeAdapter.java",
     "java/src/org/chromium/content/browser/input/ImeUtils.java",
@@ -197,6 +193,7 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/browser/AccessibilitySnapshotNode.java",
     "java/src/org/chromium/content_public/browser/ContentBitmapCallback.java",
     "java/src/org/chromium/content_public/browser/GestureStateListener.java",
+    "java/src/org/chromium/content_public/browser/ImageDownloadCallback.java",
     "java/src/org/chromium/content_public/browser/JavaScriptCallback.java",
     "java/src/org/chromium/content_public/browser/LoadUrlParams.java",
     "java/src/org/chromium/content_public/browser/NavigationController.java",
@@ -206,12 +203,9 @@ android_library("content_java") {
     "java/src/org/chromium/content_public/browser/WebContentsObserver.java",
     "java/src/org/chromium/content_public/common/MediaMetadata.java",
     "java/src/org/chromium/content_public/common/Referrer.java",
+    "java/src/org/chromium/content_public/common/ResourceRequestBody.java",
     "java/src/org/chromium/content_public/common/ScreenOrientationConstants.java",
   ]
-
-  if (enable_webvr) {
-    deps += [ "//third_party/cardboard-java:cardboard-java" ]
-  }
 }
 
 java_strings_grd("content_strings_grd") {
@@ -260,7 +254,7 @@ java_strings_grd("content_strings_grd") {
     "values-uk/android_content_strings.xml",
     "values-vi/android_content_strings.xml",
     "values-zh-rCN/android_content_strings.xml",
-    "values-zh/android_content_strings.xml",
+    "values-zh-rTW/android_content_strings.xml",
   ]
 }
 
@@ -270,7 +264,6 @@ java_cpp_enum("content_public_android_java_enums_srcjar") {
     "//content/browser/android/gesture_event_type.h",
     "//content/browser/device_sensors/device_sensors_consts.h",
     "//content/browser/device_sensors/sensor_manager_android.h",
-    "//content/browser/gamepad/gamepad_standard_mappings.h",
     "//content/public/browser/invalidate_type.h",
     "//content/public/browser/navigation_controller.h",
     "//content/public/browser/readback_types.h",
@@ -293,13 +286,6 @@ generate_jar_jni("jar_jni") {
 generate_jni("content_jni_headers") {
   sources = rebase_path(content_jni_gypi_values.sources, "", "../..")
   jni_package = "content"
-
-  if (enable_webvr) {
-    sources += [ "//content/public/android/java/src/org/chromium/content/browser/input/CardboardVRDevice.java" ]
-    public_deps = [
-      "//third_party/cardboard-java:cardboard-java",
-    ]
-  }
 }
 
 group("jni") {
@@ -318,7 +304,6 @@ android_library("content_javatests") {
     "//content/public/test/android:content_java_test_support",
     "//content/shell/android:content_shell_apk_java",
     "//content/shell/android:content_shell_java",
-    "//content/shell/android:content_shell_java_resources",
     "//content/shell/android:content_shell_test_java",
     "//device/vibration:mojo_bindings_java",
     "//device/vibration/android:vibration_manager_android",
@@ -351,7 +336,6 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/ContentViewScrollingTest.java",
     "javatests/src/org/chromium/content/browser/ContentViewZoomingTest.java",
     "javatests/src/org/chromium/content/browser/DeviceSensorsTest.java",
-    "javatests/src/org/chromium/content/browser/DownloadInfoTest.java",
     "javatests/src/org/chromium/content/browser/EmailAddressDetectionTest.java",
     "javatests/src/org/chromium/content/browser/EncodeHtmlDataUriTest.java",
     "javatests/src/org/chromium/content/browser/GestureDetectorResetTest.java",
@@ -400,7 +384,9 @@ android_library("content_javatests") {
 # GYP: //content/content_tests.gypi:content_junit_tests
 junit_binary("content_junit_tests") {
   java_files = [
-    "junit/src/org/chromium/content/browser/input/GamepadMappingsTest.java",
+    "junit/src/org/chromium/content/browser/input/RangeTest.java",
+    "junit/src/org/chromium/content/browser/input/TextInputStateTest.java",
+    "junit/src/org/chromium/content/browser/input/ThreadedInputConnectionTest.java",
     "junit/src/org/chromium/content/browser/BindingManagerImplTest.java",
   ]
   deps = [

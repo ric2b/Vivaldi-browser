@@ -1,8 +1,8 @@
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 {
   'includes': [
-    '<(DEPTH)/../vivaldi_sources.gypi',
     '<(DEPTH)/../vivaldi_product.gypi',
+    '<(DEPTH)/../vivaldi_sources.gypi',
   ],
   'variables': {
     'variables':{
@@ -24,6 +24,8 @@
     # Using Chromium as branding in FFMpeg library
     'ffmpeg_branding': 'Chromium',
     'enable_widevine': 1,
+    # Disable Whole program optimization for the time being; building Official on Win64 takes too long (5 hours)
+    'full_wpo_on_official':0,
 
     'enable_prod_wallet_service': 0,
     'remoting': 0,
@@ -167,15 +169,17 @@
   ],
   'target_defaults': {
     'includes': [
+      '<(DEPTH)/../vivaldi_sources_later.gypi',
       '<(DEPTH)/../vivaldi_disabled_targets.gypi',
     ],
     'include_dirs': [
       '<(VIVALDI)', # vivaldi root folder
     ],
     'defines': ['VIVALDI_BUILD','CHROMIUM_BUILD',
-                'VIVALDI_RELEASE=<!(python <(VIVALDI)/scripts/get_preview.py "<(build_branch)")',
+                'VIVALDI_RELEASE=<(release_kind)',
                 'WIDEVINE_CDM_VERSION_STRING="1.0.123.456"',
                 'OMIT_CHROME_FRAME',
+                'VIVALDI_RELEASE_KIND=<(VIVALDI_RELEASE_KIND)',
                 ],
     'conditions': [
       ['buildtype=="Official"', {

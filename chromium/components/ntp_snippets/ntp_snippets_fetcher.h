@@ -115,11 +115,36 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
     tick_clock_ = std::move(tick_clock);
   }
 
+  void SetPersonalizationForTesting(Personalization personalization) {
+    personalization_ = personalization;
+  }
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(NTPSnippetsFetcherTest, BuildRequestAuthenticated);
+  FRIEND_TEST_ALL_PREFIXES(NTPSnippetsFetcherTest, BuildRequestUnauthenticated);
+
+  enum FetchAPI {
+    CHROME_READER_API,
+    CHROME_CONTENT_SUGGESTIONS_API,
+  };
+
+  struct RequestParams {
+    FetchAPI fetch_api;
+    std::string obfuscated_gaia_id;
+    bool only_return_personalized_results;
+    std::string user_locale;
+    std::set<std::string> host_restricts;
+    int count_to_fetch;
+
+    RequestParams();
+    ~RequestParams();
+
+    std::string BuildRequest();
+  };
+
   void FetchSnippetsImpl(const GURL& url,
                          const std::string& auth_header,
                          const std::string& request);
-  std::string GetHostRestricts() const;
   void FetchSnippetsNonAuthenticated();
   void FetchSnippetsAuthenticated(const std::string& account_id,
                                   const std::string& oauth_access_token);
@@ -166,6 +191,11 @@ class NTPSnippetsFetcher : public OAuth2TokenService::Consumer,
 
   // Language code to restrict to for personalized results.
   std::string locale_;
+
+  // API endpoint for fetching snippets.
+  const GURL fetch_url_;
+  // Which API to use
+  const FetchAPI fetch_api_;
 
   // The fetcher for downloading the snippets.
   std::unique_ptr<net::URLFetcher> url_fetcher_;

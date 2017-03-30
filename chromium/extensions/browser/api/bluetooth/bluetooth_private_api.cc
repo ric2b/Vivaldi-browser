@@ -13,6 +13,7 @@
 #include "base/strings/string_util.h"
 #include "device/bluetooth/bluetooth_adapter.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
+#include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_discovery_session.h"
 #include "extensions/browser/api/bluetooth/bluetooth_api.h"
 #include "extensions/browser/api/bluetooth/bluetooth_api_pairing_delegate.h"
@@ -178,6 +179,8 @@ bool BluetoothPrivateSetAdapterStateFunction::DoWork(
         CreatePropertyErrorCallback(kDiscoverableProperty));
   }
 
+  parsed_ = true;
+
   if (pending_properties_.empty())
     SendResponse(true);
   return true;
@@ -205,7 +208,7 @@ void BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertySet(
   DCHECK(failed_properties_.find(property) == failed_properties_.end());
 
   pending_properties_.erase(property);
-  if (pending_properties_.empty()) {
+  if (pending_properties_.empty() && parsed_) {
     if (failed_properties_.empty())
       SendResponse(true);
     else
@@ -217,10 +220,9 @@ void BluetoothPrivateSetAdapterStateFunction::OnAdapterPropertyError(
     const std::string& property) {
   DCHECK(pending_properties_.find(property) != pending_properties_.end());
   DCHECK(failed_properties_.find(property) == failed_properties_.end());
-
   pending_properties_.erase(property);
   failed_properties_.insert(property);
-  if (pending_properties_.empty())
+  if (pending_properties_.empty() && parsed_)
     SendError();
 }
 
@@ -409,18 +411,17 @@ bool BluetoothPrivateSetDiscoveryFilterFunction::DoWork(
   // set, then create proper filter.
   if (df_param.uuids.get() || df_param.rssi.get() || df_param.pathloss.get() ||
       df_param.transport != bt_private::TransportType::TRANSPORT_TYPE_NONE) {
-    uint8_t transport;
+    device::BluetoothTransport transport;
 
     switch (df_param.transport) {
       case bt_private::TransportType::TRANSPORT_TYPE_LE:
-        transport = device::BluetoothDiscoveryFilter::Transport::TRANSPORT_LE;
+        transport = device::BLUETOOTH_TRANSPORT_LE;
         break;
       case bt_private::TransportType::TRANSPORT_TYPE_BREDR:
-        transport =
-            device::BluetoothDiscoveryFilter::Transport::TRANSPORT_CLASSIC;
+        transport = device::BLUETOOTH_TRANSPORT_CLASSIC;
         break;
       default:  // TRANSPORT_TYPE_NONE is included here
-        transport = device::BluetoothDiscoveryFilter::Transport::TRANSPORT_DUAL;
+        transport = device::BLUETOOTH_TRANSPORT_DUAL;
         break;
     }
 

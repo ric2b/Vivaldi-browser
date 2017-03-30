@@ -154,32 +154,6 @@ void SynchronousCompositorFilter::UnregisterOutputSurface(
   RemoveEntryIfNeeded(routing_id);
 }
 
-void SynchronousCompositorFilter::RegisterBeginFrameSource(
-    int routing_id,
-    SynchronousCompositorExternalBeginFrameSource* begin_frame_source) {
-  DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  DCHECK(begin_frame_source);
-  Entry& entry = entry_map_[routing_id];
-  DCHECK(!entry.begin_frame_source);
-  entry.begin_frame_source = begin_frame_source;
-  CheckIsReady(routing_id);
-}
-
-void SynchronousCompositorFilter::UnregisterBeginFrameSource(
-    int routing_id,
-    SynchronousCompositorExternalBeginFrameSource* begin_frame_source) {
-  DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  DCHECK(begin_frame_source);
-  DCHECK(ContainsKey(entry_map_, routing_id));
-  Entry& entry = entry_map_[routing_id];
-  DCHECK_EQ(begin_frame_source, entry.begin_frame_source);
-
-  if (entry.IsReady())
-    UnregisterObjects(routing_id);
-  entry.begin_frame_source = nullptr;
-  RemoveEntryIfNeeded(routing_id);
-}
-
 void SynchronousCompositorFilter::CheckIsReady(int routing_id) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
   DCHECK(ContainsKey(entry_map_, routing_id));
@@ -187,9 +161,8 @@ void SynchronousCompositorFilter::CheckIsReady(int routing_id) {
   if (filter_ready_ && entry.IsReady()) {
     DCHECK(!sync_compositor_map_.contains(routing_id));
     std::unique_ptr<SynchronousCompositorProxy> proxy(
-        new SynchronousCompositorProxy(
-            routing_id, this, entry.begin_frame_source,
-            entry.synchronous_input_handler_proxy, &input_handler_));
+        new SynchronousCompositorProxy(routing_id, this,
+                                       entry.synchronous_input_handler_proxy));
     if (entry.output_surface)
       proxy->SetOutputSurface(entry.output_surface);
     sync_compositor_map_.add(routing_id, std::move(proxy));
@@ -206,52 +179,10 @@ void SynchronousCompositorFilter::RemoveEntryIfNeeded(int routing_id) {
   DCHECK(compositor_task_runner_->BelongsToCurrentThread());
   DCHECK(ContainsKey(entry_map_, routing_id));
   Entry& entry = entry_map_[routing_id];
-  if (!entry.begin_frame_source && !entry.output_surface &&
-      !entry.synchronous_input_handler_proxy) {
+  if (!entry.output_surface && !entry.synchronous_input_handler_proxy) {
     entry_map_.erase(routing_id);
   }
 }
-
-void SynchronousCompositorFilter::SetBoundHandler(const Handler& handler) {
-  compositor_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(
-          &SynchronousCompositorFilter::SetBoundHandlerOnCompositorThread, this,
-          handler));
-}
-
-void SynchronousCompositorFilter::RegisterRoutingID(int routing_id) {}
-void SynchronousCompositorFilter::UnregisterRoutingID(int routing_id) {}
-
-void SynchronousCompositorFilter::SetBoundHandlerOnCompositorThread(
-    const Handler& handler) {
-  DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  input_handler_ = handler;
-}
-
-void SynchronousCompositorFilter::DidOverscroll(
-    int routing_id,
-    const DidOverscrollParams& params) {
-  DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  SynchronousCompositorProxy* proxy = FindProxy(routing_id);
-  if (!proxy) {
-    DLOG(WARNING) << "No matching proxy in DidOverScroll " << routing_id;
-    return;
-  }
-  proxy->DidOverscroll(params);
-}
-
-void SynchronousCompositorFilter::DidStartFlinging(int routing_id) {}
-
-void SynchronousCompositorFilter::DidStopFlinging(int routing_id) {
-  DCHECK(compositor_task_runner_->BelongsToCurrentThread());
-  Send(new InputHostMsg_DidStopFlinging(routing_id));
-}
-
-void SynchronousCompositorFilter::NotifyInputEventHandled(
-    int routing_id,
-    blink::WebInputEvent::Type type,
-    InputEventAckState ack_result) {}
 
 void SynchronousCompositorFilter::DidAddSynchronousHandlerProxy(
     int routing_id,
@@ -277,12 +208,12 @@ void SynchronousCompositorFilter::DidRemoveSynchronousHandlerProxy(
 }
 
 SynchronousCompositorFilter::Entry::Entry()
-    : begin_frame_source(nullptr),
-      output_surface(nullptr),
+    : output_surface(nullptr),
       synchronous_input_handler_proxy(nullptr) {}
 
+// TODO(boliu): refactor this
 bool SynchronousCompositorFilter::Entry::IsReady() {
-  return begin_frame_source && synchronous_input_handler_proxy;
+  return synchronous_input_handler_proxy;
 }
 
 }  // namespace content

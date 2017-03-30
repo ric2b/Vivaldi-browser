@@ -9,6 +9,7 @@
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
 #include "modules/canvas2d/BaseRenderingContext2D.h"
+#include <memory>
 
 namespace blink {
 
@@ -79,7 +80,8 @@ protected:
 
 private:
     bool m_hasAlpha;
-    OwnPtr<ImageBuffer> m_imageBuffer;
+    bool m_needsMatrixClipRestore = false;
+    std::unique_ptr<ImageBuffer> m_imageBuffer;
 };
 
 } // namespace blink

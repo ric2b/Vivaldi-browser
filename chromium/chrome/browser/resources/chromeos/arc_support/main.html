@@ -2,6 +2,9 @@
 <html>
 <head>
   <link rel="stylesheet" href="chrome://resources/css/roboto.css">
+  <link rel="stylesheet" href="chrome://resources/css/bubble.css">
+  <link rel="stylesheet" href="chrome://resources/css/bubble_button.css">
+  <link rel="stylesheet" href="chrome://resources/css/controlled_indicator.css">
   <link rel="import" href="chrome://resources/polymer/v1_0/paper-button/paper-button.html">
   <link rel="import" href="chrome://resources/polymer/v1_0/paper-progress/paper-progress.html">
   <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
@@ -13,14 +16,14 @@
       width: 360px;
     }
     paper-progress.red {
-      --paper-progress-active-color: #ff374f;
-      --paper-progress-secondary-color: #ff374f;
-      --paper-progress-container-color: #c8bdd4;
+      --paper-progress-active-color: rgb(255, 55, 79);
+      --paper-progress-container-color: rgb(200, 189, 212);
+      --paper-progress-secondary-color: rgb(255, 55, 79);
     }
     paper-progress.blue {
-      --paper-progress-active-color: #4285f4;
-      --paper-progress-secondary-color: #4285f4;
+      --paper-progress-active-color: rgb(66, 133, 244);
       --paper-progress-container-color: #e6e6e6;
+      --paper-progress-secondary-color: rgb(66, 133, 244);
     }
     paper-button {
       font-size: 13px;
@@ -40,50 +43,96 @@
   <script src="chrome://resources/js/load_time_data.js"></script>
   <script src="chrome://resources/js/util.js"></script>
   <script src="chrome://resources/js/i18n_template_no_process.js"></script>
+  <script src="chrome://resources/js/cr.js"></script>
+  <script src="chrome://resources/js/event_tracker.js"></script>
+  <script src="chrome://resources/js/cr/ui.js"></script>
+  <script src="chrome://resources/js/cr/ui/bubble.js"></script>
+  <script src="chrome://resources/js/cr/ui/bubble_button.js"></script>
+  <script src="chrome://resources/js/cr/ui/controlled_indicator.js"></script>
 </head>
 <body>
-  <div id="start" class="section section-flex">
+  <div id="terms-loading" class="section">
     <img class="image-header" src="images/header.png">
-    <p class="text-title" i18n-content="greetingHeader"></p>
-    <p class="text-desc" i18n-content="greetingDescription"></p>
-    <p class="text-terms-title" i18n-content="termsOfService"></p>
-    <div class="section-terms" id ="terms-container">
-      <webview id="terms" partition="persist:arc_support"></webview>
+    <div class="scrollable">
+      <div class="content">
+        <p class="text-title" i18n-content="greetingHeader"></p>
+        <p class="text-desc" i18n-content="greetingDescription"></p>
+        <paper-progress class="blue" indeterminate></paper-progress>
+      </div>
     </div>
-    <div class="layout horizontal section-metrics">
-      <input type="checkbox" class="checkbox-metrics" id="enable-metrics"
-        hidden>
-      <p class="text-metrics" id="text-metrics"></p>
-    </div>
-    <div class="layout horizontal end-justified section-buttons">
-      <paper-button class="white" id="button-cancel"
-          i18n-content="buttonCancel">
-      </paper-button>
-      <div class="button-separator"></div>
-      <paper-button class="blue" id="button-agree" i18n-content="buttonAgree"
-          disabled>
-      </paper-button>
+  </div>
+  <div id="terms" class="section" hidden>
+    <img class="image-header" src="images/header.png">
+    <div class="scrollable" >
+      <div class="content section-flex">
+        <p class="text-title" i18n-content="greetingHeader"></p>
+        <p class="text-desc" i18n-content="greetingDescription"></p>
+        <p class="text-terms-title" id="terms-title"
+            i18n-content="termsOfService"></p>
+        <div class="section-terms" id ="terms-container">
+          <webview id="terms-view" partition="persist:arc_support"></webview>
+        </div>
+        <label class="layout horizontal section-checkbox-container">
+          <input type="checkbox" class="checkbox-option" id="enable-metrics">
+          <p class="checkbox-text" id="text-metrics"></p>
+        </label>
+        <label class="layout horizontal section-checkbox-container">
+          <input type="checkbox" class="checkbox-option"
+              id="enable-backup-restore">
+          <p class="checkbox-text" id="text-backup-restore"></p>
+        </label>
+        <label class="layout horizontal section-checkbox-container">
+          <input type="checkbox" class="checkbox-option"
+              id="enable-location-service">
+          <p class="checkbox-text" id="text-location-service"></p>
+        </label>
+        <div class="layout horizontal end-justified section-buttons">
+          <paper-button class="white" id="button-cancel"
+              i18n-content="buttonCancel">
+          </paper-button>
+          <div class="button-separator"></div>
+          <paper-button class="blue" id="button-agree"
+            i18n-content="buttonAgree">
+          </paper-button>
+        </div>
+      </div>
     </div>
   </div>
   <div id="lso-loading" class="section" hidden>
     <img class="image-header" src="images/header.png">
-    <paper-progress class="blue" indeterminate></paper-progress>
-    <p class="text-status" i18n-content=progressLsoLoading></p>
+    <div class="scrollable">
+      <div class="content">
+        <paper-progress class="blue" indeterminate></paper-progress>
+        <p class="text-status" i18n-content=progressLsoLoading></p>
+      </div>
+    </div>
   </div>
   <div id="lso" class="section" hidden>
+    <img class="image-header" src="images/header.png">
     <webview id="arc-support" partition="persist:arc_support"></webview>
   </div>
   <div id="arc-loading" class="section" hidden>
     <img class="image-header" src="images/header.png">
-    <paper-progress class="blue" indeterminate></paper-progress>
-    <p class="text-status" i18n-content="progressAndroidLoading"></p>
+    <div class="scrollable">
+      <div class="content">
+        <paper-progress class="blue" indeterminate></paper-progress>
+        <p class="text-status" i18n-content="progressAndroidLoading"></p>
+      </div>
+    </div>
   </div>
   <div id="error" class="section" hidden>
     <img class="image-header" src="images/header.png">
-    <paper-progress class="red" value="100" max="100" ></paper-progress>
-    <p class="text-status" id="error-message"></p>
-    <paper-button class="blue" id="button-retry" i18n-content="buttonRetry">
-    </paper-button>
+    <div class="scrollable">
+      <div class="content">
+        <paper-progress class="red" value="100" max="100" ></paper-progress>
+        <p class="text-status" id="error-message"></p>
+        <paper-button class="blue" id="button-send-feedback"
+            i18n-content="buttonSendFeedback">
+        </paper-button>
+        <paper-button class="blue" id="button-retry" i18n-content="buttonRetry">
+        </paper-button>
+      </div>
+    </div>
   </div>
 </body>
 </html>

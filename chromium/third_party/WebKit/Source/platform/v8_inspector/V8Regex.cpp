@@ -9,6 +9,8 @@
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
 
+#include <limits.h>
+
 namespace blink {
 
 V8Regex::V8Regex(V8DebuggerImpl* debugger, const String16& pattern, bool caseSensitive, bool multiline)
@@ -59,7 +61,7 @@ int V8Regex::match(const String16& string, int startFrom, int* matchLength) cons
         return -1;
     v8::Local<v8::Value> argv[] = { toV8String(isolate, string.substring(startFrom)) };
     v8::Local<v8::Value> returnValue;
-    if (!exec.As<v8::Function>()->Call(context, regex, WTF_ARRAY_LENGTH(argv), argv).ToLocal(&returnValue))
+    if (!exec.As<v8::Function>()->Call(context, regex, PROTOCOL_ARRAY_LENGTH(argv), argv).ToLocal(&returnValue))
         return -1;
 
     // RegExp#exec returns null if there's no match, otherwise it returns an
@@ -69,7 +71,7 @@ int V8Regex::match(const String16& string, int startFrom, int* matchLength) cons
     //
     // https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Global_Objects/RegExp/exec
 
-    ASSERT(!returnValue.IsEmpty());
+    DCHECK(!returnValue.IsEmpty());
     if (!returnValue->IsArray())
         return -1;
 

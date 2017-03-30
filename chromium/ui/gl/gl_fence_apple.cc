@@ -6,7 +6,7 @@
 
 #include "ui/gl/gl_bindings.h"
 
-namespace gfx {
+namespace gl {
 
 GLFenceAPPLE::GLFenceAPPLE() {
   glGenFencesAPPLE(1, &fence_);
@@ -31,8 +31,14 @@ void GLFenceAPPLE::ServerWait() {
 }
 
 GLFenceAPPLE::~GLFenceAPPLE() {
-  DCHECK(glIsFenceAPPLE(fence_));
-  glDeleteFencesAPPLE(1, &fence_);
+  if (fence_) {
+    DCHECK(glIsFenceAPPLE(fence_));
+    glDeleteFencesAPPLE(1, &fence_);
+  }
 }
 
-}  // namespace gfx
+void GLFenceAPPLE::Invalidate() {
+  fence_ = 0;
+}
+
+}  // namespace gl

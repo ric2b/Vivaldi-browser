@@ -56,8 +56,8 @@ void DefaultComponentInstaller::Register(
   task_runner_ = cus->GetSequencedTaskRunner();
 
   if (!installer_traits_) {
-    NOTREACHED() << "A DefaultComponentInstaller has been created but "
-                 << "has no installer traits.";
+    LOG(ERROR) << "A DefaultComponentInstaller has been created but "
+               << "has no installer traits.";
     return;
   }
   task_runner_->PostTaskAndReply(
@@ -69,7 +69,7 @@ void DefaultComponentInstaller::Register(
 }
 
 void DefaultComponentInstaller::OnUpdateError(int error) {
-  NOTREACHED() << "Component update error: " << error;
+  LOG(ERROR) << "Component update error: " << error;
 }
 
 bool DefaultComponentInstaller::InstallHelper(
@@ -152,23 +152,42 @@ bool DefaultComponentInstaller::Uninstall() {
   return true;
 }
 
-bool DefaultComponentInstaller::FindPreinstallation() {
-  base::FilePath path;
-  if (!PathService::Get(DIR_COMPONENT_PREINSTALLED, &path))
+bool DefaultComponentInstaller::FindPreinstallation(
+    const base::FilePath& root) {
+  base::FilePath path = root.Append(installer_traits_->GetRelativeInstallDir());
+  if (!base::PathExists(path)) {
+    DVLOG(1) << "Relative install dir does not exist: " << path.MaybeAsASCII();
     return false;
-  path = path.Append(installer_traits_->GetRelativeInstallDir());
-  if (!base::PathExists(path))
-    return false;
+  }
+
   std::unique_ptr<base::DictionaryValue> manifest =
       update_client::ReadManifest(path);
-  if (!manifest || !installer_traits_->VerifyInstallation(*manifest, path))
+  if (!manifest) {
+    DVLOG(1) << "Manifest does not exist: " << path.MaybeAsASCII();
     return false;
+  }
+
+  if (!installer_traits_->VerifyInstallation(*manifest, path)) {
+    DVLOG(1) << "Installation verification failed: " << path.MaybeAsASCII();
+    return false;
+  }
+
   std::string version_lexical;
-  if (!manifest->GetStringASCII("version", &version_lexical))
+  if (!manifest->GetStringASCII("version", &version_lexical)) {
+    DVLOG(1) << "Failed to get component version from the manifest.";
     return false;
+  }
+
   const base::Version version(version_lexical);
-  if (!version.IsValid())
+  if (!version.IsValid()) {
+    DVLOG(1) << "Version in the manifest is invalid:" << version_lexical;
     return false;
+  }
+
+  VLOG(1) << "Preinstalled component found for " << installer_traits_->GetName()
+          << " at " << path.MaybeAsASCII() << " with version " << version
+          << ".";
+
   current_install_dir_ = path;
   current_manifest_ = std::move(manifest);
   current_version_ = version;
@@ -176,14 +195,26 @@ bool DefaultComponentInstaller::FindPreinstallation() {
 }
 
 void DefaultComponentInstaller::StartRegistration(ComponentUpdateService* cus) {
+  VLOG(1) << __FUNCTION__ << " for " << installer_traits_->GetName();
   DCHECK(task_runner_.get());
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
 
   base::Version latest_version(kNullVersion);
 
   // First check for an installation set up alongside Chrome itself.
-  if (FindPreinstallation())
+  base::FilePath root;
+  if (PathService::Get(DIR_COMPONENT_PREINSTALLED, &root) &&
+      FindPreinstallation(root)) {
     latest_version = current_version_;
+  }
+
+  // If there is a distinct alternate root, check there as well, and override
+  // anything found in the basic root.
+  base::FilePath root_alternate;
+  if (PathService::Get(DIR_COMPONENT_PREINSTALLED_ALT, &root_alternate) &&
+      root != root_alternate && FindPreinstallation(root_alternate)) {
+    latest_version = current_version_;
+  }
 
   // Then check for a higher-versioned user-wide installation.
   base::FilePath latest_path;
@@ -291,19 +322,22 @@ void DefaultComponentInstaller::UninstallOnTaskRunner() {
 void DefaultComponentInstaller::FinishRegistration(
     ComponentUpdateService* cus,
     const base::Closure& callback) {
+  VLOG(1) << __FUNCTION__ << " for " << installer_traits_->GetName();
   DCHECK(thread_checker_.CalledOnValidThread());
+
   if (installer_traits_->CanAutoUpdate()) {
     CrxComponent crx;
-    crx.name = installer_traits_->GetName();
-    crx.requires_network_encryption =
-        installer_traits_->RequiresNetworkEncryption();
+    installer_traits_->GetHash(&crx.pk_hash);
     crx.installer = this;
     crx.version = current_version_;
     crx.fingerprint = current_fingerprint_;
-    installer_traits_->GetHash(&crx.pk_hash);
+    crx.name = installer_traits_->GetName();
+    crx.installer_attributes = installer_traits_->GetInstallerAttributes();
+    crx.requires_network_encryption =
+        installer_traits_->RequiresNetworkEncryption();
     if (!cus->RegisterComponent(crx)) {
-      NOTREACHED() << "Component registration failed for "
-                   << installer_traits_->GetName();
+      LOG(ERROR) << "Component registration failed for "
+                 << installer_traits_->GetName();
       return;
     }
 
@@ -311,8 +345,10 @@ void DefaultComponentInstaller::FinishRegistration(
       callback.Run();
   }
 
-  if (!current_manifest_)
+  if (!current_manifest_) {
+    DVLOG(1) << "No component found for " << installer_traits_->GetName();
     return;
+  }
 
   std::unique_ptr<base::DictionaryValue> manifest_copy(
       current_manifest_->DeepCopy());

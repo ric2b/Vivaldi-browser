@@ -13,6 +13,8 @@
 #include "base/observer_list.h"
 
 @class ChromeIdentity;
+@class ChromeIdentityInteractionManager;
+@protocol ChromeIdentityInteractionManagerDelegate;
 @class NSArray;
 @class NSDate;
 @class NSError;
@@ -21,9 +23,7 @@
 
 namespace ios {
 
-// Callback passed to method |SigninIdentity()|.
-typedef void (^SigninIdentityCallback)(ChromeIdentity* identity,
-                                       NSError* error);
+class ChromeBrowserState;
 
 // Callback passed to method |GetAccessTokenForScopes()| that returns the
 // information of the obtained access token to the caller.
@@ -83,6 +83,13 @@ class ChromeIdentityService {
   ChromeIdentityService();
   virtual ~ChromeIdentityService();
 
+  // Returns a newly created and autoreleased ChromeIdentityInteractionManager
+  // with |delegate| as its delegate.
+  virtual ChromeIdentityInteractionManager*
+  CreateChromeIdentityInteractionManager(
+      ios::ChromeBrowserState* browser_state,
+      id<ChromeIdentityInteractionManagerDelegate> delegate) const;
+
   // Returns YES if |identity| is valid and if the service has it in its list of
   // identitites.
   virtual bool IsValidIdentity(ChromeIdentity* identity) const;
@@ -131,10 +138,6 @@ class ChromeIdentityService {
                               const std::string& client_secret,
                               const std::set<std::string>& scopes,
                               const AccessTokenCallback& callback);
-
-  // Allow the user to sign in with an identity already seen on this device.
-  virtual void SigninIdentity(ChromeIdentity* identity,
-                              SigninIdentityCallback callback);
 
   // Fetches the profile avatar, from the cache or the network.
   // For high resolution iPads, returns large images (200 x 200) to avoid

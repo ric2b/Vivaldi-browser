@@ -19,12 +19,12 @@
 #include "chrome/browser/translate/chrome_translate_client.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bar_controller.h"
 #import "chrome/browser/ui/cocoa/bookmarks/bookmark_bubble_controller.h"
-#import "chrome/browser/ui/cocoa/exclusive_access_bubble_window_controller.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_controller.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_window_controller.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/url_drop_target.h"
 #import "chrome/browser/ui/cocoa/view_resizer.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "components/translate/core/common/translate_errors.h"
 #include "ui/base/accelerators/accelerator_manager.h"
@@ -44,11 +44,12 @@ class ExclusiveAccessContext;
 @class FindBarCocoaController;
 @class FullscreenModeController;
 @class FullscreenWindow;
+class FullscreenLowPowerCoordinatorCocoa;
 @class InfoBarContainerController;
 class LocationBarViewMac;
 @class OverlayableContentsController;
 class PermissionBubbleCocoa;
-@class PresentationModeController;
+@class FullscreenToolbarController;
 class StatusBubbleMac;
 @class TabStripController;
 @class TabStripView;
@@ -84,10 +85,13 @@ class Command;
   base::scoped_nsobject<DevToolsController> devToolsController_;
   base::scoped_nsobject<OverlayableContentsController>
       overlayableContentsController_;
-  base::scoped_nsobject<PresentationModeController> presentationModeController_;
+  base::scoped_nsobject<FullscreenToolbarController>
+      fullscreenToolbarController_;
   std::unique_ptr<ExclusiveAccessController> exclusiveAccessController_;
   base::scoped_nsobject<BrowserWindowFullscreenTransition>
       fullscreenTransition_;
+  std::unique_ptr<FullscreenLowPowerCoordinatorCocoa>
+      fullscreenLowPowerCoordinator_;
 
   // Strong. StatusBubble is a special case of a strong reference that
   // we don't wrap in a scoped_ptr because it is acting the same
@@ -147,11 +151,6 @@ class Command;
   // AppKit fullscreen mode.
   BOOL enteringImmersiveFullscreen_;
 
-  // True between |-setPresentationMode:url:bubbleType:| and
-  // |-windowDidEnterFullScreen:| to indicate that the window is in the process
-  // of transitioning into fullscreen presentation mode.
-  BOOL enteringPresentationMode_;
-
   // When the window is in the process of entering AppKit Fullscreen, this
   // property indicates whether the window is being fullscreened on the
   // primary screen.
@@ -165,6 +164,10 @@ class Command;
   // True if the toolbar needs to be shown in fullscreen.
   BOOL shouldShowFullscreenToolbar_;
 
+  // True if a call to exit AppKit fullscreen was made during the transition to
+  // fullscreen.
+  BOOL shouldExitAfterEnteringFullscreen_;
+
   // True if AppKit has finished exiting fullscreen before the exit animation
   // is completed. This flag is used to ensure that |windowDidExitFullscreen|
   // is called after the exit fullscreen animation is complete.
@@ -175,7 +178,7 @@ class Command;
   // returns YES.
   NSRect savedRegularWindowFrame_;
 
-  // The proportion of the floating bar which is shown (in presentation mode).
+  // The proportion of the floating bar which is shown.
   CGFloat floatingBarShownFraction_;
 
   // Various UI elements/events may want to ensure that the floating bar is
@@ -399,8 +402,7 @@ class Command;
 
 
 // Methods having to do with the window type (normal/popup/app, and whether the
-// window has various features; fullscreen and presentation mode methods are
-// separate).
+// window has various features.
 @interface BrowserWindowController(WindowType)
 
 // Determines whether this controller's window supports a given feature (i.e.,
@@ -451,9 +453,8 @@ class Command;
 // involves moving the current window to a different space, and resizing the
 // window to take up the entire size of the screen.
 //
-// + Immersive fullscreen: An alternative to AppKitFullscreen API. Uses on 10.6
-// (before AppKitFullscreen API was available), and on certain HTML/Flash
-// content. This is a method defined by Chrome.
+// + Immersive fullscreen: An alternative to AppKitFullscreen API. Uses on 10.9
+//  on certain HTML/Flash content. This is a method defined by Chrome.
 //
 // The Immersive fullscreen API can be called after the AppKitFullscreen API.
 // Calling the AppKitFullscreen API while immersive fullscreen API has been
@@ -471,7 +472,7 @@ class Command;
 //
 // The omnibox sliding styles are used in conjunction with the fullscreen APIs.
 // There is exactly 1 sliding style active at a time. The sliding is mangaged
-// by the presentationModeController_. (poorly named).
+// by the fullscreenToolbarController_.
 //
 // ----------------------------------------------------------------------------
 // There are several "fullscreen modes" bantered around. Technically, any
@@ -484,21 +485,14 @@ class Command;
 //
 // + Canonical Fullscreen: When a user clicks on the fullscreen button, they
 // expect a fullscreen behavior similar to other AppKit apps.
-//  - AppKitFullscreen API + OMNIBOX_TABS_PRESENT.
+//  - AppKitFullscreen API + OMNIBOX_TABS_PRESENT/OMNIBOX_TABS_HIDDEN.
 //  - The button click directly invokes the AppKitFullscreen API. This class
 //  get a callback, and calls adjustUIForOmniboxFullscreen.
 //  - There is a menu item that is intended to invoke the same behavior. When
 //  the user clicks the menu item, or use its hotkey, this class invokes the
 //  AppKitFullscreen API.
 //
-// + Presentation Mode:
-//  - OMNIBOX_TABS_HIDDEN, typically with AppKitFullscreen API, but can
-//  also be with Immersive fullscreen API.
-//  - This class sets a flag, indicating that it wants Presentation Mode
-//  instead of Canonical Fullscreen. Then it invokes the AppKitFullscreen API.
-//
-// + HTML5 fullscreen. <-- Currently uses AppKitFullscreen API. This should
-// eventually migrate to the Immersive Fullscreen API.
+// + HTML5 fullscreen. Uses AppKitFullscreen in 10.10+, otherwise Immersive.
 //
 // There are more fullscreen styles on OSX than other OSes. However, all OSes
 // share the same cross-platform code for entering fullscreen
@@ -509,11 +503,7 @@ class Command;
 //     -- This invokes -[BrowserWindowController windowWillEnterFullscreen:]
 //   - User selects the menu item "Enter Full Screen".
 //     -- This invokes FullscreenController::ToggleFullscreenModeInternal(
-//        BROWSER_WITH_CHROME)
-//   - User selects the menu item "Enter Presentation Mode".
-//     -- This invokes FullscreenController::ToggleFullscreenModeInternal(
 //        BROWSER)
-//     -- The corresponding URL will be empty.
 //   - User requests fullscreen via an extension.
 //     -- This invokes FullscreenController::ToggleFullscreenModeInternal(
 //        BROWSER)
@@ -525,21 +515,16 @@ class Command;
 //        IsWindowFullscreenForTabOrPending() returns true.
 //     -- The corresponding URL will be the url of the web page.
 
-// Methods having to do with fullscreen and presentation mode.
+// Methods having to do with fullscreen mode.
 @interface BrowserWindowController(Fullscreen)
 
-// Toggles fullscreen mode.  Meant to be called by Lion windows when they enter
-// or exit Lion fullscreen mode.  Must not be called on Snow Leopard or earlier.
-- (void)handleLionToggleFullscreen;
+// Enters Browser AppKit Fullscreen.
+- (void)enterBrowserFullscreen;
 
-// Enters Browser/Appkit Fullscreen.
-// If |withToolbar| is NO, the tab strip and toolbar are hidden
-// (aka Presentation Mode).
-- (void)enterBrowserFullscreenWithToolbar:(BOOL)withToolbar;
-
-// Adds or removes the tab strip and toolbar from the current window. The
-// window must be in immersive or AppKit Fullscreen.
-- (void)updateFullscreenWithToolbar:(BOOL)withToolbar;
+// Updates the UI for tab fullscreen by adding or removing the tab strip and
+// toolbar from the current window. The window must already be in fullscreen.
+- (void)updateUIForTabFullscreen:
+    (ExclusiveAccessContext::TabFullscreenState)state;
 
 // Exits extension fullscreen if we're currently in the mode. Returns YES
 // if we exited fullscreen.
@@ -563,29 +548,19 @@ class Command;
 // the AppKit Fullscreen API.
 - (BOOL)isInAppKitFullscreen;
 
-// Enter fullscreen for an extension.
-- (void)enterExtensionFullscreen;
-
 // Enters Immersive Fullscreen for the given URL.
 - (void)enterWebContentFullscreen;
 
 // Exits the current fullscreen mode.
 - (void)exitAnyFullscreen;
 
-// Whether the system is in the very specific fullscreen mode: Presentation
-// Mode.
-- (BOOL)inPresentationMode;
-
-// Whether the toolbar should be shown in fullscreen.
-- (BOOL)shouldShowFullscreenToolbar;
-
 // Called by BrowserWindowFullscreenTransition when the exit animation is
 // finished.
 - (void)exitFullscreenAnimationFinished;
 
 // Resizes the fullscreen window to fit the screen it's currently on.  Called by
-// the PresentationModeController when there is a change in monitor placement or
-// resolution.
+// the FullscreenToolbarController when there is a change in monitor placement
+// or resolution.
 - (void)resizeFullscreenWindow;
 
 // Query/lock/release the requirement that the tab strip/toolbar/attached
@@ -658,8 +633,11 @@ class Command;
 // Returns the active tab contents controller's |blockFullscreenResize_| flag.
 - (BOOL)isActiveTabContentsControllerResizeBlocked;
 
-// Returns the presentation mode controller.
-- (PresentationModeController*)presentationModeController;
+// Returns the fullscreen toolbar controller.
+- (FullscreenToolbarController*)fullscreenToolbarController;
+
+// Sets the fullscreen toolbar controller.
+- (void)setFullscreenToolbarController:(FullscreenToolbarController*)controller;
 
 @end  // @interface BrowserWindowController (TestingAPI)
 

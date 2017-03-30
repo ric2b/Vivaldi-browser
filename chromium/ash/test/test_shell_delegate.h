@@ -8,10 +8,9 @@
 #include <memory>
 #include <string>
 
-#include "ash/media_delegate.h"
+#include "ash/common/media_delegate.h"
 #include "ash/shell_delegate.h"
 #include "ash/test/test_session_state_delegate.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 
@@ -41,7 +40,7 @@ class TestShellDelegate : public ShellDelegate {
   bool IsIncognitoAllowed() const override;
   bool IsMultiProfilesEnabled() const override;
   bool IsRunningInForcedAppMode() const override;
-  bool CanShowWindowForUser(aura::Window* window) const override;
+  bool CanShowWindowForUser(WmWindow* window) const override;
   bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
   void PreShutdown() override;
@@ -52,7 +51,7 @@ class TestShellDelegate : public ShellDelegate {
       VirtualKeyboardStateObserver* observer) override;
   void RemoveVirtualKeyboardStateObserver(
       VirtualKeyboardStateObserver* observer) override;
-  void OpenUrl(const GURL& url) override;
+  void OpenUrlFromArc(const GURL& url) override;
   app_list::AppListPresenter* GetAppListPresenter() override;
   ShelfDelegate* CreateShelfDelegate(ShelfModel* model) override;
   SystemTrayDelegate* CreateSystemTrayDelegate() override;
@@ -61,11 +60,10 @@ class TestShellDelegate : public ShellDelegate {
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
   NewWindowDelegate* CreateNewWindowDelegate() override;
   MediaDelegate* CreateMediaDelegate() override;
-  std::unique_ptr<ContainerDelegate> CreateContainerDelegate() override;
   std::unique_ptr<PointerWatcherDelegate> CreatePointerWatcherDelegate()
       override;
-  ui::MenuModel* CreateContextMenu(ash::Shelf* shelf,
-                                   const ash::ShelfItem* item) override;
+  ui::MenuModel* CreateContextMenu(WmShelf* wm_shelf,
+                                   const ShelfItem* item) override;
   GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;

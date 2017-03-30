@@ -56,7 +56,6 @@
 #include "platform/PlatformMouseEvent.h"
 #include "wtf/MathExtras.h"
 #include "wtf/NonCopyingSort.h"
-#include "wtf/PassOwnPtr.h"
 #include <limits>
 
 namespace blink {
@@ -140,7 +139,11 @@ StepRange RangeInputType::createStepRange(AnyStepHandling anyStepHandling) const
     const Decimal maximum = ensureMaximum(parseToNumber(element().fastGetAttribute(maxAttr), rangeDefaultMaximum), minimum, rangeDefaultMaximum);
 
     const Decimal step = StepRange::parseStep(anyStepHandling, stepDescription, element().fastGetAttribute(stepAttr));
-    return StepRange(stepBase, minimum, maximum, step, stepDescription);
+    // Range type always has range limitations because it has default
+    // minimum/maximum.
+    // https://html.spec.whatwg.org/multipage/forms.html#range-state-(type=range):concept-input-min-default
+    const bool hasRangeLimitations = true;
+    return StepRange(stepBase, minimum, maximum, hasRangeLimitations, step, stepDescription);
 }
 
 bool RangeInputType::isSteppable() const
@@ -156,7 +159,7 @@ void RangeInputType::handleMouseDownEvent(MouseEvent* event)
     Node* targetNode = event->target()->toNode();
     if (event->button() != LeftButton || !targetNode)
         return;
-    ASSERT(element().shadow());
+    DCHECK(element().shadow());
     if (targetNode != element() && !targetNode->isDescendantOf(element().userAgentShadowRoot()))
         return;
     SliderThumbElement* thumb = sliderThumbElement();
@@ -193,10 +196,10 @@ void RangeInputType::handleKeydownEvent(KeyboardEvent* event)
     if (element().isDisabledOrReadOnly())
         return;
 
-    const String& key = event->keyIdentifier();
+    const String& key = event->key();
 
     const Decimal current = parseToNumberOrNaN(element().value());
-    ASSERT(current.isFinite());
+    DCHECK(current.isFinite());
 
     StepRange stepRange(createStepRange(RejectAny));
 
@@ -215,13 +218,13 @@ void RangeInputType::handleKeydownEvent(KeyboardEvent* event)
     }
 
     Decimal newValue;
-    if (key == "Up")
+    if (key == "ArrowUp")
         newValue = current + step;
-    else if (key == "Down")
+    else if (key == "ArrowDown")
         newValue = current - step;
-    else if (key == "Left")
+    else if (key == "ArrowLeft")
         newValue = (isVertical || dir == RTL) ? current + step : current - step;
-    else if (key == "Right")
+    else if (key == "ArrowRight")
         newValue = (isVertical || dir == RTL) ? current - step : current + step;
     else if (key == "PageUp")
         newValue = current + bigStep;
@@ -250,7 +253,7 @@ void RangeInputType::handleKeydownEvent(KeyboardEvent* event)
 
 void RangeInputType::createShadowSubtree()
 {
-    ASSERT(element().shadow());
+    DCHECK(element().shadow());
 
     Document& document = element().document();
     HTMLDivElement* track = HTMLDivElement::create(document);
@@ -395,7 +398,7 @@ Decimal RangeInputType::findClosestTickMarkValue(const Decimal& value)
     size_t right = m_tickMarkValues.size();
     size_t middle;
     while (true) {
-        ASSERT(left <= right);
+        DCHECK_LE(left, right);
         middle = left + (right - left) / 2;
         if (!middle)
             break;

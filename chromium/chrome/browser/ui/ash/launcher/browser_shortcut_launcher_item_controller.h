@@ -7,6 +7,11 @@
 
 #include "base/macros.h"
 #include "chrome/browser/ui/ash/launcher/launcher_item_controller.h"
+#include "chrome/browser/ui/browser_list.h"
+
+namespace ash {
+class ShelfModel;
+}
 
 namespace content {
 class WebContents;
@@ -22,8 +27,8 @@ class ChromeLauncherController;
 // Item controller for an browser shortcut.
 class BrowserShortcutLauncherItemController : public LauncherItemController {
  public:
-  explicit BrowserShortcutLauncherItemController(
-      ChromeLauncherController* controller);
+  BrowserShortcutLauncherItemController(ChromeLauncherController* controller,
+                                        ash::ShelfModel* shelf_model);
 
   ~BrowserShortcutLauncherItemController() override;
 
@@ -33,6 +38,9 @@ class BrowserShortcutLauncherItemController : public LauncherItemController {
   // Sets the shelf id for the browser window if the browser is represented.
   void SetShelfIDForBrowserWindowContents(Browser* browser,
                                           content::WebContents* web_contents);
+
+  // Check if there is any active browsers windows.
+  bool IsListOfActiveBrowserEmpty();
 
   // LauncherItemController overrides:
   bool IsOpen() const override;
@@ -70,6 +78,11 @@ class BrowserShortcutLauncherItemController : public LauncherItemController {
   // Returns true when the given |browser| is listed in the browser application
   // list.
   bool IsBrowserRepresentedInBrowserList(Browser* browser);
+
+  // Get a list of active browsers.
+  BrowserList::BrowserVector GetListOfActiveBrowsers();
+
+  ash::ShelfModel* shelf_model_;
 
   DISALLOW_COPY_AND_ASSIGN(BrowserShortcutLauncherItemController);
 };

@@ -22,12 +22,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/values_test_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/test_extension_environment.h"
 #include "chrome/browser/printing/pwg_raster_converter.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/version_info/version_info.h"
-#include "device/core/device_client.h"
+#include "device/core/mock_device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
 #include "extensions/browser/api/device_permissions_manager.h"
@@ -451,22 +452,6 @@ std::unique_ptr<KeyedService> BuildTestingPrinterProviderAPI(
   return base::WrapUnique(new FakePrinterProviderAPI());
 }
 
-class FakeDeviceClient : public device::DeviceClient {
- public:
-  FakeDeviceClient() {}
-
-  // device::DeviceClient implementation:
-  device::UsbService* GetUsbService() override {
-    DCHECK(usb_service_);
-    return usb_service_;
-  }
-
-  void set_usb_service(device::UsbService* service) { usb_service_ = service; }
-
- private:
-  device::UsbService* usb_service_ = nullptr;
-};
-
 }  // namespace
 
 class ExtensionPrinterHandlerTest : public testing::Test {
@@ -478,12 +463,11 @@ class ExtensionPrinterHandlerTest : public testing::Test {
     extensions::PrinterProviderAPIFactory::GetInstance()->SetTestingFactory(
         env_.profile(), &BuildTestingPrinterProviderAPI);
     extension_printer_handler_.reset(new ExtensionPrinterHandler(
-        env_.profile(), base::MessageLoop::current()->task_runner()));
+        env_.profile(), base::ThreadTaskRunnerHandle::Get()));
 
     pwg_raster_converter_ = new FakePWGRasterConverter();
     extension_printer_handler_->SetPWGRasterConverterForTesting(
         std::unique_ptr<PWGRasterConverter>(pwg_raster_converter_));
-    device_client_.set_usb_service(&usb_service_);
   }
 
  protected:
@@ -493,15 +477,17 @@ class ExtensionPrinterHandlerTest : public testing::Test {
             ->GetForBrowserContext(env_.profile()));
   }
 
-  MockUsbService usb_service_;
+  device::MockUsbService& usb_service() {
+    return *device_client_.usb_service();
+  }
+
+  device::MockDeviceClient device_client_;
   TestExtensionEnvironment env_;
   std::unique_ptr<ExtensionPrinterHandler> extension_printer_handler_;
 
   FakePWGRasterConverter* pwg_raster_converter_;
 
  private:
-  FakeDeviceClient device_client_;
-
   DISALLOW_COPY_AND_ASSIGN(ExtensionPrinterHandlerTest);
 };
 
@@ -560,10 +546,10 @@ TEST_F(ExtensionPrinterHandlerTest, GetPrinters_Reset) {
 TEST_F(ExtensionPrinterHandlerTest, GetUsbPrinters) {
   scoped_refptr<MockUsbDevice> device0 =
       new MockUsbDevice(0, 0, "Google", "USB Printer", "");
-  usb_service_.AddDevice(device0);
+  usb_service().AddDevice(device0);
   scoped_refptr<MockUsbDevice> device1 =
       new MockUsbDevice(0, 1, "Google", "USB Printer", "");
-  usb_service_.AddDevice(device1);
+  usb_service().AddDevice(device1);
 
   const Extension* extension_1 = env_.MakeExtension(
       *base::test::ParseJson(kExtension1), "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -968,7 +954,7 @@ TEST_F(ExtensionPrinterHandlerTest, Print_Pwg_FailedConversion) {
 TEST_F(ExtensionPrinterHandlerTest, GrantUsbPrinterAccess) {
   scoped_refptr<MockUsbDevice> device =
       new MockUsbDevice(0, 0, "Google", "USB Printer", "");
-  usb_service_.AddDevice(device);
+  usb_service().AddDevice(device);
 
   size_t call_count = 0;
   std::unique_ptr<base::DictionaryValue> printer_info;
@@ -1000,7 +986,7 @@ TEST_F(ExtensionPrinterHandlerTest, GrantUsbPrinterAccess) {
 TEST_F(ExtensionPrinterHandlerTest, GrantUsbPrinterAccess_Reset) {
   scoped_refptr<MockUsbDevice> device =
       new MockUsbDevice(0, 0, "Google", "USB Printer", "");
-  usb_service_.AddDevice(device);
+  usb_service().AddDevice(device);
 
   size_t call_count = 0;
   std::unique_ptr<base::DictionaryValue> printer_info;

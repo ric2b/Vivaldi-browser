@@ -8,6 +8,7 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <set>
 #include <string>
 #include <utility>
@@ -185,7 +186,7 @@ base::ListValue* ConstructFileSystemList(
     file_system_dict_value->SetBooleanWithoutPathExpansion(
         kIsAvailableKey, true);
 
-    list->Append(file_system_dict_value.release());
+    list->Append(std::move(file_system_dict_value));
 
     if (filesystems[i].path.empty())
       continue;
@@ -437,7 +438,7 @@ void MediaGalleriesGetMediaFileSystemsFunction::ReturnGalleries(
   }
 
   // The custom JS binding will use this list to create DOMFileSystem objects.
-  SetResult(list.release());
+  SetResult(std::move(list));
   SendResponse(true);
 }
 
@@ -553,10 +554,10 @@ void MediaGalleriesAddUserSelectedFolderFunction::ReturnGalleriesAndId(
       }
     }
   }
-  base::DictionaryValue* results = new base::DictionaryValue;
+  std::unique_ptr<base::DictionaryValue> results(new base::DictionaryValue);
   results->SetWithoutPathExpansion("mediaFileSystems", list.release());
   results->SetIntegerWithoutPathExpansion("selectedFileSystemIndex", index);
-  SetResult(results);
+  SetResult(std::move(results));
   SendResponse(true);
 }
 
@@ -631,9 +632,10 @@ void MediaGalleriesGetMetadataFunction::GetMetadata(
     MediaGalleries::MediaMetadata metadata;
     metadata.mime_type = mime_type;
 
-    base::DictionaryValue* result_dictionary = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> result_dictionary(
+        new base::DictionaryValue);
     result_dictionary->Set(kMetadataKey, metadata.ToValue().release());
-    SetResult(result_dictionary);
+    SetResult(std::move(result_dictionary));
     SendResponse(true);
     return;
   }
@@ -671,7 +673,7 @@ void MediaGalleriesGetMetadataFunction::OnSafeMediaMetadataParserDone(
   result_dictionary->Set(kMetadataKey, metadata_dictionary.release());
 
   if (attached_images->empty()) {
-    SetResult(result_dictionary.release());
+    SetResult(std::move(result_dictionary));
     SendResponse(true);
     return;
   }
@@ -709,14 +711,15 @@ void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
 
   metadata::AttachedImage* current_image =
       &(*attached_images)[blob_uuids->size()];
-  base::DictionaryValue* attached_image = new base::DictionaryValue;
+  std::unique_ptr<base::DictionaryValue> attached_image(
+      new base::DictionaryValue);
   attached_image->Set(kBlobUUIDKey, new base::StringValue(
       current_blob->GetUUID()));
   attached_image->Set(kTypeKey, new base::StringValue(
       current_image->type));
   attached_image->Set(kSizeKey, new base::FundamentalValue(
       base::checked_cast<int>(current_image->data.size())));
-  attached_images_list->Append(attached_image);
+  attached_images_list->Append(std::move(attached_image));
 
   blob_uuids->push_back(current_blob->GetUUID());
   extensions::BlobHolder* holder =
@@ -739,7 +742,7 @@ void MediaGalleriesGetMetadataFunction::ConstructNextBlob(
   }
 
   // All Blobs have been constructed. The renderer will take ownership.
-  SetResult(result_dictionary.release());
+  SetResult(std::move(result_dictionary));
   SetTransferredBlobUUIDs(*blob_uuids);
   SendResponse(true);
 }
@@ -785,7 +788,7 @@ void MediaGalleriesAddGalleryWatchFunction::OnPreferencesInit(
     error_ = kInvalidGalleryIdMsg;
     result.gallery_id = kInvalidGalleryId;
     result.success = false;
-    SetResult(result.ToValue().release());
+    SetResult(result.ToValue());
     SendResponse(false);
     return;
   }
@@ -812,14 +815,14 @@ void MediaGalleriesAddGalleryWatchFunction::HandleResponse(
 
   if (!api->ExtensionHasGalleryChangeListener(extension()->id())) {
     result.success = false;
-    SetResult(result.ToValue().release());
+    SetResult(result.ToValue());
     error_ = kMissingEventListener;
     SendResponse(false);
     return;
   }
 
   result.success = error.empty();
-  SetResult(result.ToValue().release());
+  SetResult(result.ToValue());
   if (error.empty()) {
     SendResponse(true);
   } else {

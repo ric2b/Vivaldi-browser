@@ -11,6 +11,7 @@
 #include "base/md5.h"
 #include "base/memory/ref_counted.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -613,13 +614,12 @@ void PrinterJobHandlerTest::BeginTest(int timeout_seconds) {
 
   job_handler_->Initialize();
 
-  base::MessageLoop::current()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&PrinterJobHandlerTest::MessageLoopQuitSoonHelper,
-                 base::MessageLoop::current()),
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::Bind(&PrinterJobHandlerTest::MessageLoopQuitSoonHelper,
+                            base::MessageLoop::current()),
       base::TimeDelta::FromSeconds(timeout_seconds));
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 void PrinterJobHandlerTest::SendCapsAndDefaults(
@@ -639,7 +639,7 @@ void PrinterJobHandlerTest::TearDown() {
 }
 
 void PrinterJobHandlerTest::IdleOut() {
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 MockPrintServerWatcher::MockPrintServerWatcher() : delegate_(NULL) {

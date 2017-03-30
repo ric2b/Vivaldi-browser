@@ -260,4 +260,79 @@ public class ItemChooserDialogTest extends ChromeActivityTestCaseBase<ChromeActi
 
         mChooserDialog.dismiss();
     }
+
+    @SmallTest
+    public void testAddItemWithSameNameToListAndRemoveItemFromList() throws InterruptedException {
+        Dialog dialog = mChooserDialog.getDialogForTesting();
+        assertTrue(dialog.isShowing());
+
+        ItemChooserDialog.ItemAdapter itemAdapter = mChooserDialog.getItemAdapterForTesting();
+
+        // Add item 1.
+        ItemChooserDialog.ItemChooserRow item1 =
+                new ItemChooserDialog.ItemChooserRow("device_id_1", "same_device_name");
+        mChooserDialog.addItemToList(item1);
+        assertEquals(1, itemAdapter.getCount());
+        assertEquals(itemAdapter.getItem(0), item1);
+
+        // Add item 2.
+        ItemChooserDialog.ItemChooserRow item2 =
+                new ItemChooserDialog.ItemChooserRow("device_id_2", "different_device_name");
+        mChooserDialog.addItemToList(item2);
+        assertEquals(2, itemAdapter.getCount());
+        assertEquals(itemAdapter.getItem(0), item1);
+        assertEquals(itemAdapter.getItem(1), item2);
+
+        // Add item 3.
+        ItemChooserDialog.ItemChooserRow item3 =
+                new ItemChooserDialog.ItemChooserRow("device_id_3", "same_device_name");
+        mChooserDialog.addItemToList(item3);
+        assertEquals(3, itemAdapter.getCount());
+        assertEquals(itemAdapter.getItem(0), item1);
+        assertEquals(itemAdapter.getItem(1), item2);
+        assertEquals(itemAdapter.getItem(2), item3);
+
+        // Since two items have the same name, their display text should have their unique
+        // keys appended.
+        assertEquals("same_device_name (device_id_1)", itemAdapter.getDisplayText(0));
+        assertEquals("different_device_name", itemAdapter.getDisplayText(1));
+        assertEquals("same_device_name (device_id_3)", itemAdapter.getDisplayText(2));
+
+        // Remove item 2.
+        mChooserDialog.removeItemFromList(item2);
+        assertEquals(2, itemAdapter.getCount());
+        // Make sure the remaining items are item 1 and item 3.
+        assertEquals(itemAdapter.getItem(0), item1);
+        assertEquals(itemAdapter.getItem(1), item3);
+        assertEquals("same_device_name (device_id_1)", itemAdapter.getDisplayText(0));
+        assertEquals("same_device_name (device_id_3)", itemAdapter.getDisplayText(1));
+
+        // Remove item 1.
+        mChooserDialog.removeItemFromList(item1);
+        assertEquals(1, itemAdapter.getCount());
+        // Make sure the remaining item is item 3.
+        assertEquals(itemAdapter.getItem(0), item3);
+        // After removing item 1, item 3 is the only remaining item, so its display text
+        // also changed to its original description.
+        assertEquals("same_device_name", itemAdapter.getDisplayText(0));
+
+        mChooserDialog.dismiss();
+    }
+
+    @SmallTest
+    public void testListHeight() throws InterruptedException {
+        // 500 * .3 is 150, which is 48 * 3.125. 48 * 3.5 is 168.
+        assertEquals(168, ItemChooserDialog.getListHeight(500, 1.0f));
+
+        // 150 * .3 is 45, which rounds below the minimum height.
+        assertEquals(72, ItemChooserDialog.getListHeight(150, 1.0f));
+
+        // 1460 * .3 is 438, which rounds above the maximum height.
+        assertEquals(408, ItemChooserDialog.getListHeight(1460, 1.0f));
+
+        // 1100px is 500dp at a density of 2.2. 500 * .3 is 150dp, which is 48dp *
+        // 3.125. 48dp * 3.5 is 168dp. 168dp * 2.2px/dp is 369.6, which rounds to
+        // 370.
+        assertEquals(370, ItemChooserDialog.getListHeight(1100, 2.2f));
+    }
 }

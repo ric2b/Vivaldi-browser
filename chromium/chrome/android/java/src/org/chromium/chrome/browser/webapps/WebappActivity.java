@@ -37,11 +37,9 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.tab.TopControlsVisibilityDelegate;
 import org.chromium.chrome.browser.util.ColorUtils;
 import org.chromium.chrome.browser.util.UrlUtilities;
 import org.chromium.chrome.browser.widget.ControlContainer;
-import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.content.browser.ScreenOrientationProvider;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.NetworkChangeNotifier;
@@ -102,7 +100,13 @@ public class WebappActivity extends FullScreenActivity {
             mWebappInfo = newWebappInfo;
             resetSavedInstanceState();
             if (mIsInitialized) initializeUI(null);
+            // TODO(dominickn): send the web app into fullscreen if mDisplayMode is
+            // WebDisplayMode.Fullscreen. See crbug.com/581522
         }
+    }
+
+    protected boolean isInitialized() {
+        return mIsInitialized;
     }
 
     private void initializeUI(Bundle savedInstanceState) {
@@ -119,6 +123,8 @@ public class WebappActivity extends FullScreenActivity {
         getActivityTab().addObserver(createTabObserver());
         getActivityTab().getTabWebContentsDelegateAndroid().setDisplayMode(
                 WebDisplayMode.Standalone);
+        // TODO(dominickn): send the web app into fullscreen if mDisplayMode is
+        // WebDisplayMode.Fullscreen. See crbug.com/581522
     }
 
     @Override
@@ -167,7 +173,8 @@ public class WebappActivity extends FullScreenActivity {
      * Saves the tab data out to a file.
      */
     void saveState(File activityDirectory) {
-        File tabFile = getTabFile(activityDirectory, getActivityTab().getId());
+        String tabFileName = TabState.getTabStateFilename(getActivityTab().getId(), false);
+        File tabFile = new File(activityDirectory, tabFileName);
 
         FileOutputStream foutput = null;
         // Temporarily allowing disk access while fixing. TODO: http://crbug.com/525781
@@ -255,6 +262,10 @@ public class WebappActivity extends FullScreenActivity {
                 ? WebappUma.SPLASHSCREEN_COLOR_STATUS_CUSTOM
                 : WebappUma.SPLASHSCREEN_COLOR_STATUS_DEFAULT);
 
+        initializeSplashScreenWidgets(backgroundColor);
+    }
+
+    protected void initializeSplashScreenWidgets(final int backgroundColor) {
         final Intent intent = getIntent();
         WebappRegistry.getWebappDataStorage(this, mWebappInfo.id(),
                 new WebappRegistry.FetchWebappDataStorageCallback() {
@@ -288,7 +299,7 @@ public class WebappActivity extends FullScreenActivity {
         );
     }
 
-    private void initializeSplashScreenWidgets(int backgroundColor, Bitmap splashImage) {
+    protected void initializeSplashScreenWidgets(int backgroundColor, Bitmap splashImage) {
         Bitmap displayIcon = splashImage == null ? mWebappInfo.icon() : splashImage;
         int minimiumSizeThreshold = getResources().getDimensionPixelSize(
                 R.dimen.webapp_splash_image_size_minimum);
@@ -337,7 +348,7 @@ public class WebappActivity extends FullScreenActivity {
         appNameView.setText(mWebappInfo.name());
         if (splashIconView != null) splashIconView.setImageBitmap(displayIcon);
 
-        if (ColorUtils.shoudUseLightForegroundOnBackground(backgroundColor)) {
+        if (ColorUtils.shouldUseLightForegroundOnBackground(backgroundColor)) {
             appNameView.setTextColor(ApiCompatibilityUtils.getColor(getResources(),
                     R.color.webapp_splash_title_light));
         }
@@ -565,36 +576,7 @@ public class WebappActivity extends FullScreenActivity {
 
     @Override
     protected TabDelegateFactory createTabDelegateFactory() {
-        return new FullScreenDelegateFactory() {
-            @Override
-            public TopControlsVisibilityDelegate createTopControlsVisibilityDelegate(Tab tab) {
-                return new TopControlsVisibilityDelegate(tab) {
-                    @Override
-                    public boolean isShowingTopControlsEnabled() {
-                        if (!super.isShowingTopControlsEnabled()) return false;
-                        return shouldShowTopControls(mTab.getUrl(), mTab.getSecurityLevel());
-                    }
-
-                    @Override
-                    public boolean isHidingTopControlsEnabled() {
-                        return !isShowingTopControlsEnabled();
-                    }
-                };
-            }
-        };
-    }
-
-    public boolean shouldShowTopControls(String url, int securityLevel) {
-        // Do not show top controls when URL is not ready yet.
-        boolean visible = false;
-        if (TextUtils.isEmpty(url)) return false;
-
-        boolean isSameWebsite = UrlUtilities.sameDomainOrHost(
-                mWebappInfo.uri().toString(), url, true);
-        visible = !isSameWebsite
-                || securityLevel == ConnectionSecurityLevel.SECURITY_ERROR
-                || securityLevel == ConnectionSecurityLevel.SECURITY_WARNING;
-        return visible;
+        return new WebappDelegateFactory(this);
     }
 
     // We're temporarily disable CS on webapp since there are some issues. (http://crbug.com/471950)

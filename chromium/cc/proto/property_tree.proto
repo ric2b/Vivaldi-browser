@@ -4,6 +4,7 @@
 
 syntax = "proto2";
 
+import "element_id.proto";
 import "rectf.proto";
 import "scroll_offset.proto";
 import "size.proto";
@@ -25,13 +26,7 @@ message TranformNodeData {
   optional Transform local = 2;
   optional Transform post_local = 3;
   optional Transform to_parent = 4;
-  optional Transform to_target = 5;
-  optional Transform from_target = 6;
-  optional Transform to_screen = 7;
-  optional Transform from_screen = 8;
 
-  optional int64 target_id = 9;
-  optional int64 content_target_id = 10;
   optional int64 source_node_id = 11;
   optional bool needs_local_transform_update = 12;
   optional bool node_and_ancestors_are_animated_or_invertible = 41;
@@ -41,7 +36,6 @@ message TranformNodeData {
   optional bool is_currently_animating = 42;
   optional bool to_screen_is_potentially_animated = 16;
   optional bool has_only_translation_animations = 17;
-  optional bool to_screen_has_scale_animation = 18;
   optional bool flattens_inherited_transform = 19;
   optional bool node_and_ancestors_are_flat = 20;
   optional bool node_and_ancestors_have_only_integer_translation = 21;
@@ -54,10 +48,6 @@ message TranformNodeData {
   optional bool in_subtree_of_page_scale_layer = 28;
   optional bool transform_changed = 40;
   optional float post_local_scale_factor = 29;
-  optional float local_maximum_animation_target_scale = 30;
-  optional float local_starting_animation_scale = 31;
-  optional float combined_maximum_animation_target_scale = 32;
-  optional float combined_starting_animation_scale = 33;
 
   optional Vector2dF sublayer_scale = 34;
   optional ScrollOffset scroll_offset = 35;
@@ -65,6 +55,16 @@ message TranformNodeData {
   optional Vector2dF source_offset = 37;
   optional Vector2dF source_to_parent = 38;
   optional int64 sorting_context_id = 39;
+}
+
+// Proto for TransformCachedNodeData
+message TransformCachedNodeData {
+  optional Transform from_target = 1;
+  optional Transform to_target = 2;
+  optional Transform from_screen = 3;
+  optional Transform to_screen = 4;
+  optional int64 target_id = 5;
+  optional int64 content_target_id = 6;
 }
 
 // Proto for struct ClipNodeData.
@@ -85,13 +85,12 @@ message ClipNodeData {
 }
 
 // Proto for struct EffectNodeData.
-// NEXT ID: 17
+// NEXT ID: 20
 message EffectNodeData {
   optional float opacity = 1;
   optional float screen_space_opacity = 2;
   optional bool has_render_surface = 3;
   optional bool has_copy_request = 4;
-  optional bool has_background_filters = 5;
   optional bool hidden_by_backface_visibility = 14;
   optional bool double_sided = 13;
   optional bool is_drawn = 6;
@@ -103,10 +102,13 @@ message EffectNodeData {
   optional int64 transform_id = 9;
   optional int64 clip_id = 10;
   optional int64 target_id = 12;
+  optional int64 mask_layer_id = 17;
+  optional int64 replica_layer_id = 18;
+  optional int64 replica_mask_layer_id = 19;
 }
 
 // Proto for struct ScrollNodeData
-// NEXT ID: 15
+// NEXT ID: 16
 message ScrollNodeData {
   optional bool scrollable = 1;
   optional int32 main_thread_scrolling_reasons = 2;
@@ -120,7 +122,7 @@ message ScrollNodeData {
   optional bool should_flatten = 10;
   optional bool user_scrollable_horizontal = 13;
   optional bool user_scrollable_vertical = 14;
-  optional int64 element_id = 12;
+  optional ElementId element_id = 15;
   optional int64 transform_id = 11;
 }
 
@@ -162,6 +164,7 @@ message PropertyTree {
   // of this property tree.
   optional TransformTreeData transform_tree_data = 1000;
   optional ScrollTreeData scroll_tree_data = 1001;
+  optional EffectTreeData effect_tree_data = 1002;
 }
 
 message ScrollOffsetMapEntry {
@@ -185,6 +188,12 @@ message TransformTreeData {
       [packed = true];
   repeated int64 nodes_affected_by_outer_viewport_bounds_delta = 8
       [packed = true];
+  repeated TransformCachedNodeData cached_data = 9;
+}
+
+// Proto for data members of class EffectTree.
+message EffectTreeData {
+  repeated int64 mask_replica_layer_ids = 1 [packed = true];
 }
 
 // Proto for class PropertyTrees.

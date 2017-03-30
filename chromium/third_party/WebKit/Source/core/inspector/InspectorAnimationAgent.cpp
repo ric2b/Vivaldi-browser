@@ -20,6 +20,7 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/NodeComputedStyle.h"
+#include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorCSSAgent.h"
 #include "core/inspector/InspectorDOMAgent.h"
@@ -28,6 +29,7 @@
 #include "platform/animation/TimingFunction.h"
 #include "platform/v8_inspector/public/V8InspectorSession.h"
 #include "wtf/text/Base64.h"
+#include <memory>
 
 namespace AnimationAgentState {
 static const char animationAgentEnabled[] = "animationAgentEnabled";
@@ -37,8 +39,7 @@ static const char animationAgentPlaybackRate[] = "animationAgentPlaybackRate";
 namespace blink {
 
 InspectorAnimationAgent::InspectorAnimationAgent(InspectedFrames* inspectedFrames, InspectorDOMAgent* domAgent, InspectorCSSAgent* cssAgent, V8InspectorSession* v8Session)
-    : InspectorBaseAgent<InspectorAnimationAgent, protocol::Frontend::Animation>("Animation")
-    , m_inspectedFrames(inspectedFrames)
+    : m_inspectedFrames(inspectedFrames)
     , m_domAgent(domAgent)
     , m_cssAgent(cssAgent)
     , m_v8Session(v8Session)
@@ -89,7 +90,7 @@ void InspectorAnimationAgent::didCommitLoadForLocalFrame(LocalFrame* frame)
     setPlaybackRate(nullptr, playbackRate);
 }
 
-static PassOwnPtr<protocol::Animation::AnimationEffect> buildObjectForAnimationEffect(KeyframeEffect* effect, bool isTransition)
+static std::unique_ptr<protocol::Animation::AnimationEffect> buildObjectForAnimationEffect(KeyframeEffect* effect, bool isTransition)
 {
     ComputedTimingProperties computedTiming = effect->getComputedTiming();
     double delay = computedTiming.delay();
@@ -110,7 +111,7 @@ static PassOwnPtr<protocol::Animation::AnimationEffect> buildObjectForAnimationE
         }
     }
 
-    OwnPtr<protocol::Animation::AnimationEffect> animationObject = protocol::Animation::AnimationEffect::create()
+    std::unique_ptr<protocol::Animation::AnimationEffect> animationObject = protocol::Animation::AnimationEffect::create()
         .setDelay(delay)
         .setEndDelay(computedTiming.endDelay())
         .setPlaybackRate(computedTiming.playbackRate())
@@ -124,25 +125,25 @@ static PassOwnPtr<protocol::Animation::AnimationEffect> buildObjectForAnimationE
     return animationObject;
 }
 
-static PassOwnPtr<protocol::Animation::KeyframeStyle> buildObjectForStringKeyframe(const StringKeyframe* keyframe)
+static std::unique_ptr<protocol::Animation::KeyframeStyle> buildObjectForStringKeyframe(const StringKeyframe* keyframe)
 {
     Decimal decimal = Decimal::fromDouble(keyframe->offset() * 100);
     String offset = decimal.toString();
     offset.append("%");
 
-    OwnPtr<protocol::Animation::KeyframeStyle> keyframeObject = protocol::Animation::KeyframeStyle::create()
+    std::unique_ptr<protocol::Animation::KeyframeStyle> keyframeObject = protocol::Animation::KeyframeStyle::create()
         .setOffset(offset)
         .setEasing(keyframe->easing().toString()).build();
     return keyframeObject;
 }
 
-static PassOwnPtr<protocol::Animation::KeyframesRule> buildObjectForAnimationKeyframes(const KeyframeEffect* effect)
+static std::unique_ptr<protocol::Animation::KeyframesRule> buildObjectForAnimationKeyframes(const KeyframeEffect* effect)
 {
     if (!effect || !effect->model() || !effect->model()->isKeyframeEffectModel())
         return nullptr;
     const KeyframeEffectModelBase* model = toKeyframeEffectModelBase(effect->model());
     Vector<RefPtr<Keyframe>> normalizedKeyframes = KeyframeEffectModelBase::normalizedKeyframesForInspector(model->getFrames());
-    OwnPtr<protocol::Array<protocol::Animation::KeyframeStyle>> keyframes = protocol::Array<protocol::Animation::KeyframeStyle>::create();
+    std::unique_ptr<protocol::Array<protocol::Animation::KeyframeStyle>> keyframes = protocol::Array<protocol::Animation::KeyframeStyle>::create();
 
     for (const auto& keyframe : normalizedKeyframes) {
         // Ignore CSS Transitions
@@ -154,11 +155,11 @@ static PassOwnPtr<protocol::Animation::KeyframesRule> buildObjectForAnimationKey
     return protocol::Animation::KeyframesRule::create().setKeyframes(std::move(keyframes)).build();
 }
 
-PassOwnPtr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectForAnimation(blink::Animation& animation)
+std::unique_ptr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectForAnimation(blink::Animation& animation)
 {
     const Element* element = toKeyframeEffect(animation.effect())->target();
     CSSAnimations& cssAnimations = element->elementAnimations()->cssAnimations();
-    OwnPtr<protocol::Animation::KeyframesRule> keyframeRule = nullptr;
+    std::unique_ptr<protocol::Animation::KeyframesRule> keyframeRule = nullptr;
     String animationType;
 
     if (cssAnimations.isTransitionAnimationForInspector(animation)) {
@@ -174,10 +175,10 @@ PassOwnPtr<protocol::Animation::Animation> InspectorAnimationAgent::buildObjectF
     m_idToAnimation.set(id, &animation);
     m_idToAnimationType.set(id, animationType);
 
-    OwnPtr<protocol::Animation::AnimationEffect> animationEffectObject = buildObjectForAnimationEffect(toKeyframeEffect(animation.effect()), animationType == AnimationType::CSSTransition);
+    std::unique_ptr<protocol::Animation::AnimationEffect> animationEffectObject = buildObjectForAnimationEffect(toKeyframeEffect(animation.effect()), animationType == AnimationType::CSSTransition);
     animationEffectObject->setKeyframesRule(std::move(keyframeRule));
 
-    OwnPtr<protocol::Animation::Animation> animationObject = protocol::Animation::Animation::create()
+    std::unique_ptr<protocol::Animation::Animation> animationObject = protocol::Animation::Animation::create()
         .setId(id)
         .setName(animation.id())
         .setPausedState(animation.paused())
@@ -220,7 +221,7 @@ void InspectorAnimationAgent::getCurrentTime(ErrorString* errorString, const Str
     }
 }
 
-void InspectorAnimationAgent::setPaused(ErrorString* errorString, PassOwnPtr<protocol::Array<String>> animationIds, bool paused)
+void InspectorAnimationAgent::setPaused(ErrorString* errorString, std::unique_ptr<protocol::Array<String>> animationIds, bool paused)
 {
     for (size_t i = 0; i < animationIds->length(); ++i) {
         String animationId = animationIds->get(i);
@@ -289,7 +290,7 @@ blink::Animation* InspectorAnimationAgent::animationClone(blink::Animation* anim
     return m_idToAnimationClone.get(id);
 }
 
-void InspectorAnimationAgent::seekAnimations(ErrorString* errorString, PassOwnPtr<protocol::Array<String>> animationIds, double currentTime)
+void InspectorAnimationAgent::seekAnimations(ErrorString* errorString, std::unique_ptr<protocol::Array<String>> animationIds, double currentTime)
 {
     for (size_t i = 0; i < animationIds->length(); ++i) {
         String animationId = animationIds->get(i);
@@ -307,7 +308,7 @@ void InspectorAnimationAgent::seekAnimations(ErrorString* errorString, PassOwnPt
     }
 }
 
-void InspectorAnimationAgent::releaseAnimations(ErrorString* errorString, PassOwnPtr<protocol::Array<String>> animationIds)
+void InspectorAnimationAgent::releaseAnimations(ErrorString* errorString, std::unique_ptr<protocol::Array<String>> animationIds)
 {
     for (size_t i = 0; i < animationIds->length(); ++i) {
         String animationId = animationIds->get(i);
@@ -362,7 +363,7 @@ void InspectorAnimationAgent::setTiming(ErrorString* errorString, const String& 
     }
 }
 
-void InspectorAnimationAgent::resolveAnimation(ErrorString* errorString, const String& animationId, OwnPtr<protocol::Runtime::RemoteObject>* result)
+void InspectorAnimationAgent::resolveAnimation(ErrorString* errorString, const String& animationId, std::unique_ptr<protocol::Runtime::RemoteObject>* result)
 {
     blink::Animation* animation = assertAnimation(errorString, animationId);
     if (!animation)
@@ -425,7 +426,7 @@ String InspectorAnimationAgent::createCSSId(blink::Animation& animation)
 
     Element* element = effect->target();
     HeapVector<Member<CSSStyleDeclaration>> styles = m_cssAgent->matchingStyles(element);
-    OwnPtr<WebCryptoDigestor> digestor = createDigestor(HashAlgorithmSha1);
+    std::unique_ptr<WebCryptoDigestor> digestor = createDigestor(HashAlgorithmSha1);
     addStringToDigestor(digestor.get(), type);
     addStringToDigestor(digestor.get(), animation.id());
     for (CSSPropertyID property : cssProperties) {

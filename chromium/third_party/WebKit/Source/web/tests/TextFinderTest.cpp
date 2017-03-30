@@ -10,6 +10,7 @@
 #include "core/dom/Range.h"
 #include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/FrameHost.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLElement.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/page/Page.h"
@@ -21,7 +22,6 @@
 #include "web/FindInPageCoordinates.h"
 #include "web/WebLocalFrameImpl.h"
 #include "web/tests/FrameTestHelpers.h"
-#include "wtf/OwnPtr.h"
 
 using blink::testing::runPendingTasks;
 

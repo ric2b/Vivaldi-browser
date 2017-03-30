@@ -33,6 +33,9 @@ class ShellContentRendererClient : public ContentRendererClient {
   void DidInitializeWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context) override;
 
+  void ExposeInterfacesToBrowser(
+      shell::InterfaceRegistry* interface_registry) override;
+
  private:
   std::unique_ptr<web_cache::WebCacheImpl> web_cache_impl_;
 };

@@ -5,12 +5,21 @@
 #include "cc/tiles/software_image_decode_controller.h"
 
 #include "cc/playback/draw_image.h"
-#include "cc/raster/tile_task.h"
+#include "cc/resources/resource_format.h"
+#include "cc/test/test_tile_task_runner.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace cc {
 namespace {
+
+size_t kLockedMemoryLimitBytes = 128 * 1024 * 1024;
+class TestSoftwareImageDecodeController : public SoftwareImageDecodeController {
+ public:
+  TestSoftwareImageDecodeController()
+      : SoftwareImageDecodeController(ResourceFormat::RGBA_8888,
+                                      kLockedMemoryLimitBytes) {}
+};
 
 sk_sp<SkImage> CreateImage(int width, int height) {
   SkBitmap bitmap;
@@ -477,7 +486,7 @@ TEST(SoftwareImageDecodeControllerTest,
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetTaskForImageSameImage) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   sk_sp<SkImage> image = CreateImage(100, 100);
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
@@ -500,13 +509,15 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageSameImage) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task.get() == another_task.get());
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
 }
 
 TEST(SoftwareImageDecodeControllerTest,
      GetTaskForImageSameImageDifferentQuality) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   sk_sp<SkImage> image = CreateImage(100, 100);
   bool is_decomposable = true;
 
@@ -546,13 +557,17 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(high_quality_task.get() != low_quality_task.get());
   EXPECT_TRUE(medium_quality_task.get() != low_quality_task.get());
 
+  TestTileTaskRunner::ProcessTask(high_quality_task.get());
+  TestTileTaskRunner::ProcessTask(medium_quality_task.get());
+  TestTileTaskRunner::ProcessTask(low_quality_task.get());
+
   controller.UnrefImage(high_quality_draw_image);
   controller.UnrefImage(medium_quality_draw_image);
   controller.UnrefImage(low_quality_draw_image);
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetTaskForImageSameImageDifferentSize) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   sk_sp<SkImage> image = CreateImage(100, 100);
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
@@ -578,12 +593,15 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageSameImageDifferentSize) {
   EXPECT_TRUE(quarter_size_task);
   EXPECT_TRUE(half_size_task.get() != quarter_size_task.get());
 
+  TestTileTaskRunner::ProcessTask(half_size_task.get());
+  TestTileTaskRunner::ProcessTask(quarter_size_task.get());
+
   controller.UnrefImage(half_size_draw_image);
   controller.UnrefImage(quarter_size_draw_image);
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetTaskForImageDifferentImage) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -609,12 +627,15 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageDifferentImage) {
   EXPECT_TRUE(second_task);
   EXPECT_TRUE(first_task.get() != second_task.get());
 
+  TestTileTaskRunner::ProcessTask(first_task.get());
+  TestTileTaskRunner::ProcessTask(second_task.get());
+
   controller.UnrefImage(first_draw_image);
   controller.UnrefImage(second_draw_image);
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyDecoded) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -628,10 +649,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyDecoded) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-  task->RunOnWorkerThread();
+  TestTileTaskRunner::ScheduleTask(task.get());
+  TestTileTaskRunner::RunTask(task.get());
 
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -639,16 +658,14 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyDecoded) {
   EXPECT_TRUE(need_unref);
   EXPECT_FALSE(another_task);
 
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CompleteTask(task.get());
 
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyPrerolled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kLow_SkFilterQuality;
 
@@ -662,10 +679,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyPrerolled) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-  task->RunOnWorkerThread();
+  TestTileTaskRunner::ScheduleTask(task.get());
+  TestTileTaskRunner::RunTask(task.get());
 
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -673,9 +688,7 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyPrerolled) {
   EXPECT_TRUE(need_unref);
   EXPECT_FALSE(another_task);
 
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CompleteTask(task.get());
 
   scoped_refptr<TileTask> third_task;
   need_unref = controller.GetTaskForImageAndRef(
@@ -689,7 +702,7 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageAlreadyPrerolled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -703,10 +716,6 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
       draw_image, ImageDecodeController::TracingInfo(), &another_task);
@@ -714,9 +723,8 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(another_task.get() == task.get());
 
   // Didn't run the task, complete it (it was canceled).
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Fully cancel everything (so the raster would unref things).
   controller.UnrefImage(draw_image);
@@ -730,12 +738,14 @@ TEST(SoftwareImageDecodeControllerTest, GetTaskForImageCanceledGetsNewTask) {
   EXPECT_TRUE(third_task);
   EXPECT_FALSE(third_task.get() == task.get());
 
+  TestTileTaskRunner::ProcessTask(third_task.get());
+
   controller.UnrefImage(draw_image);
 }
 
 TEST(SoftwareImageDecodeControllerTest,
      GetTaskForImageCanceledWhileReffedGetsNewTask) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -749,10 +759,6 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
   scoped_refptr<TileTask> another_task;
   need_unref = controller.GetTaskForImageAndRef(
       draw_image, ImageDecodeController::TracingInfo(), &another_task);
@@ -760,9 +766,8 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(another_task.get() == task.get());
 
   // Didn't run the task, complete it (it was canceled).
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::CancelTask(task.get());
+  TestTileTaskRunner::CompleteTask(task.get());
 
   // Note that here, everything is reffed, but a new task is created. This is
   // possible with repeated schedule/cancel operations.
@@ -773,6 +778,8 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(third_task);
   EXPECT_FALSE(third_task.get() == task.get());
 
+  TestTileTaskRunner::ProcessTask(third_task.get());
+
   // 3 Unrefs!
   controller.UnrefImage(draw_image);
   controller.UnrefImage(draw_image);
@@ -780,7 +787,7 @@ TEST(SoftwareImageDecodeControllerTest,
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetDecodedImageForDraw) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -794,15 +801,7 @@ TEST(SoftwareImageDecodeControllerTest, GetDecodedImageForDraw) {
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -821,7 +820,7 @@ TEST(SoftwareImageDecodeControllerTest, GetDecodedImageForDraw) {
 
 TEST(SoftwareImageDecodeControllerTest,
      GetDecodedImageForDrawWithNonContainedSrcRect) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -835,15 +834,7 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -861,7 +852,7 @@ TEST(SoftwareImageDecodeControllerTest,
 }
 
 TEST(SoftwareImageDecodeControllerTest, GetDecodedImageForDrawAtRasterDecode) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -886,7 +877,7 @@ TEST(SoftwareImageDecodeControllerTest, GetDecodedImageForDrawAtRasterDecode) {
 
 TEST(SoftwareImageDecodeControllerTest,
      GetDecodedImageForDrawAtRasterDecodeMultipleTimes) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -917,7 +908,7 @@ TEST(SoftwareImageDecodeControllerTest,
 
 TEST(SoftwareImageDecodeControllerTest,
      GetDecodedImageForDrawAtRasterDecodeDoesNotPreventTasks) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -943,15 +934,7 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage another_decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -970,7 +953,7 @@ TEST(SoftwareImageDecodeControllerTest,
 
 TEST(SoftwareImageDecodeControllerTest,
      GetDecodedImageForDrawAtRasterDecodeIsUsedForLockedCache) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -996,19 +979,11 @@ TEST(SoftwareImageDecodeControllerTest,
   EXPECT_TRUE(need_unref);
   EXPECT_TRUE(task);
 
-  task->WillSchedule();
-  task->ScheduleOnOriginThread(nullptr);
-  task->DidSchedule();
-
   // If we finish the draw here, then we will use it for the locked decode
   // instead of decoding again.
   controller.DrawWithImageFinished(draw_image, decoded_draw_image);
 
-  task->RunOnWorkerThread();
-
-  task->WillComplete();
-  task->CompleteOnOriginThread(nullptr);
-  task->DidComplete();
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage another_decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1023,7 +998,7 @@ TEST(SoftwareImageDecodeControllerTest,
 }
 
 TEST(SoftwareImageDecodeControllerTest, ZeroSizedImagesAreSkipped) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -1046,7 +1021,7 @@ TEST(SoftwareImageDecodeControllerTest, ZeroSizedImagesAreSkipped) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, NonOverlappingSrcRectImagesAreSkipped) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kHigh_SkFilterQuality;
 
@@ -1069,7 +1044,7 @@ TEST(SoftwareImageDecodeControllerTest, NonOverlappingSrcRectImagesAreSkipped) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, LowQualityFilterIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kLow_SkFilterQuality;
 
@@ -1084,6 +1059,8 @@ TEST(SoftwareImageDecodeControllerTest, LowQualityFilterIsHandled) {
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
 
+  TestTileTaskRunner::ProcessTask(task.get());
+
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
   EXPECT_TRUE(decoded_draw_image.image());
@@ -1096,7 +1073,7 @@ TEST(SoftwareImageDecodeControllerTest, LowQualityFilterIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, LowQualityScaledSubrectIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kLow_SkFilterQuality;
 
@@ -1109,6 +1086,8 @@ TEST(SoftwareImageDecodeControllerTest, LowQualityScaledSubrectIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1124,7 +1103,7 @@ TEST(SoftwareImageDecodeControllerTest, LowQualityScaledSubrectIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, NoneQualityScaledSubrectIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kNone_SkFilterQuality;
 
@@ -1137,6 +1116,8 @@ TEST(SoftwareImageDecodeControllerTest, NoneQualityScaledSubrectIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1152,7 +1133,7 @@ TEST(SoftwareImageDecodeControllerTest, NoneQualityScaledSubrectIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt01_5ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1166,6 +1147,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt01_5ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1182,7 +1165,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt01_5ScaleIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt1_0ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1196,6 +1179,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt1_0ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1212,7 +1197,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt1_0ScaleIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_75ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1226,6 +1211,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_75ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1242,7 +1229,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_75ScaleIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_5ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1256,6 +1243,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_5ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1272,7 +1261,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_5ScaleIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_49ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1286,6 +1275,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_49ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1302,7 +1293,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_49ScaleIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_1ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1316,6 +1307,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_1ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1332,7 +1325,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_1ScaleIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_01ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1346,6 +1339,8 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_01ScaleIsHandled) {
       draw_image, ImageDecodeController::TracingInfo(), &task);
   EXPECT_TRUE(task);
   EXPECT_TRUE(need_unref);
+
+  TestTileTaskRunner::ProcessTask(task.get());
 
   DecodedDrawImage decoded_draw_image =
       controller.GetDecodedImageForDraw(draw_image);
@@ -1362,7 +1357,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_01ScaleIsHandled) {
 }
 
 TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_001ScaleIsHandled) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1386,7 +1381,7 @@ TEST(SoftwareImageDecodeControllerTest, MediumQualityAt0_001ScaleIsHandled) {
 
 TEST(SoftwareImageDecodeControllerTest,
      MediumQualityImagesAreTheSameAt0_5And0_49Scale) {
-  SoftwareImageDecodeController controller;
+  TestSoftwareImageDecodeController controller;
   bool is_decomposable = true;
   SkFilterQuality quality = kMedium_SkFilterQuality;
 
@@ -1408,6 +1403,8 @@ TEST(SoftwareImageDecodeControllerTest,
       draw_image_49, ImageDecodeController::TracingInfo(), &task_49);
   EXPECT_TRUE(task_49);
   EXPECT_TRUE(need_unref_49);
+
+  TestTileTaskRunner::ProcessTask(task_49.get());
 
   DecodedDrawImage decoded_draw_image_50 =
       controller.GetDecodedImageForDraw(draw_image_50);

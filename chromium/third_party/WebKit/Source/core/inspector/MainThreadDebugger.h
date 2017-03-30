@@ -36,12 +36,12 @@
 #include "core/inspector/InspectorTaskRunner.h"
 #include "core/inspector/ThreadDebugger.h"
 #include "platform/heap/Handle.h"
+#include <memory>
 #include <v8.h>
 
 namespace blink {
 
 class LocalFrame;
-class V8Debugger;
 class SecurityOrigin;
 
 class CORE_EXPORT MainThreadDebugger final : public ThreadDebugger {
@@ -63,15 +63,16 @@ public:
 
     InspectorTaskRunner* taskRunner() const { return m_taskRunner.get(); }
     bool isWorker() override { return false; }
-    void setClientMessageLoop(PassOwnPtr<ClientMessageLoop>);
+    void setClientMessageLoop(std::unique_ptr<ClientMessageLoop>);
     int contextGroupId(LocalFrame*);
     void didClearContextsForFrame(LocalFrame*);
     void contextCreated(ScriptState*, LocalFrame*, SecurityOrigin*);
     void contextWillBeDestroyed(ScriptState*);
 
+    void installAdditionalCommandLineAPI(v8::Local<v8::Context>, v8::Local<v8::Object>) override;
+
     v8::MaybeLocal<v8::Value> memoryInfo(v8::Isolate*, v8::Local<v8::Context>) override;
-protected:
-    void reportMessageToConsole(v8::Local<v8::Context>, ConsoleMessage*) override;
+    void messageAddedToConsole(int contextGroupId, MessageSource, MessageLevel, const String16& message, const String16& url, unsigned lineNumber, unsigned columnNumber, V8StackTrace*) override;
 
 private:
     // V8DebuggerClient implementation.
@@ -79,15 +80,17 @@ private:
     void quitMessageLoopOnPause() override;
     void muteWarningsAndDeprecations() override;
     void unmuteWarningsAndDeprecations() override;
-    void muteConsole() override;
-    void unmuteConsole() override;
     bool callingContextCanAccessContext(v8::Local<v8::Context> calling, v8::Local<v8::Context> target) override;
-    int ensureDefaultContextInGroup(int contextGroupId) override;
+    v8::Local<v8::Context> ensureDefaultContextInGroup(int contextGroupId) override;
 
-    OwnPtr<ClientMessageLoop> m_clientMessageLoop;
-    OwnPtr<InspectorTaskRunner> m_taskRunner;
+    std::unique_ptr<ClientMessageLoop> m_clientMessageLoop;
+    std::unique_ptr<InspectorTaskRunner> m_taskRunner;
 
     static MainThreadDebugger* s_instance;
+
+    static void querySelectorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+    static void querySelectorAllCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+    static void xpathSelectorCallback(const v8::FunctionCallbackInfo<v8::Value>&);
 };
 
 } // namespace blink

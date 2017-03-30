@@ -48,7 +48,10 @@ static_library("service") {
     "service_process_prefs.h",
   ]
 
-  configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
+  configs += [
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
 
   deps = [
     "//base",
@@ -57,24 +60,20 @@ static_library("service") {
     "//components/cloud_devices/common",
     "//google_apis",
     "//jingle:notifier",
+    "//mojo/edk/system",
     "//net",
     "//printing",
     "//skia",
     "//third_party/libjingle",
   ]
 
-  if (use_cups) {
+  if (use_cups && !is_chromeos) {
     sources += [ "cloud_print/print_system_cups.cc" ]
     configs += [ "//printing:cups" ]
   } else if (is_win) {
     sources += [
       "service_utility_process_host.cc",
       "service_utility_process_host.h",
-    ]
-    deps += [
-      # TODO(fdoray): Remove this once the PreRead field trial has expired.
-      # crbug.com/577698
-      "//components/startup_metric_utils/common",
     ]
   } else {
     sources += [ "cloud_print/print_system_dummy.cc" ]

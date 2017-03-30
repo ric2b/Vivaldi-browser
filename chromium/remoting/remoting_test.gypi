@@ -307,6 +307,7 @@
         'host/security_key/gnubby_auth_handler_win_unittest.cc',
         'host/security_key/gnubby_extension_session_unittest.cc',
         'host/security_key/remote_security_key_ipc_client_unittest.cc',
+        'host/security_key/remote_security_key_ipc_constants.cc',
         'host/security_key/remote_security_key_ipc_server_unittest.cc',
         'host/security_key/remote_security_key_message_handler_unittest.cc',
         'host/security_key/remote_security_key_message_reader_impl_unittest.cc',
@@ -405,6 +406,11 @@
             'host/linux/x_server_clipboard_unittest.cc',
             'host/local_input_monitor_unittest.cc',
           ],
+        }],
+        ['use_x11 == 0', {
+          'sources!' : [
+            'host/linux/unicode_to_keysym_unittest.cc',
+          ]
         }],
         [ 'use_ozone==1', {
           'sources!': [

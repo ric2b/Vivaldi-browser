@@ -23,7 +23,7 @@ class CachedNetworkParameters;
 class CryptoHandshakeMessage;
 class QuicCryptoServerConfig;
 class QuicCryptoServerStreamBase;
-class QuicSession;
+class QuicServerSessionBase;
 
 namespace test {
 class CryptoTestUtils;
@@ -53,8 +53,7 @@ class NET_EXPORT_PRIVATE ServerHelloNotifier : public QuicAckListenerInterface {
 // various code and test refactoring.
 class NET_EXPORT_PRIVATE QuicCryptoServerStreamBase : public QuicCryptoStream {
  public:
-  explicit QuicCryptoServerStreamBase(QuicSession* session)
-      : QuicCryptoStream(session) {}
+  explicit QuicCryptoServerStreamBase(QuicServerSessionBase* session);
   ~QuicCryptoServerStreamBase() override {}
 
   // Cancel any outstanding callbacks, such as asynchronous validation of client
@@ -86,6 +85,11 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStreamBase : public QuicCryptoStream {
       const = 0;
   virtual void SetPreviousCachedNetworkParams(
       CachedNetworkParameters cached_network_params) = 0;
+
+  // Checks the options on the handshake-message to see whether the
+  // peer supports stateless-rejects.
+  static bool DoesPeerSupportStatelessRejects(
+      const CryptoHandshakeMessage& message);
 };
 
 class NET_EXPORT_PRIVATE QuicCryptoServerStream
@@ -95,7 +99,7 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   QuicCryptoServerStream(const QuicCryptoServerConfig* crypto_config,
                          QuicCompressedCertsCache* compressed_certs_cache,
                          bool use_stateless_rejects_if_peer_supported,
-                         QuicSession* session);
+                         QuicServerSessionBase* session);
   ~QuicCryptoServerStream() override;
 
   // From QuicCryptoServerStreamBase
@@ -159,11 +163,6 @@ class NET_EXPORT_PRIVATE QuicCryptoServerStream
   void FinishProcessingHandshakeMessage(
       const CryptoHandshakeMessage& message,
       const ValidateClientHelloResultCallback::Result& result);
-
-  // Checks the options on the handshake-message to see whether the
-  // peer supports stateless-rejects.
-  static bool DoesPeerSupportStatelessRejects(
-      const CryptoHandshakeMessage& message);
 
   // crypto_config_ contains crypto parameters for the handshake.
   const QuicCryptoServerConfig* crypto_config_;

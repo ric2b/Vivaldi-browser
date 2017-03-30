@@ -84,12 +84,20 @@ class PDFiumEngine : public PDFEngine,
   int GetNamedDestinationPage(const std::string& destination) override;
   int GetMostVisiblePage() override;
   pp::Rect GetPageRect(int index) override;
+  pp::Rect GetPageBoundsRect(int index) override;
   pp::Rect GetPageContentsRect(int index) override;
   pp::Rect GetPageScreenRect(int page_index) const override;
   int GetVerticalScrollbarYPosition() override { return position_.y(); }
   void SetGrayscale(bool grayscale) override;
   void OnCallback(int id) override;
-  std::string GetPageAsJSON(int index) override;
+  int GetCharCount(int page_index) override;
+  pp::FloatRect GetCharBounds(int page_index, int char_index) override;
+  uint32_t GetCharUnicode(int page_index, int char_index) override;
+  void GetTextRunInfo(int page_index,
+                      int start_char_index,
+                      uint32_t* out_len,
+                      double* out_font_size,
+                      pp::FloatRect* out_bounds) override;
   bool GetPrintScaling() override;
   int GetCopiesToPrint() override;
   int GetDuplexType() override;
@@ -204,13 +212,10 @@ class PDFiumEngine : public PDFEngine,
   void LoadDocument();
 
   // Try loading the document. Returns true if the document is successfully
-  // loaded or is already loaded otherwise it will return false. If
-  // |with_password| is set to true, the document will be loaded with
-  // |password|. If the document could not be loaded and needs a password,
-  // |needs_password| will be set to true.
-  bool TryLoadingDoc(bool with_password,
-                     const std::string& password,
-                     bool* needs_password);
+  // loaded or is already loaded otherwise it will return false. If there is a
+  // password, then |password| is non-empty. If the document could not be loaded
+  // and needs a password, |needs_password| will be set to true.
+  bool TryLoadingDoc(const std::string& password, bool* needs_password);
 
   // Asks the user for the document password and then continue loading the
   // document.
@@ -221,9 +226,8 @@ class PDFiumEngine : public PDFEngine,
                              const pp::Var& password);
 
   // Continues loading the document when the password has been retrieved, or if
-  // there is no password.
-  void ContinueLoadingDocument(bool has_password,
-                               const std::string& password);
+  // there is no password. If there is no password, then |password| is empty.
+  void ContinueLoadingDocument(const std::string& password);
 
   // Finishes loading the document. Recalculate the document size if there were
   // pages that were not previously available.

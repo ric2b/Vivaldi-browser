@@ -189,10 +189,18 @@ chromium_strings.grd. -->
       <message name="IDS_SESSION_CRASHED_VIEW_UMA_OPTIN" desc="Text besides the checkbox to let users optin to UMA in the restore from previous crash bubble.">
         Help make Google Chrome better by sending crash reports and <ph name="UMA_LINK">$1<ex>usage statistics</ex></ph> to Google
       </message>
-      <!-- Browser Window Title Format -->
-      <message name="IDS_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for titles displayed in tabs and popup windows">
-        <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> - Google Chrome
-      </message>
+      <if expr="not chromeos">
+        <!-- Browser Window Title Format -->
+        <message name="IDS_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for titles displayed in tabs and popup windows">
+          <ph name="PAGE_TITLE">$1<ex>Google</ex></ph> - Google Chrome
+        </message>
+      </if>
+      <if expr="chromeos">
+        <!-- Browser Window Title Format -->
+        <message name="IDS_BROWSER_WINDOW_TITLE_FORMAT" desc="The format for titles displayed in tabbed browser windows">
+          Chrome - <ph name="PAGE_TITLE">$1<ex>Google</ex></ph>
+        </message>
+      </if>
       <if expr="not chromeos">
         <message name="IDS_GET_HELP_USING_CHROME" desc="Text of the button which takes the user to the Chrome help page.">
           Get help with using Chrome
@@ -207,7 +215,7 @@ chromium_strings.grd. -->
         Google Inc.
       </message>
       <message name="IDS_ABOUT_VERSION_COPYRIGHT" desc="Copyright information on the about pages">
-        Copyright <ph name="YEAR">$1</ph> Google Inc. All rights reserved.
+        Copyright <ph name="YEAR">{0,date,y}<ex>2016</ex></ph> Google Inc. All rights reserved.
       </message>
       <if expr="chromeos">
         <message name="IDS_ABOUT_VERSION_LICENSE_EULA" desc="The label below the copyright message, containing the URLs.">
@@ -574,12 +582,12 @@ Google Chrome is unable to recover your settings.
       <!-- About Chrome page -->
       <if expr="not chromeos">
         <message name="IDS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated Google Chrome">
-          Nearly up-to-date! Relaunch Google Chrome to finish updating.
+          Nearly up to date! Relaunch Google Chrome to finish updating.
         </message>
       </if>
       <if expr="chromeos">
         <message name="IDS_UPGRADE_SUCCESSFUL_RELAUNCH" desc="Status label: Successfully updated Chrome OS">
-          Nearly up-to-date! Restart your device to finish updating.
+          Nearly up to date! Restart your device to finish updating.
         </message>
       </if>
       <if expr="chromeos">
@@ -654,6 +662,9 @@ Google Chrome is unable to recover your settings.
       </message>
       <message name="IDS_EXTENSIONS_UNINSTALL" desc="The link for uninstalling extensions.">
         Remove from Chrome...
+      </message>
+      <message name="IDS_MD_EXTENSIONS_SHORTCUT_SCOPE_IN_CHROME" desc="The label to indicate that a shortcut will be triggerable only from within the Chrome application.">
+        In Chrome
       </message>
 
       <if expr="enable_extensions">
@@ -908,24 +919,6 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
         </message>
       </if>
 
-      <!-- Chrome Notifications center -->
-      <if expr="enable_notifications">
-        <if expr="is_win">
-          <message name="IDS_MESSAGE_CENTER_BALLOON_TITLE" desc="Title of the first run notification ballon describing the notification center.">
-            Chrome Notification Center
-          </message>
-          <message name="IDS_MESSAGE_CENTER_BALLOON_TEXT" desc="Body text for the the first run notification ballon describing the notification center.">
-            You can see all your notifications from Chrome apps, extensions, and websites here.
-          </message>
-        </if>
-        <message name="IDS_MESSAGE_CENTER_TOOLTIP" desc="Tooltip for notification tray icon without unread notifications">
-          Chrome - Notifications
-        </message>
-        <message name="IDS_MESSAGE_CENTER_TOOLTIP_UNREAD" desc="Tooltip for notification tray icon with unread notifications">
-          Chrome - Notifications (<ph name="QUANTITY">$1<ex>3</ex></ph> unread)
-        </message>
-      </if>
-
       <!-- MediaStream capture status tray icon -->
       <message name="IDS_MEDIA_STREAM_STATUS_TRAY_TEXT_AUDIO_AND_VIDEO" desc="Tool tip for the capture status tray icon when microphone and camera are being used">
         Google Chrome is using your camera and microphone.
@@ -966,7 +959,8 @@ Signing in anyway will merge Chrome information like bookmarks, history, and oth
       </if>
 
       <!-- Material Design User Manager -->
-      <if expr="not is_android and not chromeos">
+      <if expr="not is_android and not is_ios and not chromeos">
+        <!-- Supervised user create confirmation page -->
         <message name="IDS_SUPERVISED_USER_CREATED_TEXT" desc="Informative text for the confirmation dialog that appears after a supervised user has been created.">
           To set which websites <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> can view, you can configure restrictions and settings by visiting <ph name="BEGIN_LINK_1">&lt;a target="_blank" href="$3"&gt;</ph><ph name="DISPLAY_LINK">$4</ph><ph name="END_LINK_1">&lt;/a&gt;</ph>. If you do not change the default settings, <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> can browse everything on the web.
 
@@ -975,10 +969,26 @@ To prevent <ph name="NEW_PROFILE_NAME">$1<ex>New User</ex></ph> from accessing y
 
 Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</ex></ph> for further instructions.
         </message>
-      </if>
 
-      <!-- User manager tutorial -->
-      <if expr="not is_android and not is_ios and not chromeos">
+        <!-- User pod remove sync warning text -->
+        <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC" desc="Main text shown as a warning when attempting to remove an user. This case is for synced profiles, with all statistics loaded correctly. The symbol $1 will be substituted with custom JS code, so it should not be replaced by a #.">
+          {NUM_ITEMS, plural,
+          =1 {This will permanently delete $1 item from this device. To retrieve your data later, sign in to Chrome as $2.}
+          other {This will permanently delete $1 items from this device. To retrieve your data later, sign in to Chrome as $2.}}
+        </message>
+        <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC_WITH_ERRORS" desc="Main text shown as a warning when attempting to remove an user. This case is for non-synced profiles, with some statistics failed to load. The symbol $1 will be substituted with custom JS code, so it should not be replaced by a #.">
+          {NUM_ITEMS, plural,
+          =1 {This will permanently delete at least $1 item from this device. To retrieve your data later, sign in to Chrome as $2.}
+          other {This will permanently delete at least $1 items from this device. To retrieve your data later, sign in to Chrome as $2.}}
+        </message>
+        <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC_NOSTATS" desc="Main text shown as a warning when attempting to remove an user. This case is for synced profiles with statistics unavailable. (Possible case: Chrome decided not to load the statistics of closed profiles.)">
+          This will permanently delete your browsing data from this device. To retrieve your data later, sign in to Chrome as $2.
+        </message>
+        <message name="IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC_CALCULATING" desc="Main text shown as a warning when attempting to remove an user. This case is for synced profiles when the statistics is still loading. $1 is always replaced by localized version of the ellipsis (...).">
+          This will permanently delete at least <ph name="TOTAL_COUNT">$1<ex>...</ex></ph> items from this device. To retrieve your data later, sign in to Chrome as $2.
+        </message>
+
+        <!-- Tutorial -->
         <message name="IDS_USER_MANAGER_TUTORIAL_SLIDE_INTRO_TITLE" desc="Title of the tutorial introduction slide">
           Chrome just got better
         </message>
@@ -1101,18 +1111,37 @@ Please check your email at <ph name="ACCOUNT_EMAIL">$2<ex>jane.doe@example.com</
         Chrome could not update itself to the latest version, so you are missing out on awesome new features and security fixes. You need to update Chrome.
       </message>
 
-       <!-- Upgrade recovery bubble -->
-       <message name="IDS_RUN_RECOVERY" desc="Text for the button the user clicks to recover Chrome and its updater.">
-         Update Chrome
-       </message>
-       <message name="IDS_DECLINE_RECOVERY" desc="Text for the button the user clicks to decline recovery request.">
-         No, thanks
-       </message>
+      <!-- Upgrade recovery bubble -->
+      <message name="IDS_RUN_RECOVERY" desc="Text for the button the user clicks to recover Chrome and its updater.">
+        Update Chrome
+      </message>
+      <message name="IDS_DECLINE_RECOVERY" desc="Text for the button the user clicks to decline recovery request.">
+        No, thanks
+      </message>
       <message name="IDS_RECOVERY_BUBBLE_TITLE" desc="Text for the title of the chrome recovery bubble view.">
         Chrome is out of date
       </message>
       <message name="IDS_RECOVERY_BUBBLE_TEXT" desc="Text for the chrome recovery bubble view full description.">
         Important security improvements and new features are available in the latest version.
+      </message>
+
+      <!-- Critical Notification bubble -->
+      <message name="IDS_CRITICAL_NOTIFICATION_HEADLINE" desc="The headline for the critical notification">
+        {SECONDS, plural,
+         =1 {Google Chrome will restart in 1 second.}
+         other {Google Chrome will restart in # seconds.}}
+      </message>
+      <message name="IDS_CRITICAL_NOTIFICATION_HEADLINE_ALTERNATE" desc="The headline for the critical notification when the countdown reaches 0 (will only be seen if an onbeforeunload handler on a web page cancels the shutdown sequence.">
+        You should restart Google Chrome now.
+      </message>
+      <message name="IDS_CRITICAL_NOTIFICATION_TEXT" desc="The text of the critical update notification">
+        A special security update for Google Chrome was just applied; you should restart now for it to take effect (we'll restore your tabs).
+      </message>
+      <message name="IDS_CRITICAL_NOTIFICATION_RESTART" desc="The restart button label">
+        OK - Restart now
+      </message>
+      <message name="IDS_CRITICAL_NOTIFICATION_DISMISS" desc="The dismiss button label">
+        Don't restart
       </message>
 
       <!-- Dialog that asks whether user wants to participate in Safe Browsing Extended Reporting -->

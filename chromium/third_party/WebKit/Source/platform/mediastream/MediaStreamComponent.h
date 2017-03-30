@@ -34,29 +34,38 @@
 
 #include "platform/audio/AudioSourceProvider.h"
 #include "platform/heap/Handle.h"
+#include "public/platform/WebMediaStreamTrack.h"
 #include "wtf/Forward.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
 class MediaStreamSource;
 class WebAudioSourceProvider;
 
+// A MediaStreamComponent is a MediaStreamTrack.
+// TODO(hta): Consider merging the two classes.
+
 class PLATFORM_EXPORT MediaStreamComponent final : public GarbageCollectedFinalized<MediaStreamComponent> {
     USING_PRE_FINALIZER(MediaStreamComponent, dispose);
 public:
-    class ExtraData {
+    // This class represents whatever data the Web layer uses to represent
+    // a track. It needs to be able to answer the getSettings question.
+    class TrackData {
+        USING_FAST_MALLOC(TrackData);
     public:
-        virtual ~ExtraData() { }
+        virtual void getSettings(WebMediaStreamTrack::Settings&) = 0;
+        virtual ~TrackData() {}
     };
 
     static MediaStreamComponent* create(MediaStreamSource*);
     static MediaStreamComponent* create(const String& id, MediaStreamSource*);
 
-    // |m_extraData| may hold pointers to GC objects indirectly, and it may touch
+    // |m_trackData| may hold pointers to GC objects indirectly, and it may touch
     // eagerly finalized objects in destruction.
-    // So this class runs pre-finalizer to finalize |m_extraData| promptly.
+    // So this class runs pre-finalizer to finalize |m_trackData| promptly.
     void dispose();
 
     MediaStreamSource* source() const { return m_source.get(); }
@@ -69,8 +78,9 @@ public:
     AudioSourceProvider* getAudioSourceProvider() { return &m_sourceProvider; }
     void setSourceProvider(WebAudioSourceProvider* provider) { m_sourceProvider.wrap(provider); }
 
-    ExtraData* getExtraData() const { return m_extraData.get(); }
-    void setExtraData(PassOwnPtr<ExtraData> extraData) { m_extraData = std::move(extraData); }
+    TrackData* getTrackData() const { return m_trackData.get(); }
+    void setTrackData(std::unique_ptr<TrackData> trackData) { m_trackData = std::move(trackData); }
+    void getSettings(WebMediaStreamTrack::Settings&);
 
     DECLARE_TRACE();
 
@@ -105,7 +115,7 @@ private:
     String m_id;
     bool m_enabled;
     bool m_muted;
-    OwnPtr<ExtraData> m_extraData;
+    std::unique_ptr<TrackData> m_trackData;
 };
 
 typedef HeapVector<Member<MediaStreamComponent>> MediaStreamComponentVector;

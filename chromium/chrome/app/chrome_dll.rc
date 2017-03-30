@@ -2,6 +2,7 @@
 //
 #include "chrome_dll_resource.h"
 #include "chrome_command_ids.h"
+#include "app/vivaldi_icon.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -165,7 +166,7 @@ END
 IDR_MAINFRAME       ICON                        "theme\google_chrome\win\chrome.ico"
 IDR_SXS             ICON                        "theme\google_chrome\win\chrome_sxs.ico"
 #else
-IDR_MAINFRAME       ICON                        "../../app/resources/theme/vivaldi/vivaldi.ico"
+IDR_MAINFRAME       ICON                        VIVALDI_RELEASE_ICON
 #endif
 
 // We include these resources because all ICON types need to be in the

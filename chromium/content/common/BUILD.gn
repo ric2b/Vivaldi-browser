@@ -7,6 +7,7 @@ import("//build/config/ui.gni")
 import("//content/common/common.gni")
 import("//media/media_options.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 if (is_mac) {
   import("//build/config/mac/mac_sdk.gni")
 }
@@ -44,6 +45,8 @@ source_set("common") {
     "//components/mus/public/interfaces",
     "//components/tracing",
     "//components/tracing:startup_tracing",
+    "//content:resources",
+    "//content/app/resources",
     "//device/bluetooth",
     "//gpu",
     "//gpu/command_buffer/client:gles2_c_lib",
@@ -56,16 +59,15 @@ source_set("common") {
     "//gpu/ipc/common",
     "//gpu/skia_bindings",
     "//ipc",
-    "//ipc/mojo",
     "//media",
     "//media:shared_memory_support",
     "//media/base/ipc",
+    "//media/capture",
     "//media/gpu/ipc/client",
     "//media/gpu/ipc/common",
     "//media/midi",
     "//mojo/common:common_base",
     "//mojo/edk/system",
-    "//mojo/platform_handle:platform_handle_impl",
     "//net",
     "//sandbox",
     "//services/shell",
@@ -82,6 +84,7 @@ source_set("common") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/ime",
+    "//ui/display",
     "//ui/events/ipc",
     "//ui/gfx",
     "//ui/gfx/geometry",
@@ -157,12 +160,14 @@ source_set("common") {
   }
 
   if (enable_plugins) {
-    deps += [ "//ppapi/shared_impl" ]
+    deps += [
+      "//ppapi/proxy",
+      "//ppapi/shared_impl",
+    ]
   } else {
     sources -= [
       "pepper_file_util.cc",
       "pepper_file_util.h",
-      "pepper_messages.h",
       "pepper_plugin_list.cc",
       "pepper_plugin_list.h",
       "pepper_renderer_instance_data.cc",
@@ -202,6 +207,18 @@ source_set("common") {
       ]
     }
   }
+
+  if (is_mac) {
+    deps += [ "//media/gpu" ]
+  }
+
+  if (enable_ipc_fuzzer) {
+    configs += [ "//tools/ipc_fuzzer:ipc_fuzzer_config" ]
+    sources += [
+      "external_ipc_dumper.cc",
+      "external_ipc_dumper.h",
+    ]
+  }
 }
 
 # See comment at the top of //content/BUILD.gn for how this works.
@@ -222,11 +239,10 @@ mojom("mojo_bindings") {
   visibility = [ "//content/*" ]
 
   sources = [
-    "application_setup.mojom",
+    "frame.mojom",
     "image_downloader/image_downloader.mojom",
     "leveldb_wrapper.mojom",
     "process_control.mojom",
-    "render_frame_setup.mojom",
     "render_widget_window_tree_client_factory.mojom",
     "service_worker/embedded_worker_setup.mojom",
     "storage_partition_service.mojom",
@@ -240,7 +256,8 @@ mojom("mojo_bindings") {
     "//services/shell/public/interfaces",
     "//skia/public/interfaces",
     "//third_party/WebKit/public:mojo_bindings",
-    "//ui/mojo/geometry:interfaces",
+    "//ui/gfx/geometry/mojo",
+    "//url/mojo:url_mojom_gurl",
     "//url/mojo:url_mojom_origin",
   ]
 }

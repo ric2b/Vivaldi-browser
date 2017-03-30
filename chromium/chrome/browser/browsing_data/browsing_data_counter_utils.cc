@@ -5,9 +5,11 @@
 #include "chrome/browser/browsing_data/browsing_data_counter_utils.h"
 
 #include "base/command_line.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browsing_data/autofill_counter.h"
 #include "chrome/browser/browsing_data/cache_counter.h"
 #include "chrome/browser/browsing_data/history_counter.h"
+#include "chrome/browser/browsing_data/media_licenses_counter.h"
 #include "chrome/browser/browsing_data/passwords_counter.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -15,6 +17,13 @@
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/text/bytes_formatting.h"
+
+#if defined(ENABLE_EXTENSIONS)
+#include "base/numerics/safe_conversions.h"
+#include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browsing_data/hosted_apps_counter.h"
+#endif
 
 bool AreCountersEnabled() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -51,13 +60,17 @@ base::string16 GetCounterTextFromResult(
     // The counter is still counting.
     text = l10n_util::GetStringUTF16(IDS_CLEAR_BROWSING_DATA_CALCULATING);
 
-  } else if (pref_name == prefs::kDeletePasswords) {
-    // Passwords counter.
-    BrowsingDataCounter::ResultInt passwords_count =
+  } else if (pref_name == prefs::kDeletePasswords ||
+             pref_name == prefs::kDeleteDownloadHistory) {
+    // Counters with trivially formatted result: passwords and downloads.
+    BrowsingDataCounter::ResultInt count =
         static_cast<const BrowsingDataCounter::FinishedResult*>(
             result)->Value();
     text = l10n_util::GetPluralStringFUTF16(
-        IDS_DEL_PASSWORDS_COUNTER, passwords_count);
+        pref_name == prefs::kDeletePasswords
+            ? IDS_DEL_PASSWORDS_COUNTER
+            : IDS_DEL_DOWNLOADS_COUNTER,
+        count);
 
   } else if (pref_name == prefs::kDeleteCache) {
     // Cache counter.
@@ -158,6 +171,54 @@ base::string16 GetCounterTextFromResult(
       default:
         NOTREACHED();
     }
+
+  } else if (pref_name == prefs::kDeleteMediaLicenses) {
+    const MediaLicensesCounter::MediaLicenseResult* media_license_result =
+        static_cast<const MediaLicensesCounter::MediaLicenseResult*>(result);
+    if (media_license_result->Value() > 0) {
+      text = l10n_util::GetStringFUTF16(
+          IDS_DEL_MEDIA_LICENSES_COUNTER_SITE_COMMENT,
+          base::UTF8ToUTF16(media_license_result->GetOneOrigin()));
+    } else {
+      text = l10n_util::GetStringUTF16(
+          IDS_DEL_MEDIA_LICENSES_COUNTER_GENERAL_COMMENT);
+    }
+
+#if defined(ENABLE_EXTENSIONS)
+  } else if (pref_name == prefs::kDeleteHostedAppsData) {
+    // Hosted apps counter.
+    const HostedAppsCounter::HostedAppsResult* hosted_apps_result =
+        static_cast<const HostedAppsCounter::HostedAppsResult*>(result);
+    int hosted_apps_count = hosted_apps_result->Value();
+
+    DCHECK_GE(hosted_apps_result->Value(),
+              base::checked_cast<BrowsingDataCounter::ResultInt>(
+                  hosted_apps_result->examples().size()));
+
+    std::vector<base::string16> replacements;
+    if (hosted_apps_count > 0) {
+      replacements.push_back(                                     // App1,
+          base::UTF8ToUTF16(hosted_apps_result->examples()[0]));
+    }
+    if (hosted_apps_count > 1) {
+      replacements.push_back(
+          base::UTF8ToUTF16(hosted_apps_result->examples()[1]));  // App2,
+    }
+    if (hosted_apps_count > 2) {
+      replacements.push_back(l10n_util::GetPluralStringFUTF16(  // and X-2 more.
+          IDS_DEL_HOSTED_APPS_COUNTER_AND_X_MORE,
+          hosted_apps_count - 2));
+    }
+
+    // The output string has both the number placeholder (#) and substitution
+    // placeholders ($1, $2, $3). First fetch the correct plural string first,
+    // then substitute the $ placeholders.
+    text = base::ReplaceStringPlaceholders(
+        l10n_util::GetPluralStringFUTF16(
+            IDS_DEL_HOSTED_APPS_COUNTER, hosted_apps_count),
+        replacements,
+        nullptr);
+#endif
   }
 
   return text;

@@ -15,11 +15,13 @@
 #include "components/bitmap_uploader/bitmap_uploader_export.h"
 #include "components/mus/public/cpp/window_surface.h"
 #include "components/mus/public/cpp/window_surface_client.h"
-#include "components/mus/public/interfaces/compositor_frame.mojom.h"
-#include "components/mus/public/interfaces/gpu.mojom.h"
+#include "components/mus/public/interfaces/surface.mojom.h"
 #include "gpu/GLES2/gl2chromium.h"
 #include "gpu/GLES2/gl2extchromium.h"
-#include "mojo/public/c/gles2/gles2.h"
+
+namespace mus {
+class GLES2Context;
+}
 
 namespace shell {
 class Connector;
@@ -56,7 +58,7 @@ class BITMAP_UPLOADER_EXPORT BitmapUploader
  private:
   void Upload();
 
-  uint32_t BindTextureForSize(const mojo::Size size);
+  uint32_t BindTextureForSize(const gfx::Size& size);
 
   uint32_t TextureFormat() const {
     return format_ == BGRA ? GL_BGRA_EXT : GL_RGBA;
@@ -67,14 +69,14 @@ class BITMAP_UPLOADER_EXPORT BitmapUploader
   // WindowSurfaceClient implementation.
   void OnResourcesReturned(
       mus::WindowSurface* surface,
-      mojo::Array<mus::mojom::ReturnedResourcePtr> resources) override;
+      mojo::Array<cc::ReturnedResource> resources) override;
 
   mus::Window* window_;
-  mus::mojom::GpuPtr gpu_service_;
   std::unique_ptr<mus::WindowSurface> surface_;
-  MojoGLES2Context gles2_context_;
+  // This may be null if there is an error contacting mus/initializing. We
+  // assume we'll be shutting down soon and do nothing in this case.
+  std::unique_ptr<mus::GLES2Context> gles2_context_;
 
-  mojo::Size size_;
   uint32_t color_;
   int width_;
   int height_;

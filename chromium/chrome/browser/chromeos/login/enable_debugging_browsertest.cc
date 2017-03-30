@@ -6,7 +6,11 @@
 
 #include "base/command_line.h"
 #include "base/json/json_file_value_serializer.h"
+#include "base/location.h"
 #include "base/path_service.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
@@ -79,9 +83,8 @@ class TestDebugDaemonClient : public FakeDebugDaemonClient {
       const DebugDaemonClient::EnableDebuggingCallback& original_callback,
       bool succeeded) {
     LOG(WARNING) << "OnRemoveRootfsVerification: succeeded = " << succeeded;
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(original_callback, succeeded));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(original_callback, succeeded));
     if (runner_.get())
       runner_->Quit();
     else
@@ -96,9 +99,8 @@ class TestDebugDaemonClient : public FakeDebugDaemonClient {
       int feature_mask) {
     LOG(WARNING) << "OnQueryDebuggingFeatures: succeeded = " << succeeded
                  << ", feature_mask = " << feature_mask;
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(original_callback, succeeded, feature_mask));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(original_callback, succeeded, feature_mask));
     if (runner_.get())
       runner_->Quit();
     else
@@ -112,9 +114,8 @@ class TestDebugDaemonClient : public FakeDebugDaemonClient {
       bool succeeded) {
     LOG(WARNING) << "OnEnableDebuggingFeatures: succeeded = " << succeeded
                  << ", feature_mask = ";
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(original_callback, succeeded));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(original_callback, succeeded));
     if (runner_.get())
       runner_->Quit();
     else
@@ -234,7 +235,7 @@ class EnableDebuggingTest : public LoginManagerTest {
     InvokeEnableDebuggingScreen();
     JSExpect("!document.querySelector('#debugging.hidden')");
     debug_daemon_client_->WaitUntilCalled();
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     VerifyRemoveProtectionScreen();
   }
 
@@ -253,7 +254,7 @@ class EnableDebuggingTest : public LoginManagerTest {
     InvokeEnableDebuggingScreen();
     JSExpect("!document.querySelector('#debugging.hidden')");
     debug_daemon_client_->WaitUntilCalled();
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     JSExpect("!document.querySelector('#debugging.remove-protection-view')");
     JSExpect("!!document.querySelector('#debugging.setup-view')");
     JSExpect("!document.querySelector('#debugging.done-view')");
@@ -284,7 +285,7 @@ IN_PROC_BROWSER_TEST_F(EnableDebuggingTest, ShowAndRemoveProtection) {
   debug_daemon_client_->WaitUntilCalled();
   JSExpect("!!document.querySelector('#debugging.wait-view')");
   // Check if we have rebooted after enabling.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   EXPECT_EQ(debug_daemon_client_->num_remove_protection(), 1);
   EXPECT_EQ(debug_daemon_client_->num_enable_debugging_features(), 0);
   EXPECT_EQ(power_manager_client_->num_request_restart_calls(), 1);
@@ -297,7 +298,7 @@ IN_PROC_BROWSER_TEST_F(EnableDebuggingTest, ShowSetup) {
   debug_daemon_client_->ResetWait();
   ClickEnableButton();
   debug_daemon_client_->WaitUntilCalled();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   JSExpect("!!document.querySelector('#debugging.done-view')");
   EXPECT_EQ(debug_daemon_client_->num_enable_debugging_features(), 1);
   EXPECT_EQ(debug_daemon_client_->num_remove_protection(), 0);
@@ -314,7 +315,7 @@ IN_PROC_BROWSER_TEST_F(EnableDebuggingTest, ShowOnTestImages) {
   InvokeEnableDebuggingScreen();
   JSExpect("!document.querySelector('#debugging.hidden')");
   debug_daemon_client_->WaitUntilCalled();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   VerifyRemoveProtectionScreen();
 
   EXPECT_EQ(debug_daemon_client_->num_query_debugging_features(), 1);
@@ -338,7 +339,7 @@ IN_PROC_BROWSER_TEST_F(EnableDebuggingTest, WaitForDebugDaemon) {
   // Mark service ready and it should proceed to remove protection view.
   debug_daemon_client_->SetServiceIsAvailable(true);
   debug_daemon_client_->WaitUntilCalled();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   VerifyRemoveProtectionScreen();
 }
 
@@ -367,7 +368,7 @@ IN_PROC_BROWSER_TEST_F(EnableDebuggingNonDevTest, NoShowInNonDevMode) {
   JSExpect("!!document.querySelector('#debugging.hidden')");
   InvokeEnableDebuggingScreen();
   JSExpect("!document.querySelector('#debugging.hidden')");
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   JSExpect("!!document.querySelector('#debugging.error-view')");
   JSExpect("!document.querySelector('#debugging.remove-protection-view')");
   JSExpect("!document.querySelector('#debugging.setup-view')");

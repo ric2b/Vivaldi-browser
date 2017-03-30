@@ -21,7 +21,10 @@ config("utility_ldflags") {
 static_library("utility") {
   sources = rebase_path(gypi_values.chrome_utility_sources, ".", "..")
   defines = []
-  configs += [ "//build/config:precompiled_headers" ]
+  configs += [
+    "//build/config:precompiled_headers",
+    "//build/config/compiler:wexit_time_destructors",
+  ]
   all_dependent_configs = [ ":utility_ldflags" ]
 
   public_deps = []
@@ -41,8 +44,8 @@ static_library("utility") {
     "//courgette:courgette_lib",
     "//media",
     "//net:net_with_v8",
+    "//services/shell/public/cpp",
     "//skia",
-    "//skia/public",
     "//sql",
     "//third_party/libxml",
   ]
@@ -100,7 +103,9 @@ static_library("utility") {
     ]
   }
 
-  if (!enable_print_preview) {
+  if (enable_print_preview || (enable_basic_printing && is_win)) {
+    deps += [ "//pdf" ]
+  } else {
     sources -= [
       "printing_handler.cc",
       "printing_handler.h",
@@ -112,16 +117,13 @@ static_library("utility") {
         rebase_path(gypi_values.chrome_utility_safe_browsing_sources, ".", "..")
     deps += [ "//third_party/zlib" ]
   }
-
-  if (enable_pdf) {
-    deps += [ "//pdf" ]
-  }
 }
 
 if (is_mac) {
   import("//testing/libfuzzer/fuzzer_test.gni")
   fuzzer_test("safe_browsing_dmg_fuzzer") {
     sources = [
+      "safe_browsing/mac/convert_big_endian.h",
       "safe_browsing/mac/fuzzer.cc",
       "safe_browsing/mac/hfs.cc",
       "safe_browsing/mac/hfs.h",

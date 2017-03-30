@@ -166,6 +166,11 @@ unit tests.
    A certificate with a non-IANA delegated domain, which is rejected since a CA
    cannot validate the applicant controls that domain.
 
+- pre_june_2016.pem
+- post_june_2016.pem
+   Certs to test that policies related to enforcing CT on Symantec are
+   properly gated on the issuance date.
+
 ===== From net/data/ssl/scripts/generate-weak-test-chains.sh
 - 2048-rsa-root.pem
 - {768-rsa,1024-rsa,2048-rsa,prime256v1-ecdsa}-intermediate.pem
@@ -279,3 +284,9 @@ unit tests.
      containing the intermediate, which can be served via a URLRequestFilter.
      aia-intermediate.der is stored in DER form for convenience, since that is
      the form expected of certificates discovered via AIA.
+
+===== From net/data/ssl/scripts/generate-self-signed-certs.sh
+ - self-signed-invalid-name.pem
+ - self-signed-invalid-sig.pem
+     Two "self-signed" certificates with mismatched names or an invalid
+     signature, respectively.

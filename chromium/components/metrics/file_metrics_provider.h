@@ -40,7 +40,12 @@ class FileMetricsProvider : public MetricsProvider {
     // by an atomic rename) and the file is never updated again except to
     // be replaced by a completely new set of histograms. This is the only
     // option that can be used if the file is not writeable by *this*
-    // process.
+    // process. Once the file has been read, an attempt will be made to
+    // delete it thus providing some measure of safety should different
+    // instantiations (such as by different users of a system-level install)
+    // try to read it. In case the delete operation fails, this class
+    // persistently tracks the last-modified time of the file so it will
+    // not be read a second time.
     SOURCE_HISTOGRAMS_ATOMIC_FILE,
 
     // A directory of atomic PMA files. This handles a directory in which
@@ -61,7 +66,7 @@ class FileMetricsProvider : public MetricsProvider {
     // data written to them. The file should probably never be deleted because
     // there would be no guarantee that the data has been reported.
     // TODO(bcwhite): Enable when read/write mem-mapped files are supported.
-    //SOURCE_HISTOGRAMS_ACTIVE_FILE,
+    SOURCE_HISTOGRAMS_ACTIVE_FILE,
   };
 
   enum SourceAssociation {
@@ -100,7 +105,6 @@ class FileMetricsProvider : public MetricsProvider {
 
  private:
   friend class FileMetricsProviderTest;
-  FRIEND_TEST_ALL_PREFIXES(FileMetricsProviderTest, AccessInitialMetrics);
 
   // The different results that can occur accessing a file.
   enum AccessResult {
@@ -122,8 +126,8 @@ class FileMetricsProvider : public MetricsProvider {
     // File had invalid contents.
     ACCESS_RESULT_INVALID_CONTENTS,
 
-    // File could not be exclusively opened.
-    ACCESS_RESULT_NO_EXCLUSIVE_OPEN,
+    // File could not be opened.
+    ACCESS_RESULT_NO_OPEN,
 
     ACCESS_RESULT_MAX
   };
@@ -133,43 +137,44 @@ class FileMetricsProvider : public MetricsProvider {
   struct SourceInfo;
   using SourceInfoList = std::list<std::unique_ptr<SourceInfo>>;
 
-  // Checks a list of sources (on a task-runner allowed to do I/O) to see if
-  // any should be processed during the next histogram collection.
-  static void CheckAndMapNewMetricSourcesOnTaskRunner(SourceInfoList* sources);
-
-  // Checks a single source as part of CheckAndMapNewMetricSourcesOnTaskRunner.
-  static AccessResult CheckAndMapNewMetrics(SourceInfo* source);
-
   // Looks for the next file to read within a directory. Returns true if a
   // file was found. This is part of CheckAndMapNewMetricSourcesOnTaskRunner
   // and so runs on an thread capable of I/O. The |source| structure will
   // be internally updated to indicate the next file to be read.
   static bool LocateNextFileInDirectory(SourceInfo* source);
 
-  // Creates a task to check all monitored sources for updates.
-  void ScheduleSourcesCheck();
+  // Checks a list of sources (on a task-runner allowed to do I/O) and merge
+  // any data found within them.
+  static void CheckAndMergeMetricSourcesOnTaskRunner(SourceInfoList* sources);
 
-  // Creates a PersistentMemoryAllocator for a source that has been marked to
-  // have its metrics collected.
-  void CreateAllocatorForSource(SourceInfo* source);
+  // Checks a single source and maps it into memory.
+  static AccessResult CheckAndMapMetricSource(SourceInfo* source);
+
+  // Merges all of the histograms from a |source| to the StatisticsRecorder.
+  static void MergeHistogramDeltasFromSource(SourceInfo* source);
 
   // Records all histograms from a given source via a snapshot-manager.
-  void RecordHistogramSnapshotsFromSource(
+  static void RecordHistogramSnapshotsFromSource(
       base::HistogramSnapshotManager* snapshot_manager,
       SourceInfo* source);
+
+  // Creates a task to check all monitored sources for updates.
+  void ScheduleSourcesCheck();
 
   // Takes a list of sources checked by an external task and determines what
   // to do with each.
   void RecordSourcesChecked(SourceInfoList* checked);
 
+  // Schedules the deletion of a file in the background using the task-runner.
+  void DeleteFileAsync(const base::FilePath& path);
+
   // Updates the persistent state information to show a source as being read.
-  void RecordSourceAsSeen(SourceInfo* source);
+  void RecordSourceAsRead(SourceInfo* source);
 
   // metrics::MetricsDataProvider:
   void OnDidCreateMetricsLog() override;
   bool HasInitialStabilityMetrics() override;
-  void RecordHistogramSnapshots(
-      base::HistogramSnapshotManager* snapshot_manager) override;
+  void MergeHistogramDeltas() override;
   void RecordInitialHistogramSnapshots(
       base::HistogramSnapshotManager* snapshot_manager) override;
 
@@ -179,8 +184,8 @@ class FileMetricsProvider : public MetricsProvider {
   // A list of sources not currently active that need to be checked for changes.
   SourceInfoList sources_to_check_;
 
-  // A list of sources that have data to be read and reported.
-  SourceInfoList sources_to_read_;
+  // A list of currently active sources to be merged when required.
+  SourceInfoList sources_mapped_;
 
   // A list of sources for a previous run. These are held separately because
   // they are not subject to the periodic background checking that handles

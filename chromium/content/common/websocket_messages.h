@@ -51,6 +51,7 @@ IPC_STRUCT_BEGIN(WebSocketHostMsg_AddChannelRequest_Params)
   IPC_STRUCT_MEMBER(std::vector<std::string>, requested_protocols)
   IPC_STRUCT_MEMBER(url::Origin, origin)
   IPC_STRUCT_MEMBER(GURL, first_party_for_cookies)
+  IPC_STRUCT_MEMBER(std::string, user_agent_override)
   IPC_STRUCT_MEMBER(int, render_frame_id)
 IPC_STRUCT_END()
 

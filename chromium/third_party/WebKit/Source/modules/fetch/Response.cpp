@@ -29,6 +29,7 @@
 #include "platform/network/HTTPHeaderMap.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerResponse.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -59,9 +60,13 @@ FetchResponseData* createFetchResponseDataFromWebResponse(ScriptState* scriptSta
     case WebServiceWorkerResponseTypeBasic:
         response = response->createBasicFilteredResponse();
         break;
-    case WebServiceWorkerResponseTypeCORS:
-        response = response->createCORSFilteredResponse();
+    case WebServiceWorkerResponseTypeCORS: {
+        HTTPHeaderSet headerNames;
+        for (const auto& header : webResponse.corsExposedHeaderNames())
+            headerNames.add(String(header));
+        response = response->createCORSFilteredResponse(headerNames);
         break;
+    }
     case WebServiceWorkerResponseTypeOpaque:
         response = response->createOpaqueFilteredResponse();
         break;
@@ -128,9 +133,9 @@ Response* Response::create(ScriptState* scriptState, ScriptValue bodyValue, cons
         Blob* blob = V8Blob::toImpl(body.As<v8::Object>());
         bodyBuffer = new BodyStreamBuffer(scriptState, FetchBlobDataConsumerHandle::create(executionContext, blob->blobDataHandle()));
         contentType = blob->type();
-    } else if (V8ArrayBuffer::hasInstance(body, isolate)) {
+    } else if (body->IsArrayBuffer()) {
         bodyBuffer = new BodyStreamBuffer(scriptState, FetchFormDataConsumerHandle::create(V8ArrayBuffer::toImpl(body.As<v8::Object>())));
-    } else if (V8ArrayBufferView::hasInstance(body, isolate)) {
+    } else if (body->IsArrayBufferView()) {
         bodyBuffer = new BodyStreamBuffer(scriptState, FetchFormDataConsumerHandle::create(V8ArrayBufferView::toImpl(body.As<v8::Object>())));
     } else if (V8FormData::hasInstance(body, isolate)) {
         RefPtr<EncodedFormData> formData = V8FormData::toImpl(body.As<v8::Object>())->encodeMultiPartFormData();
@@ -142,7 +147,7 @@ Response* Response::create(ScriptState* scriptState, ScriptValue bodyValue, cons
         if (RuntimeEnabledFeatures::responseBodyWithV8ExtraStreamEnabled()) {
             bodyBuffer = new BodyStreamBuffer(scriptState, bodyValue);
         } else {
-            OwnPtr<FetchDataConsumerHandle> bodyHandle;
+            std::unique_ptr<FetchDataConsumerHandle> bodyHandle;
             reader = ReadableStreamOperations::getReader(scriptState, bodyValue, exceptionState);
             if (exceptionState.hadException()) {
                 reader = ScriptValue();
@@ -428,7 +433,6 @@ void Response::installBody()
 
 void Response::refreshBody(ScriptState* scriptState)
 {
-    ScriptState::Scope scope(scriptState);
     v8::Local<v8::Value> bodyBuffer = toV8(internalBodyBuffer(), scriptState);
     v8::Local<v8::Value> response = toV8(this, scriptState);
     if (response.IsEmpty()) {

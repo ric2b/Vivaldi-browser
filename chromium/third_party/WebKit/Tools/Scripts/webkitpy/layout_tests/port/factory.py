@@ -34,6 +34,7 @@ import re
 
 from webkitpy.common.webkit_finder import WebKitFinder
 
+
 def platform_options(use_globs=False):
     return [
         optparse.make_option('--android', action='store_const', dest='platform',
@@ -62,10 +63,11 @@ def configuration_options():
 
 
 def _builder_options(builder_name):
-    configuration = "Debug" if re.search(r"[d|D](ebu|b)g", builder_name) else "Release"
-    is_webkit2 = builder_name.find("WK2") != -1
-    builder_name = builder_name
-    return optparse.Values({'builder_name': builder_name, 'configuration': configuration, 'target': None})
+    return optparse.Values({
+        'builder_name': builder_name,
+        'configuration': "Debug" if re.search(r"[d|D](ebu|b)g", builder_name) else "Release",
+        'target': None,
+    })
 
 
 def _check_configuration_and_target(host, options):
@@ -86,7 +88,8 @@ def _check_configuration_and_target(host, options):
     else:
         raise ValueError('Could not determine build configuration type.\n'
                          'Either switch to one of the default target directories,\n'
-                         'use args.gn, or specify --debug or --release explicitly.')
+                         'use args.gn, or specify --debug or --release explicitly.\n'
+                         'If the directory is out/<dir>, then pass -t <dir>.')
 
 
 def _read_configuration_from_gn(fs, options):
@@ -161,7 +164,7 @@ class PortFactory(object):
             module_name, class_name = port_name.rsplit('.', 1)
             module = __import__(module_name, globals(), locals(), [], -1)
             port_class_name = module.get_port_class_name(class_name)
-            if port_class_name != None:
+            if port_class_name is not None:
                 cls = module.__dict__[port_class_name]
                 port_name = cls.determine_full_port_name(self._host, options, class_name)
                 return cls(self._host, port_name, options=options, **kwargs)

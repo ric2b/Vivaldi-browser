@@ -25,9 +25,6 @@ cr.define('extensions', function() {
     /** Opens the dialog to load unpacked extensions. */
     loadUnpacked: assertNotReached,
 
-    /** Opens the dialog to pack an extension. */
-    packExtension: assertNotReached,
-
     /** Updates all extensions. */
     updateAllExtensions: assertNotReached,
   };
@@ -41,6 +38,12 @@ cr.define('extensions', function() {
      * @param {extensions.ShowingType} type
      */
     showType: assertNotReached,
+
+    /** Shows the keyboard shortcuts page. */
+    showKeyboardShortcuts: assertNotReached,
+
+    /** Shows the pack extension dialog. */
+    showPackDialog: assertNotReached,
   };
 
   var Sidebar = Polymer({
@@ -90,12 +93,17 @@ cr.define('extensions', function() {
 
     /** @private */
     onPackTap_: function() {
-      this.delegate_.packExtension();
+      this.listDelegate_.showPackDialog();
     },
 
     /** @private */
     onUpdateNowTap_: function() {
       this.delegate_.updateAllExtensions();
+    },
+
+    /** @private */
+    onKeyboardShortcutsTap_: function() {
+      this.listDelegate_.showKeyboardShortcuts();
     },
   });
 

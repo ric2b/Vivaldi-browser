@@ -61,9 +61,13 @@ template <typename T> struct GenericHashTraitsBase<false, T> {
     static const unsigned minimumTableSize = 8;
 #endif
 
+    // When a hash table backing store is traced, its elements will be
+    // traced if their class type has a trace method. However, weak-referenced
+    // elements should not be traced then, but handled by the weak processing
+    // phase that follows.
     template <typename U = void>
-    struct NeedsTracingLazily {
-        static const bool value = NeedsTracing<T>::value;
+    struct IsTraceableInCollection {
+        static const bool value = IsTraceable<T>::value && !IsWeak<T>::value;
     };
 
     // The NeedsToForbidGCOnMove flag is used to make the hash table move
@@ -151,23 +155,6 @@ template <typename T> struct SimpleClassHashTraits : GenericHashTraits<T> {
     static bool isDeletedValue(const T& value) { return value.isHashTableDeletedValue(); }
 };
 
-template <typename P> struct HashTraits<OwnPtr<P>> : SimpleClassHashTraits<OwnPtr<P>> {
-    typedef std::nullptr_t EmptyValueType;
-
-    static EmptyValueType emptyValue() { return nullptr; }
-
-    static const bool hasIsEmptyValueFunction = true;
-    static bool isEmptyValue(const OwnPtr<P>& value) { return !value; }
-
-    typedef typename OwnPtr<P>::PtrType PeekInType;
-
-    static void store(PassOwnPtr<P> value, OwnPtr<P>& storage) { storage = std::move(value); }
-
-    typedef typename OwnPtr<P>::PtrType PeekOutType;
-    static PeekOutType peek(const OwnPtr<P>& value) { return value.get(); }
-    static PeekOutType peek(std::nullptr_t) { return 0; }
-};
-
 template <typename P> struct HashTraits<RefPtr<P>> : SimpleClassHashTraits<RefPtr<P>> {
     typedef std::nullptr_t EmptyValueType;
     static EmptyValueType emptyValue() { return nullptr; }
@@ -245,6 +232,9 @@ struct PairHashTraits : GenericHashTraits<std::pair<typename FirstTraitsArg::Tra
     static const bool emptyValueIsZero = FirstTraits::emptyValueIsZero && SecondTraits::emptyValueIsZero;
     static EmptyValueType emptyValue() { return std::make_pair(FirstTraits::emptyValue(), SecondTraits::emptyValue()); }
 
+    static const bool hasIsEmptyValueFunction = FirstTraits::hasIsEmptyValueFunction || SecondTraits::hasIsEmptyValueFunction;
+    static bool isEmptyValue(const TraitType& value) { return isHashTraitsEmptyValue<FirstTraits>(value.first) && isHashTraitsEmptyValue<SecondTraits>(value.second); }
+
     static const unsigned minimumTableSize = FirstTraits::minimumTableSize;
 
     static void constructDeletedValue(TraitType& slot, bool zeroValue)
@@ -299,8 +289,8 @@ struct KeyValuePairHashTraits : GenericHashTraits<KeyValuePair<typename KeyTrait
     static EmptyValueType emptyValue() { return KeyValuePair<typename KeyTraits::EmptyValueType, typename ValueTraits::EmptyValueType>(KeyTraits::emptyValue(), ValueTraits::emptyValue()); }
 
     template <typename U = void>
-    struct NeedsTracingLazily {
-        static const bool value = NeedsTracingTrait<KeyTraits>::value || NeedsTracingTrait<ValueTraits>::value;
+    struct IsTraceableInCollection {
+        static const bool value = IsTraceableInCollectionTrait<KeyTraits>::value || IsTraceableInCollectionTrait<ValueTraits>::value;
     };
 
     template <typename U = void>

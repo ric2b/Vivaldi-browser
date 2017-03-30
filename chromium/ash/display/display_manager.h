@@ -13,7 +13,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/display/display_info.h"
+#include "ash/common/display/display_info.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -60,7 +60,7 @@ class ASH_EXPORT DisplayManager
 #if defined(OS_CHROMEOS)
     : public ui::DisplayConfigurator::SoftwareMirroringController
 #endif
-      {
+{
  public:
   class ASH_EXPORT Delegate {
    public:
@@ -101,9 +101,7 @@ class ASH_EXPORT DisplayManager
   virtual ~DisplayManager();
 #endif
 
-  DisplayLayoutStore* layout_store() {
-    return layout_store_.get();
-  }
+  DisplayLayoutStore* layout_store() { return layout_store_.get(); }
 
   void set_delegate(Delegate* delegate) { delegate_ = delegate; }
 
@@ -286,7 +284,7 @@ class ASH_EXPORT DisplayManager
   void AddRemoveDisplay();
   void ToggleDisplayScaleFactor();
 
-  // SoftwareMirroringController override:
+// SoftwareMirroringController override:
 #if defined(OS_CHROMEOS)
   void SetSoftwareMirroring(bool enabled) override;
   bool SoftwareMirroringEnabled() const override;
@@ -327,7 +325,7 @@ class ASH_EXPORT DisplayManager
   // for this test scenario.
   void UpdateInternalDisplayModeListForTest();
 
-private:
+ private:
   FRIEND_TEST_ALL_PREFIXES(ExtendedDesktopTest, ConvertPoint);
   FRIEND_TEST_ALL_PREFIXES(DisplayManagerTest, TestNativeDisplaysChanged);
   FRIEND_TEST_ALL_PREFIXES(DisplayManagerTest,

@@ -32,7 +32,6 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/download_danger_type.h"
-#include "content/public/browser/power_save_blocker.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/common/content_features.h"
@@ -48,6 +47,7 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_download_manager_delegate.h"
 #include "content/shell/browser/shell_network_delegate.h"
+#include "device/power_save_blocker/power_save_blocker.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -122,13 +122,14 @@ static DownloadManagerImpl* DownloadManagerForShell(Shell* shell) {
 
 class DownloadFileWithDelay : public DownloadFileImpl {
  public:
-  DownloadFileWithDelay(std::unique_ptr<DownloadSaveInfo> save_info,
-                        const base::FilePath& default_download_directory,
-                        std::unique_ptr<ByteStreamReader> stream,
-                        const net::BoundNetLog& bound_net_log,
-                        std::unique_ptr<PowerSaveBlocker> power_save_blocker,
-                        base::WeakPtr<DownloadDestinationObserver> observer,
-                        base::WeakPtr<DownloadFileWithDelayFactory> owner);
+  DownloadFileWithDelay(
+      std::unique_ptr<DownloadSaveInfo> save_info,
+      const base::FilePath& default_download_directory,
+      std::unique_ptr<ByteStreamReader> stream,
+      const net::BoundNetLog& bound_net_log,
+      std::unique_ptr<device::PowerSaveBlocker> power_save_blocker,
+      base::WeakPtr<DownloadDestinationObserver> observer,
+      base::WeakPtr<DownloadFileWithDelayFactory> owner);
 
   ~DownloadFileWithDelay() override;
 
@@ -193,7 +194,7 @@ DownloadFileWithDelay::DownloadFileWithDelay(
     const base::FilePath& default_download_directory,
     std::unique_ptr<ByteStreamReader> stream,
     const net::BoundNetLog& bound_net_log,
-    std::unique_ptr<PowerSaveBlocker> power_save_blocker,
+    std::unique_ptr<device::PowerSaveBlocker> power_save_blocker,
     base::WeakPtr<DownloadDestinationObserver> observer,
     base::WeakPtr<DownloadFileWithDelayFactory> owner)
     : DownloadFileImpl(std::move(save_info),
@@ -254,9 +255,11 @@ DownloadFile* DownloadFileWithDelayFactory::CreateFile(
     std::unique_ptr<ByteStreamReader> stream,
     const net::BoundNetLog& bound_net_log,
     base::WeakPtr<DownloadDestinationObserver> observer) {
-  std::unique_ptr<PowerSaveBlocker> psb(PowerSaveBlocker::Create(
-      PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
-      PowerSaveBlocker::kReasonOther, "Download in progress"));
+  std::unique_ptr<device::PowerSaveBlocker> psb(new device::PowerSaveBlocker(
+      device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
+      device::PowerSaveBlocker::kReasonOther, "Download in progress",
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+      BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
   return new DownloadFileWithDelay(std::move(save_info),
                                    default_download_directory,
                                    std::move(stream),
@@ -291,12 +294,13 @@ void DownloadFileWithDelayFactory::WaitForSomeCallback() {
 
 class CountingDownloadFile : public DownloadFileImpl {
  public:
-  CountingDownloadFile(std::unique_ptr<DownloadSaveInfo> save_info,
-                       const base::FilePath& default_downloads_directory,
-                       std::unique_ptr<ByteStreamReader> stream,
-                       const net::BoundNetLog& bound_net_log,
-                       std::unique_ptr<PowerSaveBlocker> power_save_blocker,
-                       base::WeakPtr<DownloadDestinationObserver> observer)
+  CountingDownloadFile(
+      std::unique_ptr<DownloadSaveInfo> save_info,
+      const base::FilePath& default_downloads_directory,
+      std::unique_ptr<ByteStreamReader> stream,
+      const net::BoundNetLog& bound_net_log,
+      std::unique_ptr<device::PowerSaveBlocker> power_save_blocker,
+      base::WeakPtr<DownloadDestinationObserver> observer)
       : DownloadFileImpl(std::move(save_info),
                          default_downloads_directory,
                          std::move(stream),
@@ -350,9 +354,11 @@ class CountingDownloadFileFactory : public DownloadFileFactory {
       std::unique_ptr<ByteStreamReader> stream,
       const net::BoundNetLog& bound_net_log,
       base::WeakPtr<DownloadDestinationObserver> observer) override {
-    std::unique_ptr<PowerSaveBlocker> psb(PowerSaveBlocker::Create(
-        PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
-        PowerSaveBlocker::kReasonOther, "Download in progress"));
+    std::unique_ptr<device::PowerSaveBlocker> psb(new device::PowerSaveBlocker(
+        device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
+        device::PowerSaveBlocker::kReasonOther, "Download in progress",
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
     return new CountingDownloadFile(std::move(save_info),
                                     default_downloads_directory,
                                     std::move(stream),
@@ -548,13 +554,6 @@ class TestRequestStartHandler {
 class DownloadContentTest : public ContentBrowserTest {
  protected:
   void SetUpOnMainThread() override {
-    // Enable downloads resumption.
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(features::kDownloadResumption.name,
-                                            std::string());
-    base::FeatureList::SetInstance(std::move(feature_list));
-
     ASSERT_TRUE(downloads_directory_.CreateUniqueTempDir());
 
     test_delegate_.reset(new TestShellDownloadManagerDelegate());
@@ -2253,8 +2252,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CookiePolicy) {
   // Download the file.
   SetupEnsureNoPendingDownloads();
   std::unique_ptr<DownloadUrlParameters> download_parameters(
-      DownloadUrlParameters::FromWebContents(shell()->web_contents(),
-                                             origin_two.GetURL("/bar")));
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          shell()->web_contents(), origin_two.GetURL("/bar")));
   std::unique_ptr<DownloadTestObserver> observer(CreateWaiter(shell(), 1));
   DownloadManagerForShell(shell())->DownloadUrl(std::move(download_parameters));
   observer->WaitForFinished();

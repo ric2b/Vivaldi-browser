@@ -14,6 +14,7 @@
 #include "core/workers/WorkerScriptLoader.h"
 #include "core/workers/WorkerThread.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
+#include <memory>
 
 namespace blink {
 
@@ -36,7 +37,7 @@ void InProcessWorkerBase::postMessage(ExecutionContext* context, PassRefPtr<Seri
 {
     DCHECK(m_contextProxy);
     // Disentangle the port in preparation for sending it to the remote context.
-    OwnPtr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(context, ports, exceptionState);
+    std::unique_ptr<MessagePortChannelArray> channels = MessagePort::disentanglePorts(context, ports, exceptionState);
     if (exceptionState.hadException())
         return;
     m_contextProxy->postMessageToWorkerGlobalScope(message, std::move(channels));
@@ -56,8 +57,8 @@ bool InProcessWorkerBase::initialize(ExecutionContext* context, const String& ur
         scriptURL,
         DenyCrossOriginRequests,
         context->securityContext().addressSpace(),
-        bind(&InProcessWorkerBase::onResponse, this),
-        bind(&InProcessWorkerBase::onFinished, this));
+        WTF::bind(&InProcessWorkerBase::onResponse, wrapPersistent(this)),
+        WTF::bind(&InProcessWorkerBase::onFinished, wrapPersistent(this)));
 
     m_contextProxy = createInProcessWorkerGlobalScopeProxy(context);
 
@@ -88,6 +89,13 @@ ContentSecurityPolicy* InProcessWorkerBase::contentSecurityPolicy()
     return m_contentSecurityPolicy.get();
 }
 
+String InProcessWorkerBase::referrerPolicy()
+{
+    if (m_scriptLoader)
+        return m_scriptLoader->referrerPolicy();
+    return m_referrerPolicy;
+}
+
 void InProcessWorkerBase::onResponse()
 {
     InspectorInstrumentation::didReceiveScriptResponse(getExecutionContext(), m_scriptLoader->identifier());
@@ -103,6 +111,7 @@ void InProcessWorkerBase::onFinished()
         InspectorInstrumentation::scriptImported(getExecutionContext(), m_scriptLoader->identifier(), m_scriptLoader->script());
     }
     m_contentSecurityPolicy = m_scriptLoader->releaseContentSecurityPolicy();
+    m_referrerPolicy = m_scriptLoader->referrerPolicy();
     m_scriptLoader = nullptr;
 }
 

@@ -4,8 +4,8 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-dropdown/iron-dropdown.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-item/paper-item.html">
-<link rel="import" href="chrome://md-settings/on_startup_page/startup_urls_page_browser_proxy.html">
-<link rel="import" href="chrome://md-settings/settings_shared_css.html">
+<link rel="import" href="/on_startup_page/startup_urls_page_browser_proxy.html">
+<link rel="import" href="/settings_shared_css.html">
 
 <dom-module id="settings-startup-url-entry">
   <template>
@@ -13,6 +13,10 @@
       .dropdown-content {
         background: white;
         box-shadow: 0 2px 6px grey;
+      }
+
+      .hide-overflow {
+        overflow: hidden;
       }
 
       paper-item:hover {
@@ -23,7 +27,7 @@
       <div class="favicon-image"
           style="background-image: [[getIconSet_(model.url)]]">
       </div>
-      <div class="middle">
+      <div class="middle hide-overflow">
         <div class="text-elide">[[model.title]]</div>
         <div class="text-elide secondary">[[model.url]]</div>
       </div>

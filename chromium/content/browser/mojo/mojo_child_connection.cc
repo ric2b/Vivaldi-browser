@@ -17,16 +17,12 @@
 namespace content {
 
 MojoChildConnection::MojoChildConnection(const std::string& application_name,
-                                         const std::string& instance_id)
+                                         const std::string& instance_id,
+                                         const std::string& child_token,
+                                         shell::Connector* connector)
     : shell_client_token_(mojo::edk::GenerateRandomToken()) {
   mojo::ScopedMessagePipeHandle shell_client_pipe =
-      mojo::edk::CreateParentMessagePipe(shell_client_token_);
-
-  // Some process types get created before the main message loop. In this case
-  // the shell request pipe will simply be closed, and the child can detect
-  // this.
-  if (!MojoShellConnection::Get())
-    return;
+      mojo::edk::CreateParentMessagePipe(shell_client_token_, child_token);
 
   shell::mojom::ShellClientPtr client;
   client.Bind(mojo::InterfacePtrInfo<shell::mojom::ShellClient>(
@@ -39,7 +35,16 @@ MojoChildConnection::MojoChildConnection(const std::string& application_name,
   shell::Connector::ConnectParams params(target);
   params.set_client_process_connection(std::move(client),
                                        std::move(pid_receiver_request));
-  connection_ = MojoShellConnection::Get()->GetConnector()->Connect(&params);
+
+  // In some unit testing scenarios a null connector is passed.
+  if (!connector)
+    return;
+
+  connection_ = connector->Connect(&params);
+#if defined(OS_ANDROID)
+  service_registry_android_ = ServiceRegistryAndroid::Create(
+      connection_->GetInterfaceRegistry(), connection_->GetRemoteInterfaces());
+#endif
 }
 
 MojoChildConnection::~MojoChildConnection() {}

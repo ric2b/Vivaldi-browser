@@ -20,8 +20,11 @@
 #include "ui/native_theme/native_theme_mac.h"
 #import "ui/views/cocoa/bridged_content_view.h"
 #import "ui/views/cocoa/bridged_native_widget.h"
+#include "ui/views/cocoa/cocoa_mouse_capture.h"
+#import "ui/views/cocoa/drag_drop_client_mac.h"
 #import "ui/views/cocoa/native_widget_mac_nswindow.h"
 #import "ui/views/cocoa/views_nswindow_delegate.h"
+#include "ui/views/widget/drop_helper.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/window/native_frame_view.h"
 
@@ -201,11 +204,9 @@ void NativeWidgetMac::ReorderNativeViews() {
 }
 
 void NativeWidgetMac::ViewRemoved(View* view) {
-  // TODO(tapted): Something for drag and drop might be needed here in future.
-  // See http://crbug.com/464581. A NOTIMPLEMENTED() here makes a lot of spam,
-  // so only emit it when a drag and drop could be likely.
-  if (IsMouseButtonDown())
-    NOTIMPLEMENTED();
+  DragDropClientMac* client = bridge_ ? bridge_->drag_drop_client() : nullptr;
+  if (client)
+    client->drop_helper()->ResetTargetViewIfEquals(view);
 }
 
 void NativeWidgetMac::SetNativeWindowProperty(const char* name, void* value) {
@@ -494,8 +495,8 @@ bool NativeWidgetMac::IsFullscreen() const {
   return bridge_ && bridge_->target_fullscreen_state();
 }
 
-void NativeWidgetMac::SetOpacity(unsigned char opacity) {
-  [GetNativeWindow() setAlphaValue:opacity / 255.0];
+void NativeWidgetMac::SetOpacity(float opacity) {
+  [GetNativeWindow() setAlphaValue:opacity];
 }
 
 void NativeWidgetMac::FlashFrame(bool flash_frame) {
@@ -507,7 +508,7 @@ void NativeWidgetMac::RunShellDrag(View* view,
                                    const gfx::Point& location,
                                    int operation,
                                    ui::DragDropTypes::DragEventSource source) {
-  NOTIMPLEMENTED();
+  bridge_->drag_drop_client()->StartDragAndDrop(view, data, operation, source);
 }
 
 void NativeWidgetMac::SchedulePaintInRect(const gfx::Rect& rect) {
@@ -551,12 +552,15 @@ Widget::MoveLoopResult NativeWidgetMac::RunMoveLoop(
     const gfx::Vector2d& drag_offset,
     Widget::MoveLoopSource source,
     Widget::MoveLoopEscapeBehavior escape_behavior) {
-  NOTIMPLEMENTED();
-  return Widget::MOVE_LOOP_CANCELED;
+  if (!bridge_)
+    return Widget::MOVE_LOOP_CANCELED;
+
+  return bridge_->RunMoveLoop(drag_offset);
 }
 
 void NativeWidgetMac::EndMoveLoop() {
-  NOTIMPLEMENTED();
+  if (bridge_)
+    bridge_->EndMoveLoop();
 }
 
 void NativeWidgetMac::SetVisibilityChangedAnimationsEnabled(bool value) {
@@ -722,8 +726,7 @@ gfx::FontList NativeWidgetPrivate::GetWindowTitleFontList() {
 // static
 gfx::NativeView NativeWidgetPrivate::GetGlobalCapture(
     gfx::NativeView native_view) {
-  NOTIMPLEMENTED();
-  return nullptr;
+  return [CocoaMouseCapture::GetGlobalCaptureWindow() contentView];
 }
 
 }  // namespace internal

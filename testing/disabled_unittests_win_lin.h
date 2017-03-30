@@ -6,14 +6,17 @@
 //    DISABLE(foo,bar)
 //    DISABLE(foo,baz)
 
-  // Appears flaky on Win and Lin
-  //DISABLE(MediaRouterMojoImplTest,
-  //     RegisterMediaSinksObserverWithAvailabilityChange)
+  // Proprietary media codec tests
+  DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
 
-  // Failing media tests evern since proprietary media code was imported
+  // Appears flaky on Win and Lin
+
+  // Failing media tests ever since proprietary media code was imported
   DISABLE(MediaTest, VideoBearRotated270)
   DISABLE(MediaTest, VideoBearRotated90)
 
+    /*
   // Toolbar tests that started failing in v52
   DISABLE(ToolbarViewInteractiveUITest, TestAppMenuOpensOnDrag)
   DISABLE_ALL(ToolbarActionViewInteractiveUITest)
+*/

@@ -9,15 +9,16 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
-#include "mojo/public/cpp/bindings/lib/interface_endpoint_client.h"
-#include "mojo/public/cpp/bindings/lib/interface_endpoint_controller.h"
-#include "mojo/public/cpp/bindings/lib/sync_handle_watcher.h"
+#include "mojo/public/cpp/bindings/interface_endpoint_client.h"
+#include "mojo/public/cpp/bindings/interface_endpoint_controller.h"
+#include "mojo/public/cpp/bindings/sync_handle_watcher.h"
 
 namespace mojo {
 namespace internal {
@@ -284,8 +285,7 @@ MultiplexRouter::MultiplexRouter(
     bool set_interface_id_namesapce_bit,
     ScopedMessagePipeHandle message_pipe,
     scoped_refptr<base::SingleThreadTaskRunner> runner)
-    : RefCountedDeleteOnMessageLoop(
-          base::MessageLoop::current()->task_runner()),
+    : AssociatedGroupController(base::ThreadTaskRunnerHandle::Get()),
       set_interface_id_namespace_bit_(set_interface_id_namesapce_bit),
       header_validator_(this),
       connector_(std::move(message_pipe),
@@ -303,7 +303,8 @@ MultiplexRouter::MultiplexRouter(
   connector_.AllowWokenUpBySyncWatchOnSameThread();
   connector_.set_incoming_receiver(&header_validator_);
   connector_.set_connection_error_handler(
-      [this]() { OnPipeConnectionError(); });
+      base::Bind(&MultiplexRouter::OnPipeConnectionError,
+                 base::Unretained(this)));
 }
 
 MultiplexRouter::~MultiplexRouter() {
@@ -325,6 +326,13 @@ MultiplexRouter::~MultiplexRouter() {
   DCHECK(endpoints_.empty());
 }
 
+void MultiplexRouter::SetMasterInterfaceName(const std::string& name) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  header_validator_.SetDescription(name + " [master] MessageHeaderValidator");
+  control_message_handler_.SetDescription(
+      name + " [master] PipeControlMessageHandler");
+}
+
 void MultiplexRouter::CreateEndpointHandlePair(
     ScopedInterfaceEndpointHandle* local_endpoint,
     ScopedInterfaceEndpointHandle* remote_endpoint) {
@@ -343,8 +351,8 @@ void MultiplexRouter::CreateEndpointHandlePair(
   if (encountered_error_)
     UpdateEndpointStateMayRemove(endpoint, PEER_ENDPOINT_CLOSED);
 
-  *local_endpoint = ScopedInterfaceEndpointHandle(id, true, this);
-  *remote_endpoint = ScopedInterfaceEndpointHandle(id, false, this);
+  *local_endpoint = CreateScopedInterfaceEndpointHandle(id, true);
+  *remote_endpoint = CreateScopedInterfaceEndpointHandle(id, false);
 }
 
 ScopedInterfaceEndpointHandle MultiplexRouter::CreateLocalEndpointHandle(
@@ -364,7 +372,7 @@ ScopedInterfaceEndpointHandle MultiplexRouter::CreateLocalEndpointHandle(
     CHECK(!endpoint->closed());
     CHECK(endpoint->peer_closed());
   }
-  return ScopedInterfaceEndpointHandle(id, true, this);
+  return CreateScopedInterfaceEndpointHandle(id, true);
 }
 
 void MultiplexRouter::CloseEndpointHandle(InterfaceId id, bool is_local) {
@@ -439,17 +447,6 @@ void MultiplexRouter::RaiseError() {
   }
 }
 
-std::unique_ptr<AssociatedGroup> MultiplexRouter::CreateAssociatedGroup() {
-  std::unique_ptr<AssociatedGroup> group(new AssociatedGroup);
-  group->router_ = this;
-  return group;
-}
-
-// static
-MultiplexRouter* MultiplexRouter::GetRouter(AssociatedGroup* associated_group) {
-  return associated_group->router_.get();
-}
-
 void MultiplexRouter::CloseMessagePipe() {
   DCHECK(thread_checker_.CalledOnValidThread());
   connector_.CloseMessagePipe();
@@ -500,7 +497,7 @@ bool MultiplexRouter::Accept(Message* message) {
     tasks_.push_back(Task::CreateMessageTask(message));
     Task* task = tasks_.back().get();
 
-    if (task->message->has_flag(kMessageIsSync)) {
+    if (task->message->has_flag(Message::kFlagIsSync)) {
       InterfaceId id = task->message->interface_id();
       sync_message_tasks_[id].push_back(task);
       auto iter = endpoints_.find(id);
@@ -526,11 +523,18 @@ bool MultiplexRouter::OnPeerAssociatedEndpointClosed(InterfaceId id) {
     return false;
 
   InterfaceEndpoint* endpoint = FindOrInsertEndpoint(id, nullptr);
-  DCHECK(!endpoint->peer_closed());
 
-  if (endpoint->client())
-    tasks_.push_back(Task::CreateNotifyErrorTask(endpoint));
-  UpdateEndpointStateMayRemove(endpoint, PEER_ENDPOINT_CLOSED);
+  // It is possible that this endpoint has been set as peer closed. That is
+  // because when the message pipe is closed, all the endpoints are updated with
+  // PEER_ENDPOINT_CLOSED. We continue to process remaining tasks in the queue,
+  // as long as there are refs keeping the router alive. If there is a
+  // PeerAssociatedEndpointClosedEvent control message in the queue, we will get
+  // here and see that the endpoint has been marked as peer closed.
+  if (!endpoint->peer_closed()) {
+    if (endpoint->client())
+      tasks_.push_back(Task::CreateNotifyErrorTask(endpoint));
+    UpdateEndpointStateMayRemove(endpoint, PEER_ENDPOINT_CLOSED);
+  }
 
   // No need to trigger a ProcessTasks() because it is already on the stack.
 
@@ -592,9 +596,9 @@ void MultiplexRouter::ProcessTasks(
 
     InterfaceId id = kInvalidInterfaceId;
     bool sync_message = task->IsMessageTask() && task->message &&
-                        task->message->has_flag(kMessageIsSync);
+                        task->message->has_flag(Message::kFlagIsSync);
     if (sync_message) {
-      InterfaceId id = task->message->interface_id();
+      id = task->message->interface_id();
       auto& sync_message_queue = sync_message_tasks_[id];
       DCHECK_EQ(task.get(), sync_message_queue.front());
       sync_message_queue.pop_front();
@@ -608,11 +612,11 @@ void MultiplexRouter::ProcessTasks(
                                      current_task_runner);
 
     if (!processed) {
-      tasks_.push_front(std::move(task));
       if (sync_message) {
         auto& sync_message_queue = sync_message_tasks_[id];
         sync_message_queue.push_front(task.get());
       }
+      tasks_.push_front(std::move(task));
       break;
     } else {
       if (sync_message) {
@@ -643,7 +647,15 @@ bool MultiplexRouter::ProcessFirstSyncMessageForEndpoint(InterfaceId id) {
   DCHECK(processed);
 
   iter = sync_message_tasks_.find(id);
-  return iter != sync_message_tasks_.end() && !iter->second.empty();
+  if (iter == sync_message_tasks_.end())
+    return false;
+
+  if (iter->second.empty()) {
+    sync_message_tasks_.erase(iter);
+    return false;
+  }
+
+  return true;
 }
 
 bool MultiplexRouter::ProcessNotifyErrorTask(
@@ -702,8 +714,6 @@ bool MultiplexRouter::ProcessIncomingMessage(
   bool inserted = false;
   InterfaceEndpoint* endpoint = FindOrInsertEndpoint(id, &inserted);
   if (inserted) {
-    DCHECK(!IsMasterInterfaceId(id));
-
     // Currently, it is legitimate to receive messages for an endpoint
     // that is not registered. For example, the endpoint is transferred in
     // a message that is discarded. Once we add support to specify all
@@ -711,7 +721,16 @@ bool MultiplexRouter::ProcessIncomingMessage(
     // this.
     UpdateEndpointStateMayRemove(endpoint, ENDPOINT_CLOSED);
 
-    control_message_proxy_.NotifyPeerEndpointClosed(id);
+    // It is also possible that this newly-inserted endpoint is the master
+    // endpoint. When the master InterfacePtr/Binding goes away, the message
+    // pipe is closed and we explicitly trigger a pipe connection error. The
+    // error updates all the endpoints, including the master endpoint, with
+    // PEER_ENDPOINT_CLOSED and removes the master endpoint from the
+    // registration. We continue to process remaining tasks in the queue, as
+    // long as there are refs keeping the router alive. If there are remaining
+    // messages for the master endpoint, we will get here.
+    if (!IsMasterInterfaceId(id))
+      control_message_proxy_.NotifyPeerEndpointClosed(id);
     return true;
   }
 
@@ -725,7 +744,7 @@ bool MultiplexRouter::ProcessIncomingMessage(
   }
 
   bool can_direct_call;
-  if (message->has_flag(kMessageIsSync)) {
+  if (message->has_flag(Message::kFlagIsSync)) {
     can_direct_call = client_call_behavior != NO_DIRECT_CLIENT_CALLS &&
                       endpoint->task_runner()->BelongsToCurrentThread();
   } else {

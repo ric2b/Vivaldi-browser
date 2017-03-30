@@ -234,11 +234,11 @@ private:
 
     void findFosterSite(HTMLConstructionSiteTask&);
 
+    CreateElementFlags getCreateElementFlags() const;
     HTMLElement* createHTMLElement(AtomicHTMLToken*);
     Element* createElement(AtomicHTMLToken*, const AtomicString& namespaceURI);
 
     void mergeAttributesFromTokenIntoElement(AtomicHTMLToken*, Element*);
-    void dispatchDocumentElementAvailableIfNeeded();
 
     void executeTask(HTMLConstructionSiteTask&);
     void queueTask(const HTMLConstructionSiteTask&);

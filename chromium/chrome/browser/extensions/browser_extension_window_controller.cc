@@ -42,18 +42,18 @@ std::string BrowserExtensionWindowController::GetWindowTypeText() const {
   return keys::kWindowTypeValueNormal;
 }
 
-base::DictionaryValue*
+std::unique_ptr<base::DictionaryValue>
 BrowserExtensionWindowController::CreateWindowValue() const {
-  base::DictionaryValue* result =
+  std::unique_ptr<base::DictionaryValue> result =
       extensions::WindowController::CreateWindowValue();
   result->SetString(keys::kWindowExtDataKey, browser_->ext_data());
   return result;
 }
 
-base::DictionaryValue*
+std::unique_ptr<base::DictionaryValue>
 BrowserExtensionWindowController::CreateWindowValueWithTabs(
     const extensions::Extension* extension) const {
-  base::DictionaryValue* result = CreateWindowValue();
+  std::unique_ptr<base::DictionaryValue> result = CreateWindowValue();
 
   result->Set(keys::kTabsKey,
               extensions::ExtensionTabUtil::CreateTabList(browser_, extension));

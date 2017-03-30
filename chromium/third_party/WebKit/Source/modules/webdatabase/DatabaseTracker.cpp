@@ -30,6 +30,7 @@
 
 #include "modules/webdatabase/DatabaseTracker.h"
 
+#include "core/dom/CrossThreadTask.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
@@ -45,6 +46,7 @@
 #include "public/platform/WebSecurityOrigin.h"
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/Assertions.h"
+#include "wtf/Functional.h"
 #include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 
@@ -70,7 +72,7 @@ DatabaseTracker::DatabaseTracker()
     SQLiteFileSystem::registerSQLiteVFS();
 }
 
-bool DatabaseTracker::canEstablishDatabase(DatabaseContext* databaseContext, const String& name, const String& displayName, unsigned long estimatedSize, DatabaseError& error)
+bool DatabaseTracker::canEstablishDatabase(DatabaseContext* databaseContext, const String& name, const String& displayName, unsigned estimatedSize, DatabaseError& error)
 {
     ExecutionContext* executionContext = databaseContext->getExecutionContext();
     bool success = DatabaseClient::from(executionContext)->allowDatabase(executionContext, name, displayName, estimatedSize);
@@ -88,7 +90,7 @@ void DatabaseTracker::addOpenDatabase(Database* database)
 {
     MutexLocker openDatabaseMapLock(m_openDatabaseMapGuard);
     if (!m_openDatabaseMap)
-        m_openDatabaseMap = adoptPtr(new DatabaseOriginMap);
+        m_openDatabaseMap = wrapUnique(new DatabaseOriginMap);
 
     String originString = database->getSecurityOrigin()->toRawString();
     DatabaseNameMap* nameMap = m_openDatabaseMap->get(originString);
@@ -166,31 +168,6 @@ unsigned long long DatabaseTracker::getMaxSizeForDatabase(const Database* databa
     return databaseSize + spaceAvailable;
 }
 
-class DatabaseTracker::CloseOneDatabaseImmediatelyTask final : public ExecutionContextTask {
-public:
-    static std::unique_ptr<CloseOneDatabaseImmediatelyTask> create(const String& originString, const String& name, Database* database)
-    {
-        return wrapUnique(new CloseOneDatabaseImmediatelyTask(originString, name, database));
-    }
-
-    void performTask(ExecutionContext*) override
-    {
-        DatabaseTracker::tracker().closeOneDatabaseImmediately(m_originString, m_name, m_database);
-    }
-
-private:
-    CloseOneDatabaseImmediatelyTask(const String& originString, const String& name, Database* database)
-        : m_originString(originString.isolatedCopy())
-        , m_name(name.isolatedCopy())
-        , m_database(database)
-    {
-    }
-
-    String m_originString;
-    String m_name;
-    CrossThreadPersistent<Database> m_database;
-};
-
 void DatabaseTracker::closeDatabasesImmediately(SecurityOrigin* origin, const String& name)
 {
     String originString = origin->toRawString();
@@ -208,7 +185,7 @@ void DatabaseTracker::closeDatabasesImmediately(SecurityOrigin* origin, const St
 
     // We have to call closeImmediately() on the context thread.
     for (DatabaseSet::iterator it = databaseSet->begin(); it != databaseSet->end(); ++it)
-        (*it)->getDatabaseContext()->getExecutionContext()->postTask(BLINK_FROM_HERE, CloseOneDatabaseImmediatelyTask::create(originString, name, *it));
+        (*it)->getDatabaseContext()->getExecutionContext()->postTask(BLINK_FROM_HERE, createCrossThreadTask(&DatabaseTracker::closeOneDatabaseImmediately, crossThreadUnretained(this), originString, name, *it));
 }
 
 void DatabaseTracker::forEachOpenDatabaseInPage(Page* page, std::unique_ptr<DatabaseCallback> callback)

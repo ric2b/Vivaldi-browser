@@ -42,7 +42,6 @@ namespace remote_media {
 RemoteMediaPlayerBridge::RemoteMediaPlayerBridge(
     int player_id,
     const std::string& user_agent,
-    bool hide_url_log,
     RemoteMediaPlayerManager* manager)
     : MediaPlayerAndroid(
           player_id,
@@ -55,7 +54,6 @@ RemoteMediaPlayerBridge::RemoteMediaPlayerBridge(
           media::kInvalidMediaSessionId),
       width_(0),
       height_(0),
-      hide_url_log_(hide_url_log),
       url_(manager->GetLocalPlayer(player_id)->GetUrl()),
       first_party_for_cookies_(
           manager->GetLocalPlayer(player_id)->GetFirstPartyForCookies()),
@@ -211,7 +209,7 @@ void RemoteMediaPlayerBridge::Pause(bool is_media_related_action) {
   }
 }
 
-void RemoteMediaPlayerBridge::SetVideoSurface(gfx::ScopedJavaSurface surface) {
+void RemoteMediaPlayerBridge::SetVideoSurface(gl::ScopedJavaSurface surface) {
   // The surface is reset whenever the fullscreen view is destroyed or created.
   // Since the remote player doesn't use it, we forward it to the local player
   // for the time when user disconnects and resumes local playback

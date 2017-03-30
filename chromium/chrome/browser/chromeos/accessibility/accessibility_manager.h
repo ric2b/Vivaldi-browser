@@ -7,8 +7,9 @@
 
 #include <set>
 
-#include "ash/session/session_state_observer.h"
-#include "ash/shell_observer.h"
+#include "ash/common/accessibility_types.h"
+#include "ash/common/session/session_state_observer.h"
+#include "ash/common/shell_observer.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/macros.h"
@@ -24,7 +25,6 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_system.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/chromeos/accessibility_types.h"
 
 namespace content {
 class RenderViewHost;
@@ -51,18 +51,18 @@ struct AccessibilityStatusEventDetails {
   AccessibilityStatusEventDetails(
       AccessibilityNotificationType notification_type,
       bool enabled,
-      ui::AccessibilityNotificationVisibility notify);
+      ash::AccessibilityNotificationVisibility notify);
 
   AccessibilityStatusEventDetails(
       AccessibilityNotificationType notification_type,
       bool enabled,
-      ui::MagnifierType magnifier_type,
-      ui::AccessibilityNotificationVisibility notify);
+      ash::MagnifierType magnifier_type,
+      ash::AccessibilityNotificationVisibility notify);
 
   AccessibilityNotificationType notification_type;
   bool enabled;
-  ui::MagnifierType magnifier_type;
-  ui::AccessibilityNotificationVisibility notify;
+  ash::MagnifierType magnifier_type;
+  ash::AccessibilityNotificationVisibility notify;
 };
 
 typedef base::Callback<void(const AccessibilityStatusEventDetails&)>
@@ -137,13 +137,13 @@ class AccessibilityManager
   // Enables or disables spoken feedback. Enabling spoken feedback installs the
   // ChromeVox component extension.
   void EnableSpokenFeedback(bool enabled,
-                            ui::AccessibilityNotificationVisibility notify);
+                            ash::AccessibilityNotificationVisibility notify);
 
   // Returns true if spoken feedback is enabled, or false if not.
   bool IsSpokenFeedbackEnabled();
 
   // Toggles whether Chrome OS spoken feedback is on or off.
-  void ToggleSpokenFeedback(ui::AccessibilityNotificationVisibility notify);
+  void ToggleSpokenFeedback(ash::AccessibilityNotificationVisibility notify);
 
   // Enables or disables the high contrast mode for Chrome.
   void EnableHighContrast(bool enabled);
@@ -213,7 +213,7 @@ class AccessibilityManager
   // ShellObserver overrides:
   void OnAppTerminating() override;
   void OnFullscreenStateChanged(bool is_fullscreen,
-                                aura::Window* root_window) override;
+                                ash::WmWindow* root_window) override;
 
   void SetProfileForTest(Profile* profile);
 
@@ -249,6 +249,10 @@ class AccessibilityManager
   // Forward an accessibility gesture from the touch exploration controller
   // to ChromeVox.
   void HandleAccessibilityGesture(ui::AXGesture gesture);
+
+  // Update the touch exploration controller so that synthesized
+  // touch events are anchored at this point.
+  void SetTouchAccessibilityAnchorPoint(const gfx::Point& anchor_point);
 
   // Called by our widget observer when the ChromeVoxPanel is closing.
   void OnChromeVoxPanelClosing();
@@ -364,7 +368,7 @@ class AccessibilityManager
   bool spoken_feedback_enabled_;
   bool high_contrast_enabled_;
   bool autoclick_enabled_;
-  int autoclick_delay_ms_;
+  base::TimeDelta autoclick_delay_ms_;
   bool virtual_keyboard_enabled_;
   bool mono_audio_enabled_;
   bool caret_highlight_enabled_;
@@ -373,7 +377,7 @@ class AccessibilityManager
   bool select_to_speak_enabled_;
   bool switch_access_enabled_;
 
-  ui::AccessibilityNotificationVisibility spoken_feedback_notification_;
+  ash::AccessibilityNotificationVisibility spoken_feedback_notification_;
 
   bool should_speak_chrome_vox_announcements_on_user_screen_;
 

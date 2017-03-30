@@ -159,6 +159,33 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestTypes) {
   ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_types.html")) << message_;
 }
 
+// Test that the webRequest events are dispatched with the expected details when
+// a frame or tab is removed while a response is being received.
+// Flaky: https://crbug.com/617865
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
+                       DISABLED_WebRequestUnloadAfterRequest) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_unload.html?1")) <<
+      message_;
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_unload.html?2")) <<
+      message_;
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_unload.html?3")) <<
+      message_;
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_unload.html?4")) <<
+      message_;
+}
+
+// Test that the webRequest events are dispatched with the expected details when
+// a frame or tab is immediately removed after starting a request.
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
+                       WebRequestUnloadImmediately) {
+  ASSERT_TRUE(StartEmbeddedTestServer());
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_unload.html?5")) <<
+      message_;
+  ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_unload.html?6")) <<
+      message_;
+}
+
 // Flaky (sometimes crash): http://crbug.com/140976
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
                        DISABLED_WebRequestAuthRequired) {
@@ -252,8 +279,8 @@ void ExtensionWebRequestApiTest::RunPermissionTest(
   catcher_incognito.RestrictToBrowserContext(
       browser()->profile()->GetOffTheRecordProfile());
 
-  ExtensionTestMessageListener listener("done", true);
-  ExtensionTestMessageListener listener_incognito("done_incognito", true);
+  ExtensionTestMessageListener listener("done", false);
+  ExtensionTestMessageListener listener_incognito("done_incognito", false);
 
   int load_extension_flags = kFlagNone;
   if (load_extension_with_incognito_permission)
@@ -364,8 +391,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
 IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, IncognitoSplitModeReload) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   // Wait for rules to be set up.
-  ExtensionTestMessageListener listener("done", true);
-  ExtensionTestMessageListener listener_incognito("done_incognito", true);
+  ExtensionTestMessageListener listener("done", false);
+  ExtensionTestMessageListener listener_incognito("done_incognito", false);
 
   const Extension* extension = LoadExtensionWithFlags(
       test_data_dir_.AppendASCII("webrequest_reload"), kFlagEnableIncognito);
@@ -377,8 +404,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, IncognitoSplitModeReload) {
 
   // Reload extension and wait for rules to be set up again. This should not
   // crash the browser.
-  ExtensionTestMessageListener listener2("done", true);
-  ExtensionTestMessageListener listener_incognito2("done_incognito", true);
+  ExtensionTestMessageListener listener2("done", false);
+  ExtensionTestMessageListener listener_incognito2("done_incognito", false);
 
   ReloadExtension(extension->id());
 
@@ -392,7 +419,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, ExtensionRequests) {
   ExtensionTestMessageListener listener_main2("web_request_status2", true);
 
   ExtensionTestMessageListener listener_app("app_done", false);
-  ExtensionTestMessageListener listener_extension("extension_done", true);
+  ExtensionTestMessageListener listener_extension("extension_done", false);
 
   // Set up webRequest listener
   ASSERT_TRUE(LoadExtension(

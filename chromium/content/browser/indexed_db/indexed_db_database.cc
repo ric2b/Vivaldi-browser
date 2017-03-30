@@ -12,11 +12,13 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_vector.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -35,6 +37,7 @@
 #include "content/common/indexed_db/indexed_db_constants.h"
 #include "content/common/indexed_db/indexed_db_key_path.h"
 #include "content/common/indexed_db/indexed_db_key_range.h"
+#include "content/public/common/content_switches.h"
 #include "storage/browser/blob/blob_data_handle.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBDatabaseException.h"
 #include "third_party/leveldatabase/env_chromium.h"
@@ -157,7 +160,10 @@ IndexedDBDatabase::IndexedDBDatabase(const base::string16& name,
                 IndexedDBDatabaseMetadata::NO_VERSION,
                 kInvalidId),
       identifier_(unique_identifier),
-      factory_(factory) {
+      factory_(factory),
+      experimental_web_platform_features_enabled_(
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kEnableExperimentalWebPlatformFeatures)) {
   DCHECK(factory != NULL);
 }
 
@@ -1410,13 +1416,12 @@ void IndexedDBDatabase::DeleteRangeOperation(
     std::unique_ptr<IndexedDBKeyRange> key_range,
     scoped_refptr<IndexedDBCallbacks> callbacks,
     IndexedDBTransaction* transaction) {
-  IDB_TRACE1(
-      "IndexedDBDatabase::DeleteRangeOperation", "txn.id", transaction->id());
+  IDB_TRACE1("IndexedDBDatabase::DeleteRangeOperation", "txn.id",
+             transaction->id());
+  size_t delete_count = 0;
   leveldb::Status s =
-      backing_store_->DeleteRange(transaction->BackingStoreTransaction(),
-                                  id(),
-                                  object_store_id,
-                                  *key_range);
+      backing_store_->DeleteRange(transaction->BackingStoreTransaction(), id(),
+                                  object_store_id, *key_range, &delete_count);
   if (!s.ok()) {
     base::string16 error_string =
         ASCIIToUTF16("Internal error deleting data in range");
@@ -1428,7 +1433,11 @@ void IndexedDBDatabase::DeleteRangeOperation(
     }
     return;
   }
-  callbacks->OnSuccess();
+  if (experimental_web_platform_features_enabled_) {
+    callbacks->OnSuccess(base::checked_cast<int64_t>(delete_count));
+  } else {
+    callbacks->OnSuccess();
+  }
 }
 
 void IndexedDBDatabase::Clear(int64_t transaction_id,
@@ -1613,7 +1622,7 @@ void IndexedDBDatabase::ProcessPendingCalls() {
   }
 
   if (!IsDeleteDatabaseBlocked()) {
-    PendingDeleteCallList pending_delete_calls;
+    std::list<PendingDeleteCall*> pending_delete_calls;
     pending_delete_calls_.swap(pending_delete_calls);
     while (!pending_delete_calls.empty()) {
       // Only the first delete call will delete the database, but each must fire
@@ -1629,11 +1638,11 @@ void IndexedDBDatabase::ProcessPendingCalls() {
   }
 
   if (!IsOpenConnectionBlocked()) {
-    PendingOpenCallList pending_open_calls;
+    std::queue<IndexedDBPendingConnection> pending_open_calls;
     pending_open_calls_.swap(pending_open_calls);
     while (!pending_open_calls.empty()) {
       OpenConnection(pending_open_calls.front());
-      pending_open_calls.pop_front();
+      pending_open_calls.pop();
     }
   }
 }
@@ -1682,7 +1691,7 @@ void IndexedDBDatabase::OpenConnection(
     // presence of existing connections means we didn't even check for data loss
     // so there'd better not be any.
     DCHECK_NE(blink::WebIDBDataLossTotal, connection.callbacks->data_loss());
-    pending_open_calls_.push_back(connection);
+    pending_open_calls_.push(connection);
     return;
   }
 
@@ -1914,7 +1923,7 @@ void IndexedDBDatabase::Close(IndexedDBConnection* connection, bool forced) {
   ProcessPendingCalls();
 
   // TODO(jsbell): Add a test for the pending_open_calls_ cases below.
-  if (!ConnectionCount() && !pending_open_calls_.size() &&
+  if (!ConnectionCount() && pending_open_calls_.empty() &&
       !pending_delete_calls_.size()) {
     DCHECK(transactions_.empty());
     backing_store_ = NULL;

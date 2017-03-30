@@ -60,6 +60,7 @@ using FontFaceSetIterable = PairIterable<Member<FontFace>, Member<FontFace>>;
 class FontFaceSet final : public EventTargetWithInlineData, public Supplement<Document>, public ActiveDOMObject, public FontFaceSetIterable {
     USING_GARBAGE_COLLECTED_MIXIN(FontFaceSet);
     DEFINE_WRAPPERTYPEINFO();
+    WTF_MAKE_NONCOPYABLE(FontFaceSet);
 public:
     ~FontFaceSet() override;
 
@@ -89,6 +90,8 @@ public:
     void fontLoaded(FontFace*);
     void loadError(FontFace*);
 
+    size_t approximateBlankCharacterCount() const;
+
     // ActiveDOMObject
     void suspend() override;
     void resume() override;
@@ -96,6 +99,7 @@ public:
 
     static FontFaceSet* from(Document&);
     static void didLayout(Document&);
+    static size_t approximateBlankCharacterCount(Document&);
 
     static const char* supplementName()
     {

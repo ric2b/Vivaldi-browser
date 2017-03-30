@@ -1862,16 +1862,24 @@
   },
 
   "SSLVersionFallbackMin": {
-    "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "SSLVersionFallbackMin": "tls1.2" },
-    "pref_mappings": []
+  },
+
+  "CertificateTransparencyEnforcementDisabledForUrls": {
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "test_policy": { "CertificateTransparencyEnforcementDisabledForUrls": ["example.com"] },
+    "pref_mappings": [
+      { "pref": "certificate_transparency.excluded_hosts" }
+    ]
   },
 
   "RC4Enabled": {
+  },
+
+  "DHEEnabled": {
     "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "RC4Enabled": true },
+    "test_policy": { "DHEEnabled": true },
     "pref_mappings": [
-      { "pref": "ssl.rc4_enabled",
+      { "pref": "ssl.dhe_enabled",
         "local_state": true
       }
     ]
@@ -1893,6 +1901,36 @@
     "pref_mappings": [
       { "pref": "browser.suppress_unsupported_os_warning",
         "local_state": true
+      }
+    ]
+  },
+
+  "AllowedDomainsForApps": {
+    "pref": "settings.allowed_domains_for_apps",
+    "test_policy": { "AllowedDomainsForApps": "google.com,mit.edu" },
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "pref_mappings": [
+      { "pref": "settings.allowed_domains_for_apps"
+      }
+    ]
+  },
+
+  "AllowedDomainsForApps": {
+    "pref": "settings.allowed_domains_for_apps",
+    "test_policy": { "AllowedDomainsForApps": "google.com,mit.edu" },
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "pref_mappings": [
+      { "pref": "settings.allowed_domains_for_apps"
+      }
+    ]
+  },
+
+  "AllowedDomainsForApps": {
+    "pref": "settings.allowed_domains_for_apps",
+    "test_policy": { "AllowedDomainsForApps": "google.com,mit.edu" },
+    "os": ["win", "linux", "mac", "chromeos", "android"],
+    "pref_mappings": [
+      { "pref": "settings.allowed_domains_for_apps"
       }
     ]
   },
@@ -2484,6 +2522,15 @@
     "os": ["chromeos"],
     "can_be_recommended": false,
     "test_policy": { "ArcCertificatesSyncMode": 0 }
+  },
+
+  "ArcBackupRestoreEnabled": {
+    "os": ["chromeos"],
+    "can_be_recommended": false,
+    "test_policy": { "ArcBackupRestoreEnabled": false },
+    "pref_mappings": [
+      { "pref": "arc.backup_restore.enabled" }
+    ]
   },
 
   "----- Chrome OS device policies ---------------------------------------": {},

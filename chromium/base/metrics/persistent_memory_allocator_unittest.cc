@@ -53,7 +53,7 @@ class PersistentMemoryAllocatorTest : public testing::Test {
   };
 
   PersistentMemoryAllocatorTest() {
-    kAllocAlignment = PersistentMemoryAllocator::kAllocAlignment;
+    kAllocAlignment = GetAllocAlignment();
     mem_segment_.reset(new char[TEST_MEMORY_SIZE]);
   }
 
@@ -78,6 +78,10 @@ class PersistentMemoryAllocatorTest : public testing::Test {
       ++count;
     }
     return count;
+  }
+
+  static uint32_t GetAllocAlignment() {
+    return PersistentMemoryAllocator::kAllocAlignment;
   }
 
  protected:
@@ -177,9 +181,9 @@ TEST_F(PersistentMemoryAllocatorTest, AllocateAndIterate) {
 
   // Check that an objcet's type can be changed.
   EXPECT_EQ(2U, allocator_->GetType(block2));
-  allocator_->SetType(block2, 3);
+  allocator_->ChangeType(block2, 3, 2);
   EXPECT_EQ(3U, allocator_->GetType(block2));
-  allocator_->SetType(block2, 2);
+  allocator_->ChangeType(block2, 2, 3);
   EXPECT_EQ(2U, allocator_->GetType(block2));
 
   // Create second allocator (read/write) using the same memory segment.
@@ -493,7 +497,8 @@ TEST(LocalPersistentMemoryAllocatorTest, CreationTest) {
 //----- SharedPersistentMemoryAllocator ----------------------------------------
 
 TEST(SharedPersistentMemoryAllocatorTest, CreationTest) {
-  SharedMemoryHandle shared_handle;
+  SharedMemoryHandle shared_handle_1;
+  SharedMemoryHandle shared_handle_2;
 
   PersistentMemoryAllocator::MemoryInfo meminfo1;
   Reference r123, r456, r789;
@@ -507,19 +512,20 @@ TEST(SharedPersistentMemoryAllocatorTest, CreationTest) {
     r456 = local.Allocate(456, 456);
     r789 = local.Allocate(789, 789);
     local.MakeIterable(r123);
-    local.SetType(r456, 654);
+    local.ChangeType(r456, 654, 456);
     local.MakeIterable(r789);
     local.GetMemoryInfo(&meminfo1);
     EXPECT_FALSE(local.IsFull());
     EXPECT_FALSE(local.IsCorrupt());
 
-    ASSERT_TRUE(local.shared_memory()->ShareToProcess(
-                    GetCurrentProcessHandle(),
-                    &shared_handle));
+    ASSERT_TRUE(local.shared_memory()->ShareToProcess(GetCurrentProcessHandle(),
+                                                      &shared_handle_1));
+    ASSERT_TRUE(local.shared_memory()->ShareToProcess(GetCurrentProcessHandle(),
+                                                      &shared_handle_2));
   }
 
   // Read-only test.
-  std::unique_ptr<SharedMemory> shmem2(new SharedMemory(shared_handle,
+  std::unique_ptr<SharedMemory> shmem2(new SharedMemory(shared_handle_1,
                                                         /*readonly=*/true));
   ASSERT_TRUE(shmem2->Map(TEST_MEMORY_SIZE));
 
@@ -545,7 +551,7 @@ TEST(SharedPersistentMemoryAllocatorTest, CreationTest) {
   EXPECT_EQ(meminfo1.free, meminfo2.free);
 
   // Read/write test.
-  std::unique_ptr<SharedMemory> shmem3(new SharedMemory(shared_handle,
+  std::unique_ptr<SharedMemory> shmem3(new SharedMemory(shared_handle_2,
                                                         /*readonly=*/false));
   ASSERT_TRUE(shmem3->Map(TEST_MEMORY_SIZE));
 
@@ -578,6 +584,7 @@ TEST(SharedPersistentMemoryAllocatorTest, CreationTest) {
 }
 
 
+#if !defined(OS_NACL)
 //----- FilePersistentMemoryAllocator ------------------------------------------
 
 TEST(FilePersistentMemoryAllocatorTest, CreationTest) {
@@ -594,7 +601,7 @@ TEST(FilePersistentMemoryAllocatorTest, CreationTest) {
     r456 = local.Allocate(456, 456);
     r789 = local.Allocate(789, 789);
     local.MakeIterable(r123);
-    local.SetType(r456, 654);
+    local.ChangeType(r456, 654, 456);
     local.MakeIterable(r789);
     local.GetMemoryInfo(&meminfo1);
     EXPECT_FALSE(local.IsFull());
@@ -611,7 +618,7 @@ TEST(FilePersistentMemoryAllocatorTest, CreationTest) {
   const size_t mmlength = mmfile->length();
   EXPECT_GE(meminfo1.total, mmlength);
 
-  FilePersistentMemoryAllocator file(std::move(mmfile), 0, "");
+  FilePersistentMemoryAllocator file(std::move(mmfile), 0, 0, "", true);
   EXPECT_TRUE(file.IsReadonly());
   EXPECT_EQ(TEST_ID, file.Id());
   EXPECT_FALSE(file.IsFull());
@@ -635,10 +642,63 @@ TEST(FilePersistentMemoryAllocatorTest, CreationTest) {
   EXPECT_EQ(0U, meminfo2.free);
 }
 
-TEST(FilePersistentMemoryAllocatorTest, AcceptableTest) {
+TEST(FilePersistentMemoryAllocatorTest, ExtendTest) {
   ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
-  FilePath file_path_base = temp_dir.path().AppendASCII("persistent_memory_");
+  FilePath file_path = temp_dir.path().AppendASCII("extend_test");
+  MemoryMappedFile::Region region = {0, 16 << 10};  // 16KiB maximum size.
+
+  // Start with a small but valid file of persistent data.
+  ASSERT_FALSE(PathExists(file_path));
+  {
+    LocalPersistentMemoryAllocator local(TEST_MEMORY_SIZE, TEST_ID, "");
+    local.Allocate(1, 1);
+    local.Allocate(11, 11);
+
+    File writer(file_path, File::FLAG_CREATE | File::FLAG_WRITE);
+    ASSERT_TRUE(writer.IsValid());
+    writer.Write(0, (const char*)local.data(), local.used());
+  }
+  ASSERT_TRUE(PathExists(file_path));
+  int64_t before_size;
+  ASSERT_TRUE(GetFileSize(file_path, &before_size));
+
+  // Map it as an extendable read/write file and append to it.
+  {
+    std::unique_ptr<MemoryMappedFile> mmfile(new MemoryMappedFile());
+    mmfile->Initialize(
+        File(file_path, File::FLAG_OPEN | File::FLAG_READ | File::FLAG_WRITE),
+        region, MemoryMappedFile::READ_WRITE_EXTEND);
+    FilePersistentMemoryAllocator allocator(std::move(mmfile), region.size, 0,
+                                            "", false);
+    EXPECT_EQ(static_cast<size_t>(before_size), allocator.used());
+
+    allocator.Allocate(111, 111);
+    EXPECT_LT(static_cast<size_t>(before_size), allocator.used());
+  }
+
+  // Validate that append worked.
+  int64_t after_size;
+  ASSERT_TRUE(GetFileSize(file_path, &after_size));
+  EXPECT_LT(before_size, after_size);
+
+  // Verify that it's still an acceptable file.
+  {
+    std::unique_ptr<MemoryMappedFile> mmfile(new MemoryMappedFile());
+    mmfile->Initialize(
+        File(file_path, File::FLAG_OPEN | File::FLAG_READ | File::FLAG_WRITE),
+        region, MemoryMappedFile::READ_WRITE_EXTEND);
+    EXPECT_TRUE(FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, true));
+    EXPECT_TRUE(
+        FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, false));
+  }
+}
+
+TEST(FilePersistentMemoryAllocatorTest, AcceptableTest) {
+  const uint32_t kAllocAlignment =
+      PersistentMemoryAllocatorTest::GetAllocAlignment();
+  ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
 
   LocalPersistentMemoryAllocator local(TEST_MEMORY_SIZE, TEST_ID, "");
   local.MakeIterable(local.Allocate(1, 1));
@@ -660,13 +720,23 @@ TEST(FilePersistentMemoryAllocatorTest, AcceptableTest) {
     }
     ASSERT_TRUE(PathExists(file_path));
 
+    // Request read/write access for some sizes that are a multple of the
+    // allocator's alignment size. The allocator is strict about file size
+    // being a multiple of its internal alignment when doing read/write access.
+    const bool read_only = (filesize % (2 * kAllocAlignment)) != 0;
+    const uint32_t file_flags =
+        File::FLAG_OPEN | File::FLAG_READ | (read_only ? 0 : File::FLAG_WRITE);
+    const MemoryMappedFile::Access map_access =
+        read_only ? MemoryMappedFile::READ_ONLY : MemoryMappedFile::READ_WRITE;
+
     mmfile.reset(new MemoryMappedFile());
-    mmfile->Initialize(file_path);
+    mmfile->Initialize(File(file_path, file_flags), map_access);
     EXPECT_EQ(filesize, mmfile->length());
-    if (FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile)) {
+    if (FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, read_only)) {
       // Make sure construction doesn't crash. It will, however, cause
       // error messages warning about about a corrupted memory segment.
-      FilePersistentMemoryAllocator allocator(std::move(mmfile), 0, "");
+      FilePersistentMemoryAllocator allocator(std::move(mmfile), 0, 0, "",
+                                              read_only);
       // Also make sure that iteration doesn't crash.
       PersistentMemoryAllocator::Iterator iter(&allocator);
       uint32_t type_id;
@@ -680,6 +750,7 @@ TEST(FilePersistentMemoryAllocatorTest, AcceptableTest) {
         (void)type;
         (void)size;
       }
+
       // Ensure that short files are detected as corrupt and full files are not.
       EXPECT_EQ(filesize != minsize, allocator.IsCorrupt());
     } else {
@@ -700,12 +771,13 @@ TEST(FilePersistentMemoryAllocatorTest, AcceptableTest) {
     ASSERT_TRUE(PathExists(file_path));
 
     mmfile.reset(new MemoryMappedFile());
-    mmfile->Initialize(file_path);
+    mmfile->Initialize(File(file_path, file_flags), map_access);
     EXPECT_EQ(filesize, mmfile->length());
-    if (FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile)) {
+    if (FilePersistentMemoryAllocator::IsFileAcceptable(*mmfile, read_only)) {
       // Make sure construction doesn't crash. It will, however, cause
       // error messages warning about about a corrupted memory segment.
-      FilePersistentMemoryAllocator allocator(std::move(mmfile), 0, "");
+      FilePersistentMemoryAllocator allocator(std::move(mmfile), 0, 0, "",
+                                              read_only);
       EXPECT_TRUE(allocator.IsCorrupt());  // Garbage data so it should be.
     } else {
       // For filesize >= minsize, the file must be acceptable. This
@@ -715,5 +787,6 @@ TEST(FilePersistentMemoryAllocatorTest, AcceptableTest) {
     }
   }
 }
+#endif  // !defined(OS_NACL)
 
 }  // namespace base

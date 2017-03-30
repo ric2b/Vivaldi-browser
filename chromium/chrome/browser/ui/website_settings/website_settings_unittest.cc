@@ -26,14 +26,16 @@
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/cert_store.h"
 #include "content/public/common/ssl_status.h"
-#include "device/core/device_client.h"
+#include "device/core/mock_device_client.h"
 #include "device/usb/mock_usb_device.h"
 #include "device/usb/mock_usb_service.h"
 #include "grit/theme_resources.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/x509_certificate.h"
 #include "net/ssl/ssl_connection_status_flags.h"
+#include "net/test/cert_test_util.h"
 #include "net/test/test_certificate_data.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -65,19 +67,6 @@ int SetSSLCipherSuite(int connection_status, int cipher_suite) {
   return cipher_suite | connection_status;
 }
 
-class TestDeviceClient : public device::DeviceClient {
- public:
-  TestDeviceClient() {}
-  ~TestDeviceClient() override {}
-
-  device::MockUsbService& usb_service() { return usb_service_; }
-
- private:
-  device::UsbService* GetUsbService() override { return &usb_service_; }
-
-  device::MockUsbService usb_service_;
-};
-
 class MockCertStore : public content::CertStore {
  public:
   virtual ~MockCertStore() {}
@@ -104,18 +93,15 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
 
   void SetUp() override {
     ChromeRenderViewHostTestHarness::SetUp();
+
     // Setup stub SSLStatus.
     security_info_.security_level = SecurityStateModel::NONE;
 
     // Create the certificate.
     cert_id_ = 1;
-    base::Time start_date = base::Time::Now();
-    base::Time expiration_date = base::Time::FromInternalValue(
-        start_date.ToInternalValue() + base::Time::kMicrosecondsPerWeek);
-    cert_ = new net::X509Certificate("subject",
-                                     "issuer",
-                                     start_date,
-                                     expiration_date);
+    cert_ =
+        net::ImportCertFromFile(net::GetTestCertsDirectory(), "ok_cert.pem");
+    ASSERT_TRUE(cert_);
 
     TabSpecificContentSettings::CreateForWebContents(web_contents());
     InfoBarService::CreateForWebContents(web_contents());
@@ -182,12 +168,14 @@ class WebsiteSettingsTest : public ChromeRenderViewHostTestHarness {
     return website_settings_.get();
   }
 
-  device::MockUsbService& usb_service() { return device_client_.usb_service(); }
+  device::MockUsbService& usb_service() {
+    return *device_client_.usb_service();
+  }
 
   SecurityStateModel::SecurityInfo security_info_;
 
  private:
-  TestDeviceClient device_client_;
+  device::MockDeviceClient device_client_;
   std::unique_ptr<WebsiteSettings> website_settings_;
   std::unique_ptr<MockWebsiteSettingsUI> mock_ui_;
   int cert_id_;
@@ -230,15 +218,22 @@ TEST_F(WebsiteSettingsTest, OnPermissionsChanged) {
 
   // SetPermissionInfo() is called once initially, and then again every time
   // OnSitePermissionChanged() is called.
+#if !defined(ENABLE_PLUGINS)
+  // SetPermissionInfo for plugins didn't get called.
+  EXPECT_CALL(*mock_ui(), SetPermissionInfo(_, _)).Times(6);
+#else
   EXPECT_CALL(*mock_ui(), SetPermissionInfo(_, _)).Times(7);
+#endif
   EXPECT_CALL(*mock_ui(), SetSelectedTab(
       WebsiteSettingsUI::TAB_ID_PERMISSIONS));
 
   // Execute code under tests.
   website_settings()->OnSitePermissionChanged(CONTENT_SETTINGS_TYPE_POPUPS,
                                               CONTENT_SETTING_ALLOW);
+#if defined(ENABLE_PLUGINS)
   website_settings()->OnSitePermissionChanged(CONTENT_SETTINGS_TYPE_PLUGINS,
                                               CONTENT_SETTING_BLOCK);
+#endif
   website_settings()->OnSitePermissionChanged(CONTENT_SETTINGS_TYPE_GEOLOCATION,
                                               CONTENT_SETTING_ALLOW);
   website_settings()->OnSitePermissionChanged(
@@ -252,9 +247,11 @@ TEST_F(WebsiteSettingsTest, OnPermissionsChanged) {
   setting = content_settings->GetContentSetting(
       url(), url(), CONTENT_SETTINGS_TYPE_POPUPS, std::string());
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);
+#if defined(ENABLE_PLUGINS)
   setting = content_settings->GetContentSetting(
       url(), url(), CONTENT_SETTINGS_TYPE_PLUGINS, std::string());
   EXPECT_EQ(setting, CONTENT_SETTING_BLOCK);
+#endif
   setting = content_settings->GetContentSetting(
       url(), url(), CONTENT_SETTINGS_TYPE_GEOLOCATION, std::string());
   EXPECT_EQ(setting, CONTENT_SETTING_ALLOW);

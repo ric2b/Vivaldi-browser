@@ -33,7 +33,6 @@
 #include "core/css/CSSPrimitiveValueMappings.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "wtf/MathExtras.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/text/StringBuilder.h"
 
 static const int maxExpressionDepth = 100;
@@ -135,7 +134,7 @@ static bool hasDoubleValue(CSSPrimitiveValue::UnitType type)
 static String buildCSSText(const String& expression)
 {
     StringBuilder result;
-    result.appendLiteral("calc");
+    result.append("calc");
     bool expressionHasSingleTerm = expression[0] != '(';
     if (expressionHasSingleTerm)
         result.append('(');

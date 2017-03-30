@@ -38,6 +38,7 @@ EXCLUDED_FILES = ['chrome_frame_mini_installer.exe',
 
 EXCLUDED_RE_FILES = [re.compile("^"+x+"$") for x in [
                   r'Vivaldi\..*\.exe',
+                  r'api-ms-win-.*\.dll',
                 ]]
 
 def IsPEFile(path):

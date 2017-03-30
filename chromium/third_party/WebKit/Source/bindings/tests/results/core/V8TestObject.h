@@ -64,14 +64,14 @@ public:
     }
     CORE_EXPORT static TestObject* toImplWithTypeCheck(v8::Isolate*, v8::Local<v8::Value>);
     CORE_EXPORT static const WrapperTypeInfo wrapperTypeInfo;
-    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
-    {
-        visitor->traceWrappers(scriptWrappable->toImpl<TestObject>());
-    }
     template<typename VisitorDispatcher>
     static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable)
     {
         visitor->trace(scriptWrappable->toImpl<TestObject>());
+    }
+    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
+    {
+        visitor->traceWrappers(scriptWrappable->toImpl<TestObject>());
     }
     static void customVoidMethodMethodCustom(const v8::FunctionCallbackInfo<v8::Value>&);
     static void customCallPrologueVoidMethodMethodPrologueCustom(const v8::FunctionCallbackInfo<v8::Value>&, TestObject*);
@@ -89,6 +89,12 @@ public:
     CORE_EXPORT static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate);
 
     static void installFeatureName(ScriptState*, v8::Local<v8::Object> instance);
+
+    static void installFeatureName1(ScriptState*, v8::Local<v8::Object> instance);
+
+    static void installFeatureName2(ScriptState*, v8::Local<v8::Object> instance);
+
+    static void installFeatureName3(ScriptState*, v8::Local<v8::Object> instance);
 };
 
 template <>

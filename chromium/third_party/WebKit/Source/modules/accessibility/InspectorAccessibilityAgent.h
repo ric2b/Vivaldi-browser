@@ -6,15 +6,15 @@
 #define InspectorAccessibilityAgent_h
 
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/Accessibility.h"
 #include "modules/ModulesExport.h"
-#include "wtf/PassOwnPtr.h"
 
 namespace blink {
 
 class InspectorDOMAgent;
 class Page;
 
-class MODULES_EXPORT InspectorAccessibilityAgent : public InspectorBaseAgent<InspectorAccessibilityAgent, protocol::Frontend::Accessibility>, public protocol::Backend::Accessibility {
+class MODULES_EXPORT InspectorAccessibilityAgent : public InspectorBaseAgent<protocol::Accessibility::Metainfo> {
     WTF_MAKE_NONCOPYABLE(InspectorAccessibilityAgent);
 public:
     InspectorAccessibilityAgent(Page*, InspectorDOMAgent*);

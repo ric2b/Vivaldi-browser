@@ -38,6 +38,7 @@
 #include "core/dom/DocumentFragment.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionModifier.h"
 #include "core/editing/commands/CreateLinkCommand.h"
 #include "core/editing/commands/EditorCommandNames.h"
 #include "core/editing/commands/FormatBlockCommand.h"
@@ -131,6 +132,19 @@ InputEvent::InputType InputTypeFromCommandType(WebEditingCommandType commandType
     }
 }
 
+RangeVector* RangesFromCurrentSelectionOrExtendCaret(const LocalFrame& frame, SelectionDirection direction, TextGranularity granularity)
+{
+    SelectionModifier selectionModifier(frame, frame.selection().selection());
+    if (selectionModifier.selection().isCaret())
+        selectionModifier.modify(FrameSelection::AlterationExtend, direction, granularity);
+    RangeVector* ranges = new RangeVector;
+    // We only supports single selections.
+    if (selectionModifier.selection().isNone())
+        return ranges;
+    ranges->append(firstRangeOf(selectionModifier.selection()));
+    return ranges;
+}
+
 } // anonymous namespace
 
 class EditorInternalCommand {
@@ -177,7 +191,7 @@ static bool applyCommandToFrame(LocalFrame& frame, EditorCommandSource source, E
         frame.editor().applyStyle(style);
         return true;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -204,12 +218,12 @@ static bool executeToggleStyleInList(LocalFrame& frame, EditorCommandSource sour
     if (!selectionStyle || !selectionStyle->style())
         return false;
 
-    CSSValue* selectedCSSValue = selectionStyle->style()->getPropertyCSSValue(propertyID);
+    const CSSValue* selectedCSSValue = selectionStyle->style()->getPropertyCSSValue(propertyID);
     String newStyle("none");
     if (selectedCSSValue->isValueList()) {
-        CSSValueList* selectedCSSValueList = toCSSValueList(selectedCSSValue);
-        if (!selectedCSSValueList->removeAll(value))
-            selectedCSSValueList->append(value);
+        CSSValueList* selectedCSSValueList = toCSSValueList(selectedCSSValue)->copy();
+        if (!selectedCSSValueList->removeAll(*value))
+            selectedCSSValueList->append(*value);
         if (selectedCSSValueList->length())
             newStyle = selectedCSSValueList->cssText();
 
@@ -252,7 +266,7 @@ static bool executeApplyParagraphStyle(LocalFrame& frame, EditorCommandSource so
         frame.editor().applyParagraphStyle(style);
         return true;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -425,7 +439,7 @@ static bool executeDelete(LocalFrame& frame, Event*, EditorCommandSource source,
         TypingCommand::deleteKeyPressed(*frame.document(), frame.selection().granularity() == WordGranularity ? TypingCommand::SmartDelete : 0);
         return true;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -564,7 +578,7 @@ static bool executeForwardDelete(LocalFrame& frame, Event*, EditorCommandSource 
             return false;
         return true;
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -621,7 +635,7 @@ static bool executeInsertLineBreak(LocalFrame& frame, Event* event, EditorComman
         DCHECK(frame.document());
         return TypingCommand::insertLineBreak(*frame.document());
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -1303,7 +1317,7 @@ static bool enabledVisibleSelectionAndMark(LocalFrame& frame, Event* event, Edit
 {
     const VisibleSelection& selection = frame.editor().selectionForCommand(event);
     return ((selection.isCaret() && selection.isContentEditable()) || selection.isRange())
-        && frame.editor().mark().isCaretOrRange();
+        && !frame.editor().mark().isNone();
 }
 
 static bool enableCaretInEditableText(LocalFrame& frame, Event* event, EditorCommandSource)
@@ -1344,7 +1358,7 @@ static bool enabledDelete(LocalFrame& frame, Event* event, EditorCommandSource s
         // otherwise removes a character
         return enabledInEditableText(frame, event, source);
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -1359,7 +1373,7 @@ static bool enabledInRichlyEditableText(LocalFrame& frame, Event*, EditorCommand
     // We should update selection to canonicalize with current layout and style,
     // before accessing |FrameSelection::selection()|.
     frame.selection().updateIfNeeded();
-    return frame.selection().isCaretOrRange() && frame.selection().isContentRichlyEditable() && frame.selection().rootEditableElement();
+    return !frame.selection().isNone() && frame.selection().isContentRichlyEditable() && frame.selection().rootEditableElement();
 }
 
 static bool enabledPaste(LocalFrame& frame, Event*, EditorCommandSource source)
@@ -1503,7 +1517,7 @@ static String valueDefaultParagraphSeparator(LocalFrame& frame, Event*)
         return pTag.localName();
     }
 
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return String();
 }
 
@@ -1782,7 +1796,7 @@ bool Editor::Command::execute(const String& parameter, Event* triggeringEvent) c
     if (m_source == CommandFromMenuOrKeyBinding) {
         InputEvent::InputType inputType = InputTypeFromCommandType(m_command->commandType);
         if (inputType != InputEvent::InputType::None) {
-            if (dispatchBeforeInputEditorCommand(eventTargetNodeForDocument(m_frame->document()), inputType) != DispatchEventResult::NotCanceled)
+            if (dispatchBeforeInputEditorCommand(eventTargetNodeForDocument(m_frame->document()), inputType, emptyString(), getRanges()) != DispatchEventResult::NotCanceled)
                 return true;
         }
     }
@@ -1812,7 +1826,7 @@ bool Editor::Command::isSupported() const
     case CommandFromDOM:
         return m_command->isSupportedFromDOM(m_frame.get());
     }
-    ASSERT_NOT_REACHED();
+    NOTREACHED();
     return false;
 }
 
@@ -1847,6 +1861,34 @@ bool Editor::Command::isTextInsertion() const
 int Editor::Command::idForHistogram() const
 {
     return isSupported() ? static_cast<int>(m_command->commandType) : 0;
+}
+
+RangeVector* Editor::Command::getRanges() const
+{
+    if (!isSupported() || !m_frame)
+        return nullptr;
+
+    switch (m_command->commandType) {
+    case WebEditingCommandType::Delete:
+    case WebEditingCommandType::DeleteBackward:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionBackward, CharacterGranularity);
+    case WebEditingCommandType::DeleteForward:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionForward, CharacterGranularity);
+    case WebEditingCommandType::DeleteToBeginningOfLine:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionBackward, LineGranularity);
+    case WebEditingCommandType::DeleteToBeginningOfParagraph:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionBackward, ParagraphGranularity);
+    case WebEditingCommandType::DeleteToEndOfLine:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionForward, LineGranularity);
+    case WebEditingCommandType::DeleteToEndOfParagraph:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionForward, ParagraphGranularity);
+    case WebEditingCommandType::DeleteWordBackward:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionBackward, WordGranularity);
+    case WebEditingCommandType::DeleteWordForward:
+        return RangesFromCurrentSelectionOrExtendCaret(*m_frame, DirectionForward, WordGranularity);
+    default:
+        return nullptr;
+    }
 }
 
 } // namespace blink

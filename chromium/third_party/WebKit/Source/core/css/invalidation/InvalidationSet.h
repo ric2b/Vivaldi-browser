@@ -40,6 +40,7 @@
 #include "wtf/RefPtr.h"
 #include "wtf/text/AtomicStringHash.h"
 #include "wtf/text/StringHash.h"
+#include <memory>
 
 namespace blink {
 
@@ -146,10 +147,10 @@ private:
     HashSet<AtomicString>& ensureAttributeSet();
 
     // FIXME: optimize this if it becomes a memory issue.
-    OwnPtr<HashSet<AtomicString>> m_classes;
-    OwnPtr<HashSet<AtomicString>> m_ids;
-    OwnPtr<HashSet<AtomicString>> m_tagNames;
-    OwnPtr<HashSet<AtomicString>> m_attributes;
+    std::unique_ptr<HashSet<AtomicString>> m_classes;
+    std::unique_ptr<HashSet<AtomicString>> m_ids;
+    std::unique_ptr<HashSet<AtomicString>> m_tagNames;
+    std::unique_ptr<HashSet<AtomicString>> m_attributes;
 
     unsigned m_type : 1;
 
@@ -194,7 +195,7 @@ public:
     unsigned maxDirectAdjacentSelectors() const { return m_maxDirectAdjacentSelectors; }
     void updateMaxDirectAdjacentSelectors(unsigned value) { m_maxDirectAdjacentSelectors = std::max(value, m_maxDirectAdjacentSelectors); }
 
-    const DescendantInvalidationSet* siblingDescendants() const { return m_siblingDescendantInvalidationSet.get(); }
+    DescendantInvalidationSet* siblingDescendants() const { return m_siblingDescendantInvalidationSet.get(); }
     DescendantInvalidationSet& ensureSiblingDescendants();
 
     DescendantInvalidationSet* descendants() const { return m_descendantInvalidationSet.get(); }

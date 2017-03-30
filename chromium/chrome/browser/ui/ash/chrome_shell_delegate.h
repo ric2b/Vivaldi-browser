@@ -9,7 +9,6 @@
 #include <string>
 
 #include "ash/shell_delegate.h"
-#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
@@ -25,7 +24,7 @@ namespace keyboard {
 class KeyboardUI;
 }
 
-class ChromeLauncherController;
+class ChromeLauncherControllerImpl;
 
 class ChromeShellDelegate : public ash::ShellDelegate,
                             public content::NotificationObserver {
@@ -38,7 +37,7 @@ class ChromeShellDelegate : public ash::ShellDelegate,
   bool IsMultiProfilesEnabled() const override;
   bool IsIncognitoAllowed() const override;
   bool IsRunningInForcedAppMode() const override;
-  bool CanShowWindowForUser(aura::Window* window) const override;
+  bool CanShowWindowForUser(ash::WmWindow* window) const override;
   bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
   void PreShutdown() override;
@@ -49,7 +48,7 @@ class ChromeShellDelegate : public ash::ShellDelegate,
       ash::VirtualKeyboardStateObserver* observer) override;
   void RemoveVirtualKeyboardStateObserver(
       ash::VirtualKeyboardStateObserver* observer) override;
-  void OpenUrl(const GURL& url) override;
+  void OpenUrlFromArc(const GURL& url) override;
   app_list::AppListPresenter* GetAppListPresenter() override;
   ash::ShelfDelegate* CreateShelfDelegate(ash::ShelfModel* model) override;
   ash::SystemTrayDelegate* CreateSystemTrayDelegate() override;
@@ -58,10 +57,9 @@ class ChromeShellDelegate : public ash::ShellDelegate,
   ash::AccessibilityDelegate* CreateAccessibilityDelegate() override;
   ash::NewWindowDelegate* CreateNewWindowDelegate() override;
   ash::MediaDelegate* CreateMediaDelegate() override;
-  std::unique_ptr<ash::ContainerDelegate> CreateContainerDelegate() override;
   std::unique_ptr<ash::PointerWatcherDelegate> CreatePointerWatcherDelegate()
       override;
-  ui::MenuModel* CreateContextMenu(ash::Shelf* shelf,
+  ui::MenuModel* CreateContextMenu(ash::WmShelf* wm_shelf,
                                    const ash::ShelfItem* item) override;
   ash::GPUSupport* CreateGPUSupport() override;
   base::string16 GetProductName() const override;
@@ -80,7 +78,7 @@ class ChromeShellDelegate : public ash::ShellDelegate,
 
   content::NotificationRegistrar registrar_;
 
-  ChromeLauncherController* shelf_delegate_;
+  ChromeLauncherControllerImpl* shelf_delegate_;
 
   base::ObserverList<ash::VirtualKeyboardStateObserver>
       keyboard_state_observer_list_;

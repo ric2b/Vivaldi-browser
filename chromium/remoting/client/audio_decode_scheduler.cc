@@ -9,8 +9,9 @@
 #include "base/bind.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
-#include "remoting/client/audio_player.h"
+#include "remoting/client/audio_consumer.h"
 #include "remoting/codec/audio_decoder.h"
 #include "remoting/proto/audio.pb.h"
 
@@ -20,14 +21,11 @@ class AudioDecodeScheduler::Core : public base::RefCountedThreadSafe<Core> {
  public:
   Core(scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
        scoped_refptr<base::SingleThreadTaskRunner> audio_decode_task_runner,
-       std::unique_ptr<AudioPlayer> audio_player);
+       base::WeakPtr<AudioConsumer> audio_consumer);
 
   void Initialize(const protocol::SessionConfig& config);
   void ProcessAudioPacket(std::unique_ptr<AudioPacket> packet,
                           const base::Closure& done);
-
-  // Called by AudioDecodeScheduler when it is destroyed.
-  void Detach();
 
  private:
   friend class base::RefCountedThreadSafe<Core>;
@@ -45,7 +43,7 @@ class AudioDecodeScheduler::Core : public base::RefCountedThreadSafe<Core> {
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> audio_decode_task_runner_;
   std::unique_ptr<AudioDecoder> decoder_;
-  std::unique_ptr<AudioPlayer> audio_player_;
+  base::WeakPtr<AudioConsumer> audio_consumer_;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };
@@ -53,10 +51,10 @@ class AudioDecodeScheduler::Core : public base::RefCountedThreadSafe<Core> {
 AudioDecodeScheduler::Core::Core(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> audio_decode_task_runner,
-    std::unique_ptr<AudioPlayer> audio_player)
+    base::WeakPtr<AudioConsumer> audio_consumer)
     : main_task_runner_(main_task_runner),
       audio_decode_task_runner_(audio_decode_task_runner),
-      audio_player_(std::move(audio_player)) {}
+      audio_consumer_(audio_consumer) {}
 
 AudioDecodeScheduler::Core::~Core() {}
 
@@ -73,11 +71,6 @@ void AudioDecodeScheduler::Core::ProcessAudioPacket(
   audio_decode_task_runner_->PostTask(FROM_HERE, base::Bind(
       &AudioDecodeScheduler::Core::DecodePacket, this,
       base::Passed(&packet), done));
-}
-
-void AudioDecodeScheduler::Core::Detach() {
-  DCHECK(main_task_runner_->BelongsToCurrentThread());
-  audio_player_.reset();
 }
 
 void AudioDecodeScheduler::Core::DecodePacket(
@@ -97,21 +90,21 @@ void AudioDecodeScheduler::Core::ProcessDecodedPacket(
     const base::Closure& done) {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   // Only process |packet| if it is non-null.
-  if (packet.get() && audio_player_.get())
-    audio_player_->ProcessAudioPacket(std::move(packet));
+  if (packet.get() && audio_consumer_) {
+    audio_consumer_->AddAudioPacket(std::move(packet));
+  }
   done.Run();
 }
 
 AudioDecodeScheduler::AudioDecodeScheduler(
     scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> audio_decode_task_runner,
-    std::unique_ptr<AudioPlayer> audio_player)
+    base::WeakPtr<AudioConsumer> audio_consumer)
     : core_(new Core(main_task_runner,
                      audio_decode_task_runner,
-                     std::move(audio_player))) {}
+                     audio_consumer)) {}
 
 AudioDecodeScheduler::~AudioDecodeScheduler() {
-  core_->Detach();
 }
 
 void AudioDecodeScheduler::Initialize(const protocol::SessionConfig& config) {

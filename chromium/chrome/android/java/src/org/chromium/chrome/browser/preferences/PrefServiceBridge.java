@@ -88,9 +88,11 @@ public final class PrefServiceBridge {
          * See net/base/registry_controlled_domains/registry_controlled_domain.h for more details on
          * registrable domains and the current list of effective eTLDs.
          * @param domains Important registerable domains.
+         * @param exampleOrigins Example origins for each domain. These can be used to retrieve
+         *                       favicons.
          */
         @CalledByNative("ImportantSitesCallback")
-        void onImportantRegisterableDomainsReady(String[] domains);
+        void onImportantRegisterableDomainsReady(String[] domains, String[] exampleOrigins);
     }
 
     /**
@@ -157,13 +159,7 @@ public final class PrefServiceBridge {
         if (currentVersion < 1) {
             nativeMigrateJavascriptPreference();
         }
-        // Steps 2,3 intentionally skipped.
-        if (currentVersion < 4) {
-            // For a brief period (M44 Beta), it was possible for users to disable images via Site
-            // Settings. Now that this option has been removed, ensure that users are not stuck with
-            // images disabled.
-            setContentSettingEnabled(ContentSettingsType.CONTENT_SETTINGS_TYPE_IMAGES, true);
-        }
+        // Steps 2,3,4 intentionally skipped.
         preferences.edit().putInt(MIGRATION_PREF_KEY, MIGRATION_CURRENT_VERSION).apply();
     }
 
@@ -310,6 +306,13 @@ public final class PrefServiceBridge {
      */
     public boolean isNotificationsEnabled() {
         return nativeGetNotificationsEnabled();
+    }
+
+    /**
+     * @return whether vibration is enabled for notifications.
+     */
+    public boolean isNotificationsVibrateEnabled() {
+        return nativeGetNotificationsVibrateEnabled();
     }
 
     /**
@@ -816,6 +819,20 @@ public final class PrefServiceBridge {
     }
 
     /**
+     * @return The maximum number of important sites that will be returned from the call above.
+     *         This is a constant that won't change.
+     */
+    public static int getMaxImportantSites() {
+        return nativeGetMaxImportantSites();
+    }
+
+    /** This lets us mark an origin as important for testing. */
+    @VisibleForTesting
+    public static void markOriginAsImportantForTesting(String origin) {
+        nativeMarkOriginAsImportantForTesting(origin);
+    }
+
+    /**
      * Requests that the web history service finds out if we should inform the user about the
      * existence of other forms of browsing history. The response will be asynchronous, through
      * {@link OtherFormsOfBrowsingHistoryListener}.
@@ -851,6 +868,10 @@ public final class PrefServiceBridge {
 
     public void setNotificationsEnabled(boolean allow) {
         nativeSetNotificationsEnabled(allow);
+    }
+
+    public void setNotificationsVibrateEnabled(boolean enabled) {
+        nativeSetNotificationsVibrateEnabled(enabled);
     }
 
     public void setAllowLocationEnabled(boolean allow) {
@@ -1147,6 +1168,8 @@ public final class PrefServiceBridge {
             OtherFormsOfBrowsingHistoryListener listener);
     private native boolean nativeCanDeleteBrowsingHistory();
     private static native void nativeFetchImportantSites(ImportantSitesCallback callback);
+    private static native int nativeGetMaxImportantSites();
+    private static native void nativeMarkOriginAsImportantForTesting(String origin);
     private native void nativeSetAutoplayEnabled(boolean allow);
     private native void nativeSetAllowCookiesEnabled(boolean allow);
     private native void nativeSetBackgroundSyncEnabled(boolean allow);
@@ -1158,8 +1181,10 @@ public final class PrefServiceBridge {
     private native void nativeSetProtectedMediaIdentifierEnabled(boolean enabled);
     private native boolean nativeGetAllowLocationEnabled();
     private native boolean nativeGetNotificationsEnabled();
+    private native boolean nativeGetNotificationsVibrateEnabled();
     private native void nativeSetAllowLocationEnabled(boolean allow);
     private native void nativeSetNotificationsEnabled(boolean allow);
+    private native void nativeSetNotificationsVibrateEnabled(boolean enabled);
     private native void nativeSetPasswordEchoEnabled(boolean enabled);
     private native void nativeSetCrashReportingEnabled(boolean reporting);
     private native boolean nativeIsCrashReportingEnabled();

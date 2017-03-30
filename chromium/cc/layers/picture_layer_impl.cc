@@ -51,6 +51,10 @@ const int kMinHeightForGpuRasteredTile = 256;
 // of using the same tile size.
 const int kTileRoundUp = 64;
 
+// Round GPU default tile sizes to a multiple of 32. This helps prevent
+// rounding errors during compositing.
+const int kGpuDefaultTileRoundUp = 32;
+
 // For performance reasons and to support compressed tile textures, tile
 // width and height should be an even multiple of 4 in size.
 const int kTileMinimalAlignment = 4;
@@ -69,17 +73,16 @@ PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
       ideal_device_scale_(0.f),
       ideal_source_scale_(0.f),
       ideal_contents_scale_(0.f),
-      last_ideal_source_scale_(0.f),
       raster_page_scale_(0.f),
       raster_device_scale_(0.f),
       raster_source_scale_(0.f),
       raster_contents_scale_(0.f),
       low_res_raster_contents_scale_(0.f),
-      raster_source_scale_is_fixed_(false),
       was_screen_space_transform_animating_(false),
       only_used_low_res_last_append_quads_(false),
       is_mask_(is_mask),
-      nearest_neighbor_(false) {
+      nearest_neighbor_(false),
+      is_directly_composited_image_(false) {
   layer_tree_impl()->RegisterPictureLayerImpl(this);
 }
 
@@ -136,6 +139,7 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->raster_source_scale_ = raster_source_scale_;
   layer_impl->raster_contents_scale_ = raster_contents_scale_;
   layer_impl->low_res_raster_contents_scale_ = low_res_raster_contents_scale_;
+  layer_impl->is_directly_composited_image_ = is_directly_composited_image_;
 
   layer_impl->SanityCheckTilingState();
 
@@ -434,17 +438,6 @@ bool PictureLayerImpl::UpdateTiles() {
     AddTilingsForRasterScale();
   }
 
-  // Inform layer tree impl if we will have blurry content because of fixed
-  // raster scale (note that this check should happen after we
-  // ReclaculateRasterScales, since that's the function that will determine
-  // whether our raster scale is fixed.
-  if (raster_source_scale_is_fixed_ && !has_will_change_transform_hint()) {
-    if (raster_source_scale_ != ideal_source_scale_)
-      layer_tree_impl()->SetFixedRasterScaleHasBlurryContent();
-    if (ideal_source_scale_ != last_ideal_source_scale_)
-      layer_tree_impl()->SetFixedRasterScaleAttemptedToChangeScale();
-  }
-
   if (layer_tree_impl()->IsActiveTree())
     AddLowResolutionTilingIfNeeded();
 
@@ -601,7 +594,7 @@ void PictureLayerImpl::UpdateCanUseLCDTextAfterCommit() {
   // Don't allow the LCD text state to change once disabled.
   if (!RasterSourceUsesLCDText())
     return;
-  if (can_use_lcd_text() == RasterSourceUsesLCDText())
+  if (CanUseLCDText() == RasterSourceUsesLCDText())
     return;
 
   // Raster sources are considered const, so in order to update the state
@@ -750,6 +743,13 @@ gfx::Size PictureLayerImpl::CalculateTileSize(
     default_tile_width += 2 * PictureLayerTiling::kBorderTexels;
     default_tile_height += 2 * PictureLayerTiling::kBorderTexels;
 
+    // Round GPU default tile sizes to a multiple of kGpuDefaultTileAlignment.
+    // This helps prevent rounding errors in our CA path. crbug.com/632274
+    default_tile_width =
+        MathUtil::UncheckedRoundUp(default_tile_width, kGpuDefaultTileRoundUp);
+    default_tile_height =
+        MathUtil::UncheckedRoundUp(default_tile_height, kGpuDefaultTileRoundUp);
+
     default_tile_height =
         std::max(default_tile_height, kMinHeightForGpuRasteredTile);
   } else {
@@ -885,6 +885,15 @@ void PictureLayerImpl::AddTilingsForRasterScale() {
 }
 
 bool PictureLayerImpl::ShouldAdjustRasterScale() const {
+  if (is_directly_composited_image_) {
+    float max_scale = std::max(1.f, MinimumContentsScale());
+    if (raster_source_scale_ < std::min(ideal_source_scale_, max_scale))
+      return true;
+    if (raster_source_scale_ > 4 * ideal_source_scale_)
+      return true;
+    return false;
+  }
+
   if (was_screen_space_transform_animating_ !=
       draw_properties().screen_space_transform_is_animating)
     return true;
@@ -915,19 +924,23 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
   if (raster_device_scale_ != ideal_device_scale_)
     return true;
 
-  // When the source scale changes we want to match it, but not when animating
-  // or when we've fixed the scale in place.
-  if (!draw_properties().screen_space_transform_is_animating &&
-      !raster_source_scale_is_fixed_ &&
-      raster_source_scale_ != ideal_source_scale_)
-    return true;
-
   if (raster_contents_scale_ > MaximumContentsScale())
     return true;
   if (raster_contents_scale_ < MinimumContentsScale())
     return true;
 
-  return false;
+  // Don't change the raster scale if any of the following are true:
+  //  - We have an animating transform.
+  //  - We have a will-change transform hint.
+  //  - The raster scale is already ideal.
+  if (draw_properties().screen_space_transform_is_animating ||
+      has_will_change_transform_hint() ||
+      raster_source_scale_ == ideal_source_scale_) {
+    return false;
+  }
+
+  // Match the raster scale in all other cases.
+  return true;
 }
 
 void PictureLayerImpl::AddLowResolutionTilingIfNeeded() {
@@ -959,32 +972,37 @@ void PictureLayerImpl::AddLowResolutionTilingIfNeeded() {
 }
 
 void PictureLayerImpl::RecalculateRasterScales() {
+  if (is_directly_composited_image_) {
+    if (!raster_source_scale_)
+      raster_source_scale_ = 1.f;
+
+    float min_scale = MinimumContentsScale();
+    float max_scale = std::max(1.f, MinimumContentsScale());
+    float clamped_ideal_source_scale_ =
+        std::max(min_scale, std::min(ideal_source_scale_, max_scale));
+
+    while (raster_source_scale_ < clamped_ideal_source_scale_)
+      raster_source_scale_ *= 2.f;
+    while (raster_source_scale_ > 4 * clamped_ideal_source_scale_)
+      raster_source_scale_ /= 2.f;
+
+    raster_source_scale_ =
+        std::max(min_scale, std::min(raster_source_scale_, max_scale));
+
+    raster_page_scale_ = 1.f;
+    raster_device_scale_ = 1.f;
+    raster_contents_scale_ = raster_source_scale_;
+    low_res_raster_contents_scale_ = raster_contents_scale_;
+    return;
+  }
+
   float old_raster_contents_scale = raster_contents_scale_;
   float old_raster_page_scale = raster_page_scale_;
-  float old_raster_source_scale = raster_source_scale_;
 
   raster_device_scale_ = ideal_device_scale_;
   raster_page_scale_ = ideal_page_scale_;
   raster_source_scale_ = ideal_source_scale_;
   raster_contents_scale_ = ideal_contents_scale_;
-
-  // If we're not animating, or leaving an animation, and the
-  // ideal_source_scale_ changes, then things are unpredictable, and we fix
-  // the raster_source_scale_ in place.
-  if (old_raster_source_scale &&
-      !draw_properties().screen_space_transform_is_animating &&
-      !was_screen_space_transform_animating_ &&
-      old_raster_source_scale != ideal_source_scale_)
-    raster_source_scale_is_fixed_ = true;
-
-  // TODO(danakj): Adjust raster source scale closer to ideal source scale at
-  // a throttled rate. Possibly make use of invalidation_.IsEmpty() on pending
-  // tree. This will allow CSS scale changes to get re-rastered at an
-  // appropriate rate. (crbug.com/413636)
-  if (raster_source_scale_is_fixed_) {
-    raster_contents_scale_ /= raster_source_scale_;
-    raster_source_scale_ = 1.f;
-  }
 
   // During pinch we completely ignore the current ideal scale, and just use
   // a multiple of the previous scale.
@@ -1018,8 +1036,11 @@ void PictureLayerImpl::RecalculateRasterScales() {
       !ShouldAdjustRasterScaleDuringScaleAnimations()) {
     bool can_raster_at_maximum_scale = false;
     bool should_raster_at_starting_scale = false;
-    float maximum_scale = draw_properties().maximum_animation_contents_scale;
-    float starting_scale = draw_properties().starting_animation_contents_scale;
+    CombinedAnimationScale animation_scales =
+        layer_tree_impl()->property_trees()->GetAnimationScales(
+            transform_tree_index(), layer_tree_impl());
+    float maximum_scale = animation_scales.maximum_animation_scale;
+    float starting_scale = animation_scales.starting_animation_scale;
     if (maximum_scale) {
       gfx::Size bounds_at_maximum_scale =
           gfx::ScaleToCeiledSize(raster_source_->GetSize(), maximum_scale);
@@ -1156,7 +1177,6 @@ void PictureLayerImpl::ResetRasterScale() {
   raster_source_scale_ = 0.f;
   raster_contents_scale_ = 0.f;
   low_res_raster_contents_scale_ = 0.f;
-  raster_source_scale_is_fixed_ = false;
 }
 
 bool PictureLayerImpl::CanHaveTilings() const {
@@ -1218,7 +1238,6 @@ void PictureLayerImpl::UpdateIdealScales() {
                           : 1.f;
   ideal_device_scale_ = layer_tree_impl()->device_scale_factor();
   ideal_contents_scale_ = std::max(GetIdealContentsScale(), min_contents_scale);
-  last_ideal_source_scale_ = ideal_source_scale_;
   ideal_source_scale_ =
       ideal_contents_scale_ / ideal_page_scale_ / ideal_device_scale_;
 }
@@ -1226,8 +1245,13 @@ void PictureLayerImpl::UpdateIdealScales() {
 void PictureLayerImpl::GetDebugBorderProperties(
     SkColor* color,
     float* width) const {
-  *color = DebugColors::TiledContentLayerBorderColor();
-  *width = DebugColors::TiledContentLayerBorderWidth(layer_tree_impl());
+  if (is_directly_composited_image_) {
+    *color = DebugColors::ImageLayerBorderColor();
+    *width = DebugColors::ImageLayerBorderWidth(layer_tree_impl());
+  } else {
+    *color = DebugColors::TiledContentLayerBorderColor();
+    *width = DebugColors::TiledContentLayerBorderWidth(layer_tree_impl());
+  }
 }
 
 void PictureLayerImpl::GetAllPrioritizedTilesForTracing(

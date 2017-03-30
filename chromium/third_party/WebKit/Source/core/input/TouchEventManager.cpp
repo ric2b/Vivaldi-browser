@@ -18,6 +18,8 @@
 #include "platform/Histogram.h"
 #include "platform/PlatformTouchEvent.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 
 namespace blink {
@@ -444,15 +446,6 @@ WebInputEventResult TouchEventManager::handleTouchEvent(
     if (!reHitTestTouchPointsIfNeeded(event, touchInfos))
         return WebInputEventResult::NotHandled;
 
-    // Note that the disposition of any pointer events affects only the generation of touch
-    // events. If all pointer events were handled (and hence no touch events were fired), that
-    // is still equivalent to the touch events going unhandled because pointer event handler
-    // don't block scroll gesture generation.
-
-    // TODO(crbug.com/507408): If PE handlers always call preventDefault, we won't see TEs until after
-    // scrolling starts because the scrolling would suppress upcoming PEs. This sudden "break" in TE
-    // suppression can make the visible TEs inconsistent (e.g. touchmove without a touchstart).
-
     bool allTouchesReleased = true;
     for (const auto& point : event.touchPoints()) {
         if (point.state() != PlatformTouchPoint::TouchReleased
@@ -478,7 +471,7 @@ WebInputEventResult TouchEventManager::handleTouchEvent(
             isSameOrigin = true;
     }
 
-    OwnPtr<UserGestureIndicator> gestureIndicator;
+    std::unique_ptr<UserGestureIndicator> gestureIndicator;
     if (isTap || isSameOrigin) {
         UserGestureUtilizedCallback* callback = 0;
         // These are cases we'd like to migrate to not hold a user gesture.
@@ -489,9 +482,9 @@ WebInputEventResult TouchEventManager::handleTouchEvent(
             callback = this;
         }
         if (m_touchSequenceUserGestureToken)
-            gestureIndicator = adoptPtr(new UserGestureIndicator(m_touchSequenceUserGestureToken.release(), callback));
+            gestureIndicator = wrapUnique(new UserGestureIndicator(m_touchSequenceUserGestureToken.release(), callback));
         else
-            gestureIndicator = adoptPtr(new UserGestureIndicator(DefinitelyProcessingUserGesture, callback));
+            gestureIndicator = wrapUnique(new UserGestureIndicator(DefinitelyProcessingUserGesture, callback));
         m_touchSequenceUserGestureToken = UserGestureIndicator::currentToken();
     }
 

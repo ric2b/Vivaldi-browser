@@ -28,11 +28,11 @@ scoped_refptr<FakeRasterSource> FakeRasterSource::CreateFilled(
   red_paint.setColor(SK_ColorRED);
   recording_source->add_draw_rect_with_paint(gfx::Rect(size), red_paint);
 
-  gfx::Size smaller_size(size.width() - 10, size.height() - 10);
-  SkPaint green_paint;
-  green_paint.setColor(SK_ColorGREEN);
-  recording_source->add_draw_rect_with_paint(gfx::Rect(smaller_size),
-                                             green_paint);
+  SkPaint salmon_pink_paint;
+  salmon_pink_paint.setColor(SK_ColorRED);
+  salmon_pink_paint.setAlpha(128);
+  recording_source->add_draw_rect_with_paint(gfx::Rect(size),
+                                             salmon_pink_paint);
 
   recording_source->Rerecord();
 
@@ -140,15 +140,10 @@ FakeRasterSource::~FakeRasterSource() {}
 
 void FakeRasterSource::PlaybackToCanvas(
     SkCanvas* canvas,
-    const gfx::Rect& canvas_bitmap_rect,
-    const gfx::Rect& canvas_playback_rect,
-    float contents_scale,
     const PlaybackSettings& settings) const {
   if (playback_allowed_event_)
     playback_allowed_event_->Wait();
-  RasterSource::PlaybackToCanvas(canvas, canvas_bitmap_rect,
-                                 canvas_playback_rect, contents_scale,
-                                 settings);
+  RasterSource::PlaybackToCanvas(canvas, settings);
 }
 
 }  // namespace cc

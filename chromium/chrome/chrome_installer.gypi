@@ -3,6 +3,9 @@
 # found in the LICENSE file.
 
 {
+  'includes': [
+    '../media/cdm_paths.gypi',
+  ],
   'variables': {
     'lastchange_path': '../build/util/LASTCHANGE',
     'branding_dir': '<(VIVALDI)/app/resources/theme/vivaldi',
@@ -292,6 +295,8 @@
             'installer/setup/setup_util.h',
             'installer/setup/update_active_setup_version_work_item.cc',
             'installer/setup/update_active_setup_version_work_item.h',
+            'installer/setup/user_hive_visitor.cc',
+            'installer/setup/user_hive_visitor.h',
           ],
         },
         {
@@ -304,6 +309,7 @@
             '../chrome/common_constants.gyp:common_constants',
             '../chrome/common_constants.gyp:version_header',
             '../chrome_elf/chrome_elf.gyp:chrome_elf_constants',
+            '../components/components.gyp:base32',
             '../components/components.gyp:crash_component',
             '../rlz/rlz.gyp:rlz_lib',
             '../third_party/zlib/zlib.gyp:zlib',
@@ -421,6 +427,7 @@
             'installer/setup/setup_util_unittest.cc',
             'installer/setup/setup_util_unittest.h',
             'installer/setup/update_active_setup_version_work_item_unittest.cc',
+            'installer/setup/user_hive_visitor_unittest.cc',
           ],
           # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
           'msvs_disabled_warnings': [ 4267, ],
@@ -546,8 +553,8 @@
             'rpm_arch': 'i386',
             'packaging_files_binaries': [
               #'<(PRODUCT_DIR)/nacl_irt_x86_32.nexe',
-              #'<(PRODUCT_DIR)/libwidevinecdmadapter.so',
-              #'<(PRODUCT_DIR)/libwidevinecdm.so',
+              #'<(PRODUCT_DIR)/<(widevine_cdm_path)/libwidevinecdmadapter.so',
+              #'<(PRODUCT_DIR)/<(widevine_cdm_path)/libwidevinecdm.so',
             ],
             'packaging_files_common': [
               '<(DEPTH)/build/linux/bin/eu-strip',
@@ -558,8 +565,8 @@
             'rpm_arch': 'x86_64',
             'packaging_files_binaries': [
               #'<(PRODUCT_DIR)/nacl_irt_x86_64.nexe',
-              #'<(PRODUCT_DIR)/libwidevinecdmadapter.so',
-              #'<(PRODUCT_DIR)/libwidevinecdm.so',
+              #'<(PRODUCT_DIR)/<(widevine_cdm_path)/libwidevinecdmadapter.so',
+              #'<(PRODUCT_DIR)/<(widevine_cdm_path)/libwidevinecdm.so',
             ],
             'packaging_files_common': [
               '<!(which eu-strip)',
@@ -610,15 +617,15 @@
               # GN version: //chrome/installer/linux:theme_files
               'destination': '<(PRODUCT_DIR)/installer/theme/',
               'files': [
-                '<(branding_dir)/linux/product_logo_32.xpm',
+                '<(branding_dir)/../<(VIVALDI_RELEASE_KIND)/linux/product_logo_32.xpm',
                 '<(branding_dir_100)/product_logo_16.png',
-                '<(branding_dir)/product_logo_22.png',
-                '<(branding_dir)/product_logo_24.png',
+                '<(branding_dir)/../<(VIVALDI_RELEASE_KIND)/product_logo_22.png',
+                '<(branding_dir)/../<(VIVALDI_RELEASE_KIND)/product_logo_24.png',
                 '<(branding_dir_100)/product_logo_32.png',
-                '<(branding_dir)/product_logo_48.png',
-                '<(branding_dir)/product_logo_64.png',
-                '<(branding_dir)/product_logo_128.png',
-                '<(branding_dir)/product_logo_256.png',
+                '<(branding_dir)/../<(VIVALDI_RELEASE_KIND)/product_logo_48.png',
+                '<(branding_dir)/../<(VIVALDI_RELEASE_KIND)/product_logo_64.png',
+                '<(branding_dir)/../<(VIVALDI_RELEASE_KIND)/product_logo_128.png',
+                '<(branding_dir)/../<(VIVALDI_RELEASE_KIND)/product_logo_256.png',
                 '<(VIVALDI)/app/resources/theme/vivaldi/BRANDING',
               ],
             },

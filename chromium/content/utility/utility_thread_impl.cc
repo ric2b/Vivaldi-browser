@@ -18,6 +18,7 @@
 #include "content/utility/utility_blink_platform_impl.h"
 #include "content/utility/utility_process_control_impl.h"
 #include "ipc/ipc_sync_channel.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 
 #if defined(OS_POSIX) && defined(ENABLE_PLUGINS)
@@ -46,6 +47,7 @@ UtilityThreadImpl::UtilityThreadImpl()
 UtilityThreadImpl::UtilityThreadImpl(const InProcessChildThreadParams& params)
     : ChildThreadImpl(ChildThreadImpl::Options::Builder()
                           .InBrowserProcess(params)
+                          .UseMojoChannel(true)
                           .Build()) {
   Init();
 }
@@ -94,10 +96,11 @@ void UtilityThreadImpl::Init() {
   GetContentClient()->utility()->UtilityThreadStarted();
 
   process_control_.reset(new UtilityProcessControlImpl);
-  service_registry()->AddService(base::Bind(
+  GetInterfaceRegistry()->AddInterface(base::Bind(
       &UtilityThreadImpl::BindProcessControlRequest, base::Unretained(this)));
 
-  GetContentClient()->utility()->RegisterMojoServices(service_registry());
+  GetContentClient()->utility()->ExposeInterfacesToBrowser(
+      GetInterfaceRegistry());
 }
 
 bool UtilityThreadImpl::OnControlMessageReceived(const IPC::Message& msg) {

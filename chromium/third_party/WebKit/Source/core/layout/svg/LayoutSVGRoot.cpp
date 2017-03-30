@@ -27,7 +27,6 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutPart.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/SVGResourcesCache.h"
@@ -154,19 +153,18 @@ void LayoutSVGRoot::layout()
 
     SVGSVGElement* svg = toSVGSVGElement(node());
     ASSERT(svg);
-    m_isLayoutSizeChanged = selfNeedsLayout() || (svg->hasRelativeLengths() && oldSize != size());
     // When hasRelativeLengths() is false, no descendants have relative lengths
     // (hence no one is interested in viewport size changes).
-    bool layoutSizeChanged = m_isLayoutSizeChanged && svg->hasRelativeLengths();
+    m_isLayoutSizeChanged = svg->hasRelativeLengths() && (selfNeedsLayout() || oldSize != size());
 
-    SVGLayoutSupport::layoutChildren(firstChild(), false, m_didScreenScaleFactorChange, layoutSizeChanged);
+    SVGLayoutSupport::layoutChildren(firstChild(), false, m_didScreenScaleFactorChange, m_isLayoutSizeChanged);
 
     if (m_needsBoundariesOrTransformUpdate) {
         updateCachedBoundaries();
         m_needsBoundariesOrTransformUpdate = false;
     }
 
-    m_overflow.clear();
+    m_overflow.reset();
     addVisualEffectOverflow();
 
     if (!shouldApplyViewportClip()) {

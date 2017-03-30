@@ -157,7 +157,7 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
   prompt_label->SetDisplayedOnBackgroundColor(kPromptBarBackgroundColor);
 
   views::StyledLabel::RangeStyleInfo bold_style;
-  bold_style.font_style = gfx::Font::BOLD;
+  bold_style.weight = gfx::Font::Weight::BOLD;
   prompt_label->AddStyleRange(
       gfx::Range(offset, offset + domain.size()), bold_style);
 
@@ -188,6 +188,7 @@ void ProfileSigninConfirmationDialogViews::ViewHierarchyChanged(
 
   // Layout the components.
   views::GridLayout* dialog_layout = new views::GridLayout(this);
+  dialog_layout->SetInsets(views::kPanelVertMargin, 0, 0, 0);
   SetLayoutManager(dialog_layout);
 
   // Use GridLayout inside the prompt bar because StyledLabel requires it.

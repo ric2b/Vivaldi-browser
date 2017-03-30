@@ -8,7 +8,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-#include "content/public/common/service_registry.h"
+#include "services/shell/public/cpp/interface_registry.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(
     dom_distiller::DistillabilityDriver);
@@ -25,7 +25,10 @@ class DistillabilityServiceImpl : public mojom::DistillabilityService {
       : binding_(this, std::move(request)),
         distillability_driver_(distillability_driver) {}
 
-  ~DistillabilityServiceImpl() override {}
+  ~DistillabilityServiceImpl() override {
+    if (!distillability_driver_) return;
+    distillability_driver_->SetNeedsMojoSetup();
+  }
 
   void NotifyIsDistillable(bool is_distillable, bool is_last_update) override {
     if (!distillability_driver_) return;
@@ -40,8 +43,10 @@ class DistillabilityServiceImpl : public mojom::DistillabilityService {
 DistillabilityDriver::DistillabilityDriver(
     content::WebContents* web_contents)
     : content::WebContentsObserver(web_contents),
+      mojo_needs_setup_(true),
       weak_factory_(this) {
-  SetupMojoService();
+  if (!web_contents) return;
+  SetupMojoService(web_contents->GetMainFrame());
 }
 
 DistillabilityDriver::~DistillabilityDriver() {
@@ -65,21 +70,40 @@ void DistillabilityDriver::OnDistillability(
   m_delegate_.Run(distillable, is_last);
 }
 
+void DistillabilityDriver::SetNeedsMojoSetup() {
+  mojo_needs_setup_ = true;
+}
+
+void DistillabilityDriver::RenderFrameHostChanged(
+    content::RenderFrameHost* old_host,
+    content::RenderFrameHost* new_host) {
+  // This method is invoked if any of the active RenderFrameHosts are swapped.
+  // Only add the mojo service to the main frame host.
+  if (!web_contents() || web_contents()->GetMainFrame() != new_host) return;
+
+  // If the RenderFrameHost changes (this will happen if the user navigates to
+  // or from a native page), the service needs to be attached to that host.
+  mojo_needs_setup_ = true;
+  SetupMojoService(new_host);
+}
+
 void DistillabilityDriver::DidStartProvisionalLoadForFrame(
     content::RenderFrameHost* render_frame_host, const GURL& validated_url,
     bool is_error_page, bool is_iframe_srcdoc) {
-  SetupMojoService();
+  SetupMojoService(render_frame_host);
 }
 
-void DistillabilityDriver::SetupMojoService() {
-  if (!web_contents()) return;
+void DistillabilityDriver::SetupMojoService(
+    content::RenderFrameHost* frame_host) {
+  if (!frame_host || !frame_host->GetInterfaceRegistry()
+      || !mojo_needs_setup_) {
+    return;
+  }
 
-  content::RenderFrameHost* frame_host = web_contents()->GetMainFrame();
-  if (!frame_host || !frame_host->GetServiceRegistry()) return;
-
-  frame_host->GetServiceRegistry()->AddService(
+  frame_host->GetInterfaceRegistry()->AddInterface(
       base::Bind(&DistillabilityDriver::CreateDistillabilityService,
           weak_factory_.GetWeakPtr()));
+  mojo_needs_setup_ = false;
 }
 
 }  // namespace dom_distiller

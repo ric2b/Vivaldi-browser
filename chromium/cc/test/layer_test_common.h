@@ -61,7 +61,7 @@ class LayerTestCommon {
       std::unique_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++);
       T* ptr = layer.get();
-      root_layer()->AddChild(std::move(layer));
+      root_layer_for_testing()->test_properties()->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -70,7 +70,7 @@ class LayerTestCommon {
       std::unique_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++);
       T* ptr = layer.get();
-      parent->AddChild(std::move(layer));
+      parent->test_properties()->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -79,7 +79,7 @@ class LayerTestCommon {
       std::unique_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++);
       T* ptr = layer.get();
-      origin->SetReplicaLayer(std::move(layer));
+      origin->test_properties()->SetReplicaLayer(std::move(layer));
       return ptr;
     }
 
@@ -88,7 +88,7 @@ class LayerTestCommon {
       std::unique_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++, a);
       T* ptr = layer.get();
-      root_layer()->AddChild(std::move(layer));
+      root_layer_for_testing()->test_properties()->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -97,7 +97,7 @@ class LayerTestCommon {
       std::unique_ptr<T> layer =
           T::Create(host_->host_impl()->active_tree(), layer_impl_id_++, a, b);
       T* ptr = layer.get();
-      root_layer()->AddChild(std::move(layer));
+      root_layer_for_testing()->test_properties()->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -106,7 +106,7 @@ class LayerTestCommon {
       std::unique_ptr<T> layer = T::Create(host_->host_impl()->active_tree(),
                                            layer_impl_id_++, a, b, c, d);
       T* ptr = layer.get();
-      root_layer()->AddChild(std::move(layer));
+      root_layer_for_testing()->test_properties()->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -124,7 +124,7 @@ class LayerTestCommon {
       std::unique_ptr<T> layer = T::Create(host_->host_impl()->active_tree(),
                                            layer_impl_id_++, a, b, c, d, e);
       T* ptr = layer.get();
-      root_layer()->AddChild(std::move(layer));
+      root_layer_for_testing()->test_properties()->AddChild(std::move(layer));
       return ptr;
     }
 
@@ -145,8 +145,8 @@ class LayerTestCommon {
     ResourceProvider* resource_provider() const {
       return host_->host_impl()->resource_provider();
     }
-    LayerImpl* root_layer() const {
-      return host_impl()->active_tree()->root_layer();
+    LayerImpl* root_layer_for_testing() const {
+      return host_impl()->active_tree()->root_layer_for_testing();
     }
     FakeLayerTreeHost* host() { return host_.get(); }
     FakeLayerTreeHostImpl* host_impl() const { return host_->host_impl(); }
@@ -156,6 +156,10 @@ class LayerTestCommon {
     const QuadList& quad_list() const { return render_pass_->quad_list; }
     scoped_refptr<AnimationTimeline> timeline() { return timeline_; }
     scoped_refptr<AnimationTimeline> timeline_impl() { return timeline_impl_; }
+
+    void SetElementIdsForTesting() {
+      host_impl()->active_tree()->SetElementIdsForTesting();
+    }
 
    private:
     FakeLayerTreeHostClient client_;

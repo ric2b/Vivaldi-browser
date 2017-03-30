@@ -82,6 +82,10 @@ const user_manager::User* FakeChromeUserManager::AddPublicAccountUser(
   return user;
 }
 
+bool FakeChromeUserManager::AreEphemeralUsersEnabled() const {
+  return fake_ephemeral_users_enabled_;
+}
+
 void FakeChromeUserManager::LoginUser(const AccountId& account_id) {
   UserLoggedIn(account_id, ProfileHelper::GetUserIdHashByUserIdForTesting(
                                account_id.GetUserEmail()),
@@ -165,6 +169,7 @@ void FakeChromeUserManager::RemoveUser(
 
 void FakeChromeUserManager::RemoveUserFromList(const AccountId& account_id) {
   WallpaperManager::Get()->RemoveUserWallpaperInfo(account_id);
+  chromeos::ProfileHelper::Get()->RemoveUserFromListForTesting(account_id);
   FakeUserManager::RemoveUserFromList(account_id);
 }
 

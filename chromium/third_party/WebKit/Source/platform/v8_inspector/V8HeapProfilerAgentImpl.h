@@ -6,7 +6,10 @@
 #define V8HeapProfilerAgentImpl_h
 
 #include "platform/inspector_protocol/Allocator.h"
-#include "platform/v8_inspector/public/V8HeapProfilerAgent.h"
+#include "platform/inspector_protocol/String16.h"
+#include "platform/v8_inspector/protocol/HeapProfiler.h"
+
+#include <v8.h>
 
 namespace blink {
 
@@ -14,16 +17,12 @@ class V8InspectorSessionImpl;
 
 using protocol::Maybe;
 
-class V8HeapProfilerAgentImpl : public V8HeapProfilerAgent {
+class V8HeapProfilerAgentImpl : public protocol::HeapProfiler::Backend {
     PROTOCOL_DISALLOW_COPY(V8HeapProfilerAgentImpl);
 public:
-    explicit V8HeapProfilerAgentImpl(V8InspectorSessionImpl*);
+    V8HeapProfilerAgentImpl(V8InspectorSessionImpl*, protocol::FrontendChannel*, protocol::DictionaryValue* state);
     ~V8HeapProfilerAgentImpl() override;
-
-    void setInspectorState(protocol::DictionaryValue* state) override { m_state = state; }
-    void setFrontend(protocol::Frontend::HeapProfiler* frontend) override { m_frontend = frontend; }
-    void clearFrontend() override;
-    void restore() override;
+    void restore();
 
     void collectGarbage(ErrorString*) override;
 
@@ -35,12 +34,12 @@ public:
 
     void takeHeapSnapshot(ErrorString*, const Maybe<bool>& reportProgress) override;
 
-    void getObjectByHeapObjectId(ErrorString*, const String16& heapSnapshotObjectId, const Maybe<String16>& objectGroup, OwnPtr<protocol::Runtime::RemoteObject>* result) override;
+    void getObjectByHeapObjectId(ErrorString*, const String16& heapSnapshotObjectId, const Maybe<String16>& objectGroup, std::unique_ptr<protocol::Runtime::RemoteObject>* result) override;
     void addInspectedHeapObject(ErrorString*, const String16& inspectedHeapObjectId) override;
     void getHeapObjectId(ErrorString*, const String16& objectId, String16* heapSnapshotObjectId) override;
 
     void startSampling(ErrorString*, const Maybe<double>& samplingInterval) override;
-    void stopSampling(ErrorString*, OwnPtr<protocol::HeapProfiler::SamplingHeapProfile>*) override;
+    void stopSampling(ErrorString*, std::unique_ptr<protocol::HeapProfiler::SamplingHeapProfile>*) override;
 
 private:
     void startTrackingHeapObjectsInternal(bool trackAllocations);
@@ -50,7 +49,7 @@ private:
 
     V8InspectorSessionImpl* m_session;
     v8::Isolate* m_isolate;
-    protocol::Frontend::HeapProfiler* m_frontend;
+    protocol::HeapProfiler::Frontend m_frontend;
     protocol::DictionaryValue* m_state;
     bool m_hasTimer;
 };

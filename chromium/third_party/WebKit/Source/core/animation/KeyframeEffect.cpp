@@ -265,7 +265,7 @@ double KeyframeEffect::calculateTimeToEffectChange(bool forwards, double localTi
             ? std::numeric_limits<double>::infinity()
             : localTime - afterTime;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return std::numeric_limits<double>::infinity();
     }
 }
@@ -285,7 +285,7 @@ bool KeyframeEffect::isCandidateForAnimationOnCompositor(double animationPlaybac
         || hasMultipleTransformProperties())
         return false;
 
-    return CompositorAnimations::instance()->isCandidateForAnimationOnCompositor(specifiedTiming(), *m_target, animation(), *model(), animationPlaybackRate);
+    return CompositorAnimations::isCandidateForAnimationOnCompositor(specifiedTiming(), *m_target, animation(), *model(), animationPlaybackRate);
 }
 
 bool KeyframeEffect::maybeStartAnimationOnCompositor(int group, double startTime, double currentTime, double animationPlaybackRate)
@@ -293,9 +293,9 @@ bool KeyframeEffect::maybeStartAnimationOnCompositor(int group, double startTime
     ASSERT(!hasActiveAnimationsOnCompositor());
     if (!isCandidateForAnimationOnCompositor(animationPlaybackRate))
         return false;
-    if (!CompositorAnimations::instance()->canStartAnimationOnCompositor(*m_target))
+    if (!CompositorAnimations::canStartAnimationOnCompositor(*m_target))
         return false;
-    CompositorAnimations::instance()->startAnimationOnCompositor(*m_target, group, startTime, currentTime, specifiedTiming(), *animation(), *model(), m_compositorAnimationIds, animationPlaybackRate);
+    CompositorAnimations::startAnimationOnCompositor(*m_target, group, startTime, currentTime, specifiedTiming(), *animation(), *model(), m_compositorAnimationIds, animationPlaybackRate);
     ASSERT(!m_compositorAnimationIds.isEmpty());
     return true;
 }
@@ -327,7 +327,7 @@ bool KeyframeEffect::cancelAnimationOnCompositor()
         return false;
     ASSERT(animation());
     for (const auto& compositorAnimationId : m_compositorAnimationIds)
-        CompositorAnimations::instance()->cancelAnimationOnCompositor(*m_target, *animation(), compositorAnimationId);
+        CompositorAnimations::cancelAnimationOnCompositor(*m_target, *animation(), compositorAnimationId);
     m_compositorAnimationIds.clear();
     return true;
 }
@@ -341,7 +341,7 @@ void KeyframeEffect::restartAnimationOnCompositor()
 void KeyframeEffect::cancelIncompatibleAnimationsOnCompositor()
 {
     if (m_target && animation() && model())
-        CompositorAnimations::instance()->cancelIncompatibleAnimationsOnCompositor(*m_target, *animation(), *model());
+        CompositorAnimations::cancelIncompatibleAnimationsOnCompositor(*m_target, *animation(), *model());
 }
 
 void KeyframeEffect::pauseAnimationForTestingOnCompositor(double pauseTime)
@@ -351,22 +351,14 @@ void KeyframeEffect::pauseAnimationForTestingOnCompositor(double pauseTime)
         return;
     ASSERT(animation());
     for (const auto& compositorAnimationId : m_compositorAnimationIds)
-        CompositorAnimations::instance()->pauseAnimationForTestingOnCompositor(*m_target, *animation(), compositorAnimationId, pauseTime);
-}
-
-bool KeyframeEffect::canAttachCompositedLayers() const
-{
-    if (!m_target || !animation())
-        return false;
-
-    return CompositorAnimations::instance()->canAttachCompositedLayers(*m_target, *animation());
+        CompositorAnimations::pauseAnimationForTestingOnCompositor(*m_target, *animation(), compositorAnimationId, pauseTime);
 }
 
 void KeyframeEffect::attachCompositedLayers()
 {
     ASSERT(m_target);
     ASSERT(animation());
-    CompositorAnimations::instance()->attachCompositedLayers(*m_target, *animation());
+    CompositorAnimations::attachCompositedLayers(*m_target, *animation());
 }
 
 DEFINE_TRACE(KeyframeEffect)

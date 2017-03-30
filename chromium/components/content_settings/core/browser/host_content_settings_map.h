@@ -131,9 +131,6 @@ class HostContentSettingsMap : public content_settings::Observer,
   void SetDefaultContentSetting(ContentSettingsType content_type,
                                 ContentSetting setting);
 
-  // Returns true if user exceptions are allowed for |content_type|.
-  bool AreUserExceptionsAllowedForType(ContentSettingsType content_type) const;
-
   // Sets the content |setting| for the given patterns, |content_type| and
   // |resource_identifier|. Setting the value to CONTENT_SETTING_DEFAULT causes
   // the default setting for that type to be used when loading pages matching
@@ -185,7 +182,7 @@ class HostContentSettingsMap : public content_settings::Observer,
                                      const GURL& top_level_url,
                                      ContentSettingsType content_type,
                                      const std::string& resource_identifier,
-                                     base::Value* value);
+                                     std::unique_ptr<base::Value> value);
 
   // Sets a rule to apply the |value| for all sites matching |pattern|,
   // |content_type| and |resource_identifier|. Setting the value to null removes
@@ -283,7 +280,7 @@ class HostContentSettingsMap : public content_settings::Observer,
 
  private:
   friend class base::RefCountedThreadSafe<HostContentSettingsMap>;
-  friend class HostContentSettingsMapTest_MigrateOldSettings_Test;
+  friend class HostContentSettingsMapTest_MigrateKeygenSettings_Test;
 
   friend class content_settings::TestUtils;
 
@@ -304,19 +301,18 @@ class HostContentSettingsMap : public content_settings::Observer,
       ContentSettingsType content_type,
       ProviderType* provider_type) const;
 
-  // Migrate old settings for ContentSettingsTypes which only use a primary
-  // pattern. Settings which only used a primary pattern were inconsistent in
-  // what they did with the secondary pattern. Some stored a
-  // ContentSettingsPattern::Wildcard() whereas others stored the same pattern
-  // twice. This function migrates all such settings to use
-  // ContentSettingsPattern::Wildcard(). This allows us to make the scoping code
-  // consistent across different settings.
+  // Migrate Keygen settings which only use a primary pattern. Settings which
+  // only used a primary pattern were inconsistent in what they did with the
+  // secondary pattern. Some stored a ContentSettingsPattern::Wildcard() whereas
+  // others stored the same pattern twice. This function migrates all such
+  // settings to use ContentSettingsPattern::Wildcard(). This allows us to make
+  // the scoping code consistent across different settings.
   // TODO(lshang): Remove this when clients have migrated (~M53). We should
   // leave in some code to remove old-format settings for a long time.
-  void MigrateOldSettings();
+  void MigrateKeygenSettings();
 
-  // Collect UMA data about the number of exceptions.
-  void RecordNumberOfExceptions();
+  // Collect UMA data of exceptions.
+  void RecordExceptionMetrics();
 
   // Adds content settings for |content_type| and |resource_identifier|,
   // provided by |provider|, into |settings|. If |incognito| is true, adds only

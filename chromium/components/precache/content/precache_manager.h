@@ -24,7 +24,9 @@
 #include "url/gurl.h"
 
 namespace base {
+class FilePath;
 class Time;
+class TimeDelta;
 }
 
 namespace content {
@@ -35,6 +37,10 @@ namespace history {
 class HistoryService;
 }
 
+namespace net {
+class HttpResponseInfo;
+}
+
 namespace sync_driver {
 class SyncService;
 }
@@ -42,6 +48,7 @@ class SyncService;
 namespace precache {
 
 class PrecacheDatabase;
+class PrecacheUnfinishedWork;
 
 // Visible for test.
 size_t NumTopHosts();
@@ -61,7 +68,9 @@ class PrecacheManager : public KeyedService,
 
   PrecacheManager(content::BrowserContext* browser_context,
                   const sync_driver::SyncService* const sync_service,
-                  const history::HistoryService* const history_service);
+                  const history::HistoryService* const history_service,
+                  const base::FilePath& db_path,
+                  std::unique_ptr<PrecacheDatabase> precache_database);
   ~PrecacheManager() override;
 
   // Returns true if the client is in the experiment group -- that is,
@@ -92,19 +101,34 @@ class PrecacheManager : public KeyedService,
   // Returns true if precaching is currently in progress, or false otherwise.
   bool IsPrecaching() const;
 
-  // Update precache-related metrics in response to a URL being fetched.
-  void RecordStatsForFetch(const GURL& url,
-                           const GURL& referrer,
-                           const base::TimeDelta& latency,
-                           const base::Time& fetch_time,
-                           int64_t size,
-                           bool was_cached);
-
   // Posts a task to the DB thread to delete all history entries from the
   // database. Does not wait for completion of this task.
   void ClearHistory();
 
+  // Update precache about an URL being fetched. Metrics related to precache are
+  // updated and any ongoing precache will be cancelled if this is an user
+  // initiated request. Should be called on UI thread.
+  void UpdatePrecacheMetricsAndState(const GURL& url,
+                                     const GURL& referrer,
+                                     const base::TimeDelta& latency,
+                                     const base::Time& fetch_time,
+                                     const net::HttpResponseInfo& info,
+                                     int64_t size,
+                                     bool is_user_traffic);
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest, DeleteExpiredPrecacheHistory);
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest,
+                           RecordStatsForFetchDuringPrecaching);
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest, RecordStatsForFetchHTTP);
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest, RecordStatsForFetchHTTPS);
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest, RecordStatsForFetchInTopHosts);
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest,
+                           RecordStatsForFetchWithEmptyURL);
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest, RecordStatsForFetchWithNonHTTP);
+  FRIEND_TEST_ALL_PREFIXES(PrecacheManagerTest,
+                           RecordStatsForFetchWithSizeZero);
+
   enum class AllowedType {
     ALLOWED,
     DISALLOWED,
@@ -117,8 +141,15 @@ class PrecacheManager : public KeyedService,
   // From PrecacheFetcher::PrecacheDelegate.
   void OnDone() override;
 
+  // Callback when fetching unfinished work from storage is done.
+  void OnGetUnfinishedWorkDone(
+      std::unique_ptr<PrecacheUnfinishedWork> unfinished_work);
+
   // From history::HistoryService::TopHosts.
   void OnHostsReceived(const history::TopHostsList& host_counts);
+
+  // Initializes and Starts a PrecacheFetcher with unfinished work.
+  void InitializeAndStartFetcher();
 
   // From history::HistoryService::TopHosts. Used for the control group, which
   // gets the list of TopHosts for metrics purposes, but otherwise does nothing.
@@ -127,13 +158,21 @@ class PrecacheManager : public KeyedService,
   // Returns true if precaching is allowed for the browser context.
   AllowedType PrecachingAllowed() const;
 
+  // Update precache-related metrics in response to a URL being fetched.
+  void RecordStatsForFetch(const GURL& url,
+                           const GURL& referrer,
+                           const base::TimeDelta& latency,
+                           const base::Time& fetch_time,
+                           const net::HttpResponseInfo& info,
+                           int64_t size);
+
   // Update precache-related metrics in response to a URL being fetched. Called
   // by RecordStatsForFetch() by way of an asynchronous HistoryService callback.
   void RecordStatsForFetchInternal(const GURL& url,
                                    const base::TimeDelta& latency,
                                    const base::Time& fetch_time,
+                                   const net::HttpResponseInfo& info,
                                    int64_t size,
-                                   bool was_cached,
                                    int host_rank);
 
   // The browser context that owns this PrecacheManager.
@@ -161,6 +200,9 @@ class PrecacheManager : public KeyedService,
 
   // Flag indicating whether or not precaching is currently in progress.
   bool is_precaching_;
+
+  // Work that hasn't yet finished.
+  std::unique_ptr<PrecacheUnfinishedWork> unfinished_work_;
 
   DISALLOW_COPY_AND_ASSIGN(PrecacheManager);
 };

@@ -7,15 +7,16 @@
 #include <memory>
 #include <utility>
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/shelf/shelf_constants.h"
+#include "ash/common/shelf/shelf_item_delegate_manager.h"
+#include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm/window_state.h"
 #include "ash/display/window_tree_host_manager.h"
-#include "ash/shelf/shelf_constants.h"
-#include "ash/shelf/shelf_item_delegate_manager.h"
-#include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_util.h"
 #include "ash/shelf/shelf_window_watcher_item_delegate.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/window.h"
@@ -55,11 +56,9 @@ namespace ash {
 
 ShelfWindowWatcher::RootWindowObserver::RootWindowObserver(
     ShelfWindowWatcher* window_watcher)
-    : window_watcher_(window_watcher) {
-}
+    : window_watcher_(window_watcher) {}
 
-ShelfWindowWatcher::RootWindowObserver::~RootWindowObserver() {
-}
+ShelfWindowWatcher::RootWindowObserver::~RootWindowObserver() {}
 
 void ShelfWindowWatcher::RootWindowObserver::OnWindowDestroying(
     aura::Window* window) {
@@ -68,11 +67,9 @@ void ShelfWindowWatcher::RootWindowObserver::OnWindowDestroying(
 
 ShelfWindowWatcher::RemovedWindowObserver::RemovedWindowObserver(
     ShelfWindowWatcher* window_watcher)
-    : window_watcher_(window_watcher) {
-}
+    : window_watcher_(window_watcher) {}
 
-ShelfWindowWatcher::RemovedWindowObserver::~RemovedWindowObserver() {
-}
+ShelfWindowWatcher::RemovedWindowObserver::~RemovedWindowObserver() {}
 
 void ShelfWindowWatcher::RemovedWindowObserver::OnWindowParentChanged(
     aura::Window* window,
@@ -116,10 +113,8 @@ ShelfWindowWatcher::ShelfWindowWatcher(
       observed_activation_clients_(this) {
   // We can't assume all RootWindows have the same ActivationClient.
   // Add a RootWindow and its ActivationClient to the observed list.
-  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
-  for (aura::Window::Windows::const_iterator it = root_windows.begin();
-       it != root_windows.end(); ++it)
-    OnRootWindowAdded(*it);
+  for (aura::Window* root : Shell::GetAllRootWindows())
+    OnRootWindowAdded(WmWindowAura::Get(root));
 
   display::Screen::GetScreen()->AddObserver(this);
 }
@@ -129,11 +124,10 @@ ShelfWindowWatcher::~ShelfWindowWatcher() {
 }
 
 void ShelfWindowWatcher::AddShelfItem(aura::Window* window) {
-  const ShelfItemDetails* item_details =
-      GetShelfItemDetailsForWindow(window);
+  const ShelfItemDetails* item_details = GetShelfItemDetailsForWindow(window);
   ShelfItem item;
   ShelfID id = model_->next_id();
-  item.status = wm::IsActiveWindow(window) ? STATUS_ACTIVE: STATUS_RUNNING;
+  item.status = wm::IsActiveWindow(window) ? STATUS_ACTIVE : STATUS_RUNNING;
   SetShelfItemDetailsForShelfItem(&item, *item_details);
   SetShelfIDForWindow(id, window);
   std::unique_ptr<ShelfItemDelegate> item_delegate(
@@ -148,16 +142,16 @@ void ShelfWindowWatcher::RemoveShelfItem(aura::Window* window) {
   SetShelfIDForWindow(kInvalidShelfID, window);
 }
 
-void ShelfWindowWatcher::OnRootWindowAdded(aura::Window* root_window) {
+void ShelfWindowWatcher::OnRootWindowAdded(WmWindow* root_window_wm) {
+  aura::Window* root_window = WmWindowAura::GetAuraWindow(root_window_wm);
   // |observed_activation_clients_| can have the same ActivationClient multiple
   // times - which would be handled by the |observed_activation_clients_|.
   observed_activation_clients_.Add(
       aura::client::GetActivationClient(root_window));
   observed_root_windows_.Add(root_window);
 
-  aura::Window* default_container = Shell::GetContainer(
-      root_window,
-      kShellWindowId_DefaultContainer);
+  aura::Window* default_container =
+      Shell::GetContainer(root_window, kShellWindowId_DefaultContainer);
   observed_windows_.Add(default_container);
   for (size_t i = 0; i < default_container->children().size(); ++i)
     observed_windows_.Add(default_container->children()[i]);
@@ -179,8 +173,7 @@ void ShelfWindowWatcher::UpdateShelfItemStatus(aura::Window* window,
   model_->Set(index, item);
 }
 
-int ShelfWindowWatcher::GetShelfItemIndexForWindow(
-    aura::Window* window) const {
+int ShelfWindowWatcher::GetShelfItemIndexForWindow(aura::Window* window) const {
   return model_->ItemIndexByID(GetShelfIDForWindow(window));
 }
 
@@ -258,8 +251,7 @@ void ShelfWindowWatcher::OnWindowPropertyChanged(aura::Window* window,
     int index = GetShelfItemIndexForWindow(window);
     DCHECK_GE(index, 0);
     ShelfItem item = model_->items()[index];
-    const ShelfItemDetails* details =
-        GetShelfItemDetailsForWindow(window);
+    const ShelfItemDetails* details = GetShelfItemDetailsForWindow(window);
     SetShelfItemDetailsForShelfItem(&item, *details);
     model_->Set(index, item);
     return;
@@ -278,7 +270,7 @@ void ShelfWindowWatcher::OnDisplayAdded(const display::Display& new_display) {
   // When the primary root window's display get removed, the existing root
   // window is taken over by the new display and the observer is already set.
   if (!observed_root_windows_.IsObserving(root_window))
-    OnRootWindowAdded(root_window);
+    OnRootWindowAdded(WmWindowAura::Get(root_window));
 }
 
 void ShelfWindowWatcher::OnDisplayRemoved(const display::Display& old_display) {

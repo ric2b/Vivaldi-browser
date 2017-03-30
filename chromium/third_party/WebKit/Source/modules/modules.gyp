@@ -39,9 +39,13 @@
     # GN version: //third_party/WebKit/Source/modules:modules
     'target_name': 'modules',
     'dependencies': [
+      '<(DEPTH)/components/components.gyp:webmessaging_mojo_bindings_for_blink',
       '<(DEPTH)/device/battery/battery.gyp:device_battery_mojo_bindings_for_blink',
+      '<(DEPTH)/device/nfc/nfc.gyp:device_nfc_mojo_bindings_for_blink',
       '<(DEPTH)/device/usb/usb.gyp:device_usb_mojo_bindings_for_blink',
       '<(DEPTH)/device/vibration/vibration.gyp:device_vibration_mojo_bindings_for_blink',
+      '<(DEPTH)/device/vr/vr.gyp:device_vr_mojo_bindings_for_blink',
+      '<(DEPTH)/media/mojo/interfaces/mojo_bindings.gyp:image_capture_mojo_bindings_for_blink',
       '<(DEPTH)/mojo/mojo_edk.gyp:mojo_system_impl',
       '<(DEPTH)/mojo/mojo_public.gyp:mojo_cpp_bindings',
       '<(DEPTH)/third_party/icu/icu.gyp:icui18n',

@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef MEDIA_VIDEO_CAPTURE_ANDROID_VIDEO_CAPTURE_DEVICE_FACTORY_ANDROID_H_
-#define MEDIA_VIDEO_CAPTURE_ANDROID_VIDEO_CAPTURE_DEVICE_FACTORY_ANDROID_H_
+#ifndef MEDIA_CAPTURE_VIDEO_ANDROID_VIDEO_CAPTURE_DEVICE_FACTORY_ANDROID_H_
+#define MEDIA_CAPTURE_VIDEO_ANDROID_VIDEO_CAPTURE_DEVICE_FACTORY_ANDROID_H_
 
 #include "media/capture/video/video_capture_device_factory.h"
 
@@ -17,7 +17,7 @@ namespace media {
 
 // VideoCaptureDeviceFactory on Android. This class implements the static
 // VideoCapture methods and the factory of VideoCaptureAndroid.
-class MEDIA_EXPORT VideoCaptureDeviceFactoryAndroid
+class CAPTURE_EXPORT VideoCaptureDeviceFactoryAndroid
     : public VideoCaptureDeviceFactory {
  public:
   static bool RegisterVideoCaptureDeviceFactory(JNIEnv* env);
@@ -40,4 +40,4 @@ class MEDIA_EXPORT VideoCaptureDeviceFactoryAndroid
 };
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_ANDROID_VIDEO_CAPTURE_DEVICE_FACTORY_ANDROID_H_
+#endif  // MEDIA_CAPTURE_VIDEO_ANDROID_VIDEO_CAPTURE_DEVICE_FACTORY_ANDROID_H_

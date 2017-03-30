@@ -18,15 +18,17 @@
 #include "base/format_macros.h"
 #include "base/json/json_file_value_serializer.h"
 #include "base/lazy_instance.h"
+#include "base/location.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
 #include "sql/connection_memory_dump_provider.h"
 #include "sql/meta_table.h"
@@ -34,6 +36,7 @@
 #include "third_party/sqlite/sqlite3.h"
 
 #if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
+#include "base/ios/ios_util.h"
 #include "third_party/sqlite/src/ext/icu/sqliteicu.h"
 #endif
 
@@ -159,18 +162,18 @@ void InitializeSqlite() {
     sqlite3_initialize();
 
     // Schedule callback to record memory footprint histograms at 10m, 1h, and
-    // 1d.  There may not be a message loop in tests.
-    if (base::MessageLoop::current()) {
-      base::MessageLoop::current()->PostDelayedTask(
+    // 1d. There may not be a registered thread task runner in tests.
+    if (base::ThreadTaskRunnerHandle::IsSet()) {
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE, base::Bind(&RecordSqliteMemory10Min),
           base::TimeDelta::FromMinutes(10));
-      base::MessageLoop::current()->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE, base::Bind(&RecordSqliteMemoryHour),
           base::TimeDelta::FromHours(1));
-      base::MessageLoop::current()->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE, base::Bind(&RecordSqliteMemoryDay),
           base::TimeDelta::FromDays(1));
-      base::MessageLoop::current()->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE, base::Bind(&RecordSqliteMemoryWeek),
           base::TimeDelta::FromDays(7));
     }
@@ -228,30 +231,13 @@ std::string AsUTF8ForSQL(const base::FilePath& path) {
 namespace sql {
 
 // static
-Connection::ErrorIgnorerCallback* Connection::current_ignorer_cb_ = NULL;
+Connection::ErrorExpecterCallback* Connection::current_expecter_cb_ = NULL;
 
 // static
-bool Connection::ShouldIgnoreSqliteError(int error) {
-  if (!current_ignorer_cb_)
+bool Connection::IsExpectedSqliteError(int error) {
+  if (!current_expecter_cb_)
     return false;
-  return current_ignorer_cb_->Run(error);
-}
-
-// static
-bool Connection::ShouldIgnoreSqliteCompileError(int error) {
-  // Put this first in case tests need to see that the check happened.
-  if (ShouldIgnoreSqliteError(error))
-    return true;
-
-  // Trim extended error codes.
-  int basic_error = error & 0xff;
-
-  // These errors relate more to the runtime context of the system than to
-  // errors with a SQL statement or with the schema, so they aren't generally
-  // interesting to flag.  This list is not comprehensive.
-  return basic_error == SQLITE_BUSY ||
-      basic_error == SQLITE_NOTADB ||
-      basic_error == SQLITE_CORRUPT;
+  return current_expecter_cb_->Run(error);
 }
 
 void Connection::ReportDiagnosticInfo(int extended_error, Statement* stmt) {
@@ -283,15 +269,15 @@ void Connection::ReportDiagnosticInfo(int extended_error, Statement* stmt) {
 }
 
 // static
-void Connection::SetErrorIgnorer(Connection::ErrorIgnorerCallback* cb) {
-  CHECK(current_ignorer_cb_ == NULL);
-  current_ignorer_cb_ = cb;
+void Connection::SetErrorExpecter(Connection::ErrorExpecterCallback* cb) {
+  CHECK(current_expecter_cb_ == NULL);
+  current_expecter_cb_ = cb;
 }
 
 // static
-void Connection::ResetErrorIgnorer() {
-  CHECK(current_ignorer_cb_);
-  current_ignorer_cb_ = NULL;
+void Connection::ResetErrorExpecter() {
+  CHECK(current_expecter_cb_);
+  current_expecter_cb_ = NULL;
 }
 
 bool StatementID::operator<(const StatementID& other) const {
@@ -872,9 +858,11 @@ std::string Connection::CollectCorruptionInfo() {
 size_t Connection::GetAppropriateMmapSize() {
   AssertIOAllowed();
 
-#if defined(OS_IOS)
-  // iOS SQLite does not support memory mapping.
-  return 0;
+#if defined(OS_IOS) && defined(USE_SYSTEM_SQLITE)
+  if (!base::ios::IsRunningOnIOS10OrLater()) {
+    // iOS SQLite does not support memory mapping.
+    return 0;
+  }
 #endif
 
   // How much to map if no errors are found.  50MB encompasses the 99th
@@ -1460,7 +1448,14 @@ scoped_refptr<Connection::StatementRef> Connection::GetCachedStatement(
 
 scoped_refptr<Connection::StatementRef> Connection::GetUniqueStatement(
     const char* sql) {
+  return GetStatementImpl(this, sql);
+}
+
+scoped_refptr<Connection::StatementRef> Connection::GetStatementImpl(
+    sql::Connection* tracking_db, const char* sql) const {
   AssertIOAllowed();
+  DCHECK(sql);
+  DCHECK(!tracking_db || const_cast<Connection*>(tracking_db)==this);
 
   // Return inactive statement.
   if (!db_)
@@ -1470,33 +1465,19 @@ scoped_refptr<Connection::StatementRef> Connection::GetUniqueStatement(
   int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL);
   if (rc != SQLITE_OK) {
     // This is evidence of a syntax error in the incoming SQL.
-    if (!ShouldIgnoreSqliteCompileError(rc))
+    if (rc == SQLITE_ERROR)
       DLOG(FATAL) << "SQL compile error " << GetErrorMessage();
 
     // It could also be database corruption.
     OnSqliteError(rc, NULL, sql);
     return new StatementRef(NULL, NULL, false);
   }
-  return new StatementRef(this, stmt, true);
+  return new StatementRef(tracking_db, stmt, true);
 }
 
-// TODO(shess): Unify this with GetUniqueStatement().  The only difference that
-// seems legitimate is not passing |this| to StatementRef.
 scoped_refptr<Connection::StatementRef> Connection::GetUntrackedStatement(
     const char* sql) const {
-  // Return inactive statement.
-  if (!db_)
-    return new StatementRef(NULL, NULL, poisoned_);
-
-  sqlite3_stmt* stmt = NULL;
-  int rc = sqlite3_prepare_v2(db_, sql, -1, &stmt, NULL);
-  if (rc != SQLITE_OK) {
-    // This is evidence of a syntax error in the incoming SQL.
-    if (!ShouldIgnoreSqliteCompileError(rc))
-      DLOG(FATAL) << "SQL compile error " << GetErrorMessage();
-    return new StatementRef(NULL, NULL, false);
-  }
-  return new StatementRef(NULL, stmt, true);
+  return GetStatementImpl(NULL, sql);
 }
 
 std::string Connection::GetSchema() const {
@@ -1551,8 +1532,8 @@ bool Connection::DoesTableOrIndexExist(
       "SELECT name FROM sqlite_master WHERE type=? AND name=? COLLATE NOCASE";
   Statement statement(GetUntrackedStatement(kSql));
 
-  // This can happen if the database is corrupt and the error is being ignored
-  // for testing purposes.
+  // This can happen if the database is corrupt and the error is a test
+  // expectation.
   if (!statement.is_valid())
     return false;
 
@@ -1570,8 +1551,8 @@ bool Connection::DoesColumnExist(const char* table_name,
 
   Statement statement(GetUntrackedStatement(sql.c_str()));
 
-  // This can happen if the database is corrupt and the error is being ignored
-  // for testing purposes.
+  // This can happen if the database is corrupt and the error is a test
+  // expectation.
   if (!statement.is_valid())
     return false;
 
@@ -1896,7 +1877,8 @@ void Connection::AddTaggedHistogram(const std::string& name,
     histogram->Add(sample);
 }
 
-int Connection::OnSqliteError(int err, sql::Statement *stmt, const char* sql) {
+int Connection::OnSqliteError(
+    int err, sql::Statement *stmt, const char* sql) const {
   UMA_HISTOGRAM_SPARSE_SLOWLY("Sqlite.Error", err);
   AddTaggedHistogram("Sqlite.Error", err);
 
@@ -1923,7 +1905,7 @@ int Connection::OnSqliteError(int err, sql::Statement *stmt, const char* sql) {
   }
 
   // The default handling is to assert on debug and to ignore on release.
-  if (!ShouldIgnoreSqliteError(err))
+  if (!IsExpectedSqliteError(err))
     DLOG(FATAL) << GetErrorMessage();
   return err;
 }

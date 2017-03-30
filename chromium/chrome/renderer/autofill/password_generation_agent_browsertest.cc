@@ -72,10 +72,34 @@ class PasswordGenerationAgentTest : public ChromeRenderViewTest {
     render_thread_->sink().ClearMessages();
   }
 
+  void AllowToRunFormClassifier() {
+    AutofillMsg_AllowToRunFormClassifier msg(0);
+    static_cast<IPC::Listener*>(password_generation_)->OnMessageReceived(msg);
+  }
+
+  void ExpectFormClassifierVoteReceived(
+      bool received,
+      const base::string16& expected_generation_element) {
+    const IPC::Message* message =
+        render_thread_->sink().GetFirstMessageMatching(
+            AutofillHostMsg_SaveGenerationFieldDetectedByClassifier::ID);
+    if (received) {
+      ASSERT_TRUE(message);
+      std::tuple<autofill::PasswordForm, base::string16> actual_parameters;
+      AutofillHostMsg_SaveGenerationFieldDetectedByClassifier::Read(
+          message, &actual_parameters);
+      EXPECT_EQ(expected_generation_element, std::get<1>(actual_parameters));
+    } else {
+      ASSERT_FALSE(message);
+    }
+
+    render_thread_->sink().ClearMessages();
+  }
+
   void ShowGenerationPopUpManually(const char* element_id) {
     FocusField(element_id);
     AutofillMsg_UserTriggeredGeneratePassword msg(0);
-    password_generation_->OnMessageReceived(msg);
+    static_cast<IPC::Listener*>(password_generation_)->OnMessageReceived(msg);
   }
 
  private:
@@ -265,7 +289,7 @@ TEST_F(PasswordGenerationAgentTest, FillTest) {
 
   base::string16 password = base::ASCIIToUTF16("random_password");
   AutofillMsg_GeneratedPasswordAccepted msg(0, password);
-  password_generation_->OnMessageReceived(msg);
+  static_cast<IPC::Listener*>(password_generation_)->OnMessageReceived(msg);
 
   // Password fields are filled out and set as being autofilled.
   EXPECT_EQ(password, first_password_element.value());
@@ -312,7 +336,7 @@ TEST_F(PasswordGenerationAgentTest, EditingTest) {
 
   base::string16 password = base::ASCIIToUTF16("random_password");
   AutofillMsg_GeneratedPasswordAccepted msg(0, password);
-  password_generation_->OnMessageReceived(msg);
+  static_cast<IPC::Listener*>(password_generation_)->OnMessageReceived(msg);
 
   // Passwords start out the same.
   EXPECT_EQ(password, first_password_element.value());
@@ -627,7 +651,7 @@ TEST_F(PasswordGenerationAgentTest, PresavingGeneratedPassword) {
 
     base::string16 password = base::ASCIIToUTF16("random_password");
     AutofillMsg_GeneratedPasswordAccepted msg(0, password);
-    password_generation_->OnMessageReceived(msg);
+    static_cast<IPC::Listener*>(password_generation_)->OnMessageReceived(msg);
     EXPECT_TRUE(render_thread_->sink().GetFirstMessageMatching(
         AutofillHostMsg_PresaveGeneratedPassword::ID));
     render_thread_->sink().ClearMessages();
@@ -645,6 +669,26 @@ TEST_F(PasswordGenerationAgentTest, PresavingGeneratedPassword) {
         AutofillHostMsg_PasswordNoLongerGenerated::ID));
     render_thread_->sink().ClearMessages();
   }
+}
+
+TEST_F(PasswordGenerationAgentTest, FormClassifierVotesSignupForm) {
+  AllowToRunFormClassifier();
+  LoadHTMLWithUserGesture(kAccountCreationFormHTML);
+  ExpectFormClassifierVoteReceived(true /* vote is expected */,
+                                   base::ASCIIToUTF16("first_password"));
+}
+
+TEST_F(PasswordGenerationAgentTest, FormClassifierVotesSigninForm) {
+  AllowToRunFormClassifier();
+  LoadHTMLWithUserGesture(kSigninFormHTML);
+  ExpectFormClassifierVoteReceived(true /* vote is expected */,
+                                   base::string16());
+}
+
+TEST_F(PasswordGenerationAgentTest, FormClassifierDisabled) {
+  LoadHTMLWithUserGesture(kSigninFormHTML);
+  ExpectFormClassifierVoteReceived(false /* vote is not expected */,
+                                   base::string16());
 }
 
 }  // namespace autofill

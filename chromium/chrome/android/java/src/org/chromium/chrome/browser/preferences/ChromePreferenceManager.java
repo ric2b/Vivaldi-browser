@@ -20,12 +20,6 @@ import java.util.Locale;
  * ChromePreferenceManager stores and retrieves various values in Android shared preferences.
  */
 public class ChromePreferenceManager {
-    /**
-     * Preference that denotes that Chrome has attempted to migrate from tabbed mode to document
-     * mode.
-     */
-    public static final String MIGRATION_ON_UPGRADE_ATTEMPTED = "migration_on_upgrade_attempted";
-
     private static final String TAG = "preferences";
 
     private static final String PROMOS_SKIPPED_ON_FIRST_START = "promos_skipped_on_first_start";
@@ -42,7 +36,6 @@ public class ChromePreferenceManager {
             "contextual_search_peek_promo_show_count";
     private static final String CONTEXTUAL_SEARCH_LAST_ANIMATION_TIME =
             "contextual_search_last_animation_time";
-    private static final String ENABLE_CUSTOM_TABS = "enable_custom_tabs";
     private static final String CONTEXTUAL_SEARCH_TAP_QUICK_ANSWER_COUNT =
             "contextual_search_tap_quick_answer_count";
     private static final String HERB_FLAVOR_KEY = "herb_flavor";
@@ -127,44 +120,10 @@ public class ChromePreferenceManager {
     }
 
     /**
-     * @return Whether we have attempted to migrate tabbed state to document mode after OS upgrade.
-     */
-    public boolean hasAttemptedMigrationOnUpgrade() {
-        return mSharedPreferences.getBoolean(MIGRATION_ON_UPGRADE_ATTEMPTED, false);
-    }
-
-    /**
-     * Mark that we have made an attempt to migrate tabbed state to document mode after OS upgrade.
-     */
-    public void setAttemptedMigrationOnUpgrade() {
-        SharedPreferences.Editor sharedPreferencesEditor = mSharedPreferences.edit();
-        sharedPreferencesEditor.putBoolean(MIGRATION_ON_UPGRADE_ATTEMPTED, true);
-        sharedPreferencesEditor.apply();
-    }
-
-    /**
      * @return Whether the promotion for data reduction has been skipped on first invocation.
      */
     public boolean getPromosSkippedOnFirstStart() {
         return mSharedPreferences.getBoolean(PROMOS_SKIPPED_ON_FIRST_START, false);
-    }
-
-    /**
-     * Enables custom tabs when true. This will take effect next time an activity is created.
-     * @param enabled Whether custom tabs should be enabled.
-     */
-    public void setCustomTabsEnabled(boolean enabled) {
-        SharedPreferences.Editor ed = mSharedPreferences.edit();
-        ed.putBoolean(ENABLE_CUSTOM_TABS, enabled);
-        ed.apply();
-    }
-
-    /**
-     * @return Whether custom tabs is enabled. This return value is designed to be used as a kill
-     *         switch for the feature, so it returns true by default if the preference is not set.
-     */
-    public boolean getCustomTabsEnabled() {
-        return mSharedPreferences.getBoolean(ENABLE_CUSTOM_TABS, true);
     }
 
     /**

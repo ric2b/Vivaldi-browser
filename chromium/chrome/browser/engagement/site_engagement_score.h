@@ -5,25 +5,29 @@
 #ifndef CHROME_BROWSER_ENGAGEMENT_SITE_ENGAGEMENT_SCORE_H_
 #define CHROME_BROWSER_ENGAGEMENT_SITE_ENGAGEMENT_SCORE_H_
 
+#include <memory>
+
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "url/gurl.h"
 
 namespace base {
 class Clock;
 }
 
+class HostContentSettingsMap;
+
 class SiteEngagementScore {
  public:
-  // The parameters which can be varied via field trial. All "points" values
-  // should be appended to the end of the enum prior to MAX_VARIATION.
+  // The parameters which can be varied via field trial.
   enum Variation {
     // The maximum number of points that can be accrued in one day.
     MAX_POINTS_PER_DAY = 0,
 
     // The period over which site engagement decays.
-    DECAY_PERIOD_IN_DAYS,
+    DECAY_PERIOD_IN_HOURS,
 
     // The number of points to decay per period.
     DECAY_POINTS,
@@ -58,6 +62,18 @@ class SiteEngagementScore {
     MEDIUM_ENGAGEMENT_BOUNDARY,
     HIGH_ENGAGEMENT_BOUNDARY,
 
+    // The maximum number of decays that a SiteEngagementScore can incur before
+    // entering a grace period. MAX_DECAYS_PER_SCORE * DECAY_PERIOD_IN_DAYS is
+    // the max decay period, i.e. the maximum duration permitted for
+    // (clock_->Now() - score.last_engagement_time()).
+    MAX_DECAYS_PER_SCORE,
+
+    // If a SiteEngagamentScore has not been accessed or updated for a period
+    // longer than the max decay period + LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS
+    // (see above), its last engagement time will be reset to be max decay
+    // period prior to clock_->Now().
+    LAST_ENGAGEMENT_GRACE_PERIOD_IN_HOURS,
+
     MAX_VARIATION
   };
 
@@ -65,7 +81,7 @@ class SiteEngagementScore {
   static const double kMaxPoints;
 
   static double GetMaxPointsPerDay();
-  static double GetDecayPeriodInDays();
+  static double GetDecayPeriodInHours();
   static double GetDecayPoints();
   static double GetNavigationPoints();
   static double GetUserInputPoints();
@@ -76,6 +92,8 @@ class SiteEngagementScore {
   static double GetBootstrapPoints();
   static double GetMediumEngagementBoundary();
   static double GetHighEngagementBoundary();
+  static double GetMaxDecaysPerScore();
+  static double GetLastEngagementGracePeriodInHours();
 
   // Update the default engagement settings via variations.
   static void UpdateFromVariations(const char* param_name);
@@ -84,8 +102,12 @@ class SiteEngagementScore {
   // responsibility of the caller to make sure |clock| outlives this
   // SiteEngagementScore.
   SiteEngagementScore(base::Clock* clock,
-                      const base::DictionaryValue& score_dict);
+                      const GURL& origin,
+                      HostContentSettingsMap* settings_map);
+  SiteEngagementScore(SiteEngagementScore&& other);
   ~SiteEngagementScore();
+
+  SiteEngagementScore& operator=(SiteEngagementScore&& other);
 
   // Adds |points| to this score, respecting daily limits and the maximum
   // possible score. Decays the score if it has not been updated recently
@@ -93,23 +115,15 @@ class SiteEngagementScore {
   void AddPoints(double points);
   double GetScore() const;
 
+  // Writes the values in this score into |settings_map_|.
+  void Commit();
+
   // Returns true if the maximum number of points today has been added.
   bool MaxPointsPerDayAdded() const;
 
   // Resets the score to |points| and resets the daily point limit. If
-  // |updated_time| is non-null, sets the last engagement time and last
-  // shortcut launch time (if it is non-null) to |updated_time|. Otherwise, last
-  // engagement time is set to the current time and last shortcut launch time is
-  // left unchanged.
-  // TODO(calamity): Ideally, all SiteEngagementScore methods should take a
-  // base::Time argument like this one does rather than each SiteEngagementScore
-  // hold a pointer to a base::Clock. Then SiteEngagementScore doesn't need to
-  // worry about clock vending. See crbug.com/604305.
-  void Reset(double points, const base::Time* updated_time);
-
-  // Updates the content settings dictionary |score_dict| with the current score
-  // fields. Returns true if |score_dict| changed, otherwise return false.
-  bool UpdateScoreDict(base::DictionaryValue* score_dict);
+  // |updated_time| is non-null, sets the last engagement time to that value.
+  void Reset(double points, const base::Time updated_time);
 
   // Get/set the last time this origin was launched from an installed shortcut.
   base::Time last_shortcut_launch_time() const {
@@ -117,6 +131,14 @@ class SiteEngagementScore {
   }
   void set_last_shortcut_launch_time(const base::Time& time) {
     last_shortcut_launch_time_ = time;
+  }
+
+  // Get/set the last time this origin recorded an engagement change.
+  base::Time last_engagement_time() const {
+    return last_engagement_time_;
+  }
+  void set_last_engagement_time(const base::Time& time) {
+    last_engagement_time_ = time;
   }
 
  private:
@@ -139,7 +161,8 @@ class SiteEngagementScore {
   static const char* kLastShortcutLaunchTimeKey;
 
   // This version of the constructor is used in unit tests.
-  explicit SiteEngagementScore(base::Clock* clock);
+  SiteEngagementScore(base::Clock* clock,
+                      std::unique_ptr<base::DictionaryValue> score_dict);
 
   // Determine the score, accounting for any decay.
   double DecayedScore() const;
@@ -150,6 +173,10 @@ class SiteEngagementScore {
   // Sets fixed parameter values for testing site engagement. Ensure that any
   // newly added parameters receive a fixed value here.
   static void SetParamValuesForTesting();
+
+  // Updates the content settings dictionary |score_dict| with the current score
+  // fields. Returns true if |score_dict| changed, otherwise return false.
+  bool UpdateScoreDict(base::DictionaryValue* score_dict);
 
   // The clock used to vend times. Enables time travelling in tests. Owned by
   // the SiteEngagementService.
@@ -170,6 +197,15 @@ class SiteEngagementScore {
   // The last time the site with this score was launched from an installed
   // shortcut.
   base::Time last_shortcut_launch_time_;
+
+  // The dictionary that represents this engagement score.
+  std::unique_ptr<base::DictionaryValue> score_dict_;
+
+  // The origin this score represents.
+  GURL origin_;
+
+  // The settings map to write this score to when Commit() is called.
+  HostContentSettingsMap* settings_map_;
 
   DISALLOW_COPY_AND_ASSIGN(SiteEngagementScore);
 };

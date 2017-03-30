@@ -27,12 +27,17 @@ class CONTENT_EXPORT SoftwareBrowserCompositorOutputSurface
   SoftwareBrowserCompositorOutputSurface(
       std::unique_ptr<cc::SoftwareOutputDevice> software_device,
       const scoped_refptr<ui::CompositorVSyncManager>& vsync_manager,
-      base::SingleThreadTaskRunner* task_runner);
+      cc::SyntheticBeginFrameSource* begin_frame_source);
 
   ~SoftwareBrowserCompositorOutputSurface() override;
 
+  // OutputSurface implementation.
+  void SwapBuffers(cc::CompositorFrame frame) override;
+  void BindFramebuffer() override;
+  uint32_t GetFramebufferCopyTextureFormat() override;
+
  private:
-  void SwapBuffers(cc::CompositorFrame* frame) override;
+  // BrowserCompositorOutputSurface implementation.
   void OnGpuSwapBuffersCompleted(
       const std::vector<ui::LatencyInfo>& latency_info,
       gfx::SwapResult result,

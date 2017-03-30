@@ -27,8 +27,6 @@
 #include "content/common/view_message_enums.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/favicon_url.h"
-#include "content/public/common/file_chooser_file_info.h"
-#include "content/public/common/file_chooser_params.h"
 #include "content/public/common/menu_item.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/page_zoom.h"
@@ -55,7 +53,6 @@
 #include "third_party/WebKit/public/web/WebSharedWorkerCreationContextType.h"
 #include "third_party/WebKit/public/web/WebSharedWorkerCreationErrors.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/base/ui_base_types.h"
@@ -98,7 +95,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebDisplayMode,
                           blink::WebDisplayMode::WebDisplayModeLast)
 IPC_ENUM_TRAITS_MAX_VALUE(WindowContainerType, WINDOW_CONTAINER_TYPE_MAX_VALUE)
 IPC_ENUM_TRAITS(content::FaviconURL::IconType)
-IPC_ENUM_TRAITS(content::FileChooserParams::Mode)
 IPC_ENUM_TRAITS(content::MenuItem::Type)
 IPC_ENUM_TRAITS_MAX_VALUE(content::NavigationGesture,
                           content::NavigationGestureLast)
@@ -212,27 +208,6 @@ IPC_STRUCT_TRAITS_BEGIN(content::FaviconURL)
   IPC_STRUCT_TRAITS_MEMBER(icon_url)
   IPC_STRUCT_TRAITS_MEMBER(icon_type)
   IPC_STRUCT_TRAITS_MEMBER(icon_sizes)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::FileChooserFileInfo)
-  IPC_STRUCT_TRAITS_MEMBER(file_path)
-  IPC_STRUCT_TRAITS_MEMBER(display_name)
-  IPC_STRUCT_TRAITS_MEMBER(file_system_url)
-  IPC_STRUCT_TRAITS_MEMBER(modification_time)
-  IPC_STRUCT_TRAITS_MEMBER(length)
-  IPC_STRUCT_TRAITS_MEMBER(is_directory)
-IPC_STRUCT_TRAITS_END()
-
-IPC_STRUCT_TRAITS_BEGIN(content::FileChooserParams)
-  IPC_STRUCT_TRAITS_MEMBER(mode)
-  IPC_STRUCT_TRAITS_MEMBER(title)
-  IPC_STRUCT_TRAITS_MEMBER(default_file_name)
-  IPC_STRUCT_TRAITS_MEMBER(accept_types)
-  IPC_STRUCT_TRAITS_MEMBER(need_local_path)
-#if defined(OS_ANDROID)
-  IPC_STRUCT_TRAITS_MEMBER(capture)
-#endif
-  IPC_STRUCT_TRAITS_MEMBER(requestor)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::RendererPreferences)
@@ -517,6 +492,9 @@ IPC_STRUCT_BEGIN(ViewMsg_New_Params)
 
   // The page zoom level.
   IPC_STRUCT_MEMBER(double, page_zoom_level)
+
+  // The color profile to use for image decode.
+  IPC_STRUCT_MEMBER(std::vector<char>, image_decode_color_profile)
 IPC_STRUCT_END()
 
 #if defined(OS_MACOSX)
@@ -599,11 +577,6 @@ IPC_MESSAGE_ROUTED1(ViewMsg_EnableDeviceEmulation,
 // Disables device emulation, enabled previously by EnableDeviceEmulation.
 IPC_MESSAGE_ROUTED0(ViewMsg_DisableDeviceEmulation)
 
-// Sent to inform the renderer of its screen device color profile. An empty
-// profile tells the renderer use the default sRGB color profile.
-IPC_MESSAGE_ROUTED1(ViewMsg_ColorProfile,
-                    std::vector<char> /* color profile */)
-
 // Tells the render view that the resize rect has changed.
 IPC_MESSAGE_ROUTED1(ViewMsg_ChangeResizeRect,
                     gfx::Rect /* resizer_rect */)
@@ -630,18 +603,6 @@ IPC_MESSAGE_ROUTED1(ViewMsg_SetInitialFocus,
 IPC_MESSAGE_ROUTED2(ViewMsg_ShowContextMenu,
                     ui::MenuSourceType,
                     gfx::Point /* location where menu should be shown */)
-
-// Copies the image at location x, y to the clipboard (if there indeed is an
-// image at that location).
-IPC_MESSAGE_ROUTED2(ViewMsg_CopyImageAt,
-                    int /* x */,
-                    int /* y */)
-
-// Saves the image at location x, y to the disk (if there indeed is an
-// image at that location).
-IPC_MESSAGE_ROUTED2(ViewMsg_SaveImageAt,
-                    int /* x */,
-                    int /* y */)
 
 // Load or reloads an image at location x, y to cache (if there indeed is an
 // image at that location).
@@ -699,9 +660,6 @@ IPC_MESSAGE_ROUTED2(ViewMsg_SetWebUIProperty,
 // Used to notify the render-view that we have received a target URL. Used
 // to prevent target URLs spamming the browser.
 IPC_MESSAGE_ROUTED0(ViewMsg_UpdateTargetURL_ACK)
-
-IPC_MESSAGE_ROUTED1(ViewMsg_RunFileChooserResponse,
-                    std::vector<content::FileChooserFileInfo>)
 
 // Provides the results of directory enumeration.
 IPC_MESSAGE_ROUTED2(ViewMsg_EnumerateDirectoryResponse,
@@ -878,6 +836,9 @@ IPC_MESSAGE_ROUTED0(ViewMsg_SelectWordAroundCaret)
 IPC_MESSAGE_ROUTED1(ViewMsg_ForceRedraw,
                     int /* request_id */)
 
+// Let renderer know begin frame messages won't be sent even if requested.
+IPC_MESSAGE_ROUTED1(ViewMsg_SetBeginFramePaused, bool /* paused */)
+
 // Sent by the browser when the renderer should generate a new frame.
 IPC_MESSAGE_ROUTED1(ViewMsg_BeginFrame,
                     cc::BeginFrameArgs /* args */)
@@ -1038,14 +999,6 @@ IPC_MESSAGE_ROUTED2(ViewHostMsg_AppCacheAccessed,
                     GURL /* manifest url */,
                     bool /* blocked by policy */)
 
-// Initiates a download based on user actions like 'ALT+click'.
-IPC_MESSAGE_CONTROL5(ViewHostMsg_DownloadUrl,
-                     int /* render_view_id */,
-                     int /* render_frame_id */,
-                     GURL /* url */,
-                     content::Referrer /* referrer */,
-                     base::string16 /* suggested_name */)
-
 // Used to go to the session history entry at the given offset (ie, -1 will
 // return the "back" item).
 IPC_MESSAGE_ROUTED1(ViewHostMsg_GoToEntryAtOffset,
@@ -1099,11 +1052,6 @@ IPC_MESSAGE_ROUTED3(ViewHostMsg_SelectionChanged,
 IPC_MESSAGE_ROUTED1(ViewHostMsg_SelectionBoundsChanged,
                     ViewHostMsg_SelectionBounds_Params)
 
-// Asks the browser to display the file chooser.  The result is returned in a
-// ViewMsg_RunFileChooserResponse message.
-IPC_MESSAGE_ROUTED1(ViewHostMsg_RunFileChooser,
-                    content::FileChooserParams)
-
 // Asks the browser to enumerate a directory.  This is equivalent to running
 // the file chooser in directory-enumeration mode and having the user select
 // the given directory.  The result is returned in a
@@ -1111,14 +1059,6 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_RunFileChooser,
 IPC_MESSAGE_ROUTED2(ViewHostMsg_EnumerateDirectory,
                     int /* request_id */,
                     base::FilePath /* file_path */)
-
-// Asks the browser to save a image (for <canvas> or <img>) from a data URL.
-// Note: |data_url| is the contents of a data:URL, and that it's represented as
-// a string only to work around size limitations for GURLs in IPC messages.
-IPC_MESSAGE_CONTROL3(ViewHostMsg_SaveImageFromDataURL,
-                     int /* render_view_id */,
-                     int /* render_frame_id */,
-                     std::string /* data_url */)
 
 // Tells the browser to move the focus to the next (previous if reverse is
 // true) focusable element.

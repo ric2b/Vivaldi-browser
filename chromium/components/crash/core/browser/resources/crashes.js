@@ -21,8 +21,9 @@ function requestCrashes() {
  * @param {string} os The OS name and version.
  */
 function updateCrashList(enabled, dynamicBackend, crashes, version, os) {
-  $('countBanner').textContent = loadTimeData.getStringF('crashCountFormat',
-                                                         crashes.length);
+  $('countBanner').textContent =
+      loadTimeData.getStringF('crashCountFormat',
+                              crashes.length.toLocaleString());
 
   var crashSection = $('crashList');
 
@@ -44,50 +45,74 @@ function updateCrashList(enabled, dynamicBackend, crashes, version, os) {
       crash['local_id'] = productName;
 
     var crashBlock = document.createElement('div');
+    if (crash['state'] != 'uploaded')
+      crashBlock.className = 'notUploaded';
     var title = document.createElement('h3');
-    title.textContent = loadTimeData.getStringF('crashHeaderFormat',
-                                                crash['id'],
-                                                crash['local_id']);
-    crashBlock.appendChild(title);
-    var date = document.createElement('p');
-    date.textContent = loadTimeData.getStringF('crashTimeFormat',
-                                               crash['time']);
-    crashBlock.appendChild(date);
-    var linkBlock = document.createElement('p');
-    var link = document.createElement('a');
-    var commentLines = [
-      'IMPORTANT: Your crash has already been automatically reported ' +
-      'to our crash system. Please file this bug only if you can provide ' +
-      'more information about it.',
-      '',
-      '',
-      'Chrome Version: ' + version,
-      'Operating System: ' + os,
-      '',
-      'URL (if applicable) where crash occurred:',
-      '',
-      'Can you reproduce this crash?',
-      '',
-      'What steps will reproduce this crash? (If it\'s not ' +
-      'reproducible, what were you doing just before the crash?)',
-      '1.', '2.', '3.',
-      '',
-      '****DO NOT CHANGE BELOW THIS LINE****',
-      'Crash ID: crash/' + crash.id
-    ];
-    var params = {
-      template: 'Crash Report',
-      comment: commentLines.join('\n'),
-    };
-    var href = 'https://code.google.com/p/chromium/issues/entry';
-    for (var param in params) {
-      href = appendParam(href, param, params[param]);
+    var uploaded = crash['state'] == 'uploaded';
+    if (uploaded) {
+      title.textContent = loadTimeData.getStringF('crashHeaderFormat',
+                                                  crash['id'],
+                                                  crash['local_id']);
+    } else {
+      title.textContent = loadTimeData.getStringF('crashHeaderFormatLocalOnly',
+                                                  crash['local_id']);
     }
-    link.href = href;
-    link.target = '_blank';
-    link.textContent = loadTimeData.getString('bugLinkText');
-    linkBlock.appendChild(link);
-    crashBlock.appendChild(linkBlock);
+    crashBlock.appendChild(title);
+    if (uploaded) {
+      var date = document.createElement('p');
+      date.textContent = loadTimeData.getStringF('crashTimeFormat',
+                                                 crash['time']);
+      crashBlock.appendChild(date);
+      var linkBlock = document.createElement('p');
+      var link = document.createElement('a');
+      var commentLines = [
+        'IMPORTANT: Your crash has already been automatically reported ' +
+        'to our crash system. Please file this bug only if you can provide ' +
+        'more information about it.',
+        '',
+        '',
+        'Chrome Version: ' + version,
+        'Operating System: ' + os,
+        '',
+        'URL (if applicable) where crash occurred:',
+        '',
+        'Can you reproduce this crash?',
+        '',
+        'What steps will reproduce this crash? (If it\'s not ' +
+        'reproducible, what were you doing just before the crash?)',
+        '1.', '2.', '3.',
+        '',
+        '****DO NOT CHANGE BELOW THIS LINE****',
+        'Crash ID: crash/' + crash.id
+      ];
+      var params = {
+        template: 'Crash Report',
+        comment: commentLines.join('\n'),
+        // TODO(scottmg): Use add_labels to add 'User-Submitted' rather than
+        // duplicating the template's labels (the first two) once
+        // https://bugs.chromium.org/p/monorail/issues/detail?id=1488 is done.
+        labels: 'Restrict-View-EditIssue,Stability-Crash,User-Submitted',
+      };
+      var href = 'https://code.google.com/p/chromium/issues/entry';
+      for (var param in params) {
+        href = appendParam(href, param, params[param]);
+      }
+      link.href = href;
+      link.target = '_blank';
+      link.textContent = loadTimeData.getString('bugLinkText');
+      linkBlock.appendChild(link);
+      crashBlock.appendChild(linkBlock);
+    } else if (crash['state'] == 'pending') {
+      var pending = document.createElement('p');
+      pending.textContent = loadTimeData.getStringF('crashPending',
+                                                    crash['time']);
+      crashBlock.appendChild(pending);
+    } else if (crash['state'] == 'not_uploaded') {
+      var not_uploaded = document.createElement('p');
+      not_uploaded.textContent = loadTimeData.getStringF('crashNotUploaded',
+                                                         crash['time']);
+      crashBlock.appendChild(not_uploaded);
+    }
     crashSection.appendChild(crashBlock);
   }
 

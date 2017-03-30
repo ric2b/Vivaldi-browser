@@ -108,7 +108,7 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
                                 LayerTreeHostImpl* host_impl) {
     LayerImplList update_list;
     LayerTreeHostCommon::CalcDrawPropsImplInputs inputs(
-        active_tree->root_layer(), active_tree->DrawViewportSize(),
+        active_tree->root_layer_for_testing(), active_tree->DrawViewportSize(),
         host_impl->DrawTransform(), active_tree->device_scale_factor(),
         active_tree->current_page_scale_factor(),
         active_tree->InnerViewportContainerLayer(),
@@ -116,8 +116,6 @@ class CalcDrawPropsTest : public LayerTreeHostCommonPerfTest {
         active_tree->OuterViewportScrollLayer(),
         active_tree->elastic_overscroll()->Current(active_tree->IsActiveTree()),
         active_tree->OverscrollElasticityLayer(), max_texture_size,
-        host_impl->settings().can_use_lcd_text,
-        host_impl->settings().layers_always_allowed_lcd_text,
         can_render_to_separate_surface,
         host_impl->settings().layer_transforms_should_scale_layer_contents,
         false,  // do not verify_clip_tree_calculation for perf tests
@@ -149,7 +147,7 @@ class BspTreePerfTest : public CalcDrawPropsTest {
                              host_impl);
 
     LayerImplList base_list;
-    BuildLayerImplList(active_tree->root_layer(), &base_list);
+    BuildLayerImplList(active_tree->root_layer_for_testing(), &base_list);
 
     int polygon_counter = 0;
     std::vector<std::unique_ptr<DrawPolygon>> polygon_list;

@@ -44,7 +44,7 @@ class TestDevToolsClientHost : public DevToolsAgentHostClient {
   void Close() {
     EXPECT_FALSE(closed_);
     close_counter++;
-    agent_host_->DetachClient();
+    agent_host_->DetachClient(this);
     closed_ = true;
   }
 
@@ -144,7 +144,8 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
 
   // Start with a short timeout.
   inspected_rvh->GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10));
+      TimeDelta::FromMilliseconds(10),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -156,7 +157,8 @@ TEST_F(DevToolsManagerTest, NoUnresponsiveDialogInInspectedContents) {
   client_host.Close();
   // Start with a short timeout.
   inspected_rvh->GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(10));
+      TimeDelta::FromMilliseconds(10),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_UNKNOWN);
   // Wait long enough for first timeout and see if it fired.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -247,9 +249,9 @@ TEST_F(DevToolsManagerTest, TestExternalProxy) {
 
   TestDevToolsClientHost client_host;
   client_host.InspectAgentHost(agent_host.get());
-  agent_host->DispatchProtocolMessage("message1");
-  agent_host->DispatchProtocolMessage("message2");
-  agent_host->DispatchProtocolMessage("message2");
+  agent_host->DispatchProtocolMessage(&client_host, "message1");
+  agent_host->DispatchProtocolMessage(&client_host, "message2");
+  agent_host->DispatchProtocolMessage(&client_host, "message2");
 
   client_host.Close();
 }

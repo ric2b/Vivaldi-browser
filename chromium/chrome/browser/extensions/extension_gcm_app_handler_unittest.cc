@@ -18,7 +18,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/values.h"
@@ -91,9 +90,7 @@ class Waiter {
   }
 
   // Runs until UI loop becomes idle.
-  void PumpUILoop() {
-    base::MessageLoop::current()->RunUntilIdle();
-  }
+  void PumpUILoop() { base::RunLoop().RunUntilIdle(); }
 
   // Runs until IO loop becomes idle.
   void PumpIOLoop() {
@@ -289,7 +286,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     manifest.SetString(manifest_keys::kVersion, "1.0.0.0");
     manifest.SetString(manifest_keys::kName, kTestExtensionName);
     base::ListValue* permission_list = new base::ListValue;
-    permission_list->Append(new base::StringValue("gcm"));
+    permission_list->AppendString("gcm");
     manifest.Set(manifest_keys::kPermissions, permission_list);
 
     std::string error;

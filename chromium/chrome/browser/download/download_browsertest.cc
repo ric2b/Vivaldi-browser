@@ -47,6 +47,7 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/net/url_request_mock_util.h"
+#include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_browsertest_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
@@ -110,8 +111,7 @@
 #if defined(FULL_SAFE_BROWSING)
 #include "chrome/browser/safe_browsing/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection_service.h"
-#include "chrome/browser/safe_browsing/safe_browsing_database.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #endif
 
 using content::BrowserContext;
@@ -419,11 +419,6 @@ class DownloadTest : public InProcessBrowserTest {
   DownloadTest() {}
 
   void SetUpOnMainThread() override {
-    base::FeatureList::ClearInstanceForTesting();
-    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
-    feature_list->InitializeFromCommandLine(
-        features::kDownloadResumption.name, std::string());
-    base::FeatureList::SetInstance(std::move(feature_list));
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&chrome_browser_net::SetUrlRequestMocksEnabled, true));
@@ -883,7 +878,8 @@ class DownloadTest : public InProcessBrowserTest {
           creation_observer(new content::DownloadTestItemCreationObserver);
 
       std::unique_ptr<DownloadUrlParameters> params(
-          DownloadUrlParameters::FromWebContents(web_contents, starting_url));
+          DownloadUrlParameters::CreateForWebContentsMainFrame(
+              web_contents, starting_url));
       params->set_callback(creation_observer->callback());
       DownloadManagerForBrowser(browser())->DownloadUrl(std::move(params));
 
@@ -1089,15 +1085,13 @@ class FakeDownloadProtectionService
 };
 
 class FakeSafeBrowsingService
-    : public safe_browsing::SafeBrowsingService,
+    : public safe_browsing::TestSafeBrowsingService,
       public safe_browsing::ServicesDelegate::ServicesCreator {
  public:
   FakeSafeBrowsingService() {
     services_delegate_ =
         safe_browsing::ServicesDelegate::CreateForTest(this, this);
   }
-
-  std::string GetDownloadReport() const { return report_; }
 
  protected:
   ~FakeSafeBrowsingService() override {}
@@ -1120,13 +1114,6 @@ class FakeSafeBrowsingService
     NOTREACHED();
     return nullptr;
   }
-
-  // SafeBrowsingService:
-  void SendSerializedDownloadReport(const std::string& report) override {
-    report_ = report;
-  }
-
-  std::string report_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeSafeBrowsingService);
 };
@@ -1689,7 +1676,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, CloseNewTab4) {
 
   // Download a file in that new tab, having it open a file picker
   std::unique_ptr<DownloadUrlParameters> params(
-      DownloadUrlParameters::FromWebContents(new_tab, slow_download_url));
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          new_tab, slow_download_url));
   params->set_prompt(true);
   manager->DownloadUrl(std::move(params));
   observer->WaitForFinished();
@@ -1933,6 +1921,9 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, BrowserCloseAfterDownload) {
 
   DownloadAndWait(browser(), download_url);
 
+  // Close the notifications as they would prevent the browser from quitting.
+  g_browser_process->notification_ui_manager()->CancelAll();
+
   content::WindowedNotificationObserver signal(
       chrome::NOTIFICATION_BROWSER_CLOSED,
       content::Source<Browser>(browser()));
@@ -2156,7 +2147,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadUrl) {
           DownloadManagerForBrowser(browser()), 1,
           content::DownloadTestObserver::ON_DANGEROUS_DOWNLOAD_FAIL));
   std::unique_ptr<DownloadUrlParameters> params(
-      DownloadUrlParameters::FromWebContents(web_contents, url));
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          web_contents, url));
   params->set_prompt(true);
   DownloadManagerForBrowser(browser())->DownloadUrl(std::move(params));
   observer->WaitForFinished();
@@ -2184,7 +2176,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, DownloadUrlToPath) {
       = other_directory.path().Append(file.BaseName());
   content::DownloadTestObserver* observer(CreateWaiter(browser(), 1));
   std::unique_ptr<DownloadUrlParameters> params(
-      DownloadUrlParameters::FromWebContents(web_contents, url));
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          web_contents, url));
   params->set_file_path(target_file_full_path);
   DownloadManagerForBrowser(browser())->DownloadUrl(std::move(params));
   observer->WaitForFinished();
@@ -2804,6 +2797,7 @@ IN_PROC_BROWSER_TEST_F(DownloadTest, TestMultipleDownloadsBubble) {
       DownloadItem::COMPLETE));
 
   browser()->tab_strip_model()->GetActiveWebContents()->Close();
+  g_browser_process->notification_ui_manager()->CancelAll();
 }
 #endif
 
@@ -3380,7 +3374,7 @@ IN_PROC_BROWSER_TEST_F(
   safe_browsing::ClientSafeBrowsingReportRequest actual_report;
   actual_report.ParseFromString(
       test_safe_browsing_factory_->fake_safe_browsing_service()
-          ->GetDownloadReport());
+          ->serilized_download_report());
   EXPECT_EQ(safe_browsing::ClientSafeBrowsingReportRequest::
                 DANGEROUS_DOWNLOAD_WARNING,
             actual_report.type());
@@ -3413,9 +3407,9 @@ IN_PROC_BROWSER_TEST_F(
   DownloadItem* download = downloads[0];
   DownloadCommands(download).ExecuteCommand(DownloadCommands::DISCARD);
 
-  EXPECT_TRUE(
-      test_safe_browsing_factory_->fake_safe_browsing_service()
-          ->GetDownloadReport().empty());
+  EXPECT_TRUE(test_safe_browsing_factory_->fake_safe_browsing_service()
+                  ->serilized_download_report()
+                  .empty());
 }
 #endif  // FULL_SAFE_BROWSING
 
@@ -3639,7 +3633,8 @@ IN_PROC_BROWSER_TEST_F(DownloadTestWithShelf, HiddenDownload) {
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   std::unique_ptr<DownloadUrlParameters> params(
-      DownloadUrlParameters::FromWebContents(web_contents, url));
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          web_contents, url));
   params->set_callback(base::Bind(&SetHiddenDownloadCallback));
   download_manager->DownloadUrl(std::move(params));
   observer->WaitForFinished();

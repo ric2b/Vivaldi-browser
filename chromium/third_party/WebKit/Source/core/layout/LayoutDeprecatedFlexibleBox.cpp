@@ -326,7 +326,7 @@ void LayoutDeprecatedFlexibleBox::computeIntrinsicLogicalWidths(LayoutUnit& minL
 
     maxLogicalWidth = std::max(minLogicalWidth, maxLogicalWidth);
 
-    LayoutUnit scrollbarWidth(intrinsicScrollbarLogicalWidth());
+    LayoutUnit scrollbarWidth(scrollbarLogicalWidth());
     maxLogicalWidth += scrollbarWidth;
     minLogicalWidth += scrollbarWidth;
 }
@@ -423,7 +423,7 @@ void LayoutDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren)
     bool haveFlex = false, flexingChildren = false;
     gatherFlexChildrenInfo(iterator, relayoutChildren, highestFlexGroup, lowestFlexGroup, haveFlex);
 
-    LayoutBlock::startDelayUpdateScrollInfo();
+    PaintLayerScrollableArea::DelayScrollPositionClampScope delayClampScope;
 
     // We do 2 passes.  The first pass is simply to lay everyone out at
     // their preferred widths.  The second pass handles flexing the children.
@@ -646,13 +646,11 @@ void LayoutDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren)
         }
     } while (haveFlex);
 
-    LayoutBlock::finishDelayUpdateScrollInfo(nullptr, nullptr);
-
-    if (remainingSpace > 0 && ((style()->isLeftToRightDirection() && style()->boxPack() != Start)
-        || (!style()->isLeftToRightDirection() && style()->boxPack() != End))) {
+    if (remainingSpace > 0 && ((style()->isLeftToRightDirection() && style()->boxPack() != BoxPackStart)
+        || (!style()->isLeftToRightDirection() && style()->boxPack() != BoxPackEnd))) {
         // Children must be repositioned.
         LayoutUnit offset;
-        if (style()->boxPack() == Justify) {
+        if (style()->boxPack() == BoxPackJustify) {
             // Determine the total number of children.
             int totalChildren = 0;
             for (LayoutBox* child = iterator.first(); child; child = iterator.next()) {
@@ -683,7 +681,7 @@ void LayoutDeprecatedFlexibleBox::layoutHorizontalBox(bool relayoutChildren)
                 }
             }
         } else {
-            if (style()->boxPack() == Center)
+            if (style()->boxPack() == BoxPackCenter)
                 offset += remainingSpace / 2;
             else // END for LTR, START for RTL
                 offset += remainingSpace;
@@ -723,7 +721,7 @@ void LayoutDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren)
     if (haveLineClamp)
         applyLineClamp(iterator, relayoutChildren);
 
-    LayoutBlock::startDelayUpdateScrollInfo();
+    PaintLayerScrollableArea::DelayScrollPositionClampScope delayClampScope;
 
     // We do 2 passes.  The first pass is simply to lay everyone out at
     // their preferred widths.  The second pass handles flexing the children.
@@ -897,12 +895,10 @@ void LayoutDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren)
         }
     } while (haveFlex);
 
-    LayoutBlock::finishDelayUpdateScrollInfo(nullptr, nullptr);
-
-    if (style()->boxPack() != Start && remainingSpace > 0) {
+    if (style()->boxPack() != BoxPackStart && remainingSpace > 0) {
         // Children must be repositioned.
         LayoutUnit offset;
-        if (style()->boxPack() == Justify) {
+        if (style()->boxPack() == BoxPackJustify) {
             // Determine the total number of children.
             int totalChildren = 0;
             for (LayoutBox* child = iterator.first(); child; child = iterator.next()) {
@@ -933,7 +929,7 @@ void LayoutDeprecatedFlexibleBox::layoutVerticalBox(bool relayoutChildren)
                 }
             }
         } else {
-            if (style()->boxPack() == Center)
+            if (style()->boxPack() == BoxPackCenter)
                 offset += remainingSpace / 2;
             else // END
                 offset += remainingSpace;

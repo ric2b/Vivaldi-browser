@@ -159,6 +159,37 @@ TEST_F(ScrollAnchorTest, AnchorWithLayerInScrollingDiv)
     EXPECT_EQ(250, scroller->scrollPosition().y());
 }
 
+TEST_F(ScrollAnchorTest, ExcludeAnonymousCandidates)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { height: 3500px }"
+        "    #div {"
+        "        position: relative; background-color: pink;"
+        "        top: 5px; left: 5px; width: 100px; height: 3500px;"
+        "    }"
+        "    #inline { padding-left: 10px }"
+        "</style>"
+        "<div id='div'>"
+        "    <a id='inline'>text</a>"
+        "    <p id='block'>Some text</p>"
+        "</div>");
+
+    ScrollableArea* viewport = layoutViewport();
+    Element* inlineElem = document().getElementById("inline");
+    EXPECT_TRUE(inlineElem->layoutObject()->parent()->isAnonymous());
+
+    // Scroll #div into view, making anonymous block a viable candidate.
+    document().getElementById("div")->scrollIntoView();
+
+    // Trigger layout and verify that we don't anchor to the anonymous block.
+    document().getElementById("div")->setAttribute(HTMLNames::styleAttr,
+        AtomicString("top: 6px"));
+    update();
+    EXPECT_EQ(inlineElem->layoutObject()->slowFirstChild(),
+        scrollAnchor(viewport).anchorObject());
+}
+
 TEST_F(ScrollAnchorTest, FullyContainedInlineBlock)
 {
     // Exercises every WalkStatus value:
@@ -211,7 +242,7 @@ TEST_F(ScrollAnchorTest, ExcludeFixedPosition)
 {
     setBodyInnerHTML(
         "<style>"
-        "    body { height: 1000px; padding: 20px }"
+        "    body { height: 1000px; padding: 20px; }"
         "    div { position: relative; top: 100px; }"
         "    #f { position: fixed }"
         "</style>"
@@ -225,7 +256,9 @@ TEST_F(ScrollAnchorTest, ExcludeFixedPosition)
         scrollAnchor(layoutViewport()).anchorObject());
 }
 
-TEST_F(ScrollAnchorTest, ExcludeAbsolutePosition)
+// This test verifies that position:absolute elements that stick to the viewport
+// are not selected as anchors.
+TEST_F(ScrollAnchorTest, ExcludeAbsolutePositionThatSticksToViewport)
 {
     setBodyInnerHTML(
         "<style>"
@@ -234,7 +267,7 @@ TEST_F(ScrollAnchorTest, ExcludeAbsolutePosition)
         "    #space { height: 1000px; }"
         "    #abs {"
         "        position: absolute; background-color: red;"
-        "        left: 200px; top: 100px; width: 100px; height: 100px;"
+        "        width: 100px; height: 100px;"
         "    }"
         "    #rel {"
         "        position: relative; background-color: green;"
@@ -263,6 +296,71 @@ TEST_F(ScrollAnchorTest, ExcludeAbsolutePosition)
 
     // When the scroller is position:relative, the anchor may be position:absolute.
     EXPECT_EQ(absPos->layoutObject(), scrollAnchor(scroller).anchorObject());
+}
+
+// This test verifies that position:absolute elements with top/right/bottom/left
+// set are not selected as anchors.
+TEST_F(ScrollAnchorTest, ExcludeOffsettedAbsolutePosition)
+{
+    setBodyInnerHTML(
+        "<style>"
+        "    body { margin: 0; }"
+        "    #scroller { overflow: scroll; width: 500px; height: 400px; position:relative; }"
+        "    #space { height: 1000px; }"
+        "    #abs {"
+        "        position: absolute; background-color: red;"
+        "        width: 100px; height: 100px;"
+        "    }"
+        "    #rel {"
+        "        position: relative; background-color: green;"
+        "        left: 50px; top: 100px; width: 100px; height: 75px;"
+        "    }"
+        "    .top { top: 10px }"
+        "    .left { left: 10px }"
+        "    .right { right: 10px }"
+        "    .bottom { bottom: 10px }"
+        "</style>"
+        "<div id='scroller'><div id='space'>"
+        "    <div id='abs'></div>"
+        "    <div id='rel'></div>"
+        "</div></div>");
+
+    Element* scrollerElement = document().getElementById("scroller");
+    ScrollableArea* scroller = scrollerForElement(scrollerElement);
+    Element* relPos = document().getElementById("rel");
+    Element* absPos = document().getElementById("abs");
+
+    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
+    setHeight(relPos, 100);
+    // Pick absolute anchor.
+    EXPECT_EQ(absPos->layoutObject(), scrollAnchor(scroller).anchorObject());
+
+    absPos->setAttribute(HTMLNames::classAttr, "top");
+    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
+    setHeight(relPos, 125);
+    // Don't pick absolute anchor since top is set.
+    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
+
+    absPos->removeAttribute(HTMLNames::classAttr);
+    absPos->setAttribute(HTMLNames::classAttr, "right");
+    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
+    setHeight(relPos, 150);
+    // Don't pick absolute anchor since right is set.
+    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
+
+    absPos->removeAttribute(HTMLNames::classAttr);
+    absPos->setAttribute(HTMLNames::classAttr, "bottom");
+    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
+    setHeight(relPos, 175);
+    // Don't pick absolute anchor since bottom is set.
+    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
+
+    absPos->removeAttribute(HTMLNames::classAttr);
+    absPos->setAttribute(HTMLNames::classAttr, "left");
+    scroller->scrollBy(DoubleSize(0, 25), UserScroll);
+    setHeight(relPos, 200);
+    // Don't pick absolute anchor since left is set.
+    EXPECT_EQ(relPos->layoutObject(), scrollAnchor(scroller).anchorObject());
 }
 
 // Test that we descend into zero-height containers that have overflowing content.

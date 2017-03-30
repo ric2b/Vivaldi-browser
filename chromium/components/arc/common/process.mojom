@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 4
+// Next MinVersion: 5
 
 module arc.mojom;
 
@@ -84,25 +84,28 @@ struct RunningAppProcessInfo {
 
   // Current process state.
   ProcessState process_state;
+
+  // Package names running in the process.
+  [MinVersion=4] array<string>? packages;
 };
 
 interface ProcessInstance {
   // Requests ARC instance to return the current process list.
-  RequestProcessList() => (array<RunningAppProcessInfo> processes);
+  RequestProcessList@0() => (array<RunningAppProcessInfo> processes);
 
   // Requests ARC instance to kill a process.
   [MinVersion=1]
-  KillProcess(uint32 pid, string reason);
+  KillProcess@1(uint32 pid, string reason);
 
   // Sets oom_score_adj of a process.
   [MinVersion=2]
-  SetOomScoreAdj(uint32 pid, int32 score);
+  SetOomScoreAdj@2(uint32 pid, int32 score);
 
   // Disables Android built-in oom_adj adjustment.
   [MinVersion=2]
-  DisableBuiltinOomAdjustment();
+  DisableBuiltinOomAdjustment@3();
 
   // Disables Android lowmemorykiller.
   [MinVersion=3]
-  DisableLowMemoryKiller();
+  DisableLowMemoryKiller@4();
 };

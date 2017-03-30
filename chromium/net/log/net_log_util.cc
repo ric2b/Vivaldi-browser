@@ -385,7 +385,8 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
         const HostCache::Key& key = pair.first;
         const HostCache::Entry& entry = pair.second;
 
-        base::DictionaryValue* entry_dict = new base::DictionaryValue();
+        std::unique_ptr<base::DictionaryValue> entry_dict(
+            new base::DictionaryValue());
 
         entry_dict->SetString("hostname", key.hostname);
         entry_dict->SetInteger("address_family",
@@ -404,7 +405,7 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
           entry_dict->Set("addresses", address_list);
         }
 
-        entry_list->Append(entry_dict);
+        entry_list->Append(std::move(entry_dict));
       }
 
       cache_info_dict->Set("entries", entry_list);
@@ -436,9 +437,6 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
     status_dict->SetBoolean("enable_http2",
                             http_network_session->params().enable_http2 &&
                                 HttpStreamFactory::spdy_enabled());
-    status_dict->SetBoolean(
-        "use_alternative_services",
-        http_network_session->params().parse_alternative_services);
 
     NextProtoVector alpn_protos;
     http_network_session->GetAlpnProtos(&alpn_protos);
@@ -521,12 +519,12 @@ NET_EXPORT void CreateNetLogEntriesForActiveObjects(
     NetLog::ThreadSafeObserver* observer) {
   // Put together the list of all requests.
   std::vector<const URLRequest*> requests;
-  for (const auto& context : contexts) {
+  for (auto* context : contexts) {
     // May only be called on the context's thread.
     DCHECK(context->CalledOnValidThread());
     // Contexts should all be using the same NetLog.
     DCHECK_EQ((*contexts.begin())->net_log(), context->net_log());
-    for (const auto& request : *context->url_requests()) {
+    for (auto* request : *context->url_requests()) {
       requests.push_back(request);
     }
   }
@@ -535,7 +533,7 @@ NET_EXPORT void CreateNetLogEntriesForActiveObjects(
   std::sort(requests.begin(), requests.end(), RequestCreatedBefore);
 
   // Create fake events.
-  for (const auto& request : requests) {
+  for (auto* request : requests) {
     NetLog::ParametersCallback callback =
         base::Bind(&GetRequestStateAsValue, base::Unretained(request));
 

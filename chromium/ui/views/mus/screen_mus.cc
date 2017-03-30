@@ -4,15 +4,19 @@
 
 #include "ui/views/mus/screen_mus.h"
 
-#include "mojo/converters/geometry/geometry_type_converters.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
 #include "ui/aura/window.h"
 #include "ui/display/display_finder.h"
 #include "ui/display/display_observer.h"
-#include "ui/mojo/display/display_type_converters.h"
+#include "ui/display/mojo/display_type_converters.h"
 #include "ui/views/mus/screen_mus_delegate.h"
 #include "ui/views/mus/window_manager_frame_values.h"
+
+#ifdef NOTIMPLEMENTED
+#undef NOTIMPLEMENTED
+#define NOTIMPLEMENTED() DVLOG(1) << "notimplemented"
+#endif
 
 namespace mojo {
 
@@ -22,9 +26,8 @@ struct TypeConverter<views::WindowManagerFrameValues,
   static views::WindowManagerFrameValues Convert(
       const mus::mojom::FrameDecorationValuesPtr& input) {
     views::WindowManagerFrameValues result;
-    result.normal_insets = input->normal_client_area_insets.To<gfx::Insets>();
-    result.maximized_insets =
-        input->maximized_client_area_insets.To<gfx::Insets>();
+    result.normal_insets = input->normal_client_area_insets;
+    result.maximized_insets = input->maximized_client_area_insets;
     result.max_title_bar_button_width = input->max_title_bar_button_width;
     return result;
   }
@@ -39,7 +42,10 @@ ScreenMus::ScreenMus(ScreenMusDelegate* delegate)
       display_manager_observer_binding_(this) {
 }
 
-ScreenMus::~ScreenMus() {}
+ScreenMus::~ScreenMus() {
+  DCHECK_EQ(this, display::Screen::GetScreen());
+  display::Screen::SetScreenInstance(nullptr);
+}
 
 void ScreenMus::Init(shell::Connector* connector) {
   display::Screen::SetScreenInstance(this);
@@ -112,7 +118,7 @@ display::Display ScreenMus::GetPrimaryDisplay() const {
 
 display::Display ScreenMus::GetDisplayNearestWindow(
     gfx::NativeView view) const {
-  //NOTIMPLEMENTED();
+  NOTIMPLEMENTED();
   return *display_list_.GetPrimaryDisplayIterator();
 }
 

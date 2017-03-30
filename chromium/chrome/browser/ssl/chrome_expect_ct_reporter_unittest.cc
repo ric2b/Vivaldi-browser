@@ -15,11 +15,11 @@
 #include "base/values.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "net/base/test_data_directory.h"
 #include "net/ssl/signed_certificate_timestamp_and_status.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_failed_job.h"
-#include "net/url_request/certificate_report_sender.h"
+#include "net/url_request/report_sender.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,14 +30,12 @@ namespace {
 const char kSendHistogramName[] = "SSL.ExpectCTReportSendingAttempt";
 const char kFailureHistogramName[] = "SSL.ExpectCTReportFailure";
 
-// A test CertificateReportSender that exposes the latest report URI and
+// A test ReportSender that exposes the latest report URI and
 // serialized report to be sent.
-class TestCertificateReportSender : public net::CertificateReportSender {
+class TestCertificateReportSender : public net::ReportSender {
  public:
   TestCertificateReportSender()
-      : CertificateReportSender(
-            nullptr,
-            net::CertificateReportSender::DO_NOT_SEND_COOKIES) {}
+      : ReportSender(nullptr, net::ReportSender::DO_NOT_SEND_COOKIES) {}
   ~TestCertificateReportSender() override {}
 
   void Send(const GURL& report_uri,

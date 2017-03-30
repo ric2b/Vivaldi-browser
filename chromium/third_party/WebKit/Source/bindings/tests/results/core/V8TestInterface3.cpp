@@ -149,7 +149,7 @@ static void forEachMethod(const v8::FunctionCallbackInfo<v8::Value>& info)
         thisArg = ScriptValue(ScriptState::current(info.GetIsolate()), info[1]);
     }
     ScriptState* scriptState = ScriptState::current(info.GetIsolate());
-    impl->forEachForBinding(scriptState, ScriptValue(scriptState, info.This()), callback, thisArg, exceptionState);
+    impl->forEachForBinding(scriptState, ScriptValue(scriptState, info.Holder()), callback, thisArg, exceptionState);
     if (exceptionState.hadException()) {
         exceptionState.throwIfNeeded();
         return;
@@ -299,6 +299,7 @@ v8::Local<v8::FunctionTemplate> V8TestInterface3::domTemplate(v8::Isolate* isola
     return V8DOMConfiguration::domClassTemplate(isolate, world, const_cast<WrapperTypeInfo*>(&wrapperTypeInfo), installV8TestInterface3Template);
 }
 
+
 bool V8TestInterface3::hasInstance(v8::Local<v8::Value> v8Value, v8::Isolate* isolate)
 {
     return V8PerIsolateData::from(isolate)->hasInstance(&wrapperTypeInfo, v8Value);
@@ -311,7 +312,7 @@ v8::Local<v8::Object> V8TestInterface3::findInstanceInPrototypeChain(v8::Local<v
 
 TestInterface3* V8TestInterface3::toImplWithTypeCheck(v8::Isolate* isolate, v8::Local<v8::Value> value)
 {
-    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : 0;
+    return hasInstance(value, isolate) ? toImpl(v8::Local<v8::Object>::Cast(value)) : nullptr;
 }
 
 } // namespace blink

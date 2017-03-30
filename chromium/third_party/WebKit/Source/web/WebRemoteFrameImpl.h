@@ -6,13 +6,14 @@
 #define WebRemoteFrameImpl_h
 
 #include "core/frame/RemoteFrame.h"
+#include "platform/heap/SelfKeepAlive.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/web/WebRemoteFrame.h"
 #include "public/web/WebRemoteFrameClient.h"
 #include "web/RemoteFrameClientImpl.h"
 #include "web/WebExport.h"
 #include "web/WebFrameImplBase.h"
 #include "wtf/Compiler.h"
-#include "wtf/OwnPtr.h"
 
 namespace blink {
 
@@ -45,7 +46,6 @@ public:
     WebView* view() const override;
     WebDocument document() const override;
     WebPerformance performance() const override;
-    bool dispatchBeforeUnloadEvent() override;
     void dispatchUnloadEvent() override;
     void executeScript(const WebScriptSource&) override;
     void executeScriptInIsolatedWorld(
@@ -157,7 +157,7 @@ public:
     void setReplicatedName(const WebString& name, const WebString& uniqueName) const override;
     void addReplicatedContentSecurityPolicyHeader(const WebString& headerValue, WebContentSecurityPolicyType, WebContentSecurityPolicySource) const override;
     void resetReplicatedContentSecurityPolicy() const override;
-    void setReplicatedShouldEnforceStrictMixedContentChecking(bool) const override;
+    void setReplicatedInsecureRequestPolicy(WebInsecureRequestPolicy) const override;
     void setReplicatedPotentiallyTrustworthyUniqueOrigin(bool) const override;
     void DispatchLoadEventForFrameOwner() const override;
 
@@ -165,6 +165,8 @@ public:
     void didStopLoading() override;
 
     bool isIgnoredForHitTest() const override;
+
+    void willEnterFullScreen() override;
 
     DECLARE_TRACE();
 

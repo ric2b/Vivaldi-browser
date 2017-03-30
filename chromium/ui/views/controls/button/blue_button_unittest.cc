@@ -7,6 +7,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/skia_util.h"
 #include "ui/views/controls/button/label_button_border.h"
@@ -24,6 +25,7 @@ TEST_F(BlueButtonTest, Border) {
   // Compared to a normal LabelButton...
   LabelButton* button = new LabelButton(nullptr, base::ASCIIToUTF16("foo"));
   EXPECT_EQ(Button::STYLE_TEXTBUTTON, button->style());
+  // Focus painter by default.
   EXPECT_TRUE(button->focus_painter());
 
   // Switch to the same style as BlueButton for a more compelling comparison.

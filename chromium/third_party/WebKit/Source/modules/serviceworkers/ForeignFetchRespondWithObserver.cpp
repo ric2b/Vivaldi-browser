@@ -4,13 +4,14 @@
 
 #include "modules/serviceworkers/ForeignFetchRespondWithObserver.h"
 
+#include "core/fetch/CrossOriginAccessControl.h"
 #include "modules/serviceworkers/ForeignFetchResponse.h"
 
 namespace blink {
 
-ForeignFetchRespondWithObserver* ForeignFetchRespondWithObserver::create(ExecutionContext* context, int eventID, const KURL& requestURL, WebURLRequest::FetchRequestMode requestMode, WebURLRequest::FrameType frameType, WebURLRequest::RequestContext requestContext, PassRefPtr<SecurityOrigin> requestOrigin)
+ForeignFetchRespondWithObserver* ForeignFetchRespondWithObserver::create(ExecutionContext* context, int eventID, const KURL& requestURL, WebURLRequest::FetchRequestMode requestMode, WebURLRequest::FrameType frameType, WebURLRequest::RequestContext requestContext, PassRefPtr<SecurityOrigin> requestOrigin, WaitUntilObserver* observer)
 {
-    return new ForeignFetchRespondWithObserver(context, eventID, requestURL, requestMode, frameType, requestContext, requestOrigin);
+    return new ForeignFetchRespondWithObserver(context, eventID, requestURL, requestMode, frameType, requestContext, requestOrigin, observer);
 }
 
 void ForeignFetchRespondWithObserver::responseWasFulfilled(const ScriptValue& value)
@@ -44,14 +45,29 @@ void ForeignFetchRespondWithObserver::responseWasFulfilled(const ScriptValue& va
         responseWasRejected(WebServiceWorkerResponseErrorForeignFetchMismatchedOrigin);
         return;
     } else if (!isOpaque) {
-        // TODO(mek): Handle |headers| response attribute, and properly filter response.
+        HTTPHeaderSet headers;
+        if (foreignFetchResponse.hasHeaders()) {
+            for (const String& header : foreignFetchResponse.headers())
+                headers.add(header);
+            if (response->response()->getType() == FetchResponseData::CORSType) {
+                const HTTPHeaderSet& existingHeaders = response->response()->corsExposedHeaderNames();
+                HTTPHeaderSet headersToRemove;
+                for (HTTPHeaderSet::iterator it = headers.begin(); it != headers.end(); ++it) {
+                    if (!existingHeaders.contains(*it))
+                        headersToRemove.add(*it);
+                }
+                headers.removeAll(headersToRemove);
+            }
+        }
+        FetchResponseData* responseData = internalResponse->createCORSFilteredResponse(headers);
+        response = Response::create(getExecutionContext(), responseData);
     }
 
     RespondWithObserver::responseWasFulfilled(ScriptValue::from(value.getScriptState(), response));
 }
 
-ForeignFetchRespondWithObserver::ForeignFetchRespondWithObserver(ExecutionContext* context, int eventID, const KURL& requestURL, WebURLRequest::FetchRequestMode requestMode, WebURLRequest::FrameType frameType, WebURLRequest::RequestContext requestContext, PassRefPtr<SecurityOrigin> requestOrigin)
-    : RespondWithObserver(context, eventID, requestURL, requestMode, frameType, requestContext)
+ForeignFetchRespondWithObserver::ForeignFetchRespondWithObserver(ExecutionContext* context, int eventID, const KURL& requestURL, WebURLRequest::FetchRequestMode requestMode, WebURLRequest::FrameType frameType, WebURLRequest::RequestContext requestContext, PassRefPtr<SecurityOrigin> requestOrigin, WaitUntilObserver* observer)
+    : RespondWithObserver(context, eventID, requestURL, requestMode, frameType, requestContext, observer)
     , m_requestOrigin(requestOrigin)
 {
 }

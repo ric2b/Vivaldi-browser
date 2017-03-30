@@ -11,6 +11,7 @@ goog.provide('DesktopAutomationHandler');
 goog.require('AutomationObjectConstructorInstaller');
 goog.require('BaseAutomationHandler');
 goog.require('ChromeVoxState');
+goog.require('Stubs');
 goog.require('editing.TextEditHandler');
 
 goog.scope(function() {
@@ -45,15 +46,15 @@ DesktopAutomationHandler = function(node) {
   this.addListener_(e.activedescendantchanged, this.onActiveDescendantChanged);
   this.addListener_(e.alert, this.onAlert);
   this.addListener_(e.ariaAttributeChanged, this.onEventIfInRange);
-  this.addListener_(e.checkedStateChanged, this.onEventIfInRange);
+  this.addListener_(e.checkedStateChanged, this.onCheckedStateChanged);
   this.addListener_(e.focus, this.onFocus);
-  this.addListener_(e.hover, this.onEventWithFlushedOutput);
+  this.addListener_(e.hover, this.onHover);
   this.addListener_(e.loadComplete, this.onLoadComplete);
   this.addListener_(e.menuEnd, this.onMenuEnd);
   this.addListener_(e.menuListItemSelected, this.onEventIfSelected);
   this.addListener_(e.menuStart, this.onMenuStart);
   this.addListener_(e.scrollPositionChanged, this.onScrollPositionChanged);
-  this.addListener_(e.selection, this.onEventWithFlushedOutput);
+  this.addListener_(e.selection, this.onSelection);
   this.addListener_(e.textChanged, this.onTextChanged);
   this.addListener_(e.textSelectionChanged, this.onTextSelectionChanged);
   this.addListener_(e.valueChanged, this.onValueChanged);
@@ -98,18 +99,10 @@ DesktopAutomationHandler.prototype = {
 
     ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(node));
 
-    // Check to see if we've crossed roots. Continue if we've crossed roots or
-    // are not within web content.
-    if (node.root.role == RoleType.desktop ||
-        !prevRange ||
-        prevRange.start.node.root != node.root)
-      ChromeVoxState.instance.refreshMode(node.root);
-
     // Don't process nodes inside of web content if ChromeVox Next is inactive.
     if (node.root.role != RoleType.desktop &&
         ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC) {
-      if (cvox.ChromeVox.isChromeOS)
-        chrome.accessibilityPrivate.setFocusRing([]);
+      chrome.accessibilityPrivate.setFocusRing([]);
       return;
     }
 
@@ -138,7 +131,7 @@ DesktopAutomationHandler.prototype = {
   onEventIfInRange: function(evt) {
     // TODO(dtseng): Consider the end of the current range as well.
     if (AutomationUtil.isDescendantOf(
-        global.backgroundObj.currentRange.start.node, evt.target) ||
+        ChromeVoxState.instance.currentRange.start.node, evt.target) ||
             evt.target.state.focused)
       this.onEventDefault(evt);
   },
@@ -155,6 +148,17 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onEventWithFlushedOutput: function(evt) {
+    Output.flushNextSpeechUtterance();
+    this.onEventDefault(evt);
+  },
+
+  /**
+   * @param {!AutomationEvent} evt
+   */
+  onHover: function(evt) {
+    if (ChromeVoxState.instance.currentRange &&
+        evt.target == ChromeVoxState.instance.currentRange.start.node)
+      return;
     Output.flushNextSpeechUtterance();
     this.onEventDefault(evt);
   },
@@ -191,6 +195,19 @@ DesktopAutomationHandler.prototype = {
   },
 
   /**
+   * Provides all feedback once a checked state changed event fires.
+   * @param {!AutomationEvent} evt
+   */
+  onCheckedStateChanged: function(evt) {
+    if (!AutomationPredicate.checkable(evt.target))
+      return;
+
+    this.onEventIfInRange(
+        new chrome.automation.AutomationEvent(
+            EventType.checkedStateChanged, evt.target));
+  },
+
+  /**
    * Provides all feedback once a focus event fires.
    * @param {!AutomationEvent} evt
    */
@@ -221,15 +238,13 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onLoadComplete: function(evt) {
-    ChromeVoxState.instance.refreshMode(evt.target);
-
     // Don't process nodes inside of web content if ChromeVox Next is inactive.
     if (evt.target.root.role != RoleType.desktop &&
         ChromeVoxState.instance.mode === ChromeVoxMode.CLASSIC)
       return;
 
-    chrome.automation.getFocus((function(focus) {
-      if (!focus)
+    chrome.automation.getFocus(function(focus) {
+      if (!focus || !AutomationUtil.isDescendantOf(focus, evt.target))
         return;
 
       // If initial focus was already placed on this page (e.g. if a user starts
@@ -239,14 +254,25 @@ DesktopAutomationHandler.prototype = {
           ChromeVoxState.instance.currentRange.start.node.root == focus.root)
         return;
 
+      var o = new Output();
+      if (focus.role == RoleType.rootWebArea) {
+        // Restore to previous position.
+        var url = focus.docUrl;
+        url = url.substring(0, url.indexOf('#')) || url;
+        var pos = cvox.ChromeVox.position[url];
+        if (pos) {
+          focus = AutomationUtil.hitTest(focus.root, pos) || focus;
+          if (focus != focus.root)
+            o.format('$name', focus.root);
+        }
+      }
       ChromeVoxState.instance.setCurrentRange(cursors.Range.fromNode(focus));
-      new Output().withRichSpeechAndBraille(
+      o.withRichSpeechAndBraille(
           ChromeVoxState.instance.currentRange, null, evt.type).go();
-    }).bind(this));
+    }.bind(this));
   },
 
-
-    /**
+  /**
    * Provides all feedback once a text changed event fires.
    * @param {!AutomationEvent} evt
    */
@@ -311,7 +337,7 @@ DesktopAutomationHandler.prototype = {
     if (t.state.focused ||
         t.root.role == RoleType.desktop ||
         AutomationUtil.isDescendantOf(
-            global.backgroundObj.currentRange.start.node, t)) {
+            ChromeVoxState.instance.currentRange.start.node, t)) {
       if (new Date() - this.lastValueChanged_ <=
           DesktopAutomationHandler.VMIN_VALUE_CHANGE_DELAY_MS)
         return;
@@ -332,8 +358,24 @@ DesktopAutomationHandler.prototype = {
       return;
 
     var currentRange = ChromeVoxState.instance.currentRange;
-    if (currentRange)
+    if (currentRange && currentRange.isValid())
       new Output().withLocation(currentRange, null, evt.type).go();
+  },
+
+  /**
+   * @param {!AutomationEvent} evt
+   */
+  onSelection: function(evt) {
+    chrome.automation.getFocus(function(focus) {
+      // Some cases (e.g. in overview mode), require overriding the assumption
+      // that focus is an ancestor of a selection target.
+      var override = evt.target.role == RoleType.menuItem ||
+          (evt.target.root == focus.root &&
+              focus.root.role == RoleType.desktop);
+      Output.flushNextSpeechUtterance();
+      if (override || AutomationUtil.isDescendantOf(evt.target, focus))
+        this.onEventDefault(evt);
+    }.bind(this));
   },
 
   /**
@@ -341,7 +383,7 @@ DesktopAutomationHandler.prototype = {
    * @param {!AutomationEvent} evt
    */
   onMenuStart: function(evt) {
-    global.backgroundObj.startExcursion();
+    ChromeVoxState.instance.startExcursion();
     this.onEventDefault(evt);
   },
 
@@ -351,7 +393,7 @@ DesktopAutomationHandler.prototype = {
    */
   onMenuEnd: function(evt) {
     this.onEventDefault(evt);
-    global.backgroundObj.endExcursion();
+    ChromeVoxState.instance.endExcursion();
   },
 
   /**
@@ -371,10 +413,9 @@ DesktopAutomationHandler.prototype = {
  * @private
  */
 DesktopAutomationHandler.init_ = function() {
-  if (cvox.ChromeVox.isMac)
-    return;
   chrome.automation.getDesktop(function(desktop) {
-    global.desktopAutomationHandler = new DesktopAutomationHandler(desktop);
+    ChromeVoxState.desktopAutomationHandler =
+        new DesktopAutomationHandler(desktop);
   });
 };
 

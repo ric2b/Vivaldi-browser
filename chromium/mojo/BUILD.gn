@@ -12,7 +12,7 @@ group("mojo") {
     "//mojo/common",
   ]
 
-  if (!(is_linux && target_cpu == "x86")) {
+  if (!(is_linux && current_cpu == "x86")) {
     # TODO(GYP): Figure out if this needs to be supported. Right now
     # it won't work on x86 official builds because it needs stuff in the
     # sysroot that doesn't exist.
@@ -29,10 +29,9 @@ group("mojo") {
 group("tests") {
   testonly = true
   deps = [
-    "//ipc/mojo:ipc_mojo_unittests",
+    "//ipc:ipc_tests",
     "//mojo/common:mojo_common_unittests",
     "//mojo/converters/blink:blink_converters_unittests",
-    "//mojo/converters/surfaces/tests:mojo_surfaces_lib_unittests",
     "//mojo/edk/js/test:js_integration_tests",
     "//mojo/edk/js/test:js_unittests",
     "//mojo/edk/system:mojo_message_pipe_perftests",

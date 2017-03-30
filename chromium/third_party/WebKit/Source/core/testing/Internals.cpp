@@ -80,6 +80,7 @@
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLContentElement.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLImageElement.h"
@@ -93,10 +94,9 @@
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/html/shadow/TextControlInnerElements.h"
 #include "core/input/EventHandler.h"
-#include "core/inspector/ConsoleMessageStorage.h"
-#include "core/inspector/InspectorConsoleAgent.h"
 #include "core/inspector/InspectorInstrumentation.h"
 #include "core/inspector/InstanceCounters.h"
+#include "core/inspector/MainThreadDebugger.h"
 #include "core/layout/LayoutMenuList.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTreeAsText.h"
@@ -144,10 +144,11 @@
 #include "public/platform/WebGraphicsContext3DProvider.h"
 #include "public/platform/WebLayer.h"
 #include "wtf/InstanceCounter.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/dtoa.h"
 #include "wtf/text/StringBuffer.h"
 #include <deque>
+#include <memory>
 #include <v8.h>
 
 namespace blink {
@@ -951,19 +952,19 @@ String Internals::viewportAsText(Document* document, float, int availableWidth, 
 
     StringBuilder builder;
 
-    builder.appendLiteral("viewport size ");
+    builder.append("viewport size ");
     builder.append(String::number(constraints.layoutSize.width()));
     builder.append('x');
     builder.append(String::number(constraints.layoutSize.height()));
 
-    builder.appendLiteral(" scale ");
+    builder.append(" scale ");
     builder.append(String::number(constraints.initialScale));
-    builder.appendLiteral(" with limits [");
+    builder.append(" with limits [");
     builder.append(String::number(constraints.minimumScale));
-    builder.appendLiteral(", ");
+    builder.append(", ");
     builder.append(String::number(constraints.maximumScale));
 
-    builder.appendLiteral("] and userScalable ");
+    builder.append("] and userScalable ");
     builder.append(description.userZoom ? "true" : "false");
 
     return builder.toString();
@@ -1301,8 +1302,8 @@ static PaintLayer* findLayerForGraphicsLayer(PaintLayer* searchRoot, GraphicsLay
             if (searchRoot->layoutObject()->offsetParent() == searchRoot->parent()->layoutObject()->offsetParent()) {
                 LayoutBoxModelObject* current = searchRoot->layoutObject();
                 LayoutBoxModelObject* parent = searchRoot->parent()->layoutObject();
-                layerOffset->setWidth((parent->offsetLeft() - current->offsetLeft()).toInt());
-                layerOffset->setHeight((parent->offsetTop() - current->offsetTop()).toInt());
+                layerOffset->setWidth((parent->offsetLeft(parent->offsetParent()) - current->offsetLeft(parent->offsetParent())).toInt());
+                layerOffset->setHeight((parent->offsetTop(parent->offsetParent()) - current->offsetTop(parent->offsetParent())).toInt());
                 return searchRoot->parent();
             }
         }
@@ -1472,7 +1473,7 @@ AtomicString Internals::htmlNamespace()
 Vector<AtomicString> Internals::htmlTags()
 {
     Vector<AtomicString> tags(HTMLNames::HTMLTagsCount);
-    OwnPtr<const HTMLQualifiedName*[]> qualifiedNames = HTMLNames::getHTMLTags();
+    std::unique_ptr<const HTMLQualifiedName*[]> qualifiedNames = HTMLNames::getHTMLTags();
     for (size_t i = 0; i < HTMLNames::HTMLTagsCount; ++i)
         tags[i] = qualifiedNames[i]->localName();
     return tags;
@@ -1486,7 +1487,7 @@ AtomicString Internals::svgNamespace()
 Vector<AtomicString> Internals::svgTags()
 {
     Vector<AtomicString> tags(SVGNames::SVGTagsCount);
-    OwnPtr<const SVGQualifiedName*[]> qualifiedNames = SVGNames::getSVGTags();
+    std::unique_ptr<const SVGQualifiedName*[]> qualifiedNames = SVGNames::getSVGTags();
     for (size_t i = 0; i < SVGNames::SVGTagsCount; ++i)
         tags[i] = qualifiedNames[i]->localName();
     return tags;
@@ -1587,17 +1588,28 @@ String Internals::dumpRefCountedInstanceCounts() const
     return WTF::dumpRefCountedInstanceCounts();
 }
 
-Vector<String> Internals::consoleMessageArgumentCounts(Document* document) const
+unsigned Internals::numberOfConsoleMessages(Document* document) const
 {
-    FrameHost* host = document->frameHost();
-    if (!host)
-        return Vector<String>();
+    if (!document->frame())
+        return 0;
 
-    Vector<unsigned> counts = host->consoleMessageStorage().argumentCounts();
-    Vector<String> result(counts.size());
-    for (size_t i = 0; i < counts.size(); i++)
-        result[i] = String::number(counts[i]);
-    return result;
+    MainThreadDebugger* debugger = MainThreadDebugger::instance();
+    unsigned total = 0;
+    unsigned withArguments = 0;
+    debugger->debugger()->consoleMessagesCount(debugger->contextGroupId(document->frame()), &total, &withArguments);
+    return total;
+}
+
+unsigned Internals::numberOfConsoleMessagesWithArguments(Document* document) const
+{
+    if (!document->frame())
+        return 0;
+
+    MainThreadDebugger* debugger = MainThreadDebugger::instance();
+    unsigned total = 0;
+    unsigned withArguments = 0;
+    debugger->debugger()->consoleMessagesCount(debugger->contextGroupId(document->frame()), &total, &withArguments);
+    return withArguments;
 }
 
 Vector<unsigned long> Internals::setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes)
@@ -2010,31 +2022,6 @@ void Internals::forceFullRepaint(Document* document, ExceptionState& exceptionSt
         layoutViewItem.invalidatePaintForViewAndCompositedLayers();
 }
 
-void Internals::startTrackingPaintInvalidationObjects()
-{
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutViewItem().layer()->graphicsLayerBacking();
-    if (graphicsLayer->drawsContent())
-        graphicsLayer->getPaintController().startTrackingPaintInvalidationObjects();
-}
-
-void Internals::stopTrackingPaintInvalidationObjects()
-{
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutViewItem().layer()->graphicsLayerBacking();
-    if (graphicsLayer->drawsContent())
-        graphicsLayer->getPaintController().stopTrackingPaintInvalidationObjects();
-}
-
-Vector<String> Internals::trackedPaintInvalidationObjects()
-{
-    ASSERT(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
-    GraphicsLayer* graphicsLayer = toLocalFrame(frame()->page()->mainFrame())->view()->layoutViewItem().layer()->graphicsLayerBacking();
-    if (!graphicsLayer->drawsContent())
-        return Vector<String>();
-    return graphicsLayer->getPaintController().trackedPaintInvalidationObjects();
-}
-
 ClientRectList* Internals::draggableRegions(Document* document, ExceptionState& exceptionState)
 {
     return annotatedRegions(document, true, exceptionState);
@@ -2123,21 +2110,21 @@ String Internals::getCurrentCursorInfo()
     Cursor cursor = frame()->page()->chromeClient().lastSetCursorForTesting();
 
     StringBuilder result;
-    result.appendLiteral("type=");
+    result.append("type=");
     result.append(cursorTypeToString(cursor.getType()));
-    result.appendLiteral(" hotSpot=");
+    result.append(" hotSpot=");
     result.appendNumber(cursor.hotSpot().x());
     result.append(',');
     result.appendNumber(cursor.hotSpot().y());
     if (cursor.getImage()) {
         IntSize size = cursor.getImage()->size();
-        result.appendLiteral(" image=");
+        result.append(" image=");
         result.appendNumber(size.width());
         result.append('x');
         result.appendNumber(size.height());
     }
     if (cursor.imageScaleFactor() != 1) {
-        result.appendLiteral(" scale=");
+        result.append(" scale=");
         NumberToStringBuffer buffer;
         result.append(numberToFixedPrecisionString(cursor.imageScaleFactor(), 8, buffer, true));
     }
@@ -2161,7 +2148,7 @@ DOMArrayBuffer* Internals::serializeObject(PassRefPtr<SerializedScriptValue> val
 PassRefPtr<SerializedScriptValue> Internals::deserializeBuffer(DOMArrayBuffer* buffer) const
 {
     String value(static_cast<const UChar*>(buffer->data()), buffer->byteLength() / sizeof(UChar));
-    return SerializedScriptValueFactory::instance().createFromWire(value);
+    return SerializedScriptValue::create(value);
 }
 
 void Internals::forceReload(bool bypassCache)
@@ -2243,7 +2230,7 @@ void Internals::resetTypeAheadSession(HTMLSelectElement* select)
 
 bool Internals::loseSharedGraphicsContext3D()
 {
-    OwnPtr<WebGraphicsContext3DProvider> sharedProvider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    std::unique_ptr<WebGraphicsContext3DProvider> sharedProvider = wrapUnique(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!sharedProvider)
         return false;
     gpu::gles2::GLES2Interface* sharedGL = sharedProvider->contextGL();
@@ -2400,12 +2387,7 @@ bool Internals::ignoreLayoutWithPendingStylesheets(Document* document)
     return document->ignoreLayoutWithPendingStylesheets();
 }
 
-void Internals::setNetworkStateNotifierTestOnly(bool testOnly)
-{
-    networkStateNotifier().setTestUpdatesOnly(testOnly);
-}
-
-void Internals::setNetworkConnectionInfo(const String& type, double downlinkMaxMbps, ExceptionState& exceptionState)
+void Internals::setNetworkConnectionInfoOverride(bool onLine, const String& type, double downlinkMaxMbps, ExceptionState& exceptionState)
 {
     WebConnectionType webtype;
     if (type == "cellular2g") {
@@ -2432,7 +2414,12 @@ void Internals::setNetworkConnectionInfo(const String& type, double downlinkMaxM
         exceptionState.throwDOMException(NotFoundError, ExceptionMessages::failedToEnumerate("connection type", type));
         return;
     }
-    networkStateNotifier().setWebConnectionForTest(webtype, downlinkMaxMbps);
+    networkStateNotifier().setOverride(onLine, webtype, downlinkMaxMbps);
+}
+
+void Internals::clearNetworkConnectionInfoOverride()
+{
+    networkStateNotifier().clearOverride();
 }
 
 unsigned Internals::countHitRegions(CanvasRenderingContext* context)

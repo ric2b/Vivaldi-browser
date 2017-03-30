@@ -68,6 +68,11 @@ void OpenBrowserWindowForProfile(ProfileManager::CreateCallback callback,
                                  Profile::CreateStatus status);
 
 #if !defined(OS_ANDROID)
+// Loads the specified profile given by |path| asynchronously. Once profile is
+// loaded and initialized it runs |callback| if it isn't null.
+void LoadProfileAsync(const base::FilePath& path,
+                      ProfileManager::CreateCallback callback);
+
 // Opens a Browser with the specified profile given by |path|.
 // If |always_create| is true then a new window is created
 // even if a window for that profile already exists. When the browser is
@@ -93,11 +98,16 @@ bool HasProfileSwitchTargets(Profile* profile);
 void CreateAndSwitchToNewProfile(ProfileManager::CreateCallback callback,
                                  ProfileMetrics::ProfileAdd metric);
 
-// Closes all browser windows that belong to the guest profile.
+// Closes all browser windows that belong to the guest profile and opens the
+// user manager.
 void CloseGuestProfileWindows();
 
-// Closes all the browser windows for |profile| and opens the user manager.
+// Closes and locks all the browser windows for |profile| and opens the user
+// manager.
 void LockProfile(Profile* profile);
+
+// Close all the browser windows for |profile| and opens the user manager.
+void CloseProfileWindows(Profile* profile);
 
 // Returns whether lock is available to this profile.
 bool IsLockAvailable(Profile* profile);

@@ -198,7 +198,8 @@
     unsigned long numberOfLiveNodes();
     unsigned long numberOfLiveDocuments();
     DOMString dumpRefCountedInstanceCounts();
-    sequence<DOMString> consoleMessageArgumentCounts(Document document);
+    unsigned long numberOfConsoleMessages(Document document);
+    unsigned long numberOfConsoleMessagesWithArguments(Document document);
     unsigned long[] setMemoryCacheCapacities(unsigned long minDeadBytes, unsigned long maxDeadBytes, unsigned long totalBytes);
 
     DOMString counterValue(Element element);
@@ -235,7 +236,6 @@
 
     // These functions both reset the tracked repaint rects. They are intended to be used in the following order:
     //  startTrackingRepaints(), repaintRectsAsText(), stopTrackingRepaints().
-    // TODO(wangxianzhu): Remove these functions when we no longer use repaint rects.
     [RaisesException] void startTrackingRepaints(Document document);
     [RaisesException] void stopTrackingRepaints(Document document);
 
@@ -245,16 +245,6 @@
     [RaisesException] void updateLayoutIgnorePendingStylesheetsAndRunPostLayoutTasks(optional Node? node = null);
 
     [RaisesException] void forceFullRepaint(Document document);
-
-    // These functions both reset the tracked paint invalidation objects. They are intended to be used in the following order:
-    //  startTrackingPaintInvalidationObjects(), trackedPaintInvalidationObjects(), stopTrackingPaintInvalidationObjects().
-    void startTrackingPaintInvalidationObjects();
-    void stopTrackingPaintInvalidationObjects();
-
-    // Returns a list of debug strings for objects that were invalidated between
-    // startTrackingPaintInvalidationObjects() and stopTrackingPaintInvalidationObjects().
-    // If an object is invalidated multiple times, it will appear in the list multiple times.
-    DOMString[] trackedPaintInvalidationObjects();
 
     // Returns a list of draggable/non-draggable regions in the document.
     [RaisesException] ClientRectList draggableRegions(Document document);
@@ -309,10 +299,9 @@
 
     boolean ignoreLayoutWithPendingStylesheets(Document document);
 
-    // These functions are for testing NetInfo. You must call setNetworkStateNotifierTestOnly(true)
-    // before calling setNetworkConnectionInfo.
-    void setNetworkStateNotifierTestOnly(boolean testOnly);
-    [RaisesException] void setNetworkConnectionInfo(DOMString type, double downlinkMaxMbps);
+    // These functions are for testing NetInfo. You must call clearNetworkConnectionInfoOverride() at the end.
+    [RaisesException] void setNetworkConnectionInfoOverride(boolean onLine, DOMString type, double downlinkMaxMbps);
+    void clearNetworkConnectionInfoOverride();
 
     // This function is for testing HitRegions on Canvas2D.
     unsigned long countHitRegions(CanvasRenderingContext2D context);

@@ -183,7 +183,7 @@ bool ThemePainterMac::paintMenuList(const LayoutObject& o, const PaintInfo& pain
 
     NSView *view = m_layoutTheme.documentViewFor(o);
     [popupButton drawWithFrame:inflatedRect inView:view];
-    if (!ThemeMac::drawWithFrameDrawsFocusRing() && LayoutTheme::isFocused(o) && o.styleRef().outlineStyleIsAuto())
+    if (LayoutTheme::isFocused(o) && o.styleRef().outlineStyleIsAuto())
         [popupButton cr_drawFocusRingWithFrame:inflatedRect inView:view];
     [popupButton setControlView:nil];
 
@@ -224,7 +224,7 @@ bool ThemePainterMac::paintProgressBar(const LayoutObject& layoutObject, const P
     trackInfo.reserved = 0;
     trackInfo.filler1 = 0;
 
-    OwnPtr<ImageBuffer> imageBuffer = ImageBuffer::create(inflatedRect.size());
+    std::unique_ptr<ImageBuffer> imageBuffer = ImageBuffer::create(inflatedRect.size());
     if (!imageBuffer)
         return true;
 
@@ -265,22 +265,25 @@ bool ThemePainterMac::paintMenuListButton(const LayoutObject& o, const PaintInfo
         return false;
 
     Color color = o.styleRef().visitedDependentColor(CSSPropertyColor);
+    SkPaint paint = paintInfo.context.fillPaint();
+    paint.setAntiAlias(true);
+    paint.setColor(color.rgb());
 
-    FloatPoint arrow1[3];
-    arrow1[0] = FloatPoint(leftEdge, centerY - spaceBetweenArrows / 2.0f);
-    arrow1[1] = FloatPoint(leftEdge + arrowWidth, centerY - spaceBetweenArrows / 2.0f);
-    arrow1[2] = FloatPoint(leftEdge + arrowWidth / 2.0f, centerY - spaceBetweenArrows / 2.0f - arrowHeight);
+    SkPath arrow1;
+    arrow1.moveTo(leftEdge, centerY - spaceBetweenArrows / 2.0f);
+    arrow1.lineTo(leftEdge + arrowWidth, centerY - spaceBetweenArrows / 2.0f);
+    arrow1.lineTo(leftEdge + arrowWidth / 2.0f, centerY - spaceBetweenArrows / 2.0f - arrowHeight);
 
     // Draw the top arrow.
-    paintInfo.context.fillPolygon(3, arrow1, color, true);
+    paintInfo.context.drawPath(arrow1, paint);
 
-    FloatPoint arrow2[3];
-    arrow2[0] = FloatPoint(leftEdge, centerY + spaceBetweenArrows / 2.0f);
-    arrow2[1] = FloatPoint(leftEdge + arrowWidth, centerY + spaceBetweenArrows / 2.0f);
-    arrow2[2] = FloatPoint(leftEdge + arrowWidth / 2.0f, centerY + spaceBetweenArrows / 2.0f + arrowHeight);
+    SkPath arrow2;
+    arrow2.moveTo(leftEdge, centerY + spaceBetweenArrows / 2.0f);
+    arrow2.lineTo(leftEdge + arrowWidth, centerY + spaceBetweenArrows / 2.0f);
+    arrow2.lineTo(leftEdge + arrowWidth / 2.0f, centerY + spaceBetweenArrows / 2.0f + arrowHeight);
 
     // Draw the bottom arrow.
-    paintInfo.context.fillPolygon(3, arrow2, color, true);
+    paintInfo.context.drawPath(arrow2, paint);
     return false;
 }
 
@@ -348,15 +351,17 @@ bool ThemePainterMac::paintSliderTrack(const LayoutObject& o, const PaintInfo& p
         isVerticalSlider ? fillBounds.maxXMinYCorner() : fillBounds.minXMaxYCorner());
     borderGradient->addColorStop(0.0, borderGradientTopColor);
     borderGradient->addColorStop(1.0, borderGradientBottomColor);
-    Path borderPath;
+
     FloatRect borderRect(unzoomedRect);
     borderRect.inflate(-LayoutThemeMac::sliderTrackBorderWidth / 2.0);
     float borderRadiusSize = (isVerticalSlider ? borderRect.width() : borderRect.height()) / 2;
     FloatSize borderRadius(borderRadiusSize, borderRadiusSize);
-    borderPath.addRoundedRect(borderRect, borderRadius, borderRadius, borderRadius, borderRadius);
-    paintInfo.context.setStrokeGradient(borderGradient);
+    FloatRoundedRect borderRRect(borderRect, borderRadius, borderRadius, borderRadius, borderRadius);
     paintInfo.context.setStrokeThickness(LayoutThemeMac::sliderTrackBorderWidth);
-    paintInfo.context.strokePath(borderPath);
+    SkPaint borderPaint(paintInfo.context.strokePaint());
+    borderGradient->applyToPaint(borderPaint, SkMatrix::I());
+    paintInfo.context.drawRRect(borderRRect, borderPaint);
+
     return false;
 }
 
@@ -417,15 +422,17 @@ bool ThemePainterMac::paintSliderThumb(const LayoutObject& o, const PaintInfo& p
     fillGradient->addColorStop(0.52, fillGradientUpperMiddleColor);
     fillGradient->addColorStop(0.52, fillGradientLowerMiddleColor);
     fillGradient->addColorStop(1.0, fillGradientBottomColor);
-    paintInfo.context.setFillGradient(fillGradient);
-    paintInfo.context.fillEllipse(borderBounds);
+    SkPaint fillPaint(paintInfo.context.fillPaint());
+    fillGradient->applyToPaint(fillPaint, SkMatrix::I());
+    paintInfo.context.drawOval(borderBounds, fillPaint);
 
     RefPtr<Gradient> borderGradient = Gradient::create(fillBounds.minXMinYCorner(), fillBounds.minXMaxYCorner());
     borderGradient->addColorStop(0.0, borderGradientTopColor);
     borderGradient->addColorStop(1.0, borderGradientBottomColor);
-    paintInfo.context.setStrokeGradient(borderGradient);
     paintInfo.context.setStrokeThickness(LayoutThemeMac::sliderThumbBorderWidth);
-    paintInfo.context.strokeEllipse(borderBounds);
+    SkPaint borderPaint(paintInfo.context.strokePaint());
+    borderGradient->applyToPaint(borderPaint, SkMatrix::I());
+    paintInfo.context.drawOval(borderBounds, borderPaint);
 
     if (LayoutTheme::isFocused(o)) {
         Path borderPath;
@@ -537,48 +544,6 @@ bool ThemePainterMac::paintSearchFieldCancelButton(const LayoutObject& o, const 
     paintInfo.context.setFillColor(fillColor);
     paintInfo.context.fillEllipse(unzoomedRect);
 
-    return false;
-}
-
-bool ThemePainterMac::paintSearchFieldDecoration(const LayoutObject&, const PaintInfo&, const IntRect&)
-{
-    return false;
-}
-
-bool ThemePainterMac::paintSearchFieldResultsDecoration(const LayoutObject& o, const PaintInfo& paintInfo, const IntRect& r)
-{
-    if (!o.node())
-        return false;
-    Node* input = o.node()->shadowHost();
-    if (!input)
-        input = o.node();
-    if (!input->layoutObject()->isBox())
-        return false;
-
-    GraphicsContextStateSaver stateSaver(paintInfo.context);
-
-    float zoomLevel = o.styleRef().effectiveZoom();
-    FloatRect unzoomedRect(r);
-    if (zoomLevel != 1) {
-        unzoomedRect.setWidth(unzoomedRect.width() / zoomLevel);
-        unzoomedRect.setHeight(unzoomedRect.height() / zoomLevel);
-        paintInfo.context.translate(unzoomedRect.x(), unzoomedRect.y());
-        paintInfo.context.scale(zoomLevel, zoomLevel);
-        paintInfo.context.translate(-unzoomedRect.x(), -unzoomedRect.y());
-    }
-
-    LocalCurrentGraphicsContext localContext(paintInfo.context, r);
-
-    NSSearchFieldCell* search = m_layoutTheme.search();
-    m_layoutTheme.setSearchCellState(*input->layoutObject(), r);
-    [search setControlSize:searchFieldControlSizeForFont(o.styleRef())];
-    if ([search searchMenuTemplate] != nil)
-        [search setSearchMenuTemplate:nil];
-
-    m_layoutTheme.updateActiveState([search searchButtonCell], o);
-
-    [[search searchButtonCell] drawWithFrame:unzoomedRect inView:m_layoutTheme.documentViewFor(o)];
-    [[search searchButtonCell] setControlView:nil];
     return false;
 }
 

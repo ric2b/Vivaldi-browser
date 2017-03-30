@@ -31,7 +31,7 @@
 #include "platform/image-decoders/bmp/BMPImageDecoder.h"
 
 #include "platform/image-decoders/FastSharedBufferReader.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -54,7 +54,7 @@ void BMPImageDecoder::onSetData(SegmentReader* data)
 
 bool BMPImageDecoder::setFailed()
 {
-    m_reader.clear();
+    m_reader.reset();
     return ImageDecoder::setFailed();
 }
 
@@ -70,7 +70,7 @@ void BMPImageDecoder::decode(bool onlySize)
     // If we're done decoding the image, we don't need the BMPImageReader
     // anymore.  (If we failed, |m_reader| has already been cleared.)
     else if (!m_frameBufferCache.isEmpty() && (m_frameBufferCache.first().getStatus() == ImageFrame::FrameComplete))
-        m_reader.clear();
+        m_reader.reset();
 }
 
 bool BMPImageDecoder::decodeHelper(bool onlySize)
@@ -80,7 +80,7 @@ bool BMPImageDecoder::decodeHelper(bool onlySize)
         return false;
 
     if (!m_reader) {
-        m_reader = adoptPtr(new BMPImageReader(this, m_decodedOffset, imgDataOffset, false));
+        m_reader = wrapUnique(new BMPImageReader(this, m_decodedOffset, imgDataOffset, false));
         m_reader->setData(m_data.get());
     }
 

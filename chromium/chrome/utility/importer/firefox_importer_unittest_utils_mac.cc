@@ -10,11 +10,15 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
+#include "base/location.h"
 #include "base/message_loop/message_loop.h"
 #include "base/posix/global_descriptors.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
+#include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/test/test_timeouts.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/common/importer/firefox_importer_utils.h"
 #include "ipc/ipc_channel.h"
 #include "ipc/ipc_descriptors.h"
@@ -184,9 +188,8 @@ bool FFUnitTestDecryptorProxy::WaitForClientResponse() {
   // a message comes in.
   scoped_refptr<CancellableQuitMsgLoop> quit_task(
       new CancellableQuitMsgLoop());
-  base::MessageLoop::current()->PostDelayedTask(
-      FROM_HERE,
-      base::Bind(&CancellableQuitMsgLoop::QuitNow, quit_task.get()),
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, base::Bind(&CancellableQuitMsgLoop::QuitNow, quit_task.get()),
       TestTimeouts::action_max_timeout());
 
   message_loop_->Run();
@@ -290,7 +293,7 @@ MULTIPROCESS_IPC_TEST_MAIN(NSSDecrypterChildProcess) {
   listener.SetSender(channel.get());
 
   // run message loop
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   return 0;
 }

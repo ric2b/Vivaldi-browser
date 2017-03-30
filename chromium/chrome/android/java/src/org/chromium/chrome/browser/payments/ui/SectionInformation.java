@@ -4,8 +4,13 @@
 
 package org.chromium.chrome.browser.payments.ui;
 
+import org.chromium.chrome.R;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+
+import javax.annotation.Nullable;
 
 /**
  * The data to show in a single section where the user can select something, e.g., their
@@ -17,15 +22,20 @@ public class SectionInformation {
      */
     public static final int NO_SELECTION = -1;
 
-    private final ArrayList<PaymentOption> mItems;
+    /**
+     * This value indicates that user selection is invalid in this section.
+     */
+    public static final int INVALID_SELECTION = -2;
+
+    @PaymentRequestUI.DataType private final int mDataType;
+    private ArrayList<PaymentOption> mItems;
     private int mSelectedItem;
 
     /**
      * Builds an empty section without selection.
      */
-    public SectionInformation() {
-        mSelectedItem = NO_SELECTION;
-        mItems = null;
+    public SectionInformation(@PaymentRequestUI.DataType int sectionType) {
+        this(sectionType, null);
     }
 
     /**
@@ -33,27 +43,30 @@ public class SectionInformation {
      *
      * @param defaultItem The only item. It is selected by default.
      */
-    public SectionInformation(PaymentOption defaultItem) {
-        if (null != defaultItem) {
-            mSelectedItem = 0;
-            mItems = new ArrayList<PaymentOption>(1);
-            mItems.add(defaultItem);
-        } else {
-            mSelectedItem = NO_SELECTION;
-            mItems = null;
-        }
+    public SectionInformation(@PaymentRequestUI.DataType int sectionType,
+            @Nullable PaymentOption defaultItem) {
+        this(sectionType, 0, defaultItem == null ? null : Arrays.asList(defaultItem));
     }
 
     /**
      * Builds a section.
      *
-     * @param selection The index of the currently selected item.
+     * @param sectionType    Type of data being stored.
+     * @param selection      The index of the currently selected item.
      * @param itemCollection The items in the section.
      */
-    public SectionInformation(int selection, Collection<? extends PaymentOption> itemCollection) {
-        mSelectedItem = selection;
-        mItems = new ArrayList<PaymentOption>(itemCollection.size());
-        mItems.addAll(itemCollection);
+    public SectionInformation(@PaymentRequestUI.DataType int sectionType, int selection,
+            Collection<? extends PaymentOption> itemCollection) {
+        mDataType = sectionType;
+
+        if (itemCollection == null || itemCollection.isEmpty()) {
+            mSelectedItem = NO_SELECTION;
+            mItems = null;
+        } else {
+            mSelectedItem = selection;
+            mItems = new ArrayList<PaymentOption>(itemCollection.size());
+            mItems.addAll(itemCollection);
+        }
     }
 
     /**
@@ -92,8 +105,8 @@ public class SectionInformation {
     /**
      * Sets the currently selected item by index.
      *
-     * @param index The index of the currently selected item, or NO_SELECTION if a selection has not
-     *              yet been made.
+     * @param index The index of the currently selected item, NO_SELECTION if a selection has not
+     *              yet been made, or INVALID_SELECTION if an invalid selection has been made.
      */
     public void setSelectedItemIndex(int index) {
         mSelectedItem = index;
@@ -118,8 +131,8 @@ public class SectionInformation {
     /**
      * Returns the index of the selected item.
      *
-     * @return The index of the currently selected item, or NO_SELECTION if a selection has not yet
-     * been made.
+     * @return The index of the currently selected item, NO_SELECTION if a selection has not yet
+     *         been made, or INVALID_SELECTION if an invalid selection has been made.
      */
     public int getSelectedItemIndex() {
         return mSelectedItem;
@@ -132,5 +145,32 @@ public class SectionInformation {
      */
     public PaymentOption getSelectedItem() {
         return getItem(getSelectedItemIndex());
+    }
+
+    /**
+     * Adds the given item at the head of the list and selects it.
+     *
+     * @param item The item to add.
+     */
+    public void addAndSelectItem(PaymentOption item) {
+        if (mItems == null) mItems = new ArrayList<>();
+        mItems.add(0, item);
+        mSelectedItem = 0;
+    }
+
+    /**
+     * Returns the resource ID for the string telling users that they can add a new option.
+     *
+     * @return ID if the user can add a new option, or 0 if they can't.
+     */
+    public int getAddStringId() {
+        if (mDataType == PaymentRequestUI.TYPE_SHIPPING_ADDRESSES) {
+            return R.string.autofill_create_profile;
+        } else if (mDataType == PaymentRequestUI.TYPE_CONTACT_DETAILS) {
+            return R.string.payments_add_contact;
+        } else if (mDataType == PaymentRequestUI.TYPE_PAYMENT_METHODS) {
+            return R.string.autofill_create_credit_card;
+        }
+        return 0;
     }
 }

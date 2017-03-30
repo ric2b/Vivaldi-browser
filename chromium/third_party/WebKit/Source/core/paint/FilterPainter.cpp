@@ -8,7 +8,6 @@
 #include "core/paint/LayerClipRecorder.h"
 #include "core/paint/PaintLayer.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/graphics/CompositorFactory.h"
 #include "platform/graphics/CompositorFilterOperations.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -18,6 +17,8 @@
 #include "platform/graphics/paint/PaintController.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -55,13 +56,13 @@ FilterPainter::FilterPainter(PaintLayer& layer, GraphicsContext& context, const 
     paintingInfo.clipToDirtyRect = false;
 
     if (clipRect.rect() != paintingInfo.paintDirtyRect || clipRect.hasRadius()) {
-        m_clipRecorder = adoptPtr(new LayerClipRecorder(context, *layer.layoutObject(), DisplayItem::ClipLayerFilter, clipRect, &paintingInfo, LayoutPoint(), paintFlags));
+        m_clipRecorder = wrapUnique(new LayerClipRecorder(context, *layer.layoutObject(), DisplayItem::ClipLayerFilter, clipRect, &paintingInfo, LayoutPoint(), paintFlags));
     }
 
     ASSERT(m_layoutObject);
     if (!context.getPaintController().displayItemConstructionIsDisabled()) {
         FilterOperations filterOperations(layer.computeFilterOperations(m_layoutObject->styleRef()));
-        OwnPtr<CompositorFilterOperations> compositorFilterOperations = adoptPtr(CompositorFactory::current().createFilterOperations());
+        std::unique_ptr<CompositorFilterOperations> compositorFilterOperations = CompositorFilterOperations::create();
         SkiaImageFilterBuilder::buildFilterOperations(filterOperations, compositorFilterOperations.get());
         // FIXME: It's possible to have empty CompositorFilterOperations here even
         // though the SkImageFilter produced above is non-null, since the

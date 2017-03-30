@@ -40,8 +40,7 @@
 #include "platform/weborigin/ReferrerPolicy.h"
 #include "wtf/Deque.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -55,7 +54,7 @@ class ExecutionContextTask;
 class LocalDOMWindow;
 class PublicURLManager;
 class SecurityOrigin;
-class ScriptCallStack;
+class SourceLocation;
 
 class CORE_EXPORT ExecutionContext : public ContextLifecycleNotifier, public Supplementable<ExecutionContext> {
     WTF_MAKE_NONCOPYABLE(ExecutionContext);
@@ -73,6 +72,7 @@ public:
     virtual bool isDocument() const { return false; }
     virtual bool isWorkerGlobalScope() const { return false; }
     virtual bool isWorkletGlobalScope() const { return false; }
+    virtual bool isMainThreadWorkletGlobalScope() const { return false; }
     virtual bool isDedicatedWorkerGlobalScope() const { return false; }
     virtual bool isSharedWorkerGlobalScope() const { return false; }
     virtual bool isServiceWorkerGlobalScope() const { return false; }
@@ -89,7 +89,7 @@ public:
     virtual void disableEval(const String& errorMessage) = 0;
     virtual LocalDOMWindow* executingWindow() { return 0; }
     virtual String userAgent() const = 0;
-    virtual void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) = 0; // Executes the task on context's thread asynchronously.
+    virtual void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>, const String& taskNameForInstrumentation = emptyString()) = 0; // Executes the task on context's thread asynchronously.
 
     // Gets the DOMTimerCoordinator which maintains the "active timer
     // list" of tasks created by setTimeout and setInterval. The
@@ -104,10 +104,10 @@ public:
     KURL contextCompleteURL(const String& url) const { return virtualCompleteURL(url); }
 
     bool shouldSanitizeScriptError(const String& sourceURL, AccessControlStatus);
-    void reportException(ErrorEvent*, int scriptId, PassRefPtr<ScriptCallStack>, AccessControlStatus);
+    void reportException(ErrorEvent*, AccessControlStatus);
 
     virtual void addConsoleMessage(ConsoleMessage*) = 0;
-    virtual void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) = 0;
+    virtual void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) = 0;
 
     PublicURLManager& publicURLManager();
 
@@ -116,7 +116,7 @@ public:
     void suspendActiveDOMObjects();
     void resumeActiveDOMObjects();
     void stopActiveDOMObjects();
-    void postSuspendableTask(PassOwnPtr<SuspendableTask>);
+    void postSuspendableTask(std::unique_ptr<SuspendableTask>);
     void notifyContextDestroyed() override;
 
     virtual void suspendScheduledTasks();
@@ -149,6 +149,11 @@ public:
     virtual bool isSecureContext(const SecureContextCheck = StandardSecureContextCheck) const;
 
     virtual String outgoingReferrer() const;
+    // Parses a comma-separated list of referrer policy tokens, and sets
+    // the context's referrer policy to the last one that is a valid
+    // policy. Logs a message to the console if none of the policy
+    // tokens are valid policies.
+    void parseAndSetReferrerPolicy(const String& policies);
     void setReferrerPolicy(ReferrerPolicy);
     ReferrerPolicy getReferrerPolicy() const { return m_referrerPolicy; }
 
@@ -167,7 +172,7 @@ private:
 
     bool m_inDispatchErrorEvent;
     class PendingException;
-    OwnPtr<Vector<OwnPtr<PendingException>>> m_pendingExceptions;
+    std::unique_ptr<Vector<std::unique_ptr<PendingException>>> m_pendingExceptions;
 
     bool m_activeDOMObjectsAreSuspended;
     bool m_activeDOMObjectsAreStopped;
@@ -180,7 +185,7 @@ private:
     // increment and decrement the counter.
     int m_windowInteractionTokens;
 
-    Deque<OwnPtr<SuspendableTask>> m_suspendedTasks;
+    Deque<std::unique_ptr<SuspendableTask>> m_suspendedTasks;
     bool m_isRunSuspendableTasksScheduled;
 
     ReferrerPolicy m_referrerPolicy;

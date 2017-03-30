@@ -93,7 +93,6 @@ class TestingOmniboxEditController : public ChromeOmniboxEditController {
   // Overridden from ChromeOmniboxEditController:
   void UpdateWithoutTabRestore() override {}
   void OnChanged() override {}
-  void OnSetFocus() override {}
   void ShowURL() override {}
   ToolbarModel* GetToolbarModel() override { return toolbar_model_; }
   const ToolbarModel* GetToolbarModel() const override {
@@ -116,8 +115,11 @@ class OmniboxViewMacTest : public CocoaProfileTest {
   }
 };
 
-TEST_F(OmniboxViewMacTest, GetFieldFont) {
-  EXPECT_TRUE(OmniboxViewMac::GetFieldFont(gfx::Font::NORMAL));
+TEST_F(OmniboxViewMacTest, GetFonts) {
+  EXPECT_TRUE(OmniboxViewMac::GetNormalFieldFont());
+  EXPECT_TRUE(OmniboxViewMac::GetBoldFieldFont());
+  EXPECT_TRUE(OmniboxViewMac::GetLargeFont());
+  EXPECT_TRUE(OmniboxViewMac::GetSmallFont());
 }
 
 TEST_F(OmniboxViewMacTest, TabToAutocomplete) {

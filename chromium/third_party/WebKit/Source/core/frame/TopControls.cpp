@@ -5,6 +5,7 @@
 #include "core/frame/TopControls.h"
 
 #include "core/frame/FrameHost.h"
+#include "core/frame/VisualViewport.h"
 #include "core/page/ChromeClient.h"
 #include "platform/geometry/FloatSize.h"
 #include <algorithm> // for std::min and std::max
@@ -94,9 +95,29 @@ void TopControls::setShownRatio(float shownRatio)
     m_frameHost->chromeClient().didUpdateTopControls();
 }
 
-void TopControls::updateConstraints(WebTopControlsState constraints)
+void TopControls::updateConstraintsAndState(
+    WebTopControlsState constraints,
+    WebTopControlsState current,
+    bool animate)
 {
     m_permittedState = constraints;
+
+    DCHECK(!(constraints == WebTopControlsShown && current == WebTopControlsHidden));
+    DCHECK(!(constraints == WebTopControlsHidden && current == WebTopControlsShown));
+
+    // If the change should be animated, let the impl thread drive the change.
+    // Otherwise, immediately set the shown ratio so we don't have to wait for
+    // a commit from the impl thread.
+    if (animate)
+        return;
+
+    if (constraints == WebTopControlsBoth && current == WebTopControlsBoth)
+        return;
+
+    if (constraints == WebTopControlsHidden || current == WebTopControlsHidden)
+        setShownRatio(0.f);
+    else
+        setShownRatio(1.f);
 }
 
 void TopControls::setHeight(float height, bool shrinkViewport)

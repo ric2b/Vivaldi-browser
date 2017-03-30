@@ -23,14 +23,17 @@
  */
 
 #include "modules/webaudio/MediaStreamAudioSourceNode.h"
+
+#include "core/dom/ExceptionCode.h"
 #include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "platform/Logging.h"
 #include "wtf/Locker.h"
+#include <memory>
 
 namespace blink {
 
-MediaStreamAudioSourceHandler::MediaStreamAudioSourceHandler(AudioNode& node, MediaStream& mediaStream, MediaStreamTrack* audioTrack, PassOwnPtr<AudioSourceProvider> audioSourceProvider)
+MediaStreamAudioSourceHandler::MediaStreamAudioSourceHandler(AudioNode& node, MediaStream& mediaStream, MediaStreamTrack* audioTrack, std::unique_ptr<AudioSourceProvider> audioSourceProvider)
     : AudioHandler(NodeTypeMediaStreamAudioSource, node, node.context()->sampleRate())
     , m_mediaStream(mediaStream)
     , m_audioTrack(audioTrack)
@@ -44,7 +47,7 @@ MediaStreamAudioSourceHandler::MediaStreamAudioSourceHandler(AudioNode& node, Me
     initialize();
 }
 
-PassRefPtr<MediaStreamAudioSourceHandler> MediaStreamAudioSourceHandler::create(AudioNode& node, MediaStream& mediaStream, MediaStreamTrack* audioTrack, PassOwnPtr<AudioSourceProvider> audioSourceProvider)
+PassRefPtr<MediaStreamAudioSourceHandler> MediaStreamAudioSourceHandler::create(AudioNode& node, MediaStream& mediaStream, MediaStreamTrack* audioTrack, std::unique_ptr<AudioSourceProvider> audioSourceProvider)
 {
     return adoptRef(new MediaStreamAudioSourceHandler(node, mediaStream, audioTrack, std::move(audioSourceProvider)));
 }
@@ -60,7 +63,7 @@ void MediaStreamAudioSourceHandler::setFormat(size_t numberOfChannels, float sou
         // The sample-rate must be equal to the context's sample-rate.
         if (!numberOfChannels || numberOfChannels > AbstractAudioContext::maxNumberOfChannels() || sourceSampleRate != sampleRate()) {
             // process() will generate silence for these uninitialized values.
-            WTF_LOG(Media, "MediaStreamAudioSourceNode::setFormat(%u, %f) - unhandled format change", static_cast<unsigned>(numberOfChannels), sourceSampleRate);
+            DLOG(ERROR) << "setFormat(" << numberOfChannels << ", " << sourceSampleRate << ") - unhandled format change";
             m_sourceNumberOfChannels = 0;
             return;
         }
@@ -108,15 +111,45 @@ void MediaStreamAudioSourceHandler::process(size_t numberOfFrames)
 
 // ----------------------------------------------------------------
 
-MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(AbstractAudioContext& context, MediaStream& mediaStream, MediaStreamTrack* audioTrack, PassOwnPtr<AudioSourceProvider> audioSourceProvider)
+MediaStreamAudioSourceNode::MediaStreamAudioSourceNode(AbstractAudioContext& context, MediaStream& mediaStream, MediaStreamTrack* audioTrack, std::unique_ptr<AudioSourceProvider> audioSourceProvider)
     : AudioSourceNode(context)
 {
     setHandler(MediaStreamAudioSourceHandler::create(*this, mediaStream, audioTrack, std::move(audioSourceProvider)));
 }
 
-MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::create(AbstractAudioContext& context, MediaStream& mediaStream, MediaStreamTrack* audioTrack, PassOwnPtr<AudioSourceProvider> audioSourceProvider)
+MediaStreamAudioSourceNode* MediaStreamAudioSourceNode::create(AbstractAudioContext& context, MediaStream& mediaStream, ExceptionState& exceptionState)
 {
-    return new MediaStreamAudioSourceNode(context, mediaStream, audioTrack, std::move(audioSourceProvider));
+    DCHECK(isMainThread());
+
+    if (context.isContextClosed()) {
+        context.throwExceptionForClosedState(exceptionState);
+        return nullptr;
+    }
+
+    MediaStreamTrackVector audioTracks = mediaStream.getAudioTracks();
+    if (audioTracks.isEmpty()) {
+        exceptionState.throwDOMException(
+            InvalidStateError,
+            "MediaStream has no audio track");
+        return nullptr;
+    }
+
+    // Use the first audio track in the media stream.
+    MediaStreamTrack* audioTrack = audioTracks[0];
+    std::unique_ptr<AudioSourceProvider> provider = audioTrack->createWebAudioSource();
+
+    MediaStreamAudioSourceNode* node = new MediaStreamAudioSourceNode(context, mediaStream, audioTrack, std::move(provider));
+
+    if (!node)
+        return nullptr;
+
+    // TODO(hongchan): Only stereo streams are supported right now. We should be
+    // able to accept multi-channel streams.
+    node->setFormat(2, context.sampleRate());
+    // context keeps reference until node is disconnected
+    context.notifySourceNodeStartedProcessing(node);
+
+    return node;
 }
 
 DEFINE_TRACE(MediaStreamAudioSourceNode)

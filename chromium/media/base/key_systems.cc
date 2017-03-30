@@ -20,7 +20,6 @@
 #include "media/base/key_system_properties.h"
 #include "media/base/media.h"
 #include "media/base/media_client.h"
-#include "media/media_features.h"
 #include "third_party/widevine/cdm/widevine_cdm_common.h"
 
 namespace media {
@@ -57,12 +56,14 @@ static const NamedCodec kCodecStrings[] = {
     {"vp9", EME_CODEC_WEBM_VP9},        // VP9.
     {"vp9.0", EME_CODEC_WEBM_VP9},      // VP9.
 #if defined(USE_PROPRIETARY_CODECS)
-#if BUILDFLAG(ENABLE_MP4_VP9_DEMUXING)
-    {"vp09", EME_CODEC_MP4_VP9},  // VP9 in MP4.
-#endif
+    {"vp09", EME_CODEC_MP4_VP9},   // VP9 in MP4.
     {"mp4a", EME_CODEC_MP4_AAC},   // AAC.
     {"avc1", EME_CODEC_MP4_AVC1},  // AVC1.
-    {"avc3", EME_CODEC_MP4_AVC1}   // AVC3.
+    {"avc3", EME_CODEC_MP4_AVC1},  // AVC3.
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+    {"hev1", EME_CODEC_MP4_HEVC},  // HEV1.
+    {"hvc1", EME_CODEC_MP4_HEVC},  // HVC1.
+#endif
 #endif  // defined(USE_PROPRIETARY_CODECS)
 };
 
@@ -377,6 +378,13 @@ void KeySystemsImpl::AddSupportedKeySystems(
     DCHECK(properties->GetDistinctiveIdentifierSupport() !=
            EmeFeatureSupport::INVALID);
 
+    if (!IsPotentiallySupportedKeySystem(properties->GetKeySystemName())) {
+      // If you encounter this path, see the comments for the function above.
+      DLOG(ERROR) << "Unsupported name '" << properties->GetKeySystemName()
+                  << "'. See code comments.";
+      continue;
+    }
+
     // Supporting persistent state is a prerequsite for supporting persistent
     // sessions.
     if (properties->GetPersistentStateSupport() ==
@@ -546,15 +554,6 @@ bool KeySystemsImpl::IsSupportedKeySystem(const std::string& key_system) const {
 
   if (!key_system_properties_map_.count(key_system))
     return false;
-
-  // TODO(ddorwin): Move this to where we add key systems when prefixed EME is
-  // removed (crbug.com/249976).
-  if (!IsPotentiallySupportedKeySystem(key_system)) {
-    // If you encounter this path, see the comments for the above function.
-    DLOG(ERROR) << "Unrecognized key system " << key_system
-                << ". See code comments.";
-    return false;
-  }
 
   return true;
 }

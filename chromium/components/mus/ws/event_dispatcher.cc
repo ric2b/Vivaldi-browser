@@ -14,14 +14,15 @@
 #include "components/mus/ws/server_window_delegate.h"
 #include "components/mus/ws/window_coordinate_conversions.h"
 #include "components/mus/ws/window_finder.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/input_events/input_events_type_converters.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_conversions.h"
 
 namespace mus {
 namespace ws {
+
+using Entry = std::pair<uint32_t, std::unique_ptr<Accelerator>>;
+
 namespace {
 
 bool IsOnlyOneMouseButtonDown(int flags) {
@@ -67,9 +68,8 @@ uint32_t PointerId(const ui::LocatedEvent& event) {
 
 EventDispatcher::EventDispatcher(EventDispatcherDelegate* delegate)
     : delegate_(delegate),
-      root_(nullptr),
       capture_window_(nullptr),
-      capture_window_in_nonclient_area_(false),
+      capture_window_client_id_(kInvalidClientId),
       modal_window_controller_(this),
       mouse_button_down_(false),
       mouse_cursor_source_window_(nullptr),
@@ -79,6 +79,7 @@ EventDispatcher::~EventDispatcher() {
   if (capture_window_) {
     UnobserveWindow(capture_window_);
     capture_window_ = nullptr;
+    capture_window_client_id_ = kInvalidClientId;
   }
   for (const auto& pair : pointer_targets_) {
     if (pair.second.window)
@@ -121,8 +122,11 @@ bool EventDispatcher::GetCurrentMouseCursor(int32_t* cursor_out) {
 }
 
 bool EventDispatcher::SetCaptureWindow(ServerWindow* window,
-                                       bool in_nonclient_area) {
-  if (window == capture_window_)
+                                       ClientSpecificId client_id) {
+  if (!window)
+    client_id = kInvalidClientId;
+
+  if (window == capture_window_ && client_id == capture_window_client_id_)
     return true;
 
   // A window that is blocked by a modal window cannot gain capture.
@@ -152,9 +156,9 @@ bool EventDispatcher::SetCaptureWindow(ServerWindow* window,
                                      : ui::EventPointerType::POINTER_TYPE_TOUCH;
       // TODO(jonross): Track previous location in PointerTarget for sending
       // cancels.
-      ui::PointerEvent event(event_type, pointer_type, gfx::Point(),
-                             gfx::Point(), ui::EF_NONE, pair.first,
-                             ui::EventTimeForNow());
+      ui::PointerEvent event(
+          event_type, gfx::Point(), gfx::Point(), ui::EF_NONE, pair.first,
+          ui::PointerDetails(pointer_type), ui::EventTimeForNow());
       DispatchToPointerTarget(pair.second, event);
     }
     pointer_targets_.clear();
@@ -164,13 +168,15 @@ bool EventDispatcher::SetCaptureWindow(ServerWindow* window,
   // from native platform might try to set the capture again.
   bool had_capture_window = capture_window_ != nullptr;
   capture_window_ = window;
-  capture_window_in_nonclient_area_ = in_nonclient_area;
+  capture_window_client_id_ = client_id;
 
   // Begin tracking the capture window if it is not yet being observed.
   if (window) {
     ObserveWindow(window);
+    // TODO(sky): this conditional is problematic for the case of capture moving
+    // to a different display.
     if (!had_capture_window)
-      delegate_->SetNativeCapture();
+      delegate_->SetNativeCapture(window);
   } else {
     delegate_->ReleaseNativeCapture();
     if (!mouse_button_down_)
@@ -191,7 +197,7 @@ void EventDispatcher::ReleaseCaptureBlockedByModalWindow(
 
   if (modal_window_controller_.IsWindowBlockedBy(capture_window_,
                                                  modal_window)) {
-    SetCaptureWindow(nullptr, false);
+    SetCaptureWindow(nullptr, kInvalidClientId);
   }
 }
 
@@ -200,13 +206,13 @@ void EventDispatcher::ReleaseCaptureBlockedByAnyModalWindow() {
     return;
 
   if (modal_window_controller_.IsWindowBlocked(capture_window_))
-    SetCaptureWindow(nullptr, false);
+    SetCaptureWindow(nullptr, kInvalidClientId);
 }
 
 void EventDispatcher::UpdateNonClientAreaForCurrentWindow() {
   if (mouse_cursor_source_window_) {
     gfx::Point location = mouse_pointer_last_location_;
-    ServerWindow* target = FindDeepestVisibleWindowForEvents(root_, &location);
+    ServerWindow* target = FindDeepestVisibleWindowForEvents(&location);
     if (target == mouse_cursor_source_window_) {
       mouse_cursor_in_non_client_area_ =
           mouse_cursor_source_window_
@@ -219,8 +225,7 @@ void EventDispatcher::UpdateNonClientAreaForCurrentWindow() {
 void EventDispatcher::UpdateCursorProviderByLastKnownLocation() {
   if (!mouse_button_down_) {
     gfx::Point location = mouse_pointer_last_location_;
-    mouse_cursor_source_window_ =
-        FindDeepestVisibleWindowForEvents(root_, &location);
+    mouse_cursor_source_window_ = FindDeepestVisibleWindowForEvents(&location);
 
     mouse_cursor_in_non_client_area_ =
         mouse_cursor_source_window_
@@ -249,14 +254,11 @@ void EventDispatcher::RemoveAccelerator(uint32_t id) {
 }
 
 void EventDispatcher::ProcessEvent(const ui::Event& event) {
-  if (!root_)  // Tests may not have a root window.
-    return;
-
   if (event.IsKeyEvent()) {
     const ui::KeyEvent* key_event = event.AsKeyEvent();
     if (event.type() == ui::ET_KEY_PRESSED && !key_event->is_char()) {
       Accelerator* pre_target =
-          FindAccelerator(*key_event, mojom::AcceleratorPhase::PRE_TARGET);
+          FindAccelerator(*key_event, ui::mojom::AcceleratorPhase::PRE_TARGET);
       if (pre_target) {
         delegate_->OnAccelerator(pre_target->id(), event);
         return;
@@ -276,11 +278,15 @@ void EventDispatcher::ProcessEvent(const ui::Event& event) {
 
 void EventDispatcher::ProcessKeyEvent(const ui::KeyEvent& event) {
   Accelerator* post_target =
-      FindAccelerator(event, mojom::AcceleratorPhase::POST_TARGET);
+      FindAccelerator(event, ui::mojom::AcceleratorPhase::POST_TARGET);
   ServerWindow* focused_window =
       delegate_->GetFocusedWindowForEventDispatcher();
   if (focused_window) {
-    delegate_->DispatchInputEventToWindow(focused_window, false, event,
+    // Assume key events are for the client area.
+    const bool in_nonclient_area = false;
+    const ClientSpecificId client_id =
+        delegate_->GetEventTargetClientId(focused_window, in_nonclient_area);
+    delegate_->DispatchInputEventToWindow(focused_window, client_id, event,
                                           post_target);
     return;
   }
@@ -316,10 +322,7 @@ void EventDispatcher::ProcessLocatedEvent(const ui::LocatedEvent& event) {
 
   if (capture_window_) {
     mouse_cursor_source_window_ = capture_window_;
-    PointerTarget pointer_target;
-    pointer_target.window = capture_window_;
-    pointer_target.in_nonclient_area = capture_window_in_nonclient_area_;
-    DispatchToPointerTarget(pointer_target, event);
+    DispatchToClient(capture_window_, capture_window_client_id_, event);
     return;
   }
 
@@ -337,7 +340,7 @@ void EventDispatcher::ProcessLocatedEvent(const ui::LocatedEvent& event) {
         mouse_cursor_source_window_ = pointer_target.window;
       if (!any_pointers_down) {
         delegate_->SetFocusedWindowFromEventDispatcher(pointer_target.window);
-        delegate_->SetNativeCapture();
+        delegate_->SetNativeCapture(pointer_target.window);
       }
     }
   }
@@ -399,9 +402,10 @@ void EventDispatcher::UpdateTargetForPointer(int32_t pointer_id,
   // The targets are changing. Send an exit if appropriate.
   if (event.IsMousePointerEvent()) {
     ui::PointerEvent exit_event(
-        ui::ET_POINTER_EXITED, ui::EventPointerType::POINTER_TYPE_MOUSE,
-        event.location(), event.root_location(), event.flags(),
-        ui::PointerEvent::kMousePointerId, event.time_stamp());
+        ui::ET_POINTER_EXITED, event.location(), event.root_location(),
+        event.flags(), ui::PointerEvent::kMousePointerId,
+        ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE),
+        event.time_stamp());
     DispatchToPointerTarget(pointer_targets_[pointer_id], exit_event);
   }
 
@@ -412,11 +416,10 @@ void EventDispatcher::UpdateTargetForPointer(int32_t pointer_id,
 }
 
 EventDispatcher::PointerTarget EventDispatcher::PointerTargetForEvent(
-    const ui::LocatedEvent& event) const {
+    const ui::LocatedEvent& event) {
   PointerTarget pointer_target;
   gfx::Point location(event.location());
-  ServerWindow* target_window =
-      FindDeepestVisibleWindowForEvents(root_, &location);
+  ServerWindow* target_window = FindDeepestVisibleWindowForEvents(&location);
   pointer_target.window =
       modal_window_controller_.GetTargetForWindow(target_window);
   pointer_target.is_mouse_event = event.IsMousePointerEvent();
@@ -445,21 +448,29 @@ void EventDispatcher::DispatchToPointerTarget(const PointerTarget& target,
   if (target.is_mouse_event)
     mouse_cursor_in_non_client_area_ = target.in_nonclient_area;
 
+  DispatchToClient(target.window, delegate_->GetEventTargetClientId(
+                                      target.window, target.in_nonclient_area),
+                   event);
+}
+
+void EventDispatcher::DispatchToClient(ServerWindow* window,
+                                       ClientSpecificId client_id,
+                                       const ui::LocatedEvent& event) {
   gfx::Point location(event.location());
-  gfx::Transform transform(GetTransformToWindow(target.window));
+  gfx::Transform transform(GetTransformToWindow(window));
   transform.TransformPoint(&location);
   std::unique_ptr<ui::Event> clone = ui::Event::Clone(event);
   clone->AsLocatedEvent()->set_location(location);
   // TODO(jonross): add post-target accelerator support once accelerators
   // support pointer events.
-  delegate_->DispatchInputEventToWindow(target.window, target.in_nonclient_area,
-                                        *clone, nullptr);
+  delegate_->DispatchInputEventToWindow(window, client_id, *clone, nullptr);
 }
 
 void EventDispatcher::CancelPointerEventsToTarget(ServerWindow* window) {
   if (capture_window_ == window) {
     UnobserveWindow(window);
     capture_window_ = nullptr;
+    capture_window_client_id_ = kInvalidClientId;
     mouse_button_down_ = false;
     // A window only cares to be informed that it lost capture if it explicitly
     // requested capture. A window can lose capture if another window gains
@@ -498,7 +509,7 @@ void EventDispatcher::UnobserveWindow(ServerWindow* window) {
 
 Accelerator* EventDispatcher::FindAccelerator(
     const ui::KeyEvent& event,
-    const mojom::AcceleratorPhase phase) {
+    const ui::mojom::AcceleratorPhase phase) {
   for (const auto& pair : accelerators_) {
     if (pair.second->MatchesEvent(event, phase)) {
       return pair.second.get();
@@ -507,10 +518,30 @@ Accelerator* EventDispatcher::FindAccelerator(
   return nullptr;
 }
 
+ServerWindow* EventDispatcher::FindDeepestVisibleWindowForEvents(
+    gfx::Point* location) {
+  ServerWindow* root = delegate_->GetRootWindowContaining(*location);
+  if (!root)
+    return nullptr;
+
+  return mus::ws::FindDeepestVisibleWindowForEvents(root, location);
+}
+
 void EventDispatcher::OnWillChangeWindowHierarchy(ServerWindow* window,
                                                   ServerWindow* new_parent,
                                                   ServerWindow* old_parent) {
-  CancelPointerEventsToTarget(window);
+  // TODO(sky): moving to a different root likely needs to transfer capture.
+  // TODO(sky): this isn't quite right, I think the logic should be (assuming
+  // moving in same root and still drawn):
+  // . if there is capture and window is still in the same root, continue
+  //   sending to it.
+  // . if there isn't capture, then reevaluate each of the pointer targets
+  //   sending exit as necessary.
+  // http://crbug.com/613646 .
+  if (!new_parent || !new_parent->IsDrawn() ||
+      new_parent->GetRoot() != old_parent->GetRoot()) {
+    CancelPointerEventsToTarget(window);
+  }
 }
 
 void EventDispatcher::OnWindowVisibilityChanged(ServerWindow* window) {

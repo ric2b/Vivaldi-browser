@@ -394,7 +394,7 @@ void BrowserTestBase::UseSoftwareCompositing() {
 bool BrowserTestBase::UsingOSMesa() const {
   base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
   return cmd->GetSwitchValueASCII(switches::kUseGL) ==
-         gfx::kGLImplementationOSMesaName;
+         gl::kGLImplementationOSMesaName;
 }
 
 }  // namespace content

@@ -4,7 +4,9 @@
 
 #include "extensions/renderer/script_context_set.h"
 
-#include "base/message_loop/message_loop.h"
+#include "base/location.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "extensions/common/extension.h"
@@ -61,7 +63,7 @@ ScriptContext* ScriptContextSet::Register(
 void ScriptContextSet::Remove(ScriptContext* context) {
   if (contexts_.erase(context)) {
     context->Invalidate();
-    base::MessageLoop::current()->DeleteSoon(FROM_HERE, context);
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, context);
   }
 }
 
@@ -138,8 +140,14 @@ const Extension* ScriptContextSet::GetExtensionFromFrameAndWorld(
     // Isolated worlds (content script).
     extension_id = ScriptInjection::GetHostIdForIsolatedWorld(world_id);
   } else {
-    // Extension pages (chrome-extension:// URLs).
-    GURL frame_url = ScriptContext::GetDataSourceURLForFrame(frame);
+    // For looking up the extension associated with this frame, we either want
+    // to use the current url or possibly the data source url (which this frame
+    // may be navigating to shortly), depending on the security origin of the
+    // frame. We don't always want to use the data source url because some
+    // frames (eg iframes and windows created via window.open) briefly contain
+    // an about:blank script context that is scriptable by their parent/opener
+    // before they finish navigating.
+    GURL frame_url = ScriptContext::GetAccessCheckedFrameURL(frame);
     frame_url = ScriptContext::GetEffectiveDocumentURL(frame, frame_url,
                                                        use_effective_url);
     extension_id =

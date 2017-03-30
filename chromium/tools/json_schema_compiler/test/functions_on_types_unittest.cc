@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "tools/json_schema_compiler/test/functions_on_types.h"
+
+#include <utility>
+
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "tools/json_schema_compiler/test/functions_on_types.h"
 
 using namespace test::api::functions_on_types;
 
@@ -18,14 +21,14 @@ TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetParamsCreate) {
   }
   {
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(new base::FundamentalValue(9));
+    params_value->AppendInteger(9);
     std::unique_ptr<StorageArea::Get::Params> params(
         StorageArea::Get::Params::Create(*params_value));
     EXPECT_FALSE(params);
   }
   {
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(new base::StringValue("test"));
+    params_value->AppendString("test");
     std::unique_ptr<StorageArea::Get::Params> params(
         StorageArea::Get::Params::Create(*params_value));
     ASSERT_TRUE(params);
@@ -38,7 +41,7 @@ TEST(JsonSchemaCompilerFunctionsOnTypesTest, StorageAreaGetParamsCreate) {
     keys_object_value->SetInteger("integer", 5);
     keys_object_value->SetString("string", "string");
     std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-    params_value->Append(keys_object_value->DeepCopy());
+    params_value->Append(keys_object_value->CreateDeepCopy());
     std::unique_ptr<StorageArea::Get::Params> params(
         StorageArea::Get::Params::Create(*params_value));
     ASSERT_TRUE(params);
@@ -64,7 +67,7 @@ TEST(JsonSchemaCompilerFunctionsOnTypesTest, ChromeSettingGetParamsCreate) {
       new base::DictionaryValue());
   details_value->SetBoolean("incognito", true);
   std::unique_ptr<base::ListValue> params_value(new base::ListValue());
-  params_value->Append(details_value.release());
+  params_value->Append(std::move(details_value));
   std::unique_ptr<ChromeSetting::Get::Params> params(
       ChromeSetting::Get::Params::Create(*params_value));
   EXPECT_TRUE(params.get());

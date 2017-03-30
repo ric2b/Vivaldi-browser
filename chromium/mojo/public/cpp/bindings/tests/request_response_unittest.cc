@@ -23,8 +23,8 @@ class ProviderImpl : public sample::Provider {
       : binding_(this, std::move(request)) {}
 
   void EchoString(const String& a,
-                  const Callback<void(String)>& callback) override {
-    Callback<void(String)> callback_copy;
+                  const EchoStringCallback& callback) override {
+    EchoStringCallback callback_copy;
     // Make sure operator= is used.
     callback_copy = callback;
     callback_copy.Run(a);
@@ -32,18 +32,17 @@ class ProviderImpl : public sample::Provider {
 
   void EchoStrings(const String& a,
                    const String& b,
-                   const Callback<void(String, String)>& callback) override {
+                   const EchoStringsCallback& callback) override {
     callback.Run(a, b);
   }
 
   void EchoMessagePipeHandle(
       ScopedMessagePipeHandle a,
-      const Callback<void(ScopedMessagePipeHandle)>& callback) override {
+      const EchoMessagePipeHandleCallback& callback) override {
     callback.Run(std::move(a));
   }
 
-  void EchoEnum(sample::Enum a,
-                const Callback<void(sample::Enum)>& callback) override {
+  void EchoEnum(sample::Enum a, const EchoEnumCallback& callback) override {
     callback.Run(a);
   }
 
@@ -54,51 +53,34 @@ class ProviderImpl : public sample::Provider {
   Binding<sample::Provider> binding_;
 };
 
-class StringRecorder {
- public:
-  StringRecorder(std::string* buf, const base::Closure& closure)
-      : buf_(buf), closure_(closure) {}
-  void Run(const String& a) const {
-    *buf_ = a;
-    closure_.Run();
-  }
-  void Run(const String& a, const String& b) const {
-    *buf_ = a.get() + b.get();
-    closure_.Run();
-  }
+void RecordString(std::string* storage,
+                  const base::Closure& closure,
+                  String str) {
+  *storage = str;
+  closure.Run();
+}
 
- private:
-  std::string* buf_;
-  base::Closure closure_;
-};
+void RecordStrings(std::string* storage,
+                   const base::Closure& closure,
+                   String a,
+                   String b) {
+  *storage = a.get() + b.get();
+  closure.Run();
+}
 
-class EnumRecorder {
- public:
-  explicit EnumRecorder(sample::Enum* value, const base::Closure& closure)
-      : value_(value), closure_(closure) {}
-  void Run(sample::Enum a) const {
-    *value_ = a;
-    closure_.Run();
-  }
+void WriteToMessagePipe(const char* text,
+                        const base::Closure& closure,
+                        ScopedMessagePipeHandle handle) {
+  WriteTextMessage(handle.get(), text);
+  closure.Run();
+}
 
- private:
-  sample::Enum* value_;
-  base::Closure closure_;
-};
-
-class MessagePipeWriter {
- public:
-  MessagePipeWriter(const char* text, const base::Closure& closure)
-      : text_(text), closure_(closure) {}
-  void Run(ScopedMessagePipeHandle handle) const {
-    WriteTextMessage(handle.get(), text_);
-    closure_.Run();
-  }
-
- private:
-  std::string text_;
-  base::Closure closure_;
-};
+void RecordEnum(sample::Enum* storage,
+                const base::Closure& closure,
+                sample::Enum value) {
+  *storage = value;
+  closure.Run();
+}
 
 class RequestResponseTest : public testing::Test {
  public:
@@ -118,7 +100,7 @@ TEST_F(RequestResponseTest, EchoString) {
   std::string buf;
   base::RunLoop run_loop;
   provider->EchoString(String::From("hello"),
-                       StringRecorder(&buf, run_loop.QuitClosure()));
+                       base::Bind(&RecordString, &buf, run_loop.QuitClosure()));
 
   run_loop.Run();
 
@@ -133,7 +115,7 @@ TEST_F(RequestResponseTest, EchoStrings) {
   base::RunLoop run_loop;
   provider->EchoStrings(
       String::From("hello"), String::From(" world"),
-      StringRecorder(&buf, run_loop.QuitClosure()));
+      base::Bind(&RecordStrings, &buf, run_loop.QuitClosure()));
 
   run_loop.Run();
 
@@ -148,7 +130,7 @@ TEST_F(RequestResponseTest, EchoMessagePipeHandle) {
   base::RunLoop run_loop;
   provider->EchoMessagePipeHandle(
       std::move(pipe2.handle1),
-      MessagePipeWriter("hello", run_loop.QuitClosure()));
+      base::Bind(&WriteToMessagePipe, "hello", run_loop.QuitClosure()));
 
   run_loop.Run();
 
@@ -165,8 +147,7 @@ TEST_F(RequestResponseTest, EchoEnum) {
   sample::Enum value;
   base::RunLoop run_loop;
   provider->EchoEnum(sample::Enum::VALUE,
-                     EnumRecorder(&value, run_loop.QuitClosure()));
-
+                     base::Bind(&RecordEnum, &value, run_loop.QuitClosure()));
   run_loop.Run();
 
   EXPECT_EQ(sample::Enum::VALUE, value);

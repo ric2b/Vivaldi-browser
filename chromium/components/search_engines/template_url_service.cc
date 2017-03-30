@@ -131,18 +131,18 @@ bool IsFromSync(const TemplateURL* turl, const SyncDataMap& sync_data) {
 // underscores, which could occur as the result of conflict resolution.
 void LogDuplicatesHistogram(
     const TemplateURLService::TemplateURLVector& template_urls) {
-  std::map<std::string, int> duplicates;
+  std::map<base::string16, int> duplicates;
   for (TemplateURLService::TemplateURLVector::const_iterator it =
       template_urls.begin(); it != template_urls.end(); ++it) {
-    std::string keyword = base::UTF16ToASCII((*it)->keyword());
-    base::TrimString(keyword, "_", &keyword);
+    base::string16 keyword = (*it)->keyword();
+    base::TrimString(keyword, base::ASCIIToUTF16("_"), &keyword);
     duplicates[keyword]++;
   }
 
   // Count the keywords with duplicates.
   int num_dupes = 0;
-  for (std::map<std::string, int>::const_iterator it = duplicates.begin();
-      it != duplicates.end(); ++it) {
+  for (std::map<base::string16, int>::const_iterator it = duplicates.begin();
+       it != duplicates.end(); ++it) {
     if (it->second > 1)
       num_dupes++;
   }
@@ -827,8 +827,7 @@ void TemplateURLService::OnWebDataServiceRequestDone(
 
     UMA_HISTOGRAM_ENUMERATION(
         "Search.DefaultSearchProviderType",
-        TemplateURLPrepopulateData::GetEngineType(
-            *default_search_provider_, search_terms_data()),
+        default_search_provider_->GetEngineType(search_terms_data()),
         SEARCH_ENGINE_MAX);
 
     if (rappor_service_) {
@@ -2201,13 +2200,13 @@ base::string16 TemplateURLService::UniquifyKeyword(const TemplateURL& turl,
   return keyword_candidate;
 }
 
-bool TemplateURLService::IsLocalTemplateURLBetter(
-    const TemplateURL* local_turl,
-    const TemplateURL* sync_turl) {
+bool TemplateURLService::IsLocalTemplateURLBetter(const TemplateURL* local_turl,
+                                                  const TemplateURL* sync_turl,
+                                                  bool prefer_local_default) {
   DCHECK(GetTemplateURLForGUID(local_turl->sync_guid()));
   return local_turl->last_modified() > sync_turl->last_modified() ||
          local_turl->created_by_policy() ||
-         local_turl== GetDefaultSearchProvider();
+         (prefer_local_default && local_turl == GetDefaultSearchProvider());
 }
 
 void TemplateURLService::ResolveSyncKeywordConflict(
@@ -2264,11 +2263,9 @@ void TemplateURLService::MergeInSyncTemplateURL(
       FindNonExtensionTemplateURLForKeyword(sync_turl->keyword());
   bool should_add_sync_turl = true;
 
-  // If there was no TemplateURL in the local model that conflicts with
-  // |sync_turl|, skip the following preparation steps and just add |sync_turl|
-  // directly. Otherwise, modify |conflicting_turl| to make room for
-  // |sync_turl|.
+  // Resolve conflicts with local TemplateURLs.
   if (conflicting_turl) {
+    // Modify |conflicting_turl| to make room for |sync_turl|.
     if (IsFromSync(conflicting_turl, sync_data)) {
       // |conflicting_turl| is already known to Sync, so we're not allowed to
       // remove it. In this case, we want to uniquify the worse one and send an
@@ -2304,6 +2301,43 @@ void TemplateURLService::MergeInSyncTemplateURL(
       }
       // This TemplateURL was either removed or overwritten in the local model.
       // Remove the entry from the local data so it isn't pushed up to Sync.
+      local_data->erase(guid);
+    }
+  } else {
+    // Check for a turl with a conflicting prepopulate_id. This detects the case
+    // where the user changes a prepopulated engine's keyword on one client,
+    // then begins syncing on another client.  We want to reflect this keyword
+    // change to that prepopulated URL on other clients instead of assuming that
+    // the modified TemplateURL is a new entity.
+    TemplateURL* conflicting_prepopulated_turl =
+        FindPrepopulatedTemplateURL(sync_turl->prepopulate_id());
+
+    // If we found a conflict, and the sync entity is better, apply the remote
+    // changes locally. We consider |sync_turl| better if it's been modified
+    // more recently and the local TemplateURL isn't yet known to sync. We will
+    // consider the sync entity better even if the local TemplateURL is the
+    // current default, since in this case being default does not necessarily
+    // mean the user explicitly set this TemplateURL as default. If we didn't do
+    // this, changes to the keywords of prepopulated default engines would never
+    // be applied to other clients.
+    // If we can't safely replace the local entry with the synced one, or merge
+    // the relevant changes in, we give up and leave both intact.
+    if (conflicting_prepopulated_turl &&
+        !IsFromSync(conflicting_prepopulated_turl, sync_data) &&
+        !IsLocalTemplateURLBetter(conflicting_prepopulated_turl, sync_turl,
+                                  false)) {
+      std::string guid = conflicting_prepopulated_turl->sync_guid();
+      if (conflicting_prepopulated_turl == default_search_provider_) {
+        ApplyDefaultSearchChange(&sync_turl->data(),
+                                 DefaultSearchManager::FROM_USER);
+        merge_result->set_num_items_modified(
+            merge_result->num_items_modified() + 1);
+      } else {
+        Remove(conflicting_prepopulated_turl);
+        merge_result->set_num_items_deleted(merge_result->num_items_deleted() +
+                                            1);
+      }
+      // Remove the local data so it isn't written to sync.
       local_data->erase(guid);
     }
   }

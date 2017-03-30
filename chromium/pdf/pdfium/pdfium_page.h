@@ -14,10 +14,6 @@
 #include "third_party/pdfium/public/fpdf_formfill.h"
 #include "third_party/pdfium/public/fpdf_text.h"
 
-namespace base {
-class Value;
-}
-
 namespace chrome_pdf {
 
 class PDFiumEngine;
@@ -43,8 +39,17 @@ class PDFiumPage {
   // Returns FPDF_TEXTPAGE for the page, loading and parsing it if necessary.
   FPDF_TEXTPAGE GetTextPage();
 
-  // Returns a DictionaryValue version of the page.
-  base::Value* GetAccessibleContentAsValue(int rotation);
+  // Given a start char index, find the longest continuous run of text that's
+  // in a single direction and with the same style and font size. Return the
+  // length of that sequence and its font size and bounding box.
+  void GetTextRunInfo(int start_char_index,
+                      uint32_t* out_len,
+                      double* out_font_size,
+                      pp::FloatRect* out_bounds);
+  // Get a unicode character from the page.
+  uint32_t GetCharUnicode(int char_index);
+  // Get the bounds of a character in page pixels.
+  pp::FloatRect GetCharBounds(int char_index);
 
   enum Area {
     NONSELECTABLE_AREA,

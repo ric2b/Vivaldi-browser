@@ -44,7 +44,7 @@
       "mpognobbkildjkofajifpdfhcoklimli" // Vivaldi
     ]
   },
-  "historySearch": {
+  "historyPrivate": {
     "vivaldi": true,
     "channel": "stable",
     "extension_types": [ "platform_app" ],

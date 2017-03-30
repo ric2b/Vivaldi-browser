@@ -23,10 +23,10 @@
      */
     this._backdropElement = null;
 
-    // Listen to mousedown or touchstart to be sure to be the first to capture
-    // clicks outside the overlay.
-    var clickEvent = ('ontouchstart' in window) ? 'touchstart' : 'mousedown';
-    document.addEventListener(clickEvent, this._onCaptureClick.bind(this), true);
+    // Enable document-wide tap recognizer.
+    Polymer.Gestures.add(document, 'tap', null);
+    // Need to have useCapture=true, Polymer.Gestures doesn't offer that.
+    document.addEventListener('tap', this._onCaptureClick.bind(this), true);
     document.addEventListener('focus', this._onCaptureFocus.bind(this), true);
     document.addEventListener('keydown', this._onCaptureKeyDown.bind(this), true);
   };
@@ -106,7 +106,6 @@
       } else {
         this.removeOverlay(overlay);
       }
-      this.trackBackdrop();
     },
 
     /**
@@ -118,6 +117,7 @@
       var i = this._overlays.indexOf(overlay);
       if (i >= 0) {
         this._bringOverlayAtIndexToFront(i);
+        this.trackBackdrop();
         return;
       }
       var insertionIndex = this._overlays.length;
@@ -144,6 +144,7 @@
       // Get focused node.
       var element = this.deepActiveElement;
       overlay.restoreFocusNode = this._overlayParent(element) ? null : element;
+      this.trackBackdrop();
     },
 
     /**
@@ -162,6 +163,7 @@
       if (node && Polymer.dom(document.body).deepContains(node)) {
         node.focus();
       }
+      this.trackBackdrop();
     },
 
     /**
@@ -310,6 +312,7 @@
      * Returns the deepest overlay in the path.
      * @param {Array<Element>=} path
      * @return {Element|undefined}
+     * @suppress {missingProperties}
      * @private
      */
     _overlayInPath: function(path) {
@@ -330,12 +333,6 @@
       var overlay = /** @type {?} */ (this.currentOverlay());
       // Check if clicked outside of top overlay.
       if (overlay && this._overlayInPath(Polymer.dom(event).path) !== overlay) {
-        if (overlay.withBackdrop) {
-          // There's no need to stop the propagation as the backdrop element
-          // already got this mousedown/touchstart event. Calling preventDefault
-          // on this event ensures that click/tap won't be triggered at all.
-          event.preventDefault();
-        }
         overlay._onCaptureClick(event);
       }
     },
@@ -373,12 +370,11 @@
      * @param {!Element} overlay1
      * @param {!Element} overlay2
      * @return {boolean}
+     * @suppress {missingProperties}
      * @private
      */
     _shouldBeBehindOverlay: function(overlay1, overlay2) {
-      var o1 = /** @type {?} */ (overlay1);
-      var o2 = /** @type {?} */ (overlay2);
-      return !o1.alwaysOnTop && o2.alwaysOnTop;
+      return !overlay1.alwaysOnTop && overlay2.alwaysOnTop;
     }
   };
 

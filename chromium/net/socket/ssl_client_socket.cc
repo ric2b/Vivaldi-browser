@@ -8,14 +8,10 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/strings/string_util.h"
 #include "crypto/ec_private_key.h"
-#include "net/base/connection_type_histograms.h"
 #include "net/base/net_errors.h"
 #include "net/socket/ssl_client_socket_impl.h"
 #include "net/ssl/channel_id_service.h"
-#include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_config_service.h"
-#include "net/ssl/ssl_connection_status_flags.h"
-
 
 namespace net {
 
@@ -160,29 +156,7 @@ void SSLClientSocket::RecordChannelIDSupport(
 bool SSLClientSocket::IsChannelIDEnabled(
     const SSLConfig& ssl_config,
     ChannelIDService* channel_id_service) {
-  if (!ssl_config.channel_id_enabled)
-    return false;
-  if (!channel_id_service) {
-    DVLOG(1) << "NULL channel_id_service_, not enabling channel ID.";
-    return false;
-  }
-  return true;
-}
-
-// static
-bool SSLClientSocket::HasCipherAdequateForHTTP2(
-    const std::vector<uint16_t>& cipher_suites) {
-  for (uint16_t cipher : cipher_suites) {
-    if (IsTLSCipherSuiteAllowedByHTTP2(cipher))
-      return true;
-  }
-  return false;
-}
-
-// static
-bool SSLClientSocket::IsTLSVersionAdequateForHTTP2(
-    const SSLConfig& ssl_config) {
-  return ssl_config.version_max >= SSL_PROTOCOL_VERSION_TLS1_2;
+  return ssl_config.channel_id_enabled && channel_id_service;
 }
 
 // static

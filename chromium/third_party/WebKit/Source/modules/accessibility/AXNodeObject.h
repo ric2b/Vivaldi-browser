@@ -42,6 +42,7 @@ class LayoutRect;
 class Node;
 
 class MODULES_EXPORT AXNodeObject : public AXObject {
+    WTF_MAKE_NONCOPYABLE(AXNodeObject);
 protected:
     AXNodeObject(Node*, AXObjectCacheImpl&);
 
@@ -64,7 +65,7 @@ protected:
     virtual AccessibilityRole nativeAccessibilityRoleIgnoringAria() const;
     String accessibilityDescriptionForElements(HeapVector<Member<Element>> &elements) const;
     void alterSliderValue(bool increase);
-    AXObject* activeDescendant() const override;
+    AXObject* activeDescendant() override;
     String ariaAccessibilityDescription() const;
     String ariaAutoComplete() const;
     AccessibilityRole determineAriaRoleAttribute() const;
@@ -74,7 +75,6 @@ protected:
     bool isTextControl() const override;
     // This returns true if it's focusable but it's not content editable and it's not a control or ARIA control.
     bool isGenericFocusableElement() const;
-    HTMLLabelElement* labelForElement(const Element*) const;
     AXObject* menuButtonForMenu() const;
     Element* menuItemElementForMenu() const;
     Element* mouseButtonListener() const;
@@ -138,6 +138,7 @@ protected:
     bool canvasHasFallbackContent() const final;
     int headingLevel() const final;
     unsigned hierarchicalLevel() const final;
+    void markers(Vector<DocumentMarker::MarkerType>&, Vector<AXRange>&) const override;
     AccessibilityOrientation orientation() const override;
     String text() const override;
 

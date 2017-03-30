@@ -15,9 +15,12 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "media/base/android/audio_decoder_job.h"
 #include "media/base/android/media_player_manager.h"
@@ -86,7 +89,7 @@ MediaSourcePlayer::~MediaSourcePlayer() {
   }
 }
 
-void MediaSourcePlayer::SetVideoSurface(gfx::ScopedJavaSurface surface) {
+void MediaSourcePlayer::SetVideoSurface(gl::ScopedJavaSurface surface) {
   DVLOG(1) << __FUNCTION__;
   if (!video_decoder_job_->SetVideoSurface(std::move(surface)))
     return;
@@ -734,7 +737,7 @@ void MediaSourcePlayer::StartStarvationCallback(
 
   decoder_starvation_callback_.Reset(
       base::Bind(&MediaSourcePlayer::OnDecoderStarved, weak_this_));
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, decoder_starvation_callback_.callback(), timeout);
 }
 

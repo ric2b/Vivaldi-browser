@@ -18,6 +18,7 @@
 #include "components/mus/ws/platform_display_factory.h"
 #include "components/mus/ws/server_window.h"
 #include "components/mus/ws/test_utils.h"
+#include "components/mus/ws/window_manager_display_root.h"
 #include "components/mus/ws/window_manager_state.h"
 #include "components/mus/ws/window_server.h"
 #include "components/mus/ws/window_server_delegate.h"
@@ -32,10 +33,20 @@ namespace ws {
 namespace test {
 namespace {
 
+const UserId kTestId1 = "2";
+const UserId kTestId2 = "21";
+
 ClientWindowId ClientWindowIdForFirstRoot(WindowTree* tree) {
   if (tree->roots().empty())
     return ClientWindowId();
   return ClientWindowIdForWindow(tree, *tree->roots().begin());
+}
+
+WindowManagerState* GetWindowManagerStateForUser(Display* display,
+                                                 const UserId& user_id) {
+  WindowManagerDisplayRoot* display_root =
+      display->GetWindowManagerDisplayRootForUser(user_id);
+  return display_root ? display_root->window_manager_state() : nullptr;
 }
 
 }  // namespace
@@ -54,6 +65,8 @@ class DisplayTest : public testing::Test {
     window_server_.reset(new WindowServer(&window_server_delegate_,
                                           scoped_refptr<SurfacesState>()));
     window_server_delegate_.set_window_server(window_server_.get());
+    window_server_->user_id_tracker()->AddUserId(kTestId1);
+    window_server_->user_id_tracker()->AddUserId(kTestId2);
   }
 
  protected:
@@ -62,7 +75,6 @@ class DisplayTest : public testing::Test {
   TestWindowServerDelegate window_server_delegate_;
   std::unique_ptr<WindowServer> window_server_;
   base::MessageLoop message_loop_;
-  TestWindowManagerFactory test_window_manager_factory_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(DisplayTest);
@@ -72,12 +84,10 @@ TEST_F(DisplayTest, CallsCreateDefaultDisplays) {
   const int kNumHostsToCreate = 2;
   window_server_delegate_.set_num_displays_to_create(kNumHostsToCreate);
 
-  const UserId kTestId1 = "2";
-  const UserId kTestId2 = "21";
   DisplayManager* display_manager = window_server_->display_manager();
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId1);
   // The first register should trigger creation of the default
   // Displays. There should be kNumHostsToCreate Displays.
   EXPECT_EQ(static_cast<size_t>(kNumHostsToCreate),
@@ -86,42 +96,40 @@ TEST_F(DisplayTest, CallsCreateDefaultDisplays) {
   // Each host should have a WindowManagerState for kTestId1.
   for (Display* display : display_manager->displays()) {
     EXPECT_EQ(1u, display->num_window_manger_states());
-    EXPECT_TRUE(display->GetWindowManagerStateForUser(kTestId1));
-    EXPECT_FALSE(display->GetWindowManagerStateForUser(kTestId2));
+    EXPECT_TRUE(GetWindowManagerStateForUser(display, kTestId1));
+    EXPECT_FALSE(GetWindowManagerStateForUser(display, kTestId2));
   }
 
   // Add another registry, should trigger creation of another wm.
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId2, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId2);
   for (Display* display : display_manager->displays()) {
     ASSERT_EQ(2u, display->num_window_manger_states());
-    WindowManagerState* state1 =
-        display->GetWindowManagerStateForUser(kTestId1);
-    ASSERT_TRUE(state1);
-    WindowManagerState* state2 =
-        display->GetWindowManagerStateForUser(kTestId2);
-    ASSERT_TRUE(state2);
+    WindowManagerDisplayRoot* root1 =
+        display->GetWindowManagerDisplayRootForUser(kTestId1);
+    ASSERT_TRUE(root1);
+    WindowManagerDisplayRoot* root2 =
+        display->GetWindowManagerDisplayRootForUser(kTestId2);
+    ASSERT_TRUE(root2);
     // Verify the two states have different roots.
-    EXPECT_NE(state1, state2);
-    EXPECT_NE(state1->root(), state2->root());
+    EXPECT_NE(root1, root2);
+    EXPECT_NE(root1->root(), root2->root());
   }
 }
 
 TEST_F(DisplayTest, Destruction) {
   window_server_delegate_.set_num_displays_to_create(1);
 
-  const UserId kTestId1 = "2";
-  const UserId kTestId2 = "21";
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId1);
 
   // Add another registry, should trigger creation of another wm.
   DisplayManager* display_manager = window_server_->display_manager();
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId2, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId2);
   ASSERT_EQ(1u, display_manager->displays().size());
   Display* display = *display_manager->displays().begin();
   ASSERT_EQ(2u, display->num_window_manger_states());
@@ -129,47 +137,46 @@ TEST_F(DisplayTest, Destruction) {
   EXPECT_EQ(2u, window_server_->num_trees());
 
   {
-    WindowManagerState* state = display->GetWindowManagerStateForUser(kTestId1);
+    WindowManagerState* state = GetWindowManagerStateForUser(display, kTestId1);
     // Destroy the tree associated with |state|. Should result in deleting
     // |state|.
-    window_server_->DestroyTree(state->tree());
+    window_server_->DestroyTree(state->window_tree());
     ASSERT_EQ(1u, display->num_window_manger_states());
-    EXPECT_FALSE(display->GetWindowManagerStateForUser(kTestId1));
+    EXPECT_FALSE(GetWindowManagerStateForUser(display, kTestId1));
     EXPECT_EQ(1u, display_manager->displays().size());
     EXPECT_EQ(1u, window_server_->num_trees());
   }
 
   EXPECT_FALSE(window_server_delegate_.got_on_no_more_displays());
-  // Destroy the Display, which should shutdown the trees.
   window_server_->display_manager()->DestroyDisplay(display);
-  EXPECT_EQ(0u, window_server_->num_trees());
+  // There is still one tree left.
+  EXPECT_EQ(1u, window_server_->num_trees());
   EXPECT_TRUE(window_server_delegate_.got_on_no_more_displays());
 }
 
 TEST_F(DisplayTest, EventStateResetOnUserSwitch) {
   window_server_delegate_.set_num_displays_to_create(1);
 
-  const UserId kTestId1 = "20";
-  const UserId kTestId2 = "201";
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId1, &test_window_manager_factory_);
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId2, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId1);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId2);
 
   window_server_->user_id_tracker()->SetActiveUserId(kTestId1);
 
   DisplayManager* display_manager = window_server_->display_manager();
   ASSERT_EQ(1u, display_manager->displays().size());
   Display* display = *display_manager->displays().begin();
-  WindowManagerState* active_wms = display->GetActiveWindowManagerState();
+  WindowManagerState* active_wms =
+      display->GetActiveWindowManagerDisplayRoot()->window_manager_state();
   ASSERT_TRUE(active_wms);
   EXPECT_EQ(kTestId1, active_wms->user_id());
 
   static_cast<PlatformDisplayDelegate*>(display)->OnEvent(ui::PointerEvent(
       ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::Point(20, 25),
-                     gfx::Point(20, 25), base::TimeDelta(),
+                     gfx::Point(20, 25), base::TimeTicks(),
                      ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON)));
 
   EXPECT_TRUE(EventDispatcherTestApi(active_wms->event_dispatcher())
@@ -180,10 +187,13 @@ TEST_F(DisplayTest, EventStateResetOnUserSwitch) {
   // Switch the user. Should trigger resetting state in old event dispatcher
   // and update state in new event dispatcher.
   window_server_->user_id_tracker()->SetActiveUserId(kTestId2);
-  EXPECT_NE(active_wms, display->GetActiveWindowManagerState());
+  EXPECT_NE(
+      active_wms,
+      display->GetActiveWindowManagerDisplayRoot()->window_manager_state());
   EXPECT_FALSE(EventDispatcherTestApi(active_wms->event_dispatcher())
                    .AreAnyPointersDown());
-  active_wms = display->GetActiveWindowManagerState();
+  active_wms =
+      display->GetActiveWindowManagerDisplayRoot()->window_manager_state();
   EXPECT_EQ(kTestId2, active_wms->user_id());
   EXPECT_EQ(gfx::Point(20, 25),
             active_wms->event_dispatcher()->mouse_pointer_last_location());
@@ -194,25 +204,23 @@ TEST_F(DisplayTest, EventStateResetOnUserSwitch) {
 // Verifies capture fails when wm is inactive and succeeds when wm is active.
 TEST_F(DisplayTest, SetCaptureFromWindowManager) {
   window_server_delegate_.set_num_displays_to_create(1);
-  const UserId kTestId1 = "20";
-  const UserId kTestId2 = "201";
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId1, &test_window_manager_factory_);
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId2, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId1);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId2);
   window_server_->user_id_tracker()->SetActiveUserId(kTestId1);
   DisplayManager* display_manager = window_server_->display_manager();
   ASSERT_EQ(1u, display_manager->displays().size());
   Display* display = *display_manager->displays().begin();
   WindowManagerState* wms_for_id2 =
-      display->GetWindowManagerStateForUser(kTestId2);
+      GetWindowManagerStateForUser(display, kTestId2);
   ASSERT_TRUE(wms_for_id2);
   EXPECT_FALSE(wms_for_id2->IsActive());
 
   // Create a child of the root that we can set capture on.
-  WindowTree* tree = wms_for_id2->tree();
+  WindowTree* tree = wms_for_id2->window_tree();
   ClientWindowId child_window_id;
   ASSERT_TRUE(NewWindowInTree(tree, &child_window_id));
 
@@ -229,98 +237,70 @@ TEST_F(DisplayTest, SetCaptureFromWindowManager) {
 
 TEST_F(DisplayTest, FocusFailsForInactiveUser) {
   window_server_delegate_.set_num_displays_to_create(1);
-  const UserId kTestId1 = "20";
-  const UserId kTestId2 = "201";
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId1);
   TestWindowTreeClient* window_tree_client1 =
       window_server_delegate_.last_client();
   ASSERT_TRUE(window_tree_client1);
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId2, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId2);
   window_server_->user_id_tracker()->SetActiveUserId(kTestId1);
   DisplayManager* display_manager = window_server_->display_manager();
   ASSERT_EQ(1u, display_manager->displays().size());
   Display* display = *display_manager->displays().begin();
   WindowManagerState* wms_for_id2 =
-      display->GetWindowManagerStateForUser(kTestId2);
-  wms_for_id2->tree()->AddActivationParent(
-      ClientWindowIdForFirstRoot(wms_for_id2->tree()));
+      GetWindowManagerStateForUser(display, kTestId2);
+  wms_for_id2->window_tree()->AddActivationParent(
+      ClientWindowIdForFirstRoot(wms_for_id2->window_tree()));
   ASSERT_TRUE(wms_for_id2);
   EXPECT_FALSE(wms_for_id2->IsActive());
   ClientWindowId child2_id;
-  NewWindowInTree(wms_for_id2->tree(), &child2_id);
+  NewWindowInTree(wms_for_id2->window_tree(), &child2_id);
 
   // Focus should fail for windows in inactive window managers.
-  EXPECT_FALSE(wms_for_id2->tree()->SetFocus(child2_id));
+  EXPECT_FALSE(wms_for_id2->window_tree()->SetFocus(child2_id));
 
   // Focus should succeed for the active window manager.
   WindowManagerState* wms_for_id1 =
-      display->GetWindowManagerStateForUser(kTestId1);
+      GetWindowManagerStateForUser(display, kTestId1);
   ASSERT_TRUE(wms_for_id1);
-  wms_for_id1->tree()->AddActivationParent(
-      ClientWindowIdForFirstRoot(wms_for_id1->tree()));
+  wms_for_id1->window_tree()->AddActivationParent(
+      ClientWindowIdForFirstRoot(wms_for_id1->window_tree()));
   ClientWindowId child1_id;
-  NewWindowInTree(wms_for_id1->tree(), &child1_id);
+  NewWindowInTree(wms_for_id1->window_tree(), &child1_id);
   EXPECT_TRUE(wms_for_id1->IsActive());
-  EXPECT_TRUE(wms_for_id1->tree()->SetFocus(child1_id));
+  EXPECT_TRUE(wms_for_id1->window_tree()->SetFocus(child1_id));
 }
 
-// Verifies clients are notified of focus changes in different displays.
-TEST_F(DisplayTest, CrossDisplayFocus) {
+// Verifies a single tree is used for multiple displays.
+TEST_F(DisplayTest, MultipleDisplays) {
   window_server_delegate_.set_num_displays_to_create(2);
-  const UserId kTestId1 = "20";
-  WindowManagerFactoryRegistryTestApi(
-      window_server_->window_manager_factory_registry())
-      .AddService(kTestId1, &test_window_manager_factory_);
+  WindowManagerWindowTreeFactorySetTestApi(
+      window_server_->window_manager_window_tree_factory_set())
+      .Add(kTestId1);
   window_server_->user_id_tracker()->SetActiveUserId(kTestId1);
-  ASSERT_EQ(2u, window_server_delegate_.bindings()->size());
-  TestWindowTreeBinding* window_tree_binding1 =
+  ASSERT_EQ(1u, window_server_delegate_.bindings()->size());
+  TestWindowTreeBinding* window_tree_binding =
       (*window_server_delegate_.bindings())[0];
-  Display* display1 = window_tree_binding1->tree()->GetDisplay(
-      FirstRoot(window_tree_binding1->tree()));
+  WindowTree* tree = window_tree_binding->tree();
+  ASSERT_EQ(2u, tree->roots().size());
+  std::set<const ServerWindow*> roots = tree->roots();
+  auto it = roots.begin();
+  ServerWindow* root1 = tree->GetWindow((*it)->id());
+  ++it;
+  ServerWindow* root2 = tree->GetWindow((*it)->id());
+  ASSERT_NE(root1, root2);
+  Display* display1 = tree->GetDisplay(root1);
   WindowManagerState* display1_wms =
-      display1->GetWindowManagerStateForUser(kTestId1);
-  TestWindowTreeBinding* window_tree_binding2 =
-      (*window_server_delegate_.bindings())[1];
-  Display* display2 = window_tree_binding2->tree()->GetDisplay(
-      FirstRoot(window_tree_binding2->tree()));
+      display1->GetWindowManagerDisplayRootForUser(kTestId1)
+          ->window_manager_state();
+  Display* display2 = tree->GetDisplay(root2);
   WindowManagerState* display2_wms =
-      display2->GetWindowManagerStateForUser(kTestId1);
-
-  // Create children in both displays.
-  ClientWindowId child1_id;
-  ServerWindow* child1 = NewWindowInTree(display1_wms->tree(), &child1_id);
-  ASSERT_TRUE(child1);
-  child1->set_can_focus(true);
-  ClientWindowId child2_id;
-  ServerWindow* child2 = NewWindowInTree(display2_wms->tree(), &child2_id);
-  ASSERT_TRUE(child2);
-  child2->set_can_focus(true);
-
-  display1->AddActivationParent(FirstRoot(display1_wms->tree()));
-  display2->AddActivationParent(FirstRoot(display2_wms->tree()));
-  FirstRoot(display1_wms->tree())->set_can_focus(true);
-  FirstRoot(display2_wms->tree())->set_can_focus(true);
-  EXPECT_TRUE(display1_wms->tree()->SetFocus(child1_id));
-  EXPECT_EQ(child1, display1->GetFocusedWindow());
-  EXPECT_FALSE(display2->GetFocusedWindow());
-  window_tree_binding1->client()->tracker()->changes()->clear();
-  window_tree_binding2->client()->tracker()->changes()->clear();
-  // Moving focus to display2 should result in notifying display1.
-  EXPECT_TRUE(display2_wms->tree()->SetFocus(child2_id));
-  EXPECT_EQ("Focused id=null",
-            SingleChangeToDescription(
-                *window_tree_binding1->client()->tracker()->changes()));
-  EXPECT_EQ("", SingleChangeToDescription(
-                    *window_tree_binding2->client()->tracker()->changes()));
-  EXPECT_TRUE(window_tree_binding2->client()->tracker()->changes()->empty());
-  window_tree_binding1->client()->tracker()->changes()->clear();
-  window_tree_binding2->client()->tracker()->changes()->clear();
-  EXPECT_FALSE(display1->GetFocusedWindow());
-  EXPECT_EQ(child2, display2->GetFocusedWindow());
+      display2->GetWindowManagerDisplayRootForUser(kTestId1)
+          ->window_manager_state();
+  EXPECT_EQ(display1_wms->window_tree(), display2_wms->window_tree());
 }
 
 }  // namespace test

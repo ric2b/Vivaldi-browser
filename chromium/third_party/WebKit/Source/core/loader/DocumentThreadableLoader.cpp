@@ -55,6 +55,8 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLRequest.h"
 #include "wtf/Assertions.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -66,7 +68,7 @@ private:
     public:
         explicit EmptyDataReader(WebDataConsumerHandle::Client* client) : m_factory(this)
         {
-            Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, bind(&EmptyDataReader::notify, m_factory.createWeakPtr(), client));
+            Platform::current()->currentThread()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&EmptyDataReader::notify, m_factory.createWeakPtr(), WTF::unretained(client)));
         }
     private:
         Result beginRead(const void** buffer, WebDataConsumerHandle::Flags, size_t *available) override
@@ -95,7 +97,7 @@ private:
 
 // No-CORS requests are allowed for all these contexts, and plugin contexts with
 // private permission when we set skipServiceWorker flag in PepperURLLoaderHost.
-bool IsNoCORSAllowedContext(WebURLRequest::RequestContext context, bool skipServiceWorker)
+bool IsNoCORSAllowedContext(WebURLRequest::RequestContext context, WebURLRequest::SkipServiceWorker skipServiceWorker)
 {
     switch (context) {
     case WebURLRequest::RequestContextAudio:
@@ -106,7 +108,7 @@ bool IsNoCORSAllowedContext(WebURLRequest::RequestContext context, bool skipServ
     case WebURLRequest::RequestContextScript:
         return true;
     case WebURLRequest::RequestContextPlugin:
-        return skipServiceWorker;
+        return skipServiceWorker == WebURLRequest::SkipServiceWorker::All;
     default:
         return false;
     }
@@ -124,13 +126,13 @@ static const int kMaxCORSRedirects = 20;
 void DocumentThreadableLoader::loadResourceSynchronously(Document& document, const ResourceRequest& request, ThreadableLoaderClient& client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
     // The loader will be deleted as soon as this function exits.
-    OwnPtr<DocumentThreadableLoader> loader = adoptPtr(new DocumentThreadableLoader(document, &client, LoadSynchronously, options, resourceLoaderOptions));
+    std::unique_ptr<DocumentThreadableLoader> loader = wrapUnique(new DocumentThreadableLoader(document, &client, LoadSynchronously, options, resourceLoaderOptions));
     loader->start(request);
 }
 
-PassOwnPtr<DocumentThreadableLoader> DocumentThreadableLoader::create(Document& document, ThreadableLoaderClient* client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
+std::unique_ptr<DocumentThreadableLoader> DocumentThreadableLoader::create(Document& document, ThreadableLoaderClient* client, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
 {
-    return adoptPtr(new DocumentThreadableLoader(document, client, LoadAsynchronously, options, resourceLoaderOptions));
+    return wrapUnique(new DocumentThreadableLoader(document, client, LoadAsynchronously, options, resourceLoaderOptions));
 }
 
 DocumentThreadableLoader::DocumentThreadableLoader(Document& document, ThreadableLoaderClient* client, BlockingBehavior blockingBehavior, const ThreadableLoaderOptions& options, const ResourceLoaderOptions& resourceLoaderOptions)
@@ -236,10 +238,17 @@ void DocumentThreadableLoader::start(const ResourceRequest& request)
 
     // We assume that ServiceWorker is skipped for sync requests and unsupported
     // protocol requests by content/ code.
-    if (m_async && !request.skipServiceWorker() && SchemeRegistry::shouldTreatURLSchemeAsAllowingServiceWorkers(request.url().protocol()) && m_document->fetcher()->isControlledByServiceWorker()) {
+    if (m_async && request.skipServiceWorker() == WebURLRequest::SkipServiceWorker::None && SchemeRegistry::shouldTreatURLSchemeAsAllowingServiceWorkers(request.url().protocol()) && m_document->fetcher()->isControlledByServiceWorker()) {
         if (newRequest.fetchRequestMode() == WebURLRequest::FetchRequestModeCORS || newRequest.fetchRequestMode() == WebURLRequest::FetchRequestModeCORSWithForcedPreflight) {
             m_fallbackRequestForServiceWorker = ResourceRequest(request);
-            m_fallbackRequestForServiceWorker.setSkipServiceWorker(true);
+            // m_fallbackRequestForServiceWorker is used when a regular controlling
+            // service worker doesn't handle a cross origin request. When this happens
+            // we still want to give foreign fetch a chance to handle the request, so
+            // only skip the controlling service worker for the fallback request.
+            // This is currently safe because of http://crbug.com/604084 the
+            // wasFallbackRequiredByServiceWorker flag is never set when foreign fetch
+            // handled a request.
+            m_fallbackRequestForServiceWorker.setSkipServiceWorker(WebURLRequest::SkipServiceWorker::Controlling);
         }
         loadRequest(newRequest, m_resourceLoaderOptions);
         // |this| may be dead here.
@@ -451,7 +460,7 @@ void DocumentThreadableLoader::redirectReceived(Resource* resource, ResourceRequ
         // TODO(horo): If we support any API which expose the internal body, we
         // will have to read the body. And also HTTPCache changes will be needed
         // because it doesn't store the body of redirect responses.
-        responseReceived(resource, redirectResponse, adoptPtr(new EmptyDataHandle()));
+        responseReceived(resource, redirectResponse, wrapUnique(new EmptyDataHandle()));
 
         if (!self) {
             request = ResourceRequest();
@@ -596,7 +605,7 @@ void DocumentThreadableLoader::didReceiveResourceTiming(Resource* resource, cons
     // |this| may be dead here.
 }
 
-void DocumentThreadableLoader::responseReceived(Resource* resource, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void DocumentThreadableLoader::responseReceived(Resource* resource, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT_UNUSED(resource, resource == this->resource());
     ASSERT(m_async);
@@ -630,7 +639,7 @@ void DocumentThreadableLoader::handlePreflightResponse(const ResourceResponse& r
         return;
     }
 
-    OwnPtr<CrossOriginPreflightResultCacheItem> preflightResult = adoptPtr(new CrossOriginPreflightResultCacheItem(effectiveAllowCredentials()));
+    std::unique_ptr<CrossOriginPreflightResultCacheItem> preflightResult = wrapUnique(new CrossOriginPreflightResultCacheItem(effectiveAllowCredentials()));
     if (!preflightResult->parse(response, accessControlErrorDescription)
         || !preflightResult->allowsCrossOriginMethod(m_actualRequest.httpMethod(), accessControlErrorDescription)
         || !preflightResult->allowsCrossOriginHeaders(m_actualRequest.httpHeaderFields(), accessControlErrorDescription)) {
@@ -656,7 +665,7 @@ void DocumentThreadableLoader::reportResponseReceived(unsigned long identifier, 
     frame->console().reportResourceResponseReceived(loader, identifier, response);
 }
 
-void DocumentThreadableLoader::handleResponse(unsigned long identifier, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void DocumentThreadableLoader::handleResponse(unsigned long identifier, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT(m_client);
 
@@ -827,7 +836,7 @@ void DocumentThreadableLoader::loadActualRequest()
     // controlled by a SW when the preflight request was sent, a new SW may be
     // controlling the page now by calling clients.claim(). We should not send
     // the actual request to the SW. https://crbug.com/604583
-    actualRequest.setSkipServiceWorker(true);
+    actualRequest.setSkipServiceWorker(WebURLRequest::SkipServiceWorker::All);
 
     loadRequest(actualRequest, actualOptions);
     // |this| may be dead here in async mode.

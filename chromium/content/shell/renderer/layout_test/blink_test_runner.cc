@@ -37,8 +37,8 @@
 #include "components/test_runner/web_test_interfaces.h"
 #include "components/test_runner/web_test_proxy.h"
 #include "components/test_runner/web_test_runner.h"
+#include "content/common/content_switches_internal.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/web_preferences.h"
 #include "content/public/renderer/media_stream_utils.h"
@@ -58,6 +58,7 @@
 #include "media/base/video_capturer_source.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
+#include "services/shell/public/cpp/interface_provider.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/WebKit/public/platform/FilePathConversion.h"
 #include "third_party/WebKit/public/platform/Platform.h"
@@ -179,11 +180,20 @@ class MockVideoCapturerSource : public media::VideoCapturerSource {
       int max_requested_width,
       int max_requested_height,
       double max_requested_frame_rate,
-      const VideoCaptureDeviceFormatsCB& callback) override {}
-  void StartCapture(
-      const media::VideoCaptureParams& params,
-      const VideoCaptureDeliverFrameCB& new_frame_callback,
-      const RunningCallback& running_callback) override {}
+      const VideoCaptureDeviceFormatsCB& callback) override {
+    const int supported_width = 640;
+    const int supported_height = 480;
+    const float supported_framerate = 60.0;
+    callback.Run(media::VideoCaptureFormats(
+        1, media::VideoCaptureFormat(
+               gfx::Size(supported_width, supported_height),
+               supported_framerate, media::PIXEL_FORMAT_I420)));
+  }
+  void StartCapture(const media::VideoCaptureParams& params,
+                    const VideoCaptureDeliverFrameCB& new_frame_callback,
+                    const RunningCallback& running_callback) override {
+    running_callback.Run(true);
+  }
   void StopCapture() override {}
 };
 
@@ -202,6 +212,35 @@ class MockAudioCapturerSource : public media::AudioCapturerSource {
  protected:
   ~MockAudioCapturerSource() override {}
 };
+
+// Tests in web-platform-tests use absolute path links such as
+//   <script src="/resources/testharness.js">.
+// Because we load the tests as local files, such links don't work.
+// This function fixes this issue by rewriting file: URLs which were produced
+// from such links so that they point actual files in wpt/.
+WebURL RewriteAbsolutePathInWPT(const std::string& utf8_url) {
+  const char kFileScheme[] = "file:///";
+  const int kFileSchemeLen = arraysize(kFileScheme) - 1;
+  if (utf8_url.compare(0, kFileSchemeLen, kFileScheme, kFileSchemeLen) != 0)
+    return WebURL();
+  if (utf8_url.find("/LayoutTests/") != std::string::npos)
+    return WebURL();
+#if defined(OS_WIN)
+  // +3 for a drive letter, :, and /.
+  const int kFileSchemeAndDriveLen = kFileSchemeLen + 3;
+  if (utf8_url.size() <= kFileSchemeAndDriveLen)
+    return WebURL();
+  std::string path = utf8_url.substr(kFileSchemeAndDriveLen);
+#else
+  std::string path = utf8_url.substr(kFileSchemeLen);
+#endif
+  base::FilePath new_path =
+      LayoutTestRenderThreadObserver::GetInstance()
+          ->webkit_source_dir()
+          .Append(FILE_PATH_LITERAL("LayoutTests/imported/wpt/"))
+          .AppendASCII(path);
+  return WebURL(net::FilePathToFileURL(new_path));
+}
 
 }  // namespace
 
@@ -307,7 +346,15 @@ WebURL BlinkTestRunner::LocalFileToDataURL(const WebURL& file_url) {
   return WebURL(GURL(data_url_prefix + contents_base64));
 }
 
-WebURL BlinkTestRunner::RewriteLayoutTestsURL(const std::string& utf8_url) {
+WebURL BlinkTestRunner::RewriteLayoutTestsURL(const std::string& utf8_url,
+                                              bool is_wpt_mode) {
+  if (is_wpt_mode) {
+    WebURL rewritten_url = RewriteAbsolutePathInWPT(utf8_url);
+    if (!rewritten_url.isEmpty())
+      return rewritten_url;
+    return WebURL(GURL(utf8_url));
+  }
+
   const char kPrefix[] = "file:///tmp/LayoutTests/";
   const int kPrefixLen = arraysize(kPrefix) - 1;
 
@@ -444,9 +491,17 @@ void BlinkTestRunner::SetDeviceScaleFactor(float factor) {
   content::SetDeviceScaleFactor(render_view(), factor);
 }
 
+float BlinkTestRunner::GetWindowToViewportScale() {
+  return content::GetWindowToViewportScale(render_view());
+}
+
 void BlinkTestRunner::EnableUseZoomForDSF() {
   base::CommandLine::ForCurrentProcess()->
       AppendSwitch(switches::kEnableUseZoomForDSF);
+}
+
+bool BlinkTestRunner::IsUseZoomForDSFEnabled() {
+  return content::IsUseZoomForDSFEnabled();
 }
 
 void BlinkTestRunner::SetDeviceColorProfile(const std::string& name) {
@@ -501,7 +556,7 @@ std::string BlinkTestRunner::PathToLocalResource(const std::string& resource) {
     result = result.substr(0, strlen("file:///")) +
              result.substr(strlen("file:////"));
   }
-  return RewriteLayoutTestsURL(result).string().utf8();
+  return RewriteLayoutTestsURL(result, false /* is_wpt_mode */).string().utf8();
 }
 
 void BlinkTestRunner::SetLocale(const std::string& locale) {
@@ -782,7 +837,7 @@ void BlinkTestRunner::CaptureDump() {
   if (!interfaces->TestRunner()->IsRecursiveLayoutDumpRequested()) {
     std::string layout_dump = interfaces->TestRunner()->DumpLayout(
         render_view()->GetMainRenderFrame()->GetWebFrame());
-    OnLayoutDumpCompleted(layout_dump);
+    OnLayoutDumpCompleted(std::move(layout_dump));
     return;
   }
 
@@ -798,7 +853,8 @@ void BlinkTestRunner::OnLayoutDumpCompleted(std::string completed_layout_dump) {
       completed_layout_dump.append(DumpHistoryForWindow(web_view));
   }
 
-  Send(new ShellViewHostMsg_TextDump(routing_id(), completed_layout_dump));
+  Send(new ShellViewHostMsg_TextDump(routing_id(),
+                                     std::move(completed_layout_dump)));
 
   CaptureDumpContinued();
 }
@@ -867,7 +923,7 @@ void BlinkTestRunner::CaptureDumpComplete() {
 mojom::LayoutTestBluetoothFakeAdapterSetter&
 BlinkTestRunner::GetBluetoothFakeAdapterSetter() {
   if (!bluetooth_fake_adapter_setter_) {
-    RenderThread::Get()->GetServiceRegistry()->ConnectToRemoteService(
+    RenderThread::Get()->GetRemoteInterfaces()->GetInterface(
         mojo::GetProxy(&bluetooth_fake_adapter_setter_));
   }
   return *bluetooth_fake_adapter_setter_;
@@ -957,6 +1013,10 @@ void BlinkTestRunner::OnReplyBluetoothManualChooserEvents(
 void BlinkTestRunner::ReportLeakDetectionResult(
     const LeakDetectionResult& report) {
   Send(new ShellViewHostMsg_LeakDetectionDone(routing_id(), report));
+}
+
+void BlinkTestRunner::OnDestruct() {
+  delete this;
 }
 
 }  // namespace content

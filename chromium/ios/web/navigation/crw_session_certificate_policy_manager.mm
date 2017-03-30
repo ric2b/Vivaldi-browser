@@ -13,11 +13,12 @@
 #include "base/strings/sys_string_conversions.h"
 #include "ios/web/public/certificate_policy_cache.h"
 #include "ios/web/public/web_thread.h"
+#include "net/base/hash_value.h"
 #include "net/cert/x509_certificate.h"
 
 // Break if we detect that CertStatus values changed, because we persist them on
 // disk and thus require them to be consistent.
-static_assert(net::CERT_STATUS_ALL_ERRORS == 0xFFFF,
+static_assert(net::CERT_STATUS_ALL_ERRORS == 0xFF00FFFF,
               "The value of CERT_STATUS_ALL_ERRORS changed!");
 static_assert(net::CERT_STATUS_COMMON_NAME_INVALID == 1 << 0,
               "The value of CERT_STATUS_COMMON_NAME_INVALID changed!");
@@ -50,6 +51,7 @@ NSString* const kAllowedCertificatesKey = @"allowedCertificates";
 
 struct AllowedCertificate {
   scoped_refptr<net::X509Certificate> certificate;
+  net::SHA256HashValue certificateHash;
   std::string host;
 };
 
@@ -59,10 +61,10 @@ class LessThan {
                    const AllowedCertificate& rhs) const {
     if (lhs.host != rhs.host)
       return lhs.host < rhs.host;
-    return certificateCompare_(lhs.certificate, rhs.certificate);
+    return hash_compare_(lhs.certificateHash, rhs.certificateHash);
   }
  private:
-  net::X509Certificate::LessThan certificateCompare_;
+  net::SHA256HashValueLessThan hash_compare_;
 };
 
 typedef std::map<AllowedCertificate, net::CertStatus, LessThan>
@@ -105,7 +107,11 @@ void AddToCertificatePolicyCache(
                             status:(net::CertStatus)status {
   DCHECK([NSThread isMainThread]);
   DCHECK(certificate);
-  AllowedCertificate allowedCertificate = {certificate, host};
+  AllowedCertificate allowedCertificate = {
+      certificate, net::X509Certificate::CalculateChainFingerprint256(
+                       certificate->os_cert_handle(),
+                       certificate->GetIntermediateCertificates()),
+      host};
   allowed_[allowedCertificate] = status;
 }
 

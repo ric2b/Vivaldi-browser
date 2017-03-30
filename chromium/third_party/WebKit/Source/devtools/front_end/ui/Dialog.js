@@ -41,7 +41,7 @@ WebInspector.Dialog = function()
     this.contentElement.createChild("content");
     this.contentElement.tabIndex = 0;
     this.contentElement.addEventListener("focus", this._onFocus.bind(this), false);
-    this.contentElement.addEventListener("keydown", this._onKeyDown.bind(this), false);
+    this._keyDownBound = this._onKeyDown.bind(this);
 
     this._wrapsContent = false;
     this._dimmed = false;
@@ -50,7 +50,6 @@ WebInspector.Dialog = function()
 }
 
 /**
- * TODO(dgozman): remove this method (it's only used for shortcuts handling).
  * @return {boolean}
  */
 WebInspector.Dialog.hasInstance = function()
@@ -73,7 +72,11 @@ WebInspector.Dialog.prototype = {
 
         this._glassPane = new WebInspector.GlassPane(document, this._dimmed);
         this._glassPane.element.addEventListener("click", this._onGlassPaneClick.bind(this), false);
-        WebInspector.GlassPane.DefaultFocusedViewStack.push(this);
+        this.element.ownerDocument.body.addEventListener("keydown", this._keyDownBound, false);
+
+        // When a dialog closes, focus should be restored to the previous focused element when
+        // possible, otherwise the default inspector view element.
+        WebInspector.Dialog._previousFocusedElement = WebInspector.currentFocusElement() || WebInspector.Dialog._modalHostView.defaultFocusedElement();
 
         WebInspector.Widget.prototype.show.call(this, this._glassPane.element);
 
@@ -86,11 +89,15 @@ WebInspector.Dialog.prototype = {
      */
     detach: function()
     {
+        this.element.ownerDocument.body.removeEventListener("keydown", this._keyDownBound, false);
         WebInspector.Widget.prototype.detach.call(this);
 
-        WebInspector.GlassPane.DefaultFocusedViewStack.pop();
         this._glassPane.dispose();
         delete this._glassPane;
+
+        if (WebInspector.Dialog._previousFocusedElement)
+            WebInspector.Dialog._previousFocusedElement.focus();
+        delete WebInspector.Dialog._previousFocusedElement;
 
         this._restoreTabIndexOnElements();
 
@@ -250,6 +257,9 @@ WebInspector.Dialog.prototype = {
 
     __proto__: WebInspector.Widget.prototype
 };
+
+/** @type {?Element} */
+WebInspector.Dialog._previousFocusedElement = null;
 
 /** @type {?WebInspector.Widget} */
 WebInspector.Dialog._modalHostView = null;

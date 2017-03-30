@@ -8,6 +8,7 @@
 
 #include "base/run_loop.h"
 #include "build/build_config.h"
+#include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/frame_host/navigation_entry_impl.h"
 #include "content/browser/renderer_host/render_view_host_factory.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -35,6 +36,10 @@
 #include "ui/aura/test/aura_test_helper.h"
 #include "ui/compositor/test/context_factories_for_test.h"
 #include "ui/wm/core/default_activation_client.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
 
 namespace content {
@@ -190,11 +195,13 @@ void RenderViewHostTestHarness::SetUp() {
 #if defined(OS_WIN)
   ole_initializer_.reset(new ui::ScopedOleInitializer());
 #endif
+#if !defined(OS_ANDROID)
+  ImageTransportFactory::InitializeForUnitTests(
+      base::WrapUnique(new NoTransportImageTransportFactory));
+#endif
 #if defined(USE_AURA)
-  // The ContextFactory must exist before any Compositors are created.
-  bool enable_pixel_output = false;
   ui::ContextFactory* context_factory =
-      ui::InitializeContextFactoryForTests(enable_pixel_output);
+      ImageTransportFactory::GetInstance()->GetContextFactory();
 
   aura_test_helper_.reset(
       new aura::test::AuraTestHelper(base::MessageLoopForUI::current()));
@@ -211,6 +218,11 @@ void RenderViewHostTestHarness::SetUp() {
 
   if (IsBrowserSideNavigationEnabled())
     BrowserSideNavigationSetUp();
+
+#if defined(OS_MACOSX)
+  ui::WindowResizeHelperMac::Get()->Init(
+    base::MessageLoop::current()->task_runner());
+#endif  // OS_MACOSX
 }
 
 void RenderViewHostTestHarness::TearDown() {
@@ -225,6 +237,10 @@ void RenderViewHostTestHarness::TearDown() {
   // Make sure that we flush any messages related to WebContentsImpl destruction
   // before we destroy the browser context.
   base::RunLoop().RunUntilIdle();
+
+#if defined(OS_MACOSX)
+  ui::WindowResizeHelperMac::Get()->ShutdownForTests();
+#endif  // OS_MACOSX
 
 #if defined(OS_WIN)
   ole_initializer_.reset();
@@ -242,6 +258,12 @@ void RenderViewHostTestHarness::TearDown() {
                             FROM_HERE,
                             browser_context_.release());
   thread_bundle_.reset();
+
+#if !defined(OS_ANDROID)
+    // RenderWidgetHostView holds on to a reference to SurfaceManager, so it
+    // must be shut down before the ImageTransportFactory.
+    ImageTransportFactory::Terminate();
+#endif
 }
 
 BrowserContext* RenderViewHostTestHarness::CreateBrowserContext() {

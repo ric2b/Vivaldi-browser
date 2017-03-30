@@ -31,6 +31,7 @@
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/touch_emulator_client.h"
+#include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/common/input/synthetic_gesture_packet.h"
@@ -68,6 +69,12 @@ namespace cc {
 class CompositorFrameAck;
 }
 
+#if defined(OS_MACOSX)
+namespace device {
+class PowerSaveBlocker;
+}  // namespace device
+#endif
+
 namespace gfx {
 class Range;
 }
@@ -77,7 +84,6 @@ namespace content {
 class BrowserAccessibilityManager;
 class InputRouter;
 class MockRenderWidgetHost;
-class RenderWidgetHostDelegate;
 class RenderWidgetHostOwnerDelegate;
 class SyntheticGestureController;
 class TimeoutMonitor;
@@ -161,6 +167,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   bool IsLoading() const override;
   void ResizeRectChanged(const gfx::Rect& new_rect) override;
   void RestartHangMonitorTimeout() override;
+  void DisableHangMonitorForTesting() override;
   void SetIgnoreInputEvents(bool ignore_input_events) override;
   void WasResized() override;
   void AddKeyPressEventCallback(const KeyPressEventCallback& callback) override;
@@ -173,7 +180,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   void RemoveInputEventObserver(
       RenderWidgetHost::InputEventObserver* observer) override;
   void GetWebScreenInfo(blink::WebScreenInfo* result) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   void HandleCompositorProto(const std::vector<uint8_t>& proto) override;
 
   // Notification that the screen info has changed.
@@ -248,6 +254,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // Called to notify the RenderWidget that it has lost the mouse lock.
   void LostMouseLock();
 
+  // Notifies the RenderWidget that it lost the mouse lock.
+  void SendMouseLockLost();
+
   // Noifies the RenderWidget of the current mouse cursor visibility state.
   void SendCursorVisibilityState(bool is_visible);
 
@@ -278,7 +287,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // Starts a hang monitor timeout. If there's already a hang monitor timeout
   // the new one will only fire if it has a shorter delay than the time
   // left on the existing timeouts.
-  void StartHangMonitorTimeout(base::TimeDelta delay);
+  void StartHangMonitorTimeout(
+      base::TimeDelta delay,
+      RenderWidgetHostDelegate::RendererUnresponsiveType hang_monitor_reason);
 
   // Stops all existing hang monitor timeouts and assumes the renderer is
   // responsive.
@@ -551,10 +562,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // NotifyRendererResponsive.
   void RendererIsResponsive();
 
-  // Routines used to send the RenderWidget its screen color profile.
-  void DispatchColorProfile();
-  void SendColorProfile();
-
   // IPC message handlers
   void OnRenderProcessGone(int status, int error_code);
   void OnClose();
@@ -675,10 +682,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
 
   // True when waiting for RESIZE_ACK.
   bool resize_ack_pending_;
-
-  // Set if the color profile should fetched and sent to the RenderWidget
-  // during the WasResized() resize message flow.
-  bool color_profile_out_of_date_;
 
   // The current size of the RenderWidget.
   gfx::Size current_size_;
@@ -816,9 +819,17 @@ class CONTENT_EXPORT RenderWidgetHostImpl : public RenderWidgetHost,
   // This value indicates how long to wait before we consider a renderer hung.
   base::TimeDelta hung_renderer_delay_;
 
+  // Stores the reason the hang_monitor_timeout_ has been started. Used to
+  // report histograms if the renderer is hung.
+  RenderWidgetHostDelegate::RendererUnresponsiveType hang_monitor_reason_;
+
   // This value indicates how long to wait for a new compositor frame from a
   // renderer process before clearing any previously displayed content.
   base::TimeDelta new_content_rendering_delay_;
+
+#if defined(OS_MACOSX)
+  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+#endif
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;
 

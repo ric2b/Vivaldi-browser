@@ -40,7 +40,6 @@
 #include "net/base/mock_file_stream.h"
 #include "net/base/net_errors.h"
 #include "net/base/request_priority.h"
-#include "net/base/test_data_directory.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/cert/x509_certificate.h"
 #include "net/nqe/network_quality_estimator.h"
@@ -49,6 +48,7 @@
 #include "net/ssl/ssl_private_key.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/test_data_directory.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_filter.h"
 #include "net/url_request/url_request_interceptor.h"
@@ -489,23 +489,6 @@ class SelectCertificateBrowserClient : public TestContentBrowserClient {
   DISALLOW_COPY_AND_ASSIGN(SelectCertificateBrowserClient);
 };
 
-class ResourceContextStub : public MockResourceContext {
- public:
-  explicit ResourceContextStub(net::URLRequestContext* test_request_context)
-      : MockResourceContext(test_request_context) {}
-
-  std::unique_ptr<net::ClientCertStore> CreateClientCertStore() override {
-    return std::move(dummy_cert_store_);
-  }
-
-  void SetClientCertStore(std::unique_ptr<net::ClientCertStore> store) {
-    dummy_cert_store_ = std::move(store);
-  }
-
- private:
-  std::unique_ptr<net::ClientCertStore> dummy_cert_store_;
-};
-
 // Wraps a ChunkedUploadDataStream to behave as non-chunked to enable upload
 // progress reporting.
 class NonChunkedUploadDataStream : public net::UploadDataStream {
@@ -659,6 +642,10 @@ class ResourceLoaderTest : public testing::Test,
     base::RunLoop().RunUntilIdle();
   }
 
+  void SetClientCertStore(std::unique_ptr<net::ClientCertStore> store) {
+    dummy_cert_store_ = std::move(store);
+  }
+
   // ResourceLoaderDelegate:
   ResourceDispatcherHostLoginDelegate* CreateLoginDelegate(
       ResourceLoader* loader,
@@ -674,6 +661,10 @@ class ResourceLoaderTest : public testing::Test,
                           const GURL& new_url) override {}
   void DidReceiveResponse(ResourceLoader* loader) override {}
   void DidFinishLoading(ResourceLoader* loader) override {}
+  std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
+      ResourceLoader* loader) override {
+    return std::move(dummy_cert_store_);
+  }
 
   TestBrowserThreadBundle thread_bundle_;
   RenderViewHostTestEnabler rvh_test_enabler_;
@@ -681,9 +672,10 @@ class ResourceLoaderTest : public testing::Test,
   net::URLRequestJobFactoryImpl job_factory_;
   TestNetworkQualityEstimator network_quality_estimator_;
   net::TestURLRequestContext test_url_request_context_;
-  ResourceContextStub resource_context_;
+  MockResourceContext resource_context_;
   std::unique_ptr<TestBrowserContext> browser_context_;
   std::unique_ptr<TestWebContents> web_contents_;
+  std::unique_ptr<net::ClientCertStore> dummy_cert_store_;
 
   // The ResourceLoader owns the URLRequest and the ResourceHandler.
   ResourceHandlerStub* raw_ptr_resource_handler_;
@@ -740,11 +732,10 @@ TEST_F(ClientCertResourceLoaderTest, WithStoreLookup) {
   // Set up the test client cert store.
   int store_request_count;
   std::vector<std::string> store_requested_authorities;
-  net::CertificateList dummy_certs(1, scoped_refptr<net::X509Certificate>(
-      new net::X509Certificate("test", "test", base::Time(), base::Time())));
+  net::CertificateList dummy_certs(1, GetTestCert());
   std::unique_ptr<ClientCertStoreStub> test_store(new ClientCertStoreStub(
       dummy_certs, &store_request_count, &store_requested_authorities));
-  resource_context_.SetClientCertStore(std::move(test_store));
+  SetClientCertStore(std::move(test_store));
 
   // Plug in test content browser client.
   SelectCertificateBrowserClient test_client;
@@ -854,7 +845,7 @@ TEST_F(ClientCertResourceLoaderTest, StoreAsyncCancel) {
   LoaderDestroyingCertStore* test_store =
       new LoaderDestroyingCertStore(&loader_,
                                     loader_destroyed_run_loop.QuitClosure());
-  resource_context_.SetClientCertStore(base::WrapUnique(test_store));
+  SetClientCertStore(base::WrapUnique(test_store));
 
   loader_->StartRequest();
   loader_destroyed_run_loop.Run();

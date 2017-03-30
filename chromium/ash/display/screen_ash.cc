@@ -4,6 +4,8 @@
 
 #include "ash/display/screen_ash.h"
 
+#include "ash/aura/wm_window_aura.h"
+#include "ash/common/wm/root_window_finder.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
@@ -11,8 +13,6 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/wm/aura/wm_window_aura.h"
-#include "ash/wm/common/root_window_finder.h"
 #include "base/logging.h"
 #include "ui/aura/client/screen_position_client.h"
 #include "ui/aura/env.h"
@@ -33,8 +33,7 @@ class ScreenForShutdown : public display::Screen {
  public:
   explicit ScreenForShutdown(ScreenAsh* screen_ash)
       : display_list_(screen_ash->GetAllDisplays()),
-        primary_display_(screen_ash->GetPrimaryDisplay()) {
-  }
+        primary_display_(screen_ash->GetPrimaryDisplay()) {}
 
   // display::Screen overrides:
   gfx::Point GetCursorScreenPoint() override { return gfx::Point(); }
@@ -78,11 +77,9 @@ class ScreenForShutdown : public display::Screen {
 
 }  // namespace
 
-ScreenAsh::ScreenAsh() {
-}
+ScreenAsh::ScreenAsh() {}
 
-ScreenAsh::~ScreenAsh() {
-}
+ScreenAsh::~ScreenAsh() {}
 
 void ScreenAsh::NotifyMetricsChanged(const display::Display& display,
                                      uint32_t metrics) {
@@ -111,7 +108,7 @@ bool ScreenAsh::IsWindowUnderCursor(gfx::NativeWindow window) {
 
 gfx::NativeWindow ScreenAsh::GetWindowAtScreenPoint(const gfx::Point& point) {
   aura::Window* root_window =
-      wm::WmWindowAura::GetAuraWindow(wm::GetRootWindowAt(point));
+      WmWindowAura::GetAuraWindow(wm::GetRootWindowAt(point));
   aura::client::ScreenPositionClient* position_client =
       aura::client::GetScreenPositionClient(root_window);
 

@@ -14,13 +14,14 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "modules/mediasession/MediaMetadata.h"
 #include "modules/mediasession/MediaSessionError.h"
+#include <memory>
 
 namespace blink {
 
-MediaSession::MediaSession(PassOwnPtr<WebMediaSession> webMediaSession)
+MediaSession::MediaSession(std::unique_ptr<WebMediaSession> webMediaSession)
     : m_webMediaSession(std::move(webMediaSession))
 {
-    ASSERT(m_webMediaSession);
+    DCHECK(m_webMediaSession);
 }
 
 MediaSession* MediaSession::create(ExecutionContext* context, ExceptionState& exceptionState)
@@ -28,7 +29,7 @@ MediaSession* MediaSession::create(ExecutionContext* context, ExceptionState& ex
     Document* document = toDocument(context);
     LocalFrame* frame = document->frame();
     FrameLoaderClient* client = frame->loader().client();
-    OwnPtr<WebMediaSession> webMediaSession = client->createWebMediaSession();
+    std::unique_ptr<WebMediaSession> webMediaSession = client->createWebMediaSession();
     if (!webMediaSession) {
         exceptionState.throwDOMException(NotSupportedError, "Missing platform implementation.");
         return nullptr;
@@ -57,8 +58,12 @@ ScriptPromise MediaSession::deactivate(ScriptState* scriptState)
 void MediaSession::setMetadata(MediaMetadata* metadata)
 {
     m_metadata = metadata;
-
-    m_webMediaSession->setMetadata(m_metadata ? m_metadata->data() : nullptr);
+    if (metadata) {
+        WebMediaMetadata webMetadata = (WebMediaMetadata) *metadata;
+        m_webMediaSession->setMetadata(&webMetadata);
+    } else {
+        m_webMediaSession->setMetadata(nullptr);
+    }
 }
 
 MediaMetadata* MediaSession::metadata() const

@@ -28,12 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "platform/ThreadSafeFunctional.h"
+#include "platform/CrossThreadFunctional.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/heap/HeapLinkedStack.h"
 #include "platform/heap/HeapTerminatedArrayBuilder.h"
 #include "platform/heap/SafePoint.h"
+#include "platform/heap/SelfKeepAlive.h"
 #include "platform/heap/ThreadState.h"
 #include "platform/heap/Visitor.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -43,6 +44,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "wtf/HashTraits.h"
 #include "wtf/LinkedHashSet.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -83,7 +86,7 @@ private:
     IntWrapper();
     int m_x;
 };
-static_assert(WTF::NeedsTracing<IntWrapper>::value, "NeedsTracing macro failed to recognize trace method.");
+static_assert(WTF::IsTraceable<IntWrapper>::value, "IsTraceable<> template failed to recognize trace method.");
 
 struct SameSizeAsPersistent {
     void* m_pointer[4];
@@ -177,7 +180,7 @@ template<typename T> struct WeakHandlingHashTraits : WTF::SimpleClassHashTraits<
     // can perhaps only be allocated inside collections, never as independent
     // objects.  Explicitly mark this as needing tracing and it will be traced
     // in collections using the traceInCollection method, which it must have.
-    template<typename U = void> struct NeedsTracingLazily {
+    template<typename U = void> struct IsTraceableInCollection {
         static const bool value = true;
     };
     // The traceInCollection method traces differently depending on whether we
@@ -233,8 +236,8 @@ template<> struct HashTraits<blink::PairWithWeakHandling> : blink::WeakHandlingH
 };
 
 template<>
-struct NeedsTracing<blink::PairWithWeakHandling> {
-    static const bool value = NeedsTracing<blink::StrongWeakPair>::value;
+struct IsTraceable<blink::PairWithWeakHandling> {
+    static const bool value = IsTraceable<blink::StrongWeakPair>::value;
 };
 
 } // namespace WTF
@@ -464,10 +467,10 @@ class ThreadedTesterBase {
 protected:
     static void test(ThreadedTesterBase* tester)
     {
-        Vector<OwnPtr<WebThread>, numberOfThreads> m_threads;
+        Vector<std::unique_ptr<WebThread>, numberOfThreads> m_threads;
         for (int i = 0; i < numberOfThreads; i++) {
-            m_threads.append(adoptPtr(Platform::current()->createThread("blink gc testing thread")));
-            m_threads.last()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(threadFunc, AllowCrossThreadAccess(tester)));
+            m_threads.append(wrapUnique(Platform::current()->createThread("blink gc testing thread")));
+            m_threads.last()->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(threadFunc, crossThreadUnretained(tester)));
         }
         while (tester->m_threadsToFinish) {
             SafePointScope scope(BlinkGC::NoHeapPointersOnStack);
@@ -528,11 +531,11 @@ protected:
     using GlobalIntWrapperPersistent = CrossThreadPersistent<IntWrapper>;
 
     Mutex m_mutex;
-    Vector<OwnPtr<GlobalIntWrapperPersistent>> m_crossPersistents;
+    Vector<std::unique_ptr<GlobalIntWrapperPersistent>> m_crossPersistents;
 
-    PassOwnPtr<GlobalIntWrapperPersistent> createGlobalPersistent(int value)
+    std::unique_ptr<GlobalIntWrapperPersistent> createGlobalPersistent(int value)
     {
-        return adoptPtr(new GlobalIntWrapperPersistent(IntWrapper::create(value)));
+        return wrapUnique(new GlobalIntWrapperPersistent(IntWrapper::create(value)));
     }
 
     void addGlobalPersistent()
@@ -556,7 +559,7 @@ protected:
             {
                 Persistent<IntWrapper> wrapper;
 
-                OwnPtr<GlobalIntWrapperPersistent> globalPersistent = createGlobalPersistent(0x0ed0cabb);
+                std::unique_ptr<GlobalIntWrapperPersistent> globalPersistent = createGlobalPersistent(0x0ed0cabb);
 
                 for (int i = 0; i < numberOfAllocations; i++) {
                     wrapper = IntWrapper::create(0x0bbac0de);
@@ -1387,7 +1390,7 @@ private:
 
 class FinalizationObserverWithHashMap {
 public:
-    typedef HeapHashMap<WeakMember<Observable>, OwnPtr<FinalizationObserverWithHashMap>> ObserverMap;
+    typedef HeapHashMap<WeakMember<Observable>, std::unique_ptr<FinalizationObserverWithHashMap>> ObserverMap;
 
     explicit FinalizationObserverWithHashMap(Observable& target) : m_target(target) { }
     ~FinalizationObserverWithHashMap()
@@ -1401,7 +1404,7 @@ public:
         ObserverMap& map = observers();
         ObserverMap::AddResult result = map.add(&target, nullptr);
         if (result.isNewEntry)
-            result.storedValue->value = adoptPtr(new FinalizationObserverWithHashMap(target));
+            result.storedValue->value = wrapUnique(new FinalizationObserverWithHashMap(target));
         else
             ASSERT(result.storedValue->value);
         return map;
@@ -2915,6 +2918,244 @@ TEST(HeapTest, HeapCollectionTypes)
     EXPECT_EQ(1u, dequeUW2->size());
 }
 
+TEST(HeapTest, PersistentVector)
+{
+    IntWrapper::s_destructorCalls = 0;
+
+    typedef Vector<Persistent<IntWrapper>> PersistentVector;
+
+    Persistent<IntWrapper> one(IntWrapper::create(1));
+    Persistent<IntWrapper> two(IntWrapper::create(2));
+    Persistent<IntWrapper> three(IntWrapper::create(3));
+    Persistent<IntWrapper> four(IntWrapper::create(4));
+    Persistent<IntWrapper> five(IntWrapper::create(5));
+    Persistent<IntWrapper> six(IntWrapper::create(6));
+    {
+        PersistentVector vector;
+        vector.append(one);
+        vector.append(two);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector.contains(one));
+        EXPECT_TRUE(vector.contains(two));
+
+        vector.append(three);
+        vector.append(four);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector.contains(one));
+        EXPECT_TRUE(vector.contains(two));
+        EXPECT_TRUE(vector.contains(three));
+        EXPECT_TRUE(vector.contains(four));
+
+        vector.shrink(1);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector.contains(one));
+        EXPECT_FALSE(vector.contains(two));
+        EXPECT_FALSE(vector.contains(three));
+        EXPECT_FALSE(vector.contains(four));
+    }
+    {
+        PersistentVector vector1;
+        PersistentVector vector2;
+
+        vector1.append(one);
+        vector2.append(two);
+        vector1.swap(vector2);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector1.contains(two));
+        EXPECT_TRUE(vector2.contains(one));
+    }
+    {
+        PersistentVector vector1;
+        PersistentVector vector2;
+
+        vector1.append(one);
+        vector1.append(two);
+        vector2.append(three);
+        vector2.append(four);
+        vector2.append(five);
+        vector2.append(six);
+        vector1.swap(vector2);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector1.contains(three));
+        EXPECT_TRUE(vector1.contains(four));
+        EXPECT_TRUE(vector1.contains(five));
+        EXPECT_TRUE(vector1.contains(six));
+        EXPECT_TRUE(vector2.contains(one));
+        EXPECT_TRUE(vector2.contains(two));
+    }
+}
+
+TEST(HeapTest, CrossThreadPersistentVector)
+{
+    IntWrapper::s_destructorCalls = 0;
+
+    typedef Vector<CrossThreadPersistent<IntWrapper>> CrossThreadPersistentVector;
+
+    CrossThreadPersistent<IntWrapper> one(IntWrapper::create(1));
+    CrossThreadPersistent<IntWrapper> two(IntWrapper::create(2));
+    CrossThreadPersistent<IntWrapper> three(IntWrapper::create(3));
+    CrossThreadPersistent<IntWrapper> four(IntWrapper::create(4));
+    CrossThreadPersistent<IntWrapper> five(IntWrapper::create(5));
+    CrossThreadPersistent<IntWrapper> six(IntWrapper::create(6));
+    {
+        CrossThreadPersistentVector vector;
+        vector.append(one);
+        vector.append(two);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector.contains(one));
+        EXPECT_TRUE(vector.contains(two));
+
+        vector.append(three);
+        vector.append(four);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector.contains(one));
+        EXPECT_TRUE(vector.contains(two));
+        EXPECT_TRUE(vector.contains(three));
+        EXPECT_TRUE(vector.contains(four));
+
+        vector.shrink(1);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector.contains(one));
+        EXPECT_FALSE(vector.contains(two));
+        EXPECT_FALSE(vector.contains(three));
+        EXPECT_FALSE(vector.contains(four));
+    }
+    {
+        CrossThreadPersistentVector vector1;
+        CrossThreadPersistentVector vector2;
+
+        vector1.append(one);
+        vector2.append(two);
+        vector1.swap(vector2);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector1.contains(two));
+        EXPECT_TRUE(vector2.contains(one));
+    }
+    {
+        CrossThreadPersistentVector vector1;
+        CrossThreadPersistentVector vector2;
+
+        vector1.append(one);
+        vector1.append(two);
+        vector2.append(three);
+        vector2.append(four);
+        vector2.append(five);
+        vector2.append(six);
+        vector1.swap(vector2);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(vector1.contains(three));
+        EXPECT_TRUE(vector1.contains(four));
+        EXPECT_TRUE(vector1.contains(five));
+        EXPECT_TRUE(vector1.contains(six));
+        EXPECT_TRUE(vector2.contains(one));
+        EXPECT_TRUE(vector2.contains(two));
+    }
+}
+
+TEST(HeapTest, PersistentSet)
+{
+    IntWrapper::s_destructorCalls = 0;
+
+    typedef HashSet<Persistent<IntWrapper>> PersistentSet;
+
+    IntWrapper* oneRaw = IntWrapper::create(1);
+    Persistent<IntWrapper> one(oneRaw);
+    Persistent<IntWrapper> one2(oneRaw);
+    Persistent<IntWrapper> two(IntWrapper::create(2));
+    Persistent<IntWrapper> three(IntWrapper::create(3));
+    Persistent<IntWrapper> four(IntWrapper::create(4));
+    Persistent<IntWrapper> five(IntWrapper::create(5));
+    Persistent<IntWrapper> six(IntWrapper::create(6));
+    {
+        PersistentSet set;
+        set.add(one);
+        set.add(two);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(set.contains(one));
+        EXPECT_TRUE(set.contains(one2));
+        EXPECT_TRUE(set.contains(two));
+
+        set.add(three);
+        set.add(four);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(set.contains(one));
+        EXPECT_TRUE(set.contains(two));
+        EXPECT_TRUE(set.contains(three));
+        EXPECT_TRUE(set.contains(four));
+
+        set.clear();
+        conservativelyCollectGarbage();
+        EXPECT_FALSE(set.contains(one));
+        EXPECT_FALSE(set.contains(two));
+        EXPECT_FALSE(set.contains(three));
+        EXPECT_FALSE(set.contains(four));
+    }
+    {
+        PersistentSet set1;
+        PersistentSet set2;
+
+        set1.add(one);
+        set2.add(two);
+        set1.swap(set2);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(set1.contains(two));
+        EXPECT_TRUE(set2.contains(one));
+        EXPECT_TRUE(set2.contains(one2));
+    }
+}
+
+TEST(HeapTest, CrossThreadPersistentSet)
+{
+    IntWrapper::s_destructorCalls = 0;
+
+    typedef HashSet<CrossThreadPersistent<IntWrapper>> CrossThreadPersistentSet;
+
+    IntWrapper* oneRaw = IntWrapper::create(1);
+    CrossThreadPersistent<IntWrapper> one(oneRaw);
+    CrossThreadPersistent<IntWrapper> one2(oneRaw);
+    CrossThreadPersistent<IntWrapper> two(IntWrapper::create(2));
+    CrossThreadPersistent<IntWrapper> three(IntWrapper::create(3));
+    CrossThreadPersistent<IntWrapper> four(IntWrapper::create(4));
+    CrossThreadPersistent<IntWrapper> five(IntWrapper::create(5));
+    CrossThreadPersistent<IntWrapper> six(IntWrapper::create(6));
+    {
+        CrossThreadPersistentSet set;
+        set.add(one);
+        set.add(two);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(set.contains(one));
+        EXPECT_TRUE(set.contains(one2));
+        EXPECT_TRUE(set.contains(two));
+
+        set.add(three);
+        set.add(four);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(set.contains(one));
+        EXPECT_TRUE(set.contains(two));
+        EXPECT_TRUE(set.contains(three));
+        EXPECT_TRUE(set.contains(four));
+
+        set.clear();
+        conservativelyCollectGarbage();
+        EXPECT_FALSE(set.contains(one));
+        EXPECT_FALSE(set.contains(two));
+        EXPECT_FALSE(set.contains(three));
+        EXPECT_FALSE(set.contains(four));
+    }
+    {
+        CrossThreadPersistentSet set1;
+        CrossThreadPersistentSet set2;
+
+        set1.add(one);
+        set2.add(two);
+        set1.swap(set2);
+        conservativelyCollectGarbage();
+        EXPECT_TRUE(set1.contains(two));
+        EXPECT_TRUE(set2.contains(one));
+        EXPECT_TRUE(set2.contains(one2));
+    }
+}
+
 class NonTrivialObject final {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 public:
@@ -3996,8 +4237,8 @@ TEST(HeapTest, CollectionNesting)
     typedef HeapDeque<Member<IntWrapper>> IntDeque;
     HeapHashMap<void*, IntVector>* map = new HeapHashMap<void*, IntVector>();
     HeapHashMap<void*, IntDeque>* map2 = new HeapHashMap<void*, IntDeque>();
-    static_assert(WTF::NeedsTracing<IntVector>::value, "Failed to recognize HeapVector as NeedsTracing");
-    static_assert(WTF::NeedsTracing<IntDeque>::value, "Failed to recognize HeapDeque as NeedsTracing");
+    static_assert(WTF::IsTraceable<IntVector>::value, "Failed to recognize HeapVector as traceable");
+    static_assert(WTF::IsTraceable<IntDeque>::value, "Failed to recognize HeapDeque as traceable");
 
     map->add(key, IntVector());
     map2->add(key, IntDeque());
@@ -4574,9 +4815,9 @@ void destructorsCalledOnClear(bool addLots)
 
 TEST(HeapTest, DestructorsCalled)
 {
-    HeapHashMap<Member<IntWrapper>, OwnPtr<SimpleClassWithDestructor>> map;
+    HeapHashMap<Member<IntWrapper>, std::unique_ptr<SimpleClassWithDestructor>> map;
     SimpleClassWithDestructor* hasDestructor = new SimpleClassWithDestructor();
-    map.add(IntWrapper::create(1), adoptPtr(hasDestructor));
+    map.add(IntWrapper::create(1), wrapUnique(hasDestructor));
     SimpleClassWithDestructor::s_wasDestructed = false;
     map.clear();
     EXPECT_TRUE(SimpleClassWithDestructor::s_wasDestructed);
@@ -4721,8 +4962,8 @@ class GCParkingThreadTester {
 public:
     static void test()
     {
-        OwnPtr<WebThread> sleepingThread = adoptPtr(Platform::current()->createThread("SleepingThread"));
-        sleepingThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(sleeperMainFunc));
+        std::unique_ptr<WebThread> sleepingThread = wrapUnique(Platform::current()->createThread("SleepingThread"));
+        sleepingThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(sleeperMainFunc));
 
         // Wait for the sleeper to run.
         while (!s_sleeperRunning) {
@@ -5010,16 +5251,16 @@ TEST(HeapTest, RegressNullIsStrongified)
 
 TEST(HeapTest, Bind)
 {
-    std::unique_ptr<SameThreadClosure> closure = bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), Bar::create(), static_cast<Visitor*>(0));
+    std::unique_ptr<WTF::Closure> closure = WTF::bind(static_cast<void (Bar::*)(Visitor*)>(&Bar::trace), wrapPersistent(Bar::create()), nullptr);
     // OffHeapInt* should not make Persistent.
-    std::unique_ptr<SameThreadClosure> closure2 = bind(&OffHeapInt::voidFunction, OffHeapInt::create(1));
+    std::unique_ptr<WTF::Closure> closure2 = WTF::bind(&OffHeapInt::voidFunction, OffHeapInt::create(1));
     preciselyCollectGarbage();
     // The closure should have a persistent handle to the Bar.
     EXPECT_EQ(1u, Bar::s_live);
 
     UseMixin::s_traceCount = 0;
     Mixin* mixin = UseMixin::create();
-    std::unique_ptr<SameThreadClosure> mixinClosure = bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::trace), mixin, static_cast<Visitor*>(0));
+    std::unique_ptr<WTF::Closure> mixinClosure = WTF::bind(static_cast<void (Mixin::*)(Visitor*)>(&Mixin::trace), wrapPersistent(mixin), nullptr);
     preciselyCollectGarbage();
     // The closure should have a persistent handle to the mixin.
     EXPECT_EQ(1, UseMixin::s_traceCount);
@@ -5386,8 +5627,8 @@ public:
         IntWrapper::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMain));
 
         // Wait for the worker thread to have done its initialization,
         // IE. the worker allocates an object and then throw aways any
@@ -5489,8 +5730,8 @@ public:
         IntWrapper::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMain));
 
         // Wait for the worker thread initialization. The worker
         // allocates a weak collection where both collection and
@@ -5692,8 +5933,8 @@ public:
         DestructorLockingObject::s_destructorCalls = 0;
 
         MutexLocker locker(mainThreadMutex());
-        OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
-        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMain));
+        std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
+        workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMain));
 
         // Park the main thread until the worker thread has initialized.
         parkMainThread();
@@ -6045,7 +6286,10 @@ int DeepEagerly::sTraceLazy = 0;
 
 TEST(HeapTest, TraceDeepEagerly)
 {
-#if !ENABLE(ASSERT)
+    // The allocation & GC overhead is considerable for this test,
+    // straining debug builds and lower-end targets too much to be
+    // worth running.
+#if !ENABLE(ASSERT) && !OS(ANDROID)
     DeepEagerly* obj = nullptr;
     for (int i = 0; i < 10000000; i++)
         obj = new DeepEagerly(obj);
@@ -6397,7 +6641,7 @@ private:
 TEST(HeapTest, WeakPersistent)
 {
     Persistent<IntWrapper> object = new IntWrapper(20);
-    OwnPtr<WeakPersistentHolder> holder = adoptPtr(new WeakPersistentHolder(object));
+    std::unique_ptr<WeakPersistentHolder> holder = wrapUnique(new WeakPersistentHolder(object));
     preciselyCollectGarbage();
     EXPECT_TRUE(holder->object());
     object = nullptr;
@@ -6438,9 +6682,9 @@ TEST(HeapTest, CrossThreadWeakPersistent)
 
     // Step 1: Initiate a worker thread, and wait for |object| to get allocated on the worker thread.
     MutexLocker mainThreadMutexLocker(mainThreadMutex());
-    OwnPtr<WebThread> workerThread = adoptPtr(Platform::current()->createThread("Test Worker Thread"));
+    std::unique_ptr<WebThread> workerThread = wrapUnique(Platform::current()->createThread("Test Worker Thread"));
     DestructorLockingObject* object = nullptr;
-    workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(workerThreadMainForCrossThreadWeakPersistentTest, AllowCrossThreadAccess(&object)));
+    workerThread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(workerThreadMainForCrossThreadWeakPersistentTest, crossThreadUnretained(&object)));
     parkMainThread();
 
     // Step 3: Set up a CrossThreadWeakPersistent.
@@ -6675,6 +6919,37 @@ TEST(HeapTest, TestWeakConstObject)
     }
     preciselyCollectGarbage();
     EXPECT_EQ(nullptr, weakWrapper->value());
+}
+
+class EmptyMixin : public GarbageCollectedMixin {};
+class UseMixinFromLeftmostInherited : public UseMixin, public EmptyMixin {
+public:
+    ~UseMixinFromLeftmostInherited() { }
+};
+
+TEST(HeapTest, IsGarbageCollected)
+{
+    // Static sanity checks covering the correct operation of
+    // IsGarbageCollectedType<>.
+
+    static_assert(WTF::IsGarbageCollectedType<SimpleObject>::value, "GarbageCollected<>");
+    static_assert(WTF::IsGarbageCollectedType<const SimpleObject>::value, "const GarbageCollected<>");
+    static_assert(WTF::IsGarbageCollectedType<IntWrapper>::value, "GarbageCollectedFinalized<>");
+    static_assert(WTF::IsGarbageCollectedType<GarbageCollectedMixin>::value, "GarbageCollectedMixin");
+    static_assert(WTF::IsGarbageCollectedType<const GarbageCollectedMixin>::value, "const GarbageCollectedMixin");
+    static_assert(WTF::IsGarbageCollectedType<UseMixin>::value, "GarbageCollectedMixin instance");
+    static_assert(WTF::IsGarbageCollectedType<const UseMixin>::value, "const GarbageCollectedMixin instance");
+    static_assert(WTF::IsGarbageCollectedType<UseMixinFromLeftmostInherited>::value, "GarbageCollectedMixin derived instance");
+    static_assert(WTF::IsGarbageCollectedType<MultipleMixins>::value, "GarbageCollectedMixin");
+
+    static_assert(WTF::IsGarbageCollectedType<HeapHashSet<Member<IntWrapper>>>::value, "HeapHashSet");
+    static_assert(WTF::IsGarbageCollectedType<HeapLinkedHashSet<Member<IntWrapper>>>::value, "HeapLinkedHashSet");
+    static_assert(WTF::IsGarbageCollectedType<HeapListHashSet<Member<IntWrapper>>>::value, "HeapListHashSet");
+    static_assert(WTF::IsGarbageCollectedType<HeapHashCountedSet<Member<IntWrapper>>>::value, "HeapHashCountedSet");
+    static_assert(WTF::IsGarbageCollectedType<HeapHashMap<int, Member<IntWrapper>>>::value, "HeapHashMap");
+    static_assert(WTF::IsGarbageCollectedType<HeapVector<Member<IntWrapper>>>::value, "HeapVector");
+    static_assert(WTF::IsGarbageCollectedType<HeapDeque<Member<IntWrapper>>>::value, "HeapDeque");
+    static_assert(WTF::IsGarbageCollectedType<HeapTerminatedArray<Member<IntWrapper>>>::value, "HeapTerminatedArray");
 }
 
 } // namespace blink

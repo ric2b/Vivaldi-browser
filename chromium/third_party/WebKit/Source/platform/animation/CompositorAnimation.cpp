@@ -4,13 +4,16 @@
 
 #include "platform/animation/CompositorAnimation.h"
 
+#include "base/memory/ptr_util.h"
 #include "cc/animation/animation_curve.h"
 #include "cc/animation/animation_id_provider.h"
+#include "cc/animation/keyframed_animation_curve.h"
 #include "platform/animation/CompositorAnimationCurve.h"
 #include "platform/animation/CompositorFilterAnimationCurve.h"
 #include "platform/animation/CompositorFloatAnimationCurve.h"
 #include "platform/animation/CompositorScrollOffsetAnimationCurve.h"
 #include "platform/animation/CompositorTransformAnimationCurve.h"
+#include <memory>
 
 using cc::Animation;
 using cc::AnimationIdProvider;
@@ -20,50 +23,24 @@ using blink::CompositorAnimationCurve;
 
 namespace blink {
 
-CompositorAnimation::CompositorAnimation(const CompositorAnimationCurve& webCurve, CompositorTargetProperty::Type targetProperty, int animationId, int groupId)
+CompositorAnimation::CompositorAnimation(const CompositorAnimationCurve& curve, CompositorTargetProperty::Type targetProperty, int animationId, int groupId)
 {
     if (!animationId)
         animationId = AnimationIdProvider::NextAnimationId();
     if (!groupId)
         groupId = AnimationIdProvider::NextGroupId();
 
-    CompositorAnimationCurve::AnimationCurveType curveType = webCurve.type();
-    std::unique_ptr<cc::AnimationCurve> curve;
-    switch (curveType) {
-    case CompositorAnimationCurve::AnimationCurveTypeFloat: {
-        const blink::CompositorFloatAnimationCurve* floatCurve = static_cast<const blink::CompositorFloatAnimationCurve*>(&webCurve);
-        curve = floatCurve->cloneToAnimationCurve();
-        break;
-    }
-    case CompositorAnimationCurve::AnimationCurveTypeTransform: {
-        const blink::CompositorTransformAnimationCurve* transformCurve = static_cast<const blink::CompositorTransformAnimationCurve*>(&webCurve);
-        curve = transformCurve->cloneToAnimationCurve();
-        break;
-    }
-    case CompositorAnimationCurve::AnimationCurveTypeFilter: {
-        const blink::CompositorFilterAnimationCurve* filterCurve = static_cast<const blink::CompositorFilterAnimationCurve*>(&webCurve);
-        curve = filterCurve->cloneToAnimationCurve();
-        break;
-    }
-    case CompositorAnimationCurve::AnimationCurveTypeScrollOffset: {
-        const blink::CompositorScrollOffsetAnimationCurve* scrollCurve = static_cast<const blink::CompositorScrollOffsetAnimationCurve*>(&webCurve);
-        curve = scrollCurve->cloneToAnimationCurve();
-        break;
-    }
-    }
-    m_animation = Animation::Create(std::move(curve), animationId, groupId, targetProperty);
+    m_animation = Animation::Create(curve.cloneToAnimationCurve(), animationId, groupId, targetProperty);
 }
-
-CompositorAnimation::CompositorAnimation() {}
 
 CompositorAnimation::~CompositorAnimation() {}
 
-int CompositorAnimation::id()
+int CompositorAnimation::id() const
 {
     return m_animation->id();
 }
 
-int CompositorAnimation::group()
+int CompositorAnimation::group() const
 {
     return m_animation->group();
 }
@@ -148,6 +125,15 @@ std::unique_ptr<cc::Animation> CompositorAnimation::passAnimation()
 {
     m_animation->set_needs_synchronized_start_time(true);
     return std::move(m_animation);
+}
+
+std::unique_ptr<CompositorFloatAnimationCurve> CompositorAnimation::floatCurveForTesting() const
+{
+    const cc::AnimationCurve* curve = m_animation->curve();
+    DCHECK_EQ(cc::AnimationCurve::FLOAT, curve->Type());
+
+    auto keyframedCurve = base::WrapUnique(static_cast<cc::KeyframedFloatAnimationCurve*>(curve->Clone().release()));
+    return CompositorFloatAnimationCurve::CreateForTesting(std::move(keyframedCurve));
 }
 
 } // namespace blink

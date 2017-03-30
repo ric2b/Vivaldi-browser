@@ -44,6 +44,7 @@
 #include "core/paint/PaintLayer.h"
 #include "core/paint/TablePainter.h"
 #include "core/style/StyleInheritedData.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -76,7 +77,6 @@ LayoutTable::~LayoutTable()
 void LayoutTable::styleDidChange(StyleDifference diff, const ComputedStyle* oldStyle)
 {
     LayoutBlock::styleDidChange(diff, oldStyle);
-    propagateStyleToAnonymousChildren();
 
     bool oldFixedTableLayout = oldStyle ? oldStyle->isFixedTableLayout() : false;
 
@@ -92,9 +92,9 @@ void LayoutTable::styleDidChange(StyleDifference diff, const ComputedStyle* oldS
         // According to the CSS2 spec, you only use fixed table layout if an
         // explicit width is specified on the table.  Auto width implies auto table layout.
         if (style()->isFixedTableLayout())
-            m_tableLayout = adoptPtr(new TableLayoutAlgorithmFixed(this));
+            m_tableLayout = wrapUnique(new TableLayoutAlgorithmFixed(this));
         else
-            m_tableLayout = adoptPtr(new TableLayoutAlgorithmAuto(this));
+            m_tableLayout = wrapUnique(new TableLayoutAlgorithmAuto(this));
     }
 
     // If border was changed, invalidate collapsed borders cache.
@@ -424,9 +424,9 @@ bool LayoutTable::recalcChildOverflowAfterStyleChange()
     for (LayoutTableSection* section = topSection(); section; section = sectionBelow(section)) {
         if (!section->childNeedsOverflowRecalcAfterStyleChange())
             continue;
-        childrenOverflowChanged |= section->recalcChildOverflowAfterStyleChange();
+        childrenOverflowChanged = section->recalcChildOverflowAfterStyleChange() || childrenOverflowChanged;
     }
-    return childrenOverflowChanged;
+    return recalcPositionedDescendantsOverflowAfterStyleChange() || childrenOverflowChanged;
 }
 
 void LayoutTable::layout()
@@ -536,10 +536,27 @@ void LayoutTable::layout()
 
         distributeExtraLogicalHeight(floorToInt(computedLogicalHeight - totalSectionLogicalHeight));
 
-        for (LayoutTableSection* section = topSection(); section; section = sectionBelow(section))
+        bool isPaginated = view()->layoutState()->isPaginated();
+        LayoutTableSection* topSection = this->topSection();
+        LayoutUnit logicalOffset = topSection ? topSection->logicalTop() : LayoutUnit();
+        for (LayoutTableSection* section = topSection; section; section = sectionBelow(section)) {
+            section->setLogicalTop(logicalOffset);
             section->layoutRows();
+            logicalOffset += section->logicalHeight();
+            // If the section is a repeating header group that allows at least one row of content then store the
+            // offset for other sections to offset their rows against.
+            if (isPaginated && m_head && m_head == section && section->logicalHeight() < section->pageLogicalHeightForOffset(logicalOffset)
+                && section->getPaginationBreakability() != LayoutBox::AllowAnyBreaks) {
+                LayoutUnit offsetForTableHeaders = state.heightOffsetForTableHeaders();
+                // Don't include any strut in the header group - we only want the height from its content.
+                offsetForTableHeaders += section->logicalHeight();
+                if (LayoutTableRow* row = section->firstRow())
+                    offsetForTableHeaders -= section->paginationStrutForRow(row, section->logicalTop());
+                state.setHeightOffsetForTableHeaders(offsetForTableHeaders);
+            }
+        }
 
-        if (!topSection() && computedLogicalHeight > totalSectionLogicalHeight && !document().inQuirksMode()) {
+        if (!topSection && computedLogicalHeight > totalSectionLogicalHeight && !document().inQuirksMode()) {
             // Completely empty tables (with no sections or anything) should at least honor specified height
             // in strict mode.
             setLogicalHeight(logicalHeight() + computedLogicalHeight);
@@ -550,7 +567,7 @@ void LayoutTable::layout()
             sectionLogicalLeft += style()->isLeftToRightDirection() ? paddingStart() : paddingEnd();
 
         // position the table sections
-        LayoutTableSection* section = topSection();
+        LayoutTableSection* section = topSection;
         while (section) {
             if (!sectionMoved && section->logicalTop() != logicalHeight())
                 sectionMoved = true;
@@ -1450,7 +1467,7 @@ void LayoutTable::invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState
                 // Table cells paint container's background on the container's backing instead of its own (if any),
                 // so we must invalidate it by the containers.
                 if (section->backgroundChangedSinceLastPaintInvalidation()) {
-                    section->invalidateDisplayItemClient(*cell);
+                    section->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*cell, PaintInvalidationStyleChange);
                     invalidated = true;
                 } else if (hasColChangedBackground) {
                     ColAndColGroup colAndColGroup = colElementAtAbsoluteColumn(cell->absoluteColumnIndex());
@@ -1458,12 +1475,12 @@ void LayoutTable::invalidatePaintOfSubtreesIfNeeded(const PaintInvalidationState
                     LayoutTableCol* columnGroup = colAndColGroup.colgroup;
                     if ((columnGroup && columnGroup->backgroundChangedSinceLastPaintInvalidation())
                         || (column && column->backgroundChangedSinceLastPaintInvalidation())) {
-                        section->invalidateDisplayItemClient(*cell);
+                        section->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*cell, PaintInvalidationStyleChange);
                         invalidated = true;
                     }
                 }
                 if ((!invalidated || row->hasSelfPaintingLayer()) && row->backgroundChangedSinceLastPaintInvalidation())
-                    row->invalidateDisplayItemClient(*cell);
+                    row->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*cell, PaintInvalidationStyleChange);
             }
         }
     }

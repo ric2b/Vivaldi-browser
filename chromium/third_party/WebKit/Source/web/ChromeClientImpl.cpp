@@ -41,6 +41,7 @@
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameView.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/forms/ColorChooser.h"
 #include "core/html/forms/ColorChooserClient.h"
@@ -102,10 +103,12 @@
 #include "web/WebPluginContainerImpl.h"
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/StringBuilder.h"
 #include "wtf/text/StringConcatenate.h"
+#include <memory>
 
 namespace blink {
 
@@ -350,7 +353,7 @@ WebNavigationPolicy effectiveNavigationPolicy(NavigationPolicy navigationPolicy,
 } // namespace
 
 Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& r, const WindowFeatures& features,
-    NavigationPolicy navigationPolicy, ShouldSetOpener shouldSetOpener)
+    NavigationPolicy navigationPolicy)
 {
     if (!m_webView->client())
         return nullptr;
@@ -363,7 +366,7 @@ Page* ChromeClientImpl::createWindow(LocalFrame* frame, const FrameLoadRequest& 
     Fullscreen::fullyExitFullscreen(*frame->document());
 
     WebViewImpl* newView = toWebViewImpl(
-        m_webView->client()->createView(WebLocalFrameImpl::fromFrame(frame), WrappedResourceRequest(r.resourceRequest()), features, r.frameName(), policy, shouldSetOpener == NeverSetOpener));
+        m_webView->client()->createView(WebLocalFrameImpl::fromFrame(frame), WrappedResourceRequest(r.resourceRequest()), features, r.frameName(), policy, r.getShouldSetOpener() == NeverSetOpener || features.noopener));
     if (!newView)
         return nullptr;
     return newView->page();
@@ -686,7 +689,7 @@ DateTimeChooser* ChromeClientImpl::openDateTimeChooser(DateTimeChooserClient* pi
 void ChromeClientImpl::openFileChooser(LocalFrame* frame, PassRefPtr<FileChooser> fileChooser)
 {
     notifyPopupOpeningObservers();
-    WebViewClient* client = m_webView->client();
+    WebFrameClient* client = WebLocalFrameImpl::fromFrame(frame)->client();
     if (!client)
         return;
 
@@ -961,14 +964,16 @@ void ChromeClientImpl::setTouchAction(TouchAction touchAction)
         client->setTouchAction(static_cast<WebTouchAction>(touchAction));
 }
 
-bool ChromeClientImpl::requestPointerLock()
+bool ChromeClientImpl::requestPointerLock(LocalFrame* frame)
 {
-    return m_webView->requestPointerLock();
+    LocalFrame* localRoot = frame->localFrameRoot();
+    return WebLocalFrameImpl::fromFrame(localRoot)->frameWidget()->client()->requestPointerLock();
 }
 
-void ChromeClientImpl::requestPointerUnlock()
+void ChromeClientImpl::requestPointerUnlock(LocalFrame* frame)
 {
-    return m_webView->requestPointerUnlock();
+    LocalFrame* localRoot = frame->localFrameRoot();
+    return WebLocalFrameImpl::fromFrame(localRoot)->frameWidget()->client()->requestPointerUnlock();
 }
 
 void ChromeClientImpl::annotatedRegionsChanged()
@@ -1076,6 +1081,12 @@ void ChromeClientImpl::didUpdateTopControls() const
     m_webView->didUpdateTopControls();
 }
 
+CompositorProxyClient* ChromeClientImpl::createCompositorProxyClient(LocalFrame* frame)
+{
+    WebLocalFrameImpl* webFrame = WebLocalFrameImpl::fromFrame(frame);
+    return webFrame->localRoot()->frameWidget()->createCompositorProxyClient();
+}
+
 void ChromeClientImpl::registerPopupOpeningObserver(PopupOpeningObserver* observer)
 {
     DCHECK(observer);
@@ -1107,9 +1118,9 @@ void ChromeClientImpl::didObserveNonGetFetchFromScript() const
         m_webView->pageImportanceSignals()->setIssuedNonGetFetchFromScript();
 }
 
-PassOwnPtr<WebFrameScheduler> ChromeClientImpl::createFrameScheduler(BlameContext* blameContext)
+std::unique_ptr<WebFrameScheduler> ChromeClientImpl::createFrameScheduler(BlameContext* blameContext)
 {
-    return adoptPtr(m_webView->scheduler()->createFrameScheduler(blameContext).release());
+    return wrapUnique(m_webView->scheduler()->createFrameScheduler(blameContext).release());
 }
 
 double ChromeClientImpl::lastFrameTimeMonotonic() const

@@ -4,6 +4,9 @@
 
 #include "android_webview/renderer/aw_message_port_client.h"
 
+#include <memory>
+#include <utility>
+
 #include "android_webview/common/aw_message_port_messages.h"
 #include "content/public/child/v8_value_converter.h"
 #include "content/public/renderer/render_frame.h"
@@ -41,6 +44,10 @@ bool AwMessagePortClient::OnMessageReceived(
   return handled;
 }
 
+void AwMessagePortClient::OnDestruct() {
+  delete this;
+}
+
 void AwMessagePortClient::OnWebToAppMessage(
     int message_port_id,
     const base::string16& message,
@@ -62,9 +69,9 @@ void AwMessagePortClient::OnWebToAppMessage(
   converter->SetDateAllowed(true);
   converter->SetRegExpAllowed(true);
   base::ListValue result;
-  base::Value* value = converter->FromV8Value(v8value, context);
+  std::unique_ptr<base::Value> value = converter->FromV8Value(v8value, context);
   if (value) {
-    result.Append(value);
+    result.Append(std::move(value));
   }
 
   Send(new AwMessagePortHostMsg_ConvertedWebToAppMessage(

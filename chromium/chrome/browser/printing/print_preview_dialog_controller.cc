@@ -179,25 +179,16 @@ WebContents* PrintPreviewDialogController::GetOrCreatePreviewDialog(
 
   // Get the print preview dialog for |initiator|.
   WebContents* preview_dialog = GetPrintPreviewForContents(initiator);
-  if (preview_dialog) {
-    // Show the initiator holding the existing preview dialog.
-    initiator->GetDelegate()->ActivateContents(initiator);
-    return preview_dialog;
-  }
-
-  // We should only create a dialog if the initiator has not been proxied.
-  if (GetProxyDialogTarget(initiator) == initiator)
+  if (!preview_dialog)
     return CreatePrintPreviewDialog(initiator);
 
-  return nullptr;
+  // Show the initiator holding the existing preview dialog.
+  initiator->GetDelegate()->ActivateContents(initiator);
+  return preview_dialog;
 }
 
 WebContents* PrintPreviewDialogController::GetPrintPreviewForContents(
     WebContents* contents) const {
-  // If this WebContents relies on another for its preview dialog, we
-  // need to act as if we are looking for the proxied content's dialog.
-  contents = GetProxyDialogTarget(contents);
-
   // |preview_dialog_map_| is keyed by the preview dialog, so if find()
   // succeeds, then |contents| is the preview dialog.
   PrintPreviewDialogMap::const_iterator it = preview_dialog_map_.find(contents);
@@ -336,7 +327,8 @@ void PrintPreviewDialogController::OnNavEntryCommitted(
 
       // New |preview_dialog| is created. Don't update/erase map entry.
       if (waiting_for_new_preview_page_ &&
-          transition_type == ui::PAGE_TRANSITION_AUTO_TOPLEVEL &&
+          ui::PageTransitionCoreTypeIs(transition_type,
+                                       ui::PAGE_TRANSITION_AUTO_TOPLEVEL) &&
           nav_type == content::NAVIGATION_TYPE_NEW_PAGE) {
         waiting_for_new_preview_page_ = false;
         SaveInitiatorTitle(preview_dialog);
@@ -345,7 +337,8 @@ void PrintPreviewDialogController::OnNavEntryCommitted(
 
       // Cloud print sign-in causes a reload.
       if (!waiting_for_new_preview_page_ &&
-          transition_type == ui::PAGE_TRANSITION_RELOAD &&
+          ui::PageTransitionCoreTypeIs(transition_type,
+                                       ui::PAGE_TRANSITION_RELOAD) &&
           nav_type == content::NAVIGATION_TYPE_EXISTING_PAGE &&
           IsPrintPreviewURL(details->previous_url)) {
         return;
@@ -391,24 +384,6 @@ WebContents* PrintPreviewDialogController::CreatePrintPreviewDialog(
   AddObservers(preview_dialog);
 
   return preview_dialog;
-}
-
-void PrintPreviewDialogController::AddProxyDialogForWebContents(
-    WebContents* source,
-    WebContents* target) {
-  proxied_dialog_map_[source] = target;
-}
-
-void PrintPreviewDialogController::RemoveProxyDialogForWebContents(
-    WebContents* source) {
-  proxied_dialog_map_.erase(source);
-}
-
-WebContents* PrintPreviewDialogController::GetProxyDialogTarget(
-    WebContents* source) const {
-  PrintPreviewDialogMap::const_iterator proxied =
-      proxied_dialog_map_.find(source);
-  return proxied == proxied_dialog_map_.end() ? source : proxied->second;
 }
 
 void PrintPreviewDialogController::SaveInitiatorTitle(

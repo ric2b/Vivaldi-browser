@@ -7,14 +7,16 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/callback.h"
 #include "base/logging.h"
+#include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/lib/filter_chain.h"
-#include "mojo/public/cpp/bindings/lib/message_header_validator.h"
 #include "mojo/public/cpp/bindings/lib/router.h"
+#include "mojo/public/cpp/bindings/message_header_validator.h"
 #include "mojo/public/cpp/system/core.h"
 
 namespace mojo {
@@ -48,8 +50,6 @@ namespace mojo {
 // bound, it may be bound or destroyed on any thread.
 template <typename Interface>
 class StrongBinding {
-  MOVE_ONLY_TYPE_FOR_CPP_03(StrongBinding);
-
  public:
   explicit StrongBinding(Interface* impl) : binding_(impl) {}
 
@@ -73,19 +73,22 @@ class StrongBinding {
   void Bind(ScopedMessagePipeHandle handle) {
     DCHECK(!binding_.is_bound());
     binding_.Bind(std::move(handle));
-    binding_.set_connection_error_handler([this]() { OnConnectionError(); });
+    binding_.set_connection_error_handler(
+        base::Bind(&StrongBinding::OnConnectionError, base::Unretained(this)));
   }
 
   void Bind(InterfacePtr<Interface>* ptr) {
     DCHECK(!binding_.is_bound());
     binding_.Bind(ptr);
-    binding_.set_connection_error_handler([this]() { OnConnectionError(); });
+    binding_.set_connection_error_handler(
+        base::Bind(&StrongBinding::OnConnectionError, base::Unretained(this)));
   }
 
   void Bind(InterfaceRequest<Interface> request) {
     DCHECK(!binding_.is_bound());
     binding_.Bind(std::move(request));
-    binding_.set_connection_error_handler([this]() { OnConnectionError(); });
+    binding_.set_connection_error_handler(
+        base::Bind(&StrongBinding::OnConnectionError, base::Unretained(this)));
   }
 
   bool WaitForIncomingMethodCall() {
@@ -96,7 +99,7 @@ class StrongBinding {
   //
   // This method may only be called after this StrongBinding has been bound to a
   // message pipe.
-  void set_connection_error_handler(const Closure& error_handler) {
+  void set_connection_error_handler(const base::Closure& error_handler) {
     DCHECK(binding_.is_bound());
     connection_error_handler_ = error_handler;
   }
@@ -106,13 +109,16 @@ class StrongBinding {
   internal::Router* internal_router() { return binding_.internal_router(); }
 
   void OnConnectionError() {
-    connection_error_handler_.Run();
+    if (!connection_error_handler_.is_null())
+      connection_error_handler_.Run();
     delete binding_.impl();
   }
 
  private:
-  Closure connection_error_handler_;
+  base::Closure connection_error_handler_;
   Binding<Interface> binding_;
+
+  DISALLOW_COPY_AND_ASSIGN(StrongBinding);
 };
 
 }  // namespace mojo

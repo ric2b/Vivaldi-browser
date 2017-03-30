@@ -28,12 +28,14 @@ source_set("browser_sources") {
 
   configs += [
     "//build/config:precompiled_headers",
+    "//build/config/compiler:wexit_time_destructors",
     "//content:content_implementation",
   ]
 
   public_deps = [
     "//mojo/public/cpp/bindings",
     "//mojo/public/cpp/system",
+    "//services/shell/public/cpp",
 
     # We expose skia headers in the public API.
     "//skia",
@@ -43,6 +45,7 @@ source_set("browser_sources") {
     "//cc",
     "//content/browser",  # Must not be public_deps!
     "//content/public/common:common_sources",
+    "//device/power_save_blocker",
     "//gpu",
     "//media",
     "//net",

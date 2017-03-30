@@ -32,11 +32,16 @@
 #define ImageQualityController_h
 
 #include "base/gtest_prod_util.h"
-#include "core/layout/LayoutObject.h"
+#include "core/CoreExport.h"
+#include "platform/Timer.h"
 #include "platform/geometry/LayoutSize.h"
+#include "platform/graphics/Image.h"
 #include "wtf/HashMap.h"
+#include <memory>
 
 namespace blink {
+
+class LayoutObject;
 
 typedef HashMap<const void*, LayoutSize> LayerSizeMap;
 
@@ -79,7 +84,7 @@ private:
     void setTimer(Timer<ImageQualityController>*);
 
     ObjectLayerSizeMap m_objectLayerSizeMap;
-    OwnPtr<Timer<ImageQualityController>> m_timer;
+    std::unique_ptr<Timer<ImageQualityController>> m_timer;
     double m_frameTimeWhenTimerStarted;
 
     // For calling set().

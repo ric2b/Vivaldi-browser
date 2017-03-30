@@ -38,7 +38,8 @@
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/input/EventHandler.h"
-#include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutAPIShim.h"
+#include "core/layout/api/LayoutViewItem.h"
 #include "core/loader/EmptyClients.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/page/FocusController.h"
@@ -62,6 +63,7 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebSettingsImpl.h"
 #include "web/WebViewImpl.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -283,7 +285,7 @@ bool WebPagePopupImpl::initializePage()
     m_page->settings().setAccessibilityEnabled(m_webView->page()->settings().accessibilityEnabled());
     m_page->settings().setScrollAnimatorEnabled(m_webView->page()->settings().scrollAnimatorEnabled());
 
-    provideContextFeaturesTo(*m_page, adoptPtr(new PagePopupFeaturesClient()));
+    provideContextFeaturesTo(*m_page, wrapUnique(new PagePopupFeaturesClient()));
     DEFINE_STATIC_LOCAL(FrameLoaderClient, emptyFrameLoaderClient, (EmptyFrameLoaderClient::create()));
     LocalFrame* frame = LocalFrame::create(&emptyFrameLoaderClient, &m_page->frameHost(), 0);
     frame->setPagePopupOwner(m_popupClient->ownerElement());
@@ -333,7 +335,7 @@ AXObject* WebPagePopupImpl::rootAXObject()
         return 0;
     AXObjectCache* cache = document->axObjectCache();
     DCHECK(cache);
-    return toAXObjectCacheImpl(cache)->getOrCreate(document->layoutView());
+    return toAXObjectCacheImpl(cache)->getOrCreate(toLayoutView(LayoutAPIShim::layoutObjectFrom(document->layoutViewItem())));
 }
 
 void WebPagePopupImpl::setWindowRect(const IntRect& rectInScreen)
@@ -418,12 +420,11 @@ void WebPagePopupImpl::resize(const WebSize& newSizeInViewport)
 
     WebRect windowRect = windowRectInScreen();
 
-    if (windowRect.width != newSize.width
-        && windowRect.height != newSize.height) {
-        windowRect.width = newSize.width;
-        windowRect.height = newSize.height;
-        setWindowRect(windowRect);
-    }
+    // TODO(bokan): We should only call into this if the bounds actually changed
+    // but this reveals a bug in Aura. crbug.com/633140.
+    windowRect.width = newSize.width;
+    windowRect.height = newSize.height;
+    setWindowRect(windowRect);
 
     if (m_page) {
         toLocalFrame(m_page->mainFrame())->view()->resize(newSizeInViewport);

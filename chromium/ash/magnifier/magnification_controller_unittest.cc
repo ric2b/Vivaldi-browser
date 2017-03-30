@@ -4,6 +4,7 @@
 
 #include "ash/magnifier/magnification_controller.h"
 
+#include "ash/common/accessibility_types.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
@@ -12,7 +13,6 @@
 #include "ui/aura/test/aura_test_utils.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/chromeos/accessibility_types.h"
 #include "ui/display/screen.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/rect_conversions.h"
@@ -58,7 +58,7 @@ class TextInputView : public views::WidgetDelegateView {
 
 }  // namespace
 
-class MagnificationControllerTest: public test::AshTestBase {
+class MagnificationControllerTest : public test::AshTestBase {
  public:
   MagnificationControllerTest() : text_input_view_(NULL) {}
   ~MagnificationControllerTest() override {}
@@ -67,12 +67,11 @@ class MagnificationControllerTest: public test::AshTestBase {
     AshTestBase::SetUp();
     UpdateDisplay(base::StringPrintf("%dx%d", kRootWidth, kRootHeight));
 
-    aura::Window* root = GetRootWindow();
-    gfx::Rect root_bounds(root->bounds());
-
 #if defined(OS_WIN)
     // RootWindow and Display can't resize on Windows Ash.
     // http://crbug.com/165962
+    aura::Window* root = GetRootWindow();
+    gfx::Rect root_bounds(root->bounds());
     EXPECT_EQ(kRootHeight, root_bounds.height());
     EXPECT_EQ(kRootWidth, root_bounds.width());
 #endif
@@ -83,9 +82,7 @@ class MagnificationControllerTest: public test::AshTestBase {
   void TearDown() override { AshTestBase::TearDown(); }
 
  protected:
-  aura::Window* GetRootWindow() const {
-    return Shell::GetPrimaryRootWindow();
-  }
+  aura::Window* GetRootWindow() const { return Shell::GetPrimaryRootWindow(); }
 
   std::string GetHostMouseLocation() {
     const gfx::Point& location =
@@ -105,8 +102,9 @@ class MagnificationControllerTest: public test::AshTestBase {
   }
 
   std::string CurrentPointOfInterest() const {
-    return GetMagnificationController()->
-        GetPointOfInterestForTesting().ToString();
+    return GetMagnificationController()
+        ->GetPointOfInterestForTesting()
+        .ToString();
   }
 
   void CreateAndShowTextInputView(const gfx::Rect& bounds) {
@@ -134,8 +132,8 @@ class MagnificationControllerTest: public test::AshTestBase {
         GetInputMethod()->GetTextInputClient()->GetCaretBounds();
     gfx::Point origin = caret_bounds.origin();
     ::wm::ConvertPointFromScreen(GetRootWindow(), &origin);
-    return gfx::Rect(
-        origin.x(), origin.y(), caret_bounds.width(), caret_bounds.height());
+    return gfx::Rect(origin.x(), origin.y(), caret_bounds.width(),
+                     caret_bounds.height());
   }
 
   void FocusOnTextInputView() {
@@ -286,8 +284,8 @@ TEST_F(MagnificationControllerTest, FollowFocusChanged) {
   EXPECT_EQ("400,300 400x300", GetViewport().ToString());
 
   // Don't follow focus onto empty rectangle.
-  GetMagnificationController()->HandleFocusedNodeChanged(
-      false, gfx::Rect(0, 0, 0, 0));
+  GetMagnificationController()->HandleFocusedNodeChanged(false,
+                                                         gfx::Rect(0, 0, 0, 0));
   EXPECT_EQ("400,300 400x300", GetViewport().ToString());
 }
 
@@ -460,7 +458,7 @@ TEST_F(MagnificationControllerTest, PanWindowToRight) {
   GetMagnificationController()->SetEnabled(true);
   EXPECT_FLOAT_EQ(2.f, GetMagnificationController()->GetScale());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(2.3784142, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(400, 300));
@@ -469,21 +467,21 @@ TEST_F(MagnificationControllerTest, PanWindowToRight) {
   EXPECT_EQ("566,299", env->last_mouse_location().ToString());
   EXPECT_EQ("705,300", GetHostMouseLocation());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(2.8284268, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(799, 300));
   EXPECT_EQ("599,299", env->last_mouse_location().ToString());
   EXPECT_EQ("702,300", GetHostMouseLocation());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(3.3635852, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(799, 300));
   EXPECT_EQ("627,298", env->last_mouse_location().ToString());
   EXPECT_EQ("707,300", GetHostMouseLocation());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(4.f, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(799, 300));
@@ -505,7 +503,7 @@ TEST_F(MagnificationControllerTest, PanWindowToLeft) {
   GetMagnificationController()->SetEnabled(true);
   EXPECT_FLOAT_EQ(2.f, GetMagnificationController()->GetScale());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(2.3784142, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(400, 300));
@@ -514,21 +512,21 @@ TEST_F(MagnificationControllerTest, PanWindowToLeft) {
   EXPECT_EQ("231,299", env->last_mouse_location().ToString());
   EXPECT_EQ("100,300", GetHostMouseLocation());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(2.8284268, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(0, 300));
   EXPECT_EQ("194,299", env->last_mouse_location().ToString());
   EXPECT_EQ("99,300", GetHostMouseLocation());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(3.3635852, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(0, 300));
   EXPECT_EQ("164,298", env->last_mouse_location().ToString());
   EXPECT_EQ("98,300", GetHostMouseLocation());
 
-  scale *= ui::kMagnificationScaleFactor;
+  scale *= kMagnificationScaleFactor;
   GetMagnificationController()->SetScale(scale, false);
   EXPECT_FLOAT_EQ(4.f, GetMagnificationController()->GetScale());
   GetEventGenerator().MoveMouseToInHost(gfx::Point(0, 300));
@@ -683,7 +681,6 @@ TEST_F(MagnificationControllerTest, CenterTextCaretInViewport) {
   gfx::Rect caret_bounds = GetCaretBounds();
   EXPECT_EQ(caret_bounds.CenterPoint(), new_view_port.CenterPoint());
 }
-
 
 // Make sure that unified desktop can enter magnified mode.
 TEST_F(MagnificationControllerTest, EnableMagnifierInUnifiedDesktop) {

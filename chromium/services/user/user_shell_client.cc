@@ -9,7 +9,6 @@
 #include "base/memory/weak_ptr.h"
 #include "components/filesystem/lock_table.h"
 #include "components/leveldb/leveldb_service_impl.h"
-#include "mojo/public/cpp/bindings/callback.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/user/user_id_map.h"
 #include "services/user/user_service.h"
@@ -93,7 +92,7 @@ void UserShellClient::Initialize(shell::Connector* connector,
                                  const shell::Identity& identity,
                                  uint32_t id) {
   user_objects_.reset(new UserShellClient::UserServiceObjects(
-      GetUserDirForUserID(identity.user_id())));
+      GetUserDirForUserId(identity.user_id())));
   leveldb_objects_.reset(
       new UserShellClient::LevelDBServiceObjects(leveldb_service_runner_));
 }

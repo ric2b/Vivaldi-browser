@@ -5,17 +5,18 @@
 module content.mojom;
 
 import "skia/public/interfaces/bitmap.mojom";
-import "ui/mojo/geometry/geometry.mojom";
+import "ui/gfx/geometry/mojo/geometry.mojom";
+import "url/mojo/url.mojom";
 
 interface ImageDownloader {
   // Fetch and decode an image from a given URL.
   // Returns the decoded images, or http_status_code to indicate error.
   // Each call is independent, overlapping calls are possible.
-  DownloadImage(string url,
+  DownloadImage(url.mojom.Url url,
                 bool is_favicon,
                 uint32 max_bitmap_size,
                 bool bypass_cache)
       => (int32 http_status_code,
           array<skia.mojom.Bitmap> images,
-          array<mojo.Size> original_image_sizes);
+          array<gfx.mojom.Size> original_image_sizes);
 };

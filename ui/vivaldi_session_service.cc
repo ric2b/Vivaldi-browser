@@ -284,8 +284,11 @@ void VivaldiSessionService::BuildCommandsForBrowser(Browser* browser) {
       browser->session_id(), browser->tab_strip_model()->active_index()));
 }
 
-bool VivaldiSessionService::Load(const base::FilePath& path, Browser* browser) {
+bool VivaldiSessionService::Load(const base::FilePath& path,
+                                 Browser* browser,
+                                 SessionOptions& opts) {
   browser_ = browser;
+  opts_ = opts;
   current_session_file_.reset(new base::File(
       path,
       base::File::FLAG_OPEN | base::File::FLAG_READ));
@@ -490,12 +493,12 @@ Browser* VivaldiSessionService::ProcessSessionWindows(
         i != windows->end(); ++i) {
     Browser* browser = nullptr;
     if (!has_tabbed_browser &&
-        (*i)->type == sessions::SessionWindow::TYPE_TABBED)
+        (*i)->type == sessions::SessionWindow::TYPE_TABBED) {
       has_tabbed_browser = true;
-    if (i == windows->begin() &&
+    }
+    if (i == windows->begin() && !opts_.openInNewWindow_ &&
         (*i)->type == sessions::SessionWindow::TYPE_TABBED && browser_ &&
-        browser_->is_type_tabbed() &&
-        !browser_->profile()->IsOffTheRecord()) {
+        browser_->is_type_tabbed() && !browser_->profile()->IsOffTheRecord()) {
       // The first set of tabs is added to the existing browser.
       browser = browser_;
     } else {

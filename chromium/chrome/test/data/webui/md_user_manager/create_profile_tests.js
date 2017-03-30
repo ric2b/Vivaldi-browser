@@ -5,7 +5,6 @@
 cr.define('user_manager.create_profile_tests', function() {
   /** @return {!CreateProfileElement} */
   function createElement() {
-    PolymerTest.clearBody();
     var createProfileElement = document.createElement('create-profile');
     document.body.appendChild(createProfileElement);
     return createProfileElement;
@@ -25,7 +24,8 @@ cr.define('user_manager.create_profile_tests', function() {
         // Replace real proxy with mock proxy.
         signin.ProfileBrowserProxyImpl.instance_ = browserProxy;
         browserProxy.setDefaultProfileInfo({name: 'profile name'});
-        browserProxy.setIconUrls(['icon1.png', 'icon2.png']);
+        browserProxy.setIcons([{url: 'icon1.png', label: 'icon1'},
+                               {url: 'icon2.png', label: 'icon2'}]);
         browserProxy.setSignedInUsers([{username: 'username',
                                         profilePath: 'path/to/profile'}]);
         browserProxy.setExistingSupervisedUsers([{name: 'existing name 1',
@@ -39,7 +39,11 @@ cr.define('user_manager.create_profile_tests', function() {
         Polymer.dom.flush();
       });
 
-      teardown(function() { createProfileElement.remove(); });
+      teardown(function(done) {
+        createProfileElement.remove();
+        // Allow asynchronous tasks to finish.
+        setTimeout(done);
+      });
 
       test('Handles available profile icons', function() {
         return browserProxy.whenCalled('getAvailableIcons').then(function() {
@@ -65,25 +69,11 @@ cr.define('user_manager.create_profile_tests', function() {
           MockInteractions.tap(createProfileElement.$$('paper-checkbox'));
           Polymer.dom.flush();
 
-          // The dropdown menu is visible and is populated with the sentinel
-          // item as well as the signed in users.
+          // The dropdown menu is visible and is populated with signed in users.
           var dropdownMenu = createProfileElement.$$('paper-dropdown-menu');
           assertTrue(!!dropdownMenu);
           var users = dropdownMenu.querySelectorAll('paper-item');
-          assertEquals(2, users.length);
-        });
-      });
-
-      test('Sentinel item is the initially selected item', function() {
-        return browserProxy.whenCalled('getSignedInUsers').then(function() {
-          // Simulate checking the checkbox.
-          MockInteractions.tap(createProfileElement.$$('paper-checkbox'));
-          Polymer.dom.flush();
-
-          var dropdownMenu = createProfileElement.$$('paper-dropdown-menu');
-          var selector = dropdownMenu.querySelector('paper-listbox');
-          assertEquals(loadTimeData.getString('selectAnAccount'),
-                       selector.selectedItem.textContent.trim());
+          assertEquals(1, users.length);
         });
       });
 
@@ -366,13 +356,19 @@ cr.define('user_manager.create_profile_tests', function() {
         // Replace real proxy with mock proxy.
         signin.ProfileBrowserProxyImpl.instance_ = browserProxy;
 
+        browserProxy.setIcons([{url: 'icon1.png', label: 'icon1'}]);
+
         createProfileElement = createElement();
 
         // Make sure DOM is up to date.
         Polymer.dom.flush();
       });
 
-      teardown(function() { createProfileElement.remove(); });
+      teardown(function(done) {
+        createProfileElement.remove();
+        // Allow asynchronous tasks to finish.
+        setTimeout(done);
+      });
 
       test('Handles no signed in users', function() {
         return browserProxy.whenCalled('getSignedInUsers').then(function() {

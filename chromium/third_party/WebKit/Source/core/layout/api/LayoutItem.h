@@ -13,7 +13,9 @@
 namespace blink {
 
 class FrameView;
+class LayoutAPIShim;
 class Node;
+class ObjectPaintProperties;
 
 class LayoutItem {
     DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
@@ -39,6 +41,11 @@ public:
     bool isNull() const
     {
         return !m_layoutObject;
+    }
+
+    String debugName() const
+    {
+        return m_layoutObject->debugName();
     }
 
     bool isDescendantOf(LayoutItem item) const
@@ -131,6 +138,11 @@ public:
         return m_layoutObject->needsLayout();
     }
 
+    void setNeedsLayout(LayoutInvalidationReasonForTracing reason, MarkingBehavior marking = MarkContainerChain, SubtreeLayoutScope* scope = nullptr)
+    {
+        m_layoutObject->setNeedsLayout(reason, marking, scope);
+    }
+
     void layout()
     {
         m_layoutObject->layout();
@@ -146,6 +158,16 @@ public:
         return m_layoutObject->node();
     }
 
+    Document& document() const
+    {
+        return m_layoutObject->document();
+    }
+
+    LayoutItem nextInPreOrder() const
+    {
+        return LayoutItem(m_layoutObject->nextInPreOrder());
+    }
+
     void updateStyleAndLayout()
     {
         return m_layoutObject->document().updateStyleAndLayout();
@@ -154,6 +176,11 @@ public:
     const ComputedStyle& styleRef() const
     {
         return m_layoutObject->styleRef();
+    }
+
+    ComputedStyle& mutableStyleRef() const
+    {
+        return m_layoutObject->mutableStyleRef();
     }
 
     LayoutSize offsetFromContainer(const LayoutItem& item) const
@@ -186,6 +213,11 @@ public:
         return m_layoutObject->hasLayer();
     }
 
+    void setShouldDoFullPaintInvalidation(PaintInvalidationReason reason = PaintInvalidationFull)
+    {
+        m_layoutObject->setShouldDoFullPaintInvalidation(reason);
+    }
+
     void setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants()
     {
         m_layoutObject->setShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
@@ -201,9 +233,44 @@ public:
         return m_layoutObject->absoluteToLocal(point, mode);
     }
 
+    void setNeedsLayoutAndFullPaintInvalidation(LayoutInvalidationReasonForTracing reason, MarkingBehavior behavior = MarkContainerChain, SubtreeLayoutScope* scope = nullptr)
+    {
+        m_layoutObject->setNeedsLayoutAndFullPaintInvalidation(reason, behavior, scope);
+    }
+
     void setNeedsLayoutAndPrefWidthsRecalc(LayoutInvalidationReasonForTracing reason)
     {
         m_layoutObject->setNeedsLayoutAndPrefWidthsRecalc(reason);
+    }
+
+    bool needsOverflowRecalcAfterStyleChange() const
+    {
+        return m_layoutObject->needsOverflowRecalcAfterStyleChange();
+    }
+
+    void invalidateTreeIfNeeded(const PaintInvalidationState& state)
+    {
+        m_layoutObject->invalidateTreeIfNeeded(state);
+    }
+
+    CompositingState compositingState() const
+    {
+        return m_layoutObject->compositingState();
+    }
+
+    bool mapToVisualRectInAncestorSpace(const LayoutBoxModelObject* ancestor, LayoutRect& layoutRect, VisualRectFlags flags = DefaultVisualRectFlags) const
+    {
+        return m_layoutObject->mapToVisualRectInAncestorSpace(ancestor, layoutRect, flags);
+    }
+
+    Color resolveColor(int colorProperty) const
+    {
+        return m_layoutObject->resolveColor(colorProperty);
+    }
+
+    ObjectPaintProperties* objectPaintProperties() const
+    {
+        return m_layoutObject->objectPaintProperties();
     }
 
 protected:
@@ -212,6 +279,8 @@ protected:
 
 private:
     LayoutObject* m_layoutObject;
+
+    friend class LayoutAPIShim;
 };
 
 } // namespace blink

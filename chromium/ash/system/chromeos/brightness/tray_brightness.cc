@@ -7,15 +7,14 @@
 #include <algorithm>
 
 #include "ash/accelerators/accelerator_controller.h"
-#include "ash/ash_constants.h"
-#include "ash/metrics/user_metrics_recorder.h"
+#include "ash/common/ash_constants.h"
+#include "ash/common/shell_observer.h"
+#include "ash/common/system/tray/fixed_sized_image_view.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/shell_observer.h"
 #include "ash/system/brightness_control_delegate.h"
-#include "ash/system/tray/fixed_sized_image_view.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/system_tray_notifier.h"
-#include "ash/system/tray/tray_constants.h"
 #include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
@@ -53,9 +52,7 @@ class BrightnessView : public ShellObserver,
   BrightnessView(bool default_view, double initial_percent);
   ~BrightnessView() override;
 
-  bool is_default_view() const {
-    return is_default_view_;
-  }
+  bool is_default_view() const { return is_default_view_; }
 
   // |percent| is in the range [0.0, 100.0].
   void SetBrightnessPercent(double percent);
@@ -98,7 +95,8 @@ BrightnessView::BrightnessView(bool default_view, double initial_percent)
       is_default_view_(default_view),
       last_percent_(initial_percent) {
   SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal,
-      kTrayPopupPaddingHorizontal, 0, kTrayPopupPaddingBetweenItems));
+                                        kTrayPopupPaddingHorizontal, 0,
+                                        kTrayPopupPaddingBetweenItems));
 
   views::ImageView* icon = new FixedSizedImageView(0, kTrayPopupItemHeight);
   gfx::Image image = ui::ResourceBundle::GetSharedInstance().GetImageNamed(
@@ -115,15 +113,16 @@ BrightnessView::BrightnessView(bool default_view, double initial_percent)
   AddChildView(slider_);
 
   if (is_default_view_) {
-    Shell::GetInstance()->AddShellObserver(this);
-    SetVisible(Shell::GetInstance()->maximize_mode_controller()->
-               IsMaximizeModeWindowManagerEnabled());
+    WmShell::Get()->AddShellObserver(this);
+    SetVisible(Shell::GetInstance()
+                   ->maximize_mode_controller()
+                   ->IsMaximizeModeWindowManagerEnabled());
   }
 }
 
 BrightnessView::~BrightnessView() {
   if (is_default_view_)
-    Shell::GetInstance()->RemoveShellObserver(this);
+    WmShell::Get()->RemoveShellObserver(this);
 }
 
 void BrightnessView::SetBrightnessPercent(double percent) {
@@ -146,9 +145,9 @@ void BrightnessView::OnBoundsChanged(const gfx::Rect& old_bounds) {
 }
 
 void BrightnessView::SliderValueChanged(views::Slider* sender,
-                                float value,
-                                float old_value,
-                                views::SliderChangeReason reason) {
+                                        float value,
+                                        float old_value,
+                                        views::SliderChangeReason reason) {
   DCHECK_EQ(sender, slider_);
   if (reason != views::VALUE_CHANGED_BY_USER)
     return;
@@ -173,7 +172,7 @@ void BrightnessView::SliderDragEnded(views::Slider* slider) {
 }  // namespace tray
 
 TrayBrightness::TrayBrightness(SystemTray* system_tray)
-    : SystemTrayItem(system_tray),
+    : SystemTrayItem(system_tray, UMA_DISPLAY_BRIGHTNESS),
       brightness_view_(NULL),
       current_percent_(100.0),
       got_current_percent_(false),
@@ -183,19 +182,19 @@ TrayBrightness::TrayBrightness(SystemTray* system_tray)
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(&TrayBrightness::GetInitialBrightness,
                             weak_ptr_factory_.GetWeakPtr()));
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-      AddObserver(this);
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
+      this);
 }
 
 TrayBrightness::~TrayBrightness() {
-  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->
-      RemoveObserver(this);
+  chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
+      this);
 }
 
 void TrayBrightness::GetInitialBrightness() {
-  BrightnessControlDelegate* delegate =
-      Shell::GetInstance()->accelerator_controller()->
-      brightness_control_delegate();
+  BrightnessControlDelegate* delegate = Shell::GetInstance()
+                                            ->accelerator_controller()
+                                            ->brightness_control_delegate();
   // Worrisome, but happens in unit tests, so don't log anything.
   if (!delegate)
     return;
@@ -209,26 +208,25 @@ void TrayBrightness::HandleInitialBrightness(double percent) {
     HandleBrightnessChanged(percent, false);
 }
 
-views::View* TrayBrightness::CreateTrayView(user::LoginStatus status) {
+views::View* TrayBrightness::CreateTrayView(LoginStatus status) {
   return NULL;
 }
 
-views::View* TrayBrightness::CreateDefaultView(user::LoginStatus status) {
+views::View* TrayBrightness::CreateDefaultView(LoginStatus status) {
   CHECK(brightness_view_ == NULL);
   brightness_view_ = new tray::BrightnessView(true, current_percent_);
   return brightness_view_;
 }
 
-views::View* TrayBrightness::CreateDetailedView(user::LoginStatus status) {
+views::View* TrayBrightness::CreateDetailedView(LoginStatus status) {
   CHECK(brightness_view_ == NULL);
-  Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-      ash::UMA_STATUS_AREA_DETAILED_BRIGHTNESS_VIEW);
+  WmShell::Get()->RecordUserMetricsAction(
+      UMA_STATUS_AREA_DETAILED_BRIGHTNESS_VIEW);
   brightness_view_ = new tray::BrightnessView(false, current_percent_);
   return brightness_view_;
 }
 
-void TrayBrightness::DestroyTrayView() {
-}
+void TrayBrightness::DestroyTrayView() {}
 
 void TrayBrightness::DestroyDefaultView() {
   if (brightness_view_ && brightness_view_->is_default_view())
@@ -240,8 +238,7 @@ void TrayBrightness::DestroyDetailedView() {
     brightness_view_ = NULL;
 }
 
-void TrayBrightness::UpdateAfterLoginStatusChange(user::LoginStatus status) {
-}
+void TrayBrightness::UpdateAfterLoginStatusChange(LoginStatus status) {}
 
 bool TrayBrightness::ShouldHideArrow() const {
   return true;
@@ -252,8 +249,7 @@ bool TrayBrightness::ShouldShowShelf() const {
 }
 
 void TrayBrightness::BrightnessChanged(int level, bool user_initiated) {
-  Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-      ash::UMA_STATUS_AREA_BRIGHTNESS_CHANGED);
+  WmShell::Get()->RecordUserMetricsAction(UMA_STATUS_AREA_BRIGHTNESS_CHANGED);
   double percent = static_cast<double>(level);
   HandleBrightnessChanged(percent, user_initiated);
 }

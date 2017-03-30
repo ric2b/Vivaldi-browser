@@ -9,6 +9,7 @@ import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//build_overrides/v8.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
 
 content_tests_gypi_values =
@@ -21,7 +22,10 @@ content_tests_gypi_values =
                 [ "../content_tests.gypi" ])
 
 # GYP version //content/content_tests.gypi:test_support_content
-source_set("test_support") {
+#
+# Use a static library here because many test binaries depend on this but don't
+# require many files from it. This makes linking more efficient.
+static_library("test_support") {
   testonly = true
 
   # See comment at the top of //content/BUILD.gn for why this is disabled in
@@ -66,9 +70,12 @@ source_set("test_support") {
     "//content/renderer:for_content_tests",
     "//content/shell:pak",
     "//content/utility:for_content_tests",
+    "//device/nfc:mojo_bindings",
     "//ipc:test_support",
-    "//ipc/mojo",
     "//media",
+    "//media/capture",
+    "//media/mojo/interfaces:image_capture",
+    "//mojo/edk/system",
     "//mojo/edk/test:test_support",
     "//net:test_support",
     "//services/shell/public/cpp",
@@ -179,6 +186,7 @@ source_set("test_support") {
 
   if (is_android) {
     deps += [
+      "//media/capture/video/android:android",
       "//ui/android",
       "//ui/shell_dialogs",
     ]
@@ -190,6 +198,10 @@ source_set("test_support") {
 
   if (v8_use_external_startup_data) {
     deps += [ "//gin:gin" ]
+  }
+
+  if (is_mac) {
+    deps += [ "//ui/accelerated_widget_mac" ]
   }
 }
 
@@ -317,7 +329,6 @@ static_library("layouttest_support") {
 
     #"//content/shell:content_shell_lib",
     "//content/renderer:for_content_tests",
-    "//mojo/edk/test:test_support",
     "//skia",
     "//ui/accessibility:ax_gen",
     "//v8",
@@ -348,6 +359,7 @@ if (is_android) {
     deps = [
       ":content_browsertests_resources",
       "//base:base_java",
+      "//base:base_java_test_support",
       "//content/public/android:content_java",
       "//content/public/test/android:content_java_test_support",
       "//content/shell/android:content_shell_browsertests_java",
@@ -397,7 +409,6 @@ test("content_browsertests") {
     data = [
       "$root_out_dir/content_shell.pak",
       "data/",
-      "//net/data/",
       "//media/test/data/",
     ]
 
@@ -418,6 +429,9 @@ test("content_browsertests") {
         if (symbol_level != 0) {
           data += [ "$root_out_dir/content_browsertests.exe.pdb" ]
         }
+      }
+      if (is_linux) {
+        data += [ "//testing/buildbot/filters/browser-side-navigation.linux.content_browsertests.filter" ]
       }
     }
   }
@@ -452,6 +466,7 @@ test("content_browsertests") {
     "//content/test:test_support",
     "//device/battery",
     "//device/battery:mojo_bindings",
+    "//device/power_save_blocker",
     "//device/vibration:mojo_bindings",
     "//gin",
     "//gpu",
@@ -460,11 +475,8 @@ test("content_browsertests") {
     "//media:test_support",
     "//media/audio:test_support",
     "//media/base:test_support",
-    "//mojo/edk/system",
-    "//mojo/edk/test:test_support",
     "//mojo/public/cpp/bindings",
     "//mojo/public/js",
-    "//mojo/test:test_support",
     "//net:test_support",
     "//services/shell/public/cpp",
     "//storage/browser",
@@ -533,7 +545,6 @@ test("content_browsertests") {
     ]
     deps += [
       ":content_browsertests_java",
-      ":content_browsertests_manifest",
       "//content/shell:content_shell_lib",
       "//content/shell/android:content_shell_assets",
       "//content/shell/android:content_shell_jni_headers",
@@ -542,6 +553,7 @@ test("content_browsertests") {
     deps -= [ "//device/battery" ]
     android_manifest =
         "${target_gen_dir}/content_browsertests_manifest/AndroidManifest.xml"
+    android_manifest_dep = ":content_browsertests_manifest"
     use_default_launcher = false
   }
 
@@ -621,7 +633,6 @@ test("content_unittests") {
     data = [
       "$root_out_dir/content_shell.pak",
       "data/",
-      "//net/data/ssl/certificates/",
       "//media/test/data/",
     ]
   }
@@ -659,6 +670,8 @@ test("content_unittests") {
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
+    "//device/gamepad",
+    "//device/gamepad:test_helpers",
     "//gin",
     "//gpu",
     "//gpu:test_support",
@@ -667,6 +680,7 @@ test("content_unittests") {
     "//media:test_support",
     "//media/audio:test_support",
     "//media/base:test_support",
+    "//media/capture",
     "//media/midi:midi",
     "//mojo/edk/test:test_support",
     "//mojo/public/cpp/bindings",
@@ -728,6 +742,7 @@ test("content_unittests") {
                     ".",
                     "//content")
     deps += [
+      "//media/blink",
       "//third_party/libjingle:libjingle_webrtc",
       "//third_party/webrtc/base:rtc_base",
       "//third_party/webrtc/modules/desktop_capture:primitives",
@@ -788,6 +803,7 @@ test("content_unittests") {
     deps += [
       "//third_party/mozilla",
       "//third_party/ocmock",
+      "//ui/accelerated_widget_mac",
     ]
   }
   if (is_chromeos) {
@@ -902,4 +918,14 @@ test("content_perftests") {
   if (is_android) {
     deps += [ "//testing/android/native_test:native_test_native_code" ]
   }
+}
+
+fuzzer_test("renderer_fuzzer") {
+  sources = [
+    "renderer_fuzzer.cc",
+  ]
+  deps = [
+    ":test_support",
+    "//content/shell:content_shell_lib",
+  ]
 }

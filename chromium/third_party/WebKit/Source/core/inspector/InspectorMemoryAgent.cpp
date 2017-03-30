@@ -31,7 +31,6 @@
 #include "core/inspector/InspectorMemoryAgent.h"
 
 #include "core/inspector/InstanceCounters.h"
-#include "wtf/OwnPtr.h"
 
 namespace blink {
 
@@ -46,10 +45,7 @@ void InspectorMemoryAgent::getDOMCounters(ErrorString*, int* documents, int* nod
     *jsEventListeners = InstanceCounters::counterValue(InstanceCounters::JSEventListenerCounter);
 }
 
-InspectorMemoryAgent::InspectorMemoryAgent()
-    : InspectorBaseAgent<InspectorMemoryAgent, protocol::Frontend::Memory>("Memory")
-{
-}
+InspectorMemoryAgent::InspectorMemoryAgent() = default;
 
 } // namespace blink
 

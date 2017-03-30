@@ -22,8 +22,9 @@ class View;
 // The NSView that sits as the root contentView of the NSWindow, whilst it has
 // a views::RootView present. Bridges requests from Cocoa to the hosted
 // views::View.
-@interface BridgedContentView
-    : ToolTipBaseView<NSTextInputClient, NSUserInterfaceValidations> {
+@interface BridgedContentView : ToolTipBaseView<NSTextInputClient,
+                                                NSUserInterfaceValidations,
+                                                NSDraggingSource> {
  @private
   // Weak. The hosted RootView, owned by hostedView_->GetWidget().
   views::View* hostedView_;
@@ -35,8 +36,8 @@ class View;
   // A tracking area installed to enable mouseMoved events.
   ui::ScopedCrTrackingArea cursorTrackingArea_;
 
-  // Whether the view is reacting to a keyDown event on the view.
-  BOOL inKeyDown_;
+  // The keyDown event currently being handled, nil otherwise.
+  NSEvent* keyDownEvent_;
 
   // The last tooltip text, used to limit updates.
   base::string16 lastTooltipText_;

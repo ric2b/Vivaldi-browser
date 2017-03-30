@@ -195,17 +195,46 @@ cr.define('cr.ui.login.ResourceLoader', function() {
   function loadAssetsOnIdle(id, callback, opt_idleTimeoutMs) {
     opt_idleTimeoutMs = opt_idleTimeoutMs || 250;
 
-    let loadOnIdle = function() {
+    var loadOnIdle = function() {
       window.requestIdleCallback(function() {
         loadAssets(id, callback);
       }, { timeout: opt_idleTimeoutMs });
     };
 
-    if (document.readyState == 'complete') {
-      loadOnIdle();
-    } else {
+    if (document.readyState == 'loading') {
       window.addEventListener('DOMContentLoaded', loadOnIdle);
+    } else {
+      // DOMContentLoaded has already been called if document.readyState is
+      // 'interactive' or 'complete', so invoke the callback immediately.
+      loadOnIdle();
     }
+  }
+
+  /**
+   * Wait until the element with the given |id| has finished its layout,
+   * specifically, after it has an offsetHeight > 0.
+   * @param {string|function()} selector Identifier of the element to wait
+   * or a callback function to obtain element to wait for.
+   * @param {function()} callback Function to invoke when done loading.
+   */
+  function waitUntilLayoutComplete(selector, callback) {
+    if (typeof selector == 'string') {
+      var id = selector;
+      selector = function() { return $(id) };
+    }
+
+    var doWait = function() {
+      var element = selector();
+
+      if (!element || !element.offsetHeight) {
+        requestAnimationFrame(doWait);
+        return;
+      }
+
+      callback(element);
+    };
+
+    requestAnimationFrame(doWait);
   }
 
   return {
@@ -213,6 +242,7 @@ cr.define('cr.ui.login.ResourceLoader', function() {
     hasDeferredAssets: hasDeferredAssets,
     loadAssets: loadAssets,
     loadAssetsOnIdle: loadAssetsOnIdle,
+    waitUntilLayoutComplete: waitUntilLayoutComplete,
     registerAssets: registerAssets
   };
 });

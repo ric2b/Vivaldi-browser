@@ -171,9 +171,9 @@ HostContentSettingsMap::HostContentSettingsMap(PrefService* prefs,
   default_provider->AddObserver(this);
   content_settings_providers_[DEFAULT_PROVIDER] = default_provider;
 
-  MigrateOldSettings();
+  MigrateKeygenSettings();
 
-  RecordNumberOfExceptions();
+  RecordExceptionMetrics();
 }
 
 // static
@@ -267,15 +267,6 @@ ContentSetting HostContentSettingsMap::GetDefaultContentSetting(
   return content_setting;
 }
 
-bool HostContentSettingsMap::AreUserExceptionsAllowedForType(
-    ContentSettingsType content_type) const {
-  ProviderType default_provider_type = NUM_PROVIDER_TYPES;
-  ContentSetting content_setting =
-      GetDefaultContentSettingInternal(content_type, &default_provider_type);
-  DCHECK_NE(CONTENT_SETTING_DEFAULT, content_setting);
-  return default_provider_type >= PREF_PROVIDER;
-}
-
 ContentSetting HostContentSettingsMap::GetContentSetting(
     const GURL& primary_url,
     const GURL& secondary_url,
@@ -339,7 +330,7 @@ void HostContentSettingsMap::SetWebsiteSettingDefaultScope(
     const GURL& secondary_url,
     ContentSettingsType content_type,
     const std::string& resource_identifier,
-    base::Value* value) {
+    std::unique_ptr<base::Value> value) {
   const WebsiteSettingsInfo* info =
       content_settings::WebsiteSettingsRegistry::GetInstance()->Get(
           content_type);
@@ -351,7 +342,7 @@ void HostContentSettingsMap::SetWebsiteSettingDefaultScope(
     return;
 
   SetWebsiteSettingCustomScope(primary_pattern, secondary_pattern, content_type,
-                               resource_identifier, base::WrapUnique(value));
+                               resource_identifier, std::move(value));
 }
 
 void HostContentSettingsMap::SetWebsiteSettingCustomScope(
@@ -467,24 +458,15 @@ void HostContentSettingsMap::SetContentSettingDefaultScope(
                                resource_identifier, setting);
 }
 
-void HostContentSettingsMap::MigrateOldSettings() {
-  const ContentSettingsType kMigrateContentSettingTypes[] = {
-      // Only content types of scoping type: REQUESTING_DOMAIN_ONLY_SCOPE,
-      // REQUESTING_ORIGIN_ONLY_SCOPE and TOP_LEVEL_DOMAIN_ONLY_SCOPE need to be
-      // migrated.
-      CONTENT_SETTINGS_TYPE_KEYGEN};
-  for (const ContentSettingsType& type : kMigrateContentSettingTypes) {
-    WebsiteSettingsInfo::ScopingType scoping_type =
-        content_settings::ContentSettingsRegistry::GetInstance()
-            ->Get(type)
-            ->website_settings_info()
-            ->scoping_type();
-    DCHECK_NE(
-        scoping_type,
-        WebsiteSettingsInfo::REQUESTING_ORIGIN_AND_TOP_LEVEL_ORIGIN_SCOPE);
-
+void HostContentSettingsMap::MigrateKeygenSettings() {
+  const content_settings::ContentSettingsInfo* info =
+      content_settings::ContentSettingsRegistry::GetInstance()->Get(
+          CONTENT_SETTINGS_TYPE_KEYGEN);
+  if (info) {
     ContentSettingsForOneType settings;
-    GetSettingsForOneType(type, std::string(), &settings);
+    GetSettingsForOneType(CONTENT_SETTINGS_TYPE_KEYGEN, std::string(),
+                          &settings);
+
     for (const ContentSettingPatternSource& setting_entry : settings) {
       // Migrate user preference settings only.
       if (setting_entry.source != "preference")
@@ -499,21 +481,23 @@ void HostContentSettingsMap::MigrateOldSettings() {
         ContentSetting content_setting = CONTENT_SETTING_DEFAULT;
         if (setting_entry.primary_pattern == setting_entry.secondary_pattern &&
             url.is_valid()) {
-          content_setting = GetContentSetting(url, url, type, std::string());
+          content_setting = GetContentSetting(
+              url, url, CONTENT_SETTINGS_TYPE_KEYGEN, std::string());
         }
         // Remove the old pattern.
         SetContentSettingCustomScope(setting_entry.primary_pattern,
-                          setting_entry.secondary_pattern, type, std::string(),
-                          CONTENT_SETTING_DEFAULT);
+                                     setting_entry.secondary_pattern,
+                                     CONTENT_SETTINGS_TYPE_KEYGEN,
+                                     std::string(), CONTENT_SETTING_DEFAULT);
         // Set the new pattern.
-        SetContentSettingDefaultScope(url, GURL(), type, std::string(),
-                                      content_setting);
+        SetContentSettingDefaultScope(url, GURL(), CONTENT_SETTINGS_TYPE_KEYGEN,
+                                      std::string(), content_setting);
       }
     }
   }
 }
 
-void HostContentSettingsMap::RecordNumberOfExceptions() {
+void HostContentSettingsMap::RecordExceptionMetrics() {
   for (const content_settings::WebsiteSettingsInfo* info :
        *content_settings::WebsiteSettingsRegistry::GetInstance()) {
     ContentSettingsType content_type = info->type();
@@ -523,6 +507,17 @@ void HostContentSettingsMap::RecordNumberOfExceptions() {
     GetSettingsForOneType(content_type, std::string(), &settings);
     size_t num_exceptions = 0;
     for (const ContentSettingPatternSource& setting_entry : settings) {
+      // Skip default settings.
+      if (setting_entry.primary_pattern == ContentSettingsPattern::Wildcard() &&
+          setting_entry.secondary_pattern ==
+              ContentSettingsPattern::Wildcard()) {
+        continue;
+      }
+
+      UMA_HISTOGRAM_ENUMERATION("ContentSettings.ExceptionScheme",
+                                setting_entry.primary_pattern.GetScheme(),
+                                ContentSettingsPattern::SCHEME_MAX);
+
       if (setting_entry.source == "preference")
         ++num_exceptions;
     }

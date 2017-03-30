@@ -34,7 +34,6 @@
 #include "core/dom/Element.h"
 #include "core/dom/ElementRareData.h"
 #include "core/frame/FrameHost.h"
-#include "core/layout/LayoutObject.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
@@ -76,6 +75,7 @@ DEFINE_TRACE_WRAPPERS(NodeRareData)
 DEFINE_TRACE_WRAPPERS_AFTER_DISPATCH(NodeRareData)
 {
     visitor->traceWrappers(m_nodeLists);
+    visitor->traceWrappers(m_mutationObserverData);
 }
 
 void NodeRareData::finalizeGarbageCollectedObject()

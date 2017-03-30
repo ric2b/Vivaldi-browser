@@ -10,6 +10,7 @@
 #include "base/debug/leak_annotations.h"
 #include "base/json/string_escape.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/metrics/persistent_histogram_allocator.h"
@@ -287,7 +288,7 @@ void StatisticsRecorder::GetBucketRanges(
     return;
 
   for (const auto& entry : *ranges_) {
-    for (const auto& range_entry : *entry.second) {
+    for (auto* range_entry : *entry.second) {
       output->push_back(range_entry);
     }
   }
@@ -418,6 +419,12 @@ size_t StatisticsRecorder::GetHistogramCount() {
 void StatisticsRecorder::ForgetHistogramForTesting(base::StringPiece name) {
   if (histograms_)
     histograms_->erase(name);
+}
+
+// static
+std::unique_ptr<StatisticsRecorder>
+StatisticsRecorder::CreateTemporaryForTesting() {
+  return WrapUnique(new StatisticsRecorder());
 }
 
 // static

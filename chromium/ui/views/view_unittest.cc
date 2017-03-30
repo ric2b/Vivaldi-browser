@@ -2029,21 +2029,21 @@ TEST_F(ViewTest, TextfieldCutCopyPaste) {
   //
 
   normal->SelectAll(false);
-  normal->ExecuteCommand(IDS_APP_CUT);
+  normal->ExecuteCommand(IDS_APP_CUT, 0);
   base::string16 result;
   clipboard->ReadText(ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
   EXPECT_EQ(kNormalText, result);
   normal->SetText(kNormalText);  // Let's revert to the original content.
 
   read_only->SelectAll(false);
-  read_only->ExecuteCommand(IDS_APP_CUT);
+  read_only->ExecuteCommand(IDS_APP_CUT, 0);
   result.clear();
   clipboard->ReadText(ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
   // Cut should have failed, so the clipboard content should not have changed.
   EXPECT_EQ(kNormalText, result);
 
   password->SelectAll(false);
-  password->ExecuteCommand(IDS_APP_CUT);
+  password->ExecuteCommand(IDS_APP_CUT, 0);
   result.clear();
   clipboard->ReadText(ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
   // Cut should have failed, so the clipboard content should not have changed.
@@ -2055,19 +2055,19 @@ TEST_F(ViewTest, TextfieldCutCopyPaste) {
 
   // Start with |read_only| to observe a change in clipboard text.
   read_only->SelectAll(false);
-  read_only->ExecuteCommand(IDS_APP_COPY);
+  read_only->ExecuteCommand(IDS_APP_COPY, 0);
   result.clear();
   clipboard->ReadText(ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
   EXPECT_EQ(kReadOnlyText, result);
 
   normal->SelectAll(false);
-  normal->ExecuteCommand(IDS_APP_COPY);
+  normal->ExecuteCommand(IDS_APP_COPY, 0);
   result.clear();
   clipboard->ReadText(ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
   EXPECT_EQ(kNormalText, result);
 
   password->SelectAll(false);
-  password->ExecuteCommand(IDS_APP_COPY);
+  password->ExecuteCommand(IDS_APP_COPY, 0);
   result.clear();
   clipboard->ReadText(ui::CLIPBOARD_TYPE_COPY_PASTE, &result);
   // Text cannot be copied from an obscured field; the clipboard won't change.
@@ -2079,18 +2079,18 @@ TEST_F(ViewTest, TextfieldCutCopyPaste) {
 
   // Attempting to paste kNormalText in a read-only text-field should fail.
   read_only->SelectAll(false);
-  read_only->ExecuteCommand(IDS_APP_PASTE);
+  read_only->ExecuteCommand(IDS_APP_PASTE, 0);
   EXPECT_EQ(kReadOnlyText, read_only->text());
 
   password->SelectAll(false);
-  password->ExecuteCommand(IDS_APP_PASTE);
+  password->ExecuteCommand(IDS_APP_PASTE, 0);
   EXPECT_EQ(kNormalText, password->text());
 
   // Copy from |read_only| to observe a change in the normal textfield text.
   read_only->SelectAll(false);
-  read_only->ExecuteCommand(IDS_APP_COPY);
+  read_only->ExecuteCommand(IDS_APP_COPY, 0);
   normal->SelectAll(false);
-  normal->ExecuteCommand(IDS_APP_PASTE);
+  normal->ExecuteCommand(IDS_APP_PASTE, 0);
   EXPECT_EQ(kReadOnlyText, normal->text());
   widget->CloseNow();
 }
@@ -4045,6 +4045,9 @@ class PaintTrackingView : public View {
 // Makes sure child views with layers aren't painted when paint starts at an
 // ancestor.
 TEST_F(ViewLayerTest, DontPaintChildrenWithLayers) {
+  // TODO(sad): DrawWaiterForTest does not work with mus. crbug.com/618136
+  if (IsMus())
+    return;
   PaintTrackingView* content_view = new PaintTrackingView;
   widget()->SetContentsView(content_view);
   content_view->SetPaintToLayer(true);

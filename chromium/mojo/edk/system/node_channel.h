@@ -9,12 +9,14 @@
 #include <unordered_map>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/process/process_handle.h"
 #include "base/synchronization/lock.h"
 #include "base/task_runner.h"
 #include "build/build_config.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "mojo/edk/embedder/platform_handle_vector.h"
 #include "mojo/edk/embedder/scoped_platform_handle.h"
 #include "mojo/edk/system/channel.h"
@@ -63,11 +65,16 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
     virtual void OnIntroduce(const ports::NodeName& from_node,
                              const ports::NodeName& name,
                              ScopedPlatformHandle channel_handle) = 0;
+    virtual void OnBroadcast(const ports::NodeName& from_node,
+                             Channel::MessagePtr message) = 0;
 #if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
     virtual void OnRelayPortsMessage(const ports::NodeName& from_node,
                                      base::ProcessHandle from_process,
                                      const ports::NodeName& destination,
                                      Channel::MessagePtr message) = 0;
+    virtual void OnPortsMessageFromRelay(const ports::NodeName& from_node,
+                                         const ports::NodeName& source_node,
+                                         Channel::MessagePtr message) = 0;
 #endif
 
     virtual void OnChannelError(const ports::NodeName& node) = 0;
@@ -80,7 +87,8 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
   static scoped_refptr<NodeChannel> Create(
       Delegate* delegate,
       ScopedPlatformHandle platform_handle,
-      scoped_refptr<base::TaskRunner> io_task_runner);
+      scoped_refptr<base::TaskRunner> io_task_runner,
+      const ProcessErrorCallback& process_error_callback);
 
   static Channel::MessagePtr CreatePortsMessage(size_t payload_size,
                                                 void** payload,
@@ -95,6 +103,13 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
   // Permanently stop the channel from sending or receiving messages.
   void ShutDown();
 
+  // Leaks the pipe handle instead of closing it on shutdown.
+  void LeakHandleOnShutdown();
+
+  // Invokes the bad message callback for this channel, if any.
+  void NotifyBadMessage(const std::string& error);
+
+  // Note: On Windows, we take ownership of the remote process handle.
   void SetRemoteProcessHandle(base::ProcessHandle process_handle);
   bool HasRemoteProcessHandle();
   // Note: The returned |ProcessHandle| is owned by the caller and should be
@@ -120,6 +135,7 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
   void RequestIntroduction(const ports::NodeName& name);
   void Introduce(const ports::NodeName& name,
                  ScopedPlatformHandle channel_handle);
+  void Broadcast(Channel::MessagePtr message);
 
 #if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
   // Relay the message to the specified node via this channel.  This is used to
@@ -128,6 +144,12 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
   // assumed to have that permission.
   void RelayPortsMessage(const ports::NodeName& destination,
                          Channel::MessagePtr message);
+
+  // Sends a message to its destination from a relay. This is interpreted by the
+  // receiver similarly to PortsMessage, but the original source node is
+  // provided as additional message metadata from the (trusted) relay node.
+  void PortsMessageFromRelay(const ports::NodeName& source,
+                             Channel::MessagePtr message);
 #endif
 
  private:
@@ -139,7 +161,8 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
 
   NodeChannel(Delegate* delegate,
               ScopedPlatformHandle platform_handle,
-              scoped_refptr<base::TaskRunner> io_task_runner);
+              scoped_refptr<base::TaskRunner> io_task_runner,
+              const ProcessErrorCallback& process_error_callback);
   ~NodeChannel() override;
 
   // Channel::Delegate:
@@ -159,6 +182,7 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
 
   Delegate* const delegate_;
   const scoped_refptr<base::TaskRunner> io_task_runner_;
+  const ProcessErrorCallback process_error_callback_;
 
   base::Lock channel_lock_;
   scoped_refptr<Channel> channel_;
@@ -168,6 +192,9 @@ class NodeChannel : public base::RefCountedThreadSafe<NodeChannel>,
 
   base::Lock remote_process_handle_lock_;
   base::ProcessHandle remote_process_handle_ = base::kNullProcessHandle;
+#if defined(OS_WIN)
+  ScopedPlatformHandle scoped_remote_process_handle_;
+#endif
 
 #if defined(OS_MACOSX) && !defined(OS_IOS)
   base::Lock pending_mach_messages_lock_;

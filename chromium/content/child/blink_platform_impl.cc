@@ -58,7 +58,6 @@
 #include "net/base/net_errors.h"
 #include "third_party/WebKit/public/platform/WebData.h"
 #include "third_party/WebKit/public/platform/WebFloatPoint.h"
-#include "third_party/WebKit/public/platform/WebMemoryDumpProvider.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
@@ -388,7 +387,7 @@ void BlinkPlatformImpl::InternalInit() {
         ChildThreadImpl::current()->notification_dispatcher();
     push_dispatcher_ = ChildThreadImpl::current()->push_dispatcher();
     permission_client_.reset(new PermissionDispatcher(
-        ChildThreadImpl::current()->service_registry()));
+        ChildThreadImpl::current()->GetRemoteInterfaces()));
     main_thread_sync_provider_.reset(
         new BackgroundSyncProvider(main_thread_task_runner_.get()));
   }
@@ -396,7 +395,8 @@ void BlinkPlatformImpl::InternalInit() {
 
 void BlinkPlatformImpl::WaitUntilWebThreadTLSUpdate(
     scheduler::WebThreadBase* thread) {
-  base::WaitableEvent event(false, false);
+  base::WaitableEvent event(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED);
   thread->GetTaskRunner()->PostTask(
       FROM_HERE,
       base::Bind(&BlinkPlatformImpl::UpdateWebThreadTLS, base::Unretained(this),
@@ -676,10 +676,6 @@ const DataResource kDataResources[] = {
      ui::SCALE_FACTOR_100P},
     {"searchCancel", IDR_SEARCH_CANCEL, ui::SCALE_FACTOR_100P},
     {"searchCancelPressed", IDR_SEARCH_CANCEL_PRESSED, ui::SCALE_FACTOR_100P},
-    {"searchMagnifier", IDR_SEARCH_MAGNIFIER, ui::SCALE_FACTOR_100P},
-    {"searchMagnifierResults",
-     IDR_SEARCH_MAGNIFIER_RESULTS,
-     ui::SCALE_FACTOR_100P},
     {"textAreaResizeCorner", IDR_TEXTAREA_RESIZER, ui::SCALE_FACTOR_100P},
     {"textAreaResizeCorner@2x", IDR_TEXTAREA_RESIZER, ui::SCALE_FACTOR_200P},
     {"generatePassword", IDR_PASSWORD_GENERATION_ICON, ui::SCALE_FACTOR_100P},
@@ -856,6 +852,11 @@ void BlinkPlatformImpl::didStartWorkerThread() {
 
 void BlinkPlatformImpl::willStopWorkerThread() {
   WorkerThreadRegistry::Instance()->WillStopCurrentWorkerThread();
+}
+
+bool BlinkPlatformImpl::allowScriptExtensionForServiceWorker(
+    const blink::WebURL& scriptUrl) {
+  return GetContentClient()->AllowScriptExtensionForServiceWorker(scriptUrl);
 }
 
 blink::WebCrypto* BlinkPlatformImpl::crypto() {

@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Pour protéger l'accès à cet ordinateur, veuillez choisir un code d'accès d'<ph name="BOLD_START" />au moins six chiffres<ph name="BOLD_END" />. Ce code d'accès sera demandé lors d'une connexion depuis un autre appareil.</translation>
 <translation id="4176825807642096119">Code d'accès</translation>
 <translation id="4207623512727273241">Veuillez lancer le programme d'installation avant de continuer.</translation>
+<translation id="4227991223508142681">Utilitaire de provisionnement de l'hôte</translation>
 <translation id="4240294130679914010">Désinstallation de l'hôte Chromoting</translation>
 <translation id="4277463233460010382">Cet ordinateur est configuré pour permettre à un ou plusieurs clients de se connecter sans saisir de code d'accès.</translation>
 <translation id="4277736576214464567">Le code d'accès n'est pas valide. Veuillez réessayer.</translation>
@@ -261,6 +262,7 @@ Google Chrome</translation>
 <translation id="7836926030608666805">Certains composants nécessaires  sont introuvables. Veuillez vous assurer que vous utilisez la dernière version de Chrome, puis réessayer.</translation>
 <translation id="7868137160098754906">Veuillez saisir le code d'accès de l'ordinateur distant.</translation>
 <translation id="7869445566579231750">Vous n'êtes pas autorisé à exécuter cette application.</translation>
+<translation id="7895403300744144251">Les règles de sécurité de l'ordinateur distant n'autorisent pas les connexions à partir de votre compte.</translation>
 <translation id="7948001860594368197">Options de l'écran</translation>
 <translation id="7970576581263377361">Échec de l'authentification. Veuillez vous connecter de nouveau à Chromium.</translation>
 <translation id="7981525049612125370">La session à distance est arrivée à expiration.</translation>

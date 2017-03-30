@@ -22,6 +22,7 @@
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_widget.h"
 #include "ipc/ipc_channel.h"
+#include "third_party/WebKit/public/platform/WebFloatRect.h"
 #include "third_party/WebKit/public/platform/WebPoint.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebDevToolsAgent.h"
@@ -105,6 +106,10 @@ bool DevToolsAgent::OnMessageReceived(const IPC::Message& message) {
 
 void DevToolsAgent::WidgetWillClose() {
   ContinueProgram();
+}
+
+void DevToolsAgent::OnDestruct() {
+  delete this;
 }
 
 void DevToolsAgent::sendProtocolMessage(int session_id,
@@ -258,7 +263,9 @@ void DevToolsAgent::OnDispatchOnInspectorBackend(int session_id,
 }
 
 void DevToolsAgent::OnInspectElement(int x, int y) {
-  GetWebAgent()->inspectElementAt(WebPoint(x, y));
+  blink::WebFloatRect point_rect(x, y, 0, 0);
+  frame_->GetRenderWidget()->convertWindowToViewport(&point_rect);
+  GetWebAgent()->inspectElementAt(WebPoint(point_rect.x, point_rect.y));
 }
 
 void DevToolsAgent::OnRequestNewWindowACK(bool success) {

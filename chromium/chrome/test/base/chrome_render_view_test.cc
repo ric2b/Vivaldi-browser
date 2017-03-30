@@ -153,6 +153,12 @@ ChromeRenderViewTest::CreateContentBrowserClient() {
 content::ContentRendererClient*
 ChromeRenderViewTest::CreateContentRendererClient() {
   ChromeContentRendererClient* client = new ChromeContentRendererClient();
+  InitChromeContentRendererClient(client);
+  return client;
+}
+
+void ChromeRenderViewTest::InitChromeContentRendererClient(
+    ChromeContentRendererClient* client) {
 #if defined(ENABLE_EXTENSIONS)
   extension_dispatcher_delegate_.reset(
       new ChromeExtensionsDispatcherDelegate());
@@ -164,7 +170,6 @@ ChromeRenderViewTest::CreateContentRendererClient() {
 #if defined(ENABLE_SPELLCHECK)
   client->SetSpellcheck(new SpellCheck());
 #endif
-  return client;
 }
 
 void ChromeRenderViewTest::EnableUserGestureSimulationForAutofill() {

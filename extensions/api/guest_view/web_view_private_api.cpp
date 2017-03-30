@@ -91,6 +91,7 @@ bool WebViewPrivateSetVisibleFunction::RunAsyncSafe(WebViewGuest* guest) {
       vivaldi::web_view_private::SetVisible::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
   guest->SetVisible(params->is_visible);
+  SendResponse(true);
   return true;
 }
 
@@ -146,7 +147,7 @@ void WebViewInternalThumbnailFunction::SendResultFromBitmap(
   base::Base64Encode(stream_as_string, &base64_result);
   base64_result.insert(0, base::StringPrintf("data:%s;base64,",
     mime_type.c_str()));
-  SetResult(new base::StringValue(base64_result));
+  SetResult(base::MakeUnique<base::StringValue>(base64_result));
   SendResponse(true);
 }
 
@@ -344,8 +345,8 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
     thumbnail_service->SetPageThumbnail(*context, image);
   }
 
-  SetResult(new base::StringValue(std::string("chrome://thumb/") +
-                                  context->url.spec()));
+  SetResult(base::MakeUnique<base::StringValue>(
+            std::string("chrome://thumb/") + context->url.spec()));
   SendResponse(true);
 }
 
@@ -382,8 +383,8 @@ void WebViewPrivateAddToThumbnailServiceFunction::SetPageThumbnailOnUIThread(
   thumbnail_service->SetPageThumbnail(*context, thumbnail);
 
   if (send_result) {
-    SetResult(new base::StringValue(std::string("chrome://thumb/") +
-                                    context->url.spec()));
+    SetResult(base::MakeUnique<base::StringValue>(
+              std::string("chrome://thumb/") + context->url.spec()));
     SendResponse(true);
   }
   Release();
@@ -424,8 +425,8 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
   }
   // Do not store any urls for private windows.
   if (is_incognito_) {
-    SetResult(new base::StringValue(std::string("chrome://thumb/") +
-                                    context->url.spec()));
+    SetResult(base::MakeUnique<base::StringValue>(
+              std::string("chrome://thumb/") + context->url.spec()));
     SendResponse(true);
   } else {
     AddRef();
@@ -447,6 +448,7 @@ WebViewPrivateShowPageInfoFunction::WebViewPrivateShowPageInfoFunction() {
 }
 
 WebViewPrivateShowPageInfoFunction::~WebViewPrivateShowPageInfoFunction() {
+  Respond(NoArguments());
 }
 
 bool WebViewPrivateShowPageInfoFunction::RunAsyncSafe(WebViewGuest* guest) {
@@ -464,6 +466,7 @@ WebViewPrivateSetIsFullscreenFunction::
 
 WebViewPrivateSetIsFullscreenFunction::
     ~WebViewPrivateSetIsFullscreenFunction() {
+  Respond(NoArguments());
 }
 
 bool WebViewPrivateSetIsFullscreenFunction::RunAsyncSafe(WebViewGuest* guest) {
@@ -511,7 +514,6 @@ bool WebViewPrivateGetPageHistoryFunction::RunAsyncSafe(WebViewGuest* guest) {
       currentEntryIndex, history);
 
   SendResponse(true);
-
   return true;
 }
 

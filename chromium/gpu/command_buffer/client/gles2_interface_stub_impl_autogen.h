@@ -902,6 +902,10 @@ GLuint GLES2InterfaceStub::CreateGpuMemoryBufferImageCHROMIUM(
     GLenum /* usage */) {
   return 0;
 }
+void GLES2InterfaceStub::GetImageivCHROMIUM(GLuint /* image_id */,
+                                            GLenum /* param */,
+                                            GLint* /* data */) {}
+void GLES2InterfaceStub::DescheduleUntilFinishedCHROMIUM() {}
 void GLES2InterfaceStub::GetTranslatedShaderSourceANGLE(GLuint /* shader */,
                                                         GLsizei /* bufsize */,
                                                         GLsizei* /* length */,
@@ -910,11 +914,6 @@ void GLES2InterfaceStub::PostSubBufferCHROMIUM(GLint /* x */,
                                                GLint /* y */,
                                                GLint /* width */,
                                                GLint /* height */) {}
-void GLES2InterfaceStub::TexImageIOSurface2DCHROMIUM(GLenum /* target */,
-                                                     GLsizei /* width */,
-                                                     GLsizei /* height */,
-                                                     GLuint /* ioSurfaceId */,
-                                                     GLuint /* plane */) {}
 void GLES2InterfaceStub::CopyTextureCHROMIUM(
     GLenum /* source_id */,
     GLenum /* dest_id */,
@@ -1017,6 +1016,9 @@ void GLES2InterfaceStub::ScheduleCALayerCHROMIUM(
     GLint /* sorting_context_id */,
     const GLfloat* /* transform */,
     GLuint /* filter */) {}
+void GLES2InterfaceStub::ScheduleCALayerInUseQueryCHROMIUM(
+    GLsizei /* count */,
+    const GLuint* /* textures */) {}
 void GLES2InterfaceStub::CommitOverlayPlanesCHROMIUM() {}
 void GLES2InterfaceStub::SwapInterval(GLint /* interval */) {}
 void GLES2InterfaceStub::FlushDriverCachesCHROMIUM() {}

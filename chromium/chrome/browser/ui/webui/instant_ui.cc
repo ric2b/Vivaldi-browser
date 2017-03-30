@@ -6,6 +6,9 @@
 
 #include <stdint.h>
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
@@ -100,7 +103,7 @@ void InstantUIMessageHandler::GetPreferenceValue(const base::ListValue* args) {
   if (pref_name == prefs::kInstantUIZeroSuggestUrlPrefix) {
     PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
     base::StringValue arg(prefs->GetString(pref_name.c_str()));
-    web_ui()->CallJavascriptFunction(
+    web_ui()->CallJavascriptFunctionUnsafe(
         "instantConfig.getPreferenceValueResult", pref_name_value, arg);
   }
 }
@@ -136,14 +139,15 @@ void InstantUIMessageHandler::GetDebugInfo(const base::ListValue* args) {
   base::ListValue* entries = new base::ListValue();
   for (std::list<DebugEvent>::const_iterator it = events.begin();
        it != events.end(); ++it) {
-    base::DictionaryValue* entry = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> entry(new base::DictionaryValue());
     entry->SetString("time", FormatTime(it->first));
     entry->SetString("text", it->second);
-    entries->Append(entry);
+    entries->Append(std::move(entry));
   }
   data.Set("entries", entries);
 
-  web_ui()->CallJavascriptFunction("instantConfig.getDebugInfoResult", data);
+  web_ui()->CallJavascriptFunctionUnsafe("instantConfig.getDebugInfoResult",
+                                         data);
 #endif
 }
 

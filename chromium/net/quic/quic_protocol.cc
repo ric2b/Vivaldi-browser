@@ -79,9 +79,7 @@ QuicPacketHeader::QuicPacketHeader()
       path_id(kDefaultPathId),
       entropy_flag(false),
       entropy_hash(0),
-      fec_flag(false),
-      is_in_fec_group(NOT_IN_FEC_GROUP),
-      fec_group(0) {}
+      fec_flag(false) {}
 
 QuicPacketHeader::QuicPacketHeader(const QuicPacketPublicHeader& header)
     : public_header(header),
@@ -89,9 +87,7 @@ QuicPacketHeader::QuicPacketHeader(const QuicPacketPublicHeader& header)
       path_id(kDefaultPathId),
       entropy_flag(false),
       entropy_hash(0),
-      fec_flag(false),
-      is_in_fec_group(NOT_IN_FEC_GROUP),
-      fec_group(0) {}
+      fec_flag(false) {}
 
 QuicPacketHeader::QuicPacketHeader(const QuicPacketHeader& other) = default;
 
@@ -183,6 +179,27 @@ QuicVersionVector QuicSupportedVersions() {
   return supported_versions;
 }
 
+QuicVersionVector FilterSupportedVersions(QuicVersionVector versions) {
+  QuicVersionVector filtered_versions(versions.size());
+  filtered_versions.clear();  // Guaranteed by spec not to change capacity.
+  for (QuicVersion version : versions) {
+    if (version < QUIC_VERSION_30) {
+      if (!FLAGS_quic_disable_pre_30) {
+        filtered_versions.push_back(version);
+      }
+    } else {
+      if (version == QUIC_VERSION_35) {
+        if (FLAGS_quic_enable_version_35) {
+          filtered_versions.push_back(version);
+        }
+      } else {
+        filtered_versions.push_back(version);
+      }
+    }
+  }
+  return filtered_versions;
+}
+
 QuicTag QuicVersionToQuicTag(const QuicVersion version) {
   switch (version) {
     case QUIC_VERSION_25:
@@ -205,6 +222,8 @@ QuicTag QuicVersionToQuicTag(const QuicVersion version) {
       return MakeQuicTag('Q', '0', '3', '3');
     case QUIC_VERSION_34:
       return MakeQuicTag('Q', '0', '3', '4');
+    case QUIC_VERSION_35:
+      return MakeQuicTag('Q', '0', '3', '5');
     default:
       // This shold be an ERROR because we should never attempt to convert an
       // invalid QuicVersion to be written to the wire.
@@ -241,6 +260,7 @@ string QuicVersionToString(const QuicVersion version) {
     RETURN_STRING_LITERAL(QUIC_VERSION_32);
     RETURN_STRING_LITERAL(QUIC_VERSION_33);
     RETURN_STRING_LITERAL(QUIC_VERSION_34);
+    RETURN_STRING_LITERAL(QUIC_VERSION_35);
     default:
       return "QUIC_VERSION_UNSUPPORTED";
   }
@@ -277,7 +297,7 @@ ostream& operator<<(ostream& os, const QuicPacketHeader& header) {
     os << ", version:";
     for (size_t i = 0; i < header.public_header.versions.size(); ++i) {
       os << " ";
-      os << header.public_header.versions[i];
+      os << QuicVersionToString(header.public_header.versions[i]);
     }
   }
   if (header.public_header.nonce != nullptr) {
@@ -288,9 +308,7 @@ ostream& operator<<(ostream& os, const QuicPacketHeader& header) {
      << ", entropy_flag: " << header.entropy_flag
      << ", entropy hash: " << static_cast<int>(header.entropy_hash)
      << ", path_id: " << static_cast<int>(header.path_id)
-     << ", packet_number: " << header.packet_number
-     << ", is_in_fec_group: " << header.is_in_fec_group
-     << ", fec_group: " << header.fec_group << " }\n";
+     << ", packet_number: " << header.packet_number << " }\n";
   return os;
 }
 
@@ -311,11 +329,11 @@ QuicStopWaitingFrame::QuicStopWaitingFrame()
 QuicStopWaitingFrame::~QuicStopWaitingFrame() {}
 
 QuicAckFrame::QuicAckFrame()
-    : path_id(kDefaultPathId),
+    : largest_observed(0),
+      ack_delay_time(QuicTime::Delta::Infinite()),
+      path_id(kDefaultPathId),
       entropy_hash(0),
       is_truncated(false),
-      largest_observed(0),
-      ack_delay_time(QuicTime::Delta::Infinite()),
       missing(true) {}
 
 QuicAckFrame::QuicAckFrame(const QuicAckFrame& other) = default;
@@ -818,9 +836,9 @@ SerializedPacket::SerializedPacket(QuicPathId path_id,
       entropy_hash(entropy_hash),
       has_ack(has_ack),
       has_stop_waiting(has_stop_waiting),
+      transmission_type(NOT_RETRANSMISSION),
       original_path_id(kInvalidPathId),
-      original_packet_number(0),
-      transmission_type(NOT_RETRANSMISSION) {}
+      original_packet_number(0) {}
 
 SerializedPacket::SerializedPacket(const SerializedPacket& other) = default;
 
@@ -830,7 +848,6 @@ TransmissionInfo::TransmissionInfo()
     : encryption_level(ENCRYPTION_NONE),
       packet_number_length(PACKET_1BYTE_PACKET_NUMBER),
       bytes_sent(0),
-      nack_count(0),
       sent_time(QuicTime::Zero()),
       transmission_type(NOT_RETRANSMISSION),
       in_flight(false),
@@ -849,7 +866,6 @@ TransmissionInfo::TransmissionInfo(EncryptionLevel level,
     : encryption_level(level),
       packet_number_length(packet_number_length),
       bytes_sent(bytes_sent),
-      nack_count(0),
       sent_time(sent_time),
       transmission_type(transmission_type),
       in_flight(false),

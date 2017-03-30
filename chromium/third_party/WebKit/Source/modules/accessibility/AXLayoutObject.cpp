@@ -47,24 +47,23 @@
 #include "core/frame/Settings.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLImageElement.h"
+#include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLLabelElement.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/HTMLTextAreaElement.h"
+#include "core/html/LabelsNodeList.h"
 #include "core/html/shadow/ShadowElementNames.h"
 #include "core/layout/HitTestResult.h"
-#include "core/layout/LayoutFieldset.h"
 #include "core/layout/LayoutFileUploadControl.h"
 #include "core/layout/LayoutHTMLCanvas.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutListMarker.h"
 #include "core/layout/LayoutMenuList.h"
-#include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutTextControl.h"
-#include "core/layout/LayoutTextControlSingleLine.h"
-#include "core/layout/LayoutTextFragment.h"
 #include "core/layout/LayoutView.h"
+#include "core/layout/api/LayoutAPIShim.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/loader/ProgressTracker.h"
 #include "core/page/Page.h"
@@ -212,12 +211,12 @@ SkMatrix44 AXLayoutObject::transformFromLocalParentFrame() const
 {
     if (!m_layoutObject)
         return SkMatrix44();
-    LayoutView* layoutView = documentFrameView()->layoutView();
+    LayoutView* layoutView = toLayoutView(LayoutAPIShim::layoutObjectFrom(documentFrameView()->layoutViewItem()));
 
     FrameView* parentFrameView = documentFrameView()->parentFrameView();
     if (!parentFrameView)
         return SkMatrix44();
-    LayoutView* parentLayoutView = parentFrameView->layoutView();
+    LayoutView* parentLayoutView = toLayoutView(LayoutAPIShim::layoutObjectFrom(parentFrameView->layoutViewItem()));
 
     TransformationMatrix accumulatedTransform = layoutView->localToAncestorTransform(parentLayoutView, TraverseDocumentBoundaries);
     IntPoint scrollPosition = documentFrameView()->scrollPosition();
@@ -245,6 +244,70 @@ ScrollableArea* AXLayoutObject::getScrollableAreaIfScrollable() const
         return 0;
 
     return box->getScrollableArea();
+}
+
+void AXLayoutObject::getRelativeBounds(AXObject** outContainer, FloatRect& outBoundsInContainer, SkMatrix44& outContainerTransform) const
+{
+    *outContainer = nullptr;
+    outBoundsInContainer = FloatRect();
+    outContainerTransform.setIdentity();
+
+    if (!m_layoutObject)
+        return;
+
+    // First compute the container. The container must be an ancestor in the accessibility tree, and
+    // its LayoutObject must be an ancestor in the layout tree. Get the first such ancestor that's
+    // either scrollable or has a paint layer.
+    AXObject* container = parentObjectUnignored();
+    LayoutObject* containerLayoutObject = nullptr;
+    while (container) {
+        containerLayoutObject = container->getLayoutObject();
+        if (containerLayoutObject && containerLayoutObject->isBoxModelObject() && m_layoutObject->isDescendantOf(containerLayoutObject)) {
+            if (container->isScrollableContainer() || containerLayoutObject->hasLayer())
+                break;
+        }
+
+        container = container->parentObjectUnignored();
+    }
+
+    if (!container)
+        return;
+    *outContainer = container;
+
+    // Next get the local bounds of this LayoutObject, which is typically
+    // a rect at point (0, 0) with the width and height of the LayoutObject.
+    LayoutRect localBounds;
+    if (m_layoutObject->isText()) {
+        localBounds = toLayoutText(m_layoutObject)->linesBoundingBox();
+    } else if (m_layoutObject->isLayoutInline()) {
+        localBounds = toLayoutInline(m_layoutObject)->linesBoundingBox();
+    } else if (m_layoutObject->isBox()) {
+        localBounds = LayoutRect(LayoutPoint(), toLayoutBox(m_layoutObject)->size());
+    } else if (m_layoutObject->isSVG()) {
+        localBounds = LayoutRect(m_layoutObject->strokeBoundingBox());
+    } else {
+        DCHECK(false);
+    }
+    outBoundsInContainer = FloatRect(localBounds);
+
+    // If the container has a scroll offset, subtract that out because we want our
+    // bounds to be relative to the *unscrolled* position of the container object.
+    ScrollableArea* scrollableArea = container->getScrollableAreaIfScrollable();
+    if (scrollableArea) {
+        IntPoint scrollPosition = scrollableArea->scrollPosition();
+        outBoundsInContainer.move(FloatSize(scrollPosition.x(), scrollPosition.y()));
+    }
+
+    // Compute the transform between the container's coordinate space and this object.
+    // If the transform is just a simple translation, apply that to the bounding box, but
+    // if it's a non-trivial transformation like a rotation, scaling, etc. then return
+    // the full matrix instead.
+    TransformationMatrix transform = m_layoutObject->localToAncestorTransform(toLayoutBoxModelObject(containerLayoutObject));
+    if (transform.isIdentityOr2DTranslation()) {
+        outBoundsInContainer.move(transform.to2DTranslation());
+    } else {
+        outContainerTransform = TransformationMatrix::toSkMatrix44(transform);
+    }
 }
 
 static bool isImageOrAltText(LayoutBoxModelObject* box, Node* node)
@@ -573,6 +636,10 @@ bool AXLayoutObject::computeAccessibilityIsIgnored(IgnoredReasons* ignoredReason
     if (m_layoutObject->isLayoutPart())
         return false;
 
+    // Make sure renderers with layers stay in the tree.
+    if (getLayoutObject() && getLayoutObject()->hasLayer() && getNode() && getNode()->hasChildren())
+        return false;
+
     // find out if this element is inside of a label element.
     // if so, it may be ignored because it's the label for a checkbox or radio button
     AXObject* controlObject = correspondingControlForLabelElement();
@@ -823,17 +890,46 @@ const AtomicString& AXLayoutObject::accessKey() const
     return toElement(node)->getAttribute(accesskeyAttr);
 }
 
-RGBA32 AXLayoutObject::backgroundColor() const
+RGBA32 AXLayoutObject::computeBackgroundColor() const
 {
     if (!getLayoutObject())
         return AXNodeObject::backgroundColor();
 
-    const ComputedStyle* style = getLayoutObject()->style();
-    if (!style || !style->hasBackground())
-        return AXNodeObject::backgroundColor();
+    Color blendedColor = Color::transparent;
+    // Color::blend should be called like this: background.blend(foreground).
+    for (LayoutObject* layoutObject = getLayoutObject(); layoutObject;
+        layoutObject = layoutObject->parent()) {
+        const AXObject* axParent = axObjectCache().getOrCreate(layoutObject);
+        if (axParent && axParent != this) {
+            Color parentColor = axParent->backgroundColor();
+            blendedColor = parentColor.blend(blendedColor);
+            return blendedColor.rgb();
+        }
 
-    Color color = style->visitedDependentColor(CSSPropertyBackgroundColor);
-    return color.rgb();
+        const ComputedStyle* style = layoutObject->style();
+        if (!style || !style->hasBackground())
+            continue;
+
+        Color currentColor = style->visitedDependentColor(CSSPropertyBackgroundColor);
+        blendedColor = currentColor.blend(blendedColor);
+        // Continue blending until we get no transparency.
+        if (!blendedColor.hasAlpha())
+            break;
+    }
+
+    // If we still have some transparency, blend in the document base color.
+    if (blendedColor.hasAlpha()) {
+        FrameView* view = documentFrameView();
+        if (view) {
+            Color documentBaseColor = view->baseBackgroundColor();
+            blendedColor = documentBaseColor.blend(blendedColor);
+        } else {
+            // Default to a white background.
+            blendedColor.blendWithWhite();
+        }
+    }
+
+    return blendedColor.rgb();
 }
 
 RGBA32 AXLayoutObject::color() const
@@ -1405,13 +1501,6 @@ AXObject* AXLayoutObject::accessibilityHitTest(const IntPoint& point) const
 
     Node* node = hitTestResult.innerNode();
 
-    // MediaDocument has a special shadow root for displaying the save button.
-    bool allowNodeInShadowTree = node->document().isMediaDocument() && RuntimeEnabledFeatures::mediaDocumentDownloadButtonEnabled();
-
-    // Allow the hit test to return media control buttons.
-    if (node->isInShadowTree() && (!isHTMLInputElement(*node) || !node->isMediaControlElement()) && !allowNodeInShadowTree)
-        node = node->shadowHost();
-
     if (isHTMLAreaElement(node))
         return accessibilityImageMapHitTest(toHTMLAreaElement(node), point);
 
@@ -1667,11 +1756,11 @@ Document* AXLayoutObject::getDocument() const
 
 FrameView* AXLayoutObject::documentFrameView() const
 {
-    if (!m_layoutObject)
-        return 0;
+    if (!getLayoutObject())
+        return nullptr;
 
     // this is the LayoutObject's Document's LocalFrame's FrameView
-    return m_layoutObject->document().view();
+    return getLayoutObject()->document().view();
 }
 
 Element* AXLayoutObject::anchorElement() const
@@ -1684,8 +1773,8 @@ Element* AXLayoutObject::anchorElement() const
 
     // Search up the layout tree for a LayoutObject with a DOM node. Defer to an earlier continuation, though.
     for (currLayoutObject = m_layoutObject; currLayoutObject && !currLayoutObject->node(); currLayoutObject = currLayoutObject->parent()) {
-        if (currLayoutObject->isAnonymousBlock()) {
-            LayoutObject* continuation = toLayoutBlock(currLayoutObject)->continuation();
+        if (currLayoutObject->isAnonymousBlock() && currLayoutObject->isLayoutBlockFlow()) {
+            LayoutObject* continuation = toLayoutBlockFlow(currLayoutObject)->continuation();
             if (continuation)
                 return cache.getOrCreate(continuation)->anchorElement();
         }
@@ -2460,12 +2549,17 @@ LayoutRect AXLayoutObject::computeElementRect() const
     if (isWebArea() && obj->frame()->view())
         result.setSize(LayoutSize(obj->frame()->view()->contentsSize()));
 
-    // Checkboxes and radio buttons include their label as part of their rect.
-    if (isCheckboxOrRadio()) {
-        HTMLLabelElement* label = labelForElement(toElement(m_layoutObject->node()));
-        if (label && label->layoutObject()) {
-            LayoutRect labelRect = axObjectCache().getOrCreate(label)->elementRect();
-            result.unite(labelRect);
+    // Checkboxes and radio buttons include their labels as part of their rect.
+    if (isCheckboxOrRadio() && isLabelableElement(obj->node())) {
+        LabelsNodeList* labels = toLabelableElement(obj->node())->labels();
+        if (labels) {
+            for (unsigned labelIndex = 0; labelIndex < labels->length(); ++labelIndex) {
+                AXObject* labelAXObject = axObjectCache().getOrCreate(labels->item(labelIndex));
+                if (labelAXObject) {
+                    LayoutRect labelRect = labelAXObject->elementRect();
+                    result.unite(labelRect);
+                }
+            }
         }
     }
 

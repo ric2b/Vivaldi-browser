@@ -29,6 +29,7 @@
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/loader/DocumentLoader.h"
+#include "public/platform/Platform.h"
 #include "wtf/Assertions.h"
 #include "wtf/text/StringBuilder.h"
 
@@ -36,32 +37,16 @@ namespace blink {
 
 namespace {
 
-static long s_lastUsedIdentifier = 0;
-
-// static
-String& processIdPrefix()
-{
-    DEFINE_STATIC_LOCAL(String, s_processIdPrefix, ());
-    return s_processIdPrefix;
-}
+volatile int s_lastUsedIdentifier = 0;
 
 } // namespace
 
 
 // static
-void IdentifiersFactory::setProcessId(long processId)
-{
-    StringBuilder builder;
-    builder.appendNumber(processId);
-    builder.append('.');
-    ASSERT(processIdPrefix().isEmpty() || processIdPrefix() == builder.toString());
-    processIdPrefix() = builder.toString();
-}
-
-// static
 String IdentifiersFactory::createIdentifier()
 {
-    return addProcessIdPrefixTo(++s_lastUsedIdentifier);
+    int identifier = atomicIncrement(&s_lastUsedIdentifier);
+    return addProcessIdPrefixTo(identifier);
 }
 
 // static
@@ -108,18 +93,27 @@ DocumentLoader* IdentifiersFactory::loaderById(InspectedFrames* inspectedFrames,
 // static
 String IdentifiersFactory::addProcessIdPrefixTo(int id)
 {
-    ASSERT(!processIdPrefix().isEmpty());
-    return processIdPrefix() + String::number(id);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(uint32_t, s_processId, new uint32_t(Platform::current()->getUniqueIdForProcess()));
+
+    StringBuilder builder;
+
+    builder.appendNumber(s_processId);
+    builder.append('.');
+    builder.appendNumber(id);
+
+    return builder.toString();
 }
 
 // static
 int IdentifiersFactory::removeProcessIdPrefixFrom(const String& id, bool* ok)
 {
-    if (id.length() < processIdPrefix().length()) {
+    size_t dotIndex = id.find('.');
+
+    if (dotIndex == kNotFound) {
         *ok = false;
         return 0;
     }
-    return id.substring(processIdPrefix().length()).toInt(ok);
+    return id.substring(dotIndex + 1).toInt(ok);
 }
 
 } // namespace blink

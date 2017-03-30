@@ -8,6 +8,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <tuple>
 #include <utility>
 
 #include "base/bind.h"
@@ -41,6 +42,7 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/page_state.h"
 #include "content/public/common/page_type.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_notification_tracker.h"
@@ -247,10 +249,11 @@ class NavigationControllerTest
     const IPC::Message* message =
         process()->sink().GetFirstMessageMatching(FrameMsg_Navigate::ID);
     CHECK(message);
-    base::Tuple<CommonNavigationParams, StartNavigationParams,
-          RequestNavigationParams> nav_params;
+    std::tuple<CommonNavigationParams, StartNavigationParams,
+               RequestNavigationParams>
+        nav_params;
     FrameMsg_Navigate::Read(message, &nav_params);
-    return base::get<0>(nav_params).url;
+    return std::get<0>(nav_params).url;
   }
 
  protected:
@@ -665,7 +668,8 @@ void CheckNavigationEntryMatchLoadParams(
   EXPECT_EQ(load_params.url, entry->GetURL());
   EXPECT_EQ(load_params.referrer.url, entry->GetReferrer().url);
   EXPECT_EQ(load_params.referrer.policy, entry->GetReferrer().policy);
-  EXPECT_EQ(load_params.transition_type, entry->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      entry->GetTransitionType(), load_params.transition_type));
   EXPECT_EQ(load_params.extra_headers, entry->extra_headers());
 
   EXPECT_EQ(load_params.is_renderer_initiated, entry->is_renderer_initiated());
@@ -682,8 +686,7 @@ void CheckNavigationEntryMatchLoadParams(
         load_params.override_user_agent);
     EXPECT_EQ(should_override, entry->GetIsOverridingUserAgent());
   }
-  EXPECT_EQ(load_params.browser_initiated_post_data.get(),
-            entry->GetBrowserInitiatedPostData());
+  EXPECT_EQ(load_params.post_data, entry->GetPostData());
   EXPECT_EQ(load_params.transferred_global_request_id,
       entry->transferred_global_request_id());
 }
@@ -755,18 +758,13 @@ TEST_F(NavigationControllerTest, LoadURLWithExtraParams_HttpPost) {
 
   NavigationController::LoadURLParams load_params(GURL("https://posturl"));
   load_params.transition_type = ui::PAGE_TRANSITION_TYPED;
-  load_params.load_type =
-      NavigationController::LOAD_TYPE_BROWSER_INITIATED_HTTP_POST;
+  load_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
   load_params.override_user_agent = NavigationController::UA_OVERRIDE_TRUE;
 
-
-  const unsigned char* raw_data =
-      reinterpret_cast<const unsigned char*>("d\n\0a2");
+  const char* raw_data = "d\n\0a2";
   const int length = 5;
-  std::vector<unsigned char> post_data_vector(raw_data, raw_data+length);
-  scoped_refptr<base::RefCountedBytes> data =
-      base::RefCountedBytes::TakeVector(&post_data_vector);
-  load_params.browser_initiated_post_data = data.get();
+  load_params.post_data =
+      ResourceRequestBody::CreateFromBytes(raw_data, length);
 
   controller.LoadURLWithParams(load_params);
   NavigationEntryImpl* entry = controller.GetPendingEntry();
@@ -1576,22 +1574,19 @@ TEST_F(NavigationControllerTest, ResetEntryValuesAfterCommit) {
   entry_id = controller.GetPendingEntry()->GetUniqueID();
 
   // Set up some sample values.
-  const unsigned char* raw_data =
-      reinterpret_cast<const unsigned char*>("post\n\n\0data");
+  const char* raw_data = "post\n\n\0data";
   const int length = 11;
-  std::vector<unsigned char> post_data_vector(raw_data, raw_data+length);
-  scoped_refptr<base::RefCountedBytes> post_data =
-      base::RefCountedBytes::TakeVector(&post_data_vector);
   GlobalRequestID transfer_id(3, 4);
 
   // Set non-persisted values on the pending entry.
   NavigationEntryImpl* pending_entry = controller.GetPendingEntry();
-  pending_entry->SetBrowserInitiatedPostData(post_data.get());
+  pending_entry->SetPostData(
+      ResourceRequestBody::CreateFromBytes(raw_data, length));
   pending_entry->set_is_renderer_initiated(true);
   pending_entry->set_transferred_global_request_id(transfer_id);
   pending_entry->set_should_replace_entry(true);
   pending_entry->set_should_clear_history_list(true);
-  EXPECT_EQ(post_data.get(), pending_entry->GetBrowserInitiatedPostData());
+  EXPECT_TRUE(pending_entry->GetPostData());
   EXPECT_TRUE(pending_entry->is_renderer_initiated());
   EXPECT_EQ(transfer_id, pending_entry->transferred_global_request_id());
   EXPECT_TRUE(pending_entry->should_replace_entry());
@@ -1604,7 +1599,7 @@ TEST_F(NavigationControllerTest, ResetEntryValuesAfterCommit) {
   // Certain values that are only used for pending entries get reset after
   // commit.
   NavigationEntryImpl* committed_entry = controller.GetLastCommittedEntry();
-  EXPECT_FALSE(committed_entry->GetBrowserInitiatedPostData());
+  EXPECT_FALSE(committed_entry->GetPostData());
   EXPECT_FALSE(committed_entry->is_renderer_initiated());
   EXPECT_EQ(GlobalRequestID(-1, -1),
             committed_entry->transferred_global_request_id());
@@ -4008,21 +4003,24 @@ TEST_F(NavigationControllerTest, LazyReload) {
   const GURL url("http://foo");
   NavigateAndCommit(url);
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_NE(ui::PAGE_TRANSITION_RELOAD,
-            controller.GetLastCommittedEntry()->GetTransitionType());
+  EXPECT_FALSE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetLastCommittedEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_RELOAD));
 
   // Request a reload to happen when the controller becomes active (e.g. after
   // the renderer gets killed in background on Android).
   controller.SetNeedsReload();
   ASSERT_TRUE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_RELOAD,
-            controller.GetLastCommittedEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetLastCommittedEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_RELOAD));
 
   // Set the controller as active, triggering the requested reload.
   controller.SetActive(true);
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_RELOAD,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_RELOAD));
 }
 
 // Test requesting and triggering a lazy reload without any committed entry nor
@@ -4046,21 +4044,24 @@ TEST_F(NavigationControllerTest, LazyReloadWithOnlyPendingEntry) {
   const GURL url("http://foo");
   controller.LoadURL(url, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_TYPED,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_TYPED));
 
   // Request a reload to happen when the controller becomes active (e.g. after
   // the renderer gets killed in background on Android).
   controller.SetNeedsReload();
   ASSERT_TRUE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_TYPED,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_TYPED));
 
   // Set the controller as active, triggering the requested reload.
   controller.SetActive(true);
   ASSERT_FALSE(controller.NeedsReload());
-  EXPECT_EQ(ui::PAGE_TRANSITION_TYPED,
-            controller.GetPendingEntry()->GetTransitionType());
+  EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+      controller.GetPendingEntry()->GetTransitionType(),
+      ui::PAGE_TRANSITION_TYPED));
 }
 
 // Tests a subframe navigation while a toplevel navigation is pending.

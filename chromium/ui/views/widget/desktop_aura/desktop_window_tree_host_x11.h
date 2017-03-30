@@ -137,7 +137,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   void FrameTypeChanged() override;
   void SetFullscreen(bool fullscreen) override;
   bool IsFullscreen() const override;
-  void SetOpacity(unsigned char opacity) override;
+  void SetOpacity(float opacity) override;
   void SetWindowIcons(const gfx::ImageSkia& window_icon,
                       const gfx::ImageSkia& app_icon) override;
   void InitModalType(ui::ModalType modal_type) override;
@@ -259,6 +259,9 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
 
   // Is the window mapped to the screen?
   bool window_mapped_;
+
+  // Should we wait for an UnmapNotify before trying to remap the window?
+  bool wait_for_unmap_;
 
   // The bounds of |xwindow_|.
   gfx::Rect bounds_in_pixels_;

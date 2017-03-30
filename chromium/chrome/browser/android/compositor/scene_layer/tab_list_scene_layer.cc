@@ -19,7 +19,6 @@ namespace android {
 TabListSceneLayer::TabListSceneLayer(JNIEnv* env, jobject jobj)
     : SceneLayer(env, jobj),
       content_obscures_self_(false),
-      write_index_(0),
       resource_manager_(nullptr),
       layer_title_cache_(nullptr),
       tab_content_manager_(nullptr),
@@ -33,14 +32,25 @@ TabListSceneLayer::~TabListSceneLayer() {
 
 void TabListSceneLayer::BeginBuildingFrame(JNIEnv* env,
                                            const JavaParamRef<jobject>& jobj) {
-  write_index_ = 0;
   content_obscures_self_ = false;
+
+  // Remove (and re-add) all layers every frame to guarantee that z-order
+  // matches PutTabLayer call order.
+  for (auto tab : tab_map_)
+    tab.second->layer()->RemoveFromParent();
 }
 
 void TabListSceneLayer::FinishBuildingFrame(JNIEnv* env,
                                             const JavaParamRef<jobject>& jobj) {
-  if (layers_.size() > write_index_)
-    RemoveTabLayersInRange(write_index_, layers_.size());
+  // Destroy all tabs that weren't used this frame.
+  for (auto it = tab_map_.cbegin(); it != tab_map_.cend();) {
+    if (visible_tabs_this_frame_.find(it->first) ==
+        visible_tabs_this_frame_.end())
+      it = tab_map_.erase(it);
+    else
+      ++it;
+  }
+  visible_tabs_this_frame_.clear();
 }
 
 void TabListSceneLayer::UpdateLayer(
@@ -114,6 +124,7 @@ void TabListSceneLayer::PutTabLayer(
     jfloat saturation,
     jfloat brightness,
     jboolean show_toolbar,
+    jint default_theme_color,
     jint toolbar_background_color,
     jboolean anonymize_toolbar,
     jint toolbar_textbox_resource_id,
@@ -124,8 +135,18 @@ void TabListSceneLayer::PutTabLayer(
     jfloat side_border_scale,
     jboolean attach_content,
     jboolean inset_border) {
-  scoped_refptr<TabLayer> layer = GetNextLayer(incognito);
-  // https://crbug.com/517314: GetNextLayer() returns null in some corner cases.
+  scoped_refptr<TabLayer> layer;
+  auto iter = tab_map_.find(id);
+  if (iter != tab_map_.end()) {
+    layer = iter->second;
+  } else {
+    layer = TabLayer::Create(incognito, resource_manager_, layer_title_cache_,
+                             tab_content_manager_);
+    tab_map_.insert(TabMap::value_type(id, layer));
+  }
+  own_tree_->AddChild(layer->layer());
+  visible_tabs_this_frame_.insert(id);
+
   DCHECK(layer);
   if (layer) {
     layer->SetProperties(
@@ -138,7 +159,7 @@ void TabListSceneLayer::PutTabLayer(
         contour_alpha, shadow_alpha, close_alpha, border_scale, saturation,
         brightness, close_btn_width, static_to_view_blend, content_width,
         content_height, content_width, visible_content_height, show_toolbar,
-        toolbar_background_color, anonymize_toolbar,
+        default_theme_color, toolbar_background_color, anonymize_toolbar,
         toolbar_textbox_resource_id, toolbar_textbox_background_color,
         toolbar_textbox_alpha, toolbar_alpha, toolbar_y_offset,
         side_border_scale, attach_content, inset_border);
@@ -159,7 +180,9 @@ base::android::ScopedJavaLocalRef<jobject> TabListSceneLayer::GetJavaObject(
 
 void TabListSceneLayer::OnDetach() {
   SceneLayer::OnDetach();
-  RemoveAllRemainingTabLayers();
+  for (auto tab : tab_map_)
+    tab.second->layer()->RemoveFromParent();
+  tab_map_.clear();
 }
 
 bool TabListSceneLayer::ShouldShowBackground() {
@@ -168,40 +191,6 @@ bool TabListSceneLayer::ShouldShowBackground() {
 
 SkColor TabListSceneLayer::GetBackgroundColor() {
   return background_color_;
-}
-
-void TabListSceneLayer::RemoveAllRemainingTabLayers() {
-  if (layers_.size() > 0)
-    RemoveTabLayersInRange(0, layers_.size());
-}
-
-void TabListSceneLayer::RemoveTabLayersInRange(unsigned start, unsigned end) {
-  DCHECK_LT(start, end);
-  DCHECK_LE(end, layers_.size());
-  DCHECK_LE(0u, start);
-  for (unsigned i = start; i < end; ++i)
-    layers_[i]->layer()->RemoveFromParent();
-  layers_.erase(layers_.begin() + start, layers_.begin() + end);
-}
-
-scoped_refptr<TabLayer> TabListSceneLayer::GetNextLayer(bool incognito) {
-  while (write_index_ < layers_.size()) {
-    scoped_refptr<TabLayer> potential = layers_[write_index_];
-    if (potential->is_incognito() == incognito)
-      break;
-    potential->layer()->RemoveFromParent();
-    layers_.erase(layers_.begin() + write_index_);
-  }
-
-  if (write_index_ < layers_.size())
-    return layers_[write_index_++];
-
-  scoped_refptr<TabLayer> layer = TabLayer::Create(
-      incognito, resource_manager_, layer_title_cache_, tab_content_manager_);
-  layers_.push_back(layer);
-  own_tree_->AddChild(layer->layer());
-  write_index_++;
-  return layer;
 }
 
 static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& jobj) {

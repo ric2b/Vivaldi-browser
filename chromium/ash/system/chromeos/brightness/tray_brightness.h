@@ -5,8 +5,7 @@
 #ifndef ASH_SYSTEM_CHROMEOS_BRIGHTNESS_TRAY_BRIGHTNESS_H_
 #define ASH_SYSTEM_CHROMEOS_BRIGHTNESS_TRAY_BRIGHTNESS_H_
 
-#include "ash/system/tray/system_tray_item.h"
-#include "base/compiler_specific.h"
+#include "ash/common/system/tray/system_tray_item.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chromeos/dbus/power_manager_client.h"
@@ -36,13 +35,13 @@ class ASH_EXPORT TrayBrightness
   void HandleInitialBrightness(double percent);
 
   // Overridden from SystemTrayItem.
-  views::View* CreateTrayView(user::LoginStatus status) override;
-  views::View* CreateDefaultView(user::LoginStatus status) override;
-  views::View* CreateDetailedView(user::LoginStatus status) override;
+  views::View* CreateTrayView(LoginStatus status) override;
+  views::View* CreateDefaultView(LoginStatus status) override;
+  views::View* CreateDetailedView(LoginStatus status) override;
   void DestroyTrayView() override;
   void DestroyDefaultView() override;
   void DestroyDetailedView() override;
-  void UpdateAfterLoginStatusChange(user::LoginStatus status) override;
+  void UpdateAfterLoginStatusChange(LoginStatus status) override;
   bool ShouldHideArrow() const override;
   bool ShouldShowShelf() const override;
 

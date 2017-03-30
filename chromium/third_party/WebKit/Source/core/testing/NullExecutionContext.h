@@ -5,13 +5,14 @@
 #ifndef NullExecutionContext_h
 #define NullExecutionContext_h
 
-#include "bindings/core/v8/ScriptCallStack.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/SecurityContext.h"
 #include "core/events/EventQueue.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
+#include <memory>
 
 namespace blink {
 
@@ -23,7 +24,7 @@ public:
     void disableEval(const String&) override { }
     String userAgent() const override { return String(); }
 
-    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>) override;
+    void postTask(const WebTraceLocation&, std::unique_ptr<ExecutionContextTask>, const String& taskNameForInstrumentation = emptyString()) override;
 
     EventTarget* errorEventTarget() override { return nullptr; }
     EventQueue* getEventQueue() const override { return m_queue.get(); }
@@ -37,7 +38,7 @@ public:
     DOMTimerCoordinator* timers() override { return nullptr; }
 
     void addConsoleMessage(ConsoleMessage*) override { }
-    void logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack>) override { }
+    void logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation>) override { }
 
     void setIsSecureContext(bool);
     bool isSecureContext(String& errorMessage, const SecureContextCheck = StandardSecureContextCheck) const override;

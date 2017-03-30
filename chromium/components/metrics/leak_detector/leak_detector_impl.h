@@ -153,7 +153,7 @@ class LeakDetectorImpl {
   };
 
   // Returns the offset of |ptr| within the current binary. If it is not in the
-  // current binary, just return |ptr| as an integer.
+  // current binary, return |UINTPTR_MAX|.
   uintptr_t GetOffset(const void* ptr) const;
 
   // Record some of the current allocation bookkeeping. The net number of allocs
@@ -230,10 +230,6 @@ class LeakDetectorImpl {
   // Address mapping info of the current binary.
   uintptr_t mapping_addr_;
   size_t mapping_size_;
-
-  // Number of consecutive times an allocation size must trigger suspicion to be
-  // considered a leak suspect.
-  int size_suspicion_threshold_;
 
   // Number of consecutive times a call stack must trigger suspicion to be
   // considered a leak suspect.

@@ -11,11 +11,12 @@
 #include "base/bind.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/notifications/desktop_notification_profile_util.h"
+#include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "content/public/browser/permission_type.h"
 #include "ui/message_center/notifier_settings.h"
 
 #if defined(ENABLE_EXTENSIONS)
@@ -84,8 +85,9 @@ bool NotifierStateTracker::IsNotifierEnabled(
       return disabled_extension_ids_.find(notifier_id.id) ==
           disabled_extension_ids_.end();
     case NotifierId::WEB_PAGE:
-      return DesktopNotificationProfileUtil::GetContentSetting(
-          profile_, notifier_id.url) == CONTENT_SETTING_ALLOW;
+      return PermissionManager::Get(profile_)->GetPermissionStatus(
+                 content::PermissionType::NOTIFICATIONS, notifier_id.url,
+                 notifier_id.url) == blink::mojom::PermissionStatus::GRANTED;
     case NotifierId::SYSTEM_COMPONENT:
 #if defined(OS_CHROMEOS)
       return disabled_system_component_ids_.find(notifier_id.id) ==
@@ -93,6 +95,14 @@ bool NotifierStateTracker::IsNotifierEnabled(
 #else
       // We do not disable system component notifications.
       return true;
+#endif
+    case NotifierId::ARC_APPLICATION:
+#if defined(OS_CHROMEOS)
+      // TODO(hriono): Ask Android if the application's notifications are
+      // enabled.
+      return true;
+#else
+      return false;
 #endif
   }
 
@@ -177,8 +187,7 @@ void NotifierStateTracker::FirePermissionLevelChangedEvent(
       enabled ? extensions::api::notifications::PERMISSION_LEVEL_GRANTED
               : extensions::api::notifications::PERMISSION_LEVEL_DENIED;
   std::unique_ptr<base::ListValue> args(new base::ListValue());
-  args->Append(new base::StringValue(
-      extensions::api::notifications::ToString(permission)));
+  args->AppendString(extensions::api::notifications::ToString(permission));
   std::unique_ptr<extensions::Event> event(new extensions::Event(
       extensions::events::NOTIFICATIONS_ON_PERMISSION_LEVEL_CHANGED,
       extensions::api::notifications::OnPermissionLevelChanged::kEventName,

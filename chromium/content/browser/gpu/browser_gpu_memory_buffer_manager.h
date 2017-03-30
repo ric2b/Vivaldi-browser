@@ -102,27 +102,20 @@ class CONTENT_EXPORT BrowserGpuMemoryBufferManager
 
  private:
   struct BufferInfo {
-    BufferInfo()
-        : type(gfx::EMPTY_BUFFER),
-          format(gfx::BufferFormat::RGBA_8888),
-          usage(gfx::BufferUsage::GPU_READ),
-          gpu_host_id(0) {}
+    BufferInfo();
     BufferInfo(const gfx::Size& size,
                gfx::GpuMemoryBufferType type,
                gfx::BufferFormat format,
                gfx::BufferUsage usage,
-               int gpu_host_id)
-        : size(size),
-          type(type),
-          format(format),
-          usage(usage),
-          gpu_host_id(gpu_host_id) {}
+               int gpu_host_id);
+    BufferInfo(const BufferInfo& other);
+    ~BufferInfo();
 
     gfx::Size size;
-    gfx::GpuMemoryBufferType type;
-    gfx::BufferFormat format;
-    gfx::BufferUsage usage;
-    int gpu_host_id;
+    gfx::GpuMemoryBufferType type = gfx::EMPTY_BUFFER;
+    gfx::BufferFormat format = gfx::BufferFormat::RGBA_8888;
+    gfx::BufferUsage usage = gfx::BufferUsage::GPU_READ;
+    int gpu_host_id = 0;
   };
 
   struct CreateGpuMemoryBufferRequest;

@@ -134,6 +134,7 @@
       'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
     },
     {
+      # GN version: //url/mojo:url_mojom_gurl and //url/mojo:url_mojom_origin
       'target_name': 'url_mojom',
       'type': 'static_library',
       'export_dependent_settings': [
@@ -146,6 +147,7 @@
       ],
     },
     {
+      # GN version: //url/mojo:test_url_mojom_gurl
       'target_name': 'url_test_interfaces_mojom',
       'type': 'none',
       'variables': {
@@ -211,6 +213,58 @@
             '../base/base.gyp:base',
           ],
           'includes': [ '../build/java.gypi' ],
+        },
+      ],
+    }],
+    ['OS!="ios"', {
+      'targets': [
+        {
+          'target_name': 'url_interfaces_mojom_for_blink',
+          'type': 'none',
+          'variables': {
+            'for_blink': 'true',
+            'mojom_files': [
+              'mojo/origin.mojom',
+              'mojo/url.mojom',
+            ],
+            'mojom_typemaps': [
+              '../third_party/WebKit/Source/platform/mojo/KURL.typemap',
+              '../third_party/WebKit/Source/platform/mojo/SecurityOrigin.typemap',
+            ],
+          },
+          'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
+        },
+        {
+          # GN version: //url/mojo:url_mojom_gurl_blink and //url/mojo:url_mojom_origin_blink
+          'target_name': 'url_mojom_for_blink',
+          'type': 'static_library',
+          'export_dependent_settings': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+          ],
+          'dependencies': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+            'url_interfaces_mojom_for_blink',
+            'url_lib',
+          ],
+        },
+        {
+          # GN version: //url/mojo:test_url_mojom_gurl_blink
+          'target_name': 'url_test_interfaces_mojom_for_blink',
+          'type': 'none',
+          'variables': {
+            'for_blink': 'true',
+            'mojom_files': [
+              'mojo/url_test.mojom',
+            ],
+            'mojom_typemaps': [
+              '../third_party/WebKit/Source/platform/mojo/KURL.typemap',
+              '../third_party/WebKit/Source/platform/mojo/SecurityOrigin.typemap',
+            ],
+          },
+          'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
+          'dependencies': [
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+          ],
         },
       ],
     }],

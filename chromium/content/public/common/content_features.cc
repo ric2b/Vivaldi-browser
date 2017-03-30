@@ -14,6 +14,11 @@ namespace features {
 const base::Feature kBrotliEncoding{"brotli-encoding",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
+// If Canvas2D Image Chromium is allowed, this feature controls whether it is
+// enabled.
+const base::Feature kCanvas2DImageChromium{"Canvas2DImageChromium",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Enables the credential management API:
 // https://w3c.github.io/webappsec-credential-management/
 const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
@@ -24,16 +29,20 @@ const base::Feature kCredentialManagementAPI{"CredentialManagementAPI",
 const base::Feature kDefaultEnableGpuRasterization{
     "DefaultEnableGpuRasterization", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Downloads resumption will be controllable via a flag until it's enabled
-// permanently. See https://crbug.com/7648
-const base::Feature kDownloadResumption{"DownloadResumption",
-                                        base::FEATURE_ENABLED_BY_DEFAULT};
+// Do not call SharedBuffer::unlock() (https://crbug.com/603791).
+const base::Feature kDoNotUnlockSharedBuffer{"DoNotUnlockSharedBuffer",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Speculatively pre-evaluate Javascript which will likely use document.write to
 // load an external script. The feature extracts the written markup and sends it
 // to the preload scanner.
 const base::Feature kDocumentWriteEvaluator{"DocumentWriteEvaluator",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables a blink::FontCache optimization that reuses a font to serve different
+// size of font.
+const base::Feature kFontCacheScaling{"FontCacheScaling",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Can main thread be pipelined with activation. Always disabled for devices
 // with fewer than 4 cores irrespective of this flag. Can also be overridden by
@@ -79,6 +88,10 @@ const base::Feature kOriginTrials{"OriginTrials",
 const base::Feature kPaintOptimizations{"PaintOptimizations",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Whether the lookahead parser in Blink runs on the main thread.
+const base::Feature kParseHTMLOnMainThread{"ParseHTMLOnMainThread",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Partial support for pointer event feature.
 const base::Feature kPointerEvents{"PointerEvent",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
@@ -102,9 +115,14 @@ const base::Feature kStaleWhileRevalidate{"StaleWhileRevalidate2",
 const base::Feature kTokenBinding{"token-binding",
                                   base::FEATURE_DISABLED_BY_DEFAULT};
 
-// An experimental User Agent Intervention on WebFonts loading.
-const base::Feature kWebFontsInterventionV2{"WebFontsInterventionV2",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
+// Weak MemoryCache (https://crbug.com/603462).
+const base::Feature kWeakMemoryCache{"WeakMemoryCache",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If WebGL Image Chromium is allowed, this feature controls whether it is
+// enabled.
+const base::Feature kWebGLImageChromium{"WebGLImageChromium",
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Makes WebRTC use ECDSA certs by default (i.e., when no cert type was
 // specified in JS).
@@ -116,6 +134,10 @@ const base::Feature kWebRtcEcdsaDefault {"WebRTC-EnableWebRtcEcdsa",
 const base::Feature kWebUsb{"WebUSB", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
+// Allow videos to autoplay without a user gesture if muted.
+const base::Feature kAutoplayMutedVideos{"AutoplayMutedVideos",
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Use IME's own thread instead of using main UI thread. It also means that
 // we will not use replica editor and do a round trip to renderer to synchronize
 // with Blink data.
@@ -124,6 +146,18 @@ const base::Feature kImeThread{"ImeThread", base::FEATURE_DISABLED_BY_DEFAULT};
 // FeatureList definition for the Seccomp field trial.
 const base::Feature kSeccompSandboxAndroid{"SeccompSandboxAndroid",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// The JavaScript API for payments on the web.
+const base::Feature kWebPayments{"WebPayments",
+                                 base::FEATURE_ENABLED_BY_DEFAULT};
+
+#endif
+
+#if defined(OS_WIN)
+// Emergency "off switch" for new Windows sandbox security mitigation,
+// sandbox::MITIGATION_EXTENSION_POINT_DISABLE.
+const base::Feature kWinSboxDisableExtensionPoints{
+    "WinSboxDisableExtensionPoint", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 }  // namespace features

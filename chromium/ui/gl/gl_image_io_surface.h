@@ -65,12 +65,20 @@ class GL_EXPORT GLImageIOSurface : public GLImage {
   base::ScopedCFTypeRef<IOSurfaceRef> io_surface();
   base::ScopedCFTypeRef<CVPixelBufferRef> cv_pixel_buffer();
 
+  // Whether checking IOSurfaceIsInUse() will actually provide a meaningful
+  // signal about whether the Window Server is still using the IOSurface.
+  bool CanCheckIOSurfaceIsInUse() const;
+
   static unsigned GetInternalFormatForTesting(gfx::BufferFormat format);
+
+  // Downcasts from |image|. Returns |nullptr| on failure.
+  static GLImageIOSurface* FromGLImage(GLImage* image);
 
  protected:
   ~GLImageIOSurface() override;
 
  private:
+  Type GetType() const override;
   class RGBConverter;
 
   const gfx::Size size_;

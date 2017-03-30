@@ -5,7 +5,7 @@
 #include "ash/accelerators/debug_commands.h"
 
 #include "ash/accelerators/accelerator_commands.h"
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "ash/debug.h"
 #include "ash/desktop_background/desktop_background_controller.h"
 #include "ash/desktop_background/user_wallpaper_delegate.h"
@@ -14,6 +14,9 @@
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
+#include "ash/system/toast/toast_data.h"
+#include "ash/system/toast/toast_manager.h"
+#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/metrics/user_metrics.h"
@@ -64,8 +67,7 @@ void PrintWindowHierarchy(aura::Window* window,
        << " type=" << window->type()
        << (wm::IsActiveWindow(window) ? " [active] " : " ")
        << (window->IsVisible() ? " visible " : " ")
-       << window->bounds().ToString()
-       << '\n';
+       << window->bounds().ToString() << '\n';
 
   for (size_t i = 0; i < window->children().size(); ++i)
     PrintWindowHierarchy(window->children()[i], indent + 3, out);
@@ -105,8 +107,9 @@ void HandleToggleDesktopBackgroundMode() {
       Shell::GetInstance()->desktop_background_controller();
   switch (++index % 4) {
     case 0:
-      ash::Shell::GetInstance()->user_wallpaper_delegate()->
-          InitializeWallpaper();
+      ash::Shell::GetInstance()
+          ->user_wallpaper_delegate()
+          ->InitializeWallpaper();
       break;
     case 1:
       desktop_background_controller->SetWallpaperImage(
@@ -140,6 +143,13 @@ void HandleToggleTouchscreen() {
   ash::Shell::GetInstance()->delegate()->ToggleTouchscreen();
 }
 
+void HandleToggleToggleTouchView() {
+  MaximizeModeController* controller =
+      Shell::GetInstance()->maximize_mode_controller();
+  controller->EnableMaximizeModeWindowManager(
+      !controller->IsMaximizeModeWindowManagerEnabled());
+}
+
 #endif  // defined(OS_CHROMEOS)
 
 }  // namespace
@@ -167,11 +177,18 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
     case DEBUG_ADD_REMOVE_DISPLAY:
       Shell::GetInstance()->display_manager()->AddRemoveDisplay();
       break;
+    case DEBUG_SHOW_TOAST:
+      Shell::GetInstance()->toast_manager()->Show(
+          ToastData("id", "Toast", 5000 /* duration_ms */, "Dismiss"));
+      break;
     case DEBUG_TOGGLE_TOUCH_PAD:
       HandleToggleTouchpad();
       break;
     case DEBUG_TOGGLE_TOUCH_SCREEN:
       HandleToggleTouchscreen();
+      break;
+    case DEBUG_TOGGLE_TOUCH_VIEW:
+      HandleToggleToggleTouchView();
       break;
     case DEBUG_TOGGLE_UNIFIED_DESKTOP:
       Shell::GetInstance()->display_manager()->SetUnifiedDesktopEnabled(

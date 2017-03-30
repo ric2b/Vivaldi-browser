@@ -116,6 +116,8 @@ const char kReloadSharedWorkerTestPage[] =
     "files/workers/debug_shared_worker_initialization.html";
 const char kReloadSharedWorkerTestWorker[] =
     "files/workers/debug_shared_worker_initialization.js";
+const char kEmulateNetworkConditionsPage[] =
+    "files/devtools/emulate_network_conditions.html";
 
 template <typename... T>
 void DispatchOnTestSuiteSkipCheck(DevToolsWindow* window,
@@ -810,7 +812,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
 // on another devtools.
 // Disabled because of http://crbug.com/497857
 IN_PROC_BROWSER_TEST_F(DevToolsBeforeUnloadTest,
-                       DISABLED_TestDevToolsOnDevTools) {
+                       TestDevToolsOnDevTools) {
   ASSERT_TRUE(spawned_test_server()->Start());
   LoadTestPage(kDebuggerTestPage);
 
@@ -1305,7 +1307,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
 
 // This test enables switches::kUseGpuInTests which causes false positives
 // with MemorySanitizer.
-#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER)
+#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || defined(OS_WIN)
 #define MAYBE_TestLatencyInfoInstrumentation \
   DISABLED_TestLatencyInfoInstrumentation
 #else
@@ -1339,4 +1341,17 @@ IN_PROC_BROWSER_TEST_F(DevToolsPixelOutputTests,
                 "MouseWheel", "GestureTap");
 
   CloseDevToolsWindow();
+}
+
+class DevToolsNetInfoTest : public DevToolsSanityTest {
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(switches::kEnableNetworkInformation);
+    command_line->AppendSwitch(
+        switches::kEnableExperimentalWebPlatformFeatures);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(DevToolsNetInfoTest, EmulateNetworkConditions) {
+  RunTest("testEmulateNetworkConditions", kEmulateNetworkConditionsPage);
 }

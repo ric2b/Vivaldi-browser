@@ -30,8 +30,6 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/fonts/Font.h"
-#include "platform/geometry/FloatRect.h"
-#include "platform/geometry/FloatRoundedRect.h"
 #include "platform/graphics/DashArray.h"
 #include "platform/graphics/DrawLooperBuilder.h"
 #include "platform/graphics/GraphicsContextState.h"
@@ -43,7 +41,7 @@
 #include "wtf/Allocator.h"
 #include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
+#include <memory>
 
 class SkBitmap;
 class SkImage;
@@ -57,6 +55,8 @@ struct SkRect;
 
 namespace blink {
 
+class FloatRect;
+class FloatRoundedRect;
 class ImageBuffer;
 class KURL;
 class PaintController;
@@ -98,9 +98,6 @@ public:
     Color strokeColor() const { return immutableState()->strokeColor(); }
     void setStrokeColor(const Color& color) { mutableState()->setStrokeColor(color); }
 
-    Gradient* strokeGradient() const { return immutableState()->strokeGradient(); }
-    void setStrokeGradient(PassRefPtr<Gradient>, float alpha = 1);
-
     void setLineCap(LineCap cap) { mutableState()->setLineCap(cap); }
     void setLineDash(const DashArray& dashes, float dashOffset) { mutableState()->setLineDash(dashes, dashOffset); }
     void setLineJoin(LineJoin join) { mutableState()->setLineJoin(join); }
@@ -108,8 +105,6 @@ public:
 
     Color fillColor() const { return immutableState()->fillColor(); }
     void setFillColor(const Color& color) { mutableState()->setFillColor(color); }
-
-    void setFillGradient(PassRefPtr<Gradient>, float alpha = 1);
 
     void setShouldAntialias(bool antialias) { mutableState()->setShouldAntialias(antialias); }
     bool shouldAntialias() const { return immutableState()->shouldAntialias(); }
@@ -142,8 +137,6 @@ public:
     void drawRect(const IntRect&);
     void drawLine(const IntPoint&, const IntPoint&);
 
-    void fillPolygon(size_t numPoints, const FloatPoint*, const Color&, bool shouldAntialias);
-
     void fillPath(const Path&);
     void strokePath(const Path&);
 
@@ -162,6 +155,8 @@ public:
 
     void drawImage(Image*, const FloatRect& destRect, const FloatRect* srcRect = nullptr,
         SkXfermode::Mode = SkXfermode::kSrcOver_Mode, RespectImageOrientationEnum = DoNotRespectImageOrientation);
+    void drawImageRRect(Image*, const FloatRoundedRect& dest, const FloatRect& srcRect,
+        SkXfermode::Mode = SkXfermode::kSrcOver_Mode, RespectImageOrientationEnum = DoNotRespectImageOrientation);
     void drawTiledImage(Image*, const FloatRect& destRect, const FloatPoint& srcPoint, const FloatSize& tileSize,
         SkXfermode::Mode = SkXfermode::kSrcOver_Mode, const FloatSize& repeatSpacing = FloatSize());
     void drawTiledImage(Image*, const FloatRect& destRect, const FloatRect& srcRect,
@@ -173,6 +168,7 @@ public:
     void drawOval(const SkRect&, const SkPaint&);
     void drawPath(const SkPath&, const SkPaint&);
     void drawRect(const SkRect&, const SkPaint&);
+    void drawRRect(const SkRRect&, const SkPaint&);
 
     void clip(const IntRect& rect) { clipRect(rect); }
     void clip(const FloatRect& rect) { clipRect(rect); }
@@ -182,7 +178,6 @@ public:
     void clipOut(const Path&);
     void clipOutRoundedRect(const FloatRoundedRect&);
     void clipPath(const SkPath&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
-    void clipPolygon(size_t numPoints, const FloatPoint*, bool antialias);
     void clipRect(const SkRect&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
 
     void drawText(const Font&, const TextRunPaintInfo&, const FloatPoint&);
@@ -220,7 +215,7 @@ public:
     // It is assumed that this draw looper is used only for shadows
     // (i.e. a draw looper is set if and only if there is a shadow).
     // The builder passed into this method will be destroyed.
-    void setDrawLooper(PassOwnPtr<DrawLooperBuilder>);
+    void setDrawLooper(std::unique_ptr<DrawLooperBuilder>);
 
     void drawFocusRing(const Vector<IntRect>&, int width, int offset, const Color&);
     void drawFocusRing(const Path&, int width, int offset, const Color&);
@@ -238,6 +233,7 @@ public:
         Edges clippedEdges = NoEdge);
 
     const SkPaint& fillPaint() const { return immutableState()->fillPaint(); }
+    const SkPaint& strokePaint() const { return immutableState()->strokePaint(); }
 
     // ---------- Transformation methods -----------------
     void concatCTM(const AffineTransform&);
@@ -293,8 +289,6 @@ private:
     template<typename DrawTextFunc>
     void drawTextPasses(const DrawTextFunc&);
 
-    static void setPathFromPoints(SkPath*, size_t, const FloatPoint*);
-
 #if OS(MACOSX)
     static inline int focusRingOffset(int offset) { return offset + 2; }
 #else
@@ -316,7 +310,6 @@ private:
     // SkCanvas wrappers.
     void clipRRect(const SkRRect&, AntiAliasingMode = NotAntiAliased, SkRegion::Op = SkRegion::kIntersect_Op);
     void concat(const SkMatrix&);
-    void drawRRect(const SkRRect&, const SkPaint&);
 
     // Apply deferred paint state saves
     void realizePaintSave()
@@ -350,7 +343,7 @@ private:
     // Paint states stack. Enables local drawing state change with save()/restore() calls.
     // This state controls the appearance of drawn content.
     // We do not delete from this stack to avoid memory churn.
-    Vector<OwnPtr<GraphicsContextState>> m_paintStateStack;
+    Vector<std::unique_ptr<GraphicsContextState>> m_paintStateStack;
     // Current index on the stack. May not be the last thing on the stack.
     unsigned m_paintStateIndex;
     // Raw pointer to the current state.

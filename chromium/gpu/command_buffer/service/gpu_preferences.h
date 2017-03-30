@@ -53,6 +53,9 @@ struct GPU_EXPORT GpuPreferences {
 
   // Enables support for avoiding copying DXGI NV12 textures.
   bool enable_zero_copy_dxgi_video = false;
+
+  // Enables support for outputting NV12 video frames.
+  bool enable_nv12_dxgi_video = false;
 #endif
 
   // ===================================
@@ -123,6 +126,10 @@ struct GPU_EXPORT GpuPreferences {
 
   // Enable OpenGL ES 3 APIs without proper service side validation.
   bool enable_unsafe_es3_apis = false;
+
+  // Use the Pass-through command decoder, skipping all validation and state
+  // tracking.
+  bool use_passthrough_cmd_decoder = false;
 };
 
 }  // namespace gpu

@@ -23,7 +23,6 @@
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCache.h"
-
 #include <memory>
 
 namespace blink {
@@ -51,6 +50,7 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
+        ScriptState::Scope scope(m_resolver->getScriptState());
         m_resolver->resolve(Response::create(m_resolver->getScriptState(), webResponse));
         m_resolver.clear();
     }
@@ -81,6 +81,7 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
+        ScriptState::Scope scope(m_resolver->getScriptState());
         HeapVector<Member<Response>> responses;
         for (size_t i = 0; i < webResponses.size(); ++i)
             responses.append(Response::create(m_resolver->getScriptState(), webResponses[i]));
@@ -141,6 +142,7 @@ public:
     {
         if (!m_resolver->getExecutionContext() || m_resolver->getExecutionContext()->activeDOMObjectsAreStopped())
             return;
+        ScriptState::Scope scope(m_resolver->getScriptState());
         HeapVector<Member<Request>> requests;
         for (size_t i = 0; i < webRequests.size(); ++i)
             requests.append(Request::create(m_resolver->getScriptState(), webRequests[i]));
@@ -360,7 +362,7 @@ private:
     WebServiceWorkerResponse m_webResponse;
 };
 
-Cache* Cache::create(GlobalFetch::ScopedFetcher* fetcher, PassOwnPtr<WebServiceWorkerCache> webCache)
+Cache* Cache::create(GlobalFetch::ScopedFetcher* fetcher, std::unique_ptr<WebServiceWorkerCache> webCache)
 {
     return new Cache(fetcher, std::move(webCache));
 }
@@ -472,7 +474,7 @@ WebServiceWorkerCache::QueryParams Cache::toWebQueryParams(const CacheQueryOptio
     return webQueryParams;
 }
 
-Cache::Cache(GlobalFetch::ScopedFetcher* fetcher, PassOwnPtr<WebServiceWorkerCache> webCache)
+Cache::Cache(GlobalFetch::ScopedFetcher* fetcher, std::unique_ptr<WebServiceWorkerCache> webCache)
     : m_scopedFetcher(fetcher)
     , m_webCache(std::move(webCache))
 {

@@ -25,13 +25,13 @@
 
 #include "modules/webaudio/AudioParam.h"
 
+#include "core/dom/ExceptionCode.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/webaudio/AudioNode.h"
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "platform/FloatConversion.h"
 #include "platform/Histogram.h"
 #include "platform/audio/AudioUtilities.h"
-#include "platform/v8_inspector/public/ConsoleTypes.h"
 #include "wtf/MathExtras.h"
 
 namespace blink {
@@ -46,12 +46,12 @@ AudioParamHandler::AudioParamHandler(AbstractAudioContext& context, AudioParamTy
     , m_defaultValue(defaultValue)
     , m_minValue(minValue)
     , m_maxValue(maxValue)
-    , m_smoothedValue(defaultValue)
 {
     // The destination MUST exist because we need the destination handler for the AudioParam.
     RELEASE_ASSERT(context.destination());
 
     m_destinationHandler = &context.destination()->audioDestinationHandler();
+    m_timeline.setSmoothedValue(defaultValue);
 }
 
 AudioDestinationHandler& AudioParamHandler::destinationHandler() const
@@ -147,7 +147,7 @@ float AudioParamHandler::value()
     float v = intrinsicValue();
     if (deferredTaskHandler().isAudioThread()) {
         bool hasValue;
-        float timelineValue = m_timeline.valueForContextTime(destinationHandler(), v, hasValue);
+        float timelineValue = m_timeline.valueForContextTime(destinationHandler(), v, hasValue, minValue(), maxValue());
 
         if (hasValue)
             v = timelineValue;
@@ -171,7 +171,7 @@ void AudioParamHandler::setValue(float value)
 
 float AudioParamHandler::smoothedValue()
 {
-    return m_smoothedValue;
+    return m_timeline.smoothedValue();
 }
 
 bool AudioParamHandler::smooth()
@@ -179,25 +179,28 @@ bool AudioParamHandler::smooth()
     // If values have been explicitly scheduled on the timeline, then use the exact value.
     // Smoothing effectively is performed by the timeline.
     bool useTimelineValue = false;
-    float value = m_timeline.valueForContextTime(destinationHandler(), intrinsicValue(), useTimelineValue);
+    float value = m_timeline.valueForContextTime(destinationHandler(), intrinsicValue(), useTimelineValue, minValue(), maxValue());
 
-    if (m_smoothedValue == value) {
+
+    float smoothedValue = m_timeline.smoothedValue();
+    if (smoothedValue == value) {
         // Smoothed value has already approached and snapped to value.
         setIntrinsicValue(value);
         return true;
     }
 
     if (useTimelineValue) {
-        m_smoothedValue = value;
+        m_timeline.setSmoothedValue(value);
     } else {
         // Dezipper - exponential approach.
-        m_smoothedValue += (value - m_smoothedValue) * DefaultSmoothingConstant;
+        smoothedValue += (value - smoothedValue) * DefaultSmoothingConstant;
 
         // If we get close enough then snap to actual value.
         // FIXME: the threshold needs to be adjustable depending on range - but
         // this is OK general purpose value.
-        if (fabs(m_smoothedValue - value) < SnapThreshold)
-            m_smoothedValue = value;
+        if (fabs(smoothedValue - value) < SnapThreshold)
+            smoothedValue = value;
+        m_timeline.setSmoothedValue(smoothedValue);
     }
 
     setIntrinsicValue(value);
@@ -237,7 +240,7 @@ void AudioParamHandler::calculateFinalValues(float* values, unsigned numberOfVal
         // Calculate control-rate (k-rate) intrinsic value.
         bool hasValue;
         float value = intrinsicValue();
-        float timelineValue = m_timeline.valueForContextTime(destinationHandler(), value, hasValue);
+        float timelineValue = m_timeline.valueForContextTime(destinationHandler(), value, hasValue, minValue(), maxValue());
 
         if (hasValue)
             value = timelineValue;
@@ -273,7 +276,7 @@ void AudioParamHandler::calculateTimelineValues(float* values, unsigned numberOf
 
     // Note we're running control rate at the sample-rate.
     // Pass in the current value as default value.
-    setIntrinsicValue(m_timeline.valuesForFrameRange(startFrame, endFrame, intrinsicValue(), values, numberOfValues, sampleRate, sampleRate));
+    setIntrinsicValue(m_timeline.valuesForFrameRange(startFrame, endFrame, intrinsicValue(), values, numberOfValues, sampleRate, sampleRate, minValue(), maxValue()));
 }
 
 void AudioParamHandler::connect(AudioNodeOutput& output)
@@ -454,15 +457,34 @@ AudioParam* AudioParam::setTargetAtTime(float target, double time, double timeCo
 
 AudioParam* AudioParam::setValueCurveAtTime(DOMFloat32Array* curve, double time, double duration, ExceptionState& exceptionState)
 {
-    // Just find the first value in the curve (if any) that is outside the nominal range.  It's
-    // probably not necessary to produce a warning on every value outside the nominal range.
     float* curveData = curve->data();
     float min = minValue();
     float max = maxValue();
 
+    // First, find any non-finite value in the curve and throw an exception if
+    // there are any.
     for (unsigned k = 0; k < curve->length(); ++k) {
-        if (curveData[k] < min || curveData[k] > max) {
-            warnIfOutsideRange("setValueCurveAtTime value", curveData[k]);
+        float value = curveData[k];
+
+        if (!std::isfinite(value)) {
+            exceptionState.throwDOMException(
+                V8TypeError,
+                "The provided float value for the curve at element "
+                + String::number(k)
+                + " is non-finite: "
+                + String::number(value));
+            return nullptr;
+        }
+    }
+
+    // Second, find the first value in the curve (if any) that is outside the
+    // nominal range.  It's probably not necessary to produce a warning on every
+    // value outside the nominal range.
+    for (unsigned k = 0; k < curve->length(); ++k) {
+        float value = curveData[k];
+
+        if (value < min || value > max) {
+            warnIfOutsideRange("setValueCurveAtTime value", value);
             break;
         }
     }

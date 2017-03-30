@@ -7,8 +7,8 @@
 #include <cstdarg>
 #include <vector>
 
-#include "ash/ash_switches.h"
-#include "ash/display/display_info.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
 #include "ash/display/display_layout_store.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/display_util.h"
@@ -46,8 +46,7 @@ std::vector<DisplayInfo> CreateDisplayInfoListFromString(
        iter != parts.end(); ++iter, ++index) {
     int64_t id = (index < list.size()) ? list[index].id()
                                        : display::Display::kInvalidDisplayID;
-    display_info_list.push_back(
-        DisplayInfo::CreateFromSpecWithID(*iter, id));
+    display_info_list.push_back(DisplayInfo::CreateFromSpecWithID(*iter, id));
   }
   return display_info_list;
 }
@@ -69,8 +68,9 @@ bool DisplayManagerTestApi::TestIfMouseWarpsAt(
       screen->GetDisplayNearestPoint(point_in_screen);
   event_generator.MoveMouseTo(point_in_screen);
   return original_display.id() !=
-         screen->GetDisplayNearestPoint(
-                   aura::Env::GetInstance()->last_mouse_location())
+         screen
+             ->GetDisplayNearestPoint(
+                 aura::Env::GetInstance()->last_mouse_location())
              .id();
 }
 
@@ -109,12 +109,9 @@ void DisplayManagerTestApi::UpdateDisplay(const std::string& display_specs) {
     }
   }
 
-// TODO(msw): This seems to cause test hangs on Windows. http://crbug.com/584038
-#if !defined(OS_WIN)
   display_manager_->OnNativeDisplaysChanged(display_info_list);
   display_manager_->UpdateInternalDisplayModeListForTest();
   display_manager_->RunPendingTasksForTest();
-#endif
 }
 
 int64_t DisplayManagerTestApi::SetFirstDisplayAsInternalDisplay() {

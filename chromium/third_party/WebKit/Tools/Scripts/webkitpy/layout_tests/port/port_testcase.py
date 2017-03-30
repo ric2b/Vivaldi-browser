@@ -43,7 +43,7 @@ from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port.base import Port
 from webkitpy.layout_tests.port.base import TestConfiguration
 from webkitpy.layout_tests.port.server_process_mock import MockServerProcess
-from webkitpy.tool.mocktool import MockOptions
+from webkitpy.tool.mock_tool import MockOptions
 
 
 # FIXME: get rid of this fixture
@@ -95,7 +95,6 @@ class PortTestCase(unittest.TestCase):
         port_name = port_name or self.port_name
         port_name = self.port_maker.determine_full_port_name(host, options, port_name)
         port = self.port_maker(host, port_name, options=options, **kwargs)
-        port._config.build_directory = lambda configuration: '/mock-build'
         return port
 
     def make_wdiff_available(self, port):
@@ -173,7 +172,7 @@ class PortTestCase(unittest.TestCase):
                 test_socket = socket.socket()
                 test_socket.connect((host, port))
                 self.fail()
-            except IOError, e:
+            except IOError as e:
                 self.assertTrue(e.errno in (errno.ECONNREFUSED, errno.ECONNRESET))
             finally:
                 test_socket.close()
@@ -183,7 +182,7 @@ class PortTestCase(unittest.TestCase):
             try:
                 test_socket = socket.socket()
                 test_socket.connect((host, port))
-            except IOError, e:
+            except IOError as e:
                 self.fail('failed to connect to %s:%d' % (host, port))
             finally:
                 test_socket.close()
@@ -232,7 +231,7 @@ class PortTestCase(unittest.TestCase):
         exception_raised = False
         try:
             port.diff_image("EXPECTED", "ACTUAL")
-        except ValueError, e:
+        except ValueError as e:
             exception_raised = True
         self.assertFalse(exception_raised)
 
@@ -309,34 +308,23 @@ class PortTestCase(unittest.TestCase):
         self.assertEqual(port._build_path(), expected_path)
 
     def test_expectations_files(self):
-        # FIXME: crbug.com/589709 - Delete this once the 10.11 failures have been rebaselined or triaged.
-        return
-
         port = self.make_port()
+        self.assertEqual(port.expectations_files(), [
+            port.path_to_generic_test_expectations_file(),
+            port._filesystem.join(port.layout_tests_dir(), 'NeverFixTests'),
+            port._filesystem.join(port.layout_tests_dir(), 'StaleTestExpectations'),
+            port._filesystem.join(port.layout_tests_dir(), 'SlowTests'),
+        ])
 
-        generic_path = port.path_to_generic_test_expectations_file()
-        never_fix_tests_path = port._filesystem.join(port.layout_tests_dir(), 'NeverFixTests')
-        stale_tests_path = port._filesystem.join(port.layout_tests_dir(), 'StaleTestExpectations')
-        slow_tests_path = port._filesystem.join(port.layout_tests_dir(), 'SlowTests')
-
-        port._filesystem.write_text_file(skia_overrides_path, 'dummy text')
-
-        port._options.builder_name = 'DUMMY_BUILDER_NAME'
-        self.assertEqual(port.expectations_files(),
-                         [generic_path, skia_overrides_path,
-                          never_fix_tests_path, stale_tests_path, slow_tests_path])
-
-        port._options.builder_name = 'builder (deps)'
-        self.assertEqual(port.expectations_files(),
-                         [generic_path, skia_overrides_path,
-                          never_fix_tests_path, stale_tests_path, slow_tests_path])
-
-        # A builder which does NOT observe the Chromium test_expectations,
-        # but still observes the Skia test_expectations...
-        port._options.builder_name = 'builder'
-        self.assertEqual(port.expectations_files(),
-                         [generic_path, skia_overrides_path,
-                          never_fix_tests_path, stale_tests_path, slow_tests_path])
+    def test_expectations_files_wptserve_enabled(self):
+        port = self.make_port(options=MockOptions(enable_wptserve=True))
+        self.assertEqual(port.expectations_files(), [
+            port.path_to_generic_test_expectations_file(),
+            port._filesystem.join(port.layout_tests_dir(), 'NeverFixTests'),
+            port._filesystem.join(port.layout_tests_dir(), 'StaleTestExpectations'),
+            port._filesystem.join(port.layout_tests_dir(), 'SlowTests'),
+            port._filesystem.join(port.layout_tests_dir(), 'WPTServeExpectations'),
+        ])
 
     def test_check_sys_deps(self):
         port = self.make_port()

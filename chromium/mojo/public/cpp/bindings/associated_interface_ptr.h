@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -16,7 +17,6 @@
 #include "mojo/public/cpp/bindings/associated_group.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/associated_interface_request.h"
-#include "mojo/public/cpp/bindings/callback.h"
 #include "mojo/public/cpp/bindings/lib/associated_interface_ptr_state.h"
 
 namespace mojo {
@@ -25,8 +25,6 @@ namespace mojo {
 // InterfacePtr, except that it doesn't own a message pipe handle.
 template <typename Interface>
 class AssociatedInterfacePtr {
-  DISALLOW_COPY_AND_ASSIGN_WITH_MOVE_FOR_BIND(AssociatedInterfacePtr)
-
  public:
   // Constructs an unbound AssociatedInterfacePtr.
   AssociatedInterfacePtr() {}
@@ -94,7 +92,7 @@ class AssociatedInterfacePtr {
   // Queries the max version that the remote side supports. On completion, the
   // result will be returned as the input of |callback|. The version number of
   // this object will also be updated.
-  void QueryVersion(const Callback<void(uint32_t)>& callback) {
+  void QueryVersion(const base::Callback<void(uint32_t)>& callback) {
     internal_state_.QueryVersion(callback);
   }
 
@@ -124,7 +122,7 @@ class AssociatedInterfacePtr {
   //
   // This method may only be called after the AssociatedInterfacePtr has been
   // bound.
-  void set_connection_error_handler(const Closure& error_handler) {
+  void set_connection_error_handler(const base::Closure& error_handler) {
     internal_state_.set_connection_error_handler(error_handler);
   }
 
@@ -157,6 +155,7 @@ class AssociatedInterfacePtr {
   // Allow AssociatedInterfacePtr<> to be used in boolean expressions, but not
   // implicitly convertible to a real bool (which is dangerous).
  private:
+  // TODO(dcheng): Use an explicit conversion operator.
   typedef internal::AssociatedInterfacePtrState<Interface>
       AssociatedInterfacePtr::*Testable;
 
@@ -176,6 +175,8 @@ class AssociatedInterfacePtr {
 
   typedef internal::AssociatedInterfacePtrState<Interface> State;
   mutable State internal_state_;
+
+  DISALLOW_COPY_AND_ASSIGN(AssociatedInterfacePtr);
 };
 
 // Creates an associated interface. The output |ptr| should be used locally

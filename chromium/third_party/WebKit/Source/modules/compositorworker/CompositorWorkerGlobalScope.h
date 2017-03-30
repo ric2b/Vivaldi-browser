@@ -5,19 +5,22 @@
 #ifndef CompositorWorkerGlobalScope_h
 #define CompositorWorkerGlobalScope_h
 
+#include "core/dom/CompositorProxyClient.h"
 #include "core/dom/FrameRequestCallbackCollection.h"
 #include "core/dom/MessagePort.h"
 #include "core/workers/WorkerGlobalScope.h"
+#include "modules/ModulesExport.h"
+#include <memory>
 
 namespace blink {
 
 class CompositorWorkerThread;
 class WorkerThreadStartupData;
 
-class CompositorWorkerGlobalScope final : public WorkerGlobalScope {
+class MODULES_EXPORT CompositorWorkerGlobalScope final : public WorkerGlobalScope {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static CompositorWorkerGlobalScope* create(CompositorWorkerThread*, PassOwnPtr<WorkerThreadStartupData>, double timeOrigin);
+    static CompositorWorkerGlobalScope* create(CompositorWorkerThread*, std::unique_ptr<WorkerThreadStartupData>, double timeOrigin);
     ~CompositorWorkerGlobalScope() override;
 
     // EventTarget
@@ -28,7 +31,7 @@ public:
 
     int requestAnimationFrame(FrameRequestCallback*);
     void cancelAnimationFrame(int id);
-    void executeAnimationFrameCallbacks(double highResTimeNow);
+    bool executeAnimationFrameCallbacks(double highResTimeMs);
 
     // ExecutionContext:
     bool isCompositorWorkerGlobalScope() const override { return true; }
@@ -36,9 +39,10 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
 private:
-    CompositorWorkerGlobalScope(const KURL&, const String& userAgent, CompositorWorkerThread*, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData>, WorkerClients*);
+    CompositorWorkerGlobalScope(const KURL&, const String& userAgent, CompositorWorkerThread*, double timeOrigin, std::unique_ptr<SecurityOrigin::PrivilegeData>, WorkerClients*);
     CompositorWorkerThread* thread() const;
 
+    bool m_executingAnimationFrameCallbacks;
     FrameRequestCallbackCollection m_callbackCollection;
 };
 

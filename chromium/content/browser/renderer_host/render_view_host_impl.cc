@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/feature_list.h"
 #include "base/i18n/rtl.h"
 #include "base/json/json_reader.h"
 #include "base/message_loop/message_loop.h"
@@ -67,6 +68,7 @@
 #include "content/public/browser/user_metrics.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/content_constants.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/context_menu_params.h"
 #include "content/public/common/drop_data.h"
@@ -80,18 +82,20 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/fileapi/isolated_context.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/base/clipboard/clipboard.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/base/touch/touch_enabled.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/gfx/animation/animation.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/native_theme/native_theme_switches.h"
 #include "url/url_constants.h"
 
 #if defined(OS_WIN)
-#include "base/win/win_util.h"
 #include "ui/display/win/dpi.h"
+#include "ui/gfx/geometry/dip_util.h"
 #include "ui/gfx/platform_font_win.h"
 #endif
 
@@ -110,27 +114,6 @@ namespace content {
 namespace {
 
 #if defined(OS_WIN)
-
-const int kVirtualKeyboardDisplayWaitTimeoutMs = 100;
-const int kMaxVirtualKeyboardDisplayRetries = 5;
-
-void DismissVirtualKeyboardTask() {
-  static int virtual_keyboard_display_retries = 0;
-  // If the virtual keyboard is not yet visible, then we execute the task again
-  // waiting for it to show up.
-  if (!base::win::DismissVirtualKeyboard()) {
-    if (virtual_keyboard_display_retries < kMaxVirtualKeyboardDisplayRetries) {
-      BrowserThread::PostDelayedTask(
-          BrowserThread::UI, FROM_HERE,
-          base::Bind(base::IgnoreResult(&DismissVirtualKeyboardTask)),
-          TimeDelta::FromMilliseconds(kVirtualKeyboardDisplayWaitTimeoutMs));
-      ++virtual_keyboard_display_retries;
-    } else {
-      virtual_keyboard_display_retries = 0;
-    }
-  }
-}
-
 void GetWindowsSpecificPrefs(RendererPreferences* prefs) {
   NONCLIENTMETRICS_XP metrics = {0};
   base::win::GetNonClientMetrics(&metrics);
@@ -165,6 +148,56 @@ void GetWindowsSpecificPrefs(RendererPreferences* prefs) {
       display::win::GetSystemMetricsInDIP(SM_CXHSCROLL);
 }
 #endif
+
+std::vector<DropData::Metadata> DropDataToMetaData(const DropData& drop_data) {
+  std::vector<DropData::Metadata> metadata;
+  if (!drop_data.text.is_null()) {
+    metadata.push_back(DropData::Metadata::CreateForMimeType(
+        DropData::Kind::STRING,
+        base::ASCIIToUTF16(ui::Clipboard::kMimeTypeText)));
+  }
+
+  if (drop_data.url.is_valid()) {
+    metadata.push_back(DropData::Metadata::CreateForMimeType(
+        DropData::Kind::STRING,
+        base::ASCIIToUTF16(ui::Clipboard::kMimeTypeURIList)));
+  }
+
+  if (!drop_data.html.is_null()) {
+    metadata.push_back(DropData::Metadata::CreateForMimeType(
+        DropData::Kind::STRING,
+        base::ASCIIToUTF16(ui::Clipboard::kMimeTypeHTML)));
+  }
+
+  // On Aura, filenames are available before drop.
+  for (const auto& file_info : drop_data.filenames) {
+    if (!file_info.path.empty()) {
+      metadata.push_back(DropData::Metadata::CreateForFilePath(file_info.path));
+    }
+  }
+
+  // On Android, only files' mime types are available before drop.
+  for (const auto& mime_type : drop_data.file_mime_types) {
+    if (!mime_type.empty()) {
+      metadata.push_back(DropData::Metadata::CreateForMimeType(
+          DropData::Kind::FILENAME, mime_type));
+    }
+  }
+
+  for (const auto& file_system_file : drop_data.file_system_files) {
+    if (!file_system_file.url.is_empty()) {
+      metadata.push_back(
+          DropData::Metadata::CreateForFileSystemUrl(file_system_file.url));
+    }
+  }
+
+  for (const auto& custom_data_item : drop_data.custom_data) {
+    metadata.push_back(DropData::Metadata::CreateForMimeType(
+        DropData::Kind::STRING, custom_data_item.first));
+  }
+
+  return metadata;
+}
 
 }  // namespace
 
@@ -229,7 +262,6 @@ RenderViewHostImpl::RenderViewHostImpl(
       is_waiting_for_close_ack_(false),
       sudden_termination_allowed_(false),
       render_view_termination_status_(base::TERMINATION_STATUS_STILL_RUNNING),
-      virtual_keyboard_requested_(false),
       is_focused_element_editable_(false),
       updating_web_preferences_(false),
       render_view_ready_on_process_launch_(false),
@@ -340,6 +372,8 @@ bool RenderViewHostImpl::CreateRenderView(
   params.min_size = GetWidget()->min_size_for_auto_resize();
   params.max_size = GetWidget()->max_size_for_auto_resize();
   params.page_zoom_level = delegate_->GetPendingPageZoomLevel();
+  params.image_decode_color_profile =
+      gfx::ColorSpace::FromBestMonitor().GetICCProfile();
   GetWidget()->GetResizeParams(&params.initial_size);
 
   if (!Send(new ViewMsg_New(params)))
@@ -453,6 +487,10 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   prefs.user_gesture_required_for_media_playback = !command_line.HasSwitch(
       switches::kDisableGestureRequirementForMediaPlayback) &&
           (autoplay_group_name.empty() || autoplay_group_name != "Enabled");
+  prefs.autoplay_muted_videos_enabled =
+      base::FeatureList::IsEnabled(features::kAutoplayMutedVideos);
+
+  prefs.progress_bar_completion = GetProgressBarCompletionPolicy();
 #endif
 
   // Handle autoplay gesture override experiment.
@@ -539,7 +577,8 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 void RenderViewHostImpl::ClosePage() {
   is_waiting_for_close_ack_ = true;
   GetWidget()->StartHangMonitorTimeout(
-      TimeDelta::FromMilliseconds(kUnloadTimeoutMS));
+      TimeDelta::FromMilliseconds(kUnloadTimeoutMS),
+      RenderWidgetHostDelegate::RENDERER_UNRESPONSIVE_CLOSE_PAGE);
 
   if (IsRenderViewLive()) {
     // Since we are sending an IPC message to the renderer, increase the event
@@ -593,94 +632,17 @@ void RenderViewHostImpl::DragTargetDragEnter(
     const gfx::Point& screen_pt,
     WebDragOperationsMask operations_allowed,
     int key_modifiers) {
-  const int renderer_id = GetProcess()->GetID();
-  ChildProcessSecurityPolicyImpl* policy =
-      ChildProcessSecurityPolicyImpl::GetInstance();
+  DragTargetDragEnterWithMetaData(DropDataToMetaData(drop_data), client_pt,
+                                  screen_pt, operations_allowed, key_modifiers);
+}
 
-#if defined(OS_CHROMEOS)
-  // The externalfile:// scheme is used in Chrome OS to open external files in a
-  // browser tab.
-  if (drop_data.url.SchemeIs(content::kExternalFileScheme))
-    policy->GrantRequestURL(renderer_id, drop_data.url);
-#endif
-
-  // The URL could have been cobbled together from any highlighted text string,
-  // and can't be interpreted as a capability.
-  DropData filtered_data(drop_data);
-  GetProcess()->FilterURL(true, &filtered_data.url);
-  if (drop_data.did_originate_from_renderer) {
-    filtered_data.filenames.clear();
-  }
-
-  // The filenames vector, on the other hand, does represent a capability to
-  // access the given files.
-  storage::IsolatedContext::FileInfoSet files;
-  for (std::vector<ui::FileInfo>::iterator iter(
-           filtered_data.filenames.begin());
-       iter != filtered_data.filenames.end();
-       ++iter) {
-    // A dragged file may wind up as the value of an input element, or it
-    // may be used as the target of a navigation instead.  We don't know
-    // which will happen at this point, so generously grant both access
-    // and request permissions to the specific file to cover both cases.
-    // We do not give it the permission to request all file:// URLs.
-
-    // Make sure we have the same display_name as the one we register.
-    if (iter->display_name.empty()) {
-      std::string name;
-      files.AddPath(iter->path, &name);
-      iter->display_name = base::FilePath::FromUTF8Unsafe(name);
-    } else {
-      files.AddPathWithName(iter->path, iter->display_name.AsUTF8Unsafe());
-    }
-
-    policy->GrantRequestSpecificFileURL(renderer_id,
-                                        net::FilePathToFileURL(iter->path));
-
-    // If the renderer already has permission to read these paths, we don't need
-    // to re-grant them. This prevents problems with DnD for files in the CrOS
-    // file manager--the file manager already had read/write access to those
-    // directories, but dragging a file would cause the read/write access to be
-    // overwritten with read-only access, making them impossible to delete or
-    // rename until the renderer was killed.
-    if (!policy->CanReadFile(renderer_id, iter->path))
-      policy->GrantReadFile(renderer_id, iter->path);
-  }
-
-  storage::IsolatedContext* isolated_context =
-      storage::IsolatedContext::GetInstance();
-  DCHECK(isolated_context);
-  std::string filesystem_id = isolated_context->RegisterDraggedFileSystem(
-      files);
-  if (!filesystem_id.empty()) {
-    // Grant the permission iff the ID is valid.
-    policy->GrantReadFileSystem(renderer_id, filesystem_id);
-  }
-  filtered_data.filesystem_id = base::UTF8ToUTF16(filesystem_id);
-
-  storage::FileSystemContext* file_system_context =
-      BrowserContext::GetStoragePartition(GetProcess()->GetBrowserContext(),
-                                          GetSiteInstance())
-          ->GetFileSystemContext();
-  for (size_t i = 0; i < filtered_data.file_system_files.size(); ++i) {
-    storage::FileSystemURL file_system_url =
-        file_system_context->CrackURL(filtered_data.file_system_files[i].url);
-
-    std::string register_name;
-    std::string filesystem_id = isolated_context->RegisterFileSystemForPath(
-        file_system_url.type(), file_system_url.filesystem_id(),
-        file_system_url.path(), &register_name);
-    policy->GrantReadFileSystem(renderer_id, filesystem_id);
-
-    // Note: We are using the origin URL provided by the sender here. It may be
-    // different from the receiver's.
-    filtered_data.file_system_files[i].url =
-        GURL(storage::GetIsolatedFileSystemRootURIString(
-                 file_system_url.origin(), filesystem_id, std::string())
-                 .append(register_name));
-  }
-
-  Send(new DragMsg_TargetDragEnter(GetRoutingID(), filtered_data, client_pt,
+void RenderViewHostImpl::DragTargetDragEnterWithMetaData(
+    const std::vector<DropData::Metadata>& metadata,
+    const gfx::Point& client_pt,
+    const gfx::Point& screen_pt,
+    WebDragOperationsMask operations_allowed,
+    int key_modifiers) {
+  Send(new DragMsg_TargetDragEnter(GetRoutingID(), metadata, client_pt,
                                    screen_pt, operations_allowed,
                                    key_modifiers));
 }
@@ -698,12 +660,25 @@ void RenderViewHostImpl::DragTargetDragLeave() {
   Send(new DragMsg_TargetDragLeave(GetRoutingID()));
 }
 
-void RenderViewHostImpl::DragTargetDrop(
-    const gfx::Point& client_pt,
-    const gfx::Point& screen_pt,
-    int key_modifiers) {
-  Send(new DragMsg_TargetDrop(GetRoutingID(), client_pt, screen_pt,
-                              key_modifiers));
+void RenderViewHostImpl::DragTargetDrop(const DropData& drop_data,
+                                        const gfx::Point& client_pt,
+                                        const gfx::Point& screen_pt,
+                                        int key_modifiers) {
+  DropData drop_data_with_permissions(drop_data);
+  GrantFileAccessFromDropData(&drop_data_with_permissions);
+  Send(new DragMsg_TargetDrop(GetRoutingID(), drop_data_with_permissions,
+                              client_pt, screen_pt, key_modifiers));
+}
+
+void RenderViewHostImpl::FilterDropData(DropData* drop_data) {
+#if DCHECK_IS_ON()
+  drop_data->view_id = GetRoutingID();
+#endif  // DCHECK_IS_ON()
+
+  GetProcess()->FilterURL(true, &drop_data->url);
+  if (drop_data->did_originate_from_renderer) {
+    drop_data->filenames.clear();
+  }
 }
 
 void RenderViewHostImpl::DragSourceEndedAt(
@@ -802,33 +777,6 @@ void RenderViewHostImpl::SetInitialFocus(bool reverse) {
   Send(new ViewMsg_SetInitialFocus(GetRoutingID(), reverse));
 }
 
-void RenderViewHostImpl::FilesSelectedInChooser(
-    const std::vector<content::FileChooserFileInfo>& files,
-    FileChooserParams::Mode permissions) {
-  storage::FileSystemContext* const file_system_context =
-      BrowserContext::GetStoragePartition(GetProcess()->GetBrowserContext(),
-                                          GetSiteInstance())
-          ->GetFileSystemContext();
-  // Grant the security access requested to the given files.
-  for (size_t i = 0; i < files.size(); ++i) {
-    const content::FileChooserFileInfo& file = files[i];
-    if (permissions == FileChooserParams::Save) {
-      ChildProcessSecurityPolicyImpl::GetInstance()->GrantCreateReadWriteFile(
-          GetProcess()->GetID(), file.file_path);
-    } else {
-      ChildProcessSecurityPolicyImpl::GetInstance()->GrantReadFile(
-          GetProcess()->GetID(), file.file_path);
-    }
-    if (file.file_system_url.is_valid()) {
-      ChildProcessSecurityPolicyImpl::GetInstance()->GrantReadFileSystem(
-          GetProcess()->GetID(),
-          file_system_context->CrackURL(file.file_system_url)
-          .mount_filesystem_id());
-    }
-  }
-  Send(new ViewMsg_RunFileChooserResponse(GetRoutingID(), files));
-}
-
 void RenderViewHostImpl::DirectoryEnumerationFinished(
     int request_id,
     const std::vector<base::FilePath>& files) {
@@ -916,7 +864,6 @@ bool RenderViewHostImpl::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeChanged, OnFocusedNodeChanged)
     IPC_MESSAGE_HANDLER(ViewHostMsg_ClosePage_ACK, OnClosePageACK)
     IPC_MESSAGE_HANDLER(ViewHostMsg_DidZoomURL, OnDidZoomURL)
-    IPC_MESSAGE_HANDLER(ViewHostMsg_RunFileChooser, OnRunFileChooser)
     IPC_MESSAGE_HANDLER(ViewHostMsg_Focus, OnFocus)
     IPC_MESSAGE_HANDLER(ViewHostMsg_FocusedNodeTouched, OnFocusedNodeTouched)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -972,19 +919,19 @@ void RenderViewHostImpl::OnShowView(int route_id,
                                     WindowOpenDisposition disposition,
                                     const gfx::Rect& initial_rect,
                                     bool user_gesture) {
-  delegate_->ShowCreatedWindow(route_id, disposition, initial_rect,
-                               user_gesture);
+  delegate_->ShowCreatedWindow(GetProcess()->GetID(), route_id, disposition,
+                               initial_rect, user_gesture);
   Send(new ViewMsg_Move_ACK(route_id));
 }
 
 void RenderViewHostImpl::OnShowWidget(int route_id,
                                       const gfx::Rect& initial_rect) {
-  delegate_->ShowCreatedWidget(route_id, initial_rect);
+  delegate_->ShowCreatedWidget(GetProcess()->GetID(), route_id, initial_rect);
   Send(new ViewMsg_Move_ACK(route_id));
 }
 
 void RenderViewHostImpl::OnShowFullscreenWidget(int route_id) {
-  delegate_->ShowCreatedFullscreenWidget(route_id);
+  delegate_->ShowCreatedFullscreenWidget(GetProcess()->GetID(), route_id);
   Send(new ViewMsg_Move_ACK(route_id));
 }
 
@@ -1005,7 +952,9 @@ void RenderViewHostImpl::OnUpdateState(int32_t page_id,
 
   // Without this check, the renderer can trick the browser into using
   // filenames it can't access in a future session restore.
-  if (!CanAccessFilesOfPageState(state)) {
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  int child_id = GetProcess()->GetID();
+  if (!policy->CanReadAllFiles(child_id, state.GetReferencedFiles())) {
     bad_message::ReceivedBadMessage(
         GetProcess(), bad_message::RVH_CAN_ACCESS_FILES_OF_PAGE_STATE);
     return;
@@ -1131,16 +1080,6 @@ void RenderViewHostImpl::OnFocusedNodeChanged(
   is_focused_element_editable_ = is_editable_node;
   if (GetWidget()->GetView())
     GetWidget()->GetView()->FocusedNodeChanged(is_editable_node);
-#if defined(OS_WIN)
-  if (!is_editable_node && virtual_keyboard_requested_) {
-    virtual_keyboard_requested_ = false;
-    delegate_->SetIsVirtualKeyboardRequested(false);
-    BrowserThread::PostDelayedTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(base::IgnoreResult(&DismissVirtualKeyboardTask)),
-        TimeDelta::FromMilliseconds(kVirtualKeyboardDisplayWaitTimeoutMs));
-  }
-#endif
 
   // None of the rest makes sense without a view.
   if (!GetWidget()->GetView())
@@ -1255,14 +1194,6 @@ void RenderViewHostImpl::DisableAutoResize(const gfx::Size& new_size) {
     GetWidget()->GetView()->SetSize(new_size);
 }
 
-void RenderViewHostImpl::CopyImageAt(int x, int y) {
-  Send(new ViewMsg_CopyImageAt(GetRoutingID(), x, y));
-}
-
-void RenderViewHostImpl::SaveImageAt(int x, int y) {
-  Send(new ViewMsg_SaveImageAt(GetRoutingID(), x, y));
-}
-
 void RenderViewHostImpl::LoadImageAt(int x, int y) {
   Send(new ViewMsg_LoadImageAt(GetRoutingID(), x, y));
 }
@@ -1292,54 +1223,23 @@ void RenderViewHostImpl::OnDidZoomURL(double zoom_level,
                                      net::GetHostOrSpecFromURL(url));
 }
 
-void RenderViewHostImpl::OnRunFileChooser(const FileChooserParams& params) {
-  // Do not allow messages with absolute paths in them as this can permit a
-  // renderer to coerce the browser to perform I/O on a renderer controlled
-  // path.
-  if (params.default_file_name != params.default_file_name.BaseName()) {
-    bad_message::ReceivedBadMessage(GetProcess(),
-                                    bad_message::RVH_FILE_CHOOSER_PATH);
-    return;
-  }
-
-  delegate_->RunFileChooser(this, params);
-}
-
 void RenderViewHostImpl::OnFocusedNodeTouched(bool editable) {
 #if defined(OS_WIN)
-  if (editable) {
-    virtual_keyboard_requested_ = base::win::DisplayVirtualKeyboard();
-    delegate_->SetIsVirtualKeyboardRequested(true);
-  } else {
-    virtual_keyboard_requested_ = false;
-    delegate_->SetIsVirtualKeyboardRequested(false);
-    base::win::DismissVirtualKeyboard();
-  }
+  // We use the cursor position to determine where the touch occurred.
+  // TODO(ananta)
+  // Pass this information from blink.
+  // In site isolation mode, we may not have a RenderViewHostImpl instance
+  // which means that displaying the OSK is not going to work. We should
+  // probably move this to RenderWidgetHostImpl and call the view from there.
+  // https://bugs.chromium.org/p/chromium/issues/detail?id=613326
+  POINT cursor_pos = {};
+  ::GetCursorPos(&cursor_pos);
+  float scale = GetScaleFactorForView(GetWidget()->GetView());
+  gfx::Point location_dips_screen =
+      gfx::ConvertPointToDIP(scale, gfx::Point(cursor_pos));
+  if (GetWidget()->GetView())
+    GetWidget()->GetView()->FocusedNodeTouched(location_dips_screen, editable);
 #endif
-}
-
-bool RenderViewHostImpl::CanAccessFilesOfPageState(
-    const PageState& state) const {
-  ChildProcessSecurityPolicyImpl* policy =
-      ChildProcessSecurityPolicyImpl::GetInstance();
-
-  const std::vector<base::FilePath>& file_paths = state.GetReferencedFiles();
-  for (const auto& file : file_paths) {
-    if (!policy->CanReadFile(GetProcess()->GetID(), file))
-      return false;
-  }
-  return true;
-}
-
-void RenderViewHostImpl::GrantFileAccessFromPageState(const PageState& state) {
-  ChildProcessSecurityPolicyImpl* policy =
-      ChildProcessSecurityPolicyImpl::GetInstance();
-
-  const std::vector<base::FilePath>& file_paths = state.GetReferencedFiles();
-  for (const auto& file : file_paths) {
-    if (!policy->CanReadFile(GetProcess()->GetID(), file))
-      policy->GrantReadFile(GetProcess()->GetID(), file);
-  }
 }
 
 void RenderViewHostImpl::SelectWordAroundCaret() {
@@ -1360,6 +1260,90 @@ void RenderViewHostImpl::PostRenderViewReady() {
 
 void RenderViewHostImpl::RenderViewReady() {
   delegate_->RenderViewReady(this);
+}
+
+void RenderViewHostImpl::GrantFileAccessFromDropData(DropData* drop_data) {
+  DCHECK_EQ(GetRoutingID(), drop_data->view_id);
+  const int renderer_id = GetProcess()->GetID();
+  ChildProcessSecurityPolicyImpl* policy =
+      ChildProcessSecurityPolicyImpl::GetInstance();
+
+#if defined(OS_CHROMEOS)
+  // The externalfile:// scheme is used in Chrome OS to open external files in a
+  // browser tab.
+  if (drop_data->url.SchemeIs(content::kExternalFileScheme))
+    policy->GrantRequestURL(renderer_id, drop_data->url);
+#endif
+
+  // The filenames vector represents a capability to access the given files.
+  storage::IsolatedContext::FileInfoSet files;
+  for (auto& filename : drop_data->filenames) {
+    // Make sure we have the same display_name as the one we register.
+    if (filename.display_name.empty()) {
+      std::string name;
+      files.AddPath(filename.path, &name);
+      filename.display_name = base::FilePath::FromUTF8Unsafe(name);
+    } else {
+      files.AddPathWithName(filename.path,
+                            filename.display_name.AsUTF8Unsafe());
+    }
+    // A dragged file may wind up as the value of an input element, or it
+    // may be used as the target of a navigation instead.  We don't know
+    // which will happen at this point, so generously grant both access
+    // and request permissions to the specific file to cover both cases.
+    // We do not give it the permission to request all file:// URLs.
+    policy->GrantRequestSpecificFileURL(renderer_id,
+                                        net::FilePathToFileURL(filename.path));
+
+    // If the renderer already has permission to read these paths, we don't need
+    // to re-grant them. This prevents problems with DnD for files in the CrOS
+    // file manager--the file manager already had read/write access to those
+    // directories, but dragging a file would cause the read/write access to be
+    // overwritten with read-only access, making them impossible to delete or
+    // rename until the renderer was killed.
+    if (!policy->CanReadFile(renderer_id, filename.path))
+      policy->GrantReadFile(renderer_id, filename.path);
+  }
+
+  storage::IsolatedContext* isolated_context =
+      storage::IsolatedContext::GetInstance();
+  DCHECK(isolated_context);
+
+  if (!files.fileset().empty()) {
+    std::string filesystem_id =
+        isolated_context->RegisterDraggedFileSystem(files);
+    if (!filesystem_id.empty()) {
+      // Grant the permission iff the ID is valid.
+      policy->GrantReadFileSystem(renderer_id, filesystem_id);
+    }
+    drop_data->filesystem_id = base::UTF8ToUTF16(filesystem_id);
+  }
+
+  storage::FileSystemContext* file_system_context =
+      BrowserContext::GetStoragePartition(GetProcess()->GetBrowserContext(),
+                                          GetSiteInstance())
+          ->GetFileSystemContext();
+  for (auto& file_system_file : drop_data->file_system_files) {
+    storage::FileSystemURL file_system_url =
+        file_system_context->CrackURL(file_system_file.url);
+
+    std::string register_name;
+    std::string filesystem_id = isolated_context->RegisterFileSystemForPath(
+        file_system_url.type(), file_system_url.filesystem_id(),
+        file_system_url.path(), &register_name);
+
+    if (!filesystem_id.empty()) {
+      // Grant the permission iff the ID is valid.
+      policy->GrantReadFileSystem(renderer_id, filesystem_id);
+    }
+
+    // Note: We are using the origin URL provided by the sender here. It may be
+    // different from the receiver's.
+    file_system_file.url =
+        GURL(storage::GetIsolatedFileSystemRootURIString(
+                 file_system_url.origin(), filesystem_id, std::string())
+                 .append(register_name));
+  }
 }
 
 }  // namespace content

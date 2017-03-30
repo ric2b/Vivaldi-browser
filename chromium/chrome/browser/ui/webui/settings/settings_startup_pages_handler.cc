@@ -4,7 +4,9 @@
 
 #include "chrome/browser/ui/webui/settings/settings_startup_pages_handler.h"
 
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "chrome/browser/prefs/session_startup_pref.h"
@@ -80,7 +82,7 @@ void StartupPagesHandler::OnModelChanged() {
     entry->SetString("tooltip",
                      startup_custom_pages_table_model_.GetTooltip(i));
     entry->SetInteger("modelIndex", i);
-    startup_pages.Append(entry.release());
+    startup_pages.Append(std::move(entry));
   }
 
   CallJavascriptFunction("cr.webUIListenerCallback",

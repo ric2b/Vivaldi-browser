@@ -40,7 +40,6 @@
 #include "core/html/HTMLStyleElement.h"
 #include "core/html/HTMLTableRowElement.h"
 #include "core/layout/LayoutTableCell.h"
-#include "core/layout/LayoutText.h"
 
 namespace blink {
 
@@ -49,7 +48,7 @@ using namespace HTMLNames;
 static bool isTableCellEmpty(Node* cell)
 {
     DCHECK(isTableCell(cell)) << cell;
-    return VisiblePosition::firstPositionInNode(cell).deepEquivalent() == createVisiblePosition(Position::lastPositionInNode(cell)).deepEquivalent();
+    return VisiblePosition::firstPositionInNode(cell).deepEquivalent() == VisiblePosition::lastPositionInNode(cell).deepEquivalent();
 }
 
 static bool isTableRowEmpty(Node* row)
@@ -110,7 +109,7 @@ void DeleteSelectionCommand::initializeStartEnd(Position& start, Position& end)
     // For HRs, we'll get a position at (HR,1) when hitting delete from the beginning of the previous line, or (HR,0) when forward deleting,
     // but in these cases, we want to delete it, so manually expand the selection
     if (isHTMLHRElement(*start.anchorNode()))
-        start = positionBeforeNode(start.anchorNode());
+        start = Position::beforeNode(start.anchorNode());
     else if (isHTMLHRElement(*end.anchorNode()))
         end = Position::afterNode(end.anchorNode());
 
@@ -168,11 +167,11 @@ void DeleteSelectionCommand::initializePositionData(EditingState* editingState)
     initializeStartEnd(start, end);
     DCHECK(start.isNotNull());
     DCHECK(end.isNotNull());
-    if (!isEditablePosition(start, ContentIsEditable, DoNotUpdateStyle)) {
+    if (!isEditablePosition(start, ContentIsEditable)) {
         editingState->abort();
         return;
     }
-    if (!isEditablePosition(end, ContentIsEditable, DoNotUpdateStyle)) {
+    if (!isEditablePosition(end, ContentIsEditable)) {
         Node* highestRoot = highestEditableRoot(start);
         DCHECK(highestRoot);
         end = lastEditablePositionBeforePositionInRoot(end, *highestRoot);
@@ -324,7 +323,7 @@ bool DeleteSelectionCommand::handleSpecialCaseBRDelete(EditingState* editingStat
 
     // FIXME: This code doesn't belong in here.
     // We detect the case where the start is an empty line consisting of BR not wrapped in a block element.
-    if (upstreamStartIsBR && downstreamStartIsBR && !(isStartOfBlock(createVisiblePosition(positionBeforeNode(nodeAfterUpstreamStart))) && isEndOfBlock(createVisiblePosition(Position::afterNode(nodeAfterUpstreamStart))))) {
+    if (upstreamStartIsBR && downstreamStartIsBR && !(isStartOfBlock(VisiblePosition::beforeNode(nodeAfterUpstreamStart)) && isEndOfBlock(VisiblePosition::afterNode(nodeAfterUpstreamStart)))) {
         m_startsAtEmptyLine = true;
         m_endingPosition = m_downstreamEnd;
     }
@@ -399,7 +398,7 @@ void DeleteSelectionCommand::removeNode(Node* node, EditingState* editingState, 
             m_needPlaceholder = true;
     }
     if (node == m_endBlock) {
-        VisiblePosition next = nextPositionOf(createVisiblePosition(Position::lastPositionInNode(m_endBlock.get())));
+        VisiblePosition next = nextPositionOf(VisiblePosition::lastPositionInNode(m_endBlock.get()));
         if (next.isNotNull() && !isStartOfBlock(next))
             m_needPlaceholder = true;
     }
@@ -708,7 +707,7 @@ void DeleteSelectionCommand::mergeParagraphs(EditingState* editingState)
     // removals that it does cause the insertion of *another* placeholder.
     bool needPlaceholder = m_needPlaceholder;
     bool paragraphToMergeIsEmpty = startOfParagraphToMove.deepEquivalent() == endOfParagraphToMove.deepEquivalent();
-    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, mergeDestination, editingState, false, !paragraphToMergeIsEmpty);
+    moveParagraph(startOfParagraphToMove, endOfParagraphToMove, mergeDestination, editingState, DoNotPreserveSelection, paragraphToMergeIsEmpty ? DoNotPreserveStyle : PreserveStyle);
     if (editingState->isAborted())
         return;
     m_needPlaceholder = needPlaceholder;

@@ -44,8 +44,20 @@ hooks = [
         'python',
       'vivaldi/chromium/build/linux/sysroot_scripts/install-sysroot.py',
       '--running-as-hook'
-      ],
-    },
+    ],
+  },
+  {
+    # Update the Windows toolchain if necessary.
+    'name': 'win_toolchain',
+    'pattern': '.',
+    'action': ['python', 'vivaldi/chromium/build/vs_toolchain.py', 'update'],
+  },
+  {
+    # Update the Mac toolchain if necessary.
+    'name': 'mac_toolchain',
+    'pattern': '.',
+    'action': ['python', 'vivaldi/chromium/build/mac_toolchain.py'],
+  },
   # Pull binutils for linux, enabled debug fission for faster linking /
   # debugging when used with clang on Ubuntu Precise.
   # https://code.google.com/p/chromium/issues/detail?id=352046
@@ -248,7 +260,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=253383e5987fe5dc81b93057c7d173c0620d3ee0',
+      '--revision=da2c31c5634ec66236ab5851a53c4497e2212bfc',
       '--overwrite'
     ],
   },

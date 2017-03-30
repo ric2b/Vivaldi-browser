@@ -62,7 +62,7 @@ Informacje na temat prywatności znajdziesz w Polityce prywatności Google (http
 <translation id="228809120910082333">Potwierdź poniżej swoje konto i kod PIN, by móc korzystać z funkcji Chromoting.</translation>
 <translation id="2314101195544969792">Sesja aplikacji <ph name="APPLICATION_NAME" /> jest od jakiegoś czasu nieaktywna i zostanie wkrótce zakończona.</translation>
 <translation id="2353140552984634198">Możesz bezpiecznie korzystać z tego komputera przez Chromoting.</translation>
-<translation id="2359808026110333948">Kontynuuj</translation>
+<translation id="2359808026110333948">Dalej</translation>
 <translation id="2366718077645204424">Nie można połączyć się z hostem. Problem prawdopodobnie wynika z konfiguracji Twojej sieci.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  Ostatnio online <ph name="RELATIVE_TIMESTAMP" />.</translation>
 <translation id="2498359688066513246">Pomoc i opinie</translation>
@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Aby zabezpieczyć dostęp do tego komputera, wybierz PIN złożony z <ph name="BOLD_START" />co najmniej sześciu cyfr<ph name="BOLD_END" />. Będzie on wymagany przy łączeniu się z innej lokalizacji.</translation>
 <translation id="4176825807642096119">Kod dostępu</translation>
 <translation id="4207623512727273241">Najpierw uruchom instalatora.</translation>
+<translation id="4227991223508142681">Narzędzie konfiguracji hosta</translation>
 <translation id="4240294130679914010">Program do odinstalowywania hosta funkcji Chromoting</translation>
 <translation id="4277463233460010382">Ten komputer jest skonfigurowany do zezwalania jednemu lub wielu klientom na łączenie się bez podawania kodu PIN.</translation>
 <translation id="4277736576214464567">Kod dostępu jest nieprawidłowy. Spróbuj ponownie.</translation>
@@ -261,6 +262,7 @@ zdalnego Chrome</translation>
 <translation id="7836926030608666805">Brak niektórych wymaganych komponentów. Upewnij się, że korzystasz z najnowszej wersji Chrome, i spróbuj ponownie.</translation>
 <translation id="7868137160098754906">Wpisz kod PIN komputera zdalnego.</translation>
 <translation id="7869445566579231750">Nie masz uprawnień do uruchamiania tej aplikacji.</translation>
+<translation id="7895403300744144251">Zasady bezpieczeństwa obowiązujące na komputerze zdalnym nie zezwalają na nawiązywanie połączeń z Twojego konta.</translation>
 <translation id="7948001860594368197">Opcje ekranu</translation>
 <translation id="7970576581263377361">Uwierzytelnianie nie powiodło się. Zaloguj się ponownie do Chromium.</translation>
 <translation id="7981525049612125370">Sesja zdalna wygasła.</translation>

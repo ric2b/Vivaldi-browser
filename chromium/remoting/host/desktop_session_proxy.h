@@ -5,8 +5,7 @@
 #ifndef REMOTING_HOST_DESKTOP_SESSION_PROXY_H_
 #define REMOTING_HOST_DESKTOP_SESSION_PROXY_H_
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <map>
 #include <memory>
 
@@ -44,7 +43,6 @@ struct SerializedDesktopFrame;
 namespace remoting {
 
 class AudioPacket;
-class ClientSession;
 class ClientSessionControl;
 class DesktopSessionConnector;
 struct DesktopSessionProxyTraits;
@@ -136,6 +134,8 @@ class DesktopSessionProxy
   // API used to implement the SessionController interface.
   void SetScreenResolution(const ScreenResolution& resolution);
 
+  uint32_t desktop_session_id() const { return desktop_session_id_; }
+
  private:
   friend class base::DeleteHelper<DesktopSessionProxy>;
   friend struct DesktopSessionProxyTraits;
@@ -160,8 +160,9 @@ class DesktopSessionProxy
   // Drops a cached reference to the shared buffer.
   void OnReleaseSharedBuffer(int id);
 
-  // Handles CaptureCompleted notification from the desktop session agent.
-  void OnCaptureCompleted(const SerializedDesktopFrame& serialized_frame);
+  // Handles CaptureResult notification from the desktop session agent.
+  void OnCaptureResult(webrtc::DesktopCapturer::Result result,
+                       const SerializedDesktopFrame& serialized_frame);
 
   // Handles MouseCursor notification from the desktop session agent.
   void OnMouseCursor(const webrtc::MouseCursor& mouse_cursor);
@@ -224,6 +225,9 @@ class DesktopSessionProxy
 
   // True if touch events are supported by the desktop session.
   bool supports_touch_events_;
+
+  // Stores the session id for the proxied desktop process.
+  uint32_t desktop_session_id_ = UINT32_MAX;
 
   DISALLOW_COPY_AND_ASSIGN(DesktopSessionProxy);
 };

@@ -50,6 +50,8 @@ class NavigationTracker : public DevToolsEventListener {
                              const Timeout* timeout,
                              bool* is_pending);
 
+  Status CheckFunctionExists(const Timeout* timeout, bool* exists);
+
   void set_timed_out(bool timed_out);
 
   // Overridden from DevToolsEventListener:
@@ -59,7 +61,8 @@ class NavigationTracker : public DevToolsEventListener {
                  const base::DictionaryValue& params) override;
   Status OnCommandSuccess(DevToolsClient* client,
                           const std::string& method,
-                          const base::DictionaryValue& result) override;
+                          const base::DictionaryValue& result,
+                          const Timeout& command_timeout) override;
 
  private:
   DevToolsClient* client_;
@@ -76,6 +79,7 @@ class NavigationTracker : public DevToolsEventListener {
 
   void ResetLoadingState(LoadingState loading_state);
   bool IsExpectingFrameLoadingEvents();
+  bool IsEventLoopPausedByDialogs();
 
   DISALLOW_COPY_AND_ASSIGN(NavigationTracker);
 };

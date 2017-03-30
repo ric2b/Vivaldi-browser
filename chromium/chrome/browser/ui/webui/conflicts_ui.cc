@@ -17,8 +17,8 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/enumerate_modules_model_win.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/win/enumerate_modules_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -138,21 +138,16 @@ void ConflictsDOMHandler::SendModuleList() {
   }
   results.SetString("modulesTableTitle", table_title);
 
-  web_ui()->CallJavascriptFunction("returnModuleList", results);
+  web_ui()->CallJavascriptFunctionUnsafe("returnModuleList", results);
 }
 
 void ConflictsDOMHandler::Observe(int type,
                                   const content::NotificationSource& source,
                                   const content::NotificationDetails& details) {
-  switch (type) {
-    case chrome::NOTIFICATION_MODULE_LIST_ENUMERATED:
-      SendModuleList();
-      registrar_.RemoveAll();
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
+  DCHECK_EQ(chrome::NOTIFICATION_MODULE_LIST_ENUMERATED, type);
+
+  SendModuleList();
+  registrar_.RemoveAll();
 }
 
 }  // namespace

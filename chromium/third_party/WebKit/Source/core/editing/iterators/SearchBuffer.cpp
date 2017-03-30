@@ -40,7 +40,7 @@ namespace blink {
 
 static const size_t minimumSearchBufferSize = 8192;
 
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
 static bool searcherInUse;
 #endif
 
@@ -64,7 +64,7 @@ static UStringSearch* searcher()
 
 static inline void lockSearcher()
 {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     DCHECK(!searcherInUse);
     searcherInUse = true;
 #endif
@@ -72,7 +72,7 @@ static inline void lockSearcher()
 
 static inline void unlockSearcher()
 {
-#if ENABLE(ASSERT)
+#if DCHECK_IS_ON()
     DCHECK(searcherInUse);
     searcherInUse = false;
 #endif
@@ -422,7 +422,7 @@ static const TextIteratorBehaviorFlags iteratorFlagsForFindPlainText = TextItera
 template <typename Strategy>
 static EphemeralRangeTemplate<Strategy> findPlainTextAlgorithm(const EphemeralRangeTemplate<Strategy>& inputRange, const String& target, FindOptions options)
 {
-    // CharacterIterator requires layoutObjects to be up-to-date.
+    // CharacterIterator requires layoutObjects to be up to date.
     if (!inputRange.startPosition().inShadowIncludingDocument())
         return EphemeralRangeTemplate<Strategy>();
     DCHECK_EQ(inputRange.startPosition().document(), inputRange.endPosition().document());

@@ -130,6 +130,7 @@ host</translation>
 <translation id="4156740505453712750">Om de toegang tot deze computer te beschermen, kies je een pincode van <ph name="BOLD_START" />ten minste zes cijfers<ph name="BOLD_END" />. Je moet deze pincode opgeven wanneer je verbinding maakt vanaf een andere locatie.</translation>
 <translation id="4176825807642096119">Toegangscode</translation>
 <translation id="4207623512727273241">Voer het installatieprogramma uit voordat je doorgaat.</translation>
+<translation id="4227991223508142681">Hulpprogramma voor hostprovisioning</translation>
 <translation id="4240294130679914010">Verwijderprogramma voor Chromoting-host</translation>
 <translation id="4277463233460010382">Deze computer is geconfigureerd om een of meer clients toestemming te geven verbinding te maken zonder een pincode op te geven.</translation>
 <translation id="4277736576214464567">De toegangscode is ongeldig. Probeer het opnieuw.</translation>
@@ -261,6 +262,7 @@ Desktop-host</translation>
 <translation id="7836926030608666805">Er ontbreken enkele vereiste componenten. Controleer of je de nieuwste versie van Chrome gebruikt en probeer het opnieuw.</translation>
 <translation id="7868137160098754906">Voer je pincode voor de externe computer in.</translation>
 <translation id="7869445566579231750">Je hebt geen toestemming om deze app uit te voeren.</translation>
+<translation id="7895403300744144251">Beveiligingsbeleid op de externe computer staat verbindingen vanuit je account niet toe.</translation>
 <translation id="7948001860594368197">Schermopties</translation>
 <translation id="7970576581263377361">Verificatie mislukt. Log opnieuw in bij Chromium.</translation>
 <translation id="7981525049612125370">De externe sessie is verlopen.</translation>

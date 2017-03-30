@@ -251,9 +251,8 @@ bool MetricsLog::HasEnvironment() const {
   return uma_proto()->system_profile().has_uma_enabled_date();
 }
 
-void MetricsLog::WriteMetricsEnableDefault(
-    MetricsServiceClient::EnableMetricsDefault metrics_default,
-    SystemProfileProto* system_profile) {
+void MetricsLog::WriteMetricsEnableDefault(EnableMetricsDefault metrics_default,
+                                           SystemProfileProto* system_profile) {
   if (client_->IsReportingPolicyManaged()) {
     // If it's managed, then it must be reporting, otherwise we wouldn't be
     // sending metrics.
@@ -263,14 +262,14 @@ void MetricsLog::WriteMetricsEnableDefault(
   }
 
   switch (metrics_default) {
-    case MetricsServiceClient::DEFAULT_UNKNOWN:
+    case EnableMetricsDefault::DEFAULT_UNKNOWN:
       // Don't set the field if it's unknown.
       break;
-    case MetricsServiceClient::OPT_IN:
+    case EnableMetricsDefault::OPT_IN:
       system_profile->set_uma_default_state(
           SystemProfileProto_UmaDefaultState_OPT_IN);
       break;
-    case MetricsServiceClient::OPT_OUT:
+    case EnableMetricsDefault::OPT_OUT:
       system_profile->set_uma_default_state(
           SystemProfileProto_UmaDefaultState_OPT_OUT);
   }
@@ -324,7 +323,8 @@ void MetricsLog::RecordEnvironment(
 
   SystemProfileProto* system_profile = uma_proto()->mutable_system_profile();
 
-  WriteMetricsEnableDefault(client_->GetDefaultOptIn(), system_profile);
+  WriteMetricsEnableDefault(client_->GetMetricsReportingDefaultState(),
+                            system_profile);
 
   std::string brand_code;
   if (client_->GetBrand(&brand_code))
@@ -351,10 +351,10 @@ void MetricsLog::RecordEnvironment(
   hardware->set_dll_base(reinterpret_cast<uint64_t>(CURRENT_MODULE()));
 #endif
 
+  SystemProfileProto::OS* os = system_profile->mutable_os();
 #if defined(OVERRIDE_OS_NAME_TO_BLIMP)
   os->set_name("Blimp");
 #else
-  SystemProfileProto::OS* os = system_profile->mutable_os();
   std::string os_name = base::SysInfo::OperatingSystemName();
   os->set_name(os_name);
 #endif

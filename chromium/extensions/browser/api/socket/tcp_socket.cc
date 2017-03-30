@@ -4,6 +4,7 @@
 
 #include "extensions/browser/api/socket/tcp_socket.h"
 
+#include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -115,7 +116,11 @@ void TCPSocket::Disconnect() {
     socket_->Disconnect();
   server_socket_.reset(NULL);
   connect_callback_.Reset();
-  read_callback_.Reset();
+  // TODO(devlin): Should we do this for all callbacks?
+  if (!read_callback_.is_null()) {
+    base::ResetAndReturn(&read_callback_)
+        .Run(net::ERR_CONNECTION_CLOSED, nullptr);
+  }
   accept_callback_.Reset();
   accept_socket_.reset(NULL);
 }
@@ -352,6 +357,14 @@ ResumableTCPSocket::ResumableTCPSocket(
       persistent_(false),
       buffer_size_(0),
       paused_(false) {}
+
+ResumableTCPSocket::~ResumableTCPSocket() {
+  // Despite ~TCPSocket doing basically the same, we need to disconnect
+  // before ResumableTCPSocket is destroyed, because we have some extra
+  // state that relies on the socket being ResumableTCPSocket, like
+  // read_callback_.
+  Disconnect();
+}
 
 bool ResumableTCPSocket::IsPersistent() const { return persistent(); }
 

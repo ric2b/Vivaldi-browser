@@ -543,7 +543,7 @@ void ResourceDispatcher::FlushDeferredMessages(int request_id) {
 }
 
 void ResourceDispatcher::StartSync(const RequestInfo& request_info,
-                                   ResourceRequestBody* request_body,
+                                   ResourceRequestBodyImpl* request_body,
                                    SyncLoadResponse* response) {
   std::unique_ptr<ResourceRequest> request =
       CreateRequest(request_info, request_body, NULL);
@@ -574,7 +574,7 @@ void ResourceDispatcher::StartSync(const RequestInfo& request_info,
 }
 
 int ResourceDispatcher::StartAsync(const RequestInfo& request_info,
-                                   ResourceRequestBody* request_body,
+                                   ResourceRequestBodyImpl* request_body,
                                    std::unique_ptr<RequestPeer> peer) {
   GURL frame_origin;
   std::unique_ptr<ResourceRequest> request =
@@ -735,7 +735,7 @@ void ResourceDispatcher::ReleaseResourcesInMessageQueue(MessageQueue* queue) {
 
 std::unique_ptr<ResourceRequest> ResourceDispatcher::CreateRequest(
     const RequestInfo& request_info,
-    ResourceRequestBody* request_body,
+    ResourceRequestBodyImpl* request_body,
     GURL* frame_origin) {
   std::unique_ptr<ResourceRequest> request(new ResourceRequest);
   request->method = request_info.method;
@@ -802,6 +802,8 @@ std::unique_ptr<ResourceRequest> ResourceDispatcher::CreateRequest(
       extra_data->originated_from_service_worker();
   request->request_body = request_body;
   request->resource_body_stream_url = request_info.resource_body_stream_url;
+  request->initiated_in_secure_context =
+      extra_data->initiated_in_secure_context();
   if (frame_origin)
     *frame_origin = extra_data->frame_origin();
   return request;

@@ -28,23 +28,23 @@ SaveItem::SaveItem(const GURL& url,
                    const Referrer& referrer,
                    SavePackage* package,
                    SaveFileCreateInfo::SaveFileSource save_source,
-                   int frame_tree_node_id)
+                   int frame_tree_node_id,
+                   int container_frame_tree_node_id)
     : save_item_id_(GetNextSaveItemId()),
       url_(url),
       referrer_(referrer),
       frame_tree_node_id_(frame_tree_node_id),
+      container_frame_tree_node_id_(container_frame_tree_node_id),
       total_bytes_(0),
       received_bytes_(0),
       state_(WAIT_START),
-      has_final_name_(false),
       is_success_(false),
       save_source_(save_source),
       package_(package) {
   DCHECK(package);
 }
 
-SaveItem::~SaveItem() {
-}
+SaveItem::~SaveItem() {}
 
 // Set start state for save item.
 void SaveItem::Start() {
@@ -81,9 +81,8 @@ void SaveItem::Cancel() {
     // Small downloads might be complete before method has a chance to run.
     return;
   }
-  state_ = CANCELED;
-  is_success_ = false;
   Finish(received_bytes_, false);
+  state_ = CANCELED;
   package_->SaveCanceled(this);
 }
 
@@ -95,33 +94,9 @@ void SaveItem::Finish(int64_t size, bool is_success) {
   UpdateSize(size);
 }
 
-// Calculate the percentage of the save item
-int SaveItem::PercentComplete() const {
-  switch (state_) {
-    case COMPLETE:
-    case CANCELED:
-      return 100;
-    case WAIT_START:
-      return 0;
-    case IN_PROGRESS: {
-      int percent = 0;
-      if (total_bytes_ > 0)
-        percent = static_cast<int>(received_bytes_ * 100.0 / total_bytes_);
-      return percent;
-    }
-    default: {
-      NOTREACHED();
-      return -1;
-    }
-  }
-}
-
-// Rename the save item with new path.
-void SaveItem::Rename(const base::FilePath& full_path) {
+void SaveItem::SetTargetPath(const base::FilePath& full_path) {
   DCHECK(!full_path.empty() && !has_final_name());
   full_path_ = full_path;
-  file_name_ = full_path_.BaseName();
-  has_final_name_ = true;
 }
 
 void SaveItem::SetTotalBytes(int64_t total_bytes) {

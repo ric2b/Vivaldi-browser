@@ -49,6 +49,8 @@ class CC_EXPORT FilterOperation {
     FILTER_TYPE_LAST = ALPHA_THRESHOLD
   };
 
+  FilterOperation();
+
   FilterOperation(const FilterOperation& other);
 
   ~FilterOperation();
@@ -232,6 +234,10 @@ class CC_EXPORT FilterOperation {
   // Maps "forward" to determine which pixels in a destination rect are affected
   // by pixels in the source rect.
   gfx::Rect MapRect(const gfx::Rect& rect, const SkMatrix& matrix) const;
+
+  // Maps "backward" to determine which pixels in the source affect the pixels
+  // in the destination rect.
+  gfx::Rect MapRectReverse(const gfx::Rect& rect, const SkMatrix& matrix) const;
 
  private:
   FilterOperation(FilterType type, float amount);

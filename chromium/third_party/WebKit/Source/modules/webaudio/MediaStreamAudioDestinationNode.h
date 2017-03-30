@@ -28,7 +28,6 @@
 #include "modules/mediastream/MediaStream.h"
 #include "modules/webaudio/AudioBasicInspectorNode.h"
 #include "platform/audio/AudioBus.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 
 namespace blink {
@@ -65,7 +64,7 @@ private:
 class MediaStreamAudioDestinationNode final : public AudioBasicInspectorNode {
     DEFINE_WRAPPERTYPEINFO();
 public:
-    static MediaStreamAudioDestinationNode* create(AbstractAudioContext&, size_t numberOfChannels);
+    static MediaStreamAudioDestinationNode* create(AbstractAudioContext&, size_t numberOfChannels, ExceptionState&);
     MediaStream* stream() const;
 
 private:

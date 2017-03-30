@@ -49,8 +49,8 @@
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
-#include "net/base/test_data_directory.h"
 #include "net/test/cert_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/url_constants.h"
@@ -405,29 +405,46 @@ TEST_F(WebContentsImplTest, UseTitleFromPendingEntryIfSet) {
   EXPECT_EQ(title, contents()->GetTitle());
 }
 
-// Test view source mode for a webui page.
-TEST_F(WebContentsImplTest, NTPViewSource) {
+// Browser initiated navigations to view-source URLs of WebUI pages should work.
+TEST_F(WebContentsImplTest, DirectNavigationToViewSourceWebUI) {
   NavigationControllerImpl& cont =
       static_cast<NavigationControllerImpl&>(controller());
-  const char kUrl[] = "view-source:chrome://blah";
-  const GURL kGURL(kUrl);
+  const GURL kGURL("view-source:chrome://blah");
+  // NavigationControllerImpl rewrites view-source URLs, simulating that here.
+  const GURL kRewrittenURL("chrome://blah");
 
   process()->sink().ClearMessages();
 
-  cont.LoadURL(
-      kGURL, Referrer(), ui::PAGE_TRANSITION_TYPED, std::string());
+  // Use LoadURLWithParams instead of LoadURL, because the former properly
+  // rewrites view-source:chrome://blah URLs to chrome://blah.
+  NavigationController::LoadURLParams load_params(kGURL);
+  load_params.transition_type = ui::PAGE_TRANSITION_TYPED;
+  load_params.extra_headers = "content-type: text/plain";
+  load_params.load_type = NavigationController::LOAD_TYPE_DEFAULT;
+  load_params.is_renderer_initiated = false;
+  controller().LoadURLWithParams(load_params);
+
   int entry_id = cont.GetPendingEntry()->GetUniqueID();
   // Did we get the expected message?
   EXPECT_TRUE(process()->sink().GetFirstMessageMatching(
       FrameMsg_EnableViewSourceMode::ID));
 
   FrameHostMsg_DidCommitProvisionalLoad_Params params;
-  InitNavigateParams(&params, 0, entry_id, true, kGURL,
+  InitNavigateParams(&params, 0, entry_id, true, kRewrittenURL,
                      ui::PAGE_TRANSITION_TYPED);
   contents()->GetMainFrame()->PrepareForCommit();
+  contents()->GetMainFrame()->OnMessageReceived(
+      FrameHostMsg_DidStartProvisionalLoad(1, kRewrittenURL,
+                                           base::TimeTicks::Now()));
   contents()->GetMainFrame()->SendNavigateWithParams(&params);
-  // Also check title and url.
-  EXPECT_EQ(base::ASCIIToUTF16(kUrl), contents()->GetTitle());
+
+  // This is the virtual URL.
+  EXPECT_EQ(base::ASCIIToUTF16("view-source:chrome://blah"),
+            contents()->GetTitle());
+
+  // The actual URL navigated to.
+  EXPECT_EQ(kRewrittenURL,
+            contents()->GetController().GetLastCommittedEntry()->GetURL());
 }
 
 // Test to ensure UpdateMaxPageID is working properly.
@@ -1320,11 +1337,13 @@ TEST_F(WebContentsImplTest, CrossSiteNavigationBackOldNavigationIgnored) {
 
   // Go back within the site.
   controller().GoBack();
+  contents()->GetMainFrame()->PrepareForCommit();
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
   EXPECT_EQ(entry2, controller().GetPendingEntry());
 
   // Before that commits, go back again.
   controller().GoBack();
+  contents()->GetMainFrame()->PrepareForCommit();
   EXPECT_TRUE(contents()->CrossProcessNavigationPending());
   EXPECT_TRUE(contents()->GetPendingMainFrame());
   EXPECT_EQ(entry1, controller().GetPendingEntry());
@@ -1530,11 +1549,11 @@ TEST_F(WebContentsImplTest, NavigationExitsFullscreen) {
   EXPECT_EQ(orig_rfh, contents()->GetMainFrame());
 
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
   orig_rfh->OnMessageReceived(
       FrameHostMsg_ToggleFullscreen(orig_rfh->GetRoutingID(), true));
-  EXPECT_TRUE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+  EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   // Navigate to a new site.
@@ -1548,7 +1567,7 @@ TEST_F(WebContentsImplTest, NavigationExitsFullscreen) {
                               ui::PAGE_TRANSITION_TYPED);
 
   // Confirm fullscreen has exited.
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   contents()->SetDelegate(nullptr);
@@ -1583,14 +1602,14 @@ TEST_F(WebContentsImplTest, HistoryNavigationExitsFullscreen) {
   EXPECT_EQ(orig_rfh, contents()->GetMainFrame());
 
   // Sanity-check: Confirm we're not starting out in fullscreen mode.
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   for (int i = 0; i < 2; ++i) {
     // Toggle fullscreen mode on (as if initiated via IPC from renderer).
     orig_rfh->OnMessageReceived(
         FrameHostMsg_ToggleFullscreen(orig_rfh->GetRoutingID(), true));
-    EXPECT_TRUE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+    EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
     EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
     // Navigate backward (or forward).
@@ -1607,8 +1626,7 @@ TEST_F(WebContentsImplTest, HistoryNavigationExitsFullscreen) {
     orig_rfh->SimulateNavigationStop();
 
     // Confirm fullscreen has exited.
-    EXPECT_FALSE(
-        contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+    EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
     EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
   }
 
@@ -1647,18 +1665,18 @@ TEST_F(WebContentsImplTest, CrashExitsFullscreen) {
                               url, ui::PAGE_TRANSITION_TYPED);
 
   // Toggle fullscreen mode on (as if initiated via IPC from renderer).
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
   contents()->GetMainFrame()->OnMessageReceived(FrameHostMsg_ToggleFullscreen(
       contents()->GetMainFrame()->GetRoutingID(), true));
-  EXPECT_TRUE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+  EXPECT_TRUE(contents()->IsFullscreenForCurrentTab());
   EXPECT_TRUE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   // Crash the renderer.
   main_test_rfh()->GetProcess()->SimulateCrash();
 
   // Confirm fullscreen has exited.
-  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab(test_rvh()->GetWidget()));
+  EXPECT_FALSE(contents()->IsFullscreenForCurrentTab());
   EXPECT_FALSE(fake_delegate.IsFullscreenForTabOrPending(contents()));
 
   contents()->SetDelegate(nullptr);
@@ -2637,9 +2655,10 @@ TEST_F(WebContentsImplTest, PendingContents) {
   std::unique_ptr<TestWebContents> other_contents(
       static_cast<TestWebContents*>(CreateTestWebContents()));
   contents()->AddPendingContents(other_contents.get());
+  int process_id = other_contents->GetRenderViewHost()->GetProcess()->GetID();
   int route_id = other_contents->GetRenderViewHost()->GetRoutingID();
   other_contents.reset();
-  EXPECT_EQ(nullptr, contents()->GetCreatedWindow(route_id));
+  EXPECT_EQ(nullptr, contents()->GetCreatedWindow(process_id, route_id));
 }
 
 TEST_F(WebContentsImplTest, CapturerOverridesPreferredSize) {
@@ -2805,43 +2824,34 @@ TEST_F(WebContentsImplTest, HandleWheelEvent) {
   EXPECT_FALSE(contents()->HandleWheelEvent(event));
   EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
 
-  modifiers = WebInputEvent::ShiftKey | WebInputEvent::AltKey |
-      WebInputEvent::ControlKey;
-  event =
-      SyntheticWebMouseWheelEventBuilder::Build(0, 0, 0, 1, modifiers, false);
-  EXPECT_FALSE(contents()->HandleWheelEvent(event));
-  EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
-
-  // But whenever the ctrl modifier is applied with canScroll=false, they can
-  // increase/decrease zoom. Except on MacOS where we never want to adjust zoom
+  // But whenever the ctrl modifier is applied zoom can be increased or
+  // decreased. Except on MacOS where we never want to adjust zoom
   // with mousewheel.
   modifiers = WebInputEvent::ControlKey;
   event =
       SyntheticWebMouseWheelEventBuilder::Build(0, 0, 0, 1, modifiers, false);
-  event.canScroll = false;
   bool handled = contents()->HandleWheelEvent(event);
-#if defined(OS_MACOSX)
-  EXPECT_FALSE(handled);
-  EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
-#else
+#if defined(USE_AURA)
   EXPECT_TRUE(handled);
   EXPECT_EQ(1, delegate->GetAndResetContentsZoomChangedCallCount());
   EXPECT_TRUE(delegate->last_zoom_in());
+#else
+  EXPECT_FALSE(handled);
+  EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
 #endif
 
   modifiers = WebInputEvent::ControlKey | WebInputEvent::ShiftKey |
       WebInputEvent::AltKey;
   event =
       SyntheticWebMouseWheelEventBuilder::Build(0, 0, 2, -5, modifiers, false);
-  event.canScroll = false;
   handled = contents()->HandleWheelEvent(event);
-#if defined(OS_MACOSX)
-  EXPECT_FALSE(handled);
-  EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
-#else
+#if defined(USE_AURA)
   EXPECT_TRUE(handled);
   EXPECT_EQ(1, delegate->GetAndResetContentsZoomChangedCallCount());
   EXPECT_FALSE(delegate->last_zoom_in());
+#else
+  EXPECT_FALSE(handled);
+  EXPECT_EQ(0, delegate->GetAndResetContentsZoomChangedCallCount());
 #endif
 
   // Unless there is no vertical movement.

@@ -14,6 +14,7 @@
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_state.h"
 #include "cc/layers/layer_impl.h"
+#include "cc/output/copy_output_request.h"
 #include "cc/proto/gfx_conversions.h"
 #include "cc/proto/property_tree.pb.h"
 #include "cc/proto/scroll_offset.pb.h"
@@ -78,9 +79,9 @@ TransformTree::TransformTree()
     : source_to_parent_updates_allowed_(true),
       page_scale_factor_(1.f),
       device_scale_factor_(1.f),
-      device_transform_scale_factor_(1.f) {}
-
-TransformTree::TransformTree(const TransformTree& other) = default;
+      device_transform_scale_factor_(1.f) {
+  cached_data_.push_back(TransformCachedNodeData());
+}
 
 TransformTree::~TransformTree() {
 }
@@ -156,9 +157,7 @@ template class PropertyTree<EffectNode>;
 template class PropertyTree<ScrollNode>;
 
 TransformNodeData::TransformNodeData()
-    : target_id(-1),
-      content_target_id(-1),
-      source_node_id(-1),
+    : source_node_id(-1),
       sorting_context_id(0),
       needs_local_transform_update(true),
       node_and_ancestors_are_animated_or_invertible(true),
@@ -168,7 +167,6 @@ TransformNodeData::TransformNodeData()
       is_currently_animating(false),
       to_screen_is_potentially_animated(false),
       has_only_translation_animations(true),
-      to_screen_has_scale_animation(false),
       flattens_inherited_transform(false),
       node_and_ancestors_are_flat(true),
       node_and_ancestors_have_only_integer_translation(true),
@@ -180,11 +178,7 @@ TransformNodeData::TransformNodeData()
       affected_by_outer_viewport_bounds_delta_y(false),
       in_subtree_of_page_scale_layer(false),
       transform_changed(false),
-      post_local_scale_factor(1.0f),
-      local_maximum_animation_target_scale(0.f),
-      local_starting_animation_scale(0.f),
-      combined_maximum_animation_target_scale(0.f),
-      combined_starting_animation_scale(0.f) {}
+      post_local_scale_factor(1.0f) {}
 
 TransformNodeData::TransformNodeData(const TransformNodeData& other) = default;
 
@@ -194,10 +188,6 @@ TransformNodeData::~TransformNodeData() {
 bool TransformNodeData::operator==(const TransformNodeData& other) const {
   return pre_local == other.pre_local && local == other.local &&
          post_local == other.post_local && to_parent == other.to_parent &&
-         to_target == other.to_target && from_target == other.from_target &&
-         to_screen == other.to_screen && from_screen == other.from_screen &&
-         target_id == other.target_id &&
-         content_target_id == other.content_target_id &&
          source_node_id == other.source_node_id &&
          sorting_context_id == other.sorting_context_id &&
          needs_local_transform_update == other.needs_local_transform_update &&
@@ -211,7 +201,6 @@ bool TransformNodeData::operator==(const TransformNodeData& other) const {
              other.to_screen_is_potentially_animated &&
          has_only_translation_animations ==
              other.has_only_translation_animations &&
-         to_screen_has_scale_animation == other.to_screen_has_scale_animation &&
          flattens_inherited_transform == other.flattens_inherited_transform &&
          node_and_ancestors_are_flat == other.node_and_ancestors_are_flat &&
          node_and_ancestors_have_only_integer_translation ==
@@ -230,14 +219,6 @@ bool TransformNodeData::operator==(const TransformNodeData& other) const {
              other.in_subtree_of_page_scale_layer &&
          transform_changed == other.transform_changed &&
          post_local_scale_factor == other.post_local_scale_factor &&
-         local_maximum_animation_target_scale ==
-             other.local_maximum_animation_target_scale &&
-         local_starting_animation_scale ==
-             other.local_starting_animation_scale &&
-         combined_maximum_animation_target_scale ==
-             other.combined_maximum_animation_target_scale &&
-         combined_starting_animation_scale ==
-             other.combined_starting_animation_scale &&
          sublayer_scale == other.sublayer_scale &&
          scroll_offset == other.scroll_offset &&
          scroll_snap == other.scroll_snap &&
@@ -273,14 +254,6 @@ void TransformNodeData::ToProtobuf(proto::TreeNode* proto) const {
 
   TransformToProto(to_parent, data->mutable_to_parent());
 
-  TransformToProto(to_target, data->mutable_to_target());
-  TransformToProto(from_target, data->mutable_from_target());
-
-  TransformToProto(to_screen, data->mutable_to_screen());
-  TransformToProto(from_screen, data->mutable_from_screen());
-
-  data->set_target_id(target_id);
-  data->set_content_target_id(content_target_id);
   data->set_source_node_id(source_node_id);
   data->set_sorting_context_id(sorting_context_id);
 
@@ -297,7 +270,6 @@ void TransformNodeData::ToProtobuf(proto::TreeNode* proto) const {
   data->set_to_screen_is_potentially_animated(
       to_screen_is_potentially_animated);
   data->set_has_only_translation_animations(has_only_translation_animations);
-  data->set_to_screen_has_scale_animation(to_screen_has_scale_animation);
 
   data->set_flattens_inherited_transform(flattens_inherited_transform);
   data->set_node_and_ancestors_are_flat(node_and_ancestors_are_flat);
@@ -319,13 +291,6 @@ void TransformNodeData::ToProtobuf(proto::TreeNode* proto) const {
   data->set_in_subtree_of_page_scale_layer(in_subtree_of_page_scale_layer);
   data->set_transform_changed(transform_changed);
   data->set_post_local_scale_factor(post_local_scale_factor);
-  data->set_local_maximum_animation_target_scale(
-      local_maximum_animation_target_scale);
-  data->set_local_starting_animation_scale(local_starting_animation_scale);
-  data->set_combined_maximum_animation_target_scale(
-      combined_maximum_animation_target_scale);
-  data->set_combined_starting_animation_scale(
-      combined_starting_animation_scale);
 
   Vector2dFToProto(sublayer_scale, data->mutable_sublayer_scale());
   ScrollOffsetToProto(scroll_offset, data->mutable_scroll_offset());
@@ -344,14 +309,6 @@ void TransformNodeData::FromProtobuf(const proto::TreeNode& proto) {
 
   to_parent = ProtoToTransform(data.to_parent());
 
-  to_target = ProtoToTransform(data.to_target());
-  from_target = ProtoToTransform(data.from_target());
-
-  to_screen = ProtoToTransform(data.to_screen());
-  from_screen = ProtoToTransform(data.from_screen());
-
-  target_id = data.target_id();
-  content_target_id = data.content_target_id();
   source_node_id = data.source_node_id();
   sorting_context_id = data.sorting_context_id();
 
@@ -367,7 +324,6 @@ void TransformNodeData::FromProtobuf(const proto::TreeNode& proto) {
   is_currently_animating = data.is_currently_animating();
   to_screen_is_potentially_animated = data.to_screen_is_potentially_animated();
   has_only_translation_animations = data.has_only_translation_animations();
-  to_screen_has_scale_animation = data.to_screen_has_scale_animation();
 
   flattens_inherited_transform = data.flattens_inherited_transform();
   node_and_ancestors_are_flat = data.node_and_ancestors_are_flat();
@@ -389,12 +345,6 @@ void TransformNodeData::FromProtobuf(const proto::TreeNode& proto) {
   in_subtree_of_page_scale_layer = data.in_subtree_of_page_scale_layer();
   transform_changed = data.transform_changed();
   post_local_scale_factor = data.post_local_scale_factor();
-  local_maximum_animation_target_scale =
-      data.local_maximum_animation_target_scale();
-  local_starting_animation_scale = data.local_starting_animation_scale();
-  combined_maximum_animation_target_scale =
-      data.combined_maximum_animation_target_scale();
-  combined_starting_animation_scale = data.combined_starting_animation_scale();
 
   sublayer_scale = ProtoToVector2dF(data.sublayer_scale());
   scroll_offset = ProtoToScrollOffset(data.scroll_offset());
@@ -408,10 +358,47 @@ void TransformNodeData::AsValueInto(
   MathUtil::AddToTracedValue("pre_local", pre_local, value);
   MathUtil::AddToTracedValue("local", local, value);
   MathUtil::AddToTracedValue("post_local", post_local, value);
-  value->SetInteger("target_id", target_id);
-  value->SetInteger("content_target_id", content_target_id);
+  // TODO(sunxd): make frameviewer work without target_id
+  value->SetInteger("target_id", 0);
+  value->SetInteger("content_target_id", 0);
   value->SetInteger("source_node_id", source_node_id);
   value->SetInteger("sorting_context_id", sorting_context_id);
+}
+
+TransformCachedNodeData::TransformCachedNodeData()
+    : target_id(-1), content_target_id(-1) {}
+
+TransformCachedNodeData::TransformCachedNodeData(
+    const TransformCachedNodeData& other) = default;
+
+TransformCachedNodeData::~TransformCachedNodeData() {}
+
+bool TransformCachedNodeData::operator==(
+    const TransformCachedNodeData& other) const {
+  return from_target == other.from_target && to_target == other.to_target &&
+         from_screen == other.from_screen && to_screen == other.to_screen &&
+         target_id == other.target_id &&
+         content_target_id == other.content_target_id;
+}
+
+void TransformCachedNodeData::ToProtobuf(
+    proto::TransformCachedNodeData* proto) const {
+  TransformToProto(from_target, proto->mutable_from_target());
+  TransformToProto(to_target, proto->mutable_to_target());
+  TransformToProto(from_screen, proto->mutable_from_screen());
+  TransformToProto(to_screen, proto->mutable_to_screen());
+  proto->set_target_id(target_id);
+  proto->set_content_target_id(content_target_id);
+}
+
+void TransformCachedNodeData::FromProtobuf(
+    const proto::TransformCachedNodeData& proto) {
+  from_target = ProtoToTransform(proto.from_target());
+  to_target = ProtoToTransform(proto.to_target());
+  from_screen = ProtoToTransform(proto.from_screen());
+  to_screen = ProtoToTransform(proto.to_screen());
+  target_id = proto.target_id();
+  content_target_id = proto.content_target_id();
 }
 
 ClipNodeData::ClipNodeData()
@@ -503,7 +490,6 @@ EffectNodeData::EffectNodeData()
       has_render_surface(false),
       render_surface(nullptr),
       has_copy_request(false),
-      has_background_filters(false),
       hidden_by_backface_visibility(false),
       double_sided(false),
       is_drawn(true),
@@ -515,7 +501,10 @@ EffectNodeData::EffectNodeData()
       has_unclipped_descendants(false),
       transform_id(0),
       clip_id(0),
-      target_id(0) {}
+      target_id(0),
+      mask_layer_id(-1),
+      replica_layer_id(-1),
+      replica_mask_layer_id(-1) {}
 
 EffectNodeData::EffectNodeData(const EffectNodeData& other) = default;
 
@@ -524,7 +513,7 @@ bool EffectNodeData::operator==(const EffectNodeData& other) const {
          screen_space_opacity == other.screen_space_opacity &&
          has_render_surface == other.has_render_surface &&
          has_copy_request == other.has_copy_request &&
-         has_background_filters == other.has_background_filters &&
+         background_filters == other.background_filters &&
          hidden_by_backface_visibility == other.hidden_by_backface_visibility &&
          double_sided == other.double_sided && is_drawn == other.is_drawn &&
          subtree_hidden == other.subtree_hidden &&
@@ -535,7 +524,9 @@ bool EffectNodeData::operator==(const EffectNodeData& other) const {
          effect_changed == other.effect_changed &&
          num_copy_requests_in_subtree == other.num_copy_requests_in_subtree &&
          transform_id == other.transform_id && clip_id == other.clip_id &&
-         target_id == other.target_id;
+         target_id == other.target_id && mask_layer_id == other.mask_layer_id &&
+         replica_layer_id == other.replica_layer_id &&
+         replica_mask_layer_id == other.replica_mask_layer_id;
 }
 
 void EffectNodeData::ToProtobuf(proto::TreeNode* proto) const {
@@ -545,7 +536,6 @@ void EffectNodeData::ToProtobuf(proto::TreeNode* proto) const {
   data->set_screen_space_opacity(screen_space_opacity);
   data->set_has_render_surface(has_render_surface);
   data->set_has_copy_request(has_copy_request);
-  data->set_has_background_filters(has_background_filters);
   data->set_hidden_by_backface_visibility(hidden_by_backface_visibility);
   data->set_double_sided(double_sided);
   data->set_is_drawn(is_drawn);
@@ -557,6 +547,9 @@ void EffectNodeData::ToProtobuf(proto::TreeNode* proto) const {
   data->set_transform_id(transform_id);
   data->set_clip_id(clip_id);
   data->set_target_id(target_id);
+  data->set_mask_layer_id(mask_layer_id);
+  data->set_replica_layer_id(replica_layer_id);
+  data->set_replica_mask_layer_id(replica_mask_layer_id);
 }
 
 void EffectNodeData::FromProtobuf(const proto::TreeNode& proto) {
@@ -567,7 +560,6 @@ void EffectNodeData::FromProtobuf(const proto::TreeNode& proto) {
   screen_space_opacity = data.screen_space_opacity();
   has_render_surface = data.has_render_surface();
   has_copy_request = data.has_copy_request();
-  has_background_filters = data.has_background_filters();
   hidden_by_backface_visibility = data.hidden_by_backface_visibility();
   double_sided = data.double_sided();
   is_drawn = data.is_drawn();
@@ -579,13 +571,15 @@ void EffectNodeData::FromProtobuf(const proto::TreeNode& proto) {
   transform_id = data.transform_id();
   clip_id = data.clip_id();
   target_id = data.target_id();
+  mask_layer_id = data.mask_layer_id();
+  replica_layer_id = data.replica_layer_id();
+  replica_mask_layer_id = data.replica_mask_layer_id();
 }
 
 void EffectNodeData::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetDouble("opacity", opacity);
   value->SetBoolean("has_render_surface", has_render_surface);
   value->SetBoolean("has_copy_request", has_copy_request);
-  value->SetBoolean("has_background_filters", has_background_filters);
   value->SetBoolean("double_sided", double_sided);
   value->SetBoolean("is_drawn", is_drawn);
   value->SetBoolean("has_potential_opacity_animation",
@@ -596,6 +590,9 @@ void EffectNodeData::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetInteger("transform_id", transform_id);
   value->SetInteger("clip_id", clip_id);
   value->SetInteger("target_id", target_id);
+  value->SetInteger("mask_layer_id", mask_layer_id);
+  value->SetInteger("replica_layer_id", replica_layer_id);
+  value->SetInteger("replica_mask_layer_id", replica_mask_layer_id);
 }
 
 ScrollNodeData::ScrollNodeData()
@@ -609,7 +606,6 @@ ScrollNodeData::ScrollNodeData()
       should_flatten(false),
       user_scrollable_horizontal(false),
       user_scrollable_vertical(false),
-      element_id(0),
       transform_id(0),
       num_drawn_descendants(0) {}
 
@@ -654,7 +650,7 @@ void ScrollNodeData::ToProtobuf(proto::TreeNode* proto) const {
   data->set_should_flatten(should_flatten);
   data->set_user_scrollable_horizontal(user_scrollable_horizontal);
   data->set_user_scrollable_vertical(user_scrollable_vertical);
-  data->set_element_id(element_id);
+  element_id.ToProtobuf(data->mutable_element_id());
   data->set_transform_id(transform_id);
 }
 
@@ -677,7 +673,7 @@ void ScrollNodeData::FromProtobuf(const proto::TreeNode& proto) {
   should_flatten = data.should_flatten();
   user_scrollable_horizontal = data.user_scrollable_horizontal();
   user_scrollable_vertical = data.user_scrollable_vertical();
-  element_id = data.element_id();
+  element_id.FromProtobuf(data.element_id());
   transform_id = data.transform_id();
 }
 
@@ -691,8 +687,17 @@ void ScrollNodeData::AsValueInto(base::trace_event::TracedValue* value) const {
   value->SetBoolean("should_flatten", should_flatten);
   value->SetBoolean("user_scrollable_horizontal", user_scrollable_horizontal);
   value->SetBoolean("user_scrollable_vertical", user_scrollable_vertical);
-  value->SetInteger("element_id", element_id);
+
+  element_id.AddToTracedValue(value);
   value->SetInteger("transform_id", transform_id);
+}
+
+int TransformTree::Insert(const TransformNode& tree_node, int parent_id) {
+  int node_id = PropertyTree<TransformNode>::Insert(tree_node, parent_id);
+  DCHECK_EQ(node_id, static_cast<int>(cached_data_.size()));
+
+  cached_data_.push_back(TransformCachedNodeData());
+  return node_id;
 }
 
 void TransformTree::clear() {
@@ -700,6 +705,8 @@ void TransformTree::clear() {
 
   nodes_affected_by_inner_viewport_bounds_delta_.clear();
   nodes_affected_by_outer_viewport_bounds_delta_.clear();
+  cached_data_.clear();
+  cached_data_.push_back(TransformCachedNodeData());
 }
 
 bool TransformTree::ComputeTransform(int source_id,
@@ -772,8 +779,9 @@ void TransformTree::ResetChangeTracking() {
 void TransformTree::UpdateTransforms(int id) {
   TransformNode* node = Node(id);
   TransformNode* parent_node = parent(node);
-  TransformNode* target_node = Node(node->data.target_id);
+  TransformNode* target_node = Node(TargetId(id));
   TransformNode* source_node = Node(node->data.source_node_id);
+  property_trees()->UpdateCachedNumber();
   if (node->data.needs_local_transform_update ||
       NeedsSourceToParentUpdate(node))
     UpdateLocalTransform(node);
@@ -816,9 +824,9 @@ bool TransformTree::CombineTransformsBetween(int source_id,
   // A's from_screen will not produce the correct result.
   if (!dest || (dest->data.ancestors_are_invertible &&
                 dest->data.node_and_ancestors_are_flat)) {
-    transform->ConcatTransform(current->data.to_screen);
+    transform->ConcatTransform(ToScreen(current->id));
     if (dest)
-      transform->ConcatTransform(dest->data.from_screen);
+      transform->ConcatTransform(FromScreen(dest->id));
     return true;
   }
 
@@ -841,15 +849,15 @@ bool TransformTree::CombineTransformsBetween(int source_id,
          !dest->data.ancestors_are_invertible);
   for (; current && current->id > dest_id; current = parent(current)) {
     if (destination_has_non_zero_sublayer_scale &&
-        current->data.target_id == dest_id &&
-        current->data.content_target_id == dest_id)
+        TargetId(current->id) == dest_id &&
+        ContentTargetId(current->id) == dest_id)
       break;
     source_to_destination.push_back(current->id);
   }
 
   gfx::Transform combined_transform;
   if (current->id > dest_id) {
-    combined_transform = current->data.to_target;
+    combined_transform = ToTarget(current->id);
     // The stored target space transform has sublayer scale baked in, but we
     // need the unscaled transform.
     combined_transform.matrix().postScale(1.0f / dest->data.sublayer_scale.x(),
@@ -903,9 +911,9 @@ bool TransformTree::CombineInversesBetween(int source_id,
   // involved.
   if (current->data.ancestors_are_invertible &&
       current->data.node_and_ancestors_are_flat) {
-    transform->PreconcatTransform(current->data.from_screen);
+    transform->PreconcatTransform(FromScreen(current->id));
     if (dest)
-      transform->PreconcatTransform(dest->data.to_screen);
+      transform->PreconcatTransform(ToScreen(dest->id));
     return true;
   }
 
@@ -960,24 +968,27 @@ void TransformTree::UpdateScreenSpaceTransform(TransformNode* node,
                                                TransformNode* parent_node,
                                                TransformNode* target_node) {
   if (!parent_node) {
-    node->data.to_screen = node->data.to_parent;
+    SetToScreen(node->id, node->data.to_parent);
     node->data.ancestors_are_invertible = true;
     node->data.to_screen_is_potentially_animated = false;
     node->data.node_and_ancestors_are_flat = node->data.to_parent.IsFlat();
   } else {
-    node->data.to_screen = parent_node->data.to_screen;
+    gfx::Transform to_screen_space_transform = ToScreen(parent_node->id);
     if (node->data.flattens_inherited_transform)
-      node->data.to_screen.FlattenTo2d();
-    node->data.to_screen.PreconcatTransform(node->data.to_parent);
+      to_screen_space_transform.FlattenTo2d();
+    to_screen_space_transform.PreconcatTransform(node->data.to_parent);
     node->data.ancestors_are_invertible =
         parent_node->data.ancestors_are_invertible;
     node->data.node_and_ancestors_are_flat =
         parent_node->data.node_and_ancestors_are_flat &&
         node->data.to_parent.IsFlat();
+    SetToScreen(node->id, to_screen_space_transform);
   }
 
-  if (!node->data.to_screen.GetInverse(&node->data.from_screen))
+  gfx::Transform from_screen;
+  if (!ToScreen(node->id).GetInverse(&from_screen))
     node->data.ancestors_are_invertible = false;
+  SetFromScreen(node->id, from_screen);
 }
 
 void TransformTree::UpdateSublayerScale(TransformNode* node) {
@@ -992,114 +1003,38 @@ void TransformTree::UpdateSublayerScale(TransformNode* node) {
   if (node->data.in_subtree_of_page_scale_layer)
     layer_scale_factor *= page_scale_factor_;
   node->data.sublayer_scale = MathUtil::ComputeTransform2dScaleComponents(
-      node->data.to_screen, layer_scale_factor);
+      ToScreen(node->id), layer_scale_factor);
 }
 
 void TransformTree::UpdateTargetSpaceTransform(TransformNode* node,
                                                TransformNode* target_node) {
+  gfx::Transform target_space_transform;
   if (node->data.needs_sublayer_scale) {
-    node->data.to_target.MakeIdentity();
-    node->data.to_target.Scale(node->data.sublayer_scale.x(),
-                               node->data.sublayer_scale.y());
+    target_space_transform.MakeIdentity();
+    target_space_transform.Scale(node->data.sublayer_scale.x(),
+                                 node->data.sublayer_scale.y());
   } else {
     // In order to include the root transform for the root surface, we walk up
     // to the root of the transform tree in ComputeTransform.
     int target_id = target_node->id;
     ComputeTransformWithDestinationSublayerScale(node->id, target_id,
-                                                 &node->data.to_target);
+                                                 &target_space_transform);
   }
 
-  if (!node->data.to_target.GetInverse(&node->data.from_target))
+  gfx::Transform from_target;
+  if (!target_space_transform.GetInverse(&from_target))
     node->data.ancestors_are_invertible = false;
+  SetToTarget(node->id, target_space_transform);
+  SetFromTarget(node->id, from_target);
 }
 
 void TransformTree::UpdateAnimationProperties(TransformNode* node,
                                               TransformNode* parent_node) {
   bool ancestor_is_animating = false;
-  bool ancestor_is_animating_scale = false;
-  float ancestor_maximum_target_scale = 0.f;
-  float ancestor_starting_animation_scale = 0.f;
-  if (parent_node) {
+  if (parent_node)
     ancestor_is_animating = parent_node->data.to_screen_is_potentially_animated;
-    ancestor_is_animating_scale =
-        parent_node->data.to_screen_has_scale_animation;
-    ancestor_maximum_target_scale =
-        parent_node->data.combined_maximum_animation_target_scale;
-    ancestor_starting_animation_scale =
-        parent_node->data.combined_starting_animation_scale;
-  }
   node->data.to_screen_is_potentially_animated =
       node->data.has_potential_animation || ancestor_is_animating;
-  node->data.to_screen_has_scale_animation =
-      !node->data.has_only_translation_animations ||
-      ancestor_is_animating_scale;
-
-  // Once we've failed to compute a maximum animated scale at an ancestor, we
-  // continue to fail.
-  bool failed_at_ancestor =
-      ancestor_is_animating_scale && ancestor_maximum_target_scale == 0.f;
-
-  // Computing maximum animated scale in the presence of non-scale/translation
-  // transforms isn't supported.
-  bool failed_for_non_scale_or_translation =
-      !node->data.to_target.IsScaleOrTranslation();
-
-  // We don't attempt to accumulate animation scale from multiple nodes with
-  // scale animations, because of the risk of significant overestimation. For
-  // example, one node might be increasing scale from 1 to 10 at the same time
-  // as another node is decreasing scale from 10 to 1. Naively combining these
-  // scales would produce a scale of 100.
-  bool failed_for_multiple_scale_animations =
-      ancestor_is_animating_scale &&
-      !node->data.has_only_translation_animations;
-
-  if (failed_at_ancestor || failed_for_non_scale_or_translation ||
-      failed_for_multiple_scale_animations) {
-    node->data.combined_maximum_animation_target_scale = 0.f;
-    node->data.combined_starting_animation_scale = 0.f;
-
-    // This ensures that descendants know we've failed to compute a maximum
-    // animated scale.
-    node->data.to_screen_has_scale_animation = true;
-    return;
-  }
-
-  if (!node->data.to_screen_has_scale_animation) {
-    node->data.combined_maximum_animation_target_scale = 0.f;
-    node->data.combined_starting_animation_scale = 0.f;
-    return;
-  }
-
-  // At this point, we know exactly one of this node or an ancestor is animating
-  // scale.
-  if (node->data.has_only_translation_animations) {
-    // An ancestor is animating scale.
-    gfx::Vector2dF local_scales =
-        MathUtil::ComputeTransform2dScaleComponents(node->data.local, 0.f);
-    float max_local_scale = std::max(local_scales.x(), local_scales.y());
-    node->data.combined_maximum_animation_target_scale =
-        max_local_scale * ancestor_maximum_target_scale;
-    node->data.combined_starting_animation_scale =
-        max_local_scale * ancestor_starting_animation_scale;
-    return;
-  }
-
-  if (node->data.local_starting_animation_scale == 0.f ||
-      node->data.local_maximum_animation_target_scale == 0.f) {
-    node->data.combined_maximum_animation_target_scale = 0.f;
-    node->data.combined_starting_animation_scale = 0.f;
-    return;
-  }
-
-  gfx::Vector2dF ancestor_scales =
-      parent_node ? MathUtil::ComputeTransform2dScaleComponents(
-                        parent_node->data.to_target, 0.f)
-                  : gfx::Vector2dF(1.f, 1.f);
-  float max_ancestor_scale = std::max(ancestor_scales.x(), ancestor_scales.y());
-  node->data.combined_maximum_animation_target_scale =
-      max_ancestor_scale * node->data.local_maximum_animation_target_scale;
-  node->data.combined_starting_animation_scale =
-      max_ancestor_scale * node->data.local_starting_animation_scale;
 }
 
 void TransformTree::UndoSnapping(TransformNode* node) {
@@ -1112,7 +1047,7 @@ void TransformTree::UndoSnapping(TransformNode* node) {
 
 void TransformTree::UpdateSnapping(TransformNode* node) {
   if (!node->data.scrolls || node->data.to_screen_is_potentially_animated ||
-      !node->data.to_screen.IsScaleOrTranslation() ||
+      !ToScreen(node->id).IsScaleOrTranslation() ||
       !node->data.ancestors_are_invertible) {
     return;
   }
@@ -1123,9 +1058,9 @@ void TransformTree::UpdateSnapping(TransformNode* node) {
   // rounded, then what we're after is the scroll delta X, where ST * X = ST'.
   // I.e., we want a transform that will realize our scroll snap. It follows
   // that X = ST^-1 * ST'. We cache ST and ST^-1 to make this more efficient.
-  gfx::Transform rounded = node->data.to_screen;
+  gfx::Transform rounded = ToScreen(node->id);
   rounded.RoundTranslationComponents();
-  gfx::Transform delta = node->data.from_screen;
+  gfx::Transform delta = FromScreen(node->id);
   delta *= rounded;
 
   DCHECK(delta.IsApproximatelyIdentityOrTranslation(SkDoubleToMScalar(1e-4)))
@@ -1135,14 +1070,17 @@ void TransformTree::UpdateSnapping(TransformNode* node) {
 
   // Now that we have our scroll delta, we must apply it to each of our
   // combined, to/from matrices.
-  node->data.to_screen = rounded;
+  SetToScreen(node->id, rounded);
   node->data.to_parent.Translate(translation.x(), translation.y());
-  node->data.from_screen.matrix().postTranslate(-translation.x(),
-                                                -translation.y(), 0);
-  node->data.to_target.Translate(translation.x(), translation.y());
-  node->data.from_target.matrix().postTranslate(-translation.x(),
-                                                -translation.y(), 0);
-
+  gfx::Transform from_screen = FromScreen(node->id);
+  from_screen.matrix().postTranslate(-translation.x(), -translation.y(), 0);
+  SetFromScreen(node->id, from_screen);
+  gfx::Transform to_target = ToTarget(node->id);
+  to_target.Translate(translation.x(), translation.y());
+  SetToTarget(node->id, to_target);
+  gfx::Transform from_target = FromTarget(node->id);
+  from_target.matrix().postTranslate(-translation.x(), -translation.y(), 0);
+  SetFromTarget(node->id, from_target);
   node->data.scroll_snap = translation;
 }
 
@@ -1242,6 +1180,68 @@ bool TransformTree::HasNodesAffectedByOuterViewportBoundsDelta() const {
   return !nodes_affected_by_outer_viewport_bounds_delta_.empty();
 }
 
+const gfx::Transform& TransformTree::FromTarget(int node_id) const {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  return cached_data_[node_id].from_target;
+}
+
+void TransformTree::SetFromTarget(int node_id,
+                                  const gfx::Transform& transform) {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  cached_data_[node_id].from_target = transform;
+}
+
+const gfx::Transform& TransformTree::ToTarget(int node_id) const {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  return cached_data_[node_id].to_target;
+}
+
+void TransformTree::SetToTarget(int node_id, const gfx::Transform& transform) {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  cached_data_[node_id].to_target = transform;
+}
+
+const gfx::Transform& TransformTree::FromScreen(int node_id) const {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  return cached_data_[node_id].from_screen;
+}
+
+void TransformTree::SetFromScreen(int node_id,
+                                  const gfx::Transform& transform) {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  cached_data_[node_id].from_screen = transform;
+}
+
+const gfx::Transform& TransformTree::ToScreen(int node_id) const {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  return cached_data_[node_id].to_screen;
+}
+
+void TransformTree::SetToScreen(int node_id, const gfx::Transform& transform) {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  cached_data_[node_id].to_screen = transform;
+}
+
+int TransformTree::TargetId(int node_id) const {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  return cached_data_[node_id].target_id;
+}
+
+void TransformTree::SetTargetId(int node_id, int target_id) {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  cached_data_[node_id].target_id = target_id;
+}
+
+int TransformTree::ContentTargetId(int node_id) const {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  return cached_data_[node_id].content_target_id;
+}
+
+void TransformTree::SetContentTargetId(int node_id, int content_target_id) {
+  DCHECK(static_cast<int>(cached_data_.size()) > node_id);
+  cached_data_[node_id].content_target_id = content_target_id;
+}
+
 gfx::Transform TransformTree::ToScreenSpaceTransformWithoutSublayerScale(
     int id) const {
   DCHECK_GT(id, 0);
@@ -1249,7 +1249,7 @@ gfx::Transform TransformTree::ToScreenSpaceTransformWithoutSublayerScale(
     return gfx::Transform();
   }
   const TransformNode* node = Node(id);
-  gfx::Transform screen_space_transform = node->data.to_screen;
+  gfx::Transform screen_space_transform = ToScreen(id);
   if (node->data.sublayer_scale.x() != 0.0 &&
       node->data.sublayer_scale.y() != 0.0)
     screen_space_transform.Scale(1.0 / node->data.sublayer_scale.x(),
@@ -1268,7 +1268,8 @@ bool TransformTree::operator==(const TransformTree& other) const {
          nodes_affected_by_inner_viewport_bounds_delta_ ==
              other.nodes_affected_by_inner_viewport_bounds_delta() &&
          nodes_affected_by_outer_viewport_bounds_delta_ ==
-             other.nodes_affected_by_outer_viewport_bounds_delta();
+             other.nodes_affected_by_outer_viewport_bounds_delta() &&
+         cached_data_ == other.cached_data();
 }
 
 void TransformTree::ToProtobuf(proto::PropertyTree* proto) const {
@@ -1288,6 +1289,9 @@ void TransformTree::ToProtobuf(proto::PropertyTree* proto) const {
 
   for (auto i : nodes_affected_by_outer_viewport_bounds_delta_)
     data->add_nodes_affected_by_outer_viewport_bounds_delta(i);
+
+  for (int i = 0; i < static_cast<int>(cached_data_.size()); ++i)
+    cached_data_[i].ToProtobuf(data->add_cached_data());
 }
 
 void TransformTree::FromProtobuf(
@@ -1317,6 +1321,22 @@ void TransformTree::FromProtobuf(
     nodes_affected_by_outer_viewport_bounds_delta_.push_back(
         data.nodes_affected_by_outer_viewport_bounds_delta(i));
   }
+
+  DCHECK_EQ(static_cast<int>(cached_data_.size()), 1);
+  cached_data_.back().FromProtobuf(data.cached_data(0));
+  for (int i = 1; i < data.cached_data_size(); ++i) {
+    cached_data_.push_back(TransformCachedNodeData());
+    cached_data_.back().FromProtobuf(data.cached_data(i));
+  }
+}
+
+EffectTree::EffectTree() {}
+
+EffectTree::~EffectTree() {}
+
+void EffectTree::clear() {
+  PropertyTree<EffectNode>::clear();
+  mask_replica_layer_ids_.clear();
 }
 
 float EffectTree::EffectiveOpacity(const EffectNode* node) const {
@@ -1343,7 +1363,7 @@ void EffectTree::UpdateIsDrawn(EffectNode* node, EffectNode* parent_node) {
   else if (EffectiveOpacity(node) == 0.f &&
            (!node->data.has_potential_opacity_animation ||
             property_trees()->is_active) &&
-           !node->data.has_background_filters)
+           node->data.background_filters.IsEmpty())
     node->data.is_drawn = false;
   else if (parent_node)
     node->data.is_drawn = parent_node->data.is_drawn;
@@ -1382,9 +1402,9 @@ void EffectTree::UpdateBackfaceVisibility(EffectNode* node,
             parent_transform_node->data.sorting_context_id ==
                 transform_node->data.sorting_context_id) {
           gfx::Transform surface_draw_transform;
-          transform_tree.ComputeTransform(transform_node->id,
-                                          transform_node->data.target_id,
-                                          &surface_draw_transform);
+          transform_tree.ComputeTransform(
+              transform_node->id, transform_tree.TargetId(transform_node->id),
+              &surface_draw_transform);
           node->data.hidden_by_backface_visibility =
               surface_draw_transform.IsBackFaceVisible();
         } else {
@@ -1408,12 +1428,109 @@ void EffectTree::UpdateEffects(int id) {
   UpdateBackfaceVisibility(node, parent_node);
 }
 
+void EffectTree::AddCopyRequest(int node_id,
+                                std::unique_ptr<CopyOutputRequest> request) {
+  copy_requests_.insert(std::make_pair(node_id, std::move(request)));
+}
+
+void EffectTree::PushCopyRequestsTo(EffectTree* other_tree) {
+  // If other_tree still has copy requests, this means there was a commit
+  // without a draw. This only happens in some edge cases during lost context or
+  // visibility changes, so don't try to handle preserving these output
+  // requests.
+  if (!other_tree->copy_requests_.empty()) {
+    // Destroying these copy requests will abort them.
+    other_tree->copy_requests_.clear();
+  }
+
+  if (copy_requests_.empty())
+    return;
+
+  for (auto& request : copy_requests_) {
+    other_tree->copy_requests_.insert(
+        std::make_pair(request.first, std::move(request.second)));
+  }
+  copy_requests_.clear();
+
+  // Property trees need to get rebuilt since effect nodes (and render surfaces)
+  // that were created only for the copy requests we just pushed are no longer
+  // needed.
+  if (property_trees()->is_main_thread)
+    property_trees()->needs_rebuild = true;
+}
+
+void EffectTree::TakeCopyRequestsAndTransformToSurface(
+    int node_id,
+    std::vector<std::unique_ptr<CopyOutputRequest>>* requests) {
+  EffectNode* effect_node = Node(node_id);
+  DCHECK(effect_node->data.has_render_surface);
+  DCHECK(effect_node->data.has_copy_request);
+
+  auto range = copy_requests_.equal_range(node_id);
+  for (auto it = range.first; it != range.second; ++it)
+    requests->push_back(std::move(it->second));
+  copy_requests_.erase(range.first, range.second);
+
+  for (auto& it : *requests) {
+    if (!it->has_area())
+      continue;
+
+    // The area needs to be transformed from the space of content that draws to
+    // the surface to the space of the surface itself.
+    int destination_id = effect_node->data.transform_id;
+    int source_id;
+    if (effect_node->parent_id != -1) {
+      // For non-root surfaces, transform only by sub-layer scale.
+      source_id = destination_id;
+    } else {
+      // The root surface doesn't have the notion of sub-layer scale, but
+      // instead has a similar notion of transforming from the space of the root
+      // layer to the space of the screen.
+      DCHECK_EQ(0, destination_id);
+      source_id = 1;
+    }
+    gfx::Transform transform;
+    property_trees()
+        ->transform_tree.ComputeTransformWithDestinationSublayerScale(
+            source_id, destination_id, &transform);
+    it->set_area(MathUtil::MapEnclosingClippedRect(transform, it->area()));
+  }
+}
+
+bool EffectTree::HasCopyRequests() const {
+  return !copy_requests_.empty();
+}
+
 void EffectTree::ClearCopyRequests() {
   for (auto& node : nodes()) {
     node.data.num_copy_requests_in_subtree = 0;
     node.data.has_copy_request = false;
   }
+
+  // Any copy requests that are still left will be aborted (sending an empty
+  // result) on destruction.
+  copy_requests_.clear();
   set_needs_update(true);
+}
+
+int EffectTree::ClosestAncestorWithCopyRequest(int id) const {
+  DCHECK_GE(id, 0);
+  const EffectNode* node = Node(id);
+  while (node->id > 1) {
+    if (node->data.has_copy_request)
+      return node->id;
+
+    node = parent(node);
+  }
+
+  if (node->data.has_copy_request)
+    return node->id;
+  else
+    return -1;
+}
+
+void EffectTree::AddMaskOrReplicaLayerId(int id) {
+  mask_replica_layer_ids_.push_back(id);
 }
 
 bool EffectTree::ContributesToDrawnSurface(int id) {
@@ -1479,8 +1596,17 @@ void ClipTree::FromProtobuf(
   PropertyTree::FromProtobuf(proto, node_id_to_index_map);
 }
 
+EffectTree& EffectTree::operator=(const EffectTree& from) {
+  PropertyTree::operator=(from);
+  mask_replica_layer_ids_ = from.mask_replica_layer_ids_;
+  // copy_requests_ are omitted here, since these need to be moved rather
+  // than copied or assigned.
+  return *this;
+}
+
 bool EffectTree::operator==(const EffectTree& other) const {
-  return PropertyTree::operator==(other);
+  return PropertyTree::operator==(other) &&
+         mask_replica_layer_ids_ == other.mask_replica_layer_ids_;
 }
 
 void EffectTree::ToProtobuf(proto::PropertyTree* proto) const {
@@ -1488,6 +1614,10 @@ void EffectTree::ToProtobuf(proto::PropertyTree* proto) const {
   proto->set_property_type(proto::PropertyTree::Effect);
 
   PropertyTree::ToProtobuf(proto);
+  proto::EffectTreeData* data = proto->mutable_effect_tree_data();
+
+  for (auto i : mask_replica_layer_ids_)
+    data->add_mask_replica_layer_ids(i);
 }
 
 void EffectTree::FromProtobuf(
@@ -1497,13 +1627,17 @@ void EffectTree::FromProtobuf(
   DCHECK_EQ(proto.property_type(), proto::PropertyTree::Effect);
 
   PropertyTree::FromProtobuf(proto, node_id_to_index_map);
+  const proto::EffectTreeData& data = proto.effect_tree_data();
+
+  DCHECK(mask_replica_layer_ids_.empty());
+  for (int i = 0; i < data.mask_replica_layer_ids_size(); ++i) {
+    mask_replica_layer_ids_.push_back(data.mask_replica_layer_ids(i));
+  }
 }
 
 ScrollTree::ScrollTree()
     : currently_scrolling_node_id_(-1),
       layer_id_to_scroll_offset_map_(ScrollTree::ScrollOffsetMap()) {}
-
-ScrollTree::ScrollTree(const ScrollTree& other) = default;
 
 ScrollTree::~ScrollTree() {}
 
@@ -1666,12 +1800,14 @@ void ScrollTree::set_currently_scrolling_node(int scroll_node_id) {
 
 gfx::Transform ScrollTree::ScreenSpaceTransform(int scroll_node_id) const {
   const ScrollNode* scroll_node = Node(scroll_node_id);
+  const TransformTree& transform_tree = property_trees()->transform_tree;
   const TransformNode* transform_node =
-      property_trees()->transform_tree.Node(scroll_node->data.transform_id);
+      transform_tree.Node(scroll_node->data.transform_id);
   gfx::Transform screen_space_transform(
       1, 0, 0, 1, scroll_node->data.offset_to_transform_parent.x(),
       scroll_node->data.offset_to_transform_parent.y());
-  screen_space_transform.ConcatTransform(transform_node->data.to_screen);
+  screen_space_transform.ConcatTransform(
+      transform_tree.ToScreen(transform_node->id));
   if (scroll_node->data.should_flatten)
     screen_space_transform.FlattenTo2d();
   return screen_space_transform;
@@ -1769,7 +1905,7 @@ void ScrollTree::UpdateScrollOffsetMapEntry(
 void ScrollTree::UpdateScrollOffsetMap(
     ScrollTree::ScrollOffsetMap* new_scroll_offset_map,
     LayerTreeImpl* layer_tree_impl) {
-  if (layer_tree_impl && layer_tree_impl->root_layer()) {
+  if (layer_tree_impl && !layer_tree_impl->LayerListIsEmpty()) {
     DCHECK(!property_trees()->is_main_thread);
     for (auto map_entry = layer_id_to_scroll_offset_map_.begin();
          map_entry != layer_id_to_scroll_offset_map_.end();) {
@@ -1905,6 +2041,13 @@ gfx::ScrollOffset ScrollTree::ClampScrollOffsetToLimits(
   return offset;
 }
 
+PropertyTreesCachedData::PropertyTreesCachedData()
+    : property_tree_update_number(0) {
+  animation_scales.clear();
+}
+
+PropertyTreesCachedData::~PropertyTreesCachedData() {}
+
 PropertyTrees::PropertyTrees()
     : needs_rebuild(true),
       non_root_surfaces_enabled(true),
@@ -1918,8 +2061,6 @@ PropertyTrees::PropertyTrees()
   clip_tree.SetPropertyTrees(this);
   scroll_tree.SetPropertyTrees(this);
 }
-
-PropertyTrees::PropertyTrees(const PropertyTrees& other) = default;
 
 PropertyTrees::~PropertyTrees() {}
 
@@ -1969,6 +2110,7 @@ PropertyTrees& PropertyTrees::operator=(const PropertyTrees& from) {
   effect_tree.SetPropertyTrees(this);
   clip_tree.SetPropertyTrees(this);
   scroll_tree.SetPropertyTrees(this);
+  ResetCachedData();
   return *this;
 }
 
@@ -2058,6 +2200,32 @@ void PropertyTrees::PushOpacityIfNeeded(PropertyTrees* target_tree) {
   }
 }
 
+void PropertyTrees::RemoveIdFromIdToIndexMaps(int id) {
+  transform_id_to_index_map.erase(id);
+  effect_id_to_index_map.erase(id);
+  clip_id_to_index_map.erase(id);
+  scroll_id_to_index_map.erase(id);
+}
+
+bool PropertyTrees::IsInIdToIndexMap(TreeType tree_type, int id) {
+  std::unordered_map<int, int>* id_to_index_map = nullptr;
+  switch (tree_type) {
+    case TRANSFORM:
+      id_to_index_map = &transform_id_to_index_map;
+      break;
+    case EFFECT:
+      id_to_index_map = &effect_id_to_index_map;
+      break;
+    case CLIP:
+      id_to_index_map = &clip_id_to_index_map;
+      break;
+    case SCROLL:
+      id_to_index_map = &scroll_id_to_index_map;
+      break;
+  }
+  return id_to_index_map->find(id) != id_to_index_map->end();
+}
+
 void PropertyTrees::UpdateChangeTracking() {
   for (int id = 1; id < static_cast<int>(effect_tree.size()); ++id) {
     EffectNode* node = effect_tree.Node(id);
@@ -2123,6 +2291,169 @@ std::unique_ptr<base::trace_event::TracedValue> PropertyTrees::AsTracedValue()
   value->EndDictionary();
 
   return value;
+}
+
+CombinedAnimationScale PropertyTrees::GetAnimationScales(
+    int transform_node_id,
+    LayerTreeImpl* layer_tree_impl) {
+  if (cached_data_.animation_scales[transform_node_id].update_number !=
+      cached_data_.property_tree_update_number) {
+    if (!layer_tree_impl->settings()
+             .layer_transforms_should_scale_layer_contents) {
+      cached_data_.animation_scales[transform_node_id].update_number =
+          cached_data_.property_tree_update_number;
+      cached_data_.animation_scales[transform_node_id]
+          .combined_maximum_animation_target_scale = 0.f;
+      cached_data_.animation_scales[transform_node_id]
+          .combined_starting_animation_scale = 0.f;
+      return CombinedAnimationScale(
+          cached_data_.animation_scales[transform_node_id]
+              .combined_maximum_animation_target_scale,
+          cached_data_.animation_scales[transform_node_id]
+              .combined_starting_animation_scale);
+    }
+
+    TransformNode* node = transform_tree.Node(transform_node_id);
+    TransformNode* parent_node = transform_tree.parent(node);
+    bool ancestor_is_animating_scale = false;
+    float ancestor_maximum_target_scale = 0.f;
+    float ancestor_starting_animation_scale = 0.f;
+    if (parent_node) {
+      CombinedAnimationScale combined_animation_scale =
+          GetAnimationScales(parent_node->id, layer_tree_impl);
+      ancestor_maximum_target_scale =
+          combined_animation_scale.maximum_animation_scale;
+      ancestor_starting_animation_scale =
+          combined_animation_scale.starting_animation_scale;
+      ancestor_is_animating_scale =
+          cached_data_.animation_scales[parent_node->id]
+              .to_screen_has_scale_animation;
+    }
+
+    cached_data_.animation_scales[transform_node_id]
+        .to_screen_has_scale_animation =
+        !node->data.has_only_translation_animations ||
+        ancestor_is_animating_scale;
+
+    // Once we've failed to compute a maximum animated scale at an ancestor, we
+    // continue to fail.
+    bool failed_at_ancestor =
+        ancestor_is_animating_scale && ancestor_maximum_target_scale == 0.f;
+
+    // Computing maximum animated scale in the presence of non-scale/translation
+    // transforms isn't supported.
+    bool failed_for_non_scale_or_translation =
+        !transform_tree.ToTarget(transform_node_id).IsScaleOrTranslation();
+
+    // We don't attempt to accumulate animation scale from multiple nodes with
+    // scale animations, because of the risk of significant overestimation. For
+    // example, one node might be increasing scale from 1 to 10 at the same time
+    // as another node is decreasing scale from 10 to 1. Naively combining these
+    // scales would produce a scale of 100.
+    bool failed_for_multiple_scale_animations =
+        ancestor_is_animating_scale &&
+        !node->data.has_only_translation_animations;
+
+    if (failed_at_ancestor || failed_for_non_scale_or_translation ||
+        failed_for_multiple_scale_animations) {
+      // This ensures that descendants know we've failed to compute a maximum
+      // animated scale.
+      cached_data_.animation_scales[transform_node_id]
+          .to_screen_has_scale_animation = true;
+
+      cached_data_.animation_scales[transform_node_id]
+          .combined_maximum_animation_target_scale = 0.f;
+      cached_data_.animation_scales[transform_node_id]
+          .combined_starting_animation_scale = 0.f;
+    } else if (!cached_data_.animation_scales[transform_node_id]
+                    .to_screen_has_scale_animation) {
+      cached_data_.animation_scales[transform_node_id]
+          .combined_maximum_animation_target_scale = 0.f;
+      cached_data_.animation_scales[transform_node_id]
+          .combined_starting_animation_scale = 0.f;
+    } else if (node->data.has_only_translation_animations) {
+      // An ancestor is animating scale.
+      gfx::Vector2dF local_scales =
+          MathUtil::ComputeTransform2dScaleComponents(node->data.local, 0.f);
+      float max_local_scale = std::max(local_scales.x(), local_scales.y());
+      cached_data_.animation_scales[transform_node_id]
+          .combined_maximum_animation_target_scale =
+          max_local_scale * ancestor_maximum_target_scale;
+      cached_data_.animation_scales[transform_node_id]
+          .combined_starting_animation_scale =
+          max_local_scale * ancestor_starting_animation_scale;
+    } else {
+      // TODO(sunxd): make LayerTreeImpl::MaximumTargetScale take layer id as
+      // parameter.
+      LayerImpl* layer_impl = layer_tree_impl->LayerById(node->owner_id);
+      layer_tree_impl->MaximumTargetScale(
+          layer_impl, &cached_data_.animation_scales[transform_node_id]
+                           .local_maximum_animation_target_scale);
+      layer_tree_impl->AnimationStartScale(
+          layer_impl, &cached_data_.animation_scales[transform_node_id]
+                           .local_starting_animation_scale);
+      gfx::Vector2dF local_scales =
+          MathUtil::ComputeTransform2dScaleComponents(node->data.local, 0.f);
+      float max_local_scale = std::max(local_scales.x(), local_scales.y());
+
+      if (cached_data_.animation_scales[transform_node_id]
+                  .local_starting_animation_scale == 0.f ||
+          cached_data_.animation_scales[transform_node_id]
+                  .local_maximum_animation_target_scale == 0.f) {
+        cached_data_.animation_scales[transform_node_id]
+            .combined_maximum_animation_target_scale =
+            max_local_scale * ancestor_maximum_target_scale;
+        cached_data_.animation_scales[transform_node_id]
+            .combined_starting_animation_scale =
+            max_local_scale * ancestor_starting_animation_scale;
+      } else {
+        gfx::Vector2dF ancestor_scales =
+            parent_node ? MathUtil::ComputeTransform2dScaleComponents(
+                              transform_tree.ToTarget(parent_node->id), 0.f)
+                        : gfx::Vector2dF(1.f, 1.f);
+        float max_ancestor_scale =
+            std::max(ancestor_scales.x(), ancestor_scales.y());
+        cached_data_.animation_scales[transform_node_id]
+            .combined_maximum_animation_target_scale =
+            max_ancestor_scale *
+            cached_data_.animation_scales[transform_node_id]
+                .local_maximum_animation_target_scale;
+        cached_data_.animation_scales[transform_node_id]
+            .combined_starting_animation_scale =
+            max_ancestor_scale *
+            cached_data_.animation_scales[transform_node_id]
+                .local_starting_animation_scale;
+      }
+    }
+    cached_data_.animation_scales[transform_node_id].update_number =
+        cached_data_.property_tree_update_number;
+  }
+  return CombinedAnimationScale(cached_data_.animation_scales[transform_node_id]
+                                    .combined_maximum_animation_target_scale,
+                                cached_data_.animation_scales[transform_node_id]
+                                    .combined_starting_animation_scale);
+}
+
+void PropertyTrees::SetAnimationScalesForTesting(
+    int transform_id,
+    float maximum_animation_scale,
+    float starting_animation_scale) {
+  cached_data_.animation_scales[transform_id]
+      .combined_maximum_animation_target_scale = maximum_animation_scale;
+  cached_data_.animation_scales[transform_id]
+      .combined_starting_animation_scale = starting_animation_scale;
+  cached_data_.animation_scales[transform_id].update_number =
+      cached_data_.property_tree_update_number;
+}
+
+void PropertyTrees::ResetCachedData() {
+  cached_data_.property_tree_update_number = 0;
+  cached_data_.animation_scales = std::vector<AnimationScaleData>(
+      transform_tree.nodes().size(), AnimationScaleData());
+}
+
+void PropertyTrees::UpdateCachedNumber() {
+  cached_data_.property_tree_update_number++;
 }
 
 }  // namespace cc

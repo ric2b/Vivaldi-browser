@@ -33,6 +33,16 @@ STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_PARSE, WebSettings::V8CacheOptionsParse);
 STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_CODE, WebSettings::V8CacheOptionsCode);
 STATIC_ASSERT_ENUM(V8_CACHE_OPTIONS_LAST, WebSettings::V8CacheOptionsCode);
 
+STATIC_ASSERT_ENUM(ProgressBarCompletion::LOAD_EVENT,
+                   WebSettings::ProgressBarCompletion::LoadEvent);
+STATIC_ASSERT_ENUM(ProgressBarCompletion::RESOURCES_BEFORE_DCL,
+                   WebSettings::ProgressBarCompletion::ResourcesBeforeDCL);
+STATIC_ASSERT_ENUM(ProgressBarCompletion::DOM_CONTENT_LOADED,
+                   WebSettings::ProgressBarCompletion::DOMContentLoaded);
+STATIC_ASSERT_ENUM(
+    ProgressBarCompletion::RESOURCES_BEFORE_DCL_AND_SAME_ORIGIN_IFRAMES,
+    WebSettings::ProgressBarCompletion::ResourcesBeforeDCLAndSameOriginIFrames);
+
 STATIC_ASSERT_ENUM(IMAGE_ANIMATION_POLICY_ALLOWED,
                    WebSettings::ImageAnimationPolicyAllowed);
 STATIC_ASSERT_ENUM(IMAGE_ANIMATION_POLICY_ANIMATION_ONCE,
@@ -147,10 +157,14 @@ WebPreferences::WebPreferences()
       viewport_enabled(false),
 #if defined(OS_ANDROID)
       viewport_meta_enabled(true),
+      shrinks_viewport_contents_to_fit(true),
       viewport_style(ViewportStyle::MOBILE),
+      always_show_context_menu_on_touch(false),
 #else
       viewport_meta_enabled(false),
+      shrinks_viewport_contents_to_fit(false),
       viewport_style(ViewportStyle::DEFAULT),
+      always_show_context_menu_on_touch(true),
 #endif
       main_frame_resizes_are_orientation_changes(false),
       initialize_at_minimum_page_scale(true),
@@ -193,6 +207,8 @@ WebPreferences::WebPreferences()
       ignore_main_frame_overflow_hidden_quirk(false),
       report_screen_size_in_physical_pixels_quirk(false),
       resue_global_for_unowned_main_frame(false),
+      autoplay_muted_videos_enabled(false),
+      progress_bar_completion(ProgressBarCompletion::LOAD_EVENT),
 #endif
 #if defined(OS_ANDROID)
       default_minimum_page_scale_factor(0.25f),

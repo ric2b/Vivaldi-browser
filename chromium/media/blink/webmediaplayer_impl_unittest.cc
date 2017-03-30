@@ -14,9 +14,9 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "media/base/audio_hardware_config.h"
 #include "media/base/media_log.h"
 #include "media/base/test_helpers.h"
 #include "media/blink/mock_webframeclient.h"
@@ -27,6 +27,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayerClient.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
+#include "third_party/WebKit/public/platform/WebSize.h"
 #include "third_party/WebKit/public/web/WebFrameClient.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
@@ -57,7 +58,7 @@ class DummyWebMediaPlayerClient : public blink::WebMediaPlayerClient {
       const blink::WebString& label,
       const blink::WebString& language,
       bool enabled) override {
-    return 0;
+    return blink::WebMediaPlayer::TrackId();
   }
   void removeAudioTrack(blink::WebMediaPlayer::TrackId) override {}
   blink::WebMediaPlayer::TrackId addVideoTrack(
@@ -66,7 +67,7 @@ class DummyWebMediaPlayerClient : public blink::WebMediaPlayerClient {
       const blink::WebString& label,
       const blink::WebString& language,
       bool selected) override {
-    return 0;
+    return blink::WebMediaPlayer::TrackId();
   }
   void removeVideoTrack(blink::WebMediaPlayer::TrackId) override {}
   void addTextTrack(blink::WebInbandTextTrack*) override {}
@@ -87,13 +88,13 @@ class WebMediaPlayerImplTest : public testing::Test {
  public:
   WebMediaPlayerImplTest()
       : media_thread_("MediaThreadForTest"),
-        web_view_(blink::WebView::create(nullptr)),
+        web_view_(blink::WebView::create(nullptr,
+                                         blink::WebPageVisibilityStateVisible)),
         web_local_frame_(
             blink::WebLocalFrame::create(blink::WebTreeScopeType::Document,
                                          &web_frame_client_)),
         media_log_(new MediaLog()),
-        audio_parameters_(TestAudioParameters::Normal()),
-        audio_hardware_config_(audio_parameters_, audio_parameters_) {
+        audio_parameters_(TestAudioParameters::Normal()) {
     web_view_->setMainFrame(web_local_frame_);
     media_thread_.StartAndWaitForTesting();
 
@@ -101,8 +102,7 @@ class WebMediaPlayerImplTest : public testing::Test {
         web_local_frame_, &client_, nullptr,
         base::WeakPtr<WebMediaPlayerDelegate>(),
         base::WrapUnique(new DefaultRendererFactory(
-            media_log_, nullptr, DefaultRendererFactory::GetGpuFactoriesCB(),
-            audio_hardware_config_)),
+            media_log_, nullptr, DefaultRendererFactory::GetGpuFactoriesCB())),
         url_index_,
         WebMediaPlayerParams(
             WebMediaPlayerParams::DeferLoadCB(),
@@ -119,7 +119,7 @@ class WebMediaPlayerImplTest : public testing::Test {
     // NOTE: This should be done before any other member variables are
     // destructed since WMPI may reference them during destruction.
     wmpi_.reset();
-    message_loop_.RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
 
     web_view_->close();
     web_local_frame_->close();
@@ -140,6 +140,12 @@ class WebMediaPlayerImplTest : public testing::Test {
     wmpi_->SetReadyState(blink::WebMediaPlayer::ReadyStateHaveMetadata);
     wmpi_->pipeline_metadata_.has_audio = has_audio;
     wmpi_->pipeline_metadata_.has_video = has_video;
+  }
+
+  void OnMetadata(PipelineMetadata metadata) { wmpi_->OnMetadata(metadata); }
+
+  void OnVideoNaturalSizeChange(const gfx::Size& size) {
+    wmpi_->OnVideoNaturalSizeChange(size);
   }
 
   WebMediaPlayerImpl::PlayState ComputePlayState() {
@@ -189,7 +195,6 @@ class WebMediaPlayerImplTest : public testing::Test {
 
   // Audio hardware configuration.
   AudioParameters audio_parameters_;
-  AudioHardwareConfig audio_hardware_config_;
 
   // The client interface used by |wmpi_|. Just a dummy for now, but later we
   // may want a mock or intelligent fake.
@@ -438,6 +443,33 @@ TEST_F(WebMediaPlayerImplTest, ComputePlayState_Suspended) {
   EXPECT_EQ(WebMediaPlayerImpl::DelegateState::PLAYING, state.delegate_state);
   EXPECT_TRUE(state.is_memory_reporting_enabled);
   EXPECT_FALSE(state.is_suspended);
+}
+
+TEST_F(WebMediaPlayerImplTest, NaturalSizeChange) {
+  PipelineMetadata metadata;
+  metadata.has_video = true;
+  metadata.natural_size = gfx::Size(320, 240);
+
+  OnMetadata(metadata);
+  ASSERT_EQ(blink::WebSize(320, 240), wmpi_->naturalSize());
+
+  // TODO(sandersd): Verify that the client is notified of the size change?
+  OnVideoNaturalSizeChange(gfx::Size(1920, 1080));
+  ASSERT_EQ(blink::WebSize(1920, 1080), wmpi_->naturalSize());
+}
+
+TEST_F(WebMediaPlayerImplTest, NaturalSizeChange_Rotated) {
+  PipelineMetadata metadata;
+  metadata.has_video = true;
+  metadata.natural_size = gfx::Size(320, 240);
+  metadata.video_rotation = VIDEO_ROTATION_90;
+
+  // For 90/270deg rotations, the natural size should be transposed.
+  OnMetadata(metadata);
+  ASSERT_EQ(blink::WebSize(240, 320), wmpi_->naturalSize());
+
+  OnVideoNaturalSizeChange(gfx::Size(1920, 1080));
+  ASSERT_EQ(blink::WebSize(1080, 1920), wmpi_->naturalSize());
 }
 
 }  // namespace media

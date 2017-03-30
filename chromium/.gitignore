@@ -284,10 +284,12 @@ vs-chromium-project.txt
 /tools/luci-go/win64/isolate.exe
 /third_party/__START__
 /third_party/accessibility-developer-tools/
+/third_party/accessibility_test_framework/lib/*.jar
 /third_party/adobe/flash/binaries
 /third_party/adobe/flash/symbols
 /third_party/amd/
 /third_party/android_protobuf/src
+/third_party/android_support_test_runner/lib/*.jar
 /third_party/android_tools/
 /third_party/android_tools_internal/
 /third_party/android_webview_glue/src
@@ -295,6 +297,7 @@ vs-chromium-project.txt
 /third_party/angle_dx11
 /third_party/apache-mime4j
 /third_party/apache-portable-runtime/src
+/third_party/apache_velocity/lib/*.jar
 /third_party/apache-win32/bin/*.exe
 /third_party/apache-win32/bin/*.dll
 /third_party/apache-win32/bin/iconv/*.so
@@ -305,9 +308,11 @@ vs-chromium-project.txt
 /third_party/bidichecker
 /third_party/bison
 /third_party/boringssl/src
+/third_party/bouncycastle/lib/*.jar
 /third_party/cacheinvalidation/cacheinvalidation_unittests_run.xml
 /third_party/cardboard-java/src
 /third_party/catapult
+/third_party/ced/src
 /third_party/chromeos_login_manager
 /third_party/chromeos_text_input
 /third_party/chromite
@@ -325,6 +330,7 @@ vs-chromium-project.txt
 /third_party/drmemory/unpacked
 /third_party/elfutils/src
 /third_party/errorprone/lib
+/third_party/espresso/lib/*.jar
 /third_party/eyesfree/src
 /third_party/ffmpeg
 /third_party/findbugs
@@ -340,11 +346,16 @@ vs-chromium-project.txt
 /third_party/google_toolbox_for_mac/src
 /third_party/googlemac
 /third_party/gperf
+/third_party/grpc
+/third_party/guava/lib/*.jar
+/third_party/hamcrest/lib/*.jar
 /third_party/httpcomponents-client
 /third_party/httpcomponents-core
 /third_party/hunspell_dictionaries
 /third_party/icu
+/third_party/icu4j/lib/*.jar
 /third_party/jarjar
+/third_party/javax_inject/lib/*.jar
 /third_party/jsoncpp/source
 /third_party/jsr-305/src
 /third_party/junit/src
@@ -386,6 +397,7 @@ vs-chromium-project.txt
 /third_party/openmax_dl/
 /third_party/openh264/src
 /third_party/opus/src
+/third_party/ow2_asm/lib/*.jar
 /third_party/pdfsqueeze
 /third_party/pdfium
 /third_party/pefile
@@ -407,7 +419,6 @@ vs-chromium-project.txt
 /third_party/re2/src
 /third_party/requests/src
 /third_party/robolectric/lib
-/third_party/safe_browsing/testing
 /third_party/scons-2.0.1
 /third_party/sfntly/src
 /third_party/shaderc/src
@@ -415,6 +426,10 @@ vs-chromium-project.txt
 /third_party/smhasher/src
 /third_party/snappy/src
 /third_party/SPIRV-Tools/src
+/third_party/sqlite4java/lib/**/*.dll
+/third_party/sqlite4java/lib/**/*.jar
+/third_party/sqlite4java/lib/**/*.jnilib
+/third_party/sqlite4java/lib/**/*.so
 /third_party/swiftshader/include/
 /third_party/syzygy
 /third_party/syzygy/binaries

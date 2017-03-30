@@ -90,10 +90,18 @@ void QuicUnackedPacketMap::TransferRetransmissionInfo(
     QuicPacketNumber new_packet_number,
     TransmissionType transmission_type,
     TransmissionInfo* info) {
-  if (old_packet_number < least_unacked_ ||
-      old_packet_number > largest_sent_packet_) {
-    QUIC_BUG << "Old TransmissionInfo no longer exists for:"
-             << old_packet_number << " least_unacked:" << least_unacked_
+  if (old_packet_number < least_unacked_) {
+    if (!FLAGS_quic_always_write_queued_retransmissions) {
+      QUIC_BUG << "Old TransmissionInfo no longer exists for:"
+               << old_packet_number << " least_unacked:" << least_unacked_;
+    }
+    // This can happen when a retransmission packet is queued because of write
+    // blocked socket, and the original packet gets acked before the
+    // retransmission gets sent.
+    return;
+  }
+  if (old_packet_number > largest_sent_packet_) {
+    QUIC_BUG << "Old TransmissionInfo never existed for :" << old_packet_number
              << " largest_sent:" << largest_sent_packet_;
     return;
   }
@@ -137,15 +145,6 @@ bool QuicUnackedPacketMap::HasRetransmittableFrames(
   DCHECK_LT(packet_number, least_unacked_ + unacked_packets_.size());
   return !unacked_packets_[packet_number - least_unacked_]
               .retransmittable_frames.empty();
-}
-
-void QuicUnackedPacketMap::NackPacket(QuicPacketNumber packet_number,
-                                      uint16_t min_nacks) {
-  DCHECK(!FLAGS_quic_simplify_loss_detection);
-  DCHECK_GE(packet_number, least_unacked_);
-  DCHECK_LT(packet_number, least_unacked_ + unacked_packets_.size());
-  unacked_packets_[packet_number - least_unacked_].nack_count = max(
-      min_nacks, unacked_packets_[packet_number - least_unacked_].nack_count);
 }
 
 void QuicUnackedPacketMap::RemoveRetransmittability(TransmissionInfo* info) {

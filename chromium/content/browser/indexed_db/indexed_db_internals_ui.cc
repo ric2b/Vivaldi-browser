@@ -124,8 +124,8 @@ void IndexedDBInternalsUI::OnOriginsReady(
     std::unique_ptr<base::ListValue> origins,
     const base::FilePath& path) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  web_ui()->CallJavascriptFunction(
-      "indexeddb.onOriginsReady", *origins, base::StringValue(path.value()));
+  web_ui()->CallJavascriptFunctionUnsafe("indexeddb.onOriginsReady", *origins,
+                                         base::StringValue(path.value()));
 }
 
 static void FindContext(const base::FilePath& partition_path,
@@ -269,7 +269,7 @@ void IndexedDBInternalsUI::ForceCloseOriginOnIndexedDBThread(
 void IndexedDBInternalsUI::OnForcedClose(const base::FilePath& partition_path,
                                          const Origin& origin,
                                          size_t connection_count) {
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "indexeddb.onForcedClose", base::StringValue(partition_path.value()),
       base::StringValue(origin.Serialize()),
       base::FundamentalValue(static_cast<double>(connection_count)));
@@ -286,7 +286,8 @@ void IndexedDBInternalsUI::OnDownloadDataReady(
   BrowserContext* browser_context =
       web_ui()->GetWebContents()->GetBrowserContext();
   std::unique_ptr<DownloadUrlParameters> dl_params(
-      DownloadUrlParameters::FromWebContents(web_ui()->GetWebContents(), url));
+      DownloadUrlParameters::CreateForWebContentsMainFrame(
+          web_ui()->GetWebContents(), url));
   DownloadManager* dlm = BrowserContext::GetDownloadManager(browser_context);
 
   const GURL referrer(web_ui()->GetWebContents()->GetLastCommittedURL());
@@ -356,7 +357,7 @@ void IndexedDBInternalsUI::OnDownloadStarted(
   }
 
   item->AddObserver(new FileDeleter(temp_path));
-  web_ui()->CallJavascriptFunction(
+  web_ui()->CallJavascriptFunctionUnsafe(
       "indexeddb.onOriginDownloadReady",
       base::StringValue(partition_path.value()),
       base::StringValue(origin.Serialize()),

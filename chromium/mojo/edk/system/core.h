@@ -24,6 +24,7 @@
 #include "mojo/public/c/system/buffer.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/message_pipe.h"
+#include "mojo/public/c/system/platform_handle.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
@@ -52,7 +53,12 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   // Called in the parent process any time a new child is launched.
   void AddChild(base::ProcessHandle process_handle,
-                ScopedPlatformHandle platform_handle);
+                ScopedPlatformHandle platform_handle,
+                const std::string& child_token,
+                const ProcessErrorCallback& process_error_callback);
+
+  // Called in the parent process when a child process fails to launch.
+  void ChildLaunchFailed(const std::string& child_token);
 
   // Called in a child process exactly once during early initialization.
   void InitChild(ScopedPlatformHandle platform_handle);
@@ -65,7 +71,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   // Creates a message pipe endpoint associated with |token|, which a child
   // holding the token can later locate and connect to.
-  ScopedMessagePipeHandle CreateParentMessagePipe(const std::string& token);
+  ScopedMessagePipeHandle CreateParentMessagePipe(
+      const std::string& token, const std::string& child_token);
 
   // Creates a message pipe endpoint and connects it to a pipe the parent has
   // associated with |token|.
@@ -117,6 +124,8 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                        MojoHandleSignals signals,
                        const base::Callback<void(MojoResult)>& callback);
 
+  MojoResult SetProperty(MojoPropertyType type, const void* value);
+
   // ---------------------------------------------------------------------------
 
   // The following methods are essentially implementations of the Mojo Core
@@ -151,6 +160,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                           MojoMessageHandle* message);
   MojoResult FreeMessage(MojoMessageHandle message);
   MojoResult GetMessageBuffer(MojoMessageHandle message, void** buffer);
+  MojoResult GetProperty(MojoPropertyType type, void* value);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/wait_set.h":
@@ -194,6 +204,9 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                             uint32_t* num_handles,
                             MojoReadMessageFlags flags);
   MojoResult FuseMessagePipes(MojoHandle handle0, MojoHandle handle1);
+  MojoResult NotifyBadMessage(MojoMessageHandle message,
+                              const char* error,
+                              size_t error_num_bytes);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/data_pipe.h":
@@ -239,6 +252,23 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                        MojoMapBufferFlags flags);
   MojoResult UnmapBuffer(void* buffer);
 
+  // These methods correspond to the API functions defined in
+  // "mojo/public/c/system/platform_handle.h".
+  MojoResult WrapPlatformHandle(const MojoPlatformHandle* platform_handle,
+                                MojoHandle* mojo_handle);
+  MojoResult UnwrapPlatformHandle(MojoHandle mojo_handle,
+                                  MojoPlatformHandle* platform_handle);
+  MojoResult WrapPlatformSharedBufferHandle(
+      const MojoPlatformHandle* platform_handle,
+      size_t size,
+      MojoPlatformSharedBufferHandleFlags flags,
+      MojoHandle* mojo_handle);
+  MojoResult UnwrapPlatformSharedBufferHandle(
+      MojoHandle mojo_handle,
+      MojoPlatformHandle* platform_handle,
+      size_t* size,
+      MojoPlatformSharedBufferHandleFlags* flags);
+
   void GetActiveHandlesForTest(std::vector<MojoHandle>* handles);
 
  private:
@@ -273,6 +303,10 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   base::Lock mapping_table_lock_;  // Protects |mapping_table_|.
   MappingTable mapping_table_;
+
+  base::Lock property_lock_;
+  // Properties that can be read using the MojoGetProperty() API.
+  bool property_sync_call_allowed_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(Core);
 };

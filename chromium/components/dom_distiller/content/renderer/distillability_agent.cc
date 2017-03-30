@@ -11,9 +11,8 @@
 #include "components/dom_distiller/core/experiments.h"
 #include "components/dom_distiller/core/page_features.h"
 #include "components/dom_distiller/core/url_utils.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/renderer/render_frame.h"
-
+#include "services/shell/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebDistillability.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
@@ -93,9 +92,35 @@ bool IsDistillablePageAdaboost(WebDocument& doc,
     features.mozScoreAllSqrt,
     features.mozScoreAllLinear
   );
-  bool distillable = detector->Classify(derived);
-  bool long_article = long_page->Classify(derived);
+  double score = detector->Score(derived) - detector->GetThreshold();
+  double long_score = long_page->Score(derived) - long_page->GetThreshold();
+  bool distillable = score > 0;
+  bool long_article = long_score > 0;
   bool blacklisted = IsBlacklisted(parsed_url);
+
+  if (!features.isMobileFriendly) {
+    int score_int = std::round(score * 100);
+    if (score > 0) {
+      UMA_HISTOGRAM_COUNTS_1000("DomDistiller.DistillabilityScoreNMF.Positive",
+          score_int);
+    } else {
+      UMA_HISTOGRAM_COUNTS_1000("DomDistiller.DistillabilityScoreNMF.Negative",
+          -score_int);
+    }
+    if (distillable) {
+      // The long-article model is trained with pages that are
+      // non-mobile-friendly, and distillable (deemed by the first model), so
+      // only record on that type of pages.
+      int long_score_int = std::round(long_score * 100);
+      if (long_score > 0) {
+        UMA_HISTOGRAM_COUNTS_1000("DomDistiller.LongArticleScoreNMF.Positive",
+            long_score_int);
+      } else {
+        UMA_HISTOGRAM_COUNTS_1000("DomDistiller.LongArticleScoreNMF.Negative",
+            -long_score_int);
+      }
+    }
+  }
 
   int bucket = static_cast<unsigned>(features.isMobileFriendly) |
       (static_cast<unsigned>(distillable) << 1);
@@ -175,13 +200,17 @@ void DistillabilityAgent::DidMeaningfulLayout(
   bool is_last = IsLast(is_loaded);
   // Connect to Mojo service on browser to notify page distillability.
   mojom::DistillabilityServicePtr distillability_service;
-  render_frame()->GetServiceRegistry()->ConnectToRemoteService(
-      mojo::GetProxy(&distillability_service));
+  render_frame()->GetRemoteInterfaces()->GetInterface(
+      &distillability_service);
   DCHECK(distillability_service);
   distillability_service->NotifyIsDistillable(
       IsDistillablePage(doc, is_last), is_last);
 }
 
 DistillabilityAgent::~DistillabilityAgent() {}
+
+void DistillabilityAgent::OnDestruct() {
+  delete this;
+}
 
 }  // namespace dom_distiller

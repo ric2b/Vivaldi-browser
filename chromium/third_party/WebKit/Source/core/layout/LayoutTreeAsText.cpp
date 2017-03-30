@@ -45,12 +45,11 @@
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/layout/svg/LayoutSVGContainer.h"
 #include "core/layout/svg/LayoutSVGGradientStop.h"
 #include "core/layout/svg/LayoutSVGImage.h"
 #include "core/layout/svg/LayoutSVGInlineText.h"
-#include "core/layout/svg/LayoutSVGPath.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
+#include "core/layout/svg/LayoutSVGShape.h"
 #include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutTreeAsText.h"
 #include "core/page/PrintContext.h"
@@ -660,7 +659,7 @@ void LayoutTreeAsText::writeLayers(TextStream& ts, const PaintLayer* rootLayer, 
     ClipRect damageRect, clipRectToApply;
     layer->clipper().calculateRects(ClipRectsContext(rootLayer, UncachedClipRects), paintRect, layerBounds, damageRect, clipRectToApply);
 
-    // Ensure our lists are up-to-date.
+    // Ensure our lists are up to date.
     layer->stackingNode()->updateLayerListsIfNeeded();
 
     LayoutPoint offsetFromRoot;
@@ -722,11 +721,11 @@ String nodePositionAsStringForTesting(Node* node)
     for (Node* n = node; n; n = parent) {
         parent = n->parentOrShadowHostNode();
         if (n != node)
-            result.appendLiteral(" of ");
+            result.append(" of ");
         if (parent) {
             if (body && n == body) {
                 // We don't care what offset body may be in the document.
-                result.appendLiteral("body");
+                result.append("body");
                 break;
             }
             if (n->isShadowRoot()) {
@@ -734,14 +733,14 @@ String nodePositionAsStringForTesting(Node* node)
                 result.append(getTagName(n));
                 result.append('}');
             } else {
-                result.appendLiteral("child ");
+                result.append("child ");
                 result.appendNumber(n->nodeIndex());
-                result.appendLiteral(" {");
+                result.append(" {");
                 result.append(getTagName(n));
                 result.append('}');
             }
         } else {
-            result.appendLiteral("document");
+            result.append("document");
         }
     }
 

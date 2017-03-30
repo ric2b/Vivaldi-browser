@@ -133,11 +133,11 @@ void CSSCrossfadeValue::dispose()
 String CSSCrossfadeValue::customCSSText() const
 {
     StringBuilder result;
-    result.appendLiteral("-webkit-cross-fade(");
+    result.append("-webkit-cross-fade(");
     result.append(m_fromValue->cssText());
-    result.appendLiteral(", ");
+    result.append(", ");
     result.append(m_toValue->cssText());
-    result.appendLiteral(", ");
+    result.append(", ");
     result.append(m_percentageValue->cssText());
     result.append(')');
     return result.toString();
@@ -249,10 +249,26 @@ void CSSCrossfadeValue::crossfadeChanged(const IntRect&)
     }
 }
 
+bool CSSCrossfadeValue::willRenderImage() const
+{
+    for (const auto& curr : clients()) {
+        if (const_cast<LayoutObject*>(curr.key)->willRenderImage())
+            return true;
+    }
+    return false;
+}
+
 void CSSCrossfadeValue::CrossfadeSubimageObserverProxy::imageChanged(ImageResource*, const IntRect* rect)
 {
     if (m_ready)
         m_ownerValue->crossfadeChanged(*rect);
+}
+
+bool CSSCrossfadeValue::CrossfadeSubimageObserverProxy::willRenderImage()
+{
+    // If the images are not ready/loaded we won't paint them. If the images
+    // are ready then ask the clients.
+    return m_ready && m_ownerValue->willRenderImage();
 }
 
 bool CSSCrossfadeValue::hasFailedOrCanceledSubresources() const

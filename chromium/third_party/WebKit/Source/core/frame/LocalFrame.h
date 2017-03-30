@@ -41,6 +41,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "wtf/HashSet.h"
+#include <memory>
 
 namespace blink {
 
@@ -61,20 +62,21 @@ class InputMethodController;
 class IntPoint;
 class IntSize;
 class InstrumentingAgents;
+class JSONObject;
+class LayoutView;
 class LayoutViewItem;
 class LocalDOMWindow;
 class NavigationScheduler;
 class Node;
 class NodeTraversal;
+template <typename Strategy> class PositionWithAffinityTemplate;
 class PluginData;
 class Range;
-class LayoutView;
 class ScriptController;
 class ServiceRegistry;
 class SpellChecker;
 class WebFrameHostScheduler;
 class WebFrameScheduler;
-template <typename Strategy> class PositionWithAffinityTemplate;
 
 class CORE_EXPORT LocalFrame : public Frame, public LocalFrameLifecycleNotifier, public Supplementable<LocalFrame> {
     USING_GARBAGE_COLLECTED_MIXIN(LocalFrame);
@@ -90,7 +92,6 @@ public:
     // Frame overrides:
     ~LocalFrame() override;
     DECLARE_VIRTUAL_TRACE();
-    bool isLocalFrame() const override { return true; }
     DOMWindow* domWindow() const override;
     WindowProxy* windowProxy(DOMWrapperWorld&) override;
     void navigate(Document& originDocument, const KURL&, bool replaceCurrentItem, UserGestureStatus) override;
@@ -154,8 +155,8 @@ public:
     void deviceScaleFactorChanged();
     double devicePixelRatio() const;
 
-    PassOwnPtr<DragImage> nodeImage(Node&);
-    PassOwnPtr<DragImage> dragImageForSelection(float opacity);
+    std::unique_ptr<DragImage> nodeImage(Node&);
+    std::unique_ptr<DragImage> dragImageForSelection(float opacity);
 
     String selectedText() const;
     String selectedTextForClipboard() const;
@@ -189,8 +190,10 @@ private:
 
     // Internal Frame helper overrides:
     WindowProxyManager* getWindowProxyManager() const override;
-
-    String localLayerTreeAsText(unsigned flags) const;
+    // Intentionally private to prevent redundant checks when the type is
+    // already LocalFrame.
+    bool isLocalFrame() const override { return true; }
+    bool isRemoteFrame() const override { return false; }
 
     void enableNavigation() { --m_navigationDisableCount; }
     void disableNavigation() { ++m_navigationDisableCount; }
@@ -210,7 +213,7 @@ private:
     const Member<EventHandler> m_eventHandler;
     const Member<FrameConsole> m_console;
     const Member<InputMethodController> m_inputMethodController;
-    OwnPtr<WebFrameScheduler> m_frameScheduler;
+    std::unique_ptr<WebFrameScheduler> m_frameScheduler;
 
     int m_navigationDisableCount;
 
@@ -306,6 +309,30 @@ class FrameNavigationDisabler {
 public:
     explicit FrameNavigationDisabler(LocalFrame&);
     ~FrameNavigationDisabler();
+
+private:
+    Member<LocalFrame> m_frame;
+};
+
+// A helper class for attributing cost inside a scope to a LocalFrame, with
+// output written to the trace log. The class is irrelevant to the core logic
+// of LocalFrame.  Sample usage:
+//
+// void foo(LocalFrame* frame)
+// {
+//     ScopedFrameBlamer frameBlamer(frame);
+//     TRACE_EVENT0("blink", "foo");
+//     // Do some real work...
+// }
+//
+// In Trace Viewer, we can find the cost of slice |foo| attributed to |frame|.
+// Design doc: https://docs.google.com/document/d/15BB-suCb9j-nFt55yCFJBJCGzLg2qUm3WaSOPb8APtI/edit?usp=sharing
+class ScopedFrameBlamer {
+    WTF_MAKE_NONCOPYABLE(ScopedFrameBlamer);
+    STACK_ALLOCATED();
+public:
+    explicit ScopedFrameBlamer(LocalFrame*);
+    ~ScopedFrameBlamer();
 
 private:
     Member<LocalFrame> m_frame;

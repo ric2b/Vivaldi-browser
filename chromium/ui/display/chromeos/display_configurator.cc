@@ -296,10 +296,11 @@ bool DisplayConfigurator::DisplayLayoutManagerImpl::GetDisplayLayout(
     }
     case MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED:
     case MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED: {
-      if ((new_display_state == MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED &&
-           states.size() != 2 && num_on_displays != 2) ||
-          (new_display_state == MULTIPLE_DISPLAY_STATE_MULTI_EXTENDED &&
-           num_on_displays <= 2)) {
+      // In docked mode (with internal display + 2 external displays) the state
+      // will be DUAL_EXTENDED with internal display turned off and the 2
+      // external displays turned on.
+      if (new_display_state == MULTIPLE_DISPLAY_STATE_DUAL_EXTENDED &&
+          states.size() != 2 && num_on_displays != 2) {
         LOG(WARNING) << "Ignoring request to enter extended mode with "
                      << states.size() << " connected display(s) and "
                      << num_on_displays << " turned on";
@@ -378,7 +379,7 @@ bool DisplayConfigurator::DisplayLayoutManagerImpl::FindMirrorMode(
   // Check if some external display resolution can be mirrored on internal.
   // Prefer the modes in the order they're present in DisplaySnapshot, assuming
   // this is the order in which they look better on the monitor.
-  for (const auto* external_mode : external_display->display->modes()) {
+  for (const auto& external_mode : external_display->display->modes()) {
     bool is_native_aspect_ratio =
         external_native_info->size().width() * external_mode->size().height() ==
         external_native_info->size().height() * external_mode->size().width();
@@ -386,11 +387,11 @@ bool DisplayConfigurator::DisplayLayoutManagerImpl::FindMirrorMode(
       continue;  // Allow only aspect ratio preserving modes for mirroring.
 
     // Try finding an exact match.
-    for (const auto* internal_mode : internal_display->display->modes()) {
+    for (const auto& internal_mode : internal_display->display->modes()) {
       if (internal_mode->size() == external_mode->size() &&
           internal_mode->is_interlaced() == external_mode->is_interlaced()) {
-        internal_display->mirror_mode = internal_mode;
-        external_display->mirror_mode = external_mode;
+        internal_display->mirror_mode = internal_mode.get();
+        external_display->mirror_mode = external_mode.get();
         return true;  // Mirror mode found.
       }
     }
@@ -407,10 +408,11 @@ bool DisplayConfigurator::DisplayLayoutManagerImpl::FindMirrorMode(
                      !external_mode->is_interlaced();
       if (can_fit) {
         configurator_->native_display_delegate_->AddMode(
-            *internal_display->display, external_mode);
-        internal_display->display->add_mode(external_mode);
-        internal_display->mirror_mode = external_mode;
-        external_display->mirror_mode = external_mode;
+            *internal_display->display, external_mode.get());
+        internal_display->display->add_mode(external_mode.get());
+        internal_display->mirror_mode =
+          internal_display->display->modes().back().get();
+        external_display->mirror_mode = external_mode.get();
         return true;  // Mirror mode created.
       }
     }
@@ -427,17 +429,17 @@ const DisplayMode* DisplayConfigurator::FindDisplayModeMatchingSize(
     const DisplaySnapshot& display,
     const gfx::Size& size) {
   const DisplayMode* best_mode = NULL;
-  for (const DisplayMode* mode : display.modes()) {
+  for (const std::unique_ptr<const DisplayMode>& mode : display.modes()) {
     if (mode->size() != size)
       continue;
 
-    if (mode == display.native_mode()) {
-      best_mode = mode;
+    if (mode.get() == display.native_mode()) {
+      best_mode = mode.get();
       break;
     }
 
     if (!best_mode) {
-      best_mode = mode;
+      best_mode = mode.get();
       continue;
     }
 
@@ -448,14 +450,14 @@ const DisplayMode* DisplayConfigurator::FindDisplayModeMatchingSize(
       // Reset the best rate if the non interlaced is
       // found the first time.
       if (best_mode->is_interlaced()) {
-        best_mode = mode;
+        best_mode = mode.get();
         continue;
       }
     }
     if (mode->refresh_rate() < best_mode->refresh_rate())
       continue;
 
-    best_mode = mode;
+    best_mode = mode.get();
   }
 
   return best_mode;
@@ -843,7 +845,13 @@ void DisplayConfigurator::SetDisplayPowerInternal(
     chromeos::DisplayPowerState power_state,
     int flags,
     const ConfigurationCallback& callback) {
+  // Only skip if the current power state is the same and the latest requested
+  // power state is the same. If |pending_power_state_ != current_power_state_|
+  // then there is a current task pending or the last configuration failed. In
+  // either case request a new configuration to make sure the state is
+  // consistent with the expectations.
   if (power_state == current_power_state_ &&
+      power_state == pending_power_state_ &&
       !(flags & kSetDisplayPowerForceProbe)) {
     callback.Run(true);
     return;

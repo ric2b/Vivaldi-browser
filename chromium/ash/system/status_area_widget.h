@@ -6,18 +6,19 @@
 #define ASH_SYSTEM_STATUS_AREA_WIDGET_H_
 
 #include "ash/ash_export.h"
-#include "ash/shelf/shelf_types.h"
-#include "ash/system/user/login_status.h"
+#include "ash/common/login_status.h"
+#include "ash/common/shelf/shelf_types.h"
 #include "base/macros.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
 class OverviewButtonTray;
-class ShelfWidget;
 class ShellDelegate;
 class StatusAreaWidgetDelegate;
 class SystemTray;
 class WebNotificationTray;
+class WmShelf;
+class WmWindow;
 #if defined(OS_CHROMEOS)
 class LogoutButtonTray;
 class VirtualKeyboardTray;
@@ -25,7 +26,7 @@ class VirtualKeyboardTray;
 
 class ASH_EXPORT StatusAreaWidget : public views::Widget {
  public:
-  StatusAreaWidget(aura::Window* status_container, ShelfWidget* shelf_widget);
+  StatusAreaWidget(WmWindow* status_container, WmShelf* wm_shelf);
   ~StatusAreaWidget() override;
 
   // Creates the SystemTray, WebNotificationTray and LogoutButtonTray.
@@ -36,15 +37,12 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
   void Shutdown();
 
   // Update the alignment of the widget and tray views.
-  void SetShelfAlignment(wm::ShelfAlignment alignment);
-
-  // Set the visibility of system notifications.
-  void SetHideSystemNotifications(bool hide);
+  void SetShelfAlignment(ShelfAlignment alignment);
 
   // Called by the client when the login status changes. Caches login_status
   // and calls UpdateAfterLoginStatusChange for the system tray and the web
   // notification tray.
-  void UpdateAfterLoginStatusChange(user::LoginStatus login_status);
+  void UpdateAfterLoginStatusChange(LoginStatus login_status);
 
   StatusAreaWidgetDelegate* status_area_widget_delegate() {
     return status_area_widget_delegate_;
@@ -53,12 +51,10 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
   WebNotificationTray* web_notification_tray() {
     return web_notification_tray_;
   }
-  OverviewButtonTray* overview_button_tray() {
-    return overview_button_tray_;
-  }
-  ShelfWidget* shelf_widget() { return shelf_widget_; }
+  OverviewButtonTray* overview_button_tray() { return overview_button_tray_; }
+  WmShelf* wm_shelf() { return wm_shelf_; }
 
-  user::LoginStatus login_status() const { return login_status_; }
+  LoginStatus login_status() const { return login_status_; }
 
   // Returns true if the shelf should be visible. This is used when the
   // shelf is configured to auto-hide and test if the shelf should force
@@ -74,6 +70,8 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
 
   // Overridden from views::Widget:
   void OnNativeWidgetActivationChanged(bool active) override;
+  void OnMouseEvent(ui::MouseEvent* event) override;
+  void OnGestureEvent(ui::GestureEvent* event) override;
 
  private:
   void AddSystemTray();
@@ -93,9 +91,9 @@ class ASH_EXPORT StatusAreaWidget : public views::Widget {
   LogoutButtonTray* logout_button_tray_;
   VirtualKeyboardTray* virtual_keyboard_tray_;
 #endif
-  user::LoginStatus login_status_;
+  LoginStatus login_status_;
 
-  ShelfWidget* shelf_widget_;
+  WmShelf* wm_shelf_;
 
   DISALLOW_COPY_AND_ASSIGN(StatusAreaWidget);
 };

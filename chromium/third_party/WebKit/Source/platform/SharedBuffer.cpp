@@ -26,7 +26,7 @@
 
 #include "platform/SharedBuffer.h"
 
-#include "public/platform/WebProcessMemoryDump.h"
+#include "platform/web_process_memory_dump.h"
 #include "wtf/text/UTF8.h"
 #include "wtf/text/Unicode.h"
 
@@ -128,7 +128,7 @@ static void didCreateSharedBuffer(SharedBuffer* buffer)
     MutexLocker locker(statsMutex());
     liveBuffers().insert(buffer);
 
-    Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, bind(&printStats));
+    Platform::current()->mainThread()->taskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&printStats));
 }
 
 static void willDestroySharedBuffer(SharedBuffer* buffer)

@@ -7,10 +7,11 @@
 
 #include <memory>
 
+#include "base/callback.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
-#include "components/mus/public/interfaces/compositor_frame.mojom.h"
+#include "components/mus/public/interfaces/surface.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_ptr_info.h"
 
@@ -34,8 +35,8 @@ class WindowSurface : public mojom::SurfaceClient {
   // object.
   void BindToThread();
 
-  void SubmitCompositorFrame(mojom::CompositorFramePtr frame,
-                             const mojo::Closure& callback);
+  void SubmitCompositorFrame(cc::CompositorFrame frame,
+                             const base::Closure& callback);
 
   void set_client(WindowSurfaceClient* client) { client_ = client; }
 
@@ -46,8 +47,7 @@ class WindowSurface : public mojom::SurfaceClient {
                 mojo::InterfaceRequest<mojom::SurfaceClient> client_request);
 
   // SurfaceClient implementation:
-  void ReturnResources(
-      mojo::Array<mojom::ReturnedResourcePtr> resources) override;
+  void ReturnResources(mojo::Array<cc::ReturnedResource> resources) override;
 
   WindowSurfaceClient* client_;
   mojo::InterfacePtrInfo<mojom::Surface> surface_info_;

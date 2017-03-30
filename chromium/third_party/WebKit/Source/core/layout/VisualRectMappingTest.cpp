@@ -20,11 +20,11 @@ protected:
     void checkPaintInvalidationStateRectMapping(const LayoutRect& expectedRect, const LayoutRect& rect, const LayoutObject& object, const LayoutView& layoutView, const LayoutObject& paintInvalidationContainer)
     {
         Vector<const LayoutObject*> ancestors;
-        for (const LayoutObject* ancestor = &object; ancestor != layoutView; ancestor = ancestor->parentCrossingFrameBoundaries())
+        for (const LayoutObject* ancestor = &object; ancestor != layoutView; ancestor = ancestor->paintInvalidationParent())
             ancestors.append(ancestor);
 
         Vector<Optional<PaintInvalidationState>> paintInvalidationStates(ancestors.size() + 1);
-        Vector<LayoutObject*> pendingDelayedPaintInvalidations;
+        Vector<const LayoutObject*> pendingDelayedPaintInvalidations;
         paintInvalidationStates[0].emplace(layoutView, pendingDelayedPaintInvalidations);
         if (layoutView != object)
             paintInvalidationStates[0]->updateForChildren(PaintInvalidationFull);
@@ -156,6 +156,39 @@ TEST_F(VisualRectMappingTest, LayoutViewSubpixelRounding)
     EXPECT_EQ(LayoutRect(LayoutPoint(DoublePoint(0.5, 0)), LayoutSize(101, 100)), rect);
 }
 
+TEST_F(VisualRectMappingTest, LayoutViewDisplayNone)
+{
+    document().setBaseURLOverride(KURL(ParsedURLString, "http://test.com"));
+    setBodyInnerHTML(
+        "<style>body { margin: 0; }</style>"
+        "<div id=frameContainer>"
+        "  <iframe id=frame src='http://test.com' width='50' height='50' frameBorder='0'></iframe>"
+        "</div>");
+
+    Document& frameDocument = setupChildIframe("frame", "<style>body { margin: 0; }</style><div style='width:100px;height:100px;'></div>");
+    document().view()->updateAllLifecyclePhases();
+
+    LayoutBlock* frameContainer = toLayoutBlock(getLayoutObjectByElementId("frameContainer"));
+    LayoutBlock* frameBody = toLayoutBlock(frameDocument.body()->layoutObject());
+    LayoutBlock* frameDiv = toLayoutBlock(frameBody->lastChild());
+
+    // This part is copied from the LayoutView test, just to ensure that the mapped
+    // rect is valid before display:none is set on the iframe.
+    frameDocument.view()->setScrollPosition(DoublePoint(0, 47), ProgrammaticScroll);
+    LayoutRect originalRect(4, 60, 20, 80);
+    LayoutRect rect = originalRect;
+    EXPECT_TRUE(frameDiv->mapToVisualRectInAncestorSpace(frameContainer, rect));
+    EXPECT_EQ(rect, LayoutRect(4, 13, 20, 37));
+
+    Element* frameElement = document().getElementById("frame");
+    frameElement->setInlineStyleProperty(CSSPropertyDisplay, "none");
+    document().view()->updateAllLifecyclePhases();
+
+    rect = originalRect;
+    EXPECT_FALSE(frameDiv->mapToVisualRectInAncestorSpace(&layoutView(), rect));
+    EXPECT_EQ(rect, LayoutRect());
+}
+
 TEST_F(VisualRectMappingTest, SelfFlippedWritingMode)
 {
     setBodyInnerHTML(
@@ -231,8 +264,8 @@ TEST_F(VisualRectMappingTest, ContainerOverflowScroll)
         "</div>");
 
     LayoutBlock* container = toLayoutBlock(getLayoutObjectByElementId("container"));
-    EXPECT_EQ(LayoutUnit(0), container->scrollTop());
-    EXPECT_EQ(LayoutUnit(0), container->scrollLeft());
+    EXPECT_EQ(LayoutUnit(), container->scrollTop());
+    EXPECT_EQ(LayoutUnit(), container->scrollLeft());
     container->setScrollTop(LayoutUnit(7));
     container->setScrollLeft(LayoutUnit(8));
     document().view()->updateAllLifecyclePhases();
@@ -287,7 +320,7 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowScroll)
         "</div>");
 
     LayoutBlock* container = toLayoutBlock(getLayoutObjectByElementId("container"));
-    EXPECT_EQ(LayoutUnit(0), container->scrollTop());
+    EXPECT_EQ(LayoutUnit(), container->scrollTop());
     // The initial scroll offset is to the left-most because of flipped blocks writing mode.
     // 150 = total_layout_overflow(100 + 100) - width(50)
     EXPECT_EQ(LayoutUnit(150), container->scrollLeft());
@@ -350,8 +383,8 @@ TEST_F(VisualRectMappingTest, ContainerOverflowHidden)
         "</div>");
 
     LayoutBlock* container = toLayoutBlock(getLayoutObjectByElementId("container"));
-    EXPECT_EQ(LayoutUnit(0), container->scrollTop());
-    EXPECT_EQ(LayoutUnit(0), container->scrollLeft());
+    EXPECT_EQ(LayoutUnit(), container->scrollTop());
+    EXPECT_EQ(LayoutUnit(), container->scrollLeft());
     container->setScrollTop(LayoutUnit(27));
     container->setScrollLeft(LayoutUnit(28));
     document().view()->updateAllLifecyclePhases();
@@ -382,7 +415,7 @@ TEST_F(VisualRectMappingTest, ContainerFlippedWritingModeAndOverflowHidden)
         "</div>");
 
     LayoutBlock* container = toLayoutBlock(getLayoutObjectByElementId("container"));
-    EXPECT_EQ(LayoutUnit(0), container->scrollTop());
+    EXPECT_EQ(LayoutUnit(), container->scrollTop());
     // The initial scroll offset is to the left-most because of flipped blocks writing mode.
     // 150 = total_layout_overflow(100 + 100) - width(50)
     EXPECT_EQ(LayoutUnit(150), container->scrollLeft());
@@ -420,7 +453,7 @@ TEST_F(VisualRectMappingTest, ContainerAndTargetDifferentFlippedWritingMode)
         "</div>");
 
     LayoutBlock* container = toLayoutBlock(getLayoutObjectByElementId("container"));
-    EXPECT_EQ(LayoutUnit(0), container->scrollTop());
+    EXPECT_EQ(LayoutUnit(), container->scrollTop());
     // The initial scroll offset is to the left-most because of flipped blocks writing mode.
     // 150 = total_layout_overflow(100 + 100) - width(50)
     EXPECT_EQ(LayoutUnit(150), container->scrollLeft());

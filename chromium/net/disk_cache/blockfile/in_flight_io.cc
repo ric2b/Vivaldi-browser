@@ -6,7 +6,6 @@
 
 #include "base/bind.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner.h"
@@ -17,8 +16,10 @@
 namespace disk_cache {
 
 BackgroundIO::BackgroundIO(InFlightIO* controller)
-    : result_(-1), io_completed_(true, false), controller_(controller) {
-}
+    : result_(-1),
+      io_completed_(base::WaitableEvent::ResetPolicy::MANUAL,
+                    base::WaitableEvent::InitialState::NOT_SIGNALED),
+      controller_(controller) {}
 
 // Runs on the primary thread.
 void BackgroundIO::OnIOSignalled() {
@@ -44,9 +45,7 @@ BackgroundIO::~BackgroundIO() {
 
 InFlightIO::InFlightIO()
     : callback_task_runner_(base::ThreadTaskRunnerHandle::Get()),
-      running_(false),
-      single_thread_(false) {
-}
+      running_(false) {}
 
 InFlightIO::~InFlightIO() {
 }
@@ -78,7 +77,7 @@ void InFlightIO::DropPendingIO() {
 
 // Runs on a background thread.
 void InFlightIO::OnIOComplete(BackgroundIO* operation) {
-#ifndef NDEBUG
+#if DCHECK_IS_ON()
   if (callback_task_runner_->RunsTasksOnCurrentThread()) {
     DCHECK(single_thread_ || !running_);
     single_thread_ = true;

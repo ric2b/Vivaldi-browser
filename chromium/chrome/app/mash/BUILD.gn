@@ -11,6 +11,8 @@ source_set("mash") {
   ]
   deps = [
     "//ash/mus:lib",
+    "//ash/resources",
+    "//ash/sysui:lib",
     "//base:i18n",
     "//components/mus:lib",
     "//content/public/common",
@@ -18,7 +20,6 @@ source_set("mash") {
     "//mash/quick_launch:lib",
     "//mash/session:lib",
     "//mash/task_viewer:lib",
-    "//mash/wm:lib",
     "//services/shell",
     "//services/shell/background:lib",
     "//services/shell/public/cpp",
@@ -43,17 +44,17 @@ mojo_application_manifest("manifest") {
   source = "chrome_mash_manifest.json"
   deps = [
     "//ash/mus:manifest",
+    "//ash/sysui:manifest",
     "//components/mus:manifest",
     "//mash/app_driver:manifest",
     "//mash/quick_launch:manifest",
     "//mash/session:manifest",
     "//mash/task_viewer:manifest",
-    "//mash/wm:manifest",
   ]
   packaged_applications = [
     "app_driver",
+    "ash",
     "ash_sysui",
-    "desktop_wm",
     "mash_session",
     "mus",
     "quick_launch",

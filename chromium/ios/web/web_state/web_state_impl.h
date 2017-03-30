@@ -20,6 +20,8 @@
 #include "ios/web/navigation/navigation_manager_delegate.h"
 #include "ios/web/navigation/navigation_manager_impl.h"
 #include "ios/web/net/request_tracker_impl.h"
+#import "ios/web/public/java_script_dialog_callback.h"
+#include "ios/web/public/java_script_dialog_type.h"
 #include "ios/web/public/web_state/web_state.h"
 #include "url/gurl.h"
 
@@ -183,11 +185,6 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   // that is the point where MIME type is set from HTTP headers.
   void SetContentsMimeType(const std::string& mime_type);
 
-  // Executes a JavaScript string on the page asynchronously.
-  // TODO(shreyasv): Rename this to ExecuteJavaScript for consistency with
-  // upstream API.
-  virtual void ExecuteJavaScriptAsync(const base::string16& script);
-
   // Returns whether the navigation corresponding to |request| should be allowed
   // to continue by asking its policy deciders. Defaults to true.
   bool ShouldAllowRequest(NSURLRequest* request);
@@ -221,9 +218,12 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void SetDelegate(WebStateDelegate* delegate) override;
   bool IsWebUsageEnabled() const override;
   void SetWebUsageEnabled(bool enabled) override;
+  bool ShouldSuppressDialogs() const override;
+  void SetShouldSuppressDialogs(bool should_suppress) override;
   UIView* GetView() override;
   BrowserState* GetBrowserState() const override;
   void OpenURL(const WebState::OpenURLParams& params) override;
+  const NavigationManager* GetNavigationManager() const override;
   NavigationManager* GetNavigationManager() override;
   CRWJSInjectionReceiver* GetJSInjectionReceiver() const override;
   void ExecuteJavaScript(const base::string16& javascript) override;
@@ -265,6 +265,16 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void SendChangeLoadProgress(double progress);
   // Notifies the delegate that a context menu needs handling.
   bool HandleContextMenu(const ContextMenuParams& params);
+
+  // Notifies the delegate that a JavaScript dialog needs to be presented.
+  void RunJavaScriptDialog(const GURL& origin_url,
+                           JavaScriptDialogType java_script_dialog_type,
+                           NSString* message_text,
+                           NSString* default_prompt_text,
+                           const DialogClosedCallback& callback);
+
+  // Cancels all dialogs associated with this web_state.
+  void CancelActiveAndPendingDialogs();
 
   // NavigationManagerDelegate:
   void NavigateToPendingEntry() override;

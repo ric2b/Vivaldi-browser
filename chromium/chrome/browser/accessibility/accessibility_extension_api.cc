@@ -31,6 +31,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/ui/accessibility_focus_ring_controller.h"
+using chromeos::AccessibilityFocusRingController;
 #endif
 
 namespace accessibility_private = extensions::api::accessibility_private;
@@ -77,8 +78,18 @@ bool AccessibilityPrivateSetFocusRingFunction::RunSync() {
     rects.push_back(gfx::Rect(left, top, width, height));
   }
 
-  chromeos::AccessibilityFocusRingController::GetInstance()->SetFocusRing(
-      rects);
+  // Move the visible focus ring to cover all of these rects.
+  AccessibilityFocusRingController::GetInstance()->SetFocusRing(
+      rects, AccessibilityFocusRingController::PERSIST_FOCUS_RING);
+
+  // Also update the touch exploration controller so that synthesized
+  // touch events are anchored within the focused object.
+  if (!rects.empty()) {
+    chromeos::AccessibilityManager* manager =
+        chromeos::AccessibilityManager::Get();
+    manager->SetTouchAccessibilityAnchorPoint(rects[0].CenterPoint());
+  }
+
   return true;
 #endif  // defined(OS_CHROMEOS)
 

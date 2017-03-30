@@ -19,10 +19,11 @@ var TestProfileBrowserProxy = function() {
     'initializeUserManager',
     'launchUser',
     'getExistingSupervisedUsers',
+    'areAllProfilesLocked',
   ]);
 
-  /** @private {!Array<string>} */
-  this.iconUrls_ = [];
+  /** @private {!Array<!AvatarIcon>} */
+  this.icons_ = [];
 
   /** @private {!Array<SignedInUser>} */
   this.signedInUsers_ = [];
@@ -32,16 +33,19 @@ var TestProfileBrowserProxy = function() {
 
   /** @private {!Array<SupervisedUser>} */
   this.existingSupervisedUsers_ = [];
+
+  /** @private {boolean} */
+  this.allProfilesLocked_ = false;
 };
 
 TestProfileBrowserProxy.prototype = {
   __proto__: settings.TestBrowserProxy.prototype,
 
   /**
-   * @param {!Array<string>} iconUrls
+   * @param {!Array<!AvatarIcon>} icons
    */
-  setIconUrls: function(iconUrls) {
-    this.iconUrls_ = iconUrls;
+  setIcons: function(icons) {
+    this.icons_ = icons;
   },
 
   /**
@@ -65,10 +69,17 @@ TestProfileBrowserProxy.prototype = {
     this.existingSupervisedUsers_ = supervisedUsers;
   },
 
+  /**
+   * @param {boolean} allProfilesLocked
+   */
+  setAllProfilesLocked: function(allProfilesLocked) {
+    this.allProfilesLocked_ = allProfilesLocked;
+  },
+
   /** @override */
   getAvailableIcons: function() {
     this.methodCalled('getAvailableIcons');
-    cr.webUIListenerCallback('profile-icons-received', this.iconUrls_);
+    cr.webUIListenerCallback('profile-icons-received', this.icons_);
     cr.webUIListenerCallback('profile-defaults-received',
                              this.defaultProfileInfo_);
   },
@@ -109,5 +120,11 @@ TestProfileBrowserProxy.prototype = {
   getExistingSupervisedUsers: function() {
     this.methodCalled('getExistingSupervisedUsers');
     return Promise.resolve(this.existingSupervisedUsers_);
+  },
+
+  /** @override */
+  areAllProfilesLocked: function() {
+    this.methodCalled('areAllProfilesLocked');
+    return Promise.resolve(this.allProfilesLocked_);
   },
 };

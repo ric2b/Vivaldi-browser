@@ -19,6 +19,7 @@
 #include "cc/quads/surface_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
+#include "cc/surfaces/surface_id.h"
 #include "third_party/skia/include/core/SkData.h"
 #include "third_party/skia/include/core/SkFlattenableSerialization.h"
 #include "third_party/skia/include/core/SkImageFilter.h"
@@ -567,6 +568,48 @@ void ParamTraits<cc::RenderPass>::Log(const param_type& p, std::string* l) {
   l->append("])");
 }
 
+void ParamTraits<cc::SurfaceId>::GetSize(base::PickleSizer* s,
+                                         const param_type& p) {
+  GetParamSize(s, p.id_namespace());
+  GetParamSize(s, p.local_id());
+  GetParamSize(s, p.nonce());
+}
+
+void ParamTraits<cc::SurfaceId>::Write(base::Pickle* m, const param_type& p) {
+  WriteParam(m, p.id_namespace());
+  WriteParam(m, p.local_id());
+  WriteParam(m, p.nonce());
+}
+
+bool ParamTraits<cc::SurfaceId>::Read(const base::Pickle* m,
+                                      base::PickleIterator* iter,
+                                      param_type* p) {
+  uint32_t id_namespace;
+  if (!ReadParam(m, iter, &id_namespace))
+    return false;
+
+  uint32_t local_id;
+  if (!ReadParam(m, iter, &local_id))
+    return false;
+
+  uint64_t nonce;
+  if (!ReadParam(m, iter, &nonce))
+    return false;
+
+  *p = cc::SurfaceId(id_namespace, local_id, nonce);
+  return true;
+}
+
+void ParamTraits<cc::SurfaceId>::Log(const param_type& p, std::string* l) {
+  l->append("SurfaceId(");
+  LogParam(p.id_namespace(), l);
+  l->append(", ");
+  LogParam(p.local_id(), l);
+  l->append(", ");
+  LogParam(p.nonce(), l);
+  l->append(")");
+}
+
 namespace {
 enum CompositorFrameType {
   NO_FRAME,
@@ -680,7 +723,7 @@ void ParamTraits<cc::DelegatedFrameData>::Write(base::Pickle* m,
                                                 const param_type& p) {
   DCHECK_NE(0u, p.render_pass_list.size());
 
-  size_t to_reserve = sizeof(p.device_scale_factor);
+  size_t to_reserve = 0u;
   to_reserve += p.resource_list.size() * sizeof(cc::TransferableResource);
   for (const auto& pass : p.render_pass_list) {
     to_reserve += sizeof(size_t) * 2;
@@ -688,7 +731,6 @@ void ParamTraits<cc::DelegatedFrameData>::Write(base::Pickle* m,
   }
   m->Reserve(to_reserve);
 
-  WriteParam(m, p.device_scale_factor);
   WriteParam(m, p.resource_list);
   WriteParam(m, base::checked_cast<uint32_t>(p.render_pass_list.size()));
   for (const auto& pass : p.render_pass_list) {
@@ -705,9 +747,6 @@ bool ParamTraits<cc::DelegatedFrameData>::Read(const base::Pickle* m,
   const size_t kMaxRenderPasses = 10000;
   const size_t kMaxSharedQuadStateListSize = 100000;
   const size_t kMaxQuadListSize = 1000000;
-
-  if (!ReadParam(m, iter, &p->device_scale_factor))
-    return false;
 
   std::set<cc::RenderPassId> pass_set;
 
@@ -748,7 +787,6 @@ bool ParamTraits<cc::DelegatedFrameData>::Read(const base::Pickle* m,
 void ParamTraits<cc::DelegatedFrameData>::Log(const param_type& p,
                                               std::string* l) {
   l->append("DelegatedFrameData(");
-  LogParam(p.device_scale_factor, l);
   LogParam(p.resource_list, l);
   l->append(", [");
   for (size_t i = 0; i < p.render_pass_list.size(); ++i) {

@@ -6,7 +6,7 @@
 
 #include "core/dom/Document.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/OriginsUsingFeatures.h"
+#include "core/frame/HostsUsingFeatures.h"
 #include "core/frame/Settings.h"
 #include "modules/EventModules.h"
 #include "modules/device_orientation/DeviceOrientationData.h"
@@ -14,6 +14,7 @@
 #include "modules/device_orientation/DeviceOrientationEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "public/platform/Platform.h"
+#include "wtf/Assertions.h"
 
 namespace blink {
 
@@ -59,7 +60,7 @@ void DeviceOrientationController::didAddEventListener(LocalDOMWindow* window, co
             UseCounter::count(document().frame(), UseCounter::DeviceOrientationSecureOrigin);
         } else {
             Deprecation::countDeprecation(document().frame(), UseCounter::DeviceOrientationInsecureOrigin);
-            OriginsUsingFeatures::countAnyWorld(document(), OriginsUsingFeatures::Feature::DeviceOrientationInsecureOrigin);
+            HostsUsingFeatures::countAnyWorld(document(), HostsUsingFeatures::Feature::DeviceOrientationInsecureHost);
             if (document().frame()->settings()->strictPowerfulFeatureRestrictions())
                 return;
         }
@@ -109,7 +110,7 @@ const AtomicString& DeviceOrientationController::eventTypeName() const
 
 void DeviceOrientationController::setOverride(DeviceOrientationData* deviceOrientationData)
 {
-    ASSERT(deviceOrientationData);
+    DCHECK(deviceOrientationData);
     m_overrideOrientationData = deviceOrientationData;
     dispatchDeviceEvent(lastEvent());
 }

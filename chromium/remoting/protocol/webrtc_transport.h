@@ -68,7 +68,7 @@ class WebrtcTransport : public Transport,
   webrtc::PeerConnectionFactoryInterface* peer_connection_factory() {
     return peer_connection_factory_;
   }
-  remoting::WebRtcVideoEncoderFactory* video_encoder_factory() {
+  remoting::WebrtcVideoEncoderFactory* video_encoder_factory() {
     return video_encoder_factory_;
   }
 
@@ -99,9 +99,12 @@ class WebrtcTransport : public Transport,
   // webrtc::PeerConnectionObserver interface.
   void OnSignalingChange(
       webrtc::PeerConnectionInterface::SignalingState new_state) override;
-  void OnAddStream(webrtc::MediaStreamInterface* stream) override;
-  void OnRemoveStream(webrtc::MediaStreamInterface* stream) override;
-  void OnDataChannel(webrtc::DataChannelInterface* data_channel) override;
+  void OnAddStream(
+      rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) override;
+  void OnRemoveStream(
+      rtc::scoped_refptr<webrtc::MediaStreamInterface> stream) override;
+  void OnDataChannel(
+      rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel) override;
   void OnRenegotiationNeeded() override;
   void OnIceConnectionChange(
       webrtc::PeerConnectionInterface::IceConnectionState new_state) override;
@@ -130,7 +133,7 @@ class WebrtcTransport : public Transport,
       peer_connection_factory_;
   rtc::scoped_refptr<webrtc::PeerConnectionInterface> peer_connection_;
 
-  remoting::WebRtcVideoEncoderFactory* video_encoder_factory_;
+  remoting::WebrtcVideoEncoderFactory* video_encoder_factory_;
 
   bool negotiation_pending_ = false;
 

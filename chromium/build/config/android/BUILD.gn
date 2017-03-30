@@ -21,16 +21,19 @@ config("compiler") {
     # The NDK has these things, but doesn't define the constants to say that it
     # does. Define them here instead.
     "HAVE_SYS_UIO_H",
+
+    # Forces full rebuilds on NDK rolls.
+    "ANDROID_NDK_VERSION=${android_ndk_version}",
   ]
 
   if (is_clang) {
     rebased_android_toolchain_root =
         rebase_path(android_toolchain_root, root_build_dir)
     assert(rebased_android_toolchain_root != "")  # Mark as used.
-    if (current_cpu == "mipsel") {
+    if (current_cpu == "mipsel" || current_cpu == "mips64el") {
       cflags += [
         # TODO(gordanac) Enable integrated-as.
-        "-no-integrated-as",
+        "-fno-integrated-as",
         "-B${rebased_android_toolchain_root}/bin",  # Else /usr/bin/as gets picked up.
       ]
     }

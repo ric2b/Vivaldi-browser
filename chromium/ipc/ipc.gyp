@@ -17,9 +17,10 @@
         'ipc_target': 1,
       },
       'dependencies': [
+        'ipc_interfaces',
         '../base/base.gyp:base',
-        # TODO(viettrungluu): Needed for base/lazy_instance.h, which is suspect.
-        '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../mojo/mojo_public.gyp:mojo_cpp_system',
       ],
       # TODO(gregoryd): direct_dependent_settings should be shared with the
       # 64-bit target, but it doesn't work due to a bug in gyp
@@ -37,15 +38,58 @@
       ],
     },
     {
+      'target_name': 'ipc_interfaces_mojom',
+      'type': 'none',
+      'variables': {
+        'require_interface_bindings': 0,
+        'mojom_files': [
+          'ipc.mojom',
+        ],
+      },
+      'includes': [ '../mojo/mojom_bindings_generator_explicit.gypi' ],
+    },
+    {
+      'target_name': 'ipc_interfaces',
+      'type': 'static_library',
+      'dependencies': [
+        'ipc_interfaces_mojom',
+        '../base/base.gyp:base',
+        '../mojo/mojo_public.gyp:mojo_interface_bindings_generation',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+    },
+    {
+      'target_name': 'ipc_run_all_unittests',
+      'type': 'static_library',
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../base/base.gyp:test_support_base',
+        '../mojo/mojo_edk.gyp:mojo_common_test_support',
+        '../mojo/mojo_edk.gyp:mojo_system_impl',
+        '../testing/gtest.gyp:gtest',
+      ],
+      'include_dirs': [
+        '..',
+      ],
+      'sources': [
+        'run_all_unittests.cc',
+      ],
+    },
+    {
       'target_name': 'ipc_tests',
       'type': '<(gtest_target_type)',
       'dependencies': [
         'ipc',
+        'ipc_run_all_unittests',
         'test_support_ipc',
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
         '../base/base.gyp:test_support_base',
         '../crypto/crypto.gyp:crypto',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
+        '../mojo/mojo_public.gyp:mojo_cpp_system',
         '../testing/gtest.gyp:gtest',
       ],
       'include_dirs': [
@@ -55,6 +99,7 @@
         'attachment_broker_mac_unittest.cc',
         'attachment_broker_privileged_mac_unittest.cc',
         'attachment_broker_privileged_win_unittest.cc',
+        'ipc_channel_mojo_unittest.cc',
         'ipc_channel_posix_unittest.cc',
         'ipc_channel_proxy_unittest.cc',
         'ipc_channel_reader_unittest.cc',
@@ -63,6 +108,7 @@
         'ipc_message_attachment_set_posix_unittest.cc',
         'ipc_message_unittest.cc',
         'ipc_message_utils_unittest.cc',
+        'ipc_mojo_bootstrap_unittest.cc',
         'ipc_send_fds_test.cc',
         'ipc_sync_channel_unittest.cc',
         'ipc_sync_message_unittest.cc',
@@ -70,7 +116,6 @@
         'ipc_test_messages.h',
         'ipc_test_message_generator.cc',
         'ipc_test_message_generator.h',
-        'run_all_unittests.cc',
         'sync_socket_unittest.cc',
         'unix_domain_socket_util_unittest.cc',
       ],
@@ -106,16 +151,20 @@
         '../base/base.gyp:base',
         '../base/base.gyp:base_i18n',
         '../base/base.gyp:test_support_base',
-        '../base/base.gyp:test_support_perf',
+        '../mojo/mojo_edk.gyp:mojo_common_test_support',
+        '../mojo/mojo_edk.gyp:mojo_system_impl',
+        '../mojo/mojo_public.gyp:mojo_cpp_bindings',
         '../testing/gtest.gyp:gtest',
       ],
       'include_dirs': [
         '..'
       ],
       'sources': [
+        'ipc_mojo_perftest.cc',
         'ipc_perftests.cc',
         'ipc_test_base.cc',
         'ipc_test_base.h',
+        'run_all_perftests.cc',
       ],
       'conditions': [
         ['OS == "android"', {
@@ -155,17 +204,34 @@
     ['OS=="win" and target_arch=="ia32"', {
       'targets': [
         {
+          'target_name': 'ipc_interfaces_win64',
+          'type': 'static_library',
+          'dependencies': [
+            'ipc_interfaces_mojom',
+            '../base/base.gyp:base_win64',
+            '../mojo/mojo_public.gyp:mojo_interface_bindings_generation',
+          ],
+          'include_dirs': [
+            '..',
+          ],
+          'configurations': {
+            'Common_Base': {
+              'msvs_target_platform': 'x64',
+            },
+          },
+        },
+        {
           'target_name': 'ipc_win64',
           'type': '<(component)',
           'variables': {
             'ipc_target': 1,
           },
           'dependencies': [
+            'ipc_interfaces_win64',
             '../base/base.gyp:base_win64',
-            # TODO(viettrungluu): Needed for base/lazy_instance.h, which is
-            # suspect.
-            '../base/third_party/dynamic_annotations/dynamic_annotations.gyp:dynamic_annotations_win64',
             '../crypto/crypto.gyp:crypto_nacl_win64',
+            '../mojo/mojo_public.gyp:mojo_cpp_bindings_win64',
+            '../mojo/mojo_public.gyp:mojo_cpp_system_win64',
           ],
           # TODO(gregoryd): direct_dependent_settings should be shared with the
           # 32-bit target, but it doesn't work due to a bug in gyp

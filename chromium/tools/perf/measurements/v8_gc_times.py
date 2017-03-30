@@ -23,14 +23,17 @@ class V8GCTimes(legacy_page_test.LegacyPageTest):
     super(V8GCTimes, self).__init__()
 
   def WillNavigateToPage(self, page, tab):
+    del page  # unused
     config = tracing_config.TracingConfig()
     for category in self._CATEGORIES:
-      config.tracing_category_filter.AddIncludedCategory(category)
+      config.chrome_trace_config.category_filter.AddIncludedCategory(
+          category)
     config.enable_chrome_trace = True
     tab.browser.platform.tracing_controller.StartTracing(
         config, self._TIME_OUT_IN_SECONDS)
 
   def ValidateAndMeasurePage(self, page, tab, results):
+    del page  # unused
     trace_data = tab.browser.platform.tracing_controller.StopTracing()
     timeline_model = TimelineModel(trace_data)
     renderer_process = timeline_model.GetRendererProcessFromTabId(tab.id)

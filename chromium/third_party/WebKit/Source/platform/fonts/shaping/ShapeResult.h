@@ -36,9 +36,9 @@
 #include "platform/text/TextDirection.h"
 #include "wtf/HashSet.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 struct hb_buffer_t;
 
@@ -78,9 +78,6 @@ public:
 
 protected:
     struct RunInfo;
-#if COMPILER(MSVC)
-    friend struct ::WTF::OwnedPtrDeleter<RunInfo>;
-#endif
 
     ShapeResult(const Font*, unsigned numCharacters, TextDirection);
     ShapeResult(const ShapeResult&);
@@ -91,12 +88,12 @@ protected:
     }
 
     void applySpacing(ShapeResultSpacing&, const TextRun&);
-    void insertRun(PassOwnPtr<ShapeResult::RunInfo>, unsigned startGlyph,
+    void insertRun(std::unique_ptr<ShapeResult::RunInfo>, unsigned startGlyph,
         unsigned numGlyphs, hb_buffer_t*);
 
     float m_width;
     FloatRect m_glyphBoundingBox;
-    Vector<OwnPtr<RunInfo>> m_runs;
+    Vector<std::unique_ptr<RunInfo>> m_runs;
     RefPtr<SimpleFontData> m_primaryFont;
 
     unsigned m_numCharacters;

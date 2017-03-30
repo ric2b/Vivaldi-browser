@@ -42,9 +42,6 @@ struct CC_EXPORT DrawProperties {
   // to draw.
   bool screen_space_transform_is_animating;
 
-  // True if the layer can use LCD text.
-  bool can_use_lcd_text;
-
   // True if the layer needs to be clipped by clip_rect.
   bool is_clipped;
 
@@ -59,14 +56,6 @@ struct CC_EXPORT DrawProperties {
   // In target surface space, the original rect that clipped this layer. This
   // value is used to avoid unnecessarily changing GL scissor state.
   gfx::Rect clip_rect;
-
-  // The maximum scale during the layers current animation at which content
-  // should be rastered at to be crisp.
-  float maximum_animation_contents_scale;
-
-  // The scale during the layer animation start at which content should be
-  // rastered at to be crisp.
-  float starting_animation_contents_scale;
 };
 
 }  // namespace cc

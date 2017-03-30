@@ -11,6 +11,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/scoped_vector.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
@@ -24,8 +25,7 @@ struct FrameHostMsg_DidCommitProvisionalLoad_Params;
 namespace content {
 
 class NavigatorDelegate;
-class ServiceWorkerContextWrapper;
-class ServiceWorkerNavigationHandle;
+class ResourceRequestBodyImpl;
 struct NavigationRequestInfo;
 
 // This class keeps track of a single navigation. It is created upon receipt of
@@ -156,11 +156,11 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
     render_frame_host_ = render_frame_host;
   }
 
-  // PlzNavigate
-  void InitServiceWorkerHandle(
-      ServiceWorkerContextWrapper* service_worker_context);
-  ServiceWorkerNavigationHandle* service_worker_handle() const {
-    return service_worker_handle_.get();
+  // Returns the POST body associated with this navigation.  This will be
+  // null for GET and/or other non-POST requests (or if a response to a POST
+  // request was a redirect that changed the method to GET - for example 302).
+  const scoped_refptr<ResourceRequestBodyImpl>& resource_request_body() const {
+    return resource_request_body_;
   }
 
   typedef base::Callback<void(NavigationThrottle::ThrottleCheckResult)>
@@ -169,12 +169,14 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // Called when the URLRequest will start in the network stack.  |callback|
   // will be called when all throttle checks have completed. This will allow
   // the caller to cancel the navigation or let it proceed.
-  void WillStartRequest(const std::string& method,
-                        const Referrer& sanitized_referrer,
-                        bool has_user_gesture,
-                        ui::PageTransition transition,
-                        bool is_external_protocol,
-                        const ThrottleChecksFinishedCallback& callback);
+  void WillStartRequest(
+      const std::string& method,
+      scoped_refptr<content::ResourceRequestBodyImpl> resource_request_body,
+      const Referrer& sanitized_referrer,
+      bool has_user_gesture,
+      ui::PageTransition transition,
+      bool is_external_protocol,
+      const ThrottleChecksFinishedCallback& callback);
 
   // Called when the URLRequest will be redirected in the network stack.
   // |callback| will be called when all throttles check have completed. This
@@ -277,6 +279,11 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
   // The HTTP method used for the navigation.
   std::string method_;
 
+  // The POST body associated with this navigation.  This will be null for GET
+  // and/or other non-POST requests (or if a response to a POST request was a
+  // redirect that changed the method to GET - for example 302).
+  scoped_refptr<ResourceRequestBodyImpl> resource_request_body_;
+
   // The state the navigation is in.
   State state_;
 
@@ -301,11 +308,6 @@ class CONTENT_EXPORT NavigationHandleImpl : public NavigationHandle {
 
   // This callback will be run when all throttle checks have been performed.
   ThrottleChecksFinishedCallback complete_callback_;
-
-  // PlzNavigate
-  // Manages the lifetime of a pre-created ServiceWorkerProviderHost until a
-  // corresponding ServiceWorkerNetworkProvider is created in the renderer.
-  std::unique_ptr<ServiceWorkerNavigationHandle> service_worker_handle_;
 
   // Embedder data tied to this navigation.
   std::unique_ptr<NavigationData> navigation_data_;

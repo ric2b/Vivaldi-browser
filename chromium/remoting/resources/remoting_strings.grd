@@ -175,7 +175,7 @@
       <output filename="remoting/android/res/values-uk/remoting_strings.xml" lang="uk" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-vi/remoting_strings.xml" lang="vi" type="android" context="android_java"/>
       <output filename="remoting/android/res/values-zh-rCN/remoting_strings.xml" lang="zh-CN" type="android" context="android_java"/>
-      <output filename="remoting/android/res/values-zh/remoting_strings.xml" lang="zh-TW" type="android" context="android_java"/>
+      <output filename="remoting/android/res/values-zh-rTW/remoting_strings.xml" lang="zh-TW" type="android" context="android_java"/>
     </if>
 
   </outputs>
@@ -755,6 +755,9 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       <message desc="Error displayed if an invalid access code is entered." name="IDS_ERROR_INVALID_ACCESS_CODE" formatter_data="android_java">
         The access code is invalid. Please try again.
       </message>
+      <message desc="Error displayed if the host security policies do not allow connections from client." name="IDS_ERROR_INVALID_ACCOUNT" formatter_data="android_java">
+        Security policies on the remote computer do not allow connections from your account.
+      </message>
       <message desc="Error displayed when the host is online, but we are unable to connect to it due to network configuration." name="IDS_ERROR_P2P_FAILURE" formatter_data="android_java">
         Unable to reach the host. This is probably due to the configuration of the network you are using.
       </message>
@@ -1089,6 +1092,9 @@ For information about privacy, please see the Google Privacy Policy (http://goo.
       </message>
       <message name="IDS_REMOTING_HOST_COMMAND_DESCRIPTION" desc="The file description specified in the version information of remoting_host_command.exe. The Chrome Remote Desktop host allows a user to connect to their computer remotely (it 'hosts' a connection from a remote computer).">
         Application to issue commands to Chrome remote desktop host.
+      </message>
+      <message name="IDS_REMOTING_START_HOST_DESCRIPTION" desc="The file description specified in the version information of remoting_start_host.exe.">
+        Host Provisioning Utility
       </message>
       <message name="IDS_VERIFY_PIN_DIALOG_EMAIL_LABEL" desc="The message displayed by the PIN verification dialog.">
         Account

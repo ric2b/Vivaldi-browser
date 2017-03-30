@@ -7,15 +7,13 @@
 #include "core/layout/LayoutListItem.h"
 #include "core/layout/LayoutListMarker.h"
 #include "core/layout/ListMarkerText.h"
-#include "core/layout/TextRunConstructor.h"
 #include "core/layout/api/SelectionState.h"
-#include "core/paint/BlockPainter.h"
+#include "core/paint/BoxPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/paint/TextPainter.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
-#include "wtf/text/CharacterNames.h"
 
 namespace blink {
 
@@ -84,7 +82,11 @@ void ListMarkerPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& pai
     if (styleCategory == LayoutListMarker::ListStyleCategory::None)
         return;
 
-    const Color color(m_layoutListMarker.resolveColor(CSSPropertyColor));
+    Color color(m_layoutListMarker.resolveColor(CSSPropertyColor));
+
+    if (BoxPainter::shouldForceWhiteBackgroundForPrintEconomy(m_layoutListMarker.styleRef(), m_layoutListMarker.listItem()->document()))
+        color = TextPainter::textColorForWhiteBackground(color);
+
     // Apply the color to the list marker text.
     context.setFillColor(color);
 

@@ -34,6 +34,7 @@
 #include "wtf/StdLibExtras.h"
 #include "wtf/text/StringBuilder.h"
 #include <algorithm>
+#include <memory>
 
 #ifndef NDEBUG
 #include <stdio.h>
@@ -257,6 +258,7 @@ PseudoId CSSSelector::pseudoId(PseudoType type)
     case PseudoFutureCue:
     case PseudoPastCue:
     case PseudoUnresolved:
+    case PseudoDefined:
     case PseudoContent:
     case PseudoHost:
     case PseudoHostContext:
@@ -317,6 +319,7 @@ const static NameToPseudoStruct pseudoTypeWithoutArgumentsMap[] = {
 {"cue",                           CSSSelector::PseudoWebKitCustomElement},
 {"decrement",                     CSSSelector::PseudoDecrement},
 {"default",                       CSSSelector::PseudoDefault},
+{"defined",                       CSSSelector::PseudoDefined},
 {"disabled",                      CSSSelector::PseudoDisabled},
 {"double-button",                 CSSSelector::PseudoDoubleButton},
 {"empty",                         CSSSelector::PseudoEmpty},
@@ -412,6 +415,9 @@ static CSSSelector::PseudoType nameToPseudoType(const AtomicString& name, bool h
     NameToPseudoStruct dummyKey = { 0, CSSSelector::PseudoUnknown };
     const NameToPseudoStruct* match = std::lower_bound(pseudoTypeMap, pseudoTypeMapEnd, dummyKey, NameToPseudoCompare(name));
     if (match == pseudoTypeMapEnd || match->string != name.getString())
+        return CSSSelector::PseudoUnknown;
+
+    if (match->type == CSSSelector::PseudoDefined && !RuntimeEnabledFeatures::customElementsV1Enabled())
         return CSSSelector::PseudoUnknown;
 
     return static_cast<CSSSelector::PseudoType>(match->type);
@@ -512,6 +518,7 @@ void CSSSelector::updatePseudoType(const AtomicString& value, bool hasArguments)
     case PseudoCornerPresent:
     case PseudoDecrement:
     case PseudoDefault:
+    case PseudoDefined:
     case PseudoDisabled:
     case PseudoDoubleButton:
     case PseudoDrag:
@@ -665,7 +672,7 @@ String CSSSelector::selectorText(const String& rightSide) const
                 break;
             }
         } else if (cs->m_match == PseudoElement) {
-            str.appendLiteral("::");
+            str.append("::");
             str.append(cs->serializingValue());
         } else if (cs->isAttributeSelector()) {
             str.append('[');
@@ -684,19 +691,19 @@ String CSSSelector::selectorText(const String& rightSide) const
                 str.append(']');
                 break;
             case AttributeList:
-                str.appendLiteral("~=");
+                str.append("~=");
                 break;
             case AttributeHyphen:
-                str.appendLiteral("|=");
+                str.append("|=");
                 break;
             case AttributeBegin:
-                str.appendLiteral("^=");
+                str.append("^=");
                 break;
             case AttributeEnd:
-                str.appendLiteral("$=");
+                str.append("$=");
                 break;
             case AttributeContain:
-                str.appendLiteral("*=");
+                str.append("*=");
                 break;
             default:
                 break;
@@ -704,7 +711,7 @@ String CSSSelector::selectorText(const String& rightSide) const
             if (cs->m_match != AttributeSet) {
                 serializeString(cs->serializingValue(), str);
                 if (cs->attributeMatch() == CaseInsensitive)
-                    str.appendLiteral(" i");
+                    str.append(" i");
                 str.append(']');
             }
         }
@@ -760,7 +767,7 @@ void CSSSelector::setArgument(const AtomicString& value)
     m_data.m_rareData->m_argument = value;
 }
 
-void CSSSelector::setSelectorList(PassOwnPtr<CSSSelectorList> selectorList)
+void CSSSelector::setSelectorList(std::unique_ptr<CSSSelectorList> selectorList)
 {
     createRareData();
     m_data.m_rareData->m_selectorList = std::move(selectorList);

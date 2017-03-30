@@ -25,8 +25,8 @@
 
 #include "platform/graphics/DeferredImageDecoder.h"
 
+#include "platform/CrossThreadFunctional.h"
 #include "platform/SharedBuffer.h"
-#include "platform/ThreadSafeFunctional.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/graphics/ImageFrameGenerator.h"
 #include "platform/graphics/test/MockImageDecoder.h"
@@ -42,7 +42,9 @@
 #include "third_party/skia/include/core/SkPixmap.h"
 #include "third_party/skia/include/core/SkSurface.h"
 #include "wtf/PassRefPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -97,10 +99,9 @@ public:
     void SetUp() override
     {
         ImageDecodingStore::instance().setCacheLimitInBytes(1024 * 1024);
-        DeferredImageDecoder::setEnabled(true);
         m_data = SharedBuffer::create(whitePNG, sizeof(whitePNG));
         m_frameCount = 1;
-        OwnPtr<MockImageDecoder> decoder = MockImageDecoder::create(this);
+        std::unique_ptr<MockImageDecoder> decoder = MockImageDecoder::create(this);
         m_actualDecoder = decoder.get();
         m_actualDecoder->setSize(1, 1);
         m_lazyDecoder = DeferredImageDecoder::createForTesting(std::move(decoder));
@@ -161,7 +162,7 @@ protected:
 
     // Don't own this but saves the pointer to query states.
     MockImageDecoder* m_actualDecoder;
-    OwnPtr<DeferredImageDecoder> m_lazyDecoder;
+    std::unique_ptr<DeferredImageDecoder> m_lazyDecoder;
     sk_sp<SkSurface> m_surface;
     int m_decodeRequestCount;
     RefPtr<SharedBuffer> m_data;
@@ -244,9 +245,9 @@ TEST_F(DeferredImageDecoderTest, decodeOnOtherThread)
     EXPECT_EQ(0, m_decodeRequestCount);
 
     // Create a thread to rasterize SkPicture.
-    OwnPtr<WebThread> thread = adoptPtr(Platform::current()->createThread("RasterThread"));
-    thread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, threadSafeBind(&rasterizeMain, AllowCrossThreadAccess(m_surface->getCanvas()), AllowCrossThreadAccess(picture.get())));
-    thread.clear();
+    std::unique_ptr<WebThread> thread = wrapUnique(Platform::current()->createThread("RasterThread"));
+    thread->getWebTaskRunner()->postTask(BLINK_FROM_HERE, crossThreadBind(&rasterizeMain, crossThreadUnretained(m_surface->getCanvas()), crossThreadUnretained(picture.get())));
+    thread.reset();
     EXPECT_EQ(0, m_decodeRequestCount);
 
     SkBitmap canvasBitmap;
@@ -359,9 +360,9 @@ TEST_F(DeferredImageDecoderTest, smallerFrameCount)
 
 TEST_F(DeferredImageDecoderTest, frameOpacity)
 {
-    OwnPtr<ImageDecoder> actualDecoder = ImageDecoder::create(*m_data,
+    std::unique_ptr<ImageDecoder> actualDecoder = ImageDecoder::create(*m_data,
         ImageDecoder::AlphaPremultiplied, ImageDecoder::GammaAndColorProfileApplied);
-    OwnPtr<DeferredImageDecoder> decoder = DeferredImageDecoder::createForTesting(std::move(actualDecoder));
+    std::unique_ptr<DeferredImageDecoder> decoder = DeferredImageDecoder::createForTesting(std::move(actualDecoder));
     decoder->setData(*m_data, true);
 
     SkImageInfo pixInfo = SkImageInfo::MakeN32Premul(1, 1);

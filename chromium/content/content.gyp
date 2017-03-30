@@ -78,6 +78,20 @@
       'hard_dependency': 1,
     },
     {
+      # GN version: //content/public/app:gpu_manifest
+      'target_name': 'content_app_gpu_manifest',
+      'type': 'none',
+      'variables': {
+        'application_type': 'exe',
+        'application_name': 'content_gpu',
+        'source_manifest': '<(DEPTH)/content/public/app/mojo/content_gpu_manifest.json',
+      },
+      'includes': [
+        '../mojo/public/mojo_application_manifest.gypi',
+      ],
+      'hard_dependency': 1,
+    },
+    {
       # GN version: //content/public/app:renderer_manifest
       'target_name': 'content_app_renderer_manifest',
       'type': 'none',
@@ -85,6 +99,20 @@
         'application_type': 'exe',
         'application_name': 'content_renderer',
         'source_manifest': '<(DEPTH)/content/public/app/mojo/content_renderer_manifest.json',
+      },
+      'includes': [
+        '../mojo/public/mojo_application_manifest.gypi',
+      ],
+      'hard_dependency': 1,
+    },
+    {
+      # GN version: //content/public/app:utility_manifest
+      'target_name': 'content_app_utility_manifest',
+      'type': 'none',
+      'variables': {
+        'application_type': 'exe',
+        'application_name': 'content_utility',
+        'source_manifest': '<(DEPTH)/content/public/app/mojo/content_utility_manifest.json',
       },
       'includes': [
         '../mojo/public/mojo_application_manifest.gypi',
@@ -232,6 +260,11 @@
               'dependencies': [
                 'content_utility',
               ],
+            }],
+            # Shard this target into parts to work around linker limitations
+            # on link time code generation builds. See crbug.com/616946
+            ['OS=="win" and buildtype=="Official"', {
+              'msvs_shard': 5,
             }],
           ],
         },
@@ -484,12 +517,12 @@
             '../mojo/mojo_public.gyp:mojo_bindings_java',
             '../net/net.gyp:net',
             '../skia/skia.gyp:skia_mojo',
-            '../ui/android/ui_android.gyp:ui_java',
-            '../ui/touch_selection/ui_touch_selection.gyp:selection_event_type_java',
-            '../ui/touch_selection/ui_touch_selection.gyp:touch_handle_orientation_java',
             '../third_party/android_tools/android_tools.gyp:android_support_v13_javalib',
             '../third_party/WebKit/public/blink_headers.gyp:blink_headers_java',
-            '../ui/mojo/geometry/mojo_bindings.gyp:mojo_geometry_bindings',
+            '../ui/android/ui_android.gyp:ui_java',
+            '../ui/gfx/gfx.gyp:mojo_geometry_bindings',
+            '../ui/touch_selection/ui_touch_selection.gyp:selection_event_type_java',
+            '../ui/touch_selection/ui_touch_selection.gyp:touch_handle_orientation_java',
             'common_aidl',
             'console_message_level_java',
             'content_common',

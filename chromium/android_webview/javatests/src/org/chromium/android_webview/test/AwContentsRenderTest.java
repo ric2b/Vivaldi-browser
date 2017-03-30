@@ -15,6 +15,7 @@ import org.chromium.android_webview.test.util.GraphicsTestUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Feature;
 
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -116,8 +117,18 @@ public class AwContentsRenderTest extends AwTestBase {
         });
         assertTrue(latch.await(AwTestBase.WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS));
 
-        final int width = mAwContents.getContentWidthCss();
-        final int height = mAwContents.getContentHeightCss();
+        final int width = ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return mContainerView.getWidth();
+            }
+        });
+        final int height = ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Integer>() {
+            @Override
+            public Integer call() {
+                return mContainerView.getHeight();
+            }
+        });
         visibleBitmap = GraphicsTestUtils.drawAwContentsOnUiThread(mAwContents, width, height);
 
         // Things that affect DOM page visibility:

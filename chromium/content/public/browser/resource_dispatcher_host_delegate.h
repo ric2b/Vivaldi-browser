@@ -23,6 +23,7 @@ class Sender;
 
 namespace net {
 class AuthChallengeInfo;
+class ClientCertStore;
 class URLRequest;
 }
 
@@ -61,7 +62,6 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
                                 ResourceContext* resource_context,
                                 int child_id,
                                 int route_id,
-                                int request_id,
                                 bool is_content_initiated,
                                 bool must_download,
                                 ScopedVector<ResourceThrottle>* throttles);
@@ -81,7 +81,8 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
       const ResourceRequestInfo::WebContentsGetter& web_contents_getter,
       bool is_main_frame,
       ui::PageTransition page_transition,
-      bool has_user_gesture);
+      bool has_user_gesture,
+      ResourceContext* resource_context);
 
   // Returns true if we should force the given resource to be downloaded.
   // Otherwise, the content layer decides.
@@ -135,8 +136,11 @@ class CONTENT_EXPORT ResourceDispatcherHostDelegate {
   // called for navigation requests.
   virtual NavigationData* GetNavigationData(net::URLRequest* request) const;
 
+  // Get platform ClientCertStore. May return nullptr.
+  virtual std::unique_ptr<net::ClientCertStore> CreateClientCertStore(
+      ResourceContext* resource_context);
+
  protected:
-  ResourceDispatcherHostDelegate();
   virtual ~ResourceDispatcherHostDelegate();
 };
 

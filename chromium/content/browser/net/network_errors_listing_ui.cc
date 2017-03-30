@@ -4,8 +4,12 @@
 
 #include "content/browser/net/network_errors_listing_ui.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/json/json_writer.h"
+#include "base/memory/ref_counted_memory.h"
 #include "base/values.h"
 #include "content/grit/content_resources.h"
 #include "content/public/browser/web_contents.h"
@@ -44,10 +48,10 @@ std::unique_ptr<base::ListValue> GetNetworkErrorData() {
     // Exclude the aborted and pending codes as these don't return a page.
     if (error_code != net::Error::ERR_IO_PENDING &&
         error_code != net::Error::ERR_ABORTED) {
-      base::DictionaryValue* error = new base::DictionaryValue();
+      std::unique_ptr<base::DictionaryValue> error(new base::DictionaryValue());
       error->SetInteger(kErrorIdField, error_code);
       error->SetString(kErrorCodeField, itr.key());
-      error_list->Append(error);
+      error_list->Append(std::move(error));
     }
   }
   return error_list;

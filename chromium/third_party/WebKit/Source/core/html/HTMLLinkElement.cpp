@@ -55,72 +55,13 @@
 #include "platform/Histogram.h"
 #include "platform/MIMETypeRegistry.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "public/platform/WebIconSizesParser.h"
+#include "public/platform/WebSize.h"
 #include "wtf/StdLibExtras.h"
 
 namespace blink {
 
 using namespace HTMLNames;
-
-template <typename CharacterType>
-static void parseSizes(const CharacterType* value, unsigned length, Vector<IntSize>& iconSizes)
-{
-    enum State {
-        ParseStart,
-        ParseWidth,
-        ParseHeight
-    };
-    int width = 0;
-    unsigned start = 0;
-    unsigned i = 0;
-    State state = ParseStart;
-    bool invalid = false;
-    for (; i < length; ++i) {
-        if (state == ParseWidth) {
-            if (value[i] == 'x' || value[i] == 'X') {
-                if (i == start) {
-                    invalid = true;
-                    break;
-                }
-                width = charactersToInt(value + start, i - start);
-                start = i + 1;
-                state = ParseHeight;
-            } else if (value[i] < '0' || value[i] > '9') {
-                invalid = true;
-                break;
-            }
-        } else if (state == ParseHeight) {
-            if (value[i] == ' ') {
-                if (i == start) {
-                    invalid = true;
-                    break;
-                }
-                int height = charactersToInt(value + start, i - start);
-                iconSizes.append(IntSize(width, height));
-                start = i + 1;
-                state = ParseStart;
-            } else if (value[i] < '0' || value[i] > '9') {
-                invalid = true;
-                break;
-            }
-        } else if (state == ParseStart) {
-            if (value[i] >= '0' && value[i] <= '9') {
-                start = i;
-                state = ParseWidth;
-            } else if (value[i] != ' ') {
-                invalid = true;
-                break;
-            }
-        }
-    }
-    if (invalid || state == ParseWidth || (state == ParseHeight && start == i)) {
-        iconSizes.clear();
-        return;
-    }
-    if (state == ParseHeight && i > start) {
-        int height = charactersToInt(value + start, i - start);
-        iconSizes.append(IntSize(width, height));
-    }
-}
 
 static LinkEventSender& linkLoadEventSender()
 {
@@ -132,17 +73,6 @@ static bool styleSheetTypeIsSupported(const String& type)
 {
     String trimmedType = ContentType(type).type();
     return trimmedType.isEmpty() || MIMETypeRegistry::isSupportedStyleSheetMIMEType(trimmedType);
-}
-
-void HTMLLinkElement::parseSizesAttribute(const AtomicString& value, Vector<IntSize>& iconSizes)
-{
-    ASSERT(iconSizes.isEmpty());
-    if (value.isEmpty())
-        return;
-    if (value.is8Bit())
-        parseSizes(value.characters8(), value.length(), iconSizes);
-    else
-        parseSizes(value.characters16(), value.length(), iconSizes);
 }
 
 inline HTMLLinkElement::HTMLLinkElement(Document& document, bool createdByParser)
@@ -358,8 +288,10 @@ void HTMLLinkElement::didSendDOMContentLoadedForLinkPrerender()
 void HTMLLinkElement::valueWasSet()
 {
     setSynchronizedLazyAttribute(HTMLNames::sizesAttr, m_sizes->value());
-    m_iconSizes.clear();
-    parseSizesAttribute(m_sizes->value(), m_iconSizes);
+    WebVector<WebSize> webIconSizes = WebIconSizesParser::parseIconSizes(m_sizes->value());
+    m_iconSizes.resize(webIconSizes.size());
+    for (size_t i = 0; i < webIconSizes.size(); ++i)
+        m_iconSizes[i] = webIconSizes[i];
     process();
 }
 
@@ -531,7 +463,7 @@ void LinkStyle::setCSSStyleSheet(const String& href, const KURL& baseURL, const 
         return;
     }
 
-    CSSParserContext parserContext(m_owner->document(), 0, baseURL, charset);
+    CSSParserContext parserContext(m_owner->document(), nullptr, baseURL, charset);
 
     DEFINE_STATIC_LOCAL(EnumerationHistogram, restoredCachedStyleSheetHistogram, ("Blink.RestoredCachedStyleSheet", 2));
     DEFINE_STATIC_LOCAL(EnumerationHistogram, restoredCachedStyleSheet2Histogram, ("Blink.RestoredCachedStyleSheet2", StyleSheetCacheStatusCount));
@@ -729,6 +661,10 @@ void LinkStyle::process()
 
         m_loading = true;
 
+        String title = m_owner->title();
+        if (!title.isEmpty() && !m_owner->isAlternate() && m_disabledState != EnabledViaScript)
+            document().styleEngine().setPreferredStylesheetSetNameIfNotSet(title);
+
         bool mediaQueryMatches = true;
         LocalFrame* frame = loadingFrame();
         if (!m_owner->media().isEmpty() && frame && frame->document()) {
@@ -747,6 +683,7 @@ void LinkStyle::process()
         // When the link element is created by scripts, load the stylesheets asynchronously but in high priority.
         bool lowPriority = !mediaQueryMatches || m_owner->isAlternate();
         FetchRequest request = builder.build(lowPriority);
+        request.setContentSecurityPolicyNonce(m_owner->fastGetAttribute(HTMLNames::nonceAttr));
         CrossOriginAttributeValue crossOrigin = crossOriginAttributeValue(m_owner->fastGetAttribute(HTMLNames::crossoriginAttr));
         if (crossOrigin != CrossOriginAttributeNotSet) {
             request.setCrossOriginAccessControl(document().getSecurityOrigin(), crossOrigin);

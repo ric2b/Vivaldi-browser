@@ -29,7 +29,7 @@
 #include "web/PageOverlay.h"
 
 #include "core/frame/FrameHost.h"
-#include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/page/Page.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -40,12 +40,14 @@
 #include "public/web/WebViewClient.h"
 #include "web/WebDevToolsAgentImpl.h"
 #include "web/WebViewImpl.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
-PassOwnPtr<PageOverlay> PageOverlay::create(WebViewImpl* viewImpl, PageOverlay::Delegate* delegate)
+std::unique_ptr<PageOverlay> PageOverlay::create(WebViewImpl* viewImpl, PageOverlay::Delegate* delegate)
 {
-    return adoptPtr(new PageOverlay(viewImpl, delegate));
+    return wrapUnique(new PageOverlay(viewImpl, delegate));
 }
 
 PageOverlay::PageOverlay(WebViewImpl* viewImpl, PageOverlay::Delegate* delegate)

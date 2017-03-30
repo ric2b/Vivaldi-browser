@@ -272,6 +272,23 @@
       'includes': [ '../chromium/build/grit_target.gypi' ],
     },
     {
+      'target_name': 'vivaldi_other_resources',
+      'type': 'none',
+      'copies': [
+        {
+          'destination': '<(VIVALDI)/out/vivaldi_resources/other_resources/',
+          'basepath': 'other_resources/<(VIVALDI_RELEASE_KIND)/',
+          'files': [
+            'other_resources/<(VIVALDI_RELEASE_KIND)/default_100_percent/product_icon_128.png',
+            'other_resources/<(VIVALDI_RELEASE_KIND)/default_200_percent/product_icon_128.png',
+            'other_resources/<(VIVALDI_RELEASE_KIND)/win8/Logo.png',
+            'other_resources/<(VIVALDI_RELEASE_KIND)/win8/SecondaryTile.png',
+            'other_resources/<(VIVALDI_RELEASE_KIND)/win8/SmallLogo.png',
+          ],
+        },
+      ],
+    },
+    {
       'target_name': 'vivaldi_combined_component_resources',
       'type': 'none',
       'dependencies': [
@@ -291,6 +308,7 @@
         'locale_resources',
         'theme_resources',
         'unscaled_resources',
+        'vivaldi_other_resources',
       ]
     },
   ],

@@ -297,6 +297,10 @@ void RemoteChannelImpl::Stop() {
   main().remote_channel_weak_factory.InvalidateWeakPtrs();
 }
 
+void RemoteChannelImpl::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {
+  // TODO(vollick): add support for compositor worker.
+}
+
 bool RemoteChannelImpl::SupportsImplScrolling() const {
   return true;
 }
@@ -334,7 +338,12 @@ void RemoteChannelImpl::SetRendererCapabilitiesMainCopy(
 
 void RemoteChannelImpl::BeginMainFrameNotExpectedSoon() {}
 
-void RemoteChannelImpl::DidCommitAndDrawFrame() {}
+void RemoteChannelImpl::DidCommitAndDrawFrame() {
+  DCHECK(task_runner_provider_->IsImplThread());
+  MainThreadTaskRunner()->PostTask(
+      FROM_HERE, base::Bind(&RemoteChannelImpl::DidCommitAndDrawFrameOnMain,
+                            impl().remote_channel_weak_ptr));
+}
 
 void RemoteChannelImpl::SetAnimationEvents(
     std::unique_ptr<AnimationEvents> queue) {}
@@ -397,6 +406,11 @@ void RemoteChannelImpl::SendMessageProto(
 void RemoteChannelImpl::DidCompleteSwapBuffersOnMain() {
   DCHECK(task_runner_provider_->IsMainThread());
   main().layer_tree_host->DidCompleteSwapBuffers();
+}
+
+void RemoteChannelImpl::DidCommitAndDrawFrameOnMain() {
+  DCHECK(task_runner_provider_->IsMainThread());
+  main().layer_tree_host->DidCommitAndDrawFrame();
 }
 
 void RemoteChannelImpl::DidLoseOutputSurfaceOnMain() {

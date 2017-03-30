@@ -37,9 +37,6 @@ class CC_EXPORT CompositorTimingHistory {
 
   void AsValueInto(base::trace_event::TracedValue* state) const;
 
-  // Deprecated: http://crbug.com/552004
-  virtual base::TimeDelta BeginMainFrameToCommitDurationEstimate() const;
-
   // The main thread responsiveness depends heavily on whether or not the
   // on_critical_path flag is set, so we record response times separately.
   virtual base::TimeDelta BeginMainFrameQueueDurationCriticalEstimate() const;
@@ -84,16 +81,11 @@ class CC_EXPORT CompositorTimingHistory {
   void SetBeginMainFrameCommittingContinuously(bool active);
   void SetCompositorDrawingContinuously(bool active);
 
-  bool ShouldReportUma() const;
-
   static std::unique_ptr<UMAReporter> CreateUMAReporter(UMACategory category);
   virtual base::TimeTicks Now() const;
 
   bool using_synchronous_renderer_compositor_;
   bool enabled_;
-
-  // Used to limit the recorded UMA data to once every N frames.
-  int draw_count_;
 
   // Used to calculate frame rates of Main and Impl threads.
   bool did_send_begin_main_frame_;
@@ -104,7 +96,6 @@ class CC_EXPORT CompositorTimingHistory {
   base::TimeTicks new_active_tree_draw_end_time_prev_;
   base::TimeTicks draw_end_time_prev_;
 
-  RollingTimeDeltaHistory begin_main_frame_sent_to_commit_duration_history_;
   RollingTimeDeltaHistory begin_main_frame_queue_duration_history_;
   RollingTimeDeltaHistory begin_main_frame_queue_duration_critical_history_;
   RollingTimeDeltaHistory begin_main_frame_queue_duration_not_critical_history_;

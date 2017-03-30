@@ -19,7 +19,6 @@ buildflag_header("media_features") {
     "ENABLE_AC3_EAC3_AUDIO_DEMUXING=$enable_ac3_eac3_audio_demuxing",
     "ENABLE_HEVC_DEMUXING=$enable_hevc_demuxing",
     "ENABLE_MSE_MPEG2TS_STREAM_PARSER=$enable_mse_mpeg2ts_stream_parser",
-    "ENABLE_MP4_VP9_DEMUXING=0",
   ]
 }
 
@@ -77,6 +76,22 @@ source_set("cdm_api") {
   ]
 }
 
+# TODO(jrummell): This should be in media/filters/BUILD.gn (which doesn't
+# currently exist). http://crbug.com/613033
+source_set("filters_common") {
+  sources = [
+    "filters/file_data_source.h",
+  ]
+  if (media_use_ffmpeg) {
+    sources += [
+      "filters/blocking_url_protocol.h",
+      "filters/ffmpeg_glue.h",
+    ]
+  }
+}
+
+# TODO(jrummell): Each subdirectory should have it's own BUILD.gn, and then
+# this component can depend on them.  http://crbug.com/613033
 component("media") {
   sources = [
     "cdm/aes_decryptor.cc",
@@ -102,6 +117,8 @@ component("media") {
     "filters/audio_clock.h",
     "filters/audio_renderer_algorithm.cc",
     "filters/audio_renderer_algorithm.h",
+    "filters/audio_timestamp_validator.cc",
+    "filters/audio_timestamp_validator.h",
     "filters/chunk_demuxer.cc",
     "filters/chunk_demuxer.h",
     "filters/context_3d.h",
@@ -120,7 +137,6 @@ component("media") {
     "filters/default_media_permission.cc",
     "filters/default_media_permission.h",
     "filters/file_data_source.cc",
-    "filters/file_data_source.h",
     "filters/frame_processor.cc",
     "filters/frame_processor.h",
     "filters/gpu_video_decoder.cc",
@@ -241,7 +257,9 @@ component("media") {
   ]
 
   public_configs = [ "//third_party/libwebm:libwebm_config" ]
-  public_deps = []
+  public_deps = [
+    ":filters_common",
+  ]
 
   include_dirs = [ "." ]
   if (media_use_ffmpeg) {
@@ -251,14 +269,12 @@ component("media") {
       "filters/audio_file_reader.cc",
       "filters/audio_file_reader.h",
       "filters/blocking_url_protocol.cc",
-      "filters/blocking_url_protocol.h",
       "filters/ffmpeg_audio_decoder.cc",
       "filters/ffmpeg_audio_decoder.h",
       "filters/ffmpeg_bitstream_converter.h",
       "filters/ffmpeg_demuxer.cc",
       "filters/ffmpeg_demuxer.h",
       "filters/ffmpeg_glue.cc",
-      "filters/ffmpeg_glue.h",
       "filters/ffmpeg_video_decoder.cc",
       "filters/ffmpeg_video_decoder.h",
       "filters/in_memory_url_protocol.cc",
@@ -323,8 +339,6 @@ component("media") {
     deps += [
       "//media/base/android",
       "//media/base/android:media_jni_headers",
-      "//media/capture/video/android:capture_java",
-      "//media/capture/video/android:capture_jni_headers",
     ]
 
     # Only 64 bit builds are using android-21 NDK library, check common.gypi
@@ -349,8 +363,10 @@ component("media") {
   if (is_mac) {
     public_deps += [ "//media/base/mac" ]
     libs += [
-      "CoreVideo.framework",
-      "OpenGL.framework",
+      "ApplicationServices.framework",  # Temporary hack around https://crbug.com/620127. Remove after https://crbug.com/622481 is fixed.
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+      "Foundation.framework",
     ]
   }
 
@@ -360,12 +376,6 @@ component("media") {
 
   if (is_win) {
     deps += [ "//media/base/win" ]
-    libs += [
-      "mf.lib",
-      "mfplat.lib",
-      "mfreadwrite.lib",
-      "mfuuid.lib",
-    ]
   }
 
   if (proprietary_codecs) {
@@ -452,7 +462,6 @@ component("media") {
     ":shared_memory_support",
     "//media/audio",
     "//media/base",
-    "//media/capture",
     "//third_party/opus",
   ]
 
@@ -467,12 +476,21 @@ component("media") {
     "//skia",
     "//third_party/libwebm",
     "//third_party/libyuv",
-    "//third_party/opus",
     "//ui/events:events_base",
     "//ui/gfx",
     "//ui/gfx/geometry",
     "//ui/gl:gl",
     "//url",
+  ]
+}
+
+source_set("cdm_paths") {
+  sources = [
+    "cdm/cdm_paths.cc",
+    "cdm/cdm_paths.h",
+  ]
+  deps = [
+    "//base",
   ]
 }
 
@@ -512,6 +530,7 @@ test("media_unittests") {
     "filters/audio_clock_unittest.cc",
     "filters/audio_decoder_selector_unittest.cc",
     "filters/audio_renderer_algorithm_unittest.cc",
+    "filters/audio_timestamp_validator_unittest.cc",
     "filters/chunk_demuxer_unittest.cc",
     "filters/decrypting_audio_decoder_unittest.cc",
     "filters/decrypting_demuxer_stream_unittest.cc",
@@ -568,6 +587,7 @@ test("media_unittests") {
 
   deps = [
     ":cdm_api",
+    ":cdm_paths",
     ":media",
     ":test_support",
     "//base/test:test_support",
@@ -577,7 +597,6 @@ test("media_unittests") {
     "//media/audio:unittests",
     "//media/base:test_support",
     "//media/base:unittests",
-    "//media/capture:unittests",
     "//media/test:pipeline_integration_tests",
     "//skia",  # Direct dependency required to inherit config.
     "//testing/gmock",
@@ -599,9 +618,11 @@ test("media_unittests") {
     deps += [
       "//media/base/android:media_java",
       "//media/base/android:unittests",
-      "//media/capture/video/android:capture_java",
       "//ui/android:ui_java",
     ]
+  }
+  if (is_mac || is_ios) {
+    deps += [ "//media/base/mac:unittests" ]
   }
 
   # If ExternalClearKey is built, we can test CdmAdapter.
@@ -708,15 +729,16 @@ test("media_perftests") {
     "//third_party/widevine/cdm:version_h",
     "//ui/gfx:test_support",
   ]
-  if (is_android) {
-    deps += [ "//ui/gl" ]
-  }
   if (media_use_ffmpeg) {
     deps += [ "//third_party/ffmpeg" ]  # Direct dependency required to inherit config.
   }
 
   # This target should not require the Chrome executable to run.
   assert_no_deps = [ "//chrome" ]
+
+  data = [
+    "test/data/",
+  ]
 }
 
 # For running the subset of media_unittests that might require audio hardware
@@ -766,6 +788,7 @@ component("shared_memory_support") {
     "base/audio_parameters.h",
     "base/audio_point.cc",
     "base/audio_point.h",
+    "base/audio_sample_types.h",
     "base/channel_layout.cc",
     "base/channel_layout.h",
     "base/limits.h",

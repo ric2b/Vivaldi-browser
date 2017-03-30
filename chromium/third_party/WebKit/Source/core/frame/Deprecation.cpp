@@ -99,7 +99,6 @@ void Deprecation::warnOnDeprecatedProperties(const LocalFrame* frame, CSSPropert
     if (!message.isEmpty()) {
         host->deprecation().suppress(unresolvedProperty);
         ConsoleMessage* consoleMessage = ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, message);
-        consoleMessage->collectCallStack();
         frame->console().addMessage(consoleMessage);
     }
 }
@@ -123,7 +122,6 @@ void Deprecation::countDeprecation(const LocalFrame* frame, UseCounter::Feature 
         host->useCounter().recordMeasurement(feature);
         ASSERT(!deprecationMessage(feature).isEmpty());
         ConsoleMessage* consoleMessage = ConsoleMessage::create(DeprecationMessageSource, WarningMessageLevel, deprecationMessage(feature));
-        consoleMessage->collectCallStack();
         frame->console().addMessage(consoleMessage);
     }
 }
@@ -180,7 +178,7 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
         return replacedBy("'console.markTimeline'", "'console.timeStamp'");
 
     case UseCounter::FileError:
-        return "FileError is deprecated. Please use the 'name' or 'message' attributes of DOMError rather than 'code'.";
+        return String::format("'FileError is deprecated and will be removed in %s. Please use the 'name' or 'message' attributes of the error rather than 'code'. See https://www.chromestatus.com/features/6687420359639040 for more details.", milestoneString(54));
 
     case UseCounter::CSSStyleSheetInsertRuleOptionalArg:
         return "Calling CSSStyleSheet.insertRule() with one argument is deprecated. Please pass the index argument as well: insertRule(x, 0).";
@@ -238,9 +236,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
 
     case UseCounter::PrefixedCancelRequestAnimationFrame:
         return "'webkitCancelRequestAnimationFrame' is vendor-specific. Please use the standard 'cancelAnimationFrame' instead.";
-
-    case UseCounter::SyncXHRWithCredentials:
-        return "Setting 'XMLHttpRequest.withCredentials' for synchronous requests is deprecated.";
 
     case UseCounter::PictureSourceSrc:
         return "<source src> with a <picture> parent is invalid and therefore ignored. Please use <source srcset> instead.";
@@ -309,6 +304,11 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::EncryptedMediaInsecureOrigin:
         return "requestMediaKeySystemAccess() is deprecated on insecure origins in the specification. Support will be removed in the future. You should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
 
+    case UseCounter::MediaSourceAbortRemove:
+        return "Using SourceBuffer.abort() to abort remove()'s asynchronous range removal is deprecated due to specification change. Support will be removed in the future. You should instead await 'updateend'. abort() is intended to only abort an asynchronous media append or reset parser state. See https://www.chromestatus.com/features/6107495151960064 for more details.";
+    case UseCounter::MediaSourceDurationTruncatingBuffered:
+        return "Setting MediaSource.duration below the highest presentation timestamp of any buffered coded frames is deprecated due to specification change. Support for implicit removal of truncated buffered media will be removed in the future. You should instead perform explicit remove(newDuration, oldDuration) on all sourceBuffers, where newDuration < oldDuration. See https://www.chromestatus.com/features/6107495151960064 for more details.";
+
     case UseCounter::ApplicationCacheManifestSelectInsecureOrigin:
     case UseCounter::ApplicationCacheAPIInsecureOrigin:
         return "Use of the Application Cache is deprecated on insecure origins. Support will be removed in the future. You should consider switching your application to a secure origin, such as HTTPS. See https://goo.gl/rStTGz for more details.";
@@ -335,17 +335,11 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::PrefixedPerformanceResourceTimingBufferFull:
         return replacedBy("'Performance.onwebkitresourcetimingbufferfull'", "'Performance.onresourcetimingbufferfull'");
 
-    case UseCounter::BluetoothDeviceInstanceId:
-        return replacedBy("'BluetoothDevice.instanceID'", "'BluetoothDevice.id'");
-
-    case UseCounter::BluetoothDeviceConnectGATT:
-        return replacedWillBeRemoved("'BluetoothDevice.connectGATT'", "'BluetoothDevice.gatt.connect'", 52, "5264933985976320");
-
     case UseCounter::MediaStreamTrackGetSources:
         return "MediaStreamTrack.getSources is deprecated. See https://www.chromestatus.com/feature/4765305641369600 for more details.";
 
     case UseCounter::V8TouchEvent_InitTouchEvent_Method:
-        return replacedWillBeRemoved("'TouchEvent.initTouchEvent'", "the TouchEvent constructor", 53, "5730982598541312");
+        return replacedWillBeRemoved("'TouchEvent.initTouchEvent'", "the TouchEvent constructor", 54, "5730982598541312");
 
     case UseCounter::ObjectObserve:
         return willBeRemoved("'Object.observe'", 50, "6147094632988672");
@@ -359,9 +353,6 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
     case UseCounter::HTMLKeygenElement:
         return willBeRemoved("The <keygen> element", 54, "5716060992962560");
 
-    case UseCounter::ResultsAttribute:
-        return willBeRemoved("'results' attribute", 53, "5738199536107520");
-
     case UseCounter::WebAnimationsEasingAsFunctionLinear:
         return String::format("Specifying animation easing as a function is deprecated and all support will be removed in %s, at which point this will throw a TypeError. This warning may have been triggered by the Web Animations or Polymer polyfills. See http://crbug.com/601672 for details.", milestoneString(54));
 
@@ -372,28 +363,19 @@ String Deprecation::deprecationMessage(UseCounter::Feature feature)
         return String::format("EME requires that contentType strings accepted by requestMediaKeySystemAccess() include codecs. Non-standard support for contentType strings without codecs will be removed in %s. Please specify the desired codec(s) as part of the contentType.", milestoneString(54));
 
     case UseCounter::V8KeyboardEvent_KeyIdentifier_AttributeGetter:
-        return willBeRemoved("'KeyboardEvent.keyIdentifier'", 53, "5316065118650368");
-
-    case UseCounter::During_Microtask_Alert:
-        return willBeRemoved("Invoking 'alert()' during microtask execution", 53, "5647113010544640");
-
-    case UseCounter::During_Microtask_Confirm:
-        return willBeRemoved("Invoking 'confirm()' during microtask execution", 53, "5647113010544640");
-
-    case UseCounter::During_Microtask_Print:
-        return willBeRemoved("Invoking 'print()' during microtask execution", 53, "5647113010544640");
-
-    case UseCounter::During_Microtask_Prompt:
-        return willBeRemoved("Invoking 'prompt()' during microtask execution", 53, "5647113010544640");
+        return willBeRemoved("'KeyboardEvent.keyIdentifier'", 54, "5316065118650368");
 
     case UseCounter::During_Microtask_SyncXHR:
-        return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 53, "5647113010544640");
+        return willBeRemoved("Invoking 'send()' on a sync XHR during microtask execution", 54, "5647113010544640");
 
     case UseCounter::MediaStreamOnEnded:
         return willBeRemoved("The MediaStream 'ended' event", 54, "5730404371791872");
 
     case UseCounter::UntrustedEventDefaultHandled:
         return String::format("A DOM event generated from JavaScript has triggered a default action inside the browser. This behavior is non-standard and will be removed in %s. See https://www.chromestatus.com/features/5718803933560832 for more details.", milestoneString(53));
+
+    case UseCounter::UnloadHandler_Navigation:
+        return "Navigating in the unload handler is deprecated and will be removed.";
 
     case UseCounter::TouchStartUserGestureUtilized:
         return willBeRemoved("Performing operations that require explicit user interaction on touchstart events", 54, "5649871251963904");

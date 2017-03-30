@@ -12,36 +12,39 @@
   <template>
     <style include="shared-style">
       :host {
-        display: flex;
-        flex-direction: column;
-        position: relative;
+        display: block;
       }
 
       #infinite-list {
-        flex: 1;
-        padding-top: var(--first-card-padding-top);
+        height: 100%;
       }
 
       paper-item {
         -webkit-user-select: none;
         cursor: pointer;
         font: inherit;
+        white-space: nowrap;
       }
 
       paper-item:hover {
         background: #eaeaea;
       }
+
+      history-item {
+        --history-item-padding-side: var(--card-padding-side);
+      }
     </style>
     <div id="no-results" class="centered-message"
-        hidden$="{{hasResults(historyData_.length)}}">
+        hidden$="[[hasResults(historyData_.length)]]">
       {{noResultsMessage_(searchedTerm, querying)}}
     </div>
     <iron-list items="{{historyData_}}" as="item" id="infinite-list"
-        hidden$="{{!hasResults(historyData_.length)}}">
+        hidden$="[[!hasResults(historyData_.length)]]">
       <template>
         <history-item item="[[item]]"
             starred="[[item.starred]]"
             selected="{{item.selected}}"
+            is-first-item="[[isFirstItem_(index)]]"
             is-card-start="[[isCardStart_(item, index, historyData_.length)]]"
             is-card-end="[[isCardEnd_(item, index, historyData_.length)]]"
             has-time-gap="[[needsTimeGap_(item, index, historyData_.length)]]"

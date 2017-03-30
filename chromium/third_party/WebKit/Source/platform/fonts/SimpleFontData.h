@@ -35,9 +35,9 @@
 #include "platform/fonts/TypesettingFeatures.h"
 #include "platform/fonts/opentype/OpenTypeVerticalData.h"
 #include "platform/geometry/FloatRect.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/text/StringHash.h"
+#include <memory>
 
 namespace blink {
 
@@ -111,7 +111,7 @@ public:
 
     Glyph glyphForCharacter(UChar32) const;
 
-    bool isCustomFont() const override { return m_customFontData; }
+    bool isCustomFont() const override { return m_customFontData.get(); }
     bool isLoading() const override { return m_customFontData ? m_customFontData->isLoading() : false; }
     bool isLoadingFallback() const override { return m_customFontData ? m_customFontData->isLoadingFallback() : false; }
     bool isSegmented() const override;
@@ -144,7 +144,7 @@ private:
 
     FontPlatformData m_platformData;
 
-    mutable OwnPtr<GlyphMetricsMap<FloatRect>> m_glyphToBoundsMap;
+    mutable std::unique_ptr<GlyphMetricsMap<FloatRect>> m_glyphToBoundsMap;
     mutable GlyphMetricsMap<float> m_glyphToWidthMap;
 
     bool m_isTextOrientationFallback;
@@ -161,7 +161,7 @@ private:
         USING_FAST_MALLOC(DerivedFontData);
         WTF_MAKE_NONCOPYABLE(DerivedFontData);
     public:
-        static PassOwnPtr<DerivedFontData> create(bool forCustomFont);
+        static std::unique_ptr<DerivedFontData> create(bool forCustomFont);
         ~DerivedFontData();
 
         bool forCustomFont;
@@ -177,10 +177,7 @@ private:
         }
     };
 
-#if COMPILER(MSVC)
-    friend struct ::WTF::OwnedPtrDeleter<DerivedFontData>;
-#endif
-    mutable OwnPtr<DerivedFontData> m_derivedFontData;
+    mutable std::unique_ptr<DerivedFontData> m_derivedFontData;
 
     RefPtr<CustomFontData> m_customFontData;
 };
@@ -196,7 +193,7 @@ ALWAYS_INLINE FloatRect SimpleFontData::boundsForGlyph(Glyph glyph) const
 
     bounds = platformBoundsForGlyph(glyph);
     if (!m_glyphToBoundsMap)
-        m_glyphToBoundsMap = adoptPtr(new GlyphMetricsMap<FloatRect>);
+        m_glyphToBoundsMap = wrapUnique(new GlyphMetricsMap<FloatRect>);
     m_glyphToBoundsMap->setMetricsForGlyph(glyph, bounds);
     return bounds;
 }

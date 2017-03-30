@@ -23,6 +23,7 @@
 #include "net/tools/quic/quic_epoll_alarm_factory.h"
 #include "net/tools/quic/quic_epoll_connection_helper.h"
 #include "net/tools/quic/quic_packet_writer_wrapper.h"
+#include "net/tools/quic/quic_simple_server_session_helper.h"
 #include "net/tools/quic/quic_time_wait_list_manager.h"
 #include "net/tools/quic/test_tools/mock_quic_time_wait_list_manager.h"
 #include "net/tools/quic/test_tools/quic_dispatcher_peer.h"
@@ -56,6 +57,7 @@ class TestQuicSpdyServerSession : public QuicServerSessionBase {
                             QuicCompressedCertsCache* compressed_certs_cache)
       : QuicServerSessionBase(config,
                               connection,
+                              nullptr,
                               nullptr,
                               crypto_config,
                               compressed_certs_cache),
@@ -103,6 +105,8 @@ class TestDispatcher : public QuicDispatcher {
             QuicSupportedVersions(),
             std::unique_ptr<QuicEpollConnectionHelper>(
                 new QuicEpollConnectionHelper(eps, QuicAllocator::BUFFER_POOL)),
+            std::unique_ptr<QuicServerSessionBase::Helper>(
+                new QuicSimpleServerSessionHelper(QuicRandom::GetInstance())),
             std::unique_ptr<QuicEpollAlarmFactory>(
                 new QuicEpollAlarmFactory(eps))) {}
 
@@ -466,7 +470,7 @@ class MockQuicCryptoServerStream : public QuicCryptoServerStream {
  public:
   MockQuicCryptoServerStream(const QuicCryptoServerConfig& crypto_config,
                              QuicCompressedCertsCache* compressed_certs_cache,
-                             QuicSession* session)
+                             QuicServerSessionBase* session)
       : QuicCryptoServerStream(&crypto_config,
                                compressed_certs_cache,
                                FLAGS_enable_quic_stateless_reject_support,
@@ -489,9 +493,9 @@ struct StatelessRejectTestParams {
 
   friend std::ostream& operator<<(std::ostream& os,
                                   const StatelessRejectTestParams& p) {
-    os << "  enable_stateless_rejects_via_flag: "
+    os << "{  enable_stateless_rejects_via_flag: "
        << p.enable_stateless_rejects_via_flag << std::endl;
-    os << "{ client_supports_statelesss_rejects: "
+    os << " client_supports_statelesss_rejects: "
        << p.client_supports_statelesss_rejects << std::endl;
     os << "  crypto_handshake_successful: " << p.crypto_handshake_successful
        << " }";
@@ -571,13 +575,13 @@ class QuicDispatcherStatelessRejectTest
   MockQuicCryptoServerStream* crypto_stream1_;
 };
 
+// Parameterized test for stateless rejects.  Should test all
+// combinations of enabling/disabling, reject/no-reject for stateless
+// rejects.
 INSTANTIATE_TEST_CASE_P(QuicDispatcherStatelessRejectTests,
                         QuicDispatcherStatelessRejectTest,
                         ::testing::ValuesIn(GetStatelessRejectTestParams()));
 
-// Parameterized test for stateless rejects.  Should test all
-// combinations of enabling/disabling, reject/no-reject for stateless
-// rejects.
 TEST_P(QuicDispatcherStatelessRejectTest, ParameterizedBasicTest) {
   CreateTimeWaitListManager();
 
@@ -615,6 +619,45 @@ TEST_P(QuicDispatcherStatelessRejectTest, ParameterizedBasicTest) {
             Invoke(this, &QuicDispatcherTest::ValidatePacket)));
   }
   ProcessPacket(client_address, connection_id, true, false, "data");
+}
+
+TEST_P(QuicDispatcherStatelessRejectTest, CheapRejects) {
+  FLAGS_quic_use_cheap_stateless_rejects = true;
+  CreateTimeWaitListManager();
+
+  IPEndPoint client_address(net::test::Loopback4(), 1);
+  QuicConnectionId connection_id = 1;
+  if (GetParam().enable_stateless_rejects_via_flag) {
+    EXPECT_CALL(dispatcher_, CreateQuicSession(connection_id, client_address))
+        .Times(0);
+  } else {
+    EXPECT_CALL(dispatcher_, CreateQuicSession(connection_id, client_address))
+        .WillOnce(testing::Return(
+            CreateSessionBasedOnTestParams(connection_id, client_address)));
+  }
+
+  VLOG(1) << "ExpectStatelessReject: " << ExpectStatelessReject();
+  VLOG(1) << "Params: " << GetParam();
+  // Process the first packet for the connection.
+  // clang-format off
+  CryptoHandshakeMessage client_hello = CryptoTestUtils::Message(
+      "CHLO",
+      "AEAD", "AESG",
+      "KEXS", "C255",
+      "COPT", "SREJ",
+      "NONC", "1234567890123456789012",
+      "VER\0", "Q025",
+      "$padding", static_cast<int>(kClientHelloMinimumSize),
+      nullptr);
+  // clang-format on
+
+  ProcessPacket(client_address, connection_id, true, false,
+                client_hello.GetSerialized().AsStringPiece().as_string());
+
+  if (GetParam().enable_stateless_rejects_via_flag) {
+    EXPECT_EQ(true,
+              time_wait_list_manager_->IsConnectionIdInTimeWait(connection_id));
+  }
 }
 
 // Verify the stopgap test: Packets with truncated connection IDs should be

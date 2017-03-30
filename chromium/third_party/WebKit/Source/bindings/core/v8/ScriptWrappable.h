@@ -31,7 +31,6 @@
 #ifndef ScriptWrappable_h
 #define ScriptWrappable_h
 
-#include "bindings/core/v8/ScriptWrappableVisitor.h"
 #include "bindings/core/v8/WrapperTypeInfo.h"
 #include "core/CoreExport.h"
 #include "platform/heap/Handle.h"
@@ -100,24 +99,19 @@ public:
     {
         ASSERT(!wrapper.IsEmpty());
         if (UNLIKELY(containsWrapper())) {
-            wrapper = newLocalWrapper(isolate);
+            wrapper = mainWorldWrapper(isolate);
             return false;
         }
-        m_wrapper.Reset(isolate, wrapper);
-        wrapperTypeInfo->configureWrapper(&m_wrapper);
-        m_wrapper.SetWeak();
+        m_mainWorldWrapper.Reset(isolate, wrapper);
+        wrapperTypeInfo->configureWrapper(&m_mainWorldWrapper);
+        m_mainWorldWrapper.SetWeak();
         ASSERT(containsWrapper());
         return true;
     }
 
-    v8::Local<v8::Object> newLocalWrapper(v8::Isolate* isolate) const
-    {
-        return v8::Local<v8::Object>::New(isolate, m_wrapper);
-    }
-
     bool isEqualTo(const v8::Local<v8::Object>& other) const
     {
-        return m_wrapper == other;
+        return m_mainWorldWrapper == other;
     }
 
     // Provides a way to convert Node* to ScriptWrappable* without including
@@ -139,23 +133,23 @@ public:
 
     bool setReturnValue(v8::ReturnValue<v8::Value> returnValue)
     {
-        returnValue.Set(m_wrapper);
+        returnValue.Set(m_mainWorldWrapper);
         return containsWrapper();
     }
 
     void setReference(const v8::Persistent<v8::Object>& parent, v8::Isolate* isolate)
     {
-        isolate->SetReference(parent, m_wrapper);
+        isolate->SetReference(parent, m_mainWorldWrapper);
     }
 
-    bool containsWrapper() const { return !m_wrapper.IsEmpty(); }
+    bool containsWrapper() const { return !m_mainWorldWrapper.IsEmpty(); }
 
     /**
      *  Mark wrapper of this ScriptWrappable as alive in V8. Only marks
      *  wrapper in the main world. To mark wrappers in all worlds call
      *  ScriptWrappableVisitor::markWrapper(ScriptWrappable*, v8::Isolate*)
      */
-    void markWrapper(v8::Isolate*) const;
+    void markWrapper(const WrapperVisitor*) const;
 
     DECLARE_VIRTUAL_TRACE_WRAPPERS() {};
 
@@ -169,7 +163,18 @@ public:
     // already broken), we must not hit the RELEASE_ASSERT.
 
 private:
-    v8::Persistent<v8::Object> m_wrapper;
+    // These classes are exceptionally allowed to use mainWorldWrapper().
+    friend class DOMDataStore;
+    friend class V8HiddenValue;
+    friend class V8PrivateProperty;
+    friend class WebGLRenderingContextBase;
+
+    v8::Local<v8::Object> mainWorldWrapper(v8::Isolate* isolate) const
+    {
+        return v8::Local<v8::Object>::New(isolate, m_mainWorldWrapper);
+    }
+
+    v8::Persistent<v8::Object> m_mainWorldWrapper;
 };
 
 // Defines 'wrapperTypeInfo' virtual method which returns the WrapperTypeInfo of

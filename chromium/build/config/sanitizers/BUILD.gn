@@ -4,6 +4,7 @@
 
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
+import("//build/config/clang/clang.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/toolchain.gni")
 
@@ -27,6 +28,9 @@ group("deps") {
       ":options_sources",
     ]
   }
+  if (use_afl) {
+    deps += [ "//third_party/afl" ]
+  }
 }
 
 group("deps_no_options") {
@@ -38,6 +42,21 @@ group("deps_no_options") {
       ":default_sanitizer_ldflags",
     ]
     deps = []
+
+    data = [
+      "//tools/valgrind/asan/",
+    ]
+    if (is_win) {
+      exe = ".exe"
+    } else {
+      exe = ""
+    }
+    data += [ "$clang_base_path/bin/llvm-symbolizer${exe}" ]
+    if (is_linux) {
+      # llvm-symbolizer needs this.
+      data += [ "$clang_base_path/lib/libstdc++.so.6" ]
+    }
+
     if (use_prebuilt_instrumented_libraries) {
       deps += [ "//third_party/instrumented_libraries:deps" ]
     }
@@ -45,6 +64,7 @@ group("deps_no_options") {
       public_deps = [
         "//buildtools/third_party/libc++:libcxx_proxy",
       ]
+      data += [ "$root_out_dir/libc++.so" ]
     }
     if (is_mac) {
       data_deps = [
@@ -54,10 +74,10 @@ group("deps_no_options") {
   }
 }
 
-if (is_mac) {
+if (is_mac && using_sanitizer) {
   copy("copy_asan_runtime") {
     sources = [
-      "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/darwin/libclang_rt.asan_osx_dynamic.dylib",
+      "$clang_base_path/lib/clang/$clang_version/lib/darwin/libclang_rt.asan_osx_dynamic.dylib",
     ]
     outputs = [
       "$root_out_dir/{{source_file_part}}",
@@ -126,6 +146,9 @@ config("default_sanitizer_ldflags") {
     }
     if (is_ubsan || is_ubsan_security) {
       ldflags += [ "-fsanitize=undefined" ]
+    }
+    if (is_ubsan_null) {
+      ldflags += [ "-fsanitize=null" ]
     }
     if (is_ubsan_vptr) {
       ldflags += [ "-fsanitize=vptr" ]
@@ -210,7 +233,7 @@ config("asan_flags") {
       ]
       # TODO(GYP): deal with mac_bundles.
     } else if (is_win) {
-      assert(target_cpu == "x86", "WinASan is 32-bit only currently")
+      assert(current_cpu == "x86", "WinASan is 32-bit only currently")
       if (is_component_build) {
         libs = [
           "clang_rt.asan_dynamic-i386.lib",
@@ -261,7 +284,7 @@ config("coverage_flags") {
       "-mllvm",
       "-sanitizer-coverage-prune-blocks=1",
     ]
-    if (target_cpu == "arm") {
+    if (current_cpu == "arm") {
       # http://crbug.com/517105
       cflags += [
         "-mllvm",
@@ -352,12 +375,18 @@ config("ubsan_no_recover") {
 
 config("ubsan_security_flags") {
   if (is_ubsan_security) {
-    ubsan_blacklist_path =
-        rebase_path("//tools/ubsan/blacklist.txt", root_build_dir)
+    ubsan_security_blacklist_path =
+        rebase_path("//tools/ubsan/security_blacklist.txt", root_build_dir)
     cflags = [
-      "-fsanitize=signed-integer-overflow,shift",
-      "-fsanitize-blacklist=$ubsan_blacklist_path",
+      "-fsanitize=signed-integer-overflow,shift,vptr",
+      "-fsanitize-blacklist=$ubsan_security_blacklist_path",
     ]
+  }
+}
+
+config("ubsan_null_flags") {
+  if (is_ubsan_null) {
+    cflags = [ "-fsanitize=null" ]
   }
 }
 
@@ -383,6 +412,7 @@ all_sanitizer_configs = [
   ":tsan_flags",
   ":ubsan_flags",
   ":ubsan_no_recover",
+  ":ubsan_null_flags",
   ":ubsan_security_flags",
   ":ubsan_vptr_flags",
 ]

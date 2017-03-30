@@ -18,13 +18,16 @@
 #include "base/memory/singleton.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/notifications/notification.h"
+#include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/common/features.h"
 #include "content/public/browser/platform_notification_service.h"
 #include "content/public/common/persistent_notification_status.h"
 #include "third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h"
 
 class NotificationDelegate;
 class NotificationDisplayService;
+class ScopedKeepAlive;
 
 namespace content {
 class BrowserContext;
@@ -40,13 +43,6 @@ class PushMessagingBrowserTest;
 class PlatformNotificationServiceImpl
     : public content::PlatformNotificationService {
  public:
-  // Things you can do to a notification.
-  enum NotificationOperation {
-    NOTIFICATION_CLICK,
-    NOTIFICATION_CLOSE,
-    NOTIFICATION_SETTINGS
-  };
-
   // Returns the active instance of the service in the browser process. Safe to
   // be called from any thread.
   static PlatformNotificationServiceImpl* GetInstance();
@@ -54,7 +50,7 @@ class PlatformNotificationServiceImpl
   // Load the profile corresponding to |profile_id| and perform the
   // |operation| on the given notification once it has been loaded.
   void ProcessPersistentNotificationOperation(
-      NotificationOperation operation,
+      NotificationCommon::Operation operation,
       const std::string& profile_id,
       bool incognito,
       const GURL& origin,
@@ -78,10 +74,6 @@ class PlatformNotificationServiceImpl
                                      int64_t persistent_notification_id,
                                      const GURL& origin,
                                      bool by_user);
-
-
-  // Open the Notification settings screen when clicking the right button.
-  void OpenNotificationSettings(content::BrowserContext* browser_context);
 
   // content::PlatformNotificationService implementation.
   blink::mojom::PermissionStatus CheckPermissionOnUIThread(
@@ -125,6 +117,13 @@ class PlatformNotificationServiceImpl
   PlatformNotificationServiceImpl();
   ~PlatformNotificationServiceImpl() override;
 
+  // Persistent notifications fired through the delegate do not care about the
+  // lifetime of the Service Worker responsible for executing the event.
+  void OnClickEventDispatchComplete(
+      content::PersistentNotificationStatus status);
+  void OnCloseEventDispatchComplete(
+      content::PersistentNotificationStatus status);
+
   // Creates a new Web Notification-based Notification object.
   // TODO(peter): |delegate| can be a scoped_refptr, but properly passing this
   // through requires changing a whole lot of Notification constructor calls.
@@ -147,6 +146,16 @@ class PlatformNotificationServiceImpl
 
   void SetNotificationDisplayServiceForTesting(
       NotificationDisplayService* service);
+
+#if BUILDFLAG(ENABLE_BACKGROUND)
+  // Makes sure we keep the browser alive while the event in being processed.
+  // As we have no control on the click handling, the notification could be
+  // closed before a browser is brought up, thus terminating Chrome if it was
+  // the last KeepAlive. (see https://crbug.com/612815)
+  std::unique_ptr<ScopedKeepAlive> click_dispatch_keep_alive_;
+
+  int pending_click_dispatch_events_;
+#endif
 
   // Mapping between a persistent notification id and the id of the associated
   // message_center::Notification object. Must only be used on the UI thread.

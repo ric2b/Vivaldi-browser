@@ -50,13 +50,11 @@ class GLInProcessContextImpl
   GLInProcessContextImpl();
   ~GLInProcessContextImpl() override;
 
-  bool Initialize(scoped_refptr<gfx::GLSurface> surface,
+  bool Initialize(scoped_refptr<gl::GLSurface> surface,
                   bool is_offscreen,
                   GLInProcessContext* share_context,
                   gfx::AcceleratedWidget window,
-                  const gfx::Size& size,
                   const gpu::gles2::ContextCreationAttribHelper& attribs,
-                  gfx::GpuPreference gpu_preference,
                   const scoped_refptr<InProcessCommandBuffer::Service>& service,
                   const SharedMemoryLimits& mem_limits,
                   GpuMemoryBufferManager* gpu_memory_buffer_manager,
@@ -93,18 +91,17 @@ void GLInProcessContextImpl::SetLock(base::Lock* lock) {
 }
 
 bool GLInProcessContextImpl::Initialize(
-    scoped_refptr<gfx::GLSurface> surface,
+    scoped_refptr<gl::GLSurface> surface,
     bool is_offscreen,
     GLInProcessContext* share_context,
     gfx::AcceleratedWidget window,
-    const gfx::Size& size,
     const gles2::ContextCreationAttribHelper& attribs,
-    gfx::GpuPreference gpu_preference,
     const scoped_refptr<InProcessCommandBuffer::Service>& service,
     const SharedMemoryLimits& mem_limits,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
     ImageFactory* image_factory) {
-  DCHECK(size.width() >= 0 && size.height() >= 0);
+  DCHECK_GE(attribs.offscreen_framebuffer_size.width(), 0);
+  DCHECK_GE(attribs.offscreen_framebuffer_size.height(), 0);
 
   command_buffer_.reset(new InProcessCommandBuffer(service));
 
@@ -122,9 +119,7 @@ bool GLInProcessContextImpl::Initialize(
   if (!command_buffer_->Initialize(surface,
                                    is_offscreen,
                                    window,
-                                   size,
                                    attribs,
-                                   gpu_preference,
                                    share_command_buffer,
                                    gpu_memory_buffer_manager,
                                    image_factory)) {
@@ -191,25 +186,22 @@ void GLInProcessContextImpl::Destroy() {
 // static
 GLInProcessContext* GLInProcessContext::Create(
     scoped_refptr<gpu::InProcessCommandBuffer::Service> service,
-    scoped_refptr<gfx::GLSurface> surface,
+    scoped_refptr<gl::GLSurface> surface,
     bool is_offscreen,
     gfx::AcceleratedWidget window,
-    const gfx::Size& size,
     GLInProcessContext* share_context,
     const ::gpu::gles2::ContextCreationAttribHelper& attribs,
-    gfx::GpuPreference gpu_preference,
     const SharedMemoryLimits& memory_limits,
     GpuMemoryBufferManager* gpu_memory_buffer_manager,
     ImageFactory* image_factory) {
   if (surface.get()) {
     DCHECK_EQ(surface->IsOffscreen(), is_offscreen);
-    DCHECK(surface->GetSize() == size);
     DCHECK_EQ(gfx::kNullAcceleratedWidget, window);
   }
 
   std::unique_ptr<GLInProcessContextImpl> context(new GLInProcessContextImpl);
-  if (!context->Initialize(surface, is_offscreen, share_context, window, size,
-                           attribs, gpu_preference, service, memory_limits,
+  if (!context->Initialize(surface, is_offscreen, share_context, window,
+                           attribs, service, memory_limits,
                            gpu_memory_buffer_manager, image_factory))
     return NULL;
 

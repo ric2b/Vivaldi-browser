@@ -9,6 +9,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/wm/core/cursor_manager.h"
 
 namespace chromeos {
 
@@ -33,12 +34,6 @@ ui::InputMethod* GetInputMethod(aura::Window* root_window) {
 }  // namespace
 
 AccessibilityHighlightManager::AccessibilityHighlightManager() {
-  ash::Shell::GetInstance()->AddPreTargetHandler(this);
-  registrar_.Add(this, content::NOTIFICATION_FOCUS_CHANGED_IN_PAGE,
-                 content::NotificationService::AllSources());
-  aura::Window* root_window = ash::Shell::GetPrimaryRootWindow();
-  ui::InputMethod* input_method = GetInputMethod(root_window);
-  input_method->AddObserver(this);
   focus_rect_ = OffscreenRect();
   cursor_point_ = OffscreenPoint();
   caret_point_ = OffscreenPoint();
@@ -49,16 +44,18 @@ AccessibilityHighlightManager::~AccessibilityHighlightManager() {
   if (!ash::Shell::HasInstance())
     return;
 
-  ash::Shell* shell = ash::Shell::GetInstance();
-  if (shell) {
-    shell->RemovePreTargetHandler(this);
+  AccessibilityFocusRingController::GetInstance()->SetFocusRing(
+      std::vector<gfx::Rect>(),
+      AccessibilityFocusRingController::FADE_OUT_FOCUS_RING);
+  AccessibilityFocusRingController::GetInstance()->SetCaretRing(
+      OffscreenPoint());
+  AccessibilityFocusRingController::GetInstance()->SetCursorRing(
+      OffscreenPoint());
 
-    AccessibilityFocusRingController::GetInstance()->SetFocusRing(
-        std::vector<gfx::Rect>());
-    AccessibilityFocusRingController::GetInstance()->SetCaretRing(
-        OffscreenPoint());
-    AccessibilityFocusRingController::GetInstance()->SetCursorRing(
-        OffscreenPoint());
+  ash::Shell* shell = ash::Shell::GetInstance();
+  if (shell && registered_observers_) {
+    shell->RemovePreTargetHandler(this);
+    shell->cursor_manager()->RemoveObserver(this);
 
     aura::Window* root_window = shell->GetPrimaryRootWindow();
     ui::InputMethod* input_method = GetInputMethod(root_window);
@@ -68,32 +65,41 @@ AccessibilityHighlightManager::~AccessibilityHighlightManager() {
 
 void AccessibilityHighlightManager::HighlightFocus(bool focus) {
   focus_ = focus;
-
-  std::vector<gfx::Rect> rects;
-  rects.push_back(focus_ ? focus_rect_ : OffscreenRect());
-  AccessibilityFocusRingController::GetInstance()->SetFocusRing(rects);
+  UpdateFocusAndCaretHighlights();
 }
 
 void AccessibilityHighlightManager::HighlightCursor(bool cursor) {
   cursor_ = cursor;
-
-  AccessibilityFocusRingController::GetInstance()->SetCursorRing(
-      cursor_ ? cursor_point_ : OffscreenPoint());
+  UpdateCursorHighlight();
 }
 
 void AccessibilityHighlightManager::HighlightCaret(bool caret) {
   caret_ = caret;
+  UpdateFocusAndCaretHighlights();
+}
 
-  AccessibilityFocusRingController::GetInstance()->SetCaretRing(
-      caret_ ? caret_point_ : OffscreenPoint());
+void AccessibilityHighlightManager::RegisterObservers() {
+  ash::Shell* shell = ash::Shell::GetInstance();
+  shell->AddPreTargetHandler(this);
+  shell->cursor_manager()->AddObserver(this);
+  registrar_.Add(this, content::NOTIFICATION_FOCUS_CHANGED_IN_PAGE,
+                 content::NotificationService::AllSources());
+  aura::Window* root_window = ash::Shell::GetPrimaryRootWindow();
+  ui::InputMethod* input_method = GetInputMethod(root_window);
+  input_method->AddObserver(this);
+  registered_observers_ = true;
 }
 
 void AccessibilityHighlightManager::OnMouseEvent(ui::MouseEvent* event) {
   if (event->type() == ui::ET_MOUSE_MOVED) {
     cursor_point_ = event->root_location();
-    AccessibilityFocusRingController::GetInstance()->SetCursorRing(
-        cursor_ ? cursor_point_ : OffscreenPoint());
+    UpdateCursorHighlight();
   }
+}
+
+void AccessibilityHighlightManager::OnKeyEvent(ui::KeyEvent* event) {
+  if (event->type() == ui::ET_KEY_PRESSED)
+    UpdateFocusAndCaretHighlights();
 }
 
 void AccessibilityHighlightManager::Observe(
@@ -104,34 +110,69 @@ void AccessibilityHighlightManager::Observe(
   content::FocusedNodeDetails* node_details =
       content::Details<content::FocusedNodeDetails>(details).ptr();
   focus_rect_ = node_details->node_bounds_in_screen;
-
-  if (focus_) {
-    std::vector<gfx::Rect> rects;
-    rects.push_back(focus_rect_);
-    AccessibilityFocusRingController::GetInstance()->SetFocusRing(rects);
-  }
+  UpdateFocusAndCaretHighlights();
 }
 
 void AccessibilityHighlightManager::OnTextInputStateChanged(
     const ui::TextInputClient* client) {
   if (!client || client->GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE) {
-    caret_point_ = OffscreenPoint();
-    if (caret_) {
-      AccessibilityFocusRingController::GetInstance()->SetCaretRing(
-          caret_point_);
-    }
+    caret_visible_ = false;
+    UpdateFocusAndCaretHighlights();
   }
 }
 
 void AccessibilityHighlightManager::OnCaretBoundsChanged(
     const ui::TextInputClient* client) {
   gfx::Rect caret_bounds = client->GetCaretBounds();
-  if (caret_bounds.width() == 0 && caret_bounds.height() == 0)
-    caret_bounds = OffscreenRect();
   caret_point_ = caret_bounds.CenterPoint();
+  caret_visible_ = client->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE &&
+                   (caret_bounds.width() || caret_bounds.height());
+  UpdateFocusAndCaretHighlights();
+}
 
-  if (caret_)
-    AccessibilityFocusRingController::GetInstance()->SetCaretRing(caret_point_);
+void AccessibilityHighlightManager::OnCursorVisibilityChanged(bool is_visible) {
+  UpdateCursorHighlight();
+}
+
+bool AccessibilityHighlightManager::IsCursorVisible() {
+  return ash::Shell::GetInstance()->cursor_manager()->IsCursorVisible();
+}
+
+void AccessibilityHighlightManager::UpdateFocusAndCaretHighlights() {
+  auto controller = AccessibilityFocusRingController::GetInstance();
+
+  // The caret highlight takes precedence over the focus highlight if
+  // both are visible.
+  if (caret_ && caret_visible_) {
+    controller->SetCaretRing(caret_point_);
+    controller->SetFocusRing(
+        std::vector<gfx::Rect>(),
+        AccessibilityFocusRingController::FADE_OUT_FOCUS_RING);
+  } else if (focus_) {
+    controller->SetCaretRing(OffscreenPoint());
+    std::vector<gfx::Rect> rects;
+    if (!focus_rect_.IsEmpty())
+      rects.push_back(focus_rect_);
+    controller->SetFocusRing(
+        rects, AccessibilityFocusRingController::FADE_OUT_FOCUS_RING);
+  } else {
+    controller->SetCaretRing(OffscreenPoint());
+    controller->SetFocusRing(
+        std::vector<gfx::Rect>(),
+        AccessibilityFocusRingController::FADE_OUT_FOCUS_RING);
+  }
+}
+
+void AccessibilityHighlightManager::UpdateCursorHighlight() {
+  gfx::Point point = cursor_point_;
+
+  if (!cursor_)
+    point = OffscreenPoint();
+
+  if (!IsCursorVisible())
+    point = OffscreenPoint();
+
+  AccessibilityFocusRingController::GetInstance()->SetCursorRing(point);
 }
 
 }  // namespace chromeos

@@ -44,6 +44,8 @@
 #include "public/platform/WebURLResponse.h"
 #include "wtf/Assertions.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -58,6 +60,7 @@ ResourceLoader::ResourceLoader(ResourceFetcher* fetcher, Resource* resource)
 {
     ASSERT(m_resource);
     ASSERT(m_fetcher);
+    m_resource->setLoader(this);
 }
 
 ResourceLoader::~ResourceLoader()
@@ -71,15 +74,18 @@ DEFINE_TRACE(ResourceLoader)
     visitor->trace(m_resource);
 }
 
-void ResourceLoader::start(ResourceRequest& request)
+void ResourceLoader::start(const ResourceRequest& request, WebTaskRunner* loadingTaskRunner, bool defersLoading)
 {
     ASSERT(!m_loader);
+    if (m_resource->options().synchronousPolicy == RequestSynchronously && defersLoading) {
+        cancel();
+        return;
+    }
 
-    m_fetcher->willStartLoadingResource(m_resource.get(), this, request);
-    m_loader = adoptPtr(Platform::current()->createURLLoader());
-    m_loader->setDefersLoading(m_fetcher->defersLoading());
+    m_loader = wrapUnique(Platform::current()->createURLLoader());
+    m_loader->setDefersLoading(defersLoading);
     ASSERT(m_loader);
-    m_loader->setLoadingTaskRunner(m_fetcher->loadingTaskRunner());
+    m_loader->setLoadingTaskRunner(loadingTaskRunner);
 
     if (m_resource->options().synchronousPolicy == RequestSynchronously)
         requestSynchronously(request);
@@ -117,7 +123,7 @@ void ResourceLoader::willFollowRedirect(WebURLLoader*, WebURLRequest& passedNewR
 
     ResourceRequest& newRequest(passedNewRequest.toMutableResourceRequest());
     const ResourceResponse& redirectResponse(passedRedirectResponse.toResourceResponse());
-    newRequest.setFollowedRedirect(true);
+    newRequest.setRedirectStatus(ResourceRequest::RedirectStatus::FollowedRedirect);
 
     if (m_fetcher->willFollowRedirect(m_resource.get(), newRequest, redirectResponse)) {
         m_resource->willFollowRedirect(newRequest, redirectResponse);
@@ -146,20 +152,27 @@ bool ResourceLoader::responseNeedsAccessControlCheck() const
 
 void ResourceLoader::didReceiveResponse(WebURLLoader*, const WebURLResponse& response, WebDataConsumerHandle* rawHandle)
 {
-    ASSERT(!response.isNull());
+    DCHECK(!response.isNull());
     // |rawHandle|'s ownership is transferred to the callee.
-    OwnPtr<WebDataConsumerHandle> handle = adoptPtr(rawHandle);
+    std::unique_ptr<WebDataConsumerHandle> handle = wrapUnique(rawHandle);
     const ResourceResponse& resourceResponse = response.toResourceResponse();
 
     if (responseNeedsAccessControlCheck()) {
         if (response.wasFetchedViaServiceWorker()) {
             if (response.wasFallbackRequiredByServiceWorker()) {
-                m_loader.clear();
-                m_loader = adoptPtr(Platform::current()->createURLLoader());
-                ASSERT(m_loader);
+                m_loader.reset();
+                m_loader = wrapUnique(Platform::current()->createURLLoader());
+                DCHECK(m_loader);
                 ResourceRequest request = m_resource->lastResourceRequest();
-                ASSERT(!request.skipServiceWorker());
-                request.setSkipServiceWorker(true);
+                DCHECK_EQ(request.skipServiceWorker(), WebURLRequest::SkipServiceWorker::None);
+                // This code handles the case when a regular controlling service worker
+                // doesn't handle a cross origin request. When this happens we still
+                // want to give foreign fetch a chance to handle the request, so
+                // only skip the controlling service worker for the fallback request.
+                // This is currently safe because of http://crbug.com/604084 the
+                // wasFallbackRequiredByServiceWorker flag is never set when foreign fetch
+                // handled a request.
+                request.setSkipServiceWorker(WebURLRequest::SkipServiceWorker::Controlling);
                 m_loader->loadAsynchronously(WrappedResourceRequest(request), this);
                 return;
             }
@@ -206,29 +219,22 @@ void ResourceLoader::didFinishLoadingFirstPartInMultipart()
 
 void ResourceLoader::didFinishLoading(WebURLLoader*, double finishTime, int64_t encodedDataLength)
 {
-    m_loader.clear();
+    m_loader.reset();
     m_fetcher->didFinishLoading(m_resource.get(), finishTime, encodedDataLength, ResourceFetcher::DidFinishLoading);
 }
 
 void ResourceLoader::didFail(WebURLLoader*, const WebURLError& error)
 {
-    m_loader.clear();
+    m_loader.reset();
     m_fetcher->didFailLoading(m_resource.get(), error);
 }
 
-void ResourceLoader::requestSynchronously(ResourceRequest& request)
+void ResourceLoader::requestSynchronously(const ResourceRequest& request)
 {
     // downloadToFile is not supported for synchronous requests.
     ASSERT(!request.downloadToFile());
     ASSERT(m_loader);
-
-    // Synchronous requests should always be max priority, lest they hang the renderer.
-    request.setPriority(ResourceLoadPriorityHighest);
-
-    if (m_fetcher->defersLoading()) {
-        cancel();
-        return;
-    }
+    DCHECK(request.priority() == ResourceLoadPriorityHighest);
 
     WrappedResourceRequest requestIn(request);
     WebURLResponse responseOut;

@@ -4,10 +4,12 @@
 //
 // NOTE: This code is not shared between Google and Chrome.
 
-#ifndef NET_QUIC_QUIC_RELIABLE_CLIENT_STREAM_H_
-#define NET_QUIC_QUIC_RELIABLE_CLIENT_STREAM_H_
+#ifndef NET_QUIC_QUIC_CHROMIUM_CLIENT_STREAM_H_
+#define NET_QUIC_QUIC_CHROMIUM_CLIENT_STREAM_H_
 
 #include <stddef.h>
+
+#include <deque>
 #include <vector>
 
 #include "base/callback_forward.h"
@@ -40,7 +42,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
     virtual void OnDataAvailable() = 0;
 
     // Called when the stream is closed by the peer.
-    virtual void OnClose(QuicErrorCode error) = 0;
+    virtual void OnClose() = 0;
 
     // Called when the stream is closed because of an error.
     virtual void OnError(int error) = 0;
@@ -63,12 +65,21 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
 
   // QuicSpdyStream
   void OnStreamHeadersComplete(bool fin, size_t frame_len) override;
+  void OnInitialHeadersComplete(bool fin,
+                                size_t frame_len,
+                                const QuicHeaderList& header_list) override;
+  void OnTrailingHeadersComplete(bool fin,
+                                 size_t frame_len,
+                                 const QuicHeaderList& header_list) override;
   void OnPromiseHeadersComplete(QuicStreamId promised_stream_id,
                                 size_t frame_len) override;
+  void OnPromiseHeaderList(QuicStreamId promised_id,
+                           size_t frame_len,
+                           const QuicHeaderList& header_list) override;
   void OnDataAvailable() override;
   void OnClose() override;
   void OnCanWrite() override;
-  size_t WriteHeaders(const SpdyHeaderBlock& header_block,
+  size_t WriteHeaders(SpdyHeaderBlock header_block,
                       bool fin,
                       QuicAckListenerInterface* ack_notifier_delegate) override;
   SpdyPriority priority() const override;
@@ -113,7 +124,7 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
   using QuicSpdyStream::HasBufferedData;
 
  private:
-  void NotifyDelegateOfHeadersCompleteLater(const SpdyHeaderBlock& headers,
+  void NotifyDelegateOfHeadersCompleteLater(SpdyHeaderBlock headers,
                                             size_t frame_len);
   void NotifyDelegateOfHeadersComplete(SpdyHeaderBlock headers,
                                        size_t frame_len);
@@ -143,4 +154,4 @@ class NET_EXPORT_PRIVATE QuicChromiumClientStream : public QuicSpdyStream {
 
 }  // namespace net
 
-#endif  // NET_QUIC_QUIC_RELIABLE_CLIENT_STREAM_H_
+#endif  // NET_QUIC_QUIC_CHROMIUM_CLIENT_STREAM_H_

@@ -148,9 +148,12 @@ class ProfileChooserView : public content::WebContentsDelegate,
   views::View* CreateCurrentProfileView(
       const AvatarMenu::Item& avatar_item,
       bool is_guest);
+  views::View* CreateMaterialDesignCurrentProfileView(
+      const AvatarMenu::Item& avatar_item,
+      bool is_guest);
   views::View* CreateGuestProfileView();
   views::View* CreateOtherProfilesView(const Indexes& avatars_to_show);
-  views::View* CreateOptionsView(bool display_lock);
+  views::View* CreateOptionsView(bool display_lock, AvatarMenu* avatar_menu);
   views::View* CreateSupervisedUserDisclaimerView();
 
   // Account Management view for the profile |avatar_item|.
@@ -237,7 +240,7 @@ class ProfileChooserView : public content::WebContentsDelegate,
 
   // Links and buttons displayed in the active profile card.
   views::Link* manage_accounts_link_;
-  views::LabelButton* signin_current_profile_link_;
+  views::LabelButton* signin_current_profile_button_;
   views::LabelButton* auth_error_email_button_;
 
   // The profile name and photo in the active profile card. Owned by the
@@ -246,9 +249,11 @@ class ProfileChooserView : public content::WebContentsDelegate,
   EditableProfileName* current_profile_name_;
 
   // Action buttons.
+  views::LabelButton* guest_profile_button_;
   views::LabelButton* users_button_;
   views::LabelButton* go_incognito_button_;
   views::LabelButton* lock_button_;
+  views::LabelButton* close_all_windows_button_;
   views::Link* add_account_link_;
 
   // Buttons displayed in the gaia signin view.

@@ -34,10 +34,12 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "core/events/Event.h"
 #include "core/fetch/ResourceLoaderOptions.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
+#include "core/loader/DocumentLoadTiming.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FormSubmission.h"
 #include "core/loader/FrameLoadRequest.h"
@@ -45,6 +47,7 @@
 #include "core/loader/FrameLoaderClient.h"
 #include "core/loader/FrameLoaderStateMachine.h"
 #include "core/page/Page.h"
+#include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
 #include "platform/UserGestureIndicator.h"
 #include "platform/scheduler/CancellableTaskFactory.h"
@@ -52,10 +55,49 @@
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebScheduler.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
+namespace {
+
+// Add new scheduled navigation types before ScheduledLastEntry
+enum ScheduledNavigationType {
+    ScheduledReload,
+    ScheduledFormSubmission,
+    ScheduledURLNavigation,
+    ScheduledRedirect,
+    ScheduledLocationChange,
+    ScheduledPageBlock,
+
+    ScheduledLastEntry
+};
+
+// If the current frame has a provisional document loader, a scheduled
+// navigation might abort that load. Log those occurrences until
+// crbug.com/557430 is resolved.
+void maybeLogScheduledNavigationClobber(ScheduledNavigationType type, LocalFrame* frame, const FrameLoadRequest& request, UserGestureIndicator* gestureIndicator)
+{
+    if (!frame->loader().provisionalDocumentLoader())
+        return;
+    // Include enumeration values userGesture variants.
+    DEFINE_STATIC_LOCAL(EnumerationHistogram, scheduledNavigationClobberHistogram, ("Navigation.Scheduled.MaybeCausedAbort", ScheduledNavigationType::ScheduledLastEntry * 2));
+
+    UserGestureToken* gestureToken = gestureIndicator->currentToken();
+    int value = gestureToken->hasGestures() ? type + ScheduledLastEntry : type;
+    scheduledNavigationClobberHistogram.count(value);
+
+    DEFINE_STATIC_LOCAL(CustomCountHistogram, scheduledClobberAbortTimeHistogram, ("Navigation.Scheduled.MaybeCausedAbort.Time", 1, 10000, 50));
+    double navigationStart = frame->loader().provisionalDocumentLoader()->timing().navigationStart();
+    if (navigationStart)
+        scheduledClobberAbortTimeHistogram.count(monotonicallyIncreasingTime() - navigationStart);
+}
+
+} // namespace
+
 unsigned NavigationDisablerForBeforeUnload::s_navigationDisableCount = 0;
+unsigned NavigationCounterForUnload::s_inUnloadHandler = 0;
 
 class ScheduledNavigation : public GarbageCollectedFinalized<ScheduledNavigation> {
     WTF_MAKE_NONCOPYABLE(ScheduledNavigation);
@@ -80,11 +122,11 @@ public:
     Document* originDocument() const { return m_originDocument.get(); }
     bool replacesCurrentItem() const { return m_replacesCurrentItem; }
     bool isLocationChange() const { return m_isLocationChange; }
-    PassOwnPtr<UserGestureIndicator> createUserGestureIndicator()
+    std::unique_ptr<UserGestureIndicator> createUserGestureIndicator()
     {
         if (m_wasUserGesture &&  m_userGestureToken)
-            return adoptPtr(new UserGestureIndicator(m_userGestureToken));
-        return adoptPtr(new UserGestureIndicator(DefinitelyNotProcessingUserGesture));
+            return wrapUnique(new UserGestureIndicator(m_userGestureToken));
+        return wrapUnique(new UserGestureIndicator(DefinitelyNotProcessingUserGesture));
     }
 
     DEFINE_INLINE_VIRTUAL_TRACE()
@@ -117,10 +159,13 @@ protected:
 
     void fire(LocalFrame* frame) override
     {
-        OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
+        std::unique_ptr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
         FrameLoadRequest request(originDocument(), m_url, "_self", m_shouldCheckMainWorldContentSecurityPolicy);
         request.setReplacesCurrentItem(replacesCurrentItem());
         request.setClientRedirect(ClientRedirectPolicy::ClientRedirect);
+
+        ScheduledNavigationType type = isLocationChange() ? ScheduledNavigationType::ScheduledLocationChange : ScheduledNavigationType::ScheduledURLNavigation;
+        maybeLogScheduledNavigationClobber(type, frame, request, gestureIndicator.get());
         frame->loader().load(request);
     }
 
@@ -142,12 +187,13 @@ public:
 
     void fire(LocalFrame* frame) override
     {
-        OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
+        std::unique_ptr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
         FrameLoadRequest request(originDocument(), url(), "_self");
         request.setReplacesCurrentItem(replacesCurrentItem());
         if (equalIgnoringFragmentIdentifier(frame->document()->url(), request.resourceRequest().url()))
             request.resourceRequest().setCachePolicy(WebCachePolicy::ValidatingCacheData);
         request.setClientRedirect(ClientRedirectPolicy::ClientRedirect);
+        maybeLogScheduledNavigationClobber(ScheduledNavigationType::ScheduledRedirect, frame, request, gestureIndicator.get());
         frame->loader().load(request);
     }
 
@@ -180,12 +226,13 @@ public:
 
     void fire(LocalFrame* frame) override
     {
-        OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
+        std::unique_ptr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
         ResourceRequest resourceRequest = frame->loader().resourceRequestForReload(FrameLoadTypeReload, KURL(), ClientRedirectPolicy::ClientRedirect);
         if (resourceRequest.isNull())
             return;
         FrameLoadRequest request = FrameLoadRequest(nullptr, resourceRequest);
         request.setClientRedirect(ClientRedirectPolicy::ClientRedirect);
+        maybeLogScheduledNavigationClobber(ScheduledNavigationType::ScheduledReload, frame, request, gestureIndicator.get());
         frame->loader().load(request, FrameLoadTypeReload);
     }
 
@@ -205,11 +252,12 @@ public:
 
     void fire(LocalFrame* frame) override
     {
-        OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
+        std::unique_ptr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
         SubstituteData substituteData(SharedBuffer::create(), "text/plain", "UTF-8", KURL(), ForceSynchronousLoad);
         FrameLoadRequest request(originDocument(), url(), substituteData);
         request.setReplacesCurrentItem(true);
         request.setClientRedirect(ClientRedirectPolicy::ClientRedirect);
+        maybeLogScheduledNavigationClobber(ScheduledNavigationType::ScheduledPageBlock, frame, request, gestureIndicator.get());
         frame->loader().load(request);
     }
 private:
@@ -229,12 +277,10 @@ public:
 
     void fire(LocalFrame* frame) override
     {
-        OwnPtr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
-        FrameLoadRequest frameRequest(originDocument());
-        m_submission->populateFrameLoadRequest(frameRequest);
+        std::unique_ptr<UserGestureIndicator> gestureIndicator = createUserGestureIndicator();
+        FrameLoadRequest frameRequest = m_submission->createFrameLoadRequest(originDocument());
         frameRequest.setReplacesCurrentItem(replacesCurrentItem());
-        frameRequest.setTriggeringEvent(m_submission->event());
-        frameRequest.setForm(m_submission->form());
+        maybeLogScheduledNavigationClobber(ScheduledNavigationType::ScheduledFormSubmission, frame, frameRequest, gestureIndicator.get());
         frame->loader().load(frameRequest);
     }
 
@@ -347,6 +393,9 @@ void NavigationScheduler::scheduleLocationChange(Document* originDocument, const
     if (originDocument->getSecurityOrigin()->canAccess(m_frame->document()->getSecurityOrigin())) {
         KURL parsedURL(ParsedURLString, url);
         if (parsedURL.hasFragmentIdentifier() && equalIgnoringFragmentIdentifier(m_frame->document()->url(), parsedURL)) {
+            if (NavigationCounterForUnload::inUnloadHandler())
+                Deprecation::countDeprecation(m_frame, UseCounter::UnloadHandler_Navigation);
+
             FrameLoadRequest request(originDocument, m_frame->document()->completeURL(url), "_self");
             request.setReplacesCurrentItem(replacesCurrentItem);
             if (replacesCurrentItem)

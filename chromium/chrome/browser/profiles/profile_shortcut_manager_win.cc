@@ -23,7 +23,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/shortcut.h"
-#include "chrome/browser/app_icon_win.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -31,6 +30,7 @@
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/shell_integration_win.h"
+#include "chrome/browser/win/app_icon.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
@@ -1008,20 +1008,13 @@ void ProfileShortcutManagerWin::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
-  switch (type) {
-    // This notification is triggered when a profile is loaded.
-    case chrome::NOTIFICATION_PROFILE_CREATED: {
-      Profile* profile =
-          content::Source<Profile>(source).ptr()->GetOriginalProfile();
-      if (profile->GetPrefs()->GetInteger(prefs::kProfileIconVersion) <
-          kCurrentProfileIconVersion) {
-        // Ensure the profile's icon file has been created.
-        CreateOrUpdateProfileIcon(profile->GetPath());
-      }
-      break;
-    }
-    default:
-      NOTREACHED();
-      break;
+  DCHECK_EQ(chrome::NOTIFICATION_PROFILE_CREATED, type);
+
+  Profile* profile =
+      content::Source<Profile>(source).ptr()->GetOriginalProfile();
+  if (profile->GetPrefs()->GetInteger(prefs::kProfileIconVersion) <
+      kCurrentProfileIconVersion) {
+    // Ensure the profile's icon file has been created.
+    CreateOrUpdateProfileIcon(profile->GetPath());
   }
 }

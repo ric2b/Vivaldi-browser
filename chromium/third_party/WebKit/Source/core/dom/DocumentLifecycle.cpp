@@ -206,30 +206,32 @@ bool DocumentLifecycle::canAdvanceTo(LifecycleState nextState) const
             return true;
         if (nextState == InCompositingUpdate)
             return true;
-        if (nextState == InPaintInvalidation)
+        if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
+            if (nextState == InPrePaint)
+                return true;
+        } else if (nextState == InPaintInvalidation) {
             return true;
+        }
         break;
     case InPaintInvalidation:
+        DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
         return nextState == PaintInvalidationClean;
     case PaintInvalidationClean:
+        DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
         if (nextState == InStyleRecalc)
             return true;
         if (nextState == InPreLayout)
             return true;
         if (nextState == InCompositingUpdate)
             return true;
-        if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-            if (nextState == InUpdatePaintProperties)
-                return true;
-        } else if (nextState == InPaint) {
-            return true;
-        }
-        break;
-    case InUpdatePaintProperties:
-        if (nextState == UpdatePaintPropertiesClean && RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+        if (nextState == InPaint)
             return true;
         break;
-    case UpdatePaintPropertiesClean:
+    case InPrePaint:
+        if (nextState == PrePaintClean && RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+            return true;
+        break;
+    case PrePaintClean:
         if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled())
             break;
         if (nextState == InPaint)
@@ -327,8 +329,8 @@ const char* DocumentLifecycle::stateAsDebugString(const LifecycleState state)
         DEBUG_STRING_CASE(CompositingClean);
         DEBUG_STRING_CASE(InPaintInvalidation);
         DEBUG_STRING_CASE(PaintInvalidationClean);
-        DEBUG_STRING_CASE(InUpdatePaintProperties);
-        DEBUG_STRING_CASE(UpdatePaintPropertiesClean);
+        DEBUG_STRING_CASE(InPrePaint);
+        DEBUG_STRING_CASE(PrePaintClean);
         DEBUG_STRING_CASE(InPaint);
         DEBUG_STRING_CASE(PaintClean);
         DEBUG_STRING_CASE(Stopping);

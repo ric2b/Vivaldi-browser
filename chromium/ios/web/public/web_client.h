@@ -15,7 +15,7 @@
 #include "url/url_util.h"
 
 namespace base {
-class RefCountedStaticMemory;
+class RefCountedMemory;
 }
 
 class GURL;
@@ -52,10 +52,6 @@ class WebClient {
 
   // Gives the embedder a chance to perform tasks before a web view is created.
   virtual void PreWebViewCreation() const {}
-
-  // Gives the embedder a chance to set up the given web view before presenting
-  // it in the UI.
-  virtual void PostWebViewCreation(UIWebView* web_view) const {}
 
   // Gives the embedder a chance to register its own standard and saveable url
   // schemes early on in the startup sequence.
@@ -101,8 +97,7 @@ class WebClient {
                                             ui::ScaleFactor scale_factor) const;
 
   // Returns the raw bytes of a scale independent data resource.
-  virtual base::RefCountedStaticMemory* GetDataResourceBytes(
-      int resource_id) const;
+  virtual base::RefCountedMemory* GetDataResourceBytes(int resource_id) const;
 
   // Returns a list of additional WebUI schemes, if any. These additional
   // schemes act as aliases to the about: scheme. The additional schemes may or

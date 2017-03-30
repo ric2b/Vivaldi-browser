@@ -6,9 +6,9 @@
 #define ASH_SYSTEM_OVERVIEW_OVERVIEW_BUTTON_TRAY_H_
 
 #include "ash/ash_export.h"
-#include "ash/session/session_state_observer.h"
-#include "ash/shell_observer.h"
-#include "ash/system/tray/tray_background_view.h"
+#include "ash/common/session/session_state_observer.h"
+#include "ash/common/shell_observer.h"
+#include "ash/common/system/tray/tray_background_view.h"
 #include "base/macros.h"
 
 namespace views {
@@ -26,12 +26,12 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
                                       public SessionStateObserver,
                                       public ShellObserver {
  public:
-  explicit OverviewButtonTray(StatusAreaWidget* status_area_widget);
+  explicit OverviewButtonTray(WmShelf* wm_shelf);
   ~OverviewButtonTray() override;
 
   // Updates the tray's visibility based on the LoginStatus and the current
   // state of MaximizeMode
-  virtual void UpdateAfterLoginStatusChange(user::LoginStatus status);
+  virtual void UpdateAfterLoginStatusChange(LoginStatus status);
 
   // ActionableView:
   bool PerformAction(const ui::Event& event) override;
@@ -48,7 +48,7 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
   void ClickedOutsideBubble() override;
   base::string16 GetAccessibleNameForTray() override;
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
-  void SetShelfAlignment(wm::ShelfAlignment alignment) override;
+  void SetShelfAlignment(ShelfAlignment alignment) override;
 
  private:
   friend class OverviewButtonTrayTest;

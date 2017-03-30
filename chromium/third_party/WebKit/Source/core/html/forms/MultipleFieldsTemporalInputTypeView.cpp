@@ -45,6 +45,7 @@
 #include "core/layout/LayoutTheme.h"
 #include "core/page/FocusController.h"
 #include "core/page/Page.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/DateComponents.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/DateTimeFormat.h"
@@ -277,7 +278,7 @@ void MultipleFieldsTemporalInputTypeView::pickerIndicatorChooseValue(const Strin
 
 void MultipleFieldsTemporalInputTypeView::pickerIndicatorChooseValue(double value)
 {
-    ASSERT(std::isfinite(value) || std::isnan(value));
+    DCHECK(std::isfinite(value) || std::isnan(value));
     if (std::isnan(value))
         element().setValue(emptyString(), DispatchInputAndChangeEvent);
     else
@@ -345,13 +346,13 @@ PassRefPtr<ComputedStyle> MultipleFieldsTemporalInputTypeView::customStyleForLay
 
 void MultipleFieldsTemporalInputTypeView::createShadowSubtree()
 {
-    ASSERT(element().shadow());
+    DCHECK(element().shadow());
 
     // Element must not have a layoutObject here, because if it did
     // DateTimeEditElement::customStyleForLayoutObject() is called in appendChild()
     // before the field wrapper element is created.
     // FIXME: This code should not depend on such craziness.
-    ASSERT(!element().layoutObject());
+    DCHECK(!element().layoutObject());
 
     Document& document = element().document();
     ContainerNode* container = element().userAgentShadowRoot();
@@ -370,7 +371,7 @@ void MultipleFieldsTemporalInputTypeView::createShadowSubtree()
 
 void MultipleFieldsTemporalInputTypeView::destroyShadowSubtree()
 {
-    ASSERT(!m_isDestroyingShadowSubtree);
+    DCHECK(!m_isDestroyingShadowSubtree);
     m_isDestroyingShadowSubtree = true;
     if (SpinButtonElement* element = spinButtonElement())
         element->removeSpinButtonOwner();
@@ -435,7 +436,7 @@ void MultipleFieldsTemporalInputTypeView::handleKeydownEvent(KeyboardEvent* even
     if (!element().focused())
         return;
     if (m_pickerIndicatorIsVisible
-        && ((event->keyIdentifier() == "Down" && event->getModifierState("Alt")) || (LayoutTheme::theme().shouldOpenPickerWithF4Key() && event->keyIdentifier() == "F4"))) {
+        && ((event->key() == "ArrowDown" && event->getModifierState("Alt")) || (LayoutTheme::theme().shouldOpenPickerWithF4Key() && event->key() == "F4"))) {
         if (PickerIndicatorElement* element = pickerIndicatorElement())
             element->openPopup();
         event->setDefaultHandled();
@@ -574,7 +575,7 @@ void MultipleFieldsTemporalInputTypeView::hidePickerIndicator()
     if (!m_pickerIndicatorIsVisible)
         return;
     m_pickerIndicatorIsVisible = false;
-    ASSERT(pickerIndicatorElement());
+    DCHECK(pickerIndicatorElement());
     pickerIndicatorElement()->setInlineStyleProperty(CSSPropertyDisplay, CSSValueNone);
 }
 
@@ -583,7 +584,7 @@ void MultipleFieldsTemporalInputTypeView::showPickerIndicator()
     if (m_pickerIndicatorIsVisible)
         return;
     m_pickerIndicatorIsVisible = true;
-    ASSERT(pickerIndicatorElement());
+    DCHECK(pickerIndicatorElement());
     pickerIndicatorElement()->removeInlineStyleProperty(CSSPropertyDisplay);
 }
 

@@ -5,6 +5,7 @@
 #include "extensions/browser/api/storage/settings_test_util.h"
 
 #include "base/files/file_path.h"
+#include "base/run_loop.h"
 #include "extensions/browser/api/storage/storage_frontend.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system_provider.h"
@@ -29,7 +30,7 @@ std::unique_ptr<base::Value> CreateKilobyte() {
 std::unique_ptr<base::Value> CreateMegabyte() {
   base::ListValue* megabyte = new base::ListValue();
   for (int i = 0; i < 1000; ++i) {
-    megabyte->Append(CreateKilobyte().release());
+    megabyte->Append(CreateKilobyte());
   }
   return std::unique_ptr<base::Value>(megabyte);
 }
@@ -45,7 +46,7 @@ ValueStore* GetStorage(scoped_refptr<const Extension> extension,
   ValueStore* storage = NULL;
   frontend->RunWithStorage(
       extension, settings_namespace, base::Bind(&AssignStorage, &storage));
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   return storage;
 }
 
@@ -74,7 +75,7 @@ scoped_refptr<const Extension> AddExtensionWithIdAndPermissions(
   std::unique_ptr<base::ListValue> permissions(new base::ListValue());
   for (std::set<std::string>::const_iterator it = permissions_set.begin();
       it != permissions_set.end(); ++it) {
-    permissions->Append(new base::StringValue(*it));
+    permissions->AppendString(*it);
   }
   manifest.Set("permissions", permissions.release());
 

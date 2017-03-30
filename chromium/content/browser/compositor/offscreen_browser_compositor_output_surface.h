@@ -29,7 +29,7 @@ class OffscreenBrowserCompositorOutputSurface
   OffscreenBrowserCompositorOutputSurface(
       scoped_refptr<ContextProviderCommandBuffer> context,
       scoped_refptr<ui::CompositorVSyncManager> vsync_manager,
-      base::SingleThreadTaskRunner* task_runner,
+      cc::SyntheticBeginFrameSource* begin_frame_source,
       std::unique_ptr<display_compositor::CompositorOverlayCandidateValidator>
           overlay_candidate_validator);
 
@@ -39,9 +39,13 @@ class OffscreenBrowserCompositorOutputSurface
   // cc::OutputSurface:
   void EnsureBackbuffer() override;
   void DiscardBackbuffer() override;
-  void Reshape(const gfx::Size& size, float scale_factor, bool alpha) override;
+  void Reshape(const gfx::Size& size,
+               float scale_factor,
+               const gfx::ColorSpace& color_space,
+               bool alpha) override;
   void BindFramebuffer() override;
-  void SwapBuffers(cc::CompositorFrame* frame) override;
+  uint32_t GetFramebufferCopyTextureFormat() override;
+  void SwapBuffers(cc::CompositorFrame frame) override;
 
   // BrowserCompositorOutputSurface
   void OnReflectorChanged() override;

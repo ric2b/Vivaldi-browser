@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/non_thread_safe.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
@@ -69,15 +70,14 @@ class NET_EXPORT HttpServerPropertiesImpl
   // unittests.
   static std::string GetFlattenedSpdyServer(const HostPortPair& host_port_pair);
 
-  // Returns the canonical host suffix for |host|, or std::string() if none
+  // Returns the canonical host suffix for |host|, or nullptr if none
   // exists.
-  std::string GetCanonicalSuffix(const std::string& host);
+  const std::string* GetCanonicalSuffix(const std::string& host) const;
 
   // -----------------------------
   // HttpServerProperties methods:
   // -----------------------------
 
-  base::WeakPtr<HttpServerProperties> GetWeakPtr() override;
   void Clear() override;
   bool SupportsRequestPriority(const url::SchemeHostPort& server) override;
   bool GetSupportsSpdy(const url::SchemeHostPort& server) override;
@@ -105,7 +105,6 @@ class NET_EXPORT HttpServerPropertiesImpl
       const AlternativeService& alternative_service) override;
   void ConfirmAlternativeService(
       const AlternativeService& alternative_service) override;
-  void ClearAlternativeServices(const url::SchemeHostPort& origin) override;
   const AlternativeServiceMap& alternative_service_map() const override;
   std::unique_ptr<base::Value> GetAlternativeServiceInfoAsValue()
       const override;

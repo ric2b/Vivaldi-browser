@@ -225,7 +225,7 @@ TEST_P(QuicCryptoServerStreamTest, ConnectedAfterCHLO) {
   EXPECT_TRUE(server_stream()->handshake_confirmed());
 }
 
-TEST_P(QuicCryptoServerStreamTest, EncryptionLevelAfterCHLO) {
+TEST_P(QuicCryptoServerStreamTest, InitialEncryptionAfterCHLO) {
   Initialize();
   InitializeFakeClient(/* supports_stateless_rejects= */ false);
 
@@ -238,7 +238,33 @@ TEST_P(QuicCryptoServerStreamTest, EncryptionLevelAfterCHLO) {
   // Now do another handshake, with the blocking SHLO connection option.
   InitializeServer();
   InitializeFakeClient(/* supports_stateless_rejects= */ false);
-  client_session_->config()->SetConnectionOptionsToSend({kIPFS});
+  if (FLAGS_quic_default_immediate_forward_secure) {
+    client_session_->config()->SetConnectionOptionsToSend({kIPFS});
+  }
+
+  AdvanceHandshakeWithFakeClient();
+  EXPECT_TRUE(server_stream()->encryption_established());
+  EXPECT_TRUE(server_stream()->handshake_confirmed());
+  EXPECT_EQ(ENCRYPTION_INITIAL,
+            server_session_->connection()->encryption_level());
+}
+
+TEST_P(QuicCryptoServerStreamTest, ForwardSecureAfterCHLO) {
+  Initialize();
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+
+  // Do a first handshake in order to prime the client config with the server's
+  // information.
+  AdvanceHandshakeWithFakeClient();
+  EXPECT_FALSE(server_stream()->encryption_established());
+  EXPECT_FALSE(server_stream()->handshake_confirmed());
+
+  // Now do another handshake, with the blocking SHLO connection option.
+  InitializeServer();
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+  if (!FLAGS_quic_default_immediate_forward_secure) {
+    client_session_->config()->SetConnectionOptionsToSend({kIPFS});
+  }
 
   AdvanceHandshakeWithFakeClient();
   EXPECT_TRUE(server_stream()->encryption_established());
@@ -398,6 +424,20 @@ TEST_P(QuicCryptoServerStreamTest, ZeroRTT) {
   }
 
   EXPECT_EQ(1, client_stream()->num_sent_client_hellos());
+}
+
+TEST_P(QuicCryptoServerStreamTest, FailByPolicy) {
+  FLAGS_quic_enable_chlo_policy = true;
+  FLAGS_quic_require_fix = false;
+  Initialize();
+  InitializeFakeClient(/* supports_stateless_rejects= */ false);
+
+  EXPECT_CALL(*server_session_->helper(), CanAcceptClientHello(_, _, _))
+      .WillOnce(testing::Return(false));
+  EXPECT_CALL(*server_connection_,
+              CloseConnection(QUIC_HANDSHAKE_FAILED, _, _));
+
+  AdvanceHandshakeWithFakeClient();
 }
 
 TEST_P(QuicCryptoServerStreamTest, MessageAfterHandshake) {

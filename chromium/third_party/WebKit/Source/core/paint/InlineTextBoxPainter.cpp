@@ -7,16 +7,12 @@
 #include "core/editing/CompositionUnderline.h"
 #include "core/editing/Editor.h"
 #include "core/editing/markers/DocumentMarkerController.h"
-#include "core/editing/markers/RenderedDocumentMarker.h"
 #include "core/frame/LocalFrame.h"
-#include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutTextCombine.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/api/LineLayoutAPIShim.h"
 #include "core/layout/api/LineLayoutBox.h"
-#include "core/layout/api/LineLayoutText.h"
 #include "core/layout/line/InlineTextBox.h"
-#include "core/paint/BoxPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/TextPainter.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
@@ -149,10 +145,7 @@ void InlineTextBoxPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& 
 
     // 2. Now paint the foreground, including text and decorations like underline/overline (in quirks mode only).
     int length = m_inlineTextBox.len();
-    StringView string = m_inlineTextBox.getLineLayoutItem().text().createView();
-    ASSERT(m_inlineTextBox.start() + length <= string.length());
-    if (static_cast<unsigned>(length) != string.length() || m_inlineTextBox.start())
-        string.narrow(m_inlineTextBox.start(), length);
+    StringView string = StringView(m_inlineTextBox.getLineLayoutItem().text(), m_inlineTextBox.start(), length);
     int maximumLength = m_inlineTextBox.getLineLayoutItem().textLength() - m_inlineTextBox.start();
 
     StringBuilder charactersWithHyphen;
@@ -441,10 +434,7 @@ void InlineTextBoxPainter::paintSelection(GraphicsContext& context, const Layout
     // If the text is truncated, let the thing being painted in the truncation
     // draw its own highlight.
     int length = m_inlineTextBox.truncation() != cNoTruncation ? m_inlineTextBox.truncation() : m_inlineTextBox.len();
-    StringView string = m_inlineTextBox.getLineLayoutItem().text().createView();
-
-    if (string.length() != static_cast<unsigned>(length) || m_inlineTextBox.start())
-        string.narrow(m_inlineTextBox.start(), length);
+    StringView string(m_inlineTextBox.getLineLayoutItem().text(), m_inlineTextBox.start(), static_cast<unsigned>(length));
 
     StringBuilder charactersWithHyphen;
     bool respectHyphen = ePos == length && m_inlineTextBox.hasHyphen();

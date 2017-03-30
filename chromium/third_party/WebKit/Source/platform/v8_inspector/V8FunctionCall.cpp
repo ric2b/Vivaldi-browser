@@ -30,11 +30,11 @@
 
 #include "platform/v8_inspector/V8FunctionCall.h"
 
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/v8_inspector/V8Compat.h"
 #include "platform/v8_inspector/V8DebuggerImpl.h"
 #include "platform/v8_inspector/V8StringUtil.h"
 #include "platform/v8_inspector/public/V8DebuggerClient.h"
-#include "wtf/PassOwnPtr.h"
 
 #include <v8.h>
 
@@ -50,27 +50,27 @@ V8FunctionCall::V8FunctionCall(V8DebuggerImpl* debugger, v8::Local<v8::Context> 
 
 void V8FunctionCall::appendArgument(v8::Local<v8::Value> value)
 {
-    m_arguments.append(value);
+    m_arguments.push_back(value);
 }
 
 void V8FunctionCall::appendArgument(const String16& argument)
 {
-    m_arguments.append(toV8String(m_context->GetIsolate(), argument));
+    m_arguments.push_back(toV8String(m_context->GetIsolate(), argument));
 }
 
 void V8FunctionCall::appendArgument(int argument)
 {
-    m_arguments.append(v8::Number::New(m_context->GetIsolate(), argument));
+    m_arguments.push_back(v8::Number::New(m_context->GetIsolate(), argument));
 }
 
 void V8FunctionCall::appendArgument(bool argument)
 {
-    m_arguments.append(argument ? v8::True(m_context->GetIsolate()) : v8::False(m_context->GetIsolate()));
+    m_arguments.push_back(argument ? v8::True(m_context->GetIsolate()) : v8::False(m_context->GetIsolate()));
 }
 
 void V8FunctionCall::appendUndefinedArgument()
 {
-    m_arguments.append(v8::Undefined(m_context->GetIsolate()));
+    m_arguments.push_back(v8::Undefined(m_context->GetIsolate()));
 }
 
 v8::Local<v8::Value> V8FunctionCall::call(bool& hadException, bool reportExceptions)
@@ -94,13 +94,13 @@ v8::Local<v8::Value> V8FunctionCall::callWithoutExceptionHandling()
     if (!thisObject->Get(m_context, m_name).ToLocal(&value))
         return v8::Local<v8::Value>();
 
-    ASSERT(value->IsFunction());
+    DCHECK(value->IsFunction());
 
     v8::Local<v8::Function> function = v8::Local<v8::Function>::Cast(value);
-    OwnPtr<v8::Local<v8::Value>[]> info = adoptArrayPtr(new v8::Local<v8::Value>[m_arguments.size()]);
+    std::unique_ptr<v8::Local<v8::Value>[]> info(new v8::Local<v8::Value>[m_arguments.size()]);
     for (size_t i = 0; i < m_arguments.size(); ++i) {
         info[i] = m_arguments[i];
-        ASSERT(!info[i].IsEmpty());
+        DCHECK(!info[i].IsEmpty());
     }
 
     v8::MicrotasksScope microtasksScope(m_context->GetIsolate(), v8::MicrotasksScope::kDoNotRunMicrotasks);
@@ -118,7 +118,7 @@ v8::Local<v8::Function> V8FunctionCall::function()
     if (!thisObject->Get(m_context, m_name).ToLocal(&value))
         return v8::Local<v8::Function>();
 
-    ASSERT(value->IsFunction());
+    DCHECK(value->IsFunction());
     return v8::Local<v8::Function>::Cast(value);
 }
 

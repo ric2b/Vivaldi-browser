@@ -11,6 +11,7 @@
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "content/public/test/web_contents_tester.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
+#include "ui/base/page_transition_types.h"
 
 namespace page_load_metrics {
 
@@ -35,6 +36,11 @@ class PageLoadMetricsObserverTestHarness
   // navigation.
   void StartNavigation(const GURL& gurl);
 
+  // Simulates committing a navigation to the given URL with the given
+  // PageTransition.
+  void NavigateWithPageTransitionAndCommit(const GURL& url,
+                                           ui::PageTransition transition);
+
   // Call this to simulate sending a PageLoadTiming IPC from the render process
   // to the browser process. These will update the timing information for the
   // most recently committed navigation.
@@ -46,6 +52,9 @@ class PageLoadMetricsObserverTestHarness
   void SimulateInputEvent(const blink::WebInputEvent& event);
 
   const base::HistogramTester& histogram_tester() const;
+
+  // Gets the PageLoadExtraInfo for the committed_load_ in observer_.
+  const PageLoadExtraInfo GetPageLoadExtraInfoForCommittedLoad();
 
  private:
   base::HistogramTester histogram_tester_;

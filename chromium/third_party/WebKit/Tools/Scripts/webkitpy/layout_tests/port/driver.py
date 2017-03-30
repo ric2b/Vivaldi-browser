@@ -223,16 +223,13 @@ class Driver(object):
 
     HTTP_DIR = "http/tests/"
     HTTP_LOCAL_DIR = "http/tests/local/"
-    WPT_DIR = "imported/web-platform-tests/"
+    WPT_DIR = "imported/wpt/"
 
     def is_http_test(self, test_name):
         return test_name.startswith(self.HTTP_DIR) and not test_name.startswith(self.HTTP_LOCAL_DIR)
 
-    def _should_treat_as_wpt_test(self, test_name):
-        return self._port.is_wpt_enabled() and self._port.is_wpt_test(test_name)
-
     def _get_http_host_and_ports_for_test(self, test_name):
-        if self._should_treat_as_wpt_test(test_name):
+        if self._port.should_use_wptserve(test_name):
             # TODO(burnik): Read from config or args.
             return ("web-platform.test", 8001, 8444)
         else:
@@ -246,12 +243,12 @@ class Driver(object):
         their name (e.g. 'http/tests/security/mixedContent/test1.https.html') will
         be loaded over HTTPS; all other tests over HTTP.
         """
-        is_wpt_test = self._should_treat_as_wpt_test(test_name)
+        using_wptserve = self._port.should_use_wptserve(test_name)
 
-        if not self.is_http_test(test_name) and not is_wpt_test:
+        if not self.is_http_test(test_name) and not using_wptserve:
             return path.abspath_to_uri(self._port.host.platform, self._port.abspath_for_test(test_name))
 
-        if is_wpt_test:
+        if using_wptserve:
             test_dir_prefix = self.WPT_DIR
         else:
             test_dir_prefix = self.HTTP_DIR
@@ -312,7 +309,7 @@ class Driver(object):
         self.stop()
         self._driver_tempdir = self._port._filesystem.mkdtemp(prefix='%s-' % self._port.driver_name())
         server_name = self._port.driver_name()
-        environment = self._port.setup_environ_for_server(server_name)
+        environment = self._port.setup_environ_for_server()
         environment = self._setup_environ_for_driver(environment)
         self._crashed_process_name = None
         self._crashed_pid = None
@@ -320,7 +317,7 @@ class Driver(object):
         self._leak_log = None
         cmd_line = self.cmd_line(pixel_tests, per_test_args)
         self._server_process = self._port._server_process_constructor(
-            self._port, server_name, cmd_line, environment, logging=self._port.get_option("driver_logging"))
+            self._port, server_name, cmd_line, environment, more_logging=self._port.get_option("driver_logging"))
         self._server_process.start()
         self._current_cmd_line = cmd_line
 
@@ -410,9 +407,10 @@ class Driver(object):
 
     def _command_from_driver_input(self, driver_input):
         # FIXME: performance tests pass in full URLs instead of test names.
-        if driver_input.test_name.startswith('http://') or driver_input.test_name.startswith('https://') or driver_input.test_name == ('about:blank'):
+        if driver_input.test_name.startswith(
+                'http://') or driver_input.test_name.startswith('https://') or driver_input.test_name == ('about:blank'):
             command = driver_input.test_name
-        elif self.is_http_test(driver_input.test_name) or self._should_treat_as_wpt_test(driver_input.test_name):
+        elif self.is_http_test(driver_input.test_name) or self._port.should_use_wptserve(driver_input.test_name):
             command = self.test_to_uri(driver_input.test_name)
         else:
             command = self._port.abspath_for_test(driver_input.test_name)
@@ -459,12 +457,12 @@ class Driver(object):
 
     def _process_stdout_line(self, block, line):
         if (self._read_header(block, line, 'Content-Type: ', 'content_type')
-            or self._read_header(block, line, 'Content-Transfer-Encoding: ', 'encoding')
-            or self._read_header(block, line, 'Content-Length: ', '_content_length', int)
-            or self._read_header(block, line, 'ActualHash: ', 'content_hash')
-            or self._read_header(block, line, 'DumpMalloc: ', 'malloc')
-            or self._read_header(block, line, 'DumpJSHeap: ', 'js_heap')
-            or self._read_header(block, line, 'StdinPath', 'stdin_path')):
+                or self._read_header(block, line, 'Content-Transfer-Encoding: ', 'encoding')
+                or self._read_header(block, line, 'Content-Length: ', '_content_length', int)
+                or self._read_header(block, line, 'ActualHash: ', 'content_hash')
+                or self._read_header(block, line, 'DumpMalloc: ', 'malloc')
+                or self._read_header(block, line, 'DumpJSHeap: ', 'js_heap')
+                or self._read_header(block, line, 'StdinPath', 'stdin_path')):
             return
         # Note, we're not reading ExpectedHash: here, but we could.
         # If the line wasn't a header, we just append it to the content.
@@ -507,7 +505,8 @@ class Driver(object):
 
             if out_line:
                 if out_line[-1] != "\n":
-                    _log.error("Last character read from DRT stdout line was not a newline!  This indicates either a NRWT or DRT bug.")
+                    _log.error(
+                        "Last character read from DRT stdout line was not a newline!  This indicates either a NRWT or DRT bug.")
                 content_length_before_header_check = block._content_length
                 self._process_stdout_line(block, out_line)
                 # FIXME: Unlike HTTP, DRT dumps the content right after printing a Content-Length header.

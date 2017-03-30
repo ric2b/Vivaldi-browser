@@ -13,6 +13,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
+#include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 
 namespace mojo {
 namespace internal {
@@ -59,7 +60,7 @@ class ResponderThunk : public MessageReceiverWithStatus {
   bool Accept(Message* message) override {
     DCHECK(task_runner_->RunsTasksOnCurrentThread());
     accept_was_invoked_ = true;
-    DCHECK(message->has_flag(kMessageIsResponse));
+    DCHECK(message->has_flag(Message::kFlagIsResponse));
 
     bool result = false;
 
@@ -133,27 +134,28 @@ Router::Router(ScopedMessagePipeHandle message_pipe,
   if (expects_sync_requests)
     connector_.AllowWokenUpBySyncWatchOnSameThread();
   connector_.set_incoming_receiver(filters_.GetHead());
-  connector_.set_connection_error_handler([this]() { OnConnectionError(); });
+  connector_.set_connection_error_handler(
+      base::Bind(&Router::OnConnectionError, base::Unretained(this)));
 }
 
 Router::~Router() {}
 
 bool Router::Accept(Message* message) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!message->has_flag(kMessageExpectsResponse));
+  DCHECK(!message->has_flag(Message::kFlagExpectsResponse));
   return connector_.Accept(message);
 }
 
 bool Router::AcceptWithResponder(Message* message, MessageReceiver* responder) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(message->has_flag(kMessageExpectsResponse));
+  DCHECK(message->has_flag(Message::kFlagExpectsResponse));
 
   // Reserve 0 in case we want it to convey special meaning in the future.
   uint64_t request_id = next_request_id_++;
   if (request_id == 0)
     request_id = next_request_id_++;
 
-  bool is_sync = message->has_flag(kMessageIsSync);
+  bool is_sync = message->has_flag(Message::kFlagIsSync);
   message->set_request_id(request_id);
   if (!connector_.Accept(message))
     return false;
@@ -163,6 +165,8 @@ bool Router::AcceptWithResponder(Message* message, MessageReceiver* responder) {
     async_responders_[request_id] = base::WrapUnique(responder);
     return true;
   }
+
+  SyncCallRestrictions::AssertSyncCallAllowed();
 
   bool response_received = false;
   std::unique_ptr<MessageReceiver> sync_responder(responder);
@@ -198,7 +202,7 @@ bool Router::HandleIncomingMessage(Message* message) {
 
   const bool during_sync_call =
       connector_.during_sync_handle_watcher_callback();
-  if (!message->has_flag(kMessageIsSync) &&
+  if (!message->has_flag(Message::kFlagIsSync) &&
       (during_sync_call || !pending_messages_.empty())) {
     std::unique_ptr<Message> pending_message(new Message);
     message->MoveTo(pending_message.get());
@@ -246,7 +250,7 @@ void Router::HandleQueuedMessages() {
 }
 
 bool Router::HandleMessageInternal(Message* message) {
-  if (message->has_flag(kMessageExpectsResponse)) {
+  if (message->has_flag(Message::kFlagExpectsResponse)) {
     if (!incoming_receiver_)
       return false;
 
@@ -257,10 +261,10 @@ bool Router::HandleMessageInternal(Message* message) {
       delete responder;
     return ok;
 
-  } else if (message->has_flag(kMessageIsResponse)) {
+  } else if (message->has_flag(Message::kFlagIsResponse)) {
     uint64_t request_id = message->request_id();
 
-    if (message->has_flag(kMessageIsSync)) {
+    if (message->has_flag(Message::kFlagIsSync)) {
       auto it = sync_responses_.find(request_id);
       if (it == sync_responses_.end()) {
         DCHECK(testing_mode_);
@@ -309,7 +313,8 @@ void Router::OnConnectionError() {
   }
 
   encountered_error_ = true;
-  error_handler_.Run();
+  if (!error_handler_.is_null())
+    error_handler_.Run();
 }
 
 // ----------------------------------------------------------------------------

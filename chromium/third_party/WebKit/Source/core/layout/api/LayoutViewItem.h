@@ -113,6 +113,26 @@ public:
         toView()->invalidatePaintForViewAndCompositedLayers();
     }
 
+    void sendMediaPositionChangeNotifications(const IntRect& visibleRect)
+    {
+        toView()->sendMediaPositionChangeNotifications(visibleRect);
+    }
+
+    int viewHeight(IncludeScrollbarsInRect scrollbarInclusion = ExcludeScrollbars) const
+    {
+        return toView()->viewHeight(scrollbarInclusion);
+    }
+
+    int viewWidth(IncludeScrollbarsInRect scrollbarInclusion = ExcludeScrollbars) const
+    {
+        return toView()->viewWidth(scrollbarInclusion);
+    }
+
+    FloatSize viewportSizeForViewportUnits() const
+    {
+        return toView()->viewportSizeForViewportUnits();
+    }
+
 private:
     LayoutView* toView() { return toLayoutView(layoutObject()); }
     const LayoutView* toView() const { return toLayoutView(layoutObject()); }

@@ -35,6 +35,8 @@ class BrowserAccessibilityManagerAndroid;
 class BrowserAccessibilityManagerWin;
 #elif defined(OS_LINUX) && !defined(OS_CHROMEOS) && defined(USE_X11)
 class BrowserAccessibilityManagerAuraLinux;
+#elif defined(OS_MACOSX)
+class BrowserAccessibilityManagerMac;
 #endif
 
 class SiteInstance;
@@ -276,6 +278,10 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
       ToBrowserAccessibilityManagerAuraLinux();
 #endif
 
+#if defined(OS_MACOSX)
+  BrowserAccessibilityManagerMac* ToBrowserAccessibilityManagerMac();
+#endif
+
   // Return the object that has focus, starting at the top of the frame tree.
   virtual BrowserAccessibility* GetFocus();
 
@@ -285,7 +291,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
 
   // Given a focused node |focus|, returns a descendant of that node if it
   // has an active descendant, otherwise returns |focus|.
-  BrowserAccessibility* GetActiveDescendantFocus(BrowserAccessibility* focus);
+  BrowserAccessibility* GetActiveDescendant(BrowserAccessibility* focus);
 
   // Returns true if native focus is anywhere in this WebContents or not.
   bool NativeViewHasFocus();
@@ -294,7 +300,7 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
   // scroll offsets separately.
   virtual bool UseRootScrollOffsetsWhenComputingBounds();
 
-  // Walk the tree.
+  // Walk the tree using depth-first pre-order traversal.
   static BrowserAccessibility* NextInTreeOrder(
       const BrowserAccessibility* object);
   static BrowserAccessibility* PreviousInTreeOrder(
@@ -314,9 +320,16 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
                                         int* child_index1,
                                         int* child_index2);
 
-  // Returns all the text found between the given start and end locations.
+  static std::vector<const BrowserAccessibility*> FindTextOnlyObjectsInRange(
+      const BrowserAccessibility& start_object,
+      const BrowserAccessibility& end_object);
+
+  static base::string16 GetTextForRange(
+      const BrowserAccessibility& start_object,
+      const BrowserAccessibility& end_object);
+
   // If start and end offsets are greater than the text's length, returns all
-  // the text until text length.
+  // the text.
   static base::string16 GetTextForRange(
       const BrowserAccessibility& start_object,
       int start_offset,
@@ -352,6 +365,9 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeDelegate {
 
   // Returns the BrowserAccessibilityDelegate from |GetRootManager|, above.
   BrowserAccessibilityDelegate* GetDelegateFromRootManager();
+
+  // Returns whether this is the top document.
+  bool IsRootTree();
 
   // Get a snapshot of the current tree as an AXTreeUpdate.
   ui::AXTreeUpdate SnapshotAXTreeForTesting();

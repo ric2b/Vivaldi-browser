@@ -42,9 +42,6 @@ class ListValue;
 class StringValue;
 class Value;
 
-typedef std::vector<Value*> ValueVector;
-typedef std::map<std::string, Value*> ValueMap;
-
 // The Value class is the base class for Values. A Value can be instantiated
 // via the Create*Value() factory methods, or by directly creating instances of
 // the subclasses.
@@ -185,7 +182,8 @@ class BASE_EXPORT BinaryValue: public Value {
   // For situations where you want to keep ownership of your buffer, this
   // factory method creates a new BinaryValue by copying the contents of the
   // buffer that's passed in.
-  static BinaryValue* CreateWithCopiedBuffer(const char* buffer, size_t size);
+  static std::unique_ptr<BinaryValue> CreateWithCopiedBuffer(const char* buffer,
+                                                             size_t size);
 
   size_t GetSize() const { return size_; }
 
@@ -210,6 +208,7 @@ class BASE_EXPORT BinaryValue: public Value {
 // are |std::string|s and should be UTF-8 encoded.
 class BASE_EXPORT DictionaryValue : public Value {
  public:
+  using Storage = std::map<std::string, std::unique_ptr<Value>>;
   // Returns |value| if it is a dictionary, nullptr otherwise.
   static std::unique_ptr<DictionaryValue> From(std::unique_ptr<Value> value);
 
@@ -372,7 +371,7 @@ class BASE_EXPORT DictionaryValue : public Value {
 
    private:
     const DictionaryValue& target_;
-    ValueMap::const_iterator it_;
+    Storage::const_iterator it_;
   };
 
   // Overridden from Value:
@@ -382,7 +381,7 @@ class BASE_EXPORT DictionaryValue : public Value {
   bool Equals(const Value* other) const override;
 
  private:
-  ValueMap dictionary_;
+  Storage dictionary_;
 
   DISALLOW_COPY_AND_ASSIGN(DictionaryValue);
 };
@@ -390,8 +389,9 @@ class BASE_EXPORT DictionaryValue : public Value {
 // This type of Value represents a list of other Value values.
 class BASE_EXPORT ListValue : public Value {
  public:
-  typedef ValueVector::iterator iterator;
-  typedef ValueVector::const_iterator const_iterator;
+  using Storage = std::vector<std::unique_ptr<Value>>;
+  using const_iterator = Storage::const_iterator;
+  using iterator = Storage::iterator;
 
   // Returns |value| if it is a list, nullptr otherwise.
   static std::unique_ptr<ListValue> From(std::unique_ptr<Value> value);
@@ -508,7 +508,7 @@ class BASE_EXPORT ListValue : public Value {
   std::unique_ptr<ListValue> CreateDeepCopy() const;
 
  private:
-  ValueVector list_;
+  Storage list_;
 
   DISALLOW_COPY_AND_ASSIGN(ListValue);
 };

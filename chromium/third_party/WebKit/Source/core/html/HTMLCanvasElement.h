@@ -41,10 +41,12 @@
 #include "core/page/PageLifecycleObserver.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/CanvasSurfaceLayerBridge.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/graphics/ImageBufferClient.h"
 #include "platform/heap/Handle.h"
+#include <memory>
 
 #define CanvasDefaultInterpolationQuality InterpolationLow
 
@@ -69,6 +71,7 @@ typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextO
 class CORE_EXPORT HTMLCanvasElement final : public HTMLElement, public ContextLifecycleObserver, public PageLifecycleObserver, public CanvasImageSource, public ImageBufferClient, public ImageBitmapSource {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
+    USING_PRE_FINALIZER(HTMLCanvasElement, dispose);
 public:
     using Node::getExecutionContext;
 
@@ -166,6 +169,8 @@ public:
     FloatSize elementSize(const FloatSize&) const override;
     bool isCanvasElement() const override { return true; }
     bool isOpaque() const override;
+    int sourceWidth() override { return m_size.width(); }
+    int sourceHeight() override { return m_size.height(); }
 
     // ImageBufferClient implementation
     void notifySurfaceInvalid() override;
@@ -183,9 +188,9 @@ public:
 
     DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
-    void createImageBufferUsingSurfaceForTesting(PassOwnPtr<ImageBufferSurface>);
+    void createImageBufferUsingSurfaceForTesting(std::unique_ptr<ImageBufferSurface>);
 
-    static void registerRenderingContextFactory(PassOwnPtr<CanvasRenderingContextFactory>);
+    static void registerRenderingContextFactory(std::unique_ptr<CanvasRenderingContextFactory>);
     void updateExternallyAllocatedMemory() const;
 
     void styleDidChange(const ComputedStyle* oldStyle, const ComputedStyle& newStyle);
@@ -197,13 +202,20 @@ public:
     std::pair<Element*, String> getControlAndIdIfHitRegionExists(const LayoutPoint&);
     String getIdFromControl(const Element*);
 
+    // For OffscreenCanvas that controls this html canvas element
+    CanvasSurfaceLayerBridge* surfaceLayerBridge() const { return m_surfaceLayerBridge.get(); }
+    bool createSurfaceLayer();
+
+    void detachContext() { m_context = nullptr; }
+
 protected:
     void didMoveToNewDocument(Document& oldDocument) override;
 
 private:
     explicit HTMLCanvasElement(Document&);
+    void dispose();
 
-    using ContextFactoryVector = Vector<OwnPtr<CanvasRenderingContextFactory>>;
+    using ContextFactoryVector = Vector<std::unique_ptr<CanvasRenderingContextFactory>>;
     static ContextFactoryVector& renderingContextFactories();
     static CanvasRenderingContextFactory* getRenderingContextFactory(int);
 
@@ -213,9 +225,9 @@ private:
 
     void reset();
 
-    PassOwnPtr<ImageBufferSurface> createImageBufferSurface(const IntSize& deviceSize, int* msaaSampleCount);
+    std::unique_ptr<ImageBufferSurface> createImageBufferSurface(const IntSize& deviceSize, int* msaaSampleCount);
     void createImageBuffer();
-    void createImageBufferInternal(PassOwnPtr<ImageBufferSurface> externalSurface);
+    void createImageBufferInternal(std::unique_ptr<ImageBufferSurface> externalSurface);
     bool shouldUseDisplayList(const IntSize& deviceSize);
 
     void setSurfaceSize(const IntSize&);
@@ -243,9 +255,12 @@ private:
     // after the first attempt failed.
     mutable bool m_didFailToCreateImageBuffer;
     bool m_imageBufferIsClear;
-    OwnPtr<ImageBuffer> m_imageBuffer;
+    std::unique_ptr<ImageBuffer> m_imageBuffer;
 
     mutable RefPtr<Image> m_copiedImage; // FIXME: This is temporary for platforms that have to copy the image buffer to render (and for CSSCanvasValue).
+
+    // Used for OffscreenCanvas that controls this HTML canvas element
+    std::unique_ptr<CanvasSurfaceLayerBridge> m_surfaceLayerBridge;
 };
 
 } // namespace blink

@@ -50,7 +50,10 @@ class Command(object):
         self._tool = None
         # option_parser can be overridden by the tool using set_option_parser
         # This default parser will be used for standalone_help printing.
-        self.option_parser = HelpPrintingOptionParser(usage=optparse.SUPPRESS_USAGE, add_help_option=False, option_list=self.options)
+        self.option_parser = HelpPrintingOptionParser(
+            usage=optparse.SUPPRESS_USAGE,
+            add_help_option=False,
+            option_list=self.options)
 
     def _exit(self, code):
         sys.exit(code)
@@ -147,7 +150,7 @@ class HelpPrintingOptionParser(optparse.OptionParser):
 
     # We override format_epilog to avoid the default formatting which would paragraph-wrap the epilog
     # and also to allow us to compute the epilog lazily instead of in the constructor (allowing it to be context sensitive).
-    def format_epilog(self, epilog):
+    def format_epilog(self, epilog):  # pylint: disable=unused-argument
         if self.epilog_method:
             return "\n%s\n" % self.epilog_method()
         return ""

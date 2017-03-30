@@ -376,8 +376,9 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
     popup_observer.Init();
     // Press alt+DOWN to open popup.
     bool alt = true;
-    content::SimulateKeyPress(
-        guest_web_contents(), ui::VKEY_DOWN, false, false, alt, false);
+    content::SimulateKeyPress(guest_web_contents(), ui::DomKey::ARROW_DOWN,
+                              ui::DomCode::ARROW_DOWN, ui::VKEY_DOWN, false,
+                              false, alt, false);
     popup_observer.Wait();
 
     content::RenderWidgetHost* popup_rwh =
@@ -403,8 +404,9 @@ class WebViewInteractiveTestBase : public extensions::PlatformAppBrowserTest {
     EXPECT_LE(std::abs(diff.y() - top_spacing), threshold_px);
 
     // Close the popup.
-    content::SimulateKeyPress(
-        guest_web_contents(), ui::VKEY_ESCAPE, false, false, false, false);
+    content::SimulateKeyPress(guest_web_contents(), ui::DomKey::ESCAPE,
+                              ui::DomCode::ESCAPE, ui::VKEY_ESCAPE, false,
+                              false, false, false);
   }
 
   void DragTestStep1() {
@@ -678,8 +680,9 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
     SimulateRWHMouseClick(
         embedder_web_contents->GetRenderViewHost()->GetWidget(),
         blink::WebMouseEvent::ButtonLeft, 200, 20);
-    content::SimulateKeyPress(embedder_web_contents, ui::VKEY_TAB,
-        false, false, false, false);
+    content::SimulateKeyPress(embedder_web_contents, ui::DomKey::TAB,
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
     ASSERT_TRUE(listener.WaitUntilSatisfied());
   }
 
@@ -693,12 +696,15 @@ IN_PROC_BROWSER_TEST_F(WebViewFocusInteractiveTest, Focus_AdvanceFocus) {
     // element. The initial element is dependent upon tab direction which blink
     // does not propagate to the plugin.
     // See http://crbug.com/147644.
-    content::SimulateKeyPress(embedder_web_contents, ui::VKEY_TAB,
-        false, false, false, false);
-    content::SimulateKeyPress(embedder_web_contents, ui::VKEY_TAB,
-        false, false, false, false);
-    content::SimulateKeyPress(embedder_web_contents, ui::VKEY_TAB,
-        false, false, false, false);
+    content::SimulateKeyPress(embedder_web_contents, ui::DomKey::TAB,
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
+    content::SimulateKeyPress(embedder_web_contents, ui::DomKey::TAB,
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
+    content::SimulateKeyPress(embedder_web_contents, ui::DomKey::TAB,
+                              ui::DomCode::TAB, ui::VKEY_TAB, false, false,
+                              false, false);
     ASSERT_TRUE(listener.WaitUntilSatisfied());
   }
 }
@@ -927,16 +933,9 @@ IN_PROC_BROWSER_TEST_F(WebViewContextMenuInteractiveTest,
 // and in oopif-mode the events are sent directly to the child process without
 // the forwarding code path (relying on surface-based hittesting).
 
-// Flaky on ChromeOS.  http://crbug.com/613258
-#if defined(OS_CHROMEOS)
-#define MAYBE_ContextMenuParamsAfterCSSTransforms \
-  DISABLED_ContextMenuParamsAfterCSSTransforms
-#else
-#define MAYBE_ContextMenuParamsAfterCSSTransforms \
-  ContextMenuParamsAfterCSSTransforms
-#endif
+// Flaky.  http://crbug.com/613258
 IN_PROC_BROWSER_TEST_F(WebViewContextMenuInteractiveTest,
-                       MAYBE_ContextMenuParamsAfterCSSTransforms) {
+                       DISABLED_ContextMenuParamsAfterCSSTransforms) {
   LoadAndLaunchPlatformApp("web_view/context_menus/coordinates_with_transforms",
                            "Launched");
 
@@ -1042,7 +1041,7 @@ IN_PROC_BROWSER_TEST_F(WebViewDragDropInteractiveTest, DragDropWithinWebView) {
   for (;;) {
     base::RunLoop run_loop;
     quit_closure_ = run_loop.QuitClosure();
-    base::MessageLoop::current()->PostTask(
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::Bind(&WebViewInteractiveTestBase::DragTestStep1,
                               base::Unretained(this)));
     run_loop.Run();

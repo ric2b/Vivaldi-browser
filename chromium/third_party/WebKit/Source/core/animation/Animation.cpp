@@ -35,6 +35,7 @@
 #include "core/animation/KeyframeEffect.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/StyleChangeReason.h"
 #include "core/events/AnimationPlayerEvent.h"
 #include "core/frame/UseCounter.h"
 #include "core/inspector/InspectorInstrumentation.h"
@@ -42,10 +43,10 @@
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/TraceEvent.h"
 #include "platform/animation/CompositorAnimationPlayer.h"
-#include "platform/graphics/CompositorFactory.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebCompositorSupport.h"
 #include "wtf/MathExtras.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -96,6 +97,7 @@ Animation::Animation(ExecutionContext* executionContext, AnimationTimeline& time
     , m_compositorState(nullptr)
     , m_compositorPending(false)
     , m_compositorGroup(0)
+    , m_preFinalizerRegistered(false)
     , m_currentTimePending(false)
     , m_stateIsBeingUpdated(false)
     , m_effectSuppressed(false)
@@ -294,7 +296,7 @@ bool Animation::preCommit(int compositorGroup, bool startOnCompositor)
                 createCompositorPlayer();
 
             if (maybeStartAnimationOnCompositor())
-                m_compositorState = adoptPtr(new CompositorState(*this));
+                m_compositorState = wrapUnique(new CompositorState(*this));
             else
                 cancelIncompatibleAnimationsOnCompositor();
         }
@@ -327,7 +329,7 @@ void Animation::postCommit(double timelineTime)
         m_currentTimePending = false;
         break;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
     }
 }
 
@@ -484,7 +486,7 @@ const char* Animation::playStateString(AnimationPlayState playState)
     case Finished:
         return "finished";
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return "";
     }
 }
@@ -762,7 +764,7 @@ void Animation::setCompositorPending(bool effectChanged)
     // FIXME: KeyframeEffect could notify this directly?
     if (!hasActiveAnimationsOnCompositor()) {
         destroyCompositorPlayer();
-        m_compositorState.clear();
+        m_compositorState.reset();
     }
     if (effectChanged && m_compositorState) {
         m_compositorState->effectChanged = true;
@@ -902,8 +904,14 @@ void Animation::endUpdatingState()
 void Animation::createCompositorPlayer()
 {
     if (Platform::current()->isThreadedAnimationEnabled() && !m_compositorPlayer) {
+        // We only need to pre-finalize if we are running animations on the compositor.
+        if (!m_preFinalizerRegistered) {
+            ThreadState::current()->registerPreFinalizer(this);
+            m_preFinalizerRegistered = true;
+        }
+
         ASSERT(Platform::current()->compositorSupport());
-        m_compositorPlayer = adoptPtr(CompositorFactory::current().createAnimationPlayer());
+        m_compositorPlayer = CompositorAnimationPlayer::create();
         ASSERT(m_compositorPlayer);
         m_compositorPlayer->setAnimationDelegate(this);
         attachCompositorTimeline();
@@ -919,7 +927,7 @@ void Animation::destroyCompositorPlayer()
     if (m_compositorPlayer) {
         detachCompositorTimeline();
         m_compositorPlayer->setAnimationDelegate(nullptr);
-        m_compositorPlayer.clear();
+        m_compositorPlayer.reset();
     }
 }
 
@@ -949,14 +957,13 @@ void Animation::attachCompositedLayers()
     ASSERT(m_content);
     ASSERT(m_content->isKeyframeEffect());
 
-    if (toKeyframeEffect(m_content.get())->canAttachCompositedLayers())
-        toKeyframeEffect(m_content.get())->attachCompositedLayers();
+    toKeyframeEffect(m_content.get())->attachCompositedLayers();
 }
 
 void Animation::detachCompositedLayers()
 {
-    if (m_compositorPlayer && m_compositorPlayer->isLayerAttached())
-        m_compositorPlayer->detachLayer();
+    if (m_compositorPlayer && m_compositorPlayer->isElementAttached())
+        m_compositorPlayer->detachElement();
 }
 
 void Animation::notifyAnimationStarted(double monotonicTime, int group)
@@ -1040,7 +1047,7 @@ Animation::PlayStateUpdateScope::~PlayStateUpdateScope()
     case DoNotSetCompositorPending:
         break;
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         break;
     }
     m_animation->endUpdatingState();
@@ -1077,6 +1084,14 @@ void Animation::disableCompositedAnimationForTesting()
 {
     m_isCompositedAnimationDisabledForTesting = true;
     cancelAnimationOnCompositor();
+}
+
+void Animation::invalidateKeyframeEffect()
+{
+    if (!m_content || !m_content->isKeyframeEffect())
+        return;
+
+    toKeyframeEffect(m_content.get())->target()->setNeedsStyleRecalc(LocalStyleChange, StyleChangeReasonForTracing::create(StyleChangeReason::StyleSheetChange));
 }
 
 DEFINE_TRACE(Animation)

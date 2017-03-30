@@ -7,17 +7,24 @@
 #include <algorithm>
 #include <utility>
 
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_popup_label_button.h"
+#include "ash/common/system/tray/tray_popup_label_button_border.h"
+#include "ash/common/system/user/button_from_view.h"
+#include "ash/common/system/user/login_status.h"
+#include "ash/common/system/user/rounded_image_view.h"
+#include "ash/common/wm_lookup.h"
+#include "ash/common/wm_root_window_controller.h"
+#include "ash/common/wm_shell.h"
+#include "ash/common/wm_window.h"
 #include "ash/multi_profile_uma.h"
 #include "ash/popup_message.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/tray_popup_label_button.h"
-#include "ash/system/tray/tray_popup_label_button_border.h"
-#include "ash/system/user/button_from_view.h"
-#include "ash/system/user/rounded_image_view.h"
 #include "ash/system/user/user_card_view.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
@@ -27,7 +34,6 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/painter.h"
-#include "ui/wm/core/shadow_types.h"
 
 namespace ash {
 namespace tray {
@@ -66,25 +72,21 @@ const int kTrayUserTileHoverBorderInset = 10;
 const int kPopupMessageOffset = 25;
 
 // Switch to a user with the given |user_index|.
-void SwitchUser(ash::UserIndex user_index) {
+void SwitchUser(UserIndex user_index) {
   // Do not switch users when the log screen is presented.
-  if (ash::Shell::GetInstance()
-          ->session_state_delegate()
-          ->IsUserSessionBlocked())
+  SessionStateDelegate* delegate = WmShell::Get()->GetSessionStateDelegate();
+  if (delegate->IsUserSessionBlocked())
     return;
 
   DCHECK(user_index > 0);
-  ash::SessionStateDelegate* delegate =
-      ash::Shell::GetInstance()->session_state_delegate();
-  ash::MultiProfileUMA::RecordSwitchActiveUser(
-      ash::MultiProfileUMA::SWITCH_ACTIVE_USER_BY_TRAY);
+  MultiProfileUMA::RecordSwitchActiveUser(
+      MultiProfileUMA::SWITCH_ACTIVE_USER_BY_TRAY);
   delegate->SwitchActiveUser(delegate->GetUserInfo(user_index)->GetAccountId());
 }
 
 bool IsMultiProfileSupportedAndUserActive() {
-  auto* shell = Shell::GetInstance();
-  return shell->delegate()->IsMultiProfilesEnabled() &&
-         !shell->session_state_delegate()->IsUserSessionBlocked();
+  return Shell::GetInstance()->delegate()->IsMultiProfilesEnabled() &&
+         !WmShell::Get()->GetSessionStateDelegate()->IsUserSessionBlocked();
 }
 
 class UserViewMouseWatcherHost : public views::MouseWatcherHost {
@@ -154,20 +156,20 @@ void AddUserView::AddContent() {
   set_background(views::Background::CreateSolidBackground(kBackgroundColor));
 
   add_user_ = new views::View;
-  add_user_->SetBorder(views::Border::CreateEmptyBorder(
-      0, kTrayUserTileHoverBorderInset, 0, 0));
+  add_user_->SetBorder(
+      views::Border::CreateEmptyBorder(0, kTrayUserTileHoverBorderInset, 0, 0));
 
   add_user_->SetLayoutManager(new views::BoxLayout(
       views::BoxLayout::kHorizontal, 0, 0, kTrayPopupPaddingBetweenItems));
   AddChildViewAt(add_user_, 0);
 
   // Add the [+] icon which is also the anchor for messages.
-  RoundedImageView* icon = new RoundedImageView(kTrayAvatarCornerRadius, true);
+  RoundedImageView* icon = new RoundedImageView(kTrayRoundedBorderRadius, true);
   anchor_ = icon;
   icon->SetImage(*ui::ResourceBundle::GetSharedInstance()
                       .GetImageNamed(IDR_AURA_UBER_TRAY_ADD_MULTIPROFILE_USER)
                       .ToImageSkia(),
-                 gfx::Size(kTrayAvatarSize, kTrayAvatarSize));
+                 gfx::Size(kTrayItemSize, kTrayItemSize));
   add_user_->AddChildView(icon);
 
   // Add the command text.
@@ -179,9 +181,7 @@ void AddUserView::AddContent() {
 
 }  // namespace
 
-UserView::UserView(SystemTrayItem* owner,
-                   user::LoginStatus login,
-                   UserIndex index)
+UserView::UserView(SystemTrayItem* owner, LoginStatus login, UserIndex index)
     : user_index_(index),
       user_card_view_(NULL),
       owner_(owner),
@@ -189,16 +189,16 @@ UserView::UserView(SystemTrayItem* owner,
       logout_button_(NULL),
       add_user_enabled_(true),
       focus_manager_(NULL) {
-  CHECK_NE(user::LOGGED_IN_NONE, login);
+  CHECK_NE(LoginStatus::NOT_LOGGED_IN, login);
   if (!index) {
     // Only the logged in user will have a background. All other users will have
     // to allow the TrayPopupContainer highlighting the menu line.
     set_background(views::Background::CreateSolidBackground(
-        login == user::LOGGED_IN_PUBLIC ? kPublicAccountBackgroundColor
-                                        : kBackgroundColor));
+        login == LoginStatus::PUBLIC ? kPublicAccountBackgroundColor
+                                     : kBackgroundColor));
   }
-  SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0, kTrayPopupPaddingBetweenItems));
+  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
+                                        kTrayPopupPaddingBetweenItems));
   // The logout button must be added before the user card so that the user card
   // can correctly calculate the remaining available width.
   // Note that only the current multiprofile user gets a button.
@@ -294,10 +294,9 @@ void UserView::Layout() {
 
 void UserView::ButtonPressed(views::Button* sender, const ui::Event& event) {
   if (sender == logout_button_) {
-    Shell::GetInstance()->metrics()->RecordUserMetricsAction(
-        ash::UMA_STATUS_AREA_SIGN_OUT);
+    WmShell::Get()->RecordUserMetricsAction(UMA_STATUS_AREA_SIGN_OUT);
     RemoveAddUserMenuOption();
-    Shell::GetInstance()->system_tray_delegate()->SignOut();
+    WmShell::Get()->system_tray_delegate()->SignOut();
   } else if (sender == user_card_view_ &&
              IsMultiProfileSupportedAndUserActive()) {
     if (!user_index_) {
@@ -314,7 +313,7 @@ void UserView::ButtonPressed(views::Button* sender, const ui::Event& event) {
     RemoveAddUserMenuOption();
     // Let the user add another account to the session.
     MultiProfileUMA::RecordSigninUser(MultiProfileUMA::SIGNIN_USER_BY_TRAY);
-    Shell::GetInstance()->system_tray_delegate()->ShowUserLogin();
+    WmShell::Get()->system_tray_delegate()->ShowUserLogin();
     owner_->system_tray()->CloseSystemBubble();
   } else {
     NOTREACHED();
@@ -330,26 +329,23 @@ void UserView::OnDidChangeFocus(View* focused_before, View* focused_now) {
   // Nothing to do here.
 }
 
-void UserView::AddLogoutButton(user::LoginStatus login) {
+void UserView::AddLogoutButton(LoginStatus login) {
   const base::string16 title =
       user::GetLocalizedSignOutStringForStatus(login, true);
   auto* logout_button = new TrayPopupLabelButton(this, title);
   logout_button->SetAccessibleName(title);
   logout_button_ = logout_button;
   // In public account mode, the logout button border has a custom color.
-  if (login == user::LOGGED_IN_PUBLIC) {
+  if (login == LoginStatus::PUBLIC) {
     std::unique_ptr<TrayPopupLabelButtonBorder> border(
         new TrayPopupLabelButtonBorder());
-    border->SetPainter(false,
-                       views::Button::STATE_NORMAL,
+    border->SetPainter(false, views::Button::STATE_NORMAL,
                        views::Painter::CreateImageGridPainter(
                            kPublicAccountLogoutButtonBorderImagesNormal));
-    border->SetPainter(false,
-                       views::Button::STATE_HOVERED,
+    border->SetPainter(false, views::Button::STATE_HOVERED,
                        views::Painter::CreateImageGridPainter(
                            kPublicAccountLogoutButtonBorderImagesHovered));
-    border->SetPainter(false,
-                       views::Button::STATE_PRESSED,
+    border->SetPainter(false, views::Button::STATE_PRESSED,
                        views::Painter::CreateImageGridPainter(
                            kPublicAccountLogoutButtonBorderImagesHovered));
     logout_button_->SetBorder(std::move(border));
@@ -357,12 +353,11 @@ void UserView::AddLogoutButton(user::LoginStatus login) {
   AddChildView(logout_button_);
 }
 
-void UserView::AddUserCard(user::LoginStatus login) {
+void UserView::AddUserCard(LoginStatus login) {
   // Add padding around the panel.
-  SetBorder(views::Border::CreateEmptyBorder(kTrayPopupUserCardVerticalPadding,
-                                             kTrayPopupPaddingHorizontal,
-                                             kTrayPopupUserCardVerticalPadding,
-                                             kTrayPopupPaddingHorizontal));
+  SetBorder(views::Border::CreateEmptyBorder(
+      kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal,
+      kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal));
 
   views::TrayBubbleView* bubble_view =
       owner_->system_tray()->GetSystemBubble()->bubble_view();
@@ -374,7 +369,7 @@ void UserView::AddUserCard(user::LoginStatus login) {
   user_card_view_ = new UserCardView(login, max_card_width, user_index_);
   // The entry is clickable when no system modal dialog is open and the multi
   // profile option is active.
-  bool clickable = !Shell::GetInstance()->IsSystemModalWindowOpen() &&
+  bool clickable = !WmShell::Get()->IsSystemModalWindowOpen() &&
                    IsMultiProfileSupportedAndUserActive();
   if (clickable) {
     // To allow the border to start before the icon, reduce the size before and
@@ -383,8 +378,7 @@ void UserView::AddUserCard(user::LoginStatus login) {
       SetBorder(views::Border::CreateEmptyBorder(
           kTrayPopupUserCardVerticalPadding,
           kTrayPopupPaddingHorizontal - kTrayUserTileHoverBorderInset,
-          kTrayPopupUserCardVerticalPadding,
-          kTrayPopupPaddingHorizontal));
+          kTrayPopupUserCardVerticalPadding, kTrayPopupPaddingHorizontal));
       user_card_view_->SetBorder(views::Border::CreateEmptyBorder(
           0, kTrayUserTileHoverBorderInset, 0, 0));
     }
@@ -411,7 +405,7 @@ void UserView::AddUserCard(user::LoginStatus login) {
   AddChildViewAt(user_card_view_, 0);
   // Card for supervised user can consume more space than currently
   // available. In that case we should increase system bubble's width.
-  if (login == user::LOGGED_IN_PUBLIC)
+  if (login == LoginStatus::PUBLIC)
     bubble_view->SetWidth(GetPreferredSize().width());
 }
 
@@ -428,14 +422,19 @@ void UserView::ToggleAddUserMenuOption() {
   views::Widget::InitParams params;
   params.type = views::Widget::InitParams::TYPE_TOOLTIP;
   params.keep_on_top = true;
-  params.context = this->GetWidget()->GetNativeWindow();
   params.accept_events = true;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+  params.shadow_type = views::Widget::InitParams::SHADOW_TYPE_NONE;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+  params.name = "AddUserMenuOption";
+  WmLookup::Get()
+      ->GetWindowForWidget(GetWidget())
+      ->GetRootWindowController()
+      ->ConfigureWidgetInitParamsForContainer(
+          add_menu_option_.get(), kShellWindowId_DragImageAndTooltipContainer,
+          &params);
   add_menu_option_->Init(params);
-  add_menu_option_->SetOpacity(0xFF);
-  add_menu_option_->GetNativeWindow()->set_owned_by_parent(false);
-  SetShadowType(add_menu_option_->GetNativeView(), ::wm::SHADOW_TYPE_NONE);
+  add_menu_option_->SetOpacity(1.f);
 
   // Position it below our user card.
   gfx::Rect bounds = user_card_view_->GetBoundsInScreen();
@@ -450,15 +449,14 @@ void UserView::ToggleAddUserMenuOption() {
       new AddUserView(static_cast<ButtonFromView*>(user_card_view_));
 
   const SessionStateDelegate* delegate =
-      Shell::GetInstance()->session_state_delegate();
+      WmShell::Get()->GetSessionStateDelegate();
 
   SessionStateDelegate::AddUserError add_user_error;
   add_user_enabled_ = delegate->CanAddUserToMultiProfile(&add_user_error);
 
-  ButtonFromView* button = new ButtonFromView(add_user_view,
-                                              add_user_enabled_ ? this : NULL,
-                                              add_user_enabled_,
-                                              gfx::Insets(1, 1, 1, 1));
+  ButtonFromView* button =
+      new ButtonFromView(add_user_view, add_user_enabled_ ? this : NULL,
+                         add_user_enabled_, gfx::Insets(1, 1, 1, 1));
   button->SetAccessibleName(
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SIGN_IN_ANOTHER_ACCOUNT));
   button->ForceBorderVisible(true);
@@ -489,10 +487,8 @@ void UserView::ToggleAddUserMenuOption() {
 
     popup_message_.reset(new PopupMessage(
         bundle.GetLocalizedString(IDS_ASH_STATUS_TRAY_CAPTION_CANNOT_ADD_USER),
-        bundle.GetLocalizedString(message_id),
-        PopupMessage::ICON_WARNING,
-        add_user_view->anchor(),
-        views::BubbleBorder::TOP_LEFT,
+        bundle.GetLocalizedString(message_id), PopupMessage::ICON_WARNING,
+        add_user_view->anchor(), views::BubbleBorder::TOP_LEFT,
         gfx::Size(parent()->bounds().width() - kPopupMessageOffset, 0),
         2 * kPopupMessageOffset));
   }

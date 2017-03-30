@@ -281,7 +281,7 @@ bool InsertListCommand::doApplyForSingleParagraph(bool forceCreateList, const HT
             Node* firstChildInList = enclosingListChild(VisiblePosition::firstPositionInNode(listElement).deepEquivalent().anchorNode(), listElement);
             Element* outerBlock = firstChildInList && isBlockFlowElement(*firstChildInList) ? toElement(firstChildInList) : listElement;
 
-            moveParagraphWithClones(VisiblePosition::firstPositionInNode(listElement), createVisiblePosition(Position::lastPositionInNode(listElement)), newList, outerBlock, editingState);
+            moveParagraphWithClones(VisiblePosition::firstPositionInNode(listElement), VisiblePosition::lastPositionInNode(listElement), newList, outerBlock, editingState);
             if (editingState->isAborted())
                 return false;
 
@@ -333,7 +333,7 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
     DCHECK(listChildNode);
     if (isHTMLLIElement(*listChildNode)) {
         start = VisiblePosition::firstPositionInNode(listChildNode);
-        end = createVisiblePosition(Position::lastPositionInNode(listChildNode));
+        end = VisiblePosition::lastPositionInNode(listChildNode);
         nextListChild = listChildNode->nextSibling();
         previousListChild = listChildNode->previousSibling();
     } else {
@@ -382,8 +382,8 @@ void InsertListCommand::unlistifyParagraph(const VisiblePosition& originalStart,
     if (editingState->isAborted())
         return;
 
-    VisiblePosition insertionPoint = createVisiblePosition(positionBeforeNode(placeholder));
-    moveParagraphs(start, end, insertionPoint, editingState, /* preserveSelection */ true, /* preserveStyle */ true, listChildNode);
+    VisiblePosition insertionPoint = VisiblePosition::beforeNode(placeholder);
+    moveParagraphs(start, end, insertionPoint, editingState, PreserveSelection, PreserveStyle, listChildNode);
 }
 
 static HTMLElement* adjacentEnclosingList(const VisiblePosition& pos, const VisiblePosition& adjacentPos, const HTMLQualifiedName& listTag)
@@ -495,7 +495,7 @@ void InsertListCommand::moveParagraphOverPositionIntoEmptyListItem(const Visible
     document().updateStyleAndLayoutIgnorePendingStylesheets();
     const VisiblePosition& start = startOfParagraph(pos, CanSkipOverEditingBoundary);
     const VisiblePosition& end = endOfParagraph(pos, CanSkipOverEditingBoundary);
-    moveParagraph(start, end, createVisiblePosition(positionBeforeNode(placeholder)), editingState, true);
+    moveParagraph(start, end, VisiblePosition::beforeNode(placeholder), editingState, PreserveSelection);
 }
 
 DEFINE_TRACE(InsertListCommand)

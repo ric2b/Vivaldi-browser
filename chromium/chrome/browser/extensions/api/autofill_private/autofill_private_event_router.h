@@ -38,26 +38,15 @@ class AutofillPrivateEventRouter :
   // KeyedService overrides:
   void Shutdown() override;
 
-  // EventRouter::Observer overrides:
-  void OnListenerAdded(const EventListenerInfo& details) override;
-  void OnListenerRemoved(const EventListenerInfo& details) override;
-
   // PersonalDataManagerObserver implementation.
   void OnPersonalDataChanged() override;
 
  private:
-  // Either listens or unlistens for changes to |personal_data_|, depending on
-  // whether clients are listening to the autofillPrivate API events.
-  void StartOrStopListeningForChanges();
-
   content::BrowserContext* context_;
 
   EventRouter* event_router_;
 
   autofill::PersonalDataManager* personal_data_;
-
-  // Whether this class is currently listening for changes to |personal_data_|.
-  bool listening_;
 
   DISALLOW_COPY_AND_ASSIGN(AutofillPrivateEventRouter);
 };

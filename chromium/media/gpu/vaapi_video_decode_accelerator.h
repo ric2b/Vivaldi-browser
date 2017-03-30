@@ -21,8 +21,9 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/linked_ptr.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/synchronization/lock.h"
 #include "base/threading/thread.h"
@@ -52,7 +53,7 @@ class VaapiPicture;
 // stopped during |this->Destroy()|, so any tasks posted to the decoder thread
 // can assume |*this| is still alive.  See |weak_this_| below for more details.
 class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
-    : public media::VideoDecodeAccelerator {
+    : public VideoDecodeAccelerator {
  public:
   class VaapiDecodeSurface;
 
@@ -62,15 +63,14 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
 
   ~VaapiVideoDecodeAccelerator() override;
 
-  // media::VideoDecodeAccelerator implementation.
+  // VideoDecodeAccelerator implementation.
   bool Initialize(const Config& config, Client* client) override;
-  void Decode(const media::BitstreamBuffer& bitstream_buffer) override;
-  void AssignPictureBuffers(
-      const std::vector<media::PictureBuffer>& buffers) override;
+  void Decode(const BitstreamBuffer& bitstream_buffer) override;
+  void AssignPictureBuffers(const std::vector<PictureBuffer>& buffers) override;
 #if defined(USE_OZONE)
-  void ImportBufferForPicture(int32_t picture_buffer_id,
-                              const std::vector<gfx::GpuMemoryBufferHandle>&
-                                  gpu_memory_buffer_handles) override;
+  void ImportBufferForPicture(
+      int32_t picture_buffer_id,
+      const gfx::GpuMemoryBufferHandle& gpu_memory_buffer_handle) override;
 #endif
   void ReusePictureBuffer(int32_t picture_buffer_id) override;
   void Flush() override;
@@ -80,10 +80,8 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
       const base::WeakPtr<Client>& decode_client,
       const scoped_refptr<base::SingleThreadTaskRunner>& decode_task_runner)
       override;
-  VideoPixelFormat GetOutputFormat() const override;
 
-  static media::VideoDecodeAccelerator::SupportedProfiles
-  GetSupportedProfiles();
+  static VideoDecodeAccelerator::SupportedProfiles GetSupportedProfiles();
 
  private:
   class VaapiH264Accelerator;
@@ -95,8 +93,7 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
 
   // Map the received input buffer into this process' address space and
   // queue it for decode.
-  void MapAndQueueNewInputBuffer(
-      const media::BitstreamBuffer& bitstream_buffer);
+  void MapAndQueueNewInputBuffer(const BitstreamBuffer& bitstream_buffer);
 
   // Get a new input buffer from the queue and set it up in decoder. This will
   // sleep if no input buffers are available. Return true if a new buffer has
@@ -265,8 +262,8 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
   typedef base::Callback<void(VaapiPicture*)> OutputCB;
   std::queue<OutputCB> pending_output_cbs_;
 
-  // ChildThread's message loop
-  base::MessageLoop* message_loop_;
+  // ChildThread's task runner.
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   // WeakPtr<> pointing to |this| for use in posting tasks from the decoder
   // thread back to the ChildThread.  Because the decoder thread is a member of
@@ -280,7 +277,7 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
   VASurface::ReleaseCB va_surface_release_cb_;
 
   // To expose client callbacks from VideoDecodeAccelerator.
-  // NOTE: all calls to these objects *MUST* be executed on message_loop_.
+  // NOTE: all calls to these objects *MUST* be executed on task_runner_.
   std::unique_ptr<base::WeakPtrFactory<Client>> client_ptr_factory_;
   base::WeakPtr<Client> client_;
 
@@ -308,9 +305,11 @@ class MEDIA_GPU_EXPORT VaapiVideoDecodeAccelerator
   // to be returned before we can free them.
   bool awaiting_va_surfaces_recycle_;
 
-  // Last requested number/resolution of output picture buffers.
+  // Last requested number/resolution of output picture buffers and their
+  // format.
   size_t requested_num_pics_;
   gfx::Size requested_pic_size_;
+  gfx::BufferFormat output_format_;
 
   // Callback to make GL context current.
   MakeGLContextCurrentCallback make_context_current_cb_;

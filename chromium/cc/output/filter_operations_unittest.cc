@@ -21,10 +21,10 @@ TEST(FilterOperationsTest, GetOutsetsBlur) {
   int top, right, bottom, left;
   top = right = bottom = left = 0;
   ops.GetOutsets(&top, &right, &bottom, &left);
-  EXPECT_EQ(57, top);
-  EXPECT_EQ(57, right);
-  EXPECT_EQ(57, bottom);
-  EXPECT_EQ(57, left);
+  EXPECT_EQ(60, top);
+  EXPECT_EQ(60, right);
+  EXPECT_EQ(60, bottom);
+  EXPECT_EQ(60, left);
 }
 
 TEST(FilterOperationsTest, MapRectBlur) {
@@ -32,6 +32,13 @@ TEST(FilterOperationsTest, MapRectBlur) {
   ops.Append(FilterOperation::CreateBlurFilter(20));
   EXPECT_EQ(gfx::Rect(-60, -60, 130, 130),
             ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
+TEST(FilterOperationsTest, MapRectReverseBlur) {
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateBlurFilter(20));
+  EXPECT_EQ(gfx::Rect(-60, -60, 130, 130),
+            ops.MapRectReverse(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
 }
 
 TEST(FilterOperationsTest, GetOutsetsDropShadowReferenceFilter) {
@@ -66,12 +73,62 @@ TEST(FilterOperationsTest, MapRectDropShadowReferenceFilter) {
             ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
 }
 
+TEST(FilterOperationsTest, MapRectReverseDropShadowReferenceFilter) {
+  FilterOperations ops;
+  ops.Append(
+      FilterOperation::CreateReferenceFilter(SkDropShadowImageFilter::Make(
+          SkIntToScalar(3), SkIntToScalar(8), SkIntToScalar(4),
+          SkIntToScalar(9), SK_ColorBLACK,
+          SkDropShadowImageFilter::kDrawShadowAndForeground_ShadowMode,
+          nullptr)));
+  EXPECT_EQ(gfx::Rect(-15, -35, 34, 64),
+            ops.MapRectReverse(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
 TEST(FilterOperationsTest, MapRectOffsetReferenceFilter) {
   sk_sp<SkImageFilter> filter = SkOffsetImageFilter::Make(30, 40, nullptr);
   FilterOperations ops;
   ops.Append(FilterOperation::CreateReferenceFilter(std::move(filter)));
   EXPECT_EQ(gfx::Rect(30, 40, 10, 10),
             ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
+TEST(FilterOperationsTest, MapRectReverseOffsetReferenceFilter) {
+  sk_sp<SkImageFilter> filter = SkOffsetImageFilter::Make(30, 40, nullptr);
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateReferenceFilter(std::move(filter)));
+  EXPECT_EQ(gfx::Rect(-30, -40, 10, 10),
+            ops.MapRectReverse(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
+TEST(FilterOperationsTest, MapRectCombineNonCommutative) {
+  // Offsets by 100px in each axis, then scales the resulting image by 2.
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateReferenceFilter(
+      SkOffsetImageFilter::Make(100, 100, nullptr)));
+  SkMatrix scaleMatrix;
+  scaleMatrix.setScale(2, 2);
+  ops.Append(
+      FilterOperation::CreateReferenceFilter(SkImageFilter::MakeMatrixFilter(
+          scaleMatrix, kNone_SkFilterQuality, nullptr)));
+
+  EXPECT_EQ(gfx::Rect(200, 200, 20, 20),
+            ops.MapRect(gfx::Rect(10, 10), SkMatrix::I()));
+}
+
+TEST(FilterOperationsTest, MapRectReverseCombineNonCommutative) {
+  // Offsets by 100px in each axis, then scales the resulting image by 2.
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateReferenceFilter(
+      SkOffsetImageFilter::Make(100, 100, nullptr)));
+  SkMatrix scaleMatrix;
+  scaleMatrix.setScale(2, 2);
+  ops.Append(
+      FilterOperation::CreateReferenceFilter(SkImageFilter::MakeMatrixFilter(
+          scaleMatrix, kNone_SkFilterQuality, nullptr)));
+
+  EXPECT_EQ(gfx::Rect(10, 10),
+            ops.MapRectReverse(gfx::Rect(200, 200, 20, 20), SkMatrix::I()));
 }
 
 TEST(FilterOperationsTest, GetOutsetsNullReferenceFilter) {
@@ -94,16 +151,23 @@ TEST(FilterOperationsTest, MapRectNullReferenceFilter) {
             ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
 }
 
+TEST(FilterOperationsTest, MapRectReverseNullReferenceFilter) {
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateReferenceFilter(nullptr));
+  EXPECT_EQ(gfx::Rect(0, 0, 10, 10),
+            ops.MapRectReverse(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
 TEST(FilterOperationsTest, GetOutsetsDropShadow) {
   FilterOperations ops;
   ops.Append(FilterOperation::CreateDropShadowFilter(gfx::Point(3, 8), 20, 0));
   int top, right, bottom, left;
   top = right = bottom = left = 0;
   ops.GetOutsets(&top, &right, &bottom, &left);
-  EXPECT_EQ(49, top);
-  EXPECT_EQ(60, right);
-  EXPECT_EQ(65, bottom);
-  EXPECT_EQ(54, left);
+  EXPECT_EQ(52, top);
+  EXPECT_EQ(63, right);
+  EXPECT_EQ(68, bottom);
+  EXPECT_EQ(57, left);
 }
 
 TEST(FilterOperationsTest, MapRectDropShadow) {
@@ -111,6 +175,13 @@ TEST(FilterOperationsTest, MapRectDropShadow) {
   ops.Append(FilterOperation::CreateDropShadowFilter(gfx::Point(3, 8), 20, 0));
   EXPECT_EQ(gfx::Rect(-57, -52, 130, 130),
             ops.MapRect(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
+}
+
+TEST(FilterOperationsTest, MapRectReverseDropShadow) {
+  FilterOperations ops;
+  ops.Append(FilterOperation::CreateDropShadowFilter(gfx::Point(3, 8), 20, 0));
+  EXPECT_EQ(gfx::Rect(-63, -68, 130, 130),
+            ops.MapRectReverse(gfx::Rect(0, 0, 10, 10), SkMatrix::I()));
 }
 
 #define SAVE_RESTORE_AMOUNT(filter_name, filter_type, a)                  \

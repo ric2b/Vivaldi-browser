@@ -85,7 +85,7 @@ class ProxyDeviceEventDispatcher : public DeviceEventDispatcherEvdev {
   }
 
   void DispatchKeyboardDevicesUpdated(
-      const std::vector<KeyboardDevice>& devices) override {
+      const std::vector<InputDevice>& devices) override {
     ui_thread_runner_->PostTask(
         FROM_HERE,
         base::Bind(&EventFactoryEvdev::DispatchKeyboardDevicesUpdated,
@@ -252,6 +252,7 @@ void EventFactoryEvdev::DispatchPinchEvent(const PinchEventParams& params) {
   TRACE_EVENT1("evdev", "EventFactoryEvdev::DispatchPinchEvent", "device",
                params.device_id);
   GestureEventDetails details(params.type);
+  details.set_device_type(GestureDeviceType::DEVICE_TOUCHPAD);
   details.set_scale(params.scale);
   GestureEvent event(params.location.x(), params.location.y(), 0,
                      params.timestamp, details);
@@ -318,7 +319,7 @@ void EventFactoryEvdev::DispatchUiEvent(Event* event) {
 }
 
 void EventFactoryEvdev::DispatchKeyboardDevicesUpdated(
-    const std::vector<KeyboardDevice>& devices) {
+    const std::vector<InputDevice>& devices) {
   TRACE_EVENT0("evdev", "EventFactoryEvdev::DispatchKeyboardDevicesUpdated");
   DeviceHotplugEventObserver* observer = DeviceDataManager::GetInstance();
   observer->OnKeyboardDevicesUpdated(devices);

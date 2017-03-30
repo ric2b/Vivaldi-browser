@@ -17,6 +17,12 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image.h"
 
+@interface NSWorkspace (Redeclarations)
+
+@property(readonly) BOOL accessibilityDisplayShouldIncreaseContrast;
+
+@end
+
 NSString* const kBrowserThemeDidChangeNotification =
     @"BrowserThemeDidChangeNotification";
 
@@ -183,7 +189,8 @@ NSColor* ThemeService::GetNSColor(int id, bool incognito) const {
   DCHECK(CalledOnValidThread());
 
   int original_id = id;
-  if (ui::MaterialDesignController::IsModeMaterial() && incognito) {
+  const bool is_mode_material = ui::MaterialDesignController::IsModeMaterial();
+  if (is_mode_material && incognito) {
     id += kMaterialDesignIdOffset;
   }
 
@@ -193,7 +200,12 @@ NSColor* ThemeService::GetNSColor(int id, bool incognito) const {
     return nscolor_iter->second;
 
   SkColor sk_color = GetColor(original_id, incognito);
-  NSColor* color = skia::SkColorToCalibratedNSColor(sk_color);
+  NSColor* color = nil;
+  if (is_mode_material) {
+    color = skia::SkColorToSRGBNSColor(sk_color);
+  } else {
+    color = skia::SkColorToCalibratedNSColor(sk_color);
+  }
 
   // We loaded successfully.  Cache the color.
   if (color)
@@ -398,4 +410,14 @@ NSColor* ThemeService::BrowserThemeProvider::GetNSColorTint(int id) const {
 
 NSGradient* ThemeService::BrowserThemeProvider::GetNSGradient(int id) const {
   return theme_service_.GetNSGradient(id);
+}
+
+bool ThemeService::BrowserThemeProvider::ShouldIncreaseContrast() const {
+  NSWorkspace* workspace = [NSWorkspace sharedWorkspace];
+  if ([workspace
+          respondsToSelector:@selector(
+                                 accessibilityDisplayShouldIncreaseContrast)]) {
+    return workspace.accessibilityDisplayShouldIncreaseContrast == YES;
+  }
+  return false;
 }

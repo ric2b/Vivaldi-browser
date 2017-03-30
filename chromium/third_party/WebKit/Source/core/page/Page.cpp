@@ -27,7 +27,6 @@
 #include "core/editing/commands/UndoStack.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/Event.h"
-#include "core/fetch/MemoryCache.h"
 #include "core/fetch/ResourceFetcher.h"
 #include "core/frame/DOMTimer.h"
 #include "core/frame/FrameConsole.h"
@@ -36,9 +35,9 @@
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/frame/Settings.h"
+#include "core/frame/VisualViewport.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/inspector/InspectorInstrumentation.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/TextAutosizer.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/ChromeClient.h"
@@ -46,6 +45,7 @@
 #include "core/page/DragController.h"
 #include "core/page/FocusController.h"
 #include "core/page/PointerLockController.h"
+#include "core/page/ScopedPageLoadDeferrer.h"
 #include "core/page/ValidationMessageClient.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/paint/PaintLayer.h"
@@ -90,12 +90,6 @@ void Page::networkStateChanged(bool online)
     }
 }
 
-void Page::onMemoryPressure()
-{
-    for (Page* page : ordinaryPages())
-        page->memoryPurgeController().purgeMemory();
-}
-
 float deviceScaleFactor(LocalFrame* frame)
 {
     if (!frame)
@@ -110,7 +104,8 @@ Page* Page::createOrdinary(PageClients& pageClients)
 {
     Page* page = create(pageClients);
     ordinaryPages().add(page);
-    page->memoryPurgeController().registerClient(page);
+    if (ScopedPageLoadDeferrer::isActive())
+        page->setDefersLoading(true);
     return page;
 }
 
@@ -165,14 +160,6 @@ ScrollingCoordinator* Page::scrollingCoordinator()
     return m_scrollingCoordinator.get();
 }
 
-MemoryPurgeController& Page::memoryPurgeController()
-{
-    if (!m_memoryPurgeController)
-        m_memoryPurgeController = MemoryPurgeController::create();
-
-    return *m_memoryPurgeController;
-}
-
 String Page::mainThreadScrollingReasonsAsText()
 {
     if (ScrollingCoordinator* scrollingCoordinator = this->scrollingCoordinator())
@@ -212,7 +199,7 @@ void Page::documentDetached(Document* document)
     m_contextMenuController->documentDetached(document);
     if (m_validationMessageClient)
         m_validationMessageClient->documentDetached(*document);
-    m_originsUsingFeatures.documentDetached(*document);
+    m_hostsUsingFeatures.documentDetached(*document);
 }
 
 bool Page::openedByDOM() const
@@ -261,19 +248,6 @@ PluginData* Page::pluginData() const
     if (!m_pluginData)
         m_pluginData = PluginData::create(this);
     return m_pluginData.get();
-}
-
-void Page::unmarkAllTextMatches()
-{
-    if (!mainFrame())
-        return;
-
-    Frame* frame = mainFrame();
-    do {
-        if (frame->isLocalFrame())
-            toLocalFrame(frame)->document()->markers().removeMarkers(DocumentMarker::TextMatch);
-        frame = frame->tree().traverseNextWithWrap(false);
-    } while (frame);
 }
 
 void Page::setValidationMessageClient(ValidationMessageClient* client)
@@ -355,8 +329,8 @@ void Page::setVisibilityState(PageVisibilityState visibilityState, bool isInitia
     if (!isInitialState)
         notifyPageVisibilityChanged();
 
-    if (!isInitialState && m_mainFrame && m_mainFrame->isLocalFrame())
-        deprecatedLocalMainFrame()->didChangeVisibilityState();
+    if (!isInitialState && m_mainFrame)
+        m_mainFrame->didChangeVisibilityState();
 
     // Compress CompressibleStrings when 10 seconds have passed since the page
     // went to background.
@@ -470,11 +444,10 @@ void Page::didCommitLoad(LocalFrame* frame)
 {
     notifyDidCommitLoad(frame);
     if (m_mainFrame == frame) {
-        frame->console().clearMessages();
         useCounter().didCommitLoad();
         deprecation().clearSuppression();
         frameHost().visualViewport().sendUMAMetrics();
-        m_originsUsingFeatures.updateMeasurementsAndClear();
+        m_hostsUsingFeatures.updateMeasurementsAndClear();
         UserGestureIndicator::clearProcessedUserGestureSinceLoad();
     }
 }
@@ -494,12 +467,6 @@ void Page::acceptLanguagesChanged()
         frames[i]->localDOMWindow()->acceptLanguagesChanged();
 }
 
-void Page::purgeMemory(DeviceKind deviceKind)
-{
-    if (deviceKind == DeviceKind::LowEnd)
-        memoryCache()->pruneAll();
-}
-
 DEFINE_TRACE(Page)
 {
     visitor->trace(m_animator);
@@ -515,10 +482,8 @@ DEFINE_TRACE(Page)
     visitor->trace(m_mainFrame);
     visitor->trace(m_validationMessageClient);
     visitor->trace(m_frameHost);
-    visitor->trace(m_memoryPurgeController);
     Supplementable<Page>::trace(visitor);
     PageLifecycleNotifier::trace(visitor);
-    MemoryPurgeClient::trace(visitor);
 }
 
 void Page::layerTreeViewInitialized(WebLayerTreeView& layerTreeView)

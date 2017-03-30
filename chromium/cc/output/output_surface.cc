@@ -69,12 +69,12 @@ class SkiaGpuTraceMemoryDump : public SkTraceMemoryDump {
     base::trace_event::MemoryAllocatorDumpGuid guid;
 
     if (strcmp(backing_type, kGLTextureBackingType) == 0) {
-      guid = gfx::GetGLTextureClientGUIDForTracing(share_group_tracing_guid_,
-                                                   gl_id);
+      guid = gl::GetGLTextureClientGUIDForTracing(share_group_tracing_guid_,
+                                                  gl_id);
     } else if (strcmp(backing_type, kGLBufferBackingType) == 0) {
-      guid = gfx::GetGLBufferGUIDForTracing(tracing_process_id, gl_id);
+      guid = gl::GetGLBufferGUIDForTracing(tracing_process_id, gl_id);
     } else if (strcmp(backing_type, kGLRenderbufferBackingType) == 0) {
-      guid = gfx::GetGLRenderbufferGUIDForTracing(tracing_process_id, gl_id);
+      guid = gl::GetGLRenderbufferGUIDForTracing(tracing_process_id, gl_id);
     }
 
     if (!guid.empty()) {
@@ -121,51 +121,19 @@ class SkiaGpuTraceMemoryDump : public SkTraceMemoryDump {
 OutputSurface::OutputSurface(
     scoped_refptr<ContextProvider> context_provider,
     scoped_refptr<ContextProvider> worker_context_provider,
-    scoped_refptr<VulkanContextProvider> vulkan_context_provider,
     std::unique_ptr<SoftwareOutputDevice> software_device)
-    : client_(NULL),
-      context_provider_(std::move(context_provider)),
+    : context_provider_(std::move(context_provider)),
       worker_context_provider_(std::move(worker_context_provider)),
-      vulkan_context_provider_(vulkan_context_provider),
       software_device_(std::move(software_device)),
-      device_scale_factor_(-1),
-      has_alpha_(true),
-      external_stencil_test_enabled_(false),
       weak_ptr_factory_(this) {
   client_thread_checker_.DetachFromThread();
 }
 
-OutputSurface::OutputSurface(scoped_refptr<ContextProvider> context_provider)
-    : OutputSurface(std::move(context_provider),
-                    nullptr,
-                    nullptr,
-                    nullptr) {
-}
-
 OutputSurface::OutputSurface(
-    scoped_refptr<ContextProvider> context_provider,
-    scoped_refptr<ContextProvider> worker_context_provider)
-    : OutputSurface(std::move(context_provider),
-                    std::move(worker_context_provider),
-                    nullptr,
-                    nullptr) {
-}
-
-OutputSurface::OutputSurface(
-    std::unique_ptr<SoftwareOutputDevice> software_device)
-    : OutputSurface(nullptr,
-                    nullptr,
-                    nullptr,
-                    std::move(software_device)) {
-}
-
-OutputSurface::OutputSurface(
-    scoped_refptr<ContextProvider> context_provider,
-    std::unique_ptr<SoftwareOutputDevice> software_device)
-    : OutputSurface(std::move(context_provider),
-                    nullptr,
-                    nullptr,
-                    std::move(software_device)) {
+    scoped_refptr<VulkanContextProvider> vulkan_context_provider)
+    : vulkan_context_provider_(vulkan_context_provider),
+      weak_ptr_factory_(this) {
+  client_thread_checker_.DetachFromThread();
 }
 
 // Forwarded to OutputSurfaceClient
@@ -247,6 +215,7 @@ void OutputSurface::DiscardBackbuffer() {
 
 void OutputSurface::Reshape(const gfx::Size& size,
                             float scale_factor,
+                            const gfx::ColorSpace& color_space,
                             bool has_alpha) {
   if (size == surface_size_ && scale_factor == device_scale_factor_ &&
       has_alpha == has_alpha_)
@@ -278,6 +247,11 @@ void OutputSurface::PostSwapBuffersComplete() {
 // after the OutputSurface has been destroyed.
 void OutputSurface::OnSwapBuffersComplete() {
   client_->DidSwapBuffersComplete();
+}
+
+void OutputSurface::DidReceiveTextureInUseResponses(
+    const gpu::TextureInUseResponses& responses) {
+  client_->DidReceiveTextureInUseResponses(responses);
 }
 
 void OutputSurface::SetMemoryPolicy(const ManagedMemoryPolicy& policy) {

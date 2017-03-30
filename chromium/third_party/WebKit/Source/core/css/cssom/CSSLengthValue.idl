@@ -7,14 +7,15 @@ enum LengthType {
 };
 
 [
+    Exposed=(Window,PaintWorklet),
     RuntimeEnabled=CSSTypedOM
-] interface CSSLengthValue : StyleValue {
+] interface CSSLengthValue : CSSStyleValue {
     [RaisesException, NewObject] CSSLengthValue add(CSSLengthValue other);
     [RaisesException, NewObject] CSSLengthValue subtract(CSSLengthValue other);
     [RaisesException, NewObject] CSSLengthValue multiply(double value);
     [RaisesException, NewObject] CSSLengthValue divide(double value);
 
-    [RaisesException, NewObject] static CSSLengthValue from(DOMString cssString);
+    [RaisesException, NewObject] static CSSLengthValue from(DOMString cssText);
     [RaisesException, NewObject] static CSSLengthValue from(double value, LengthType type);
-    [RaisesException, NewObject] static CSSLengthValue from(CalcDictionary dictionary);
+    [RaisesException, NewObject] static CSSLengthValue from(CSSCalcDictionary dictionary);
 };

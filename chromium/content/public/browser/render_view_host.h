@@ -6,9 +6,10 @@
 #define CONTENT_PUBLIC_BROWSER_RENDER_VIEW_HOST_H_
 
 #include "base/callback_forward.h"
+#include "base/files/file_path.h"
 #include "build/build_config.h"
 #include "content/common/content_export.h"
-#include "content/public/common/file_chooser_params.h"
+#include "content/public/common/drop_data.h"
 #include "content/public/common/page_zoom.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/system/core.h"
@@ -40,8 +41,6 @@ class RenderViewHostDelegate;
 class RenderWidgetHost;
 class SessionStorageNamespace;
 class SiteInstance;
-struct DropData;
-struct FileChooserFileInfo;
 struct WebPreferences;
 
 // A RenderViewHost is responsible for creating and talking to a RenderView
@@ -102,14 +101,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // Returns true if the current focused element is editable.
   virtual bool IsFocusedElementEditable() = 0;
 
-  // Copies the image at location x, y to the clipboard (if there indeed is an
-  // image at that location).
-  virtual void CopyImageAt(int x, int y) = 0;
-
-  // Saves the image at location x, y to the disk (if there indeed is an
-  // image at that location).
-  virtual void SaveImageAt(int x, int y) = 0;
-
   virtual void LoadImageAt(int x, int y) = 0;
 
   // Notifies the listener that a directory enumeration is complete.
@@ -138,15 +129,23 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
       const gfx::Point& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers) = 0;
+  virtual void DragTargetDragEnterWithMetaData(
+      const std::vector<DropData::Metadata>& metadata,
+      const gfx::Point& client_pt,
+      const gfx::Point& screen_pt,
+      blink::WebDragOperationsMask operations_allowed,
+      int key_modifiers) = 0;
   virtual void DragTargetDragOver(
       const gfx::Point& client_pt,
       const gfx::Point& screen_pt,
       blink::WebDragOperationsMask operations_allowed,
       int key_modifiers) = 0;
   virtual void DragTargetDragLeave() = 0;
-  virtual void DragTargetDrop(const gfx::Point& client_pt,
+  virtual void DragTargetDrop(const DropData& drop_data,
+                              const gfx::Point& client_pt,
                               const gfx::Point& screen_pt,
                               int key_modifiers) = 0;
+  virtual void FilterDropData(DropData* drop_data) = 0;
 
   // Instructs the RenderView to automatically resize and send back updates
   // for the new size.
@@ -169,13 +168,6 @@ class CONTENT_EXPORT RenderViewHost : public IPC::Sender {
   // the given point.
   virtual void ExecutePluginActionAtLocation(
       const gfx::Point& location, const blink::WebPluginAction& action) = 0;
-
-  // Notifies the Listener that one or more files have been chosen by the user
-  // from a file chooser dialog for the form. |permissions| is the file
-  // selection mode in which the chooser dialog was created.
-  virtual void FilesSelectedInChooser(
-      const std::vector<content::FileChooserFileInfo>& files,
-      FileChooserParams::Mode permissions) = 0;
 
   virtual RenderViewHostDelegate* GetDelegate() const = 0;
 

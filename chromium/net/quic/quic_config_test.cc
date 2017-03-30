@@ -112,6 +112,7 @@ TEST_F(QuicConfigTest, ProcessClientHello) {
 }
 
 TEST_F(QuicConfigTest, ProcessServerHello) {
+  const IPEndPoint kTestServerAddress(IPAddress(127, 0, 3, 1), 1234);
   QuicConfig server_config;
   QuicTagVector cgst;
   cgst.push_back(kQBIC);
@@ -126,6 +127,7 @@ TEST_F(QuicConfigTest, ProcessServerHello) {
   server_config.SetInitialSessionFlowControlWindowToSend(
       2 * kInitialSessionFlowControlWindowForTest);
   server_config.SetSocketReceiveBufferToSend(kDefaultSocketReceiveBuffer);
+  server_config.SetAlternateServerAddressToSend(kTestServerAddress);
   CryptoHandshakeMessage msg;
   server_config.ToHandshakeMessage(&msg);
   string error_details;
@@ -143,6 +145,8 @@ TEST_F(QuicConfigTest, ProcessServerHello) {
   EXPECT_EQ(config_.ReceivedInitialSessionFlowControlWindowBytes(),
             2 * kInitialSessionFlowControlWindowForTest);
   EXPECT_EQ(config_.ReceivedSocketReceiveBuffer(), kDefaultSocketReceiveBuffer);
+  EXPECT_TRUE(config_.HasReceivedAlternateServerAddress());
+  EXPECT_EQ(kTestServerAddress, config_.ReceivedAlternateServerAddress());
 }
 
 TEST_F(QuicConfigTest, MissingOptionalValuesInCHLO) {
@@ -177,9 +181,8 @@ TEST_F(QuicConfigTest, MissingOptionalValuesInSHLO) {
 }
 
 TEST_F(QuicConfigTest, MissingValueInCHLO) {
+  // Server receives CHLO with missing kICSL.
   CryptoHandshakeMessage msg;
-  msg.SetValue(kICSL, 1);
-  // Missing kMSPC. KATO is optional.
   string error_details;
   const QuicErrorCode error =
       config_.ProcessPeerHello(msg, CLIENT, &error_details);
@@ -187,9 +190,8 @@ TEST_F(QuicConfigTest, MissingValueInCHLO) {
 }
 
 TEST_F(QuicConfigTest, MissingValueInSHLO) {
+  // Client receives SHLO with missing kICSL.
   CryptoHandshakeMessage msg;
-  msg.SetValue(kMSPC, 3);
-  // Missing ICSL. KATO is optional.
   string error_details;
   const QuicErrorCode error =
       config_.ProcessPeerHello(msg, SERVER, &error_details);

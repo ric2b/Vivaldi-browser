@@ -18,16 +18,14 @@ class SingleThreadTaskRunner;
 
 namespace webrtc {
 class DesktopFrame;
+class VideoFrameBuffer;
 }  // namespace webrtc
-
-namespace cricket {
-class VideoFrame;
-}  // namespace cricket
 
 namespace remoting {
 namespace protocol {
 
 class FrameConsumer;
+struct FrameStats;
 
 class WebrtcVideoRendererAdapter
     : public rtc::VideoSinkInterface<cricket::VideoFrame> {
@@ -43,11 +41,14 @@ class WebrtcVideoRendererAdapter
   void OnFrame(const cricket::VideoFrame& frame) override;
 
  private:
-  void DrawFrame(std::unique_ptr<webrtc::DesktopFrame> frame);
+  void HandleFrameOnMainThread(std::unique_ptr<FrameStats> stats,
+                               scoped_refptr<webrtc::VideoFrameBuffer> frame);
+  void DrawFrame(std::unique_ptr<FrameStats> stats,
+                 std::unique_ptr<webrtc::DesktopFrame> frame);
+  void FrameRendered(std::unique_ptr<FrameStats> stats);
 
   scoped_refptr<webrtc::MediaStreamInterface> media_stream_;
   FrameConsumer* frame_consumer_;
-  uint32_t output_format_fourcc_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   base::WeakPtrFactory<WebrtcVideoRendererAdapter> weak_factory_;

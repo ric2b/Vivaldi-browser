@@ -20,6 +20,7 @@
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/libyuv/include/libyuv.h"
+#include "third_party/skia/include/core/SkImage.h"
 
 namespace {
 
@@ -288,7 +289,7 @@ void CanvasCaptureHandler::AddVideoCapturerSourceToVideoTrack(
   web_track->initialize(webkit_source);
   blink::WebMediaConstraints constraints;
   constraints.initialize();
-  web_track->setExtraData(new MediaStreamVideoTrack(
+  web_track->setTrackData(new MediaStreamVideoTrack(
       media_stream_source.release(), constraints,
       MediaStreamVideoSource::ConstraintsCallback(), true));
 }

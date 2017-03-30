@@ -12,6 +12,7 @@
 #include "core/css/resolver/StyleResolverState.h"
 #include "core/style/ShadowData.h"
 #include "platform/graphics/filters/FilterOperations.h"
+#include <memory>
 
 namespace blink {
 
@@ -58,7 +59,7 @@ double defaultParameter(FilterOperation::OperationType type)
         return 0;
 
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return 0;
     }
 }
@@ -81,7 +82,7 @@ double clampParameter(double value, FilterOperation::OperationType type)
         return value;
 
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return 0;
     }
 }
@@ -105,7 +106,7 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertCSSFilter(const CSS
     case FilterOperation::SEPIA: {
         double amount = defaultParameter(type);
         if (filter.length() == 1) {
-            const CSSPrimitiveValue& firstValue = toCSSPrimitiveValue(*filter.item(0));
+            const CSSPrimitiveValue& firstValue = toCSSPrimitiveValue(filter.item(0));
             amount = firstValue.getDoubleValue();
             if (firstValue.isPercentage())
                 amount /= 100;
@@ -117,7 +118,7 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertCSSFilter(const CSS
     case FilterOperation::HUE_ROTATE: {
         double angle = defaultParameter(type);
         if (filter.length() == 1)
-            angle = toCSSPrimitiveValue(*filter.item(0)).computeDegrees();
+            angle = toCSSPrimitiveValue(filter.item(0)).computeDegrees();
         result.interpolableValue = InterpolableNumber::create(angle);
         break;
     }
@@ -126,12 +127,12 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertCSSFilter(const CSS
         if (filter.length() == 0)
             result.interpolableValue = CSSLengthInterpolationType::createNeutralInterpolableValue();
         else
-            result = CSSLengthInterpolationType::maybeConvertCSSValue(*filter.item(0));
+            result = CSSLengthInterpolationType::maybeConvertCSSValue(filter.item(0));
         break;
     }
 
     case FilterOperation::DROP_SHADOW: {
-        result = ShadowInterpolationFunctions::maybeConvertCSSValue(*filter.item(0));
+        result = ShadowInterpolationFunctions::maybeConvertCSSValue(filter.item(0));
         break;
     }
 
@@ -139,7 +140,7 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertCSSFilter(const CSS
         return nullptr;
 
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return nullptr;
     }
 
@@ -184,7 +185,7 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertFilter(const Filter
         return nullptr;
 
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return nullptr;
     }
 
@@ -195,7 +196,7 @@ InterpolationValue FilterInterpolationFunctions::maybeConvertFilter(const Filter
     return result;
 }
 
-PassOwnPtr<InterpolableValue> FilterInterpolationFunctions::createNoneValue(const NonInterpolableValue& untypedNonInterpolableValue)
+std::unique_ptr<InterpolableValue> FilterInterpolationFunctions::createNoneValue(const NonInterpolableValue& untypedNonInterpolableValue)
 {
     switch (toFilterNonInterpolableValue(untypedNonInterpolableValue).type()) {
     case FilterOperation::GRAYSCALE:
@@ -217,7 +218,7 @@ PassOwnPtr<InterpolableValue> FilterInterpolationFunctions::createNoneValue(cons
         return ShadowInterpolationFunctions::createNeutralInterpolableValue();
 
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return nullptr;
     }
 }
@@ -261,7 +262,7 @@ FilterOperation* FilterInterpolationFunctions::createFilter(const InterpolableVa
     }
 
     default:
-        ASSERT_NOT_REACHED();
+        NOTREACHED();
         return nullptr;
     }
 }

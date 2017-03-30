@@ -369,7 +369,9 @@ void InputMethodEngineBase::ProcessKeyEvent(const ui::KeyEvent& key_event,
   if (&key_event == sent_key_event_)
     ext_event.extension_id = extension_id_;
 
-  observer_->OnKeyEvent(active_component_id_, ext_event, callback);
+  // Should not pass key event in password field.
+  if (current_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD)
+    observer_->OnKeyEvent(active_component_id_, ext_event, callback);
 }
 
 void InputMethodEngineBase::SetSurroundingText(const std::string& text,
@@ -385,22 +387,23 @@ void InputMethodEngineBase::KeyEventHandled(const std::string& extension_id,
                                             const std::string& request_id,
                                             bool handled) {
   handling_key_event_ = false;
-  // When finish handling key event, take care of the unprocessed setComposition
-  // and commitText calls.
+  // When finish handling key event, take care of the unprocessed commitText
+  // and setComposition calls.
   ui::IMEInputContextHandlerInterface* input_context =
       ui::IMEBridge::Get()->GetInputContextHandler();
+  if (!text_.empty()) {
+    if (input_context) {
+      input_context->CommitText(text_);
+    }
+    text_ = "";
+  }
+
   if (!composition_.text.empty()) {
     if (input_context) {
       input_context->UpdateCompositionText(
           composition_, composition_.selection.start(), true);
     }
     composition_.Clear();
-  }
-  if (!text_.empty()) {
-    if (input_context) {
-      input_context->CommitText(text_);
-    }
-    text_ = "";
   }
 
   RequestMap::iterator request = request_map_.find(request_id);

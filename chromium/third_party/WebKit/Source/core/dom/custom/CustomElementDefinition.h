@@ -5,35 +5,82 @@
 #ifndef CustomElementDefinition_h
 #define CustomElementDefinition_h
 
-#include "bindings/core/v8/ScopedPersistent.h"
-#include "core/dom/custom/CustomElementsRegistry.h"
+#include "bindings/core/v8/ScriptValue.h"
+#include "core/CoreExport.h"
+#include "core/dom/custom/CustomElementDescriptor.h"
 #include "platform/heap/Handle.h"
-#include "v8.h"
+#include "wtf/HashSet.h"
+#include "wtf/Noncopyable.h"
 #include "wtf/text/AtomicString.h"
+#include "wtf/text/AtomicStringHash.h"
 
 namespace blink {
 
-class CustomElementDefinition final
+class Element;
+class ExceptionState;
+class HTMLElement;
+class QualifiedName;
+
+class CORE_EXPORT CustomElementDefinition
     : public GarbageCollectedFinalized<CustomElementDefinition> {
+    WTF_MAKE_NONCOPYABLE(CustomElementDefinition);
 public:
-    CustomElementDefinition(
-        CustomElementsRegistry*,
-        CustomElementsRegistry::Id,
-        const AtomicString& localName);
+    CustomElementDefinition(const CustomElementDescriptor&);
+    CustomElementDefinition(const CustomElementDescriptor&,
+        const HashSet<AtomicString>&);
+    virtual ~CustomElementDefinition();
 
-    CustomElementsRegistry::Id id() const { return m_id; }
-    const AtomicString& localName() const { return m_localName; }
-    v8::Local<v8::Object> prototype(ScriptState*) const;
+    DECLARE_VIRTUAL_TRACE();
 
-    DEFINE_INLINE_TRACE()
+    const CustomElementDescriptor& descriptor() { return m_descriptor; }
+
+    // TODO(yosin): To support Web Modules, introduce an abstract
+    // class |CustomElementConstructor| to allow us to have JavaScript
+    // and C++ constructors and ask the binding layer to convert
+    // |CustomElementConstructor| to |ScriptValue|. Replace
+    // |getConstructorForScript()| by |getConstructor() ->
+    // CustomElementConstructor|.
+    virtual ScriptValue getConstructorForScript() = 0;
+
+    using ConstructionStack = HeapVector<Member<Element>, 1>;
+    ConstructionStack& constructionStack()
     {
-        visitor->trace(m_registry);
+        return m_constructionStack;
     }
 
+    virtual HTMLElement* createElementSync(Document&, const QualifiedName&) = 0;
+    virtual HTMLElement* createElementSync(Document&, const QualifiedName&, ExceptionState&) = 0;
+    HTMLElement* createElementAsync(Document&, const QualifiedName&);
+
+    void upgrade(Element*);
+
+    virtual bool hasConnectedCallback() const = 0;
+    virtual bool hasDisconnectedCallback() const = 0;
+    bool hasAttributeChangedCallback(const QualifiedName&);
+
+    virtual void runConnectedCallback(Element*) = 0;
+    virtual void runDisconnectedCallback(Element*) = 0;
+    virtual void runAttributeChangedCallback(Element*, const QualifiedName&,
+        const AtomicString& oldValue, const AtomicString& newValue) = 0;
+
+    void enqueueUpgradeReaction(Element*);
+    void enqueueConnectedCallback(Element*);
+    void enqueueDisconnectedCallback(Element*);
+    void enqueueAttributeChangedCallback(Element*, const QualifiedName&,
+        const AtomicString& oldValue, const AtomicString& newValue);
+
+protected:
+    virtual bool runConstructor(Element*) = 0;
+
+    static void checkConstructorResult(Element*, Document&, const QualifiedName&, ExceptionState&);
+
+    HashSet<AtomicString> m_observedAttributes;
+
 private:
-    Member<CustomElementsRegistry> m_registry;
-    CustomElementsRegistry::Id m_id;
-    AtomicString m_localName;
+    const CustomElementDescriptor m_descriptor;
+    ConstructionStack m_constructionStack;
+
+    void enqueueAttributeChangedCallbackForAllAttributes(Element*);
 };
 
 } // namespace blink

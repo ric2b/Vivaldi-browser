@@ -8,6 +8,9 @@ if (is_android) {
   assert(rebase_path("//", root_build_dir) == "../../",
          "Android output directory must be nested 2 levels within src/ (" +
              "e.g.: out-gn/Debug). http://crbug.com/412935")
+
+  import("//build_overrides/build.gni")
+
   has_chrome_android_internal =
       exec_script("//build/dir_exists.py",
                   [ rebase_path("//clank", root_build_dir) ],
@@ -23,6 +26,9 @@ if (is_android) {
 
   if (!defined(default_android_ndk_root)) {
     default_android_ndk_root = "//third_party/android_tools/ndk"
+    default_android_ndk_version = "r10e"
+  } else {
+    assert(defined(default_android_ndk_version))
   }
 
   if (!defined(default_android_sdk_root)) {
@@ -56,6 +62,7 @@ if (is_android) {
 
   declare_args() {
     android_ndk_root = default_android_ndk_root
+    android_ndk_version = default_android_ndk_version
 
     android_sdk_root = default_android_sdk_root
     android_sdk_version = default_android_sdk_version
@@ -89,6 +96,11 @@ if (is_android) {
     # Enables verbose proguard output (summaries and unfiltered output).
     proguard_verbose = false
 
+    # Java debug on Android. Having this on enables multidexing, and turning it
+    # off will enable proguard. To access this flag from within Java code, look
+    # at BuildConfig.IS_DEBUG, which is wired to this arg.
+    is_java_debug = is_debug
+
     # Set to true to enable the Errorprone compiler
     use_errorprone_java_compiler = false
 
@@ -109,13 +121,13 @@ if (is_android) {
     enable_incremental_javac = false
 
     # Speed up dexing using dx --incremental.
-    enable_incremental_dx = is_debug
+    enable_incremental_dx = is_java_debug
 
     # Neither of these should ever be used for release builds since they are
     # somewhat experimental and dx --incremental is known to not produce
     # byte-for-byte identical output.
-    assert(!(enable_incremental_dx && !is_debug))
-    assert(!(enable_incremental_javac && !is_debug))
+    assert(!(enable_incremental_dx && !is_java_debug))
+    assert(!(enable_incremental_javac && !is_java_debug))
 
     # Adds intrumentation to each function. Writes a file with the order that
     # functions are called at startup.

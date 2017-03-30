@@ -9,6 +9,7 @@ import android.os.Handler;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.PasswordUIView;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
@@ -38,6 +39,7 @@ public class MainPreferences extends PreferenceFragment implements SignInStateOb
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
 
     private boolean mShowSearchEnginePicker;
+    private boolean mIsDemoUser;
 
     public MainPreferences() {
         setHasOptionsMenu(true);
@@ -52,17 +54,21 @@ public class MainPreferences extends PreferenceFragment implements SignInStateOb
                 && getArguments().getBoolean(EXTRA_SHOW_SEARCH_ENGINE_PICKER, false)) {
             mShowSearchEnginePicker = true;
         }
+
+        mIsDemoUser = ApiCompatibilityUtils.isDemoUser(getActivity());
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        SigninManager.get(getActivity()).addSignInStateObserver(this);
-
         // updatePreferences() must be called before setupSignInPref as updatePreferences loads
         // the SignInPreference.
         updatePreferences();
-        setupSignInPref();
+
+        if (!mIsDemoUser) {
+            SigninManager.get(getActivity()).addSignInStateObserver(this);
+            setupSignInPref();
+        }
 
         if (mShowSearchEnginePicker) {
             mShowSearchEnginePicker = false;
@@ -73,8 +79,10 @@ public class MainPreferences extends PreferenceFragment implements SignInStateOb
     @Override
     public void onPause() {
         super.onPause();
-        SigninManager.get(getActivity()).removeSignInStateObserver(this);
-        clearSignInPref();
+        if (!mIsDemoUser) {
+            SigninManager.get(getActivity()).removeSignInStateObserver(this);
+            clearSignInPref();
+        }
     }
 
     private void updatePreferences() {
@@ -112,6 +120,10 @@ public class MainPreferences extends PreferenceFragment implements SignInStateOb
             dataReduction.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
         } else {
             getPreferenceScreen().removePreference(dataReduction);
+        }
+
+        if (mIsDemoUser) {
+            getPreferenceScreen().removePreference(findPreference(PREF_SIGN_IN));
         }
     }
 

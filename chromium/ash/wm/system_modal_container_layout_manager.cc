@@ -6,17 +6,20 @@
 
 #include <cmath>
 
-#include "ash/session/session_state_delegate.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/wm_shell.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/wm/dim_window.h"
 #include "ash/wm/window_util.h"
+#include "base/stl_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_property.h"
 #include "ui/compositor/layer.h"
 #include "ui/keyboard/keyboard_controller.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ash {
 namespace {
@@ -39,8 +42,7 @@ SystemModalContainerLayoutManager::SystemModalContainerLayoutManager(
       container_(container),
       modal_background_(nullptr) {}
 
-SystemModalContainerLayoutManager::~SystemModalContainerLayoutManager() {
-}
+SystemModalContainerLayoutManager::~SystemModalContainerLayoutManager() {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // SystemModalContainerLayoutManager, aura::LayoutManager implementation:
@@ -56,17 +58,24 @@ void SystemModalContainerLayoutManager::OnWindowAddedToLayout(
          child->type() == ui::wm::WINDOW_TYPE_POPUP);
   DCHECK(
       container_->id() != kShellWindowId_LockSystemModalContainer ||
-      Shell::GetInstance()->session_state_delegate()->IsUserSessionBlocked());
+      WmShell::Get()->GetSessionStateDelegate()->IsUserSessionBlocked());
+  // Since this is for SystemModal, there is no goodd reason to add
+  // these window other than MODAL_TYPE_NONE or MODAL_TYPE_SYSTEM.
+  // DCHECK to avoid simple mistake.
+  DCHECK_NE(child->GetProperty(aura::client::kModalKey), ui::MODAL_TYPE_CHILD);
+  DCHECK_NE(child->GetProperty(aura::client::kModalKey), ui::MODAL_TYPE_WINDOW);
 
   child->AddObserver(this);
-  if (child->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_NONE)
+  if (child->GetProperty(aura::client::kModalKey) == ui::MODAL_TYPE_SYSTEM &&
+      child->IsVisible()) {
     AddModalWindow(child);
+  }
 }
 
 void SystemModalContainerLayoutManager::OnWillRemoveWindowFromLayout(
     aura::Window* child) {
   child->RemoveObserver(this);
-  if (child->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_NONE)
+  if (child->GetProperty(aura::client::kModalKey) == ui::MODAL_TYPE_SYSTEM)
     RemoveModalWindow(child);
 }
 
@@ -84,12 +93,16 @@ void SystemModalContainerLayoutManager::OnWindowPropertyChanged(
     aura::Window* window,
     const void* key,
     intptr_t old) {
-  if (key != aura::client::kModalKey)
+  if (key != aura::client::kModalKey || !window->IsVisible())
     return;
 
-  if (window->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_NONE) {
+  ui::ModalType new_modal = window->GetProperty(aura::client::kModalKey);
+  if (static_cast<ui::ModalType>(old) == new_modal)
+    return;
+
+  if (new_modal == ui::MODAL_TYPE_SYSTEM) {
     AddModalWindow(window);
-  } else if (static_cast<ui::ModalType>(old) != ui::MODAL_TYPE_NONE) {
+  } else {
     RemoveModalWindow(window);
     Shell::GetInstance()->OnModalWindowRemoved(window);
   }
@@ -104,6 +117,19 @@ void SystemModalContainerLayoutManager::OnWindowDestroying(
   }
 }
 
+void SystemModalContainerLayoutManager::OnWindowVisibilityChanged(
+    aura::Window* window,
+    bool visible) {
+  if (window->GetProperty(aura::client::kModalKey) != ui::MODAL_TYPE_SYSTEM)
+    return;
+  if (window->IsVisible()) {
+    AddModalWindow(window);
+  } else {
+    RemoveModalWindow(window);
+    Shell::GetInstance()->OnModalWindowRemoved(window);
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SystemModalContainerLayoutManager, Keyboard::KeybaordControllerObserver
 // implementation:
@@ -113,22 +139,12 @@ void SystemModalContainerLayoutManager::OnKeyboardBoundsChanging(
   PositionDialogsAfterWorkAreaResize();
 }
 
-bool SystemModalContainerLayoutManager::CanWindowReceiveEvents(
+bool SystemModalContainerLayoutManager::IsPartOfActiveModalWindow(
     aura::Window* window) {
-  // We could get when we're at lock screen and there is modal window at
-  // system modal window layer which added event filter.
-  // Now this lock modal windows layer layout manager should not block events
-  // for windows at lock layer.
-  // See SystemModalContainerLayoutManagerTest.EventFocusContainers and
-  // http://crbug.com/157469
-  if (modal_windows_.empty())
-    return true;
-  // This container can not handle events if the screen is locked and it is not
-  // above the lock screen layer (crbug.com/110920).
-  if (Shell::GetInstance()->session_state_delegate()->IsUserSessionBlocked() &&
-      container_->id() < ash::kShellWindowId_LockScreenContainer)
-    return true;
-  return wm::GetActivatableWindow(window) == modal_window();
+  return modal_window() &&
+         (modal_window()->Contains(window) ||
+          ::wm::HasTransientAncestor(::wm::GetToplevelWindow(window),
+                                     modal_window()));
 }
 
 bool SystemModalContainerLayoutManager::ActivateNextModalWindow() {
@@ -185,6 +201,9 @@ void SystemModalContainerLayoutManager::AddModalWindow(aura::Window* window) {
     if (capture_window)
       capture_window->ReleaseCapture();
   }
+  DCHECK(window->IsVisible());
+  DCHECK(!ContainsValue(modal_windows_, window));
+
   modal_windows_.push_back(window);
   Shell::GetInstance()->CreateModalBackground(window);
   window->parent()->StackChildAtTop(window);
@@ -221,8 +240,8 @@ gfx::Rect SystemModalContainerLayoutManager::GetUsableDialogArea() {
   if (keyboard_controller) {
     gfx::Rect bounds = keyboard_controller->current_keyboard_bounds();
     if (!bounds.IsEmpty()) {
-      valid_bounds.set_height(std::max(
-          0, valid_bounds.height() - bounds.height()));
+      valid_bounds.set_height(
+          std::max(0, valid_bounds.height() - bounds.height()));
     }
   }
   return valid_bounds;
@@ -254,9 +273,9 @@ bool SystemModalContainerLayoutManager::DialogIsCentered(
     const gfx::Rect& window_bounds) {
   gfx::Point window_center = window_bounds.CenterPoint();
   gfx::Point container_center = GetUsableDialogArea().CenterPoint();
-  return
-      std::abs(window_center.x() - container_center.x()) < kCenterPixelDelta &&
-      std::abs(window_center.y() - container_center.y()) < kCenterPixelDelta;
+  return std::abs(window_center.x() - container_center.x()) <
+             kCenterPixelDelta &&
+         std::abs(window_center.y() - container_center.y()) < kCenterPixelDelta;
 }
 
 }  // namespace ash

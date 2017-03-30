@@ -34,8 +34,12 @@
 #include "platform/audio/AudioArray.h"
 #include "wtf/Forward.h"
 #include "wtf/Vector.h"
+#include <memory>
 
 namespace blink {
+
+class AbstractAudioContext;
+class ExceptionState;
 
 class PeriodicWave final : public GarbageCollectedFinalized<PeriodicWave>, public ScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
@@ -46,7 +50,12 @@ public:
     static PeriodicWave* createTriangle(float sampleRate);
 
     // Creates an arbitrary periodic wave given the frequency components (Fourier coefficients).
-    static PeriodicWave* create(float sampleRate, DOMFloat32Array* real, DOMFloat32Array* imag, bool normalize);
+    static PeriodicWave* create(
+        AbstractAudioContext&,
+        DOMFloat32Array* real,
+        DOMFloat32Array* imag,
+        bool normalize,
+        ExceptionState&);
 
     virtual ~PeriodicWave();
 
@@ -96,7 +105,7 @@ private:
 
     // Creates tables based on numberOfComponents Fourier coefficients.
     void createBandLimitedTables(const float* real, const float* imag, unsigned numberOfComponents, bool disableNormalization);
-    Vector<OwnPtr<AudioFloatArray>> m_bandLimitedTables;
+    Vector<std::unique_ptr<AudioFloatArray>> m_bandLimitedTables;
 };
 
 } // namespace blink

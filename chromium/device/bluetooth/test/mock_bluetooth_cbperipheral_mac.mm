@@ -45,7 +45,6 @@ using base::scoped_nsobject;
 - (instancetype)initWithIdentifier:(NSUUID*)identifier name:(NSString*)name {
   self = [super init];
   if (self) {
-    _services.reset([[NSMutableArray alloc] init]);
     _identifier.reset([identifier retain]);
     if (name) {
       _name.reset([name retain]);
@@ -76,12 +75,34 @@ using base::scoped_nsobject;
 
 - (void)setState:(CBPeripheralState)state {
   _state = state;
+  if (_state == CBPeripheralStateDisconnected) {
+    _services.reset();
+  }
 }
 
 - (void)discoverServices:(NSArray*)serviceUUIDs {
   if (_bluetoothTestMac) {
     _bluetoothTestMac->OnFakeBluetoothServiceDiscovery();
   }
+  [_delegate peripheral:self.peripheral didDiscoverServices:nil];
+}
+
+- (void)discoverCharacteristics:(NSArray*)characteristics
+                     forService:(CBService*)service {
+}
+
+- (void)readValueForCharacteristic:(CBCharacteristic*)characteristic {
+  DCHECK(_bluetoothTestMac);
+  _bluetoothTestMac->OnFakeBluetoothCharacteristicReadValue();
+}
+
+- (void)writeValue:(NSData*)data
+    forCharacteristic:(CBCharacteristic*)characteristic
+                 type:(CBCharacteristicWriteType)type {
+  DCHECK(_bluetoothTestMac);
+  const uint8_t* buffer = static_cast<const uint8_t*>(data.bytes);
+  std::vector<uint8_t> value(buffer, buffer + data.length);
+  _bluetoothTestMac->OnFakeBluetoothCharacteristicWriteValue(value);
 }
 
 - (void)removeAllServices {
@@ -89,31 +110,48 @@ using base::scoped_nsobject;
 }
 
 - (void)addServices:(NSArray*)services {
+  if (!_services.get()) {
+    _services.reset([[NSMutableArray alloc] init]);
+  }
   for (CBUUID* uuid in services) {
-    base::scoped_nsobject<MockCBService> service(
-        [[MockCBService alloc] initWithCBUUID:uuid primary:YES]);
+    base::scoped_nsobject<MockCBService> service([[MockCBService alloc]
+        initWithPeripheral:self.peripheral
+                    CBUUID:uuid
+                   primary:YES]);
     [_services.get() addObject:service.get().service];
   }
 }
 
-- (void)didDiscoverWithError:(NSError*)error {
+- (void)didDiscoverServicesWithError:(NSError*)error {
   [_delegate peripheral:self.peripheral didDiscoverServices:error];
 }
 
 - (void)removeService:(CBService*)service {
   base::scoped_nsobject<CBService> serviceToRemove(service,
                                                    base::scoped_policy::RETAIN);
+  DCHECK(serviceToRemove);
   [_services.get() removeObject:serviceToRemove];
-  NSAssert(serviceToRemove, @"Unknown service to remove %@", service);
-  [_services.get() removeObject:serviceToRemove];
+  [self didModifyServices:@[ serviceToRemove ]];
+}
+
+- (void)didDiscoverCharactericsForAllServices {
+  for (CBService* service in _services.get()) {
+    [_delegate peripheral:self.peripheral
+        didDiscoverCharacteristicsForService:service
+                                       error:nil];
+  }
+}
+
+- (void)didModifyServices:(NSArray*)invalidatedServices {
   // -[CBPeripheralDelegate peripheral:didModifyServices:] is only available
   // with 10.9. It is safe to call this method (even if chrome is running on
   // 10.8) since WebBluetooth is enabled only with 10.10.
   DCHECK(
       [_delegate respondsToSelector:@selector(peripheral:didModifyServices:)]);
-  [_delegate performSelector:@selector(peripheral:didModifyServices:)
-                  withObject:self.peripheral
-                  withObject:@[ serviceToRemove ]];
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wpartial-availability"
+  [_delegate peripheral:self.peripheral didModifyServices:invalidatedServices];
+#pragma clang diagnostic pop
 }
 
 - (NSUUID*)identifier {
@@ -130,6 +168,11 @@ using base::scoped_nsobject;
 
 - (CBPeripheral*)peripheral {
   return ObjCCast<CBPeripheral>(self);
+}
+
+- (void)setNotifyValue:(BOOL)notification
+     forCharacteristic:(CBCharacteristic*)characteristic {
+  _bluetoothTestMac->OnFakeBluetoothGattSetCharacteristicNotification();
 }
 
 @end

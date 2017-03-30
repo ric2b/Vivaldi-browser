@@ -90,11 +90,6 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
                        GLenum internalformat,
                        GLsizei width,
                        GLsizei height) override;
-  void TexImageIOSurface2DCHROMIUM(GLenum target,
-                                   GLsizei width,
-                                   GLsizei height,
-                                   GLuint io_surface_id,
-                                   GLuint plane) override;
   void TexParameteri(GLenum target, GLenum pname, GLint param) override;
 
   void CompressedTexImage2D(GLenum target,
@@ -114,6 +109,7 @@ class TestGLES2Interface : public gpu::gles2::GLES2InterfaceStub {
                                             GLsizei height,
                                             GLenum internalformat,
                                             GLenum usage) override;
+  void GetImageivCHROMIUM(GLuint image_id, GLenum param, GLint* data) override;
   void BindTexImage2DCHROMIUM(GLenum target, GLint image_id) override;
   void ReleaseTexImage2DCHROMIUM(GLenum target, GLint image_id) override;
   void FramebufferRenderbuffer(GLenum target,

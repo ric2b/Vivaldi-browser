@@ -23,6 +23,8 @@ extern const base::Feature kArcMemoryManagement;
 extern const base::Feature kAutomaticTabDiscarding;
 #endif  // defined(OS_WIN) || defined(OS_MACOSX)
 
+extern const base::Feature kBackspaceGoesBackFeature;
+
 extern const base::Feature kBlockSmallContent;
 
 extern const base::Feature kBrowserHangFixesExperiment;
@@ -31,11 +33,17 @@ extern const base::Feature kExpectCTReporting;
 
 extern const base::Feature kExperimentalKeyboardLockUI;
 
+#if defined(OS_CHROMEOS)
+extern const base::Feature kHappininessTrackingSystem;
+#endif
+
 #if defined(GOOGLE_CHROME_BUILD) && defined(OS_LINUX) && !defined(OS_CHROMEOS)
 extern const base::Feature kLinuxObsoleteSystemIsEndOfTheLine;
 #endif
 
 extern const base::Feature kMaterialDesignHistoryFeature;
+
+extern const base::Feature kMaterialDesignSettingsFeature;
 
 #if defined(OS_CHROMEOS)
 extern const base::Feature kRuntimeMemoryLeakDetector;

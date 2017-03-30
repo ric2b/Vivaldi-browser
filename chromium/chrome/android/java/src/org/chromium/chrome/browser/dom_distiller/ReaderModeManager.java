@@ -9,6 +9,7 @@ import android.text.TextUtils;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.SysUtils;
+import org.chromium.base.VisibleForTesting;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.browser.ChromeActivity;
@@ -90,7 +91,6 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
 
     // InfoBar tracking.
     private boolean mIsInfoBarContainerShown;
-    private boolean mContainerHasInfoBars;
 
 
     public ReaderModeManager(TabModelSelector selector, ChromeActivity activity) {
@@ -156,6 +156,11 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
 
         // Set this manager as the active one for the UI utils.
         DomDistillerUIUtils.setReaderModeManagerDelegate(this);
+
+        // Update infobar state based on current tab.
+        if (shownTab.getInfoBarContainer() != null) {
+            mIsInfoBarContainerShown = shownTab.getInfoBarContainer().hasInfoBars();
+        }
 
         // Remove the infobar observer from the previous tab and attach it to the current one.
         if (previousTab != null && previousTab.getInfoBarContainer() != null) {
@@ -265,13 +270,12 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
 
     @Override
     public void onAddInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isFirst) {
-        mContainerHasInfoBars = true;
+        mIsInfoBarContainerShown = true;
         // If the panel is opened past the peeking state, obscure the infobar.
         if (mReaderModePanel != null && mReaderModePanel.isPanelOpened() && container != null) {
             container.setIsObscuredByOtherView(true);
         } else if (isFirst) {
             // Temporarily hides the reader mode button while the infobars are shown.
-            mIsInfoBarContainerShown = true;
             closeReaderPanel(StateChangeReason.INFOBAR_SHOWN, false);
         }
     }
@@ -280,7 +284,6 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     public void onRemoveInfoBar(InfoBarContainer container, InfoBar infoBar, boolean isLast) {
         // Re-shows the reader mode button if necessary once the infobars are dismissed.
         if (isLast) {
-            mContainerHasInfoBars = false;
             mIsInfoBarContainerShown = false;
             requestReaderPanelShow(StateChangeReason.INFOBAR_HIDDEN);
         }
@@ -336,13 +339,7 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     public void onClosed(StateChangeReason reason) {
         if (mReaderModePanel == null || mTabModelSelector == null) return;
 
-        if (mContainerHasInfoBars) {
-            Tab curTab = mTabModelSelector.getCurrentTab();
-            if (curTab != null) {
-                InfoBarContainer container = curTab.getInfoBarContainer();
-                if (container != null) container.setIsObscuredByOtherView(false);
-            }
-        }
+        restoreInfobars();
 
         // Only dismiss the panel if the close was a result of user interaction.
         if (reason != StateChangeReason.FLING && reason != StateChangeReason.SWIPE
@@ -360,6 +357,29 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
         int currentTabId = mTabModelSelector.getCurrentTabId();
         if (!mTabStatusMap.containsKey(currentTabId)) return;
         mTabStatusMap.get(currentTabId).setIsDismissed(true);
+    }
+
+    @Override
+    public void onPeek() {
+        restoreInfobars();
+    }
+
+    /**
+     * Restore any infobars that may have been hidden by Reader Mode.
+     */
+    private void restoreInfobars() {
+        if (!mIsInfoBarContainerShown) return;
+
+        Tab curTab = mTabModelSelector.getCurrentTab();
+        if (curTab == null) return;
+
+        InfoBarContainer container = curTab.getInfoBarContainer();
+        if (container == null) return;
+
+        container.setIsObscuredByOtherView(false);
+
+        // Temporarily hides the reader mode button while the infobars are shown.
+        closeReaderPanel(StateChangeReason.INFOBAR_SHOWN, false);
     }
 
     @Override
@@ -526,6 +546,14 @@ public class ReaderModeManager extends TabModelSelectorTabObserver
     public boolean isPanelOpened() {
         if (mReaderModePanel == null) return false;
         return mReaderModePanel.isPanelOpened();
+    }
+
+    /**
+     * @return The ReaderModePanel for testing.
+     */
+    @VisibleForTesting
+    public ReaderModePanel getPanelForTesting() {
+        return mReaderModePanel;
     }
 
     /**

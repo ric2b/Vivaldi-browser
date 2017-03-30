@@ -93,7 +93,7 @@ bool JoinListValuesToString(const base::DictionaryValue* dictionary,
 
   std::string buffer;
   bool first = true;
-  for (const base::Value* v : *list) {
+  for (const auto& v : *list) {
     std::string value;
     if (!v->GetAsString(&value))
       return false;
@@ -377,8 +377,8 @@ void StatisticsProviderImpl::Shutdown() {
 
 StatisticsProviderImpl::StatisticsProviderImpl()
     : load_statistics_started_(false),
-      on_statistics_loaded_(true  /* manual_reset */,
-                            false /* initially_signaled */),
+      on_statistics_loaded_(base::WaitableEvent::ResetPolicy::MANUAL,
+                            base::WaitableEvent::InitialState::NOT_SIGNALED),
       oem_manifest_loaded_(false) {
   regional_data_extractors_[kInitialLocaleKey] =
       &GetInitialLocaleFromRegionalData;

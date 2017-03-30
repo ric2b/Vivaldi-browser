@@ -11,7 +11,6 @@
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/move.h"
 #include "mojo/public/c/system/functions.h"
 #include "mojo/public/c/system/types.h"
 
@@ -72,8 +71,6 @@ namespace mojo {
 // like the C++11 |unique_ptr|.
 template <class HandleType>
 class ScopedHandleBase {
-  MOVE_ONLY_TYPE_FOR_CPP_03(ScopedHandleBase);
-
  public:
   using RawHandleType = HandleType;
 
@@ -96,6 +93,7 @@ class ScopedHandleBase {
   }
 
   const HandleType& get() const { return handle_; }
+  const HandleType* operator->() const { return &handle_; }
 
   template <typename PassedHandleType>
   static ScopedHandleBase<HandleType> From(
@@ -122,6 +120,10 @@ class ScopedHandleBase {
 
   bool is_valid() const { return handle_.is_valid(); }
 
+  bool operator==(const ScopedHandleBase& other) const {
+    return handle_.value() == other.get().value();
+  }
+
  private:
   void CloseIfNecessary() {
     if (handle_.is_valid())
@@ -129,6 +131,8 @@ class ScopedHandleBase {
   }
 
   HandleType handle_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedHandleBase);
 };
 
 template <typename HandleType>

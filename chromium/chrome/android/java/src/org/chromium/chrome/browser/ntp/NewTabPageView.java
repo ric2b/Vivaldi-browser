@@ -47,12 +47,9 @@ import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageAdapter;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageListItem;
 import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
-import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
-import org.chromium.chrome.browser.ntp.snippets.SnippetItemDecoration;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge.FetchSnippetImageCallback;
-import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge.SnippetsObserver;
+import org.chromium.chrome.browser.ntp.snippets.SnippetsBridge;
 import org.chromium.chrome.browser.profiles.MostVisitedSites.MostVisitedURLsObserver;
-import org.chromium.chrome.browser.profiles.MostVisitedSites.ThumbnailCallback;
+import org.chromium.chrome.browser.util.MathUtils;
 import org.chromium.chrome.browser.util.ViewUtils;
 import org.chromium.chrome.browser.widget.RoundedIconGenerator;
 import org.chromium.ui.base.DeviceFormFactor;
@@ -146,8 +143,14 @@ public class NewTabPageView extends FrameLayout
         /** Opens the recent tabs page in the current tab. */
         void navigateToRecentTabs();
 
-        /** Opens a given URL in the current tab. */
-        void open(String url);
+        /**
+         * Opens an url in the current tab and records related metrics.
+         * @param url the URL to open
+         */
+        void openSnippet(String url);
+
+        /** Opens a url in the current tab. */
+        void openUrl(String url);
 
         /** Opens the interests dialog. */
         void navigateToInterests();
@@ -165,16 +168,6 @@ public class NewTabPageView extends FrameLayout
          * @param numResults The maximum number of sites to retrieve.
          */
         void setMostVisitedURLsObserver(MostVisitedURLsObserver observer, int numResults);
-
-        /** Sets the observer that will be notified of new snippets. */
-        void setSnippetsObserver(SnippetsObserver observer);
-
-        /**
-         * Gets a cached thumbnail of a URL.
-         * @param url The URL whose thumbnail is being retrieved.
-         * @param thumbnailCallback The callback to be notified when the thumbnail is available.
-         */
-        void getURLThumbnail(String url, ThumbnailCallback thumbnailCallback);
 
         /**
          * Gets the favicon image for a given URL.
@@ -202,7 +195,7 @@ public class NewTabPageView extends FrameLayout
          * @param callback The callback to be notified when the favicon has been checked.
          */
         void ensureIconIsAvailable(String pageUrl, String iconUrl, boolean isLargeIcon,
-                IconAvailabilityCallback callback);
+                boolean isTemporary, IconAvailabilityCallback callback);
 
         /**
          * Checks if the pages with the given URLs are available offline.
@@ -229,18 +222,6 @@ public class NewTabPageView extends FrameLayout
          * @param mostVisitedItems The MostVisitedItem shown on the NTP. Used to record metrics.
          */
         void onLoadingComplete(MostVisitedItem[] mostVisitedItems);
-
-        /**
-         * Called when a snippet has been dismissed by the user.
-         */
-        void onSnippetDismissed(SnippetArticle dismissedSnippet);
-
-        /**
-         * Gets the thumbnail image for a snippet.
-         * @param snippet The snippet for which we want to fetch the image.
-         * @param callback Callback to run after fetching completes (successful or not).
-         */
-        void fetchSnippetImage(SnippetArticle snippet, FetchSnippetImageCallback callback);
     }
 
     /**
@@ -273,14 +254,14 @@ public class NewTabPageView extends FrameLayout
      * @param manager NewTabPageManager used to perform various actions when the user interacts
      *                with the page.
      * @param searchProviderHasLogo Whether the search provider has a logo.
-     * @param useCardsUi Whether to use the new cards based UI or the old one.
+     * @param snippetsBridge The optional bridge, that can be used to interact with the snippets.
      */
-    public void initialize(NewTabPageManager manager,
-            boolean searchProviderHasLogo, boolean useCardsUi) {
+    public void initialize(NewTabPageManager manager, boolean searchProviderHasLogo,
+            SnippetsBridge snippetsBridge) {
         mManager = manager;
         ViewStub stub = (ViewStub) findViewById(R.id.new_tab_page_layout_stub);
 
-        mUseCardsUi = useCardsUi;
+        mUseCardsUi = snippetsBridge != null;
         if (mUseCardsUi) {
             stub.setLayoutResource(R.layout.new_tab_page_recycler_view);
             mRecyclerView = (NewTabPageRecyclerView) stub.inflate();
@@ -290,6 +271,7 @@ public class NewTabPageView extends FrameLayout
                     (NewTabPageLayout) LayoutInflater.from(getContext())
                             .inflate(R.layout.new_tab_page_layout, mRecyclerView, false);
             mNewTabPageLayout.setUseCardsUiEnabled(mUseCardsUi);
+            mRecyclerView.setAboveTheFoldView(mNewTabPageLayout);
 
             // Tailor the LayoutParams for the snippets UI, as the configuration in the XML is
             // made for the ScrollView UI.
@@ -395,7 +377,7 @@ public class NewTabPageView extends FrameLayout
 
         // Set up snippets
         if (mUseCardsUi) {
-            mNewTabPageAdapter = new NewTabPageAdapter(mManager, mNewTabPageLayout);
+            mNewTabPageAdapter = new NewTabPageAdapter(mManager, mNewTabPageLayout, snippetsBridge);
             mRecyclerView.setAdapter(mNewTabPageAdapter);
 
             // Set up swipe-to-dismiss
@@ -403,7 +385,6 @@ public class NewTabPageView extends FrameLayout
                     new ItemTouchHelper(mNewTabPageAdapter.getItemTouchCallbacks());
             helper.attachToRecyclerView(mRecyclerView);
 
-            NewTabPageUma.recordSnippetAction(NewTabPageUma.SNIPPETS_ACTION_SHOWN);
             mRecyclerView.addOnScrollListener(new RecyclerView.OnScrollListener() {
                 private boolean mScrolledOnce = false;
                 @Override
@@ -416,8 +397,7 @@ public class NewTabPageView extends FrameLayout
                 }
             });
             initializeSearchBoxRecyclerViewScrollHandling();
-            mRecyclerView.addItemDecoration(new SnippetItemDecoration());
-            updateSnippetsHeaderDisplay();
+            mRecyclerView.updateSnippetsHeaderDisplay(mNewTabPageLayout.getPaddingTop());
         } else {
             initializeSearchBoxScrollHandling();
         }
@@ -426,25 +406,36 @@ public class NewTabPageView extends FrameLayout
     private void updateSearchBoxOnScroll() {
         if (mDisableUrlFocusChangeAnimations) return;
 
-        float percentage = 0;
+        float toolbarTransitionPercentage;
         // During startup the view may not be fully initialized, so we only calculate the current
         // percentage if some basic view properties are sane.
-        if (getWrapperView().getHeight() != 0 && mSearchBoxView.getTop() != 0) {
-            // getVerticalScroll is valid only for the RecyclerView if the first item is visible.
-            // Luckily, if the first item is not visible, we know the toolbar transition should
-            // be 100%.
-            if (mUseCardsUi && !mRecyclerView.isFirstItemVisible()) {
-                percentage = 1f;
+        if (getWrapperView().getHeight() == 0 || mSearchBoxView.getTop() == 0) {
+            toolbarTransitionPercentage = 0f;
+        } else if (!mUseCardsUi) {
+            toolbarTransitionPercentage =
+                    MathUtils.clamp(getVerticalScroll() / (float) mSearchBoxView.getTop(), 0f, 1f);
+        } else {
+            if (!mRecyclerView.isFirstItemVisible()) {
+                // getVerticalScroll is valid only for the RecyclerView if the first item is
+                // visible. Luckily, if the first item is not visible, we know the toolbar
+                // transition should be 100%.
+                toolbarTransitionPercentage = 1f;
             } else {
-                int scrollY = getVerticalScroll();
-                percentage = Math.max(0f, Math.min(1f, scrollY / (float) mSearchBoxView.getTop()));
+                final int scrollY = getVerticalScroll();
+                final int top = mSearchBoxView.getTop();  // Relative to mNewTabPageLayout.
+                final int transitionLength = getResources()
+                        .getDimensionPixelSize(R.dimen.ntp_search_box_transition_length);
+
+                // |scrollY - top| gives the distance the search bar is from the top of the screen.
+                toolbarTransitionPercentage = MathUtils.clamp(
+                        (scrollY - top + transitionLength) / (float) transitionLength, 0f, 1f);
             }
         }
 
-        updateVisualsForToolbarTransition(percentage);
+        updateVisualsForToolbarTransition(toolbarTransitionPercentage);
 
         if (mSearchBoxScrollListener != null) {
-            mSearchBoxScrollListener.onNtpScrollChanged(percentage);
+            mSearchBoxScrollListener.onNtpScrollChanged(toolbarTransitionPercentage);
         }
     }
 
@@ -452,104 +443,20 @@ public class NewTabPageView extends FrameLayout
         return mUseCardsUi ? mRecyclerView : mScrollView;
     }
 
-    private View getFirstViewMatchingViewType(int newTabPageListItemViewType) {
-        for (int i = 0; i < mRecyclerView.getLayoutManager().getChildCount(); i++) {
-            RecyclerView.ViewHolder viewHolder = mRecyclerView.findViewHolderForLayoutPosition(i);
-            if (viewHolder != null && viewHolder.getItemViewType() == newTabPageListItemViewType) {
-                return viewHolder.itemView;
+    /**
+     * Get the number of listed items (visible or not) for the given type.
+     * @param newTabPageListItemViewType the item type to count.
+     */
+    public int getViewCountMatchingViewType(
+            @NewTabPageListItem.ViewType int newTabPageListItemViewType) {
+        int viewCount = 0;
+        int adapterSize = mNewTabPageAdapter.getItemCount();
+        for (int i = 0; i < adapterSize; i++) {
+            if (mNewTabPageAdapter.getItemViewType(i) == newTabPageListItemViewType) {
+                viewCount++;
             }
         }
-        return null;
-    }
-
-    /**
-     * Change the peeking card's width, padding and children's opacity to give a smooth transition.
-     */
-    private void updatePeekingCard() {
-        // Get the first snippet that could display to make the peeking card transition.
-        ViewGroup firstSnippet =
-                (ViewGroup) getFirstViewMatchingViewType(NewTabPageListItem.VIEW_TYPE_SNIPPET);
-
-        if (firstSnippet == null || !firstSnippet.isShown()) return;
-
-        // If first snippet exists change the peeking card margin and padding to change its
-        // width when scrolling.
-        // Value used for max peeking card height and padding.
-        int maxPadding = getResources().getDimensionPixelSize(
-                R.dimen.snippets_padding_and_peeking_card_height);
-
-        // The peeking card's resting position is |maxPadding| from the bottom of the screen hence
-        // |getHeight() - maxPadding|, and it grows the further it gets from this.
-        int padding = getHeight() - maxPadding - firstSnippet.getTop();
-
-        // Make sure the |padding| is between 0 and |maxPadding|.
-        padding = Math.min(Math.max(padding, 0), maxPadding);
-
-        // Modify the padding so as the margin increases, the padding decreases, keeping the card's
-        // contents in the same position. The top and bottom remain the same.
-        firstSnippet.setPadding(padding, maxPadding, padding, maxPadding);
-
-        RecyclerView.LayoutParams params =
-                (RecyclerView.LayoutParams) firstSnippet.getLayoutParams();
-        params.leftMargin = maxPadding - padding;
-        params.rightMargin = maxPadding - padding;
-
-        // Set the opacity of the card content to be 0 when peeking and 1 when full width.
-        int firstSnippetChildCount = firstSnippet.getChildCount();
-        for (int i = 0; i < firstSnippetChildCount; ++i) {
-            View snippetChild = firstSnippet.getChildAt(i);
-            snippetChild.setAlpha(padding / (float) maxPadding);
-        }
-    }
-
-    /**
-     * Show the snippets header when the user scrolls down and snippet articles starts reaching the
-     * top of the screen.
-     */
-    private void updateSnippetsHeaderDisplay() {
-        // Get the snippet header view.
-        View snippetHeader = getFirstViewMatchingViewType(NewTabPageListItem.VIEW_TYPE_HEADER);
-
-        if (snippetHeader == null || !snippetHeader.isShown()) return;
-
-        // Start doing the calculations if the snippet header is currently shown on screen.
-        RecyclerView.LayoutParams params =
-                (RecyclerView.LayoutParams) snippetHeader.getLayoutParams();
-        float headerAlpha = 0;
-        int headerHeight = 0;
-
-        // Get the max snippet header height.
-        int maxSnippetHeaderHeight =
-                getResources().getDimensionPixelSize(R.dimen.snippets_article_header_height);
-        // Measurement used to multiply the max snippet height to get a range on when to start
-        // modifying the display of article header.
-        final int numberHeaderHeight = 2;
-        // Used to indicate when to start modifying the snippet header.
-        int heightToStartChangingHeader = maxSnippetHeaderHeight * numberHeaderHeight;
-        int snippetHeaderTop = snippetHeader.getTop();
-        int omniBoxHeight = mNewTabPageLayout.getPaddingTop();
-
-        // Check if snippet header top is within range to start showing the snippet header.
-        if (snippetHeaderTop < omniBoxHeight + heightToStartChangingHeader) {
-            // The amount of space the article header has scrolled into the
-            // |heightToStartChangingHeader|.
-            int amountScrolledIntoHeaderSpace =
-                    heightToStartChangingHeader - (snippetHeaderTop - omniBoxHeight);
-
-            // Remove the |numberHeaderHeight| to get the actual header height we want to
-            // display. Never let the height be more than the |maxSnippetHeaderHeight|.
-            headerHeight = Math.min(
-                    amountScrolledIntoHeaderSpace / numberHeaderHeight, maxSnippetHeaderHeight);
-
-            // Get the alpha for the snippet header.
-            headerAlpha = (float) headerHeight / maxSnippetHeaderHeight;
-        }
-        snippetHeader.setAlpha(headerAlpha);
-        params.height = headerHeight;
-        snippetHeader.setLayoutParams(params);
-
-        // Update the space at the bottom, which needs to know about the height of the header.
-        mRecyclerView.refreshBottomSpacing();
+        return viewCount;
     }
 
     /**
@@ -557,62 +464,13 @@ public class NewTabPageView extends FrameLayout
      * the RecyclerView.
      */
     private void initializeSearchBoxRecyclerViewScrollHandling() {
-        final NewTabPageUma.SnapStateObserver snapStateObserver =
-                new NewTabPageUma.SnapStateObserver();
-
         final Runnable mSnapScrollRunnable = new Runnable() {
             @Override
             public void run() {
                 assert mPendingSnapScroll;
-                NewTabPageUma.SnapState currentSnapState = updateSnapScroll();
-                snapStateObserver.updateSnapState(currentSnapState);
-            }
-
-            private NewTabPageUma.SnapState updateSnapScroll() {
-                // These calculations only work if the first item is visible (since
-                // computeVerticalScrollOffset only takes into account visible items).
-                // Luckily, we only need to perform the calculations if the first item is visible.
-                if (!mRecyclerView.isFirstItemVisible()) {
-                    return NewTabPageUma.SnapState.BELOW_THE_FOLD;
-                }
-
-                final int currentScroll = getVerticalScroll();
-
-                // If snapping to Most Likely or to Articles, the omnibox will be at the top of the
-                // page, so offset the scroll so the scroll targets appear below it.
-                final int omniBoxHeight = mNewTabPageLayout.getPaddingTop();
-                final int topOfMostLikelyScroll = mMostVisitedLayout.getTop() - omniBoxHeight;
-                final int topOfSnippetsScroll = mNewTabPageLayout.getHeight() - omniBoxHeight;
-
-                assert currentScroll >= 0;
-                // Do not do any scrolling if the user is currently viewing articles.
-                if (currentScroll >= topOfSnippetsScroll) {
-                    return NewTabPageUma.SnapState.BELOW_THE_FOLD;
-                }
-
-                // If Most Likely is fully visible when we are scrolled to the top, we have two
-                // snap points: the Top and Articles.
-                // If not, we have three snap points, the Top, Most Likely and Articles.
-                boolean snapToMostLikely =
-                        mRecyclerView.getHeight() < mMostVisitedLayout.getBottom();
-
-                int targetScroll;
-                NewTabPageUma.SnapState snapState = NewTabPageUma.SnapState.ABOVE_THE_FOLD;
-                if (currentScroll < mNewTabPageLayout.getHeight() / 3) {
-                    // In either case, if in the top 1/3 of the original NTP, snap to the top.
-                    targetScroll = 0;
-                } else if (snapToMostLikely
-                        && currentScroll < mNewTabPageLayout.getHeight() * 2 / 3) {
-                    // If in the middle 1/3 and we are snapping to Most Likely, snap to it.
-                    targetScroll = topOfMostLikelyScroll;
-                } else {
-                    // Otherwise, snap to the Articles.
-                    targetScroll = topOfSnippetsScroll;
-                    snapState = NewTabPageUma.SnapState.BELOW_THE_FOLD;
-                }
-                mRecyclerView.smoothScrollBy(0, targetScroll - currentScroll);
                 mPendingSnapScroll = false;
-                return snapState;
+
+                mRecyclerView.snapScroll(mSearchBoxView, getVerticalScroll(), getHeight());
             }
         };
 
@@ -624,8 +482,8 @@ public class NewTabPageView extends FrameLayout
                     mRecyclerView.postDelayed(mSnapScrollRunnable, SNAP_SCROLL_DELAY_MS);
                 }
                 updateSearchBoxOnScroll();
-                updatePeekingCard();
-                updateSnippetsHeaderDisplay();
+                mRecyclerView.updatePeekingCard();
+                mRecyclerView.updateSnippetsHeaderDisplay(mNewTabPageLayout.getPaddingTop());
             }
         });
 
@@ -737,8 +595,6 @@ public class NewTabPageView extends FrameLayout
 
         mMostVisitedDesign.setSearchProviderHasLogo(mMostVisitedLayout, hasLogo);
 
-        if (!hasLogo) setUrlFocusChangeAnimationPercentInternal(0);
-
         // Hide or show all the views above the Most Visited items.
         int visibility = hasLogo ? View.VISIBLE : View.GONE;
         int childCount = mNewTabPageLayout.getChildCount();
@@ -752,7 +608,8 @@ public class NewTabPageView extends FrameLayout
 
         updateMostVisitedPlaceholderVisibility();
 
-        if (hasLogo) setUrlFocusChangeAnimationPercent(mUrlFocusChangePercent);
+        onUrlFocusAnimationChanged();
+
         mSnapshotMostVisitedChanged = true;
     }
 
@@ -763,7 +620,7 @@ public class NewTabPageView extends FrameLayout
     void setUrlFocusAnimationsDisabled(boolean disable) {
         if (disable == mDisableUrlFocusChangeAnimations) return;
         mDisableUrlFocusChangeAnimations = disable;
-        if (!disable) setUrlFocusChangeAnimationPercent(mUrlFocusChangePercent);
+        if (!disable) onUrlFocusAnimationChanged();
     }
 
     /**
@@ -803,9 +660,7 @@ public class NewTabPageView extends FrameLayout
      */
     void setUrlFocusChangeAnimationPercent(float percent) {
         mUrlFocusChangePercent = percent;
-        if (!mDisableUrlFocusChangeAnimations && mSearchProviderHasLogo) {
-            setUrlFocusChangeAnimationPercentInternal(percent);
-        }
+        onUrlFocusAnimationChanged();
     }
 
     /**
@@ -816,12 +671,10 @@ public class NewTabPageView extends FrameLayout
         return mUrlFocusChangePercent;
     }
 
-    /**
-     * Unconditionally sets the percentage the URL is focused during an animation, without updating
-     * mUrlFocusChangePercent.
-     * @see #setUrlFocusChangeAnimationPercent
-     */
-    private void setUrlFocusChangeAnimationPercentInternal(float percent) {
+    private void onUrlFocusAnimationChanged() {
+        if (mDisableUrlFocusChangeAnimations) return;
+
+        float percent = mSearchProviderHasLogo ? mUrlFocusChangePercent : 0;
         // Only apply the scrolling offset when not using the cards UI, as there we will either snap
         // to the top of the page (with scrolling offset 0), or snap to below the fold, where Most
         // Likely items are not visible anymore, so they will stay out of sight.
@@ -842,7 +695,9 @@ public class NewTabPageView extends FrameLayout
         // Ensure there are no rounding issues when the animation percent is 0.
         if (transitionPercentage == 0f) searchUiAlpha = 1f;
 
-        mSearchProviderLogoView.setAlpha(searchUiAlpha);
+        if (!mUseCardsUi) {
+            mSearchProviderLogoView.setAlpha(searchUiAlpha);
+        }
         mSearchBoxView.setAlpha(searchUiAlpha);
     }
 
@@ -959,19 +814,22 @@ public class NewTabPageView extends FrameLayout
 
         // Re-apply the url focus change amount after a rotation to ensure the views are correctly
         // placed with their new layout configurations.
-        setUrlFocusChangeAnimationPercent(mUrlFocusChangePercent);
+        onUrlFocusAnimationChanged();
         updateSearchBoxOnScroll();
 
         if (mUseCardsUi) {
-            updatePeekingCard();
+            mRecyclerView.updatePeekingCard();
+            // The positioning of elements may have been changed (since the elements expand to fill
+            // the available vertical space), so adjust the scroll.
+            mRecyclerView.snapScroll(mSearchBoxView, getVerticalScroll(), getHeight());
         }
     }
 
     // MostVisitedURLsObserver implementation
 
     @Override
-    public void onMostVisitedURLsAvailable(
-            final String[] titles, final String[] urls, final String[] whitelistIconPaths) {
+    public void onMostVisitedURLsAvailable(final String[] titles, final String[] urls,
+            final String[] whitelistIconPaths, final int[] sources, final int[] providerIndexes) {
         Set<String> urlSet = new HashSet<>(Arrays.asList(urls));
 
         // TODO(https://crbug.com/607573): We should show offline-available content in a nonblocking
@@ -980,13 +838,15 @@ public class NewTabPageView extends FrameLayout
         mManager.getUrlsAvailableOffline(urlSet, new Callback<Set<String>>() {
             @Override
             public void onResult(Set<String> offlineUrls) {
-                onOfflineUrlsAvailable(titles, urls, whitelistIconPaths, offlineUrls);
+                onOfflineUrlsAvailable(
+                        titles, urls, whitelistIconPaths, offlineUrls, sources, providerIndexes);
             }
         });
     }
 
     private void onOfflineUrlsAvailable(final String[] titles, final String[] urls,
-            final String[] whitelistIconPaths, final Set<String> offlineUrls) {
+            final String[] whitelistIconPaths, final Set<String> offlineUrls, final int[] sources,
+            final int[] providerIndexes) {
         mMostVisitedLayout.removeAllViews();
 
         MostVisitedItem[] oldItems = mMostVisitedItems;
@@ -1001,6 +861,9 @@ public class NewTabPageView extends FrameLayout
             final String url = urls[i];
             final String title = titles[i];
             final String whitelistIconPath = whitelistIconPaths[i];
+            final int source = sources[i];
+            final int providerIndex = providerIndexes[i];
+
             boolean offlineAvailable = offlineUrls.contains(url);
 
             // Look for an existing item to reuse.
@@ -1020,8 +883,8 @@ public class NewTabPageView extends FrameLayout
 
             // If nothing can be reused, create a new item.
             if (item == null) {
-                item = new MostVisitedItem(
-                        mManager, title, url, whitelistIconPath, offlineAvailable, i);
+                item = new MostVisitedItem(mManager, title, url, whitelistIconPath,
+                        offlineAvailable, i, source, providerIndex);
                 View view =
                         mMostVisitedDesign.createMostVisitedItemView(inflater, item, isInitialLoad);
                 item.initView(view);
@@ -1063,7 +926,8 @@ public class NewTabPageView extends FrameLayout
                     }
                 }
             };
-            mManager.ensureIconIsAvailable(url, iconUrl, useLargeIcon, callback);
+            mManager.ensureIconIsAvailable(
+                    url, iconUrl, useLargeIcon, /*isTemporary=*/false, callback);
         }
     }
 
@@ -1227,7 +1091,7 @@ public class NewTabPageView extends FrameLayout
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         if (mUseCardsUi) {
-            updatePeekingCard();
+            mRecyclerView.updatePeekingCard();
         }
     }
 

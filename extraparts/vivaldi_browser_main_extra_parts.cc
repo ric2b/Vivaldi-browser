@@ -45,6 +45,15 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
 
     command_line->AppendSwitchNoDup(
       translate::switches::kDisableTranslate);
+
+#if defined(OS_WIN)
+    // Note(yngve) VB-20601: Disable DSF Zoom on Windows because it causes
+    // flickering on HiDPI screens
+    if (!command_line->HasSwitch(switches::kEnableUseZoomForDSF))
+      command_line->AppendSwitchASCII(
+        switches::kEnableUseZoomForDSF,
+        "false");
+#endif
   }
 
 #if defined(OS_MACOSX)

@@ -32,6 +32,7 @@
 
 #include "base/trace_event/process_memory_dump.h"
 #include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
@@ -40,16 +41,19 @@
 #include "platform/heap/Heap.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/heap/Visitor.h"
+#include "platform/web_memory_allocator_dump.h"
+#include "platform/web_process_memory_dump.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebMemoryAllocatorDump.h"
-#include "public/platform/WebProcessMemoryDump.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
 #include "wtf/CurrentTime.h"
 #include "wtf/DataLog.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/ThreadingPrimitives.h"
 #include "wtf/allocator/Partitions.h"
+#include <memory>
+#include <v8.h>
 
 #if OS(WIN)
 #include <stddef.h>
@@ -65,8 +69,6 @@
 #include <pthread_np.h>
 #endif
 
-#include <v8.h>
-
 namespace blink {
 
 WTF::ThreadSpecific<ThreadState*>* ThreadState::s_threadSpecific = nullptr;
@@ -76,7 +78,7 @@ uint8_t ThreadState::s_mainThreadStateStorage[sizeof(ThreadState)];
 
 ThreadState::ThreadState(bool perThreadHeapEnabled)
     : m_thread(currentThread())
-    , m_persistentRegion(adoptPtr(new PersistentRegion()))
+    , m_persistentRegion(wrapUnique(new PersistentRegion()))
 #if OS(WIN) && COMPILER(MSVC)
     , m_threadStackSize(0)
 #endif
@@ -98,6 +100,7 @@ ThreadState::ThreadState(bool perThreadHeapEnabled)
     , m_gcState(NoGCScheduled)
     , m_isolate(nullptr)
     , m_traceDOMWrappers(nullptr)
+    , m_invalidateDeadObjectsInWrappersMarkingDeque(nullptr)
 #if defined(ADDRESS_SANITIZER)
     , m_asanFakeStack(__asan_get_current_fake_stack())
 #endif
@@ -111,9 +114,6 @@ ThreadState::ThreadState(bool perThreadHeapEnabled)
     ASSERT(checkThread());
     ASSERT(!**s_threadSpecific);
     **s_threadSpecific = this;
-
-    // TODO(keishi) Remove when per thread heap is ready.
-    CHECK(!m_perThreadHeapEnabled);
 
     if (m_perThreadHeapEnabled) {
         m_heap = new ThreadHeap();
@@ -133,7 +133,7 @@ ThreadState::ThreadState(bool perThreadHeapEnabled)
         m_arenas[arenaIndex] = new NormalPageArena(this, arenaIndex);
     m_arenas[BlinkGC::LargeObjectArenaIndex] = new LargeObjectArena(this, BlinkGC::LargeObjectArenaIndex);
 
-    m_likelyToBePromptlyFreed = adoptArrayPtr(new int[likelyToBePromptlyFreedArraySize]);
+    m_likelyToBePromptlyFreed = wrapArrayUnique(new int[likelyToBePromptlyFreedArraySize]);
     clearArenaAges();
 
     // There is little use of weak references and collections off the main thread;
@@ -424,30 +424,6 @@ bool ThreadState::popAndInvokeThreadLocalWeakCallback(Visitor* visitor)
     // we might have an off-heap collection. We assert it in
     // ThreadHeap::pushThreadLocalWeakCallback.
     if (CallbackStack::Item* item = m_threadLocalWeakCallbackStack->pop()) {
-        // Note that the thread-local weak processing can be called for
-        // an already dead object (for which isHeapObjectAlive(object) can
-        // return false). This can happen in the following scenario:
-        //
-        // 1) Marking runs. A weak callback for an object X is registered
-        //    to the thread that created the object X (say, thread P).
-        // 2) Marking finishes. All other threads are resumed.
-        // 3) The object X becomes unreachable.
-        // 4) A next GC hits before the thread P wakes up.
-        // 5) Marking runs. The object X is not marked.
-        // 6) Marking finishes. All other threads are resumed.
-        // 7) The thread P wakes up and invokes pending weak callbacks.
-        //    The weak callback for the object X is called, but the object X
-        //    is already dead.
-        //
-        // Even in this case, it is safe to access the object X in the weak
-        // callback because it is not yet swept. It is completely wasteful
-        // to invoke the weak callback for dead objects but it is just
-        // wasteful and safe.
-        //
-        // TODO(Oilpan): Avoid calling weak callbacks for dead objects.
-        // We can do that by checking isHeapObjectAlive(object) before
-        // calling the weak callback, but in that case Callback::Item
-        // needs to understand T*.
         item->call(visitor);
         return true;
     }
@@ -472,7 +448,7 @@ void ThreadState::threadLocalWeakProcessing()
     // Due to the complexity, we just forbid allocations.
     NoAllocationScope noAllocationScope(this);
 
-    OwnPtr<Visitor> visitor = Visitor::create(this, BlinkGC::ThreadLocalWeakProcessing);
+    std::unique_ptr<Visitor> visitor = Visitor::create(this, BlinkGC::ThreadLocalWeakProcessing);
 
     // Perform thread-specific weak processing.
     while (popAndInvokeThreadLocalWeakCallback(visitor.get())) { }
@@ -736,8 +712,13 @@ void ThreadState::performIdleGC(double deadlineSeconds)
     if (gcState() != IdleGCScheduled)
         return;
 
+    if (isGCForbidden()) {
+        // If GC is forbidden at this point, try again.
+        scheduleIdleGC();
+        return;
+    }
+
     double idleDeltaInSeconds = deadlineSeconds - monotonicallyIncreasingTime();
-    TRACE_EVENT2("blink_gc", "ThreadState::performIdleGC", "idleDeltaInSeconds", idleDeltaInSeconds, "estimatedMarkingTime", m_heap->heapStats().estimatedMarkingTime());
     if (idleDeltaInSeconds <= m_heap->heapStats().estimatedMarkingTime() && !Platform::current()->currentThread()->scheduler()->canExceedIdleDeadlineIfRequired()) {
         // If marking is estimated to take longer than the deadline and we can't
         // exceed the deadline, then reschedule for the next idle period.
@@ -745,6 +726,7 @@ void ThreadState::performIdleGC(double deadlineSeconds)
         return;
     }
 
+    TRACE_EVENT2("blink_gc", "ThreadState::performIdleGC", "idleDeltaInSeconds", idleDeltaInSeconds, "estimatedMarkingTime", m_heap->heapStats().estimatedMarkingTime());
     ThreadHeap::collectGarbage(BlinkGC::NoHeapPointersOnStack, BlinkGC::GCWithoutSweep, BlinkGC::IdleGC);
 }
 
@@ -807,7 +789,7 @@ void ThreadState::scheduleIdleGC()
     if (!Platform::current()->currentThread()->scheduler())
         return;
 
-    Platform::current()->currentThread()->scheduler()->postNonNestableIdleTask(BLINK_FROM_HERE, WTF::bind<double>(&ThreadState::performIdleGC, this));
+    Platform::current()->currentThread()->scheduler()->postNonNestableIdleTask(BLINK_FROM_HERE, WTF::bind(&ThreadState::performIdleGC, WTF::unretained(this)));
     setGCState(IdleGCScheduled);
 }
 
@@ -821,7 +803,7 @@ void ThreadState::scheduleIdleLazySweep()
     if (!Platform::current()->currentThread()->scheduler())
         return;
 
-    Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind<double>(&ThreadState::performIdleLazySweep, this));
+    Platform::current()->currentThread()->scheduler()->postIdleTask(BLINK_FROM_HERE, WTF::bind(&ThreadState::performIdleLazySweep, WTF::unretained(this)));
 }
 
 void ThreadState::schedulePreciseGC()
@@ -967,10 +949,30 @@ void ThreadState::preGC()
     makeConsistentForGC();
     flushHeapDoesNotContainCacheIfNeeded();
     clearArenaAges();
+
+    // It is possible, albeit rare, for a thread to be kept
+    // at a safepoint across multiple GCs, as resuming all attached
+    // threads after the "global" GC phases will contend for the shared
+    // safepoint barrier mutexes etc, which can additionally delay
+    // a thread. Enough so that another thread may initiate
+    // a new GC before this has happened.
+    //
+    // In which case the parked thread's ThreadState will have unprocessed
+    // entries on its local weak callback stack when that later GC goes
+    // ahead. Clear out and invalidate the stack now, as the thread
+    // should only process callbacks that's found to be reachable by
+    // the latest GC, when it eventually gets to next perform
+    // thread-local weak processing.
+    m_threadLocalWeakCallbackStack->clear();
 }
 
 void ThreadState::postGC(BlinkGC::GCType gcType)
 {
+    if (RuntimeEnabledFeatures::traceWrappablesEnabled()
+        && m_invalidateDeadObjectsInWrappersMarkingDeque) {
+        m_invalidateDeadObjectsInWrappersMarkingDeque(m_isolate);
+    }
+
     ASSERT(isInGC());
     for (int i = 0; i < BlinkGC::NumberOfArenas; i++)
         m_arenas[i]->prepareForSweep();
@@ -1319,7 +1321,7 @@ void ThreadState::copyStackUntilSafePointScope()
     }
 }
 
-void ThreadState::addInterruptor(PassOwnPtr<BlinkGCInterruptor> interruptor)
+void ThreadState::addInterruptor(std::unique_ptr<BlinkGCInterruptor> interruptor)
 {
     ASSERT(checkThread());
     SafePointScope scope(BlinkGC::HeapPointersOnStack);

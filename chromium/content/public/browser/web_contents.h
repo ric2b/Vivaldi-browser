@@ -149,6 +149,14 @@ class WebContents : public PageNavigator,
     // RenderFrame, have already been created on the renderer side, and
     // WebContents construction should take this into account.
     bool renderer_initiated_creation;
+
+    // True if the WebContents should create its renderer process and main
+    // RenderFrame before the first navigation. This is useful to reduce
+    // the latency of the first navigation in cases where it might
+    // not happen right away.
+    // Note that the pre-created renderer process may not be used if the first
+    // navigation requires a dedicated or privileged process, such as a WebUI.
+    bool initialize_renderer;
   };
 
   // Creates a new WebContents.
@@ -195,16 +203,20 @@ class WebContents : public PageNavigator,
   // |GetLastCommittedURL| as appropriate.
   virtual const GURL& GetURL() const = 0;
 
-  // Gets the URL currently being displayed in the URL bar, if there is one.
-  // This URL might be a pending navigation that hasn't committed yet, so it is
-  // not guaranteed to match the current page in this WebContents. A typical
-  // example of this is interstitials, which show the URL of the new/loading
-  // page (active) but the security context is of the old page (last committed).
+  // Gets the virtual URL currently being displayed in the URL bar, if there is
+  // one. This URL might be a pending navigation that hasn't committed yet, so
+  // it is not guaranteed to match the current page in this WebContents. A
+  // typical example of this is interstitials, which show the URL of the
+  // new/loading page (active) but the security context is of the old page (last
+  // committed).
   virtual const GURL& GetVisibleURL() const = 0;
 
-  // Gets the last committed URL. It represents the current page that is
-  // displayed in this WebContents. It represents the current security
-  // context.
+  // Gets the virtual URL of the last committed page in this WebContents.
+  // Virtual URLs are meant to be displayed to the user (e.g., they include the
+  // "view-source:" prefix for view source URLs, unlike NavigationEntry::GetURL
+  // and NavigationHandle::GetURL). The last committed page is the current
+  // security context and the content that is actually displayed within the tab.
+  // See also GetVisibleURL above, which may differ from this URL.
   virtual const GURL& GetLastCommittedURL() const = 0;
 
   // Return the currently active RenderProcessHost and RenderViewHost. Each of

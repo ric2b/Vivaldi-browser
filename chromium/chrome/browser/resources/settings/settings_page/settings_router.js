@@ -8,6 +8,7 @@
  *   page: string,
  *   section: string,
  *   subpage: !Array<string>,
+ *   dialog: (string|undefined),
  * }}
  */
 var SettingsRoute;
@@ -58,6 +59,7 @@ Polymer({
               page: route.page,
               section: route.section,
               subpage: route.subpage,
+              dialog: route.dialog,
             };
           }
         }
@@ -201,6 +203,12 @@ Polymer({
     },
 <if expr="chromeos">
     {
+      url: '/quickUnlock/authenticate',
+      page: 'basic',
+      section: 'people',
+      subpage: ['quick-unlock-authenticate'],
+    },
+    {
       url: '/accounts',
       page: 'basic',
       section: 'people',
@@ -233,6 +241,18 @@ Polymer({
       subpage: ['site-settings', 'all-sites'],
     },
     {
+      url: '/siteSettings/automaticDownloads',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-automatic-downloads'],
+    },
+    {
+      url: '/siteSettings/backgroundSync',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-background-sync'],
+    },
+    {
       url: '/siteSettings/camera',
       page: 'advanced',
       section: 'privacy',
@@ -255,6 +275,12 @@ Polymer({
       page: 'advanced',
       section: 'privacy',
       subpage: ['site-settings', 'site-settings-category-images'],
+    },
+    {
+      url: '/siteSettings/keygen',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-keygen'],
     },
     {
       url: '/siteSettings/location',
@@ -281,10 +307,22 @@ Polymer({
       subpage: ['site-settings', 'site-settings-category-notifications'],
     },
     {
+      url: '/siteSettings/plugins',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-plugins'],
+    },
+    {
       url: '/siteSettings/popups',
       page: 'advanced',
       section: 'privacy',
       subpage: ['site-settings', 'site-settings-category-popups'],
+    },
+    {
+      url: '/siteSettings/unsandboxedPlugins',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-unsandboxed-plugins'],
     },
     // Site details routes.
     {
@@ -292,6 +330,20 @@ Polymer({
       page: 'advanced',
       section: 'privacy',
       subpage: ['site-settings', 'all-sites', 'site-details'],
+    },
+    {
+      url: '/siteSettings/automaticDownloads/details',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-automatic-downloads',
+          'site-details'],
+    },
+    {
+      url: '/siteSettings/backgroundSync/details',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-background-sync',
+          'site-details'],
     },
     {
       url: '/siteSettings/camera/details',
@@ -319,6 +371,13 @@ Polymer({
       page: 'advanced',
       section: 'privacy',
       subpage: ['site-settings', 'site-settings-category-images',
+          'site-details'],
+    },
+    {
+      url: '/siteSettings/keygen/details',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-keygen',
           'site-details'],
     },
     {
@@ -350,6 +409,13 @@ Polymer({
           'site-details'],
     },
     {
+      url: '/siteSettings/plugins/details',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-plugins',
+          'site-details'],
+    },
+    {
       url: '/siteSettings/popups/details',
       page: 'advanced',
       section: 'privacy',
@@ -357,10 +423,18 @@ Polymer({
           'site-details'],
     },
     {
+      url: '/siteSettings/unsandboxedPlugins/details',
+      page: 'advanced',
+      section: 'privacy',
+      subpage: ['site-settings', 'site-settings-category-unsandsboxed-plugins',
+          'site-details'],
+    },
+    {
       url: '/clearBrowserData',
       page: 'advanced',
       section: 'privacy',
-      subpage: ['clear-browsing-data'],
+      subpage: [],
+      dialog: 'clear-browsing-data',
     },
 <if expr="chromeos">
     {
@@ -447,6 +521,12 @@ Polymer({
       subpage: [],
     },
     {
+      url: '/printing',
+      page: 'advanced',
+      section: 'printing',
+      subpage: [],
+    },
+    {
       url: '/accessibility',
       page: 'advanced',
       section: 'a11y',
@@ -484,7 +564,7 @@ Polymer({
       subpage: ['keyboard'],
     },
     {
-      url: '/display-overlay',
+      url: '/display',
       page: 'basic',
       section: 'device',
       subpage: ['display'],
@@ -513,12 +593,13 @@ Polymer({
   currentRouteChanged_: function(newRoute, oldRoute) {
     for (var i = 0; i < this.routes_.length; ++i) {
       var route = this.routes_[i];
-      if (route.page == newRoute.page && route.section == newRoute.section &&
+      if (route.page == newRoute.page &&
+          route.section == newRoute.section &&
+          route.dialog == newRoute.dialog &&
           route.subpage.length == newRoute.subpage.length &&
           newRoute.subpage.every(function(value, index) {
             return value == route.subpage[index];
           })) {
-
         // Update the property containing the titles for the current route.
         this.currentRouteTitles = {
           pageTitle: loadTimeData.getString(route.page + 'PageTitle'),
@@ -534,6 +615,7 @@ Polymer({
           page: newRoute.page,
           section: newRoute.section,
           subpage: newRoute.subpage,
+          dialog: newRoute.dialog,
         };
 
         // Push the current route to the history state, so when the user

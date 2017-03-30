@@ -143,8 +143,8 @@ bool IsArcMemoryManagementEnabled() {
 std::ostream& operator<<(
     std::ostream& out, const TabManagerDelegate::Candidate& candidate) {
   if (candidate.is_arc_app) {
-    out << "app " << candidate.app->pid
-        << " (" << candidate.app->process_name << ")";
+    out << "app " << candidate.app->pid()
+        << " (" << candidate.app->process_name() << ")";
   } else {
     out << "tab " << candidate.tab->renderer_handle;
   }
@@ -284,15 +284,14 @@ int TabManagerDelegate::MemoryStat::EstimatedMemoryFreedKB(
 }
 
 class TabManagerDelegate::UmaReporter {
-  public:
-   UmaReporter()
-       : last_kill_time_(), total_kills_(0) {}
-   ~UmaReporter() {}
-   void ReportKill(const int memory_freed);
+ public:
+  UmaReporter() : last_kill_time_(), total_kills_(0) {}
+  ~UmaReporter() {}
+  void ReportKill(const int memory_freed);
 
-  private:
-   base::Time last_kill_time_;
-   int total_kills_;
+ private:
+  base::Time last_kill_time_;
+  int total_kills_;
 };
 
 void TabManagerDelegate::UmaReporter::ReportKill(const int memory_freed) {
@@ -336,7 +335,7 @@ TabManagerDelegate::TabManagerDelegate(
                  content::NotificationService::AllBrowserContextsAndSources());
   auto arc_bridge_service = arc::ArcBridgeService::Get();
   if (arc_bridge_service)
-    arc_bridge_service->AddObserver(this);
+    arc_bridge_service->process()->AddObserver(this);
   auto activation_client = GetActivationClient();
   if (activation_client)
     activation_client->AddObserver(this);
@@ -350,7 +349,7 @@ TabManagerDelegate::~TabManagerDelegate() {
     activation_client->RemoveObserver(this);
   auto arc_bridge_service = arc::ArcBridgeService::Get();
   if (arc_bridge_service)
-    arc_bridge_service->RemoveObserver(this);
+    arc_bridge_service->process()->RemoveObserver(this);
 }
 
 void TabManagerDelegate::OnBrowserSetLastActive(Browser* browser) {
@@ -369,12 +368,12 @@ void TabManagerDelegate::OnBrowserSetLastActive(Browser* browser) {
   AdjustFocusedTabScore(pid);
 }
 
-void TabManagerDelegate::OnProcessInstanceReady() {
+void TabManagerDelegate::OnInstanceReady() {
   auto arc_bridge_service = arc::ArcBridgeService::Get();
   DCHECK(arc_bridge_service);
 
-  arc_process_instance_ = arc_bridge_service->process_instance();
-  arc_process_instance_version_ = arc_bridge_service->process_version();
+  arc_process_instance_ = arc_bridge_service->process()->instance();
+  arc_process_instance_version_ = arc_bridge_service->process()->version();
 
   DCHECK(arc_process_instance_);
 
@@ -399,7 +398,7 @@ void TabManagerDelegate::OnProcessInstanceReady() {
   arc_process_instance_->DisableLowMemoryKiller();
 }
 
-void TabManagerDelegate::OnProcessInstanceClosed() {
+void TabManagerDelegate::OnInstanceClosed() {
   arc_process_instance_ = nullptr;
   arc_process_instance_version_ = 0;
 }
@@ -613,7 +612,7 @@ TabManagerDelegate::GetSortedCandidates(
   }
 
   for (const auto& app : arc_processes) {
-    Candidate candidate(&app, AppStateToPriority(app.process_state));
+    Candidate candidate(&app, AppStateToPriority(app.process_state()));
     // Skip persistent android processes since we should never kill them.
     // Also don't ajust OOM score so their score remains min oom_score_adj.
     if (candidate.priority >= ProcessPriority::ANDROID_PERSISTENT)
@@ -664,8 +663,8 @@ void TabManagerDelegate::LowMemoryKillImpl(
     }
     if (entry.is_arc_app) {
         int estimated_memory_freed_kb =
-            mem_stat_->EstimatedMemoryFreedKB(entry.app->pid);
-        if (KillArcProcess(entry.app->nspid)) {
+            mem_stat_->EstimatedMemoryFreedKB(entry.app->pid());
+        if (KillArcProcess(entry.app->nspid())) {
           target_memory_to_free_kb -= estimated_memory_freed_kb;
           uma_->ReportKill(estimated_memory_freed_kb);
           VLOG(2) << "Killed " << entry;
@@ -782,15 +781,15 @@ void TabManagerDelegate::DistributeOomScoreInRange(
     int score = static_cast<int>(priority + 0.5f);
     if (cur->is_arc_app) {
       // Use pid as map keys so it's globally unique.
-      (*new_map)[cur->app->pid] = score;
+      (*new_map)[cur->app->pid()] = score;
       int cur_app_pid_score = 0;
       {
         base::AutoLock oom_score_autolock(oom_score_lock_);
-        cur_app_pid_score = oom_score_map_[cur->app->pid];
+        cur_app_pid_score = oom_score_map_[cur->app->pid()];
       }
       if (cur_app_pid_score != score) {
         VLOG(3) << "Set OOM score " << score << " for " << *cur;
-        SetOomScoreAdjForApp(cur->app->nspid, score);
+        SetOomScoreAdjForApp(cur->app->nspid(), score);
       }
     } else {
       base::ProcessHandle process_handle = cur->tab->renderer_handle;

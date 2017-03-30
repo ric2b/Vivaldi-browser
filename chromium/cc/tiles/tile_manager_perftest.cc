@@ -244,13 +244,13 @@ class TileManagerPerfTest : public TestLayerTreeHostBase {
       child_layer->SetBounds(layer_bounds);
       child_layer->SetDrawsContent(true);
       layers.push_back(child_layer.get());
-      pending_layer()->AddChild(std::move(child_layer));
+      pending_layer()->test_properties()->AddChild(std::move(child_layer));
       ++next_id;
     }
 
     // Property trees need to be rebuilt because layers were added above.
     host_impl()->pending_tree()->property_trees()->needs_rebuild = true;
-    host_impl()->pending_tree()->BuildPropertyTreesForTesting();
+    host_impl()->pending_tree()->BuildLayerListAndPropertyTreesForTesting();
     bool update_lcd_text = false;
     host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
     for (FakePictureLayerImpl* layer : layers)

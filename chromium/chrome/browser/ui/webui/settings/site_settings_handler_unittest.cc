@@ -137,19 +137,17 @@ class SiteSettingsHandlerTest : public testing::Test {
 };
 
 TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
-  ContentSettingsType type = CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
-
   // Test the JS -> C++ -> JS callback path for getting and setting defaults.
   base::ListValue getArgs;
-  getArgs.Append(new base::StringValue(kCallbackId));
-  getArgs.Append(new base::FundamentalValue(type));
+  getArgs.AppendString(kCallbackId);
+  getArgs.AppendString("notifications");
   handler()->HandleGetDefaultValueForContentType(&getArgs);
   ValidateDefault(true, 1U);
 
   // Set the default to 'Blocked'.
   base::ListValue setArgs;
-  setArgs.Append(new base::FundamentalValue(type));
-  setArgs.Append(new base::StringValue("block"));
+  setArgs.AppendString("notifications");
+  setArgs.AppendString("block");
   handler()->HandleSetDefaultValueForContentType(&setArgs);
 
   EXPECT_EQ(2U, web_ui()->call_data().size());
@@ -160,31 +158,29 @@ TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
 }
 
 TEST_F(SiteSettingsHandlerTest, Origins) {
-  ContentSettingsType type = CONTENT_SETTINGS_TYPE_NOTIFICATIONS;
-
   // Test the JS -> C++ -> JS callback path for configuring origins, by setting
   // Google.com to blocked.
   base::ListValue setArgs;
   std::string google("http://www.google.com");
-  setArgs.Append(new base::StringValue(google));  // Primary pattern.
-  setArgs.Append(new base::StringValue(google));  // Secondary pattern.
-  setArgs.Append(new base::FundamentalValue(type));
-  setArgs.Append(new base::StringValue("block"));
+  setArgs.AppendString(google);  // Primary pattern.
+  setArgs.AppendString(google);  // Secondary pattern.
+  setArgs.AppendString("notifications");
+  setArgs.AppendString("block");
   handler()->HandleSetCategoryPermissionForOrigin(&setArgs);
   EXPECT_EQ(1U, web_ui()->call_data().size());
 
   // Verify the change was successful.
   base::ListValue listArgs;
-  listArgs.Append(new base::StringValue(kCallbackId));
-  listArgs.Append(new base::FundamentalValue(type));
+  listArgs.AppendString(kCallbackId);
+  listArgs.AppendString("notifications");
   handler()->HandleGetExceptionList(&listArgs);
   ValidateOrigin(google, google, "block", "preference", 2U);
 
   // Reset things back to how they were.
   base::ListValue resetArgs;
-  resetArgs.Append(new base::StringValue(google));
-  resetArgs.Append(new base::StringValue(google));
-  resetArgs.Append(new base::FundamentalValue(type));
+  resetArgs.AppendString(google);
+  resetArgs.AppendString(google);
+  resetArgs.AppendString("notifications");
   handler()->HandleResetCategoryPermissionForOrigin(&resetArgs);
   EXPECT_EQ(3U, web_ui()->call_data().size());
 
@@ -196,15 +192,15 @@ TEST_F(SiteSettingsHandlerTest, Origins) {
 TEST_F(SiteSettingsHandlerTest, Patterns) {
   base::ListValue args;
   std::string pattern("[*.]google.com");
-  args.Append(new base::StringValue(kCallbackId));
-  args.Append(new base::StringValue(pattern));
+  args.AppendString(kCallbackId);
+  args.AppendString(pattern);
   handler()->HandleIsPatternValid(&args);
   ValidatePattern(true, 1U);
 
   base::ListValue invalid;
   std::string bad_pattern(";");
-  invalid.Append(new base::StringValue(kCallbackId));
-  invalid.Append(new base::StringValue(bad_pattern));
+  invalid.AppendString(kCallbackId);
+  invalid.AppendString(bad_pattern);
   handler()->HandleIsPatternValid(&invalid);
   ValidatePattern(false, 2U);
 }

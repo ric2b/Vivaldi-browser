@@ -22,119 +22,92 @@
 #include "components/mus/public/cpp/context_provider.h"
 #include "components/mus/public/cpp/output_surface.h"
 #include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_connection.h"
-#include "components/mus/public/interfaces/gpu.mojom.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
+#include "components/mus/public/cpp/window_tree_client.h"
 #include "mojo/public/cpp/bindings/binding.h"
-#include "services/shell/public/cpp/connector.h"
 #include "ui/views/mus/window_tree_host_mus.h"
 
 namespace views {
 
-// PerConnectionState ----------------------------------------------------------
+// PerClientState --------------------------------------------------------------
 
-// State needed per ViewManager. Provides the real implementation of
+// State needed per WindowTreeClient. Provides the real implementation of
 // CreateOutputSurface. SurfaceBinding obtains a pointer to the
-// PerConnectionState appropriate for the ViewManager. PerConnectionState is
-// stored in a thread local map. When no more refereces to a PerConnectionState
-// remain the PerConnectionState is deleted and the underlying map cleaned up.
-class SurfaceBinding::PerConnectionState
-    : public base::RefCounted<PerConnectionState> {
+// PerClientState appropriate for the WindowTreeClient. PerClientState is
+// stored in a thread local map. When no more refereces to a PerClientState
+// remain the PerClientState is deleted and the underlying map cleaned up.
+class SurfaceBinding::PerClientState : public base::RefCounted<PerClientState> {
  public:
-  static PerConnectionState* Get(shell::Connector* connector,
-                                 mus::WindowTreeConnection* connection);
+  static PerClientState* Get(shell::Connector* connector,
+                             mus::WindowTreeClient* client);
 
   std::unique_ptr<cc::OutputSurface> CreateOutputSurface(
       mus::Window* window,
       mus::mojom::SurfaceType type);
 
  private:
-  typedef std::map<mus::WindowTreeConnection*, PerConnectionState*>
-      ConnectionToStateMap;
+  typedef std::map<mus::WindowTreeClient*, PerClientState*> ClientToStateMap;
 
-  friend class base::RefCounted<PerConnectionState>;
+  friend class base::RefCounted<PerClientState>;
 
-  PerConnectionState(shell::Connector* connector,
-                     mus::WindowTreeConnection* connection);
-  ~PerConnectionState();
-
-  void Init();
+  PerClientState(shell::Connector* connector,
+                 mus::WindowTreeClient* client);
+  ~PerClientState();
 
   static base::LazyInstance<
-      base::ThreadLocalPointer<ConnectionToStateMap>>::Leaky window_states;
+      base::ThreadLocalPointer<ClientToStateMap>>::Leaky window_states;
 
   shell::Connector* connector_;
-  mus::WindowTreeConnection* connection_;
+  mus::WindowTreeClient* client_;
 
-  // Set of state needed to create an OutputSurface.
-  mus::mojom::GpuPtr gpu_;
-
-  DISALLOW_COPY_AND_ASSIGN(PerConnectionState);
+  DISALLOW_COPY_AND_ASSIGN(PerClientState);
 };
 
 // static
 base::LazyInstance<base::ThreadLocalPointer<
-    SurfaceBinding::PerConnectionState::ConnectionToStateMap>>::Leaky
-    SurfaceBinding::PerConnectionState::window_states;
+    SurfaceBinding::PerClientState::ClientToStateMap>>::Leaky
+    SurfaceBinding::PerClientState::window_states;
 
 // static
-SurfaceBinding::PerConnectionState* SurfaceBinding::PerConnectionState::Get(
+SurfaceBinding::PerClientState* SurfaceBinding::PerClientState::Get(
     shell::Connector* connector,
-    mus::WindowTreeConnection* connection) {
-  ConnectionToStateMap* window_map = window_states.Pointer()->Get();
+    mus::WindowTreeClient* client) {
+  // |connector| can be null in some unit-tests.
+  if (!connector)
+    return nullptr;
+  ClientToStateMap* window_map = window_states.Pointer()->Get();
   if (!window_map) {
-    window_map = new ConnectionToStateMap;
+    window_map = new ClientToStateMap;
     window_states.Pointer()->Set(window_map);
   }
-  if (!(*window_map)[connection]) {
-    (*window_map)[connection] = new PerConnectionState(connector, connection);
-    (*window_map)[connection]->Init();
-  }
-  return (*window_map)[connection];
+  if (!(*window_map)[client])
+    (*window_map)[client] = new PerClientState(connector, client);
+  return (*window_map)[client];
 }
 
 std::unique_ptr<cc::OutputSurface>
-SurfaceBinding::PerConnectionState::CreateOutputSurface(
+SurfaceBinding::PerClientState::CreateOutputSurface(
     mus::Window* window,
     mus::mojom::SurfaceType surface_type) {
-  if (gpu_.encountered_error())
-    return nullptr;
-  // TODO(sky): figure out lifetime here. Do I need to worry about the return
-  // value outliving this?
-  mus::mojom::CommandBufferPtr cb;
-  gpu_->CreateOffscreenGLES2Context(GetProxy(&cb));
-
   scoped_refptr<cc::ContextProvider> context_provider(
-      new mus::ContextProvider(cb.PassInterface().PassHandle()));
+      new mus::ContextProvider(connector_));
   return base::WrapUnique(new mus::OutputSurface(
       context_provider, window->RequestSurface(surface_type)));
 }
 
-SurfaceBinding::PerConnectionState::PerConnectionState(
+SurfaceBinding::PerClientState::PerClientState(
     shell::Connector* connector,
-    mus::WindowTreeConnection* connection)
-    : connector_(connector), connection_(connection) {}
+    mus::WindowTreeClient* client)
+    : connector_(connector), client_(client) {}
 
-SurfaceBinding::PerConnectionState::~PerConnectionState() {
-  ConnectionToStateMap* window_map = window_states.Pointer()->Get();
+SurfaceBinding::PerClientState::~PerClientState() {
+  ClientToStateMap* window_map = window_states.Pointer()->Get();
   DCHECK(window_map);
-  DCHECK_EQ(this, (*window_map)[connection_]);
-  window_map->erase(connection_);
+  DCHECK_EQ(this, (*window_map)[client_]);
+  window_map->erase(client_);
   if (window_map->empty()) {
     delete window_map;
     window_states.Pointer()->Set(nullptr);
   }
-}
-
-void SurfaceBinding::PerConnectionState::Init() {
-  connector_->ConnectToInterface("mojo:mus", &gpu_);
-
-  // TODO(sad): If connection is lost (e.g. if gpu crashes), then the
-  // connections need to be restored. https://crbug.com/613366
-  // TODO(rockot|yzshen): It is necessary to install a connection-error handler,
-  // even if the handler doesn't actually do anything. https://crbug.com/613371
-  gpu_.set_connection_error_handler([]{});
 }
 
 // SurfaceBinding --------------------------------------------------------------
@@ -144,12 +117,12 @@ SurfaceBinding::SurfaceBinding(shell::Connector* connector,
                                mus::mojom::SurfaceType surface_type)
     : window_(window),
       surface_type_(surface_type),
-      state_(PerConnectionState::Get(connector, window->connection())) {}
+      state_(PerClientState::Get(connector, window->window_tree())) {}
 
 SurfaceBinding::~SurfaceBinding() {}
 
 std::unique_ptr<cc::OutputSurface> SurfaceBinding::CreateOutputSurface() {
-  return state_->CreateOutputSurface(window_, surface_type_);
+  return state_ ? state_->CreateOutputSurface(window_, surface_type_) : nullptr;
 }
 
 }  // namespace views

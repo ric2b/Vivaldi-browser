@@ -71,13 +71,11 @@ CommandBufferProxyImpl::CommandBufferProxyImpl(int channel_id,
 std::unique_ptr<CommandBufferProxyImpl> CommandBufferProxyImpl::Create(
     scoped_refptr<GpuChannelHost> host,
     gpu::SurfaceHandle surface_handle,
-    const gfx::Size& size,
     CommandBufferProxyImpl* share_group,
     int32_t stream_id,
     gpu::GpuStreamPriority stream_priority,
     const gpu::gles2::ContextCreationAttribHelper& attribs,
     const GURL& active_url,
-    gfx::GpuPreference gpu_preference,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
   DCHECK(!share_group || (stream_id == share_group->stream_id_));
   TRACE_EVENT1("gpu", "GpuChannelHost::CreateViewCommandBuffer",
@@ -85,14 +83,12 @@ std::unique_ptr<CommandBufferProxyImpl> CommandBufferProxyImpl::Create(
 
   GPUCreateCommandBufferConfig init_params;
   init_params.surface_handle = surface_handle;
-  init_params.size = size;
   init_params.share_group_id =
       share_group ? share_group->route_id_ : MSG_ROUTING_NONE;
   init_params.stream_id = stream_id;
   init_params.stream_priority = stream_priority;
   init_params.attribs = attribs;
   init_params.active_url = active_url;
-  init_params.gpu_preference = gpu_preference;
 
   int32_t route_id = host->GenerateRouteID();
   std::unique_ptr<CommandBufferProxyImpl> command_buffer = base::WrapUnique(
@@ -266,9 +262,11 @@ void CommandBufferProxyImpl::Flush(int32_t put_offset) {
   last_barrier_put_offset_ = put_offset;
 
   if (channel_) {
+    uint32_t highest_verified_flush_id;
     const uint32_t flush_id = channel_->OrderingBarrier(
         route_id_, stream_id_, put_offset, ++flush_count_, latency_info_,
-        put_offset_changed, true);
+        put_offset_changed, true, &highest_verified_flush_id);
+    UpdateVerifiedReleases(highest_verified_flush_id);
     if (put_offset_changed) {
       DCHECK(flush_id);
       const uint64_t fence_sync_release = next_fence_sync_release_ - 1;
@@ -296,9 +294,12 @@ void CommandBufferProxyImpl::OrderingBarrier(int32_t put_offset) {
   last_barrier_put_offset_ = put_offset;
 
   if (channel_) {
+    uint32_t highest_verified_flush_id;
     const uint32_t flush_id = channel_->OrderingBarrier(
         route_id_, stream_id_, put_offset, ++flush_count_, latency_info_,
-        put_offset_changed, false);
+        put_offset_changed, false, &highest_verified_flush_id);
+    UpdateVerifiedReleases(highest_verified_flush_id);
+
     if (put_offset_changed) {
       DCHECK(flush_id);
       const uint64_t fence_sync_release = next_fence_sync_release_ - 1;
@@ -459,6 +460,9 @@ int32_t CommandBufferProxyImpl::CreateImage(ClientBuffer buffer,
       gpu_memory_buffer_manager->GpuMemoryBufferFromClientBuffer(buffer);
   DCHECK(gpu_memory_buffer);
 
+  DCHECK(image_gmb_map_.find(new_id) == image_gmb_map_.end());
+  image_gmb_map_[new_id].gpu_memory_buffer_id = gpu_memory_buffer->GetId().id;
+
   // This handle is owned by the GPU process and must be passed to it or it
   // will leak. In otherwords, do not early out on error between here and the
   // sending of the CreateImage IPC below.
@@ -512,6 +516,9 @@ void CommandBufferProxyImpl::DestroyImage(int32_t id) {
   if (last_state_.error != gpu::error::kNoError)
     return;
 
+  auto it = image_gmb_map_.find(id);
+  if (it != image_gmb_map_.end())
+    image_gmb_map_.erase(it);
   Send(new GpuCommandBufferMsg_DestroyImage(route_id_, id));
 }
 
@@ -529,7 +536,19 @@ int32_t CommandBufferProxyImpl::CreateGpuMemoryBufferImage(
   if (!buffer)
     return -1;
 
-  return CreateImage(buffer->AsClientBuffer(), width, height, internal_format);
+  int32_t result =
+      CreateImage(buffer->AsClientBuffer(), width, height, internal_format);
+  if (result != -1)
+    image_gmb_map_[result].owned_gpu_memory_buffer = std::move(buffer);
+  return result;
+}
+
+int32_t CommandBufferProxyImpl::GetImageGpuMemoryBufferId(unsigned image_id) {
+  CheckLock();
+  auto it = image_gmb_map_.find(image_id);
+  if (it != image_gmb_map_.end())
+    return it->second.gpu_memory_buffer_id;
+  return -1;
 }
 
 uint32_t CommandBufferProxyImpl::CreateStreamTexture(uint32_t texture_id) {
@@ -662,13 +681,23 @@ void CommandBufferProxyImpl::SignalQuery(uint32_t query,
   signal_tasks_.insert(std::make_pair(signal_id, callback));
 }
 
-bool CommandBufferProxyImpl::ProduceFrontBuffer(const gpu::Mailbox& mailbox) {
+void CommandBufferProxyImpl::TakeFrontBuffer(const gpu::Mailbox& mailbox) {
   CheckLock();
   if (last_state_.error != gpu::error::kNoError)
-    return false;
+    return;
 
-  Send(new GpuCommandBufferMsg_ProduceFrontBuffer(route_id_, mailbox));
-  return true;
+  Send(new GpuCommandBufferMsg_TakeFrontBuffer(route_id_, mailbox));
+}
+
+void CommandBufferProxyImpl::ReturnFrontBuffer(const gpu::Mailbox& mailbox,
+                                               const gpu::SyncToken& sync_token,
+                                               bool is_lost) {
+  CheckLock();
+  if (last_state_.error != gpu::error::kNoError)
+    return;
+
+  Send(new GpuCommandBufferMsg_WaitSyncToken(route_id_, sync_token));
+  Send(new GpuCommandBufferMsg_ReturnFrontBuffer(route_id_, mailbox, is_lost));
 }
 
 gpu::error::Error CommandBufferProxyImpl::GetLastError() {
@@ -751,6 +780,7 @@ void CommandBufferProxyImpl::OnSwapBuffersCompleted(
   params_mac.io_surface.reset(IOSurfaceLookupFromMachPort(params.io_surface));
   params_mac.pixel_size = params.pixel_size;
   params_mac.scale_factor = params.scale_factor;
+  params_mac.responses = std::move(params.in_use_responses);
   gpu::GpuProcessHostedCALayerTreeParamsMac* mac_frame_ptr = &params_mac;
 #else
   gpu::GpuProcessHostedCALayerTreeParamsMac* mac_frame_ptr = nullptr;
@@ -847,5 +877,11 @@ void CommandBufferProxyImpl::DisconnectChannel() {
   if (gpu_control_client_)
     gpu_control_client_->OnGpuControlLostContext();
 }
+
+CommandBufferProxyImpl::ImageInfo::ImageInfo() {}
+CommandBufferProxyImpl::ImageInfo::~ImageInfo() {}
+CommandBufferProxyImpl::ImageInfo::ImageInfo(ImageInfo&& other) = default;
+CommandBufferProxyImpl::ImageInfo& CommandBufferProxyImpl::ImageInfo::operator=(
+    ImageInfo&& other) = default;
 
 }  // namespace gpu

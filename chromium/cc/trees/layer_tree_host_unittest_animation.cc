@@ -13,6 +13,7 @@
 #include "cc/animation/animation_timeline.h"
 #include "cc/animation/element_animations.h"
 #include "cc/animation/scroll_offset_animation_curve.h"
+#include "cc/animation/scroll_offset_animations.h"
 #include "cc/animation/timing_function.h"
 #include "cc/animation/transform_operations.h"
 #include "cc/base/completion_event.h"
@@ -43,6 +44,7 @@ class LayerTreeHostAnimationTest : public LayerTreeTest {
 
   void AttachPlayersToTimeline() {
     layer_tree_host()->animation_host()->AddAnimationTimeline(timeline_.get());
+    layer_tree_host()->SetElementIdsForTesting();
     timeline_->AttachPlayer(player_.get());
     timeline_->AttachPlayer(player_child_.get());
   }
@@ -144,7 +146,7 @@ class LayerTreeHostAnimationTestAddAnimation
 
   void BeginTest() override {
     AttachPlayersToTimeline();
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
     PostAddInstantAnimationToMainThreadPlayer(player_.get());
   }
 
@@ -185,7 +187,7 @@ class LayerTreeHostAnimationTestCheckerboardDoesNotStarveDraws
 
   void BeginTest() override {
     AttachPlayersToTimeline();
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
     PostAddAnimationToMainThreadPlayer(player_.get());
   }
 
@@ -223,7 +225,7 @@ class LayerTreeHostAnimationTestAnimationsGetDeleted
 
   void BeginTest() override {
     AttachPlayersToTimeline();
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
     PostAddAnimationToMainThreadPlayer(player_.get());
   }
 
@@ -269,7 +271,7 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
     layer_tree_host()->root_layer()->AddChild(picture_);
 
     AttachPlayersToTimeline();
-    player_child_->AttachElement(picture_->id());
+    player_child_->AttachElement(picture_->element_id());
   }
 
   void BeginTest() override {
@@ -280,7 +282,7 @@ class LayerTreeHostAnimationTestAddAnimationWithTimingFunction
                      base::TimeTicks monotonic_time) override {
     // TODO(ajuma): This test only checks the active tree. Add checks for
     // pending tree too.
-    if (!host_impl->active_tree()->root_layer())
+    if (!host_impl->active_tree()->root_layer_for_testing())
       return;
 
     // Wait for the commit with the animation to happen.
@@ -335,7 +337,7 @@ class LayerTreeHostAnimationTestSynchronizeAnimationStartTimes
 
     AttachPlayersToTimeline();
     player_child_->set_animation_delegate(this);
-    player_child_->AttachElement(picture_->id());
+    player_child_->AttachElement(picture_->element_id());
   }
 
   void BeginTest() override {
@@ -389,7 +391,7 @@ class LayerTreeHostAnimationTestAnimationFinishedEvents
  public:
   void BeginTest() override {
     AttachPlayersToTimeline();
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
     PostAddInstantAnimationToMainThreadPlayer(player_.get());
   }
 
@@ -425,7 +427,7 @@ class LayerTreeHostAnimationTestDoNotSkipLayersWithAnimatedOpacity
     LayerTreeHostAnimationTest::SetupTree();
 
     AttachPlayersToTimeline();
-    player_->AttachElement(update_check_layer_->id());
+    player_->AttachElement(update_check_layer_->element_id());
   }
 
   void BeginTest() override {
@@ -473,7 +475,8 @@ class LayerTreeHostAnimationTestLayerAddedWithAnimation
       AttachPlayersToTimeline();
 
       scoped_refptr<Layer> layer = Layer::Create();
-      player_->AttachElement(layer->id());
+      layer->SetElementId(ElementId(42, 0));
+      player_->AttachElement(layer->element_id());
       player_->set_animation_delegate(this);
 
       // Any valid AnimationCurve will do here.
@@ -624,7 +627,7 @@ class LayerTreeHostAnimationTestCheckerboardDoesntStartAnimations
     layer_tree_host()->root_layer()->AddChild(picture_);
 
     AttachPlayersToTimeline();
-    player_child_->AttachElement(picture_->id());
+    player_child_->AttachElement(picture_->element_id());
     player_child_->set_animation_delegate(this);
   }
 
@@ -713,7 +716,7 @@ class LayerTreeHostAnimationTestScrollOffsetChangesArePropagated
     layer_tree_host()->root_layer()->AddChild(scroll_layer_);
 
     AttachPlayersToTimeline();
-    player_child_->AttachElement(scroll_layer_->id());
+    player_child_->AttachElement(scroll_layer_->element_id());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -724,7 +727,8 @@ class LayerTreeHostAnimationTestScrollOffsetChangesArePropagated
         std::unique_ptr<ScrollOffsetAnimationCurve> curve(
             ScrollOffsetAnimationCurve::Create(
                 gfx::ScrollOffset(500.f, 550.f),
-                EaseInOutTimingFunction::Create()));
+                CubicBezierTimingFunction::CreatePreset(
+                    CubicBezierTimingFunction::EaseType::EASE_IN_OUT)));
         std::unique_ptr<Animation> animation(Animation::Create(
             std::move(curve), 1, 0, TargetProperty::SCROLL_OFFSET));
         animation->set_needs_synchronized_start_time(true);
@@ -770,7 +774,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationTakeover
     layer_tree_host()->root_layer()->AddChild(scroll_layer_);
 
     AttachPlayersToTimeline();
-    player_child_->AttachElement(scroll_layer_->id());
+    player_child_->AttachElement(scroll_layer_->element_id());
     // Allows NotifyAnimationTakeover to get called.
     player_child_->set_animation_delegate(this);
   }
@@ -778,18 +782,24 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationTakeover
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
 
   void DidCommit() override {
-    // Add a main thread scrolling reason after the first commit to trigger
-    // the takeover path.
     if (layer_tree_host()->source_frame_number() == 1) {
-      scroll_layer_->AddMainThreadScrollingReasons(
-          MainThreadScrollingReason::kHasNonLayerViewportConstrainedObjects);
+      // Add an update after the first commit to trigger the animation takeover
+      // path.
+      layer_tree_host()
+          ->animation_host()
+          ->scroll_offset_animations()
+          .AddTakeoverUpdate(scroll_layer_->element_id());
+      EXPECT_TRUE(layer_tree_host()
+                      ->animation_host()
+                      ->scroll_offset_animations()
+                      .HasUpdatesForTesting());
     }
   }
 
   void WillCommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (host_impl->sync_tree()->source_frame_number() == 0) {
       host_impl->animation_host()->ImplOnlyScrollAnimationCreate(
-          scroll_layer_->id(), gfx::ScrollOffset(650.f, 750.f),
+          scroll_layer_->element_id(), gfx::ScrollOffset(650.f, 750.f),
           gfx::ScrollOffset(10, 20));
     }
   }
@@ -809,6 +819,108 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationTakeover
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestScrollOffsetAnimationTakeover);
+
+// Verifies that an impl-only scroll offset animation gets updated when the
+// scroll offset is adjusted on the main thread.
+class LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted
+    : public LayerTreeHostAnimationTest {
+ public:
+  LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted() {}
+
+  void SetupTree() override {
+    LayerTreeHostAnimationTest::SetupTree();
+
+    scroll_layer_ = FakePictureLayer::Create(&client_);
+    scroll_layer_->SetBounds(gfx::Size(10000, 10000));
+    client_.set_bounds(scroll_layer_->bounds());
+    scroll_layer_->SetScrollOffset(gfx::ScrollOffset(10, 20));
+    layer_tree_host()->root_layer()->AddChild(scroll_layer_);
+
+    AttachPlayersToTimeline();
+    player_child_->AttachElement(scroll_layer_->element_id());
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    if (layer_tree_host()->source_frame_number() == 1) {
+      // Add an update after the first commit to trigger the animation update
+      // path.
+      layer_tree_host()
+          ->animation_host()
+          ->scroll_offset_animations()
+          .AddAdjustmentUpdate(scroll_layer_->element_id(),
+                               gfx::Vector2dF(100.f, 100.f));
+      EXPECT_TRUE(layer_tree_host()
+                      ->animation_host()
+                      ->scroll_offset_animations()
+                      .HasUpdatesForTesting());
+    } else if (layer_tree_host()->source_frame_number() == 2) {
+      // Verify that the update queue is cleared after the update is applied.
+      EXPECT_FALSE(layer_tree_host()
+                       ->animation_host()
+                       ->scroll_offset_animations()
+                       .HasUpdatesForTesting());
+    }
+  }
+
+  void BeginCommitOnThread(LayerTreeHostImpl* host_impl) override {
+    // Note that the frame number gets incremented after BeginCommitOnThread but
+    // before WillCommitCompleteOnThread and CommitCompleteOnThread.
+    if (host_impl->sync_tree()->source_frame_number() == 0) {
+      // This happens after the impl-only animation is added in
+      // WillCommitCompleteOnThread.
+      Animation* animation =
+          host_impl->animation_host()
+              ->GetElementAnimationsForElementId(scroll_layer_->element_id())
+              ->GetAnimation(TargetProperty::SCROLL_OFFSET);
+      ScrollOffsetAnimationCurve* curve =
+          animation->curve()->ToScrollOffsetAnimationCurve();
+
+      // Verifiy the initial and target position before the scroll offset
+      // update from MT.
+      EXPECT_EQ(Animation::RunState::RUNNING, animation->run_state());
+      EXPECT_EQ(gfx::ScrollOffset(10.f, 20.f),
+                curve->GetValue(base::TimeDelta()));
+      EXPECT_EQ(gfx::ScrollOffset(650.f, 750.f), curve->target_value());
+    }
+  }
+
+  void WillCommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    if (host_impl->sync_tree()->source_frame_number() == 0) {
+      host_impl->animation_host()->ImplOnlyScrollAnimationCreate(
+          scroll_layer_->element_id(), gfx::ScrollOffset(650.f, 750.f),
+          gfx::ScrollOffset(10, 20));
+    }
+  }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    if (host_impl->sync_tree()->source_frame_number() == 1) {
+      Animation* animation =
+          host_impl->animation_host()
+              ->GetElementAnimationsForElementId(scroll_layer_->element_id())
+              ->GetAnimation(TargetProperty::SCROLL_OFFSET);
+      ScrollOffsetAnimationCurve* curve =
+          animation->curve()->ToScrollOffsetAnimationCurve();
+      // Verifiy the initial and target position after the scroll offset
+      // update from MT
+      EXPECT_EQ(Animation::RunState::STARTING, animation->run_state());
+      EXPECT_EQ(gfx::ScrollOffset(110.f, 120.f),
+                curve->GetValue(base::TimeDelta()));
+      EXPECT_EQ(gfx::ScrollOffset(750.f, 850.f), curve->target_value());
+
+      EndTest();
+    }
+  }
+
+  void AfterTest() override {}
+
+ private:
+  FakeContentLayerClient client_;
+  scoped_refptr<FakePictureLayer> scroll_layer_;
+};
+
+MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestScrollOffsetAnimationAdjusted);
 
 // Verifies that when the main thread removes a scroll animation and sets a new
 // scroll position, the active tree takes on exactly this new scroll position
@@ -831,14 +943,16 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
     layer_tree_host()->root_layer()->AddChild(scroll_layer_);
 
     std::unique_ptr<ScrollOffsetAnimationCurve> curve(
-        ScrollOffsetAnimationCurve::Create(gfx::ScrollOffset(6500.f, 7500.f),
-                                           EaseInOutTimingFunction::Create()));
+        ScrollOffsetAnimationCurve::Create(
+            gfx::ScrollOffset(6500.f, 7500.f),
+            CubicBezierTimingFunction::CreatePreset(
+                CubicBezierTimingFunction::EaseType::EASE_IN_OUT)));
     std::unique_ptr<Animation> animation(Animation::Create(
         std::move(curve), 1, 0, TargetProperty::SCROLL_OFFSET));
     animation->set_needs_synchronized_start_time(true);
 
     AttachPlayersToTimeline();
-    player_child_->AttachElement(scroll_layer_->id());
+    player_child_->AttachElement(scroll_layer_->element_id());
     player_child_->AddAnimation(std::move(animation));
   }
 
@@ -898,7 +1012,7 @@ class LayerTreeHostAnimationTestScrollOffsetAnimationRemoval
     if (!host_impl->pending_tree())
       return false;
 
-    if (!host_impl->active_tree()->root_layer())
+    if (!host_impl->active_tree()->root_layer_for_testing())
       return false;
 
     scoped_refptr<AnimationTimeline> timeline_impl =
@@ -946,16 +1060,18 @@ class LayerTreeHostAnimationTestAnimationsAddedToNewAndExistingLayers
 
   void DidCommit() override {
     if (layer_tree_host()->source_frame_number() == 1) {
-      player_->AttachElement(layer_tree_host()->root_layer()->id());
+      player_->AttachElement(layer_tree_host()->root_layer()->element_id());
       AddAnimatedTransformToPlayer(player_.get(), 4, 1, 1);
     } else if (layer_tree_host()->source_frame_number() == 2) {
       AddOpacityTransitionToPlayer(player_.get(), 1, 0.f, 0.5f, true);
 
       scoped_refptr<Layer> layer = Layer::Create();
       layer_tree_host()->root_layer()->AddChild(layer);
+
+      layer_tree_host()->SetElementIdsForTesting();
       layer->SetBounds(gfx::Size(4, 4));
 
-      player_child_->AttachElement(layer->id());
+      player_child_->AttachElement(layer->element_id());
       player_child_->set_animation_delegate(this);
       AddOpacityTransitionToPlayer(player_child_.get(), 1, 0.f, 0.5f, true);
     }
@@ -1043,7 +1159,9 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
     layer_->SetTransform(start_transform);
 
     layer_tree_host()->root_layer()->AddChild(layer_);
-    player_->AttachElement(layer_->id());
+    layer_tree_host()->SetElementIdsForTesting();
+
+    player_->AttachElement(layer_->element_id());
 
     AttachPlayersToTimeline();
   }
@@ -1084,7 +1202,7 @@ class LayerTreeHostAnimationTestPendingTreeAnimatesFirstCommit
     // starting state which is 6,7.
     gfx::Transform expected_transform;
     expected_transform.Translate(6.0, 7.0);
-    EXPECT_EQ(expected_transform, child->DrawTransform());
+    EXPECT_TRANSFORMATION_MATRIX_EQ(expected_transform, child->DrawTransform());
     // And the sync tree layer should know it is animating.
     EXPECT_TRUE(child->screen_space_transform_is_animating());
 
@@ -1113,9 +1231,11 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
     layer_->SetBounds(gfx::Size(4, 4));
     layer_tree_host()->root_layer()->AddChild(layer_);
 
+    layer_tree_host()->SetElementIdsForTesting();
+
     layer_tree_host()->animation_host()->AddAnimationTimeline(timeline_.get());
     timeline_->AttachPlayer(player_.get());
-    player_->AttachElement(layer_->id());
+    player_->AttachElement(layer_->element_id());
     DCHECK(player_->element_animations());
 
     AddOpacityTransitionToPlayer(player_.get(), 10000.0, 0.1f, 0.9f, true);
@@ -1138,7 +1258,7 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
             player_->element_animations()->has_element_in_active_list());
         EXPECT_FALSE(
             player_->element_animations()->has_element_in_pending_list());
-        EXPECT_TRUE(layer_tree_host()->animation_host()->NeedsAnimateLayers());
+        EXPECT_FALSE(layer_tree_host()->animation_host()->NeedsAnimateLayers());
         break;
       case 2:
         layer_tree_host()->root_layer()->AddChild(layer_);
@@ -1166,7 +1286,7 @@ class LayerTreeHostAnimationTestAnimatedLayerRemovedAndAdded
       case 1:
         EXPECT_FALSE(
             player_impl->element_animations()->has_element_in_active_list());
-        EXPECT_TRUE(host_impl->animation_host()->NeedsAnimateLayers());
+        EXPECT_FALSE(host_impl->animation_host()->NeedsAnimateLayers());
         break;
       case 2:
         EXPECT_TRUE(
@@ -1197,8 +1317,8 @@ class LayerTreeHostAnimationTestAddAnimationAfterAnimating
 
     AttachPlayersToTimeline();
 
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
-    player_child_->AttachElement(layer_->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
+    player_child_->AttachElement(layer_->element_id());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -1226,11 +1346,12 @@ class LayerTreeHostAnimationTestAddAnimationAfterAnimating
         host_impl->animation_host()->active_element_animations_for_testing();
     EXPECT_EQ(2u, element_animations_copy.size());
     for (auto& it : element_animations_copy) {
-      int id = it.first;
-      if (id == host_impl->RootLayer()->id()) {
+      ElementId id = it.first;
+      if (id ==
+          host_impl->active_tree()->root_layer_for_testing()->element_id()) {
         Animation* anim = it.second->GetAnimation(TargetProperty::TRANSFORM);
         EXPECT_GT((anim->start_time() - base::TimeTicks()).InSecondsF(), 0);
-      } else if (id == layer_->id()) {
+      } else if (id == layer_->element_id()) {
         Animation* anim = it.second->GetAnimation(TargetProperty::OPACITY);
         EXPECT_GT((anim->start_time() - base::TimeTicks()).InSecondsF(), 0);
       }
@@ -1259,8 +1380,8 @@ class LayerTreeHostAnimationTestRemoveAnimation
 
     AttachPlayersToTimeline();
 
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
-    player_child_->AttachElement(layer_->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
+    player_child_->AttachElement(layer_->element_id());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -1308,7 +1429,8 @@ class LayerTreeHostAnimationTestRemoveAnimation
         // applied.
         gfx::Transform expected_transform;
         expected_transform.Translate(10.f, 10.f);
-        EXPECT_EQ(expected_transform, child->DrawTransform());
+        EXPECT_TRANSFORMATION_MATRIX_EQ(expected_transform,
+                                        child->DrawTransform());
         EXPECT_FALSE(child->screen_space_transform_is_animating());
         EndTest();
         break;
@@ -1338,7 +1460,7 @@ class LayerTreeHostAnimationTestIsAnimating
     layer_tree_host()->root_layer()->AddChild(layer_);
 
     AttachPlayersToTimeline();
-    player_->AttachElement(layer_->id());
+    player_->AttachElement(layer_->element_id());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -1420,8 +1542,8 @@ class LayerTreeHostAnimationTestAnimationFinishesDuringCommit
 
     AttachPlayersToTimeline();
 
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
-    player_child_->AttachElement(layer_->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
+    player_child_->AttachElement(layer_->element_id());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }
@@ -1451,7 +1573,8 @@ class LayerTreeHostAnimationTestAnimationFinishesDuringCommit
         gfx::Transform expected_transform;
         expected_transform.Translate(5.f, 5.f);
         LayerImpl* layer_impl = host_impl->sync_tree()->LayerById(layer_->id());
-        EXPECT_EQ(expected_transform, layer_impl->DrawTransform());
+        EXPECT_TRANSFORMATION_MATRIX_EQ(expected_transform,
+                                        layer_impl->DrawTransform());
         EndTest();
         break;
     }
@@ -1494,7 +1617,7 @@ class LayerTreeHostAnimationTestNotifyAnimationFinished
     layer_tree_host()->root_layer()->AddChild(picture_);
 
     AttachPlayersToTimeline();
-    player_->AttachElement(picture_->id());
+    player_->AttachElement(picture_->element_id());
     player_->set_animation_delegate(this);
   }
 
@@ -1533,6 +1656,68 @@ class LayerTreeHostAnimationTestNotifyAnimationFinished
 SINGLE_AND_MULTI_THREAD_TEST_F(
     LayerTreeHostAnimationTestNotifyAnimationFinished);
 
+// Check that transform sync happens correctly at commit when we remove and add
+// a different animation player to an element.
+class LayerTreeHostAnimationTestChangeAnimationPlayer
+    : public LayerTreeHostAnimationTest {
+ public:
+  void SetupTree() override {
+    LayerTreeHostAnimationTest::SetupTree();
+    AttachPlayersToTimeline();
+    timeline_->DetachPlayer(player_child_.get());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
+
+    TransformOperations start;
+    start.AppendTranslate(5.f, 5.f, 0.f);
+    TransformOperations end;
+    end.AppendTranslate(5.f, 5.f, 0.f);
+    AddAnimatedTransformToPlayer(player_.get(), 1.0, start, end);
+  }
+
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
+    PropertyTrees* property_trees = host_impl->sync_tree()->property_trees();
+    TransformNode* node =
+        property_trees->transform_tree.Node(host_impl->sync_tree()
+                                                ->root_layer_for_testing()
+                                                ->transform_tree_index());
+    gfx::Transform translate;
+    translate.Translate(5, 5);
+    switch (host_impl->sync_tree()->source_frame_number()) {
+      case 2:
+        EXPECT_TRANSFORMATION_MATRIX_EQ(node->data.local, translate);
+        EndTest();
+        break;
+      default:
+        break;
+    }
+  }
+
+  void DidCommit() override { PostSetNeedsCommitToMainThread(); }
+
+  void WillBeginMainFrame() override {
+    if (layer_tree_host()->source_frame_number() == 2) {
+      // Destroy player.
+      timeline_->DetachPlayer(player_.get());
+      player_ = nullptr;
+      timeline_->AttachPlayer(player_child_.get());
+      player_child_->AttachElement(
+          layer_tree_host()->root_layer()->element_id());
+      AddAnimatedTransformToPlayer(player_child_.get(), 1.0, 10, 10);
+      Animation* animation = player_child_->element_animations()->GetAnimation(
+          TargetProperty::TRANSFORM);
+      animation->set_start_time(base::TimeTicks::Now() +
+                                base::TimeDelta::FromSecondsD(1000));
+      animation->set_fill_mode(Animation::FillMode::NONE);
+    }
+  }
+
+  void AfterTest() override {}
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostAnimationTestChangeAnimationPlayer);
+
 // Check that SetTransformIsPotentiallyAnimatingChanged is called
 // if we destroy ElementAnimations.
 class LayerTreeHostAnimationTestSetPotentiallyAnimatingOnLacDestruction
@@ -1544,7 +1729,7 @@ class LayerTreeHostAnimationTestSetPotentiallyAnimatingOnLacDestruction
 
     LayerTreeHostAnimationTest::SetupTree();
     AttachPlayersToTimeline();
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
     AddAnimatedTransformToPlayer(player_.get(), 1.0, 5, 5);
   }
 
@@ -1553,11 +1738,11 @@ class LayerTreeHostAnimationTestSetPotentiallyAnimatingOnLacDestruction
   void CommitCompleteOnThread(LayerTreeHostImpl* host_impl) override {
     if (host_impl->pending_tree()->source_frame_number() <= 1) {
       EXPECT_TRUE(host_impl->pending_tree()
-                      ->root_layer()
+                      ->root_layer_for_testing()
                       ->screen_space_transform_is_animating());
     } else {
       EXPECT_FALSE(host_impl->pending_tree()
-                       ->root_layer()
+                       ->root_layer_for_testing()
                        ->screen_space_transform_is_animating());
     }
   }
@@ -1577,7 +1762,7 @@ class LayerTreeHostAnimationTestSetPotentiallyAnimatingOnLacDestruction
                                    DrawResult draw_result) override {
     const bool screen_space_transform_is_animating =
         host_impl->active_tree()
-            ->root_layer()
+            ->root_layer_for_testing()
             ->screen_space_transform_is_animating();
 
     // Check that screen_space_transform_is_animating changes only once.
@@ -1628,8 +1813,8 @@ class LayerTreeHostAnimationTestRebuildPropertyTreesOnAnimationSetNeedsCommit
 
     AttachPlayersToTimeline();
 
-    player_->AttachElement(layer_tree_host()->root_layer()->id());
-    player_child_->AttachElement(layer_->id());
+    player_->AttachElement(layer_tree_host()->root_layer()->element_id());
+    player_child_->AttachElement(layer_->element_id());
   }
 
   void BeginTest() override { PostSetNeedsCommitToMainThread(); }

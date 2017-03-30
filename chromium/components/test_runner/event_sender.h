@@ -60,10 +60,6 @@ class EventSender {
 
   void DoDragDrop(const blink::WebDragData&, blink::WebDragOperationsMask);
 
-  void set_send_wheel_gestures(bool send_wheel_gestures) {
-    send_wheel_gestures_ = send_wheel_gestures;
-  }
-
  private:
   friend class EventSenderBindings;
 
@@ -140,7 +136,6 @@ class EventSender {
   bool IsFlinging() const;
   void GestureScrollFirstPoint(int x, int y);
 
-  bool GetMovedBeyondSlopRegionArg(gin::Arguments* args);
   void TouchStart(gin::Arguments* args);
   void TouchMove(gin::Arguments* args);
   void TouchCancel(gin::Arguments* args);
@@ -179,7 +174,11 @@ class EventSender {
 
   void DoLeapForward(int milliseconds);
 
-  void SendCurrentTouchEvent(blink::WebInputEvent::Type, bool);
+  void GetOptionalTouchArgs(gin::Arguments* args,
+                            bool& moved_beyond_slop_region,
+                            uint32_t& unique_touch_event_id);
+  uint32_t GetUniqueTouchEventId(gin::Arguments* args);
+  void SendCurrentTouchEvent(blink::WebInputEvent::Type, gin::Arguments* args);
 
   void GestureEvent(blink::WebInputEvent::Type,
                     gin::Arguments*);
@@ -205,6 +204,9 @@ class EventSender {
 
   void SendGesturesForMouseWheelEvent(
       const blink::WebMouseWheelEvent wheel_event);
+
+  std::unique_ptr<blink::WebInputEvent> ScaleEvent(
+      const blink::WebInputEvent& event);
 
   double last_event_timestamp() { return last_event_timestamp_; }
 
@@ -261,7 +263,6 @@ class EventSender {
   const blink::WebView* view() const;
   blink::WebView* view();
 
-  bool send_wheel_gestures_;
   bool force_layout_on_events_;
 
   // When set to true (the default value), we batch mouse move and mouse up

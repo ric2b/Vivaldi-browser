@@ -13,7 +13,6 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/tracked_objects.h"
 #include "base/win/scoped_handle.h"
-#include "base/win/windows_version.h"
 
 namespace base {
 
@@ -100,10 +99,8 @@ bool CreateThreadInternal(size_t stack_size,
                           PlatformThreadHandle* out_thread_handle,
                           ThreadPriority priority) {
   unsigned int flags = 0;
-  if (stack_size > 0 && base::win::GetVersion() >= base::win::VERSION_XP) {
+  if (stack_size > 0) {
     flags = STACK_SIZE_PARAM_IS_A_RESERVATION;
-  } else {
-    stack_size = 0;
   }
 
   ThreadParams* params = new ThreadParams;
@@ -217,15 +214,13 @@ void PlatformThread::Join(PlatformThreadHandle thread_handle) {
 
   // Wait for the thread to exit.  It should already have terminated but make
   // sure this assumption is valid.
-  DWORD result = WaitForSingleObject(thread_handle.platform_handle(), INFINITE);
-  if (result != WAIT_OBJECT_0) {
-    // Debug info for bug 127931.
-    DWORD error = GetLastError();
-    debug::Alias(&error);
-    debug::Alias(&result);
-    CHECK(false);
-  }
+  CHECK_EQ(WAIT_OBJECT_0,
+           WaitForSingleObject(thread_handle.platform_handle(), INFINITE));
+  CloseHandle(thread_handle.platform_handle());
+}
 
+// static
+void PlatformThread::Detach(PlatformThreadHandle thread_handle) {
   CloseHandle(thread_handle.platform_handle());
 }
 

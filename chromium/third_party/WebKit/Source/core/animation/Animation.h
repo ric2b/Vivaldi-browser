@@ -45,6 +45,7 @@
 #include "platform/animation/CompositorAnimationPlayerClient.h"
 #include "platform/heap/Handle.h"
 #include "wtf/RefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -61,6 +62,7 @@ class CORE_EXPORT Animation final
     , public CompositorAnimationPlayerClient {
     DEFINE_WRAPPERTYPEINFO();
     USING_GARBAGE_COLLECTED_MIXIN(Animation);
+    USING_PRE_FINALIZER(Animation, dispose);
 public:
     enum AnimationPlayState {
         Unset,
@@ -180,6 +182,8 @@ public:
     bool effectSuppressed() const { return m_effectSuppressed; }
     void setEffectSuppressed(bool);
 
+    void invalidateKeyframeEffect();
+
     DECLARE_VIRTUAL_TRACE();
 
 protected:
@@ -294,11 +298,12 @@ private:
     // This mirrors the known compositor state. It is created when a compositor
     // animation is started. Updated once the start time is known and each time
     // modifications are pushed to the compositor.
-    OwnPtr<CompositorState> m_compositorState;
+    std::unique_ptr<CompositorState> m_compositorState;
     bool m_compositorPending;
     int m_compositorGroup;
 
-    OwnPtr<CompositorAnimationPlayer> m_compositorPlayer;
+    std::unique_ptr<CompositorAnimationPlayer> m_compositorPlayer;
+    bool m_preFinalizerRegistered;
 
     bool m_currentTimePending;
     bool m_stateIsBeingUpdated;

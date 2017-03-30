@@ -8,15 +8,16 @@
 #include <utility>
 #include <vector>
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/wm/overview/window_selector_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/display/display_manager.h"
 #include "ash/shell.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/display_manager_test_api.h"
 #include "ash/test/test_system_tray_delegate.h"
 #include "ash/test/test_volume_control_delegate.h"
-#include "ash/wm/overview/window_selector_controller.h"
 #include "base/command_line.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/user_action_tester.h"
@@ -135,24 +136,34 @@ class MaximizeModeControllerTest : public test::AshTestBase {
 
     float radians = degrees * kDegreesToRadians;
     gfx::Vector3dF base_vector(0.0f, -kMeanGravity, 0.0f);
-    gfx::Vector3dF lid_vector(0.0f,
-                              kMeanGravity * cos(radians),
+    gfx::Vector3dF lid_vector(0.0f, kMeanGravity * cos(radians),
                               kMeanGravity * sin(radians));
     TriggerBaseAndLidUpdate(base_vector, lid_vector);
   }
 
+  void HoldDeviceVertical() {
+    gfx::Vector3dF base_vector(9.8f, 0.0f, 0.0f);
+    gfx::Vector3dF lid_vector(9.8f, 0.0f, 0.0f);
+    TriggerBaseAndLidUpdate(base_vector, lid_vector);
+  }
+
   void OpenLid() {
-    maximize_mode_controller()->LidEventReceived(true /* open */,
-        maximize_mode_controller()->tick_clock_->NowTicks());
+    maximize_mode_controller()->LidEventReceived(
+        true /* open */, maximize_mode_controller()->tick_clock_->NowTicks());
   }
 
   void CloseLid() {
-    maximize_mode_controller()->LidEventReceived(false /* open */,
-        maximize_mode_controller()->tick_clock_->NowTicks());
+    maximize_mode_controller()->LidEventReceived(
+        false /* open */, maximize_mode_controller()->tick_clock_->NowTicks());
   }
 
   bool WasLidOpenedRecently() {
     return maximize_mode_controller()->WasLidOpenedRecently();
+  }
+
+  void SetTabletMode(bool on) {
+    maximize_mode_controller()->TabletModeEventReceived(
+        on, maximize_mode_controller()->tick_clock_->NowTicks());
   }
 
   bool AreEventsBlocked() {
@@ -204,8 +215,7 @@ TEST_F(MaximizeModeControllerTest, CloseLidWhileInMaximizeMode) {
 }
 
 // Verify that maximize mode will not be entered when the lid is closed.
-TEST_F(MaximizeModeControllerTest,
-    HingeAnglesWithLidClosed) {
+TEST_F(MaximizeModeControllerTest, HingeAnglesWithLidClosed) {
   AttachTickClockForTest();
 
   CloseLid();
@@ -222,8 +232,7 @@ TEST_F(MaximizeModeControllerTest,
 
 // Verify the maximize mode state for unstable hinge angles when the lid was
 // recently open.
-TEST_F(MaximizeModeControllerTest,
-    UnstableHingeAnglesWhenLidRecentlyOpened) {
+TEST_F(MaximizeModeControllerTest, UnstableHingeAnglesWhenLidRecentlyOpened) {
   AttachTickClockForTest();
 
   OpenLid();
@@ -264,6 +273,32 @@ TEST_F(MaximizeModeControllerTest, WasLidOpenedRecentlyOverTime) {
   // 3 seconds after lid open.
   AdvanceTickClock(base::TimeDelta::FromSeconds(2));
   EXPECT_FALSE(WasLidOpenedRecently());
+}
+
+TEST_F(MaximizeModeControllerTest, TabletModeTransition) {
+  OpenLidToAngle(90.0f);
+  EXPECT_FALSE(IsMaximizeModeStarted());
+
+  // Unstable reading. This should not trigger maximize mode.
+  HoldDeviceVertical();
+  EXPECT_FALSE(IsMaximizeModeStarted());
+
+  // When tablet mode switch is on it should force maximize mode even if the
+  // reading is not stable.
+  SetTabletMode(true);
+  EXPECT_TRUE(IsMaximizeModeStarted());
+
+  // After tablet mode switch is off it should stay in maximize mode if the
+  // reading is not stable.
+  SetTabletMode(false);
+  EXPECT_TRUE(IsMaximizeModeStarted());
+
+  // Should leave maximize mode when the lid angle is small enough.
+  OpenLidToAngle(90.0f);
+  EXPECT_FALSE(IsMaximizeModeStarted());
+
+  OpenLidToAngle(300.0f);
+  EXPECT_TRUE(IsMaximizeModeStarted());
 }
 
 // Verify the maximize mode enter/exit thresholds for stable angles.
@@ -439,11 +474,10 @@ TEST_F(MaximizeModeControllerTest, DisplayDisconnectionDuringOverview) {
   ASSERT_NE(w1->GetRootWindow(), w2->GetRootWindow());
 
   maximize_mode_controller()->EnableMaximizeModeWindowManager(true);
-  Shell::GetInstance()->window_selector_controller()->ToggleOverview();
+  WmShell::Get()->window_selector_controller()->ToggleOverview();
 
   UpdateDisplay("800x600");
-  EXPECT_FALSE(
-      Shell::GetInstance()->window_selector_controller()->IsSelecting());
+  EXPECT_FALSE(WmShell::Get()->window_selector_controller()->IsSelecting());
   EXPECT_EQ(w1->GetRootWindow(), w2->GetRootWindow());
 }
 
@@ -484,6 +518,7 @@ class MaximizeModeControllerSwitchesTest : public MaximizeModeControllerTest {
         switches::kAshEnableTouchViewTesting);
     MaximizeModeControllerTest::SetUp();
   }
+
  private:
   DISALLOW_COPY_AND_ASSIGN(MaximizeModeControllerSwitchesTest);
 };

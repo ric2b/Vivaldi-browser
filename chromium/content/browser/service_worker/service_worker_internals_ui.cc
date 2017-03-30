@@ -5,6 +5,7 @@
 #include "content/browser/service_worker/service_worker_internals_ui.h"
 
 #include <stdint.h>
+
 #include <string>
 #include <utility>
 #include <vector>
@@ -15,6 +16,7 @@
 #include "base/values.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
+#include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -58,7 +60,7 @@ void OperationCompleteCallback(WeakPtr<ServiceWorkerInternalsUI> internals,
   }
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (internals) {
-    internals->web_ui()->CallJavascriptFunction(
+    internals->web_ui()->CallJavascriptFunctionUnsafe(
         "serviceworker.onOperationComplete",
         FundamentalValue(static_cast<int>(status)),
         FundamentalValue(callback_id));
@@ -113,16 +115,16 @@ base::ProcessId GetRealProcessId(int process_host_id) {
 void UpdateVersionInfo(const ServiceWorkerVersionInfo& version,
                        DictionaryValue* info) {
   switch (version.running_status) {
-    case ServiceWorkerVersion::STOPPED:
+    case EmbeddedWorkerStatus::STOPPED:
       info->SetString("running_status", "STOPPED");
       break;
-    case ServiceWorkerVersion::STARTING:
+    case EmbeddedWorkerStatus::STARTING:
       info->SetString("running_status", "STARTING");
       break;
-    case ServiceWorkerVersion::RUNNING:
+    case EmbeddedWorkerStatus::RUNNING:
       info->SetString("running_status", "RUNNING");
       break;
-    case ServiceWorkerVersion::STOPPING:
+    case EmbeddedWorkerStatus::STOPPING:
       info->SetString("running_status", "STOPPING");
       break;
   }
@@ -164,7 +166,8 @@ ListValue* GetRegistrationListValue(
        it != registrations.end();
        ++it) {
     const ServiceWorkerRegistrationInfo& registration = *it;
-    DictionaryValue* registration_info = new DictionaryValue();
+    std::unique_ptr<class base::DictionaryValue> registration_info(
+        new DictionaryValue());
     registration_info->SetString("scope", registration.pattern.spec());
     registration_info->SetString(
         "registration_id", base::Int64ToString(registration.registration_id));
@@ -183,7 +186,7 @@ ListValue* GetRegistrationListValue(
       registration_info->Set("waiting", waiting_info);
     }
 
-    result->Append(registration_info);
+    result->Append(std::move(registration_info));
   }
   return result;
 }
@@ -239,8 +242,8 @@ void DidGetRegistrations(
   args.push_back(GetRegistrationListValue(stored_registrations));
   args.push_back(new FundamentalValue(partition_id));
   args.push_back(new StringValue(context_path.value()));
-  internals->web_ui()->CallJavascriptFunction("serviceworker.onPartitionData",
-                                              args.get());
+  internals->web_ui()->CallJavascriptFunctionUnsafe(
+      "serviceworker.onPartitionData", args.get());
 }
 
 }  // namespace
@@ -253,18 +256,17 @@ class ServiceWorkerInternalsUI::PartitionObserver
   ~PartitionObserver() override {}
   // ServiceWorkerContextObserver overrides:
   void OnRunningStateChanged(int64_t version_id,
-                             ServiceWorkerVersion::RunningStatus) override {
+                             EmbeddedWorkerStatus) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    web_ui_->CallJavascriptFunction(
+    web_ui_->CallJavascriptFunctionUnsafe(
         "serviceworker.onRunningStateChanged", FundamentalValue(partition_id_),
         StringValue(base::Int64ToString(version_id)));
   }
   void OnVersionStateChanged(int64_t version_id,
                              ServiceWorkerVersion::Status) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    web_ui_->CallJavascriptFunction(
-        "serviceworker.onVersionStateChanged",
-        FundamentalValue(partition_id_),
+    web_ui_->CallJavascriptFunctionUnsafe(
+        "serviceworker.onVersionStateChanged", FundamentalValue(partition_id_),
         StringValue(base::Int64ToString(version_id)));
   }
   void OnErrorReported(int64_t version_id,
@@ -283,8 +285,8 @@ class ServiceWorkerInternalsUI::PartitionObserver
     value->SetInteger("columnNumber", info.column_number);
     value->SetString("sourceURL", info.source_url.spec());
     args.push_back(value.release());
-    web_ui_->CallJavascriptFunction("serviceworker.onErrorReported",
-                                    args.get());
+    web_ui_->CallJavascriptFunctionUnsafe("serviceworker.onErrorReported",
+                                          args.get());
   }
   void OnReportConsoleMessage(int64_t version_id,
                               int process_id,
@@ -303,19 +305,19 @@ class ServiceWorkerInternalsUI::PartitionObserver
     value->SetInteger("lineNumber", message.line_number);
     value->SetString("sourceURL", message.source_url.spec());
     args.push_back(value.release());
-    web_ui_->CallJavascriptFunction("serviceworker.onConsoleMessageReported",
-                                    args.get());
+    web_ui_->CallJavascriptFunctionUnsafe(
+        "serviceworker.onConsoleMessageReported", args.get());
   }
   void OnRegistrationStored(int64_t registration_id,
                             const GURL& pattern) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    web_ui_->CallJavascriptFunction("serviceworker.onRegistrationStored",
-                                    StringValue(pattern.spec()));
+    web_ui_->CallJavascriptFunctionUnsafe("serviceworker.onRegistrationStored",
+                                          StringValue(pattern.spec()));
   }
   void OnRegistrationDeleted(int64_t registration_id,
                              const GURL& pattern) override {
-    web_ui_->CallJavascriptFunction("serviceworker.onRegistrationDeleted",
-                                    StringValue(pattern.spec()));
+    web_ui_->CallJavascriptFunctionUnsafe("serviceworker.onRegistrationDeleted",
+                                          StringValue(pattern.spec()));
   }
   int partition_id() const { return partition_id_; }
 
@@ -386,7 +388,7 @@ void ServiceWorkerInternalsUI::GetOptions(const ListValue* args) {
   options.SetBoolean("debug_on_start",
                      ServiceWorkerDevToolsManager::GetInstance()
                          ->debug_service_worker_on_start());
-  web_ui()->CallJavascriptFunction("serviceworker.onOptions", options);
+  web_ui()->CallJavascriptFunctionUnsafe("serviceworker.onOptions", options);
 }
 
 void ServiceWorkerInternalsUI::SetOption(const ListValue* args) {

@@ -13,6 +13,7 @@
 #include "modules/ModulesExport.h"
 #include "modules/payments/PaymentCompleter.h"
 #include "modules/payments/PaymentDetails.h"
+#include "modules/payments/PaymentMethodData.h"
 #include "modules/payments/PaymentOptions.h"
 #include "modules/payments/PaymentUpdater.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -27,9 +28,9 @@
 namespace blink {
 
 class ExceptionState;
+class PaymentAddress;
 class ScriptPromiseResolver;
 class ScriptState;
-class ShippingAddress;
 
 class MODULES_EXPORT PaymentRequest final : public EventTargetWithInlineData, WTF_NON_EXPORTED_BASE(public mojom::blink::PaymentRequestClient), public PaymentCompleter, public PaymentUpdater, public ContextLifecycleObserver, public ActiveScriptWrappable {
     DEFINE_WRAPPERTYPEINFO();
@@ -37,16 +38,22 @@ class MODULES_EXPORT PaymentRequest final : public EventTargetWithInlineData, WT
     WTF_MAKE_NONCOPYABLE(PaymentRequest);
 
 public:
-    static PaymentRequest* create(ScriptState*, const Vector<String>& supportedMethods, const PaymentDetails&, ExceptionState&);
-    static PaymentRequest* create(ScriptState*, const Vector<String>& supportedMethods, const PaymentDetails&, const PaymentOptions&, ExceptionState&);
-    static PaymentRequest* create(ScriptState*, const Vector<String>& supportedMethods, const PaymentDetails&, const PaymentOptions&, const ScriptValue& data, ExceptionState&);
+    static PaymentRequest* create(ScriptState*, const HeapVector<PaymentMethodData>&, const PaymentDetails&, ExceptionState&);
+    static PaymentRequest* create(ScriptState*, const HeapVector<PaymentMethodData>&, const PaymentDetails&, const PaymentOptions&, ExceptionState&);
 
     virtual ~PaymentRequest();
 
-    ScriptPromise show(ScriptState*);
-    void abort(ExceptionState&);
+    struct MethodData {
+        MethodData(const Vector<String>& methods, const String& data)
+            : supportedMethods(methods), stringifiedData(data) {}
+        Vector<String> supportedMethods;
+        String stringifiedData;
+    };
 
-    ShippingAddress* getShippingAddress() const { return m_shippingAddress.get(); }
+    ScriptPromise show(ScriptState*);
+    ScriptPromise abort(ScriptState*);
+
+    PaymentAddress* getShippingAddress() const { return m_shippingAddress.get(); }
     const String& shippingOption() const { return m_shippingOption; }
 
     DEFINE_ATTRIBUTE_EVENT_LISTENER(shippingaddresschange);
@@ -57,7 +64,7 @@ public:
     ExecutionContext* getExecutionContext() const override;
 
     // PaymentCompleter:
-    ScriptPromise complete(ScriptState*, bool success) override;
+    ScriptPromise complete(ScriptState*, PaymentComplete result) override;
 
     // PaymentUpdater:
     void onUpdatePaymentDetails(const ScriptValue& detailsScriptValue) override;
@@ -66,7 +73,7 @@ public:
     DECLARE_TRACE();
 
 private:
-    PaymentRequest(ScriptState*, const Vector<String>& supportedMethods, const PaymentDetails&, const PaymentOptions&, const ScriptValue& data, ExceptionState&);
+    PaymentRequest(ScriptState*, const HeapVector<PaymentMethodData>&, const PaymentDetails&, const PaymentOptions&, ExceptionState&);
 
     // LifecycleObserver:
     void contextDestroyed() override;
@@ -75,23 +82,24 @@ private:
     bool hasPendingActivity() const override;
 
     // mojom::blink::PaymentRequestClient:
-    void OnShippingAddressChange(mojom::blink::ShippingAddressPtr) override;
+    void OnShippingAddressChange(mojom::blink::PaymentAddressPtr) override;
     void OnShippingOptionChange(const String& shippingOptionId) override;
     void OnPaymentResponse(mojom::blink::PaymentResponsePtr) override;
-    void OnError() override;
+    void OnError(mojom::blink::PaymentErrorReason) override;
     void OnComplete() override;
+    void OnAbort(bool abortedSuccessfully) override;
 
     // Clears the promise resolvers and closes the Mojo connection.
     void clearResolversAndCloseMojoConnection();
 
-    Vector<String> m_supportedMethods;
+    Vector<MethodData> m_methodData;
     PaymentDetails m_details;
     PaymentOptions m_options;
-    String m_stringifiedData;
-    Member<ShippingAddress> m_shippingAddress;
+    Member<PaymentAddress> m_shippingAddress;
     String m_shippingOption;
     Member<ScriptPromiseResolver> m_showResolver;
     Member<ScriptPromiseResolver> m_completeResolver;
+    Member<ScriptPromiseResolver> m_abortResolver;
     mojom::blink::PaymentRequestPtr m_paymentProvider;
     mojo::Binding<mojom::blink::PaymentRequestClient> m_clientBinding;
 };

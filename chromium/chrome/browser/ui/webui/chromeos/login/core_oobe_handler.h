@@ -5,14 +5,19 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_CORE_OOBE_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_CHROMEOS_LOGIN_CORE_OOBE_HANDLER_H_
 
+#include <memory>
 #include <string>
+#include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
+#include "base/values.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/login/screens/core_oobe_actor.h"
 #include "chrome/browser/chromeos/login/version_info_updater.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/demo_mode_detector.h"
+#include "ui/events/event_source.h"
 
 namespace base {
 class ListValue;
@@ -20,6 +25,10 @@ class ListValue;
 
 namespace gfx {
 class Rect;
+}
+
+namespace ui {
+class EventProcessor;
 }
 
 namespace chromeos {
@@ -30,7 +39,8 @@ class OobeUI;
 // The core handler for Javascript messages related to the "oobe" view.
 class CoreOobeHandler : public BaseScreenHandler,
                         public VersionInfoUpdater::Delegate,
-                        public CoreOobeActor {
+                        public CoreOobeActor,
+                        public ui::EventSource {
  public:
   class Delegate {
    public:
@@ -57,6 +67,9 @@ class CoreOobeHandler : public BaseScreenHandler,
   void OnEnterpriseInfoUpdated(const std::string& message_text,
                                const std::string& asset_id) override;
 
+  // ui::EventSource implementation:
+  ui::EventProcessor* GetEventProcessor() override;
+
   // Show or hide OOBE UI.
   void ShowOobeUI(bool show);
 
@@ -70,6 +83,23 @@ class CoreOobeHandler : public BaseScreenHandler,
   void UpdateShutdownAndRebootVisibility(bool reboot_on_shutdown);
 
  private:
+  // Calls javascript method.
+  //
+  // Note that the Args template parameter pack should consist of types
+  // convertible to base::Value.
+  template <typename... Args>
+  void ExecuteDeferredJSCall(const std::string& function_name,
+                             std::unique_ptr<Args>... args);
+
+  // Calls javascript method if the instance is already initialized, or defers
+  // the call until it gets initialized.
+  template <typename... Args>
+  void CallJSOrDefer(const std::string& function_name, const Args&... args);
+
+  // Executes javascript calls that were deferred while the instance was not
+  // initialized yet.
+  void ExecuteDeferredJSCalls();
+
   // CoreOobeActor implementation:
   void ShowSignInError(int login_attempts,
                        const std::string& error_text,
@@ -94,6 +124,7 @@ class CoreOobeHandler : public BaseScreenHandler,
 
   void InitDemoModeDetection() override;
   void StopDemoModeDetection() override;
+  void UpdateKeyboardState() override;
 
   // Handlers for JS WebUI messages.
   void HandleEnableLargeCursor(bool enabled);
@@ -101,7 +132,6 @@ class CoreOobeHandler : public BaseScreenHandler,
   void HandleEnableVirtualKeyboard(bool enabled);
   void HandleEnableScreenMagnifier(bool enabled);
   void HandleEnableSpokenFeedback(bool /* enabled */);
-  void HandleEnableMonoAudio(bool enabled);
   void HandleInitialized();
   void HandleSkipUpdateEnrollAfterEula();
   void HandleUpdateCurrentScreen(const std::string& screen);
@@ -112,6 +142,10 @@ class CoreOobeHandler : public BaseScreenHandler,
   void HandleToggleResetScreen();
   void HandleEnableDebuggingScreen();
   void HandleHeaderBarVisible();
+
+  // When keyboard_utils.js arrow key down event is reached, raise it
+  // to tab/shift-tab event.
+  void HandleRaiseTabKeyEvent(bool reverse);
 
   // Updates a11y menu state based on the current a11y features state(on/off).
   void UpdateA11yState();
@@ -125,15 +159,22 @@ class CoreOobeHandler : public BaseScreenHandler,
   // Updates the device requisition string on the UI side.
   void UpdateDeviceRequisition();
 
-  // Updates virtual keyboard state.
-  void UpdateKeyboardState();
-
   // Updates client area size based on the primary screen size.
   void UpdateClientAreaSize();
 
   // Notification of a change in the accessibility settings.
   void OnAccessibilityStatusChanged(
       const AccessibilityStatusEventDetails& details);
+
+  // Whether the instance is initialized.
+  //
+  // The instance becomes initialized after the corresponding message is
+  // received from javascript side.
+  bool is_initialized_;
+
+  // Javascript calls that have been deferred while the instance was not
+  // initialized yet.
+  std::vector<base::Closure> deferred_js_calls_;
 
   // Owner of this handler.
   OobeUI* oobe_ui_;

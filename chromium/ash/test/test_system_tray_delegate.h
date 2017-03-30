@@ -5,7 +5,7 @@
 #ifndef ASH_TEST_TEST_SYSTEM_TRAY_DELEGATE_H_
 #define ASH_TEST_TEST_SYSTEM_TRAY_DELEGATE_H_
 
-#include "ash/system/tray/default_system_tray_delegate.h"
+#include "ash/common/system/tray/default_system_tray_delegate.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 
@@ -17,19 +17,24 @@ class TestSystemTrayDelegate : public DefaultSystemTrayDelegate {
   TestSystemTrayDelegate();
   ~TestSystemTrayDelegate() override;
 
+  // Sets whether a system update is required. Defaults to false. Static so
+  // tests can set the value before the system tray is constructed. Reset in
+  // AshTestHelper::TearDown.
+  static void SetSystemUpdateRequired(bool required);
+
   // Changes the login status when initially the delegate is created. This will
   // be called before AshTestBase::SetUp() to test the case when chrome is
   // restarted right after the login (such like a flag is set).
   // This value will be reset in AshTestHelper::TearDown,  most test fixtures
   // don't need to care its lifecycle.
-  static void SetInitialLoginStatus(user::LoginStatus login_status);
+  static void SetInitialLoginStatus(LoginStatus login_status);
 
   // Changes the current login status in the test. This also invokes
   // UpdateAfterLoginStatusChange(). Usually this is called in the test code to
   // set up a login status. This will fit to most of the test cases, but this
   // cannot be set during the initialization. To test the initialization,
   // consider using SetInitialLoginStatus() instead.
-  void SetLoginStatus(user::LoginStatus login_status);
+  void SetLoginStatus(LoginStatus login_status);
 
   void set_should_show_display_notification(bool should_show) {
     should_show_display_notification_ = should_show;
@@ -43,8 +48,9 @@ class TestSystemTrayDelegate : public DefaultSystemTrayDelegate {
   void ClearSessionLengthLimit();
 
   // Overridden from SystemTrayDelegate:
-  user::LoginStatus GetUserLoginStatus() const override;
+  LoginStatus GetUserLoginStatus() const override;
   bool IsUserSupervised() const override;
+  void GetSystemUpdateInfo(UpdateInfo* info) const override;
   bool ShouldShowDisplayNotification() override;
   bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
   bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
@@ -52,7 +58,7 @@ class TestSystemTrayDelegate : public DefaultSystemTrayDelegate {
 
  private:
   bool should_show_display_notification_;
-  user::LoginStatus login_status_;
+  LoginStatus login_status_;
   base::TimeDelta session_length_limit_;
   bool session_length_limit_set_;
 

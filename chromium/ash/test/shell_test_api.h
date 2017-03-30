@@ -15,7 +15,6 @@ namespace ash {
 class AshNativeCursorManager;
 class DragDropController;
 class MaximizeModeWindowManager;
-class RootWindowLayoutManager;
 class SessionStateDelegate;
 class ScreenPositionController;
 class ShelfDelegate;
@@ -28,10 +27,9 @@ namespace test {
 
 // Accesses private data from a Shell for testing.
 class ShellTestApi {
-public:
+ public:
   explicit ShellTestApi(Shell* shell);
 
-  RootWindowLayoutManager* root_window_layout();
   SystemGestureEventFilter* system_gesture_event_filter();
   WorkspaceController* workspace_controller();
   ScreenPositionController* screen_position_controller();

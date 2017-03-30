@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">‏כדי להגן על הגישה למחשב זה, בחר PIN באורך <ph name="BOLD_START" />שש ספרות לפחות<ph name="BOLD_END" />. PIN זה יידרש בעת התחברות ממיקום אחר.</translation>
 <translation id="4176825807642096119">קוד גישה</translation>
 <translation id="4207623512727273241">הפעל את המתקין לפני שתמשיך.</translation>
+<translation id="4227991223508142681">Host Provisioning Utility</translation>
 <translation id="4240294130679914010">‏מסיר ההתקנה של מארח Chromoting</translation>
 <translation id="4277463233460010382">‏מחשב זה מוגדר לאפשר ללקוח אחד או יותר להתחבר מבלי להזין PIN.</translation>
 <translation id="4277736576214464567">קוד הגישה אינו חוקי. נסה שוב.</translation>
@@ -229,7 +230,7 @@ Chromoting</translation>
 <translation id="6668065415969892472">‏ה-PIN שלך עודכן.</translation>
 <translation id="6681800064886881394">‏Copyright © 2013 Google Inc.‎. כל הזכויות שמורות.</translation>
 <translation id="6746493157771801606">נקה היסטוריה</translation>
-<translation id="6748108480210050150">מ-</translation>
+<translation id="6748108480210050150">מאת</translation>
 <translation id="677755392401385740">המארח הופעל עבור המשתמש: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">הצג/ערוך</translation>
 <translation id="6930242544192836755">משך החיבור</translation>
@@ -261,6 +262,7 @@ Chromoting</translation>
 <translation id="7836926030608666805">‏חלק מהרכיבים הדרושים חסרים. ודא שאתה משתמש בגרסה העדכנית ביותר של Chrome ונסה שוב.</translation>
 <translation id="7868137160098754906">‏הזן את מספר ה-PIN עבור המחשב המרוחק.</translation>
 <translation id="7869445566579231750">אין לך הרשאה להריץ את היישום הזה.</translation>
+<translation id="7895403300744144251">מדיניות האבטחה במחשב המרוחק אינה מתירה חיבורים מהחשבון שלך.</translation>
 <translation id="7948001860594368197">אפשרויות מסך</translation>
 <translation id="7970576581263377361">‏האימות נכשל. היכנס שוב ל-Chromium.</translation>
 <translation id="7981525049612125370">פג התוקף של ההפעלה המרוחקת.</translation>

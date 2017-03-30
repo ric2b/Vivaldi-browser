@@ -4,18 +4,18 @@
 
 #include "ash/metrics/user_metrics_recorder.h"
 
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/shelf_item_types.h"
+#include "ash/common/shelf/shelf_model.h"
+#include "ash/common/shell_window_ids.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/wm/window_state.h"
+#include "ash/common/wm_shell.h"
 #include "ash/metrics/desktop_task_switch_metric_recorder.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_delegate.h"
-#include "ash/shelf/shelf_item_types.h"
-#include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/wm/common/window_state.h"
-#include "ash/wm/common/wm_user_metrics_action.h"
 #include "ash/wm/window_state_aura.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/user_metrics.h"
@@ -64,6 +64,8 @@ ActiveWindowStateType GetActiveWindowState() {
       case wm::WINDOW_STATE_TYPE_INACTIVE:
       case wm::WINDOW_STATE_TYPE_END:
       case wm::WINDOW_STATE_TYPE_AUTO_POSITIONED:
+      case wm::WINDOW_STATE_TYPE_PINNED:
+        // TODO: We probably want to recorde PINNED state.
         active_window_state_type = ACTIVE_WINDOW_STATE_TYPE_OTHER;
         break;
     }
@@ -73,23 +75,23 @@ ActiveWindowStateType GetActiveWindowState() {
 
 // Returns true if kiosk mode is active.
 bool IsKioskModeActive() {
-  return Shell::GetInstance()->system_tray_delegate()->GetUserLoginStatus() ==
-         user::LOGGED_IN_KIOSK_APP;
+  return WmShell::Get()->system_tray_delegate()->GetUserLoginStatus() ==
+         LoginStatus::KIOSK_APP;
 }
 
 // Returns true if there is an active user and their session isn't currently
 // locked.
 bool IsUserActive() {
-  switch (Shell::GetInstance()->system_tray_delegate()->GetUserLoginStatus()) {
-    case user::LOGGED_IN_NONE:
-    case user::LOGGED_IN_LOCKED:
+  switch (WmShell::Get()->system_tray_delegate()->GetUserLoginStatus()) {
+    case LoginStatus::NOT_LOGGED_IN:
+    case LoginStatus::LOCKED:
       return false;
-    case user::LOGGED_IN_USER:
-    case user::LOGGED_IN_OWNER:
-    case user::LOGGED_IN_GUEST:
-    case user::LOGGED_IN_PUBLIC:
-    case user::LOGGED_IN_SUPERVISED:
-    case user::LOGGED_IN_KIOSK_APP:
+    case LoginStatus::USER:
+    case LoginStatus::OWNER:
+    case LoginStatus::GUEST:
+    case LoginStatus::PUBLIC:
+    case LoginStatus::SUPERVISED:
+    case LoginStatus::KIOSK_APP:
       return true;
   }
   NOTREACHED();
@@ -100,10 +102,9 @@ bool IsUserActive() {
 // UMA statistics. Note the containers are ordered from top most visible
 // container to the lowest to allow the |GetNumVisibleWindows| method to short
 // circuit when processing a maximized or fullscreen window.
-int kVisibleWindowContainerIds[] = {kShellWindowId_PanelContainer,
-                                    kShellWindowId_DockedContainer,
-                                    kShellWindowId_AlwaysOnTopContainer,
-                                    kShellWindowId_DefaultContainer};
+int kVisibleWindowContainerIds[] = {
+    kShellWindowId_PanelContainer, kShellWindowId_DockedContainer,
+    kShellWindowId_AlwaysOnTopContainer, kShellWindowId_DefaultContainer};
 
 // Returns an approximate count of how many windows are currently visible in the
 // primary root window.
@@ -117,7 +118,8 @@ int GetNumVisibleWindowsInPrimaryDisplay() {
 
     const aura::Window::Windows& children =
         Shell::GetContainer(Shell::GetInstance()->GetPrimaryRootWindow(),
-                            current_container_id)->children();
+                            current_container_id)
+            ->children();
     // Reverse iterate over the child windows so that they are processed in
     // visible stacking order.
     for (aura::Window::Windows::const_reverse_iterator it = children.rbegin(),
@@ -144,7 +146,7 @@ int GetNumVisibleWindowsInPrimaryDisplay() {
       // and completely obscure windows beneath them.
       if ((kShellWindowId_DefaultContainer == current_container_id ||
            kShellWindowId_AlwaysOnTopContainer == current_container_id) &&
-          child_window_state->IsMaximizedOrFullscreen()) {
+          child_window_state->IsMaximizedOrFullscreenOrPinned()) {
         maximized_or_fullscreen_window_present = true;
         break;
       }
@@ -197,420 +199,379 @@ UserMetricsRecorder::~UserMetricsRecorder() {
 }
 
 void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
+  using base::RecordAction;
+  using base::UserMetricsAction;
+
   switch (action) {
-    case ash::UMA_ACCEL_KEYBOARD_BRIGHTNESS_DOWN_F6:
-      base::RecordAction(
-          base::UserMetricsAction("Accel_KeyboardBrightnessDown_F6"));
+    case UMA_ACCEL_KEYBOARD_BRIGHTNESS_DOWN_F6:
+      RecordAction(UserMetricsAction("Accel_KeyboardBrightnessDown_F6"));
       break;
-    case ash::UMA_ACCEL_KEYBOARD_BRIGHTNESS_UP_F7:
-      base::RecordAction(
-          base::UserMetricsAction("Accel_KeyboardBrightnessUp_F7"));
+    case UMA_ACCEL_KEYBOARD_BRIGHTNESS_UP_F7:
+      RecordAction(UserMetricsAction("Accel_KeyboardBrightnessUp_F7"));
       break;
-    case ash::UMA_ACCEL_LOCK_SCREEN_LOCK_BUTTON:
-      base::RecordAction(
-          base::UserMetricsAction("Accel_LockScreen_LockButton"));
+    case UMA_ACCEL_LOCK_SCREEN_LOCK_BUTTON:
+      RecordAction(UserMetricsAction("Accel_LockScreen_LockButton"));
       break;
-    case ash::UMA_ACCEL_LOCK_SCREEN_POWER_BUTTON:
-      base::RecordAction(
-          base::UserMetricsAction("Accel_LockScreen_PowerButton"));
+    case UMA_ACCEL_LOCK_SCREEN_POWER_BUTTON:
+      RecordAction(UserMetricsAction("Accel_LockScreen_PowerButton"));
       break;
-    case ash::UMA_ACCEL_MAXIMIZE_RESTORE_F4:
-      base::RecordAction(
-          base::UserMetricsAction("Accel_Maximize_Restore_F4"));
+    case UMA_ACCEL_MAXIMIZE_RESTORE_F4:
+      RecordAction(UserMetricsAction("Accel_Maximize_Restore_F4"));
       break;
-    case ash::UMA_ACCEL_PREVWINDOW_F5:
-      base::RecordAction(base::UserMetricsAction("Accel_PrevWindow_F5"));
+    case UMA_ACCEL_PREVWINDOW_F5:
+      RecordAction(UserMetricsAction("Accel_PrevWindow_F5"));
       break;
-    case ash::UMA_ACCEL_EXIT_FIRST_Q:
-      base::RecordAction(base::UserMetricsAction("Accel_Exit_First_Q"));
+    case UMA_ACCEL_EXIT_FIRST_Q:
+      RecordAction(UserMetricsAction("Accel_Exit_First_Q"));
       break;
-    case ash::UMA_ACCEL_EXIT_SECOND_Q:
-      base::RecordAction(base::UserMetricsAction("Accel_Exit_Second_Q"));
+    case UMA_ACCEL_EXIT_SECOND_Q:
+      RecordAction(UserMetricsAction("Accel_Exit_Second_Q"));
       break;
-    case ash::UMA_ACCEL_RESTART_POWER_BUTTON:
-      base::RecordAction(
-          base::UserMetricsAction("Accel_Restart_PowerButton"));
+    case UMA_ACCEL_RESTART_POWER_BUTTON:
+      RecordAction(UserMetricsAction("Accel_Restart_PowerButton"));
       break;
-    case ash::UMA_ACCEL_SHUT_DOWN_POWER_BUTTON:
-      base::RecordAction(
-          base::UserMetricsAction("Accel_ShutDown_PowerButton"));
+    case UMA_ACCEL_SHUT_DOWN_POWER_BUTTON:
+      RecordAction(UserMetricsAction("Accel_ShutDown_PowerButton"));
       break;
-    case ash::UMA_CLOSE_THROUGH_CONTEXT_MENU:
-      base::RecordAction(base::UserMetricsAction("CloseFromContextMenu"));
+    case UMA_CLOSE_THROUGH_CONTEXT_MENU:
+      RecordAction(UserMetricsAction("CloseFromContextMenu"));
       break;
-    case ash::UMA_DESKTOP_SWITCH_TASK:
-      base::RecordAction(base::UserMetricsAction("Desktop_SwitchTask"));
+    case UMA_DESKTOP_SWITCH_TASK:
+      RecordAction(UserMetricsAction("Desktop_SwitchTask"));
       task_switch_metrics_recorder_.OnTaskSwitch(
           TaskSwitchMetricsRecorder::DESKTOP);
       break;
-    case ash::UMA_LAUNCHER_BUTTON_PRESSED_WITH_MOUSE:
-      base::RecordAction(
-          base::UserMetricsAction("Launcher_ButtonPressed_Mouse"));
+    case UMA_DRAG_MAXIMIZE_LEFT:
+      RecordAction(UserMetricsAction("WindowDrag_MaximizeLeft"));
       break;
-    case ash::UMA_LAUNCHER_BUTTON_PRESSED_WITH_TOUCH:
-      base::RecordAction(
-          base::UserMetricsAction("Launcher_ButtonPressed_Touch"));
+    case UMA_DRAG_MAXIMIZE_RIGHT:
+      RecordAction(UserMetricsAction("WindowDrag_MaximizeRight"));
       break;
-    case ash::UMA_LAUNCHER_CLICK_ON_APP:
-      base::RecordAction(base::UserMetricsAction("Launcher_ClickOnApp"));
+    case UMA_LAUNCHER_BUTTON_PRESSED_WITH_MOUSE:
+      RecordAction(UserMetricsAction("Launcher_ButtonPressed_Mouse"));
       break;
-    case ash::UMA_LAUNCHER_CLICK_ON_APPLIST_BUTTON:
-      base::RecordAction(
-          base::UserMetricsAction("Launcher_ClickOnApplistButton"));
+    case UMA_LAUNCHER_BUTTON_PRESSED_WITH_TOUCH:
+      RecordAction(UserMetricsAction("Launcher_ButtonPressed_Touch"));
       break;
-    case ash::UMA_LAUNCHER_LAUNCH_TASK:
-      base::RecordAction(base::UserMetricsAction("Launcher_LaunchTask"));
+    case UMA_LAUNCHER_CLICK_ON_APP:
+      RecordAction(UserMetricsAction("Launcher_ClickOnApp"));
+      break;
+    case UMA_LAUNCHER_CLICK_ON_APPLIST_BUTTON:
+      RecordAction(UserMetricsAction("Launcher_ClickOnApplistButton"));
+      break;
+    case UMA_LAUNCHER_LAUNCH_TASK:
+      RecordAction(UserMetricsAction("Launcher_LaunchTask"));
       task_switch_metrics_recorder_.OnTaskSwitch(
           TaskSwitchMetricsRecorder::SHELF);
       break;
-    case ash::UMA_LAUNCHER_MINIMIZE_TASK:
-      base::RecordAction(base::UserMetricsAction("Launcher_MinimizeTask"));
+    case UMA_LAUNCHER_MINIMIZE_TASK:
+      RecordAction(UserMetricsAction("Launcher_MinimizeTask"));
       break;
-    case ash::UMA_LAUNCHER_SWITCH_TASK:
-      base::RecordAction(base::UserMetricsAction("Launcher_SwitchTask"));
+    case UMA_LAUNCHER_SWITCH_TASK:
+      RecordAction(UserMetricsAction("Launcher_SwitchTask"));
       task_switch_metrics_recorder_.OnTaskSwitch(
           TaskSwitchMetricsRecorder::SHELF);
       break;
     case UMA_MAXIMIZE_MODE_DISABLED:
-      base::RecordAction(base::UserMetricsAction("Touchview_Disabled"));
+      RecordAction(UserMetricsAction("Touchview_Disabled"));
       break;
     case UMA_MAXIMIZE_MODE_ENABLED:
-      base::RecordAction(base::UserMetricsAction("Touchview_Enabled"));
+      RecordAction(UserMetricsAction("Touchview_Enabled"));
       break;
     case UMA_MAXIMIZE_MODE_INITIALLY_DISABLED:
-      base::RecordAction(
-          base::UserMetricsAction("Touchview_Initially_Disabled"));
+      RecordAction(UserMetricsAction("Touchview_Initially_Disabled"));
       break;
-    case ash::UMA_MOUSE_DOWN:
-      base::RecordAction(base::UserMetricsAction("Mouse_Down"));
+    case UMA_MOUSE_DOWN:
+      RecordAction(UserMetricsAction("Mouse_Down"));
       break;
-    case ash::UMA_PANEL_MINIMIZE_CAPTION_CLICK:
-      base::RecordAction(
-         base::UserMetricsAction("Panel_Minimize_Caption_Click"));
+    case UMA_PANEL_MINIMIZE_CAPTION_CLICK:
+      RecordAction(UserMetricsAction("Panel_Minimize_Caption_Click"));
       break;
-    case ash::UMA_PANEL_MINIMIZE_CAPTION_GESTURE:
-      base::RecordAction(
-          base::UserMetricsAction("Panel_Minimize_Caption_Gesture"));
+    case UMA_PANEL_MINIMIZE_CAPTION_GESTURE:
+      RecordAction(UserMetricsAction("Panel_Minimize_Caption_Gesture"));
       break;
-    case ash::UMA_SHELF_ALIGNMENT_SET_BOTTOM:
-      base::RecordAction(
-          base::UserMetricsAction("Shelf_AlignmentSetBottom"));
+    case UMA_SHELF_ALIGNMENT_SET_BOTTOM:
+      RecordAction(UserMetricsAction("Shelf_AlignmentSetBottom"));
       break;
-    case ash::UMA_SHELF_ALIGNMENT_SET_LEFT:
-      base::RecordAction(
-          base::UserMetricsAction("Shelf_AlignmentSetLeft"));
+    case UMA_SHELF_ALIGNMENT_SET_LEFT:
+      RecordAction(UserMetricsAction("Shelf_AlignmentSetLeft"));
       break;
-    case ash::UMA_SHELF_ALIGNMENT_SET_RIGHT:
-      base::RecordAction(
-          base::UserMetricsAction("Shelf_AlignmentSetRight"));
+    case UMA_SHELF_ALIGNMENT_SET_RIGHT:
+      RecordAction(UserMetricsAction("Shelf_AlignmentSetRight"));
       break;
-    case ash::UMA_STATUS_AREA_AUDIO_CURRENT_INPUT_DEVICE:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Audio_CurrentInputDevice"));
+    case UMA_STATUS_AREA_AUDIO_CURRENT_INPUT_DEVICE:
+      RecordAction(UserMetricsAction("StatusArea_Audio_CurrentInputDevice"));
       break;
-    case ash::UMA_STATUS_AREA_AUDIO_CURRENT_OUTPUT_DEVICE:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Audio_CurrentOutputDevice"));
+    case UMA_STATUS_AREA_AUDIO_CURRENT_OUTPUT_DEVICE:
+      RecordAction(UserMetricsAction("StatusArea_Audio_CurrentOutputDevice"));
       break;
-    case ash::UMA_STATUS_AREA_AUDIO_SWITCH_INPUT_DEVICE:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Audio_SwitchInputDevice"));
+    case UMA_STATUS_AREA_AUDIO_SWITCH_INPUT_DEVICE:
+      RecordAction(UserMetricsAction("StatusArea_Audio_SwitchInputDevice"));
       break;
-    case ash::UMA_STATUS_AREA_AUDIO_SWITCH_OUTPUT_DEVICE:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Audio_SwitchOutputDevice"));
+    case UMA_STATUS_AREA_AUDIO_SWITCH_OUTPUT_DEVICE:
+      RecordAction(UserMetricsAction("StatusArea_Audio_SwitchOutputDevice"));
       break;
-    case ash::UMA_STATUS_AREA_BRIGHTNESS_CHANGED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_BrightnessChanged"));
+    case UMA_STATUS_AREA_BRIGHTNESS_CHANGED:
+      RecordAction(UserMetricsAction("StatusArea_BrightnessChanged"));
       break;
-    case ash::UMA_STATUS_AREA_BLUETOOTH_CONNECT_KNOWN_DEVICE:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Bluetooth_Connect_Known"));
+    case UMA_STATUS_AREA_BLUETOOTH_CONNECT_KNOWN_DEVICE:
+      RecordAction(UserMetricsAction("StatusArea_Bluetooth_Connect_Known"));
       break;
-    case ash::UMA_STATUS_AREA_BLUETOOTH_CONNECT_UNKNOWN_DEVICE:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Bluetooth_Connect_Unknown"));
+    case UMA_STATUS_AREA_BLUETOOTH_CONNECT_UNKNOWN_DEVICE:
+      RecordAction(UserMetricsAction("StatusArea_Bluetooth_Connect_Unknown"));
       break;
-    case ash::UMA_STATUS_AREA_BLUETOOTH_DISABLED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Bluetooth_Disabled"));
+    case UMA_STATUS_AREA_BLUETOOTH_DISABLED:
+      RecordAction(UserMetricsAction("StatusArea_Bluetooth_Disabled"));
       break;
-    case ash::UMA_STATUS_AREA_BLUETOOTH_ENABLED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Bluetooth_Enabled"));
+    case UMA_STATUS_AREA_BLUETOOTH_ENABLED:
+      RecordAction(UserMetricsAction("StatusArea_Bluetooth_Enabled"));
       break;
-    case ash::UMA_STATUS_AREA_CAPS_LOCK_DETAILED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_CapsLock_Detailed"));
+    case UMA_STATUS_AREA_CAPS_LOCK_DETAILED:
+      RecordAction(UserMetricsAction("StatusArea_CapsLock_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_CAPS_LOCK_DISABLED_BY_CLICK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_CapsLock_DisabledByClick"));
+    case UMA_STATUS_AREA_CAPS_LOCK_DISABLED_BY_CLICK:
+      RecordAction(UserMetricsAction("StatusArea_CapsLock_DisabledByClick"));
       break;
-    case ash::UMA_STATUS_AREA_CAPS_LOCK_ENABLED_BY_CLICK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_CapsLock_EnabledByClick"));
+    case UMA_STATUS_AREA_CAPS_LOCK_ENABLED_BY_CLICK:
+      RecordAction(UserMetricsAction("StatusArea_CapsLock_EnabledByClick"));
       break;
-    case ash::UMA_STATUS_AREA_CAPS_LOCK_POPUP:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_CapsLock_Popup"));
+    case UMA_STATUS_AREA_CAPS_LOCK_POPUP:
+      RecordAction(UserMetricsAction("StatusArea_CapsLock_Popup"));
       break;
-    case ash::UMA_STATUS_AREA_CAST_STOP_CAST:
-      base::RecordAction(base::UserMetricsAction("StatusArea_Cast_StopCast"));
+    case UMA_STATUS_AREA_CAST_STOP_CAST:
+      RecordAction(UserMetricsAction("StatusArea_Cast_StopCast"));
       break;
-    case ash::UMA_STATUS_AREA_CONNECT_TO_CONFIGURED_NETWORK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_ConnectConfigured"));
+    case UMA_STATUS_AREA_CONNECT_TO_CONFIGURED_NETWORK:
+      RecordAction(UserMetricsAction("StatusArea_Network_ConnectConfigured"));
       break;
-    case ash::UMA_STATUS_AREA_CONNECT_TO_UNCONFIGURED_NETWORK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_ConnectUnconfigured"));
+    case UMA_STATUS_AREA_CONNECT_TO_UNCONFIGURED_NETWORK:
+      RecordAction(UserMetricsAction("StatusArea_Network_ConnectUnconfigured"));
       break;
-    case ash::UMA_STATUS_AREA_CONNECT_TO_VPN:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_VPN_ConnectToNetwork"));
+    case UMA_STATUS_AREA_CONNECT_TO_VPN:
+      RecordAction(UserMetricsAction("StatusArea_VPN_ConnectToNetwork"));
       break;
-    case ash::UMA_STATUS_AREA_CHANGED_VOLUME_MENU:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Volume_ChangedMenu"));
+    case UMA_STATUS_AREA_CHANGED_VOLUME_MENU:
+      RecordAction(UserMetricsAction("StatusArea_Volume_ChangedMenu"));
       break;
-    case ash::UMA_STATUS_AREA_CHANGED_VOLUME_POPUP:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Volume_ChangedPopup"));
+    case UMA_STATUS_AREA_CHANGED_VOLUME_POPUP:
+      RecordAction(UserMetricsAction("StatusArea_Volume_ChangedPopup"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_ACCESSABILITY:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Accessability_DetailedView"));
+    case UMA_STATUS_AREA_DETAILED_ACCESSABILITY:
+      RecordAction(UserMetricsAction("StatusArea_Accessability_DetailedView"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_AUDIO_VIEW:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Audio_Detailed"));
+    case UMA_STATUS_AREA_DETAILED_AUDIO_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_Audio_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_BLUETOOTH_VIEW:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Bluetooth_Detailed"));
+    case UMA_STATUS_AREA_DETAILED_BLUETOOTH_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_Bluetooth_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_BRIGHTNESS_VIEW:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Brightness_Detailed"));
+    case UMA_STATUS_AREA_DETAILED_BRIGHTNESS_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_Brightness_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_CAST_VIEW:
-      base::RecordAction(base::UserMetricsAction("StatusArea_Cast_Detailed"));
+    case UMA_STATUS_AREA_DETAILED_CAST_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_Cast_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_CAST_VIEW_LAUNCH_CAST:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Cast_Detailed_Launch_Cast"));
+    case UMA_STATUS_AREA_DETAILED_CAST_VIEW_LAUNCH_CAST:
+      RecordAction(UserMetricsAction("StatusArea_Cast_Detailed_Launch_Cast"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_DRIVE_VIEW:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Drive_Detailed"));
+    case UMA_STATUS_AREA_DETAILED_DRIVE_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_Drive_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_NETWORK_VIEW:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_Detailed"));
+    case UMA_STATUS_AREA_DETAILED_NETWORK_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_Network_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DETAILED_VPN_VIEW:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_VPN_Detailed"));
+    case UMA_STATUS_AREA_DETAILED_SMS_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_SMS_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DISABLE_AUTO_CLICK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_AutoClickDisabled"));
+    case UMA_STATUS_AREA_DETAILED_VPN_VIEW:
+      RecordAction(UserMetricsAction("StatusArea_VPN_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_DISABLE_HIGH_CONTRAST:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_HighContrastDisabled"));
+    case UMA_STATUS_AREA_DISABLE_AUTO_CLICK:
+      RecordAction(UserMetricsAction("StatusArea_AutoClickDisabled"));
       break;
-    case ash::UMA_STATUS_AREA_DISABLE_LARGE_CURSOR:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_LargeCursorDisabled"));
+    case UMA_STATUS_AREA_DISABLE_HIGH_CONTRAST:
+      RecordAction(UserMetricsAction("StatusArea_HighContrastDisabled"));
       break;
-    case ash::UMA_STATUS_AREA_DISABLE_MAGNIFIER:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_MagnifierDisabled"));
+    case UMA_STATUS_AREA_DISABLE_LARGE_CURSOR:
+      RecordAction(UserMetricsAction("StatusArea_LargeCursorDisabled"));
       break;
-    case ash::UMA_STATUS_AREA_DISABLE_SPOKEN_FEEDBACK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_SpokenFeedbackDisabled"));
+    case UMA_STATUS_AREA_DISABLE_MAGNIFIER:
+      RecordAction(UserMetricsAction("StatusArea_MagnifierDisabled"));
       break;
-    case ash::UMA_STATUS_AREA_DISABLE_VIRTUAL_KEYBOARD:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_VirtualKeyboardDisabled"));
+    case UMA_STATUS_AREA_DISABLE_SPOKEN_FEEDBACK:
+      RecordAction(UserMetricsAction("StatusArea_SpokenFeedbackDisabled"));
       break;
-    case ash::UMA_STATUS_AREA_DISABLE_WIFI:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_WifiDisabled"));
+    case UMA_STATUS_AREA_DISABLE_VIRTUAL_KEYBOARD:
+      RecordAction(UserMetricsAction("StatusArea_VirtualKeyboardDisabled"));
       break;
-    case ash::UMA_STATUS_AREA_DRIVE_CANCEL_OPERATION:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Drive_CancelOperation"));
+    case UMA_STATUS_AREA_DISPLAY_DEFAULT_SELECTED:
+      RecordAction(UserMetricsAction("StatusArea_Display_Default_Selected"));
       break;
-    case ash::UMA_STATUS_AREA_DRIVE_SETTINGS:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Drive_Settings"));
+    case UMA_STATUS_AREA_DISPLAY_DEFAULT_SHOW_SETTINGS:
+      RecordAction(
+          UserMetricsAction("StatusArea_Display_Default_ShowSettings"));
       break;
-    case ash::UMA_STATUS_AREA_ENABLE_AUTO_CLICK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_AutoClickEnabled"));
+    case UMA_STATUS_AREA_DISPLAY_NOTIFICATION_CREATED:
+      RecordAction(
+          UserMetricsAction("StatusArea_Display_Notification_Created"));
       break;
-    case ash::UMA_STATUS_AREA_ENABLE_HIGH_CONTRAST:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_HighContrastEnabled"));
+    case UMA_STATUS_AREA_DISPLAY_NOTIFICATION_SELECTED:
+      RecordAction(
+          UserMetricsAction("StatusArea_Display_Notification_Selected"));
       break;
-    case ash::UMA_STATUS_AREA_ENABLE_LARGE_CURSOR:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_LargeCursorEnabled"));
+    case UMA_STATUS_AREA_DISPLAY_NOTIFICATION_SHOW_SETTINGS:
+      RecordAction(
+          UserMetricsAction("StatusArea_Display_Notification_Show_Settings"));
       break;
-    case ash::UMA_STATUS_AREA_ENABLE_MAGNIFIER:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_MagnifierEnabled"));
+    case UMA_STATUS_AREA_DISABLE_WIFI:
+      RecordAction(UserMetricsAction("StatusArea_Network_WifiDisabled"));
       break;
-    case ash::UMA_STATUS_AREA_ENABLE_SPOKEN_FEEDBACK:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_SpokenFeedbackEnabled"));
+    case UMA_STATUS_AREA_DRIVE_CANCEL_OPERATION:
+      RecordAction(UserMetricsAction("StatusArea_Drive_CancelOperation"));
       break;
-    case ash::UMA_STATUS_AREA_ENABLE_VIRTUAL_KEYBOARD:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_VirtualKeyboardEnabled"));
+    case UMA_STATUS_AREA_DRIVE_SETTINGS:
+      RecordAction(UserMetricsAction("StatusArea_Drive_Settings"));
       break;
-    case ash::UMA_STATUS_AREA_ENABLE_WIFI:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_WifiEnabled"));
+    case UMA_STATUS_AREA_ENABLE_AUTO_CLICK:
+      RecordAction(UserMetricsAction("StatusArea_AutoClickEnabled"));
       break;
-    case ash::UMA_STATUS_AREA_IME_SHOW_DETAILED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_IME_Detailed"));
+    case UMA_STATUS_AREA_ENABLE_HIGH_CONTRAST:
+      RecordAction(UserMetricsAction("StatusArea_HighContrastEnabled"));
       break;
-    case ash::UMA_STATUS_AREA_IME_SWITCH_MODE:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_IME_SwitchMode"));
+    case UMA_STATUS_AREA_ENABLE_LARGE_CURSOR:
+      RecordAction(UserMetricsAction("StatusArea_LargeCursorEnabled"));
       break;
-    case ash::UMA_STATUS_AREA_MENU_OPENED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_MenuOpened"));
+    case UMA_STATUS_AREA_ENABLE_MAGNIFIER:
+      RecordAction(UserMetricsAction("StatusArea_MagnifierEnabled"));
       break;
-    case ash::UMA_STATUS_AREA_NETWORK_JOIN_OTHER_CLICKED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_JoinOther"));
+    case UMA_STATUS_AREA_ENABLE_SPOKEN_FEEDBACK:
+      RecordAction(UserMetricsAction("StatusArea_SpokenFeedbackEnabled"));
       break;
-    case ash::UMA_STATUS_AREA_NETWORK_SETTINGS_CLICKED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_Settings"));
+    case UMA_STATUS_AREA_ENABLE_VIRTUAL_KEYBOARD:
+      RecordAction(UserMetricsAction("StatusArea_VirtualKeyboardEnabled"));
       break;
-    case ash::UMA_STATUS_AREA_SHOW_NETWORK_CONNECTION_DETAILS:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_Network_ConnectionDetails"));
+    case UMA_STATUS_AREA_ENABLE_WIFI:
+      RecordAction(UserMetricsAction("StatusArea_Network_WifiEnabled"));
       break;
-    case ash::UMA_STATUS_AREA_SHOW_VPN_CONNECTION_DETAILS:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_VPN_ConnectionDetails"));
+    case UMA_STATUS_AREA_IME_SHOW_DETAILED:
+      RecordAction(UserMetricsAction("StatusArea_IME_Detailed"));
       break;
-    case ash::UMA_STATUS_AREA_SIGN_OUT:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_SignOut"));
+    case UMA_STATUS_AREA_IME_SWITCH_MODE:
+      RecordAction(UserMetricsAction("StatusArea_IME_SwitchMode"));
       break;
-    case ash::UMA_STATUS_AREA_VPN_ADD_BUILT_IN_CLICKED:
-      base::RecordAction(base::UserMetricsAction("StatusArea_VPN_AddBuiltIn"));
+    case UMA_STATUS_AREA_MENU_OPENED:
+      RecordAction(UserMetricsAction("StatusArea_MenuOpened"));
       break;
-    case ash::UMA_STATUS_AREA_VPN_ADD_THIRD_PARTY_CLICKED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_VPN_AddThirdParty"));
+    case UMA_STATUS_AREA_NETWORK_JOIN_OTHER_CLICKED:
+      RecordAction(UserMetricsAction("StatusArea_Network_JoinOther"));
       break;
-    case ash::UMA_STATUS_AREA_VPN_DISCONNECT_CLICKED:
-      base::RecordAction(base::UserMetricsAction("StatusArea_VPN_Disconnect"));
+    case UMA_STATUS_AREA_NETWORK_SETTINGS_CLICKED:
+      RecordAction(UserMetricsAction("StatusArea_Network_Settings"));
+    case UMA_STATUS_AREA_OS_UPDATE_DEFAULT_SELECTED:
+      RecordAction(UserMetricsAction("StatusArea_OS_Update_Default_Selected"));
       break;
-    case ash::UMA_STATUS_AREA_VPN_SETTINGS_CLICKED:
-      base::RecordAction(
-          base::UserMetricsAction("StatusArea_VPN_Settings"));
+    case UMA_STATUS_AREA_SCREEN_CAPTURE_DEFAULT_STOP:
+      RecordAction(UserMetricsAction("StatusArea_ScreenCapture_Default_Stop"));
       break;
-    case ash::UMA_TOGGLE_MAXIMIZE_CAPTION_CLICK:
-      base::RecordAction(
-          base::UserMetricsAction("Caption_ClickTogglesMaximize"));
+    case UMA_STATUS_AREA_SCREEN_CAPTURE_NOTIFICATION_STOP:
+      RecordAction(
+          UserMetricsAction("StatusArea_ScreenCapture_Notification_Stop"));
       break;
-    case ash::UMA_TOGGLE_MAXIMIZE_CAPTION_GESTURE:
-      base::RecordAction(
-          base::UserMetricsAction("Caption_GestureTogglesMaximize"));
+    case UMA_STATUS_AREA_SHOW_NETWORK_CONNECTION_DETAILS:
+      RecordAction(UserMetricsAction("StatusArea_Network_ConnectionDetails"));
       break;
-    case ash::UMA_TOGGLE_SINGLE_AXIS_MAXIMIZE_BORDER_CLICK:
-      base::RecordAction(
-          base::UserMetricsAction(
-              "WindowBorder_ClickTogglesSingleAxisMaximize"));
+    case UMA_STATUS_AREA_SHOW_VPN_CONNECTION_DETAILS:
+      RecordAction(UserMetricsAction("StatusArea_VPN_ConnectionDetails"));
       break;
-    case ash::UMA_TOUCHPAD_GESTURE_OVERVIEW:
-      base::RecordAction(
-          base::UserMetricsAction("Touchpad_Gesture_Overview"));
+    case UMA_STATUS_AREA_SIGN_OUT:
+      RecordAction(UserMetricsAction("StatusArea_SignOut"));
       break;
-    case ash::UMA_TOUCHSCREEN_TAP_DOWN:
-      base::RecordAction(base::UserMetricsAction("Touchscreen_Down"));
+    case UMA_STATUS_AREA_SMS_DETAILED_DISMISS_MSG:
+      RecordAction(UserMetricsAction("StatusArea_SMS_Detailed_DismissMsg"));
       break;
-    case ash::UMA_TRAY_HELP:
-      base::RecordAction(base::UserMetricsAction("Tray_Help"));
+    case UMA_STATUS_AREA_SMS_NOTIFICATION_DISMISS_MSG:
+      RecordAction(UserMetricsAction("StatusArea_SMS_Notification_DismissMsg"));
       break;
-    case ash::UMA_TRAY_LOCK_SCREEN:
-      base::RecordAction(base::UserMetricsAction("Tray_LockScreen"));
+    case UMA_STATUS_AREA_TRACING_DEFAULT_SELECTED:
+      RecordAction(UserMetricsAction("StatusArea_Tracing_Default_Selected"));
       break;
-    case ash::UMA_TRAY_OVERVIEW:
-      base::RecordAction(base::UserMetricsAction("Tray_Overview"));
+    case UMA_STATUS_AREA_VPN_ADD_BUILT_IN_CLICKED:
+      RecordAction(UserMetricsAction("StatusArea_VPN_AddBuiltIn"));
       break;
-    case ash::UMA_TRAY_SHUT_DOWN:
-      base::RecordAction(base::UserMetricsAction("Tray_ShutDown"));
+    case UMA_STATUS_AREA_VPN_ADD_THIRD_PARTY_CLICKED:
+      RecordAction(UserMetricsAction("StatusArea_VPN_AddThirdParty"));
       break;
-    case ash::UMA_WINDOW_APP_CLOSE_BUTTON_CLICK:
-      base::RecordAction(base::UserMetricsAction("AppCloseButton_Clk"));
+    case UMA_STATUS_AREA_VPN_DISCONNECT_CLICKED:
+      RecordAction(UserMetricsAction("StatusArea_VPN_Disconnect"));
       break;
-    case ash::UMA_WINDOW_CLOSE_BUTTON_CLICK:
-      base::RecordAction(base::UserMetricsAction("CloseButton_Clk"));
+    case UMA_STATUS_AREA_VPN_SETTINGS_CLICKED:
+      RecordAction(UserMetricsAction("StatusArea_VPN_Settings"));
       break;
-    case ash::UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_EXIT_FULLSCREEN:
-      base::RecordAction(base::UserMetricsAction("MaxButton_Clk_ExitFS"));
+    case UMA_TOGGLE_MAXIMIZE_CAPTION_CLICK:
+      RecordAction(UserMetricsAction("Caption_ClickTogglesMaximize"));
       break;
-    case ash::UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_RESTORE:
-      base::RecordAction(
-          base::UserMetricsAction("MaxButton_Clk_Restore"));
+    case UMA_TOGGLE_MAXIMIZE_CAPTION_GESTURE:
+      RecordAction(UserMetricsAction("Caption_GestureTogglesMaximize"));
       break;
-    case ash::UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_MAXIMIZE:
-      base::RecordAction(
-          base::UserMetricsAction("MaxButton_Clk_Maximize"));
+    case UMA_TOGGLE_SINGLE_AXIS_MAXIMIZE_BORDER_CLICK:
+      RecordAction(
+          UserMetricsAction("WindowBorder_ClickTogglesSingleAxisMaximize"));
       break;
-    case ash::UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_MINIMIZE:
-      base::RecordAction(base::UserMetricsAction("MinButton_Clk"));
+    case UMA_TOUCHPAD_GESTURE_OVERVIEW:
+      RecordAction(UserMetricsAction("Touchpad_Gesture_Overview"));
       break;
-    case ash::UMA_WINDOW_MAXIMIZE_BUTTON_MAXIMIZE_LEFT:
-      base::RecordAction(base::UserMetricsAction("MaxButton_MaxLeft"));
+    case UMA_TOUCHSCREEN_TAP_DOWN:
+      RecordAction(UserMetricsAction("Touchscreen_Down"));
       break;
-    case ash::UMA_WINDOW_MAXIMIZE_BUTTON_MAXIMIZE_RIGHT:
-      base::RecordAction(base::UserMetricsAction("MaxButton_MaxRight"));
+    case UMA_TRAY_HELP:
+      RecordAction(UserMetricsAction("Tray_Help"));
       break;
-    case ash::UMA_WINDOW_OVERVIEW:
-      base::RecordAction(
-          base::UserMetricsAction("WindowSelector_Overview"));
+    case UMA_TRAY_LOCK_SCREEN:
+      RecordAction(UserMetricsAction("Tray_LockScreen"));
       break;
-    case ash::UMA_WINDOW_OVERVIEW_ACTIVE_WINDOW_CHANGED:
-      base::RecordAction(
-          base::UserMetricsAction("WindowSelector_ActiveWindowChanged"));
+    case UMA_TRAY_OVERVIEW:
+      RecordAction(UserMetricsAction("Tray_Overview"));
+      break;
+    case UMA_TRAY_SHUT_DOWN:
+      RecordAction(UserMetricsAction("Tray_ShutDown"));
+      break;
+    case UMA_WINDOW_APP_CLOSE_BUTTON_CLICK:
+      RecordAction(UserMetricsAction("AppCloseButton_Clk"));
+      break;
+    case UMA_WINDOW_CLOSE_BUTTON_CLICK:
+      RecordAction(UserMetricsAction("CloseButton_Clk"));
+      break;
+    case UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_EXIT_FULLSCREEN:
+      RecordAction(UserMetricsAction("MaxButton_Clk_ExitFS"));
+      break;
+    case UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_RESTORE:
+      RecordAction(UserMetricsAction("MaxButton_Clk_Restore"));
+      break;
+    case UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_MAXIMIZE:
+      RecordAction(UserMetricsAction("MaxButton_Clk_Maximize"));
+      break;
+    case UMA_WINDOW_MAXIMIZE_BUTTON_CLICK_MINIMIZE:
+      RecordAction(UserMetricsAction("MinButton_Clk"));
+      break;
+    case UMA_WINDOW_MAXIMIZE_BUTTON_MAXIMIZE_LEFT:
+      RecordAction(UserMetricsAction("MaxButton_MaxLeft"));
+      break;
+    case UMA_WINDOW_MAXIMIZE_BUTTON_MAXIMIZE_RIGHT:
+      RecordAction(UserMetricsAction("MaxButton_MaxRight"));
+      break;
+    case UMA_WINDOW_CYCLE:
+      RecordAction(UserMetricsAction("WindowCycleController_Cycle"));
+      break;
+    case UMA_WINDOW_OVERVIEW:
+      RecordAction(UserMetricsAction("WindowSelector_Overview"));
+      break;
+    case UMA_WINDOW_OVERVIEW_ACTIVE_WINDOW_CHANGED:
+      RecordAction(UserMetricsAction("WindowSelector_ActiveWindowChanged"));
       task_switch_metrics_recorder_.OnTaskSwitch(
           TaskSwitchMetricsRecorder::OVERVIEW_MODE);
       break;
-    case ash::UMA_WINDOW_OVERVIEW_ENTER_KEY:
-      base::RecordAction(
-          base::UserMetricsAction("WindowSelector_OverviewEnterKey"));
-      break;
-    case ash::UMA_WINDOW_CYCLE:
-      base::RecordAction(
-          base::UserMetricsAction("WindowCycleController_Cycle"));
-      break;
-  }
-}
-
-void UserMetricsRecorder::RecordUserMetricsAction(
-    wm::WmUserMetricsAction action) {
-  switch (action) {
-    case wm::WmUserMetricsAction::DRAG_MAXIMIZE_LEFT:
-      base::RecordAction(base::UserMetricsAction("WindowDrag_MaximizeLeft"));
-      break;
-    case wm::WmUserMetricsAction::DRAG_MAXIMIZE_RIGHT:
-      base::RecordAction(base::UserMetricsAction("WindowDrag_MaximizeRight"));
+    case UMA_WINDOW_OVERVIEW_ENTER_KEY:
+      RecordAction(UserMetricsAction("WindowSelector_OverviewEnterKey"));
       break;
   }
 }

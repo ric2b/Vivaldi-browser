@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
@@ -77,27 +78,47 @@ bool TestLogFunction::RunSafe() {
   return true;
 }
 
-bool TestSendMessageFunction::RunAsync() {
+TestSendMessageFunction::TestSendMessageFunction() : waiting_(false) {}
+
+ExtensionFunction::ResponseAction TestSendMessageFunction::Run() {
   std::unique_ptr<PassMessage::Params> params(
       PassMessage::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
+  bool listener_will_respond = false;
+  std::pair<std::string, bool*> details(params->message,
+                                        &listener_will_respond);
   content::NotificationService::current()->Notify(
       extensions::NOTIFICATION_EXTENSION_TEST_MESSAGE,
       content::Source<TestSendMessageFunction>(this),
-      content::Details<std::string>(&params->message));
-  return true;
+      content::Details<std::pair<std::string, bool*>>(&details));
+  // If the listener is not intending to respond, or has already responded,
+  // finish the function.
+  if (!listener_will_respond || response_.get()) {
+    if (!response_) {
+      response_ =
+          OneArgument(base::MakeUnique<base::StringValue>(std::string()));
+    }
+    return RespondNow(std::move(response_));
+  }
+  // Otherwise, wait for a reply.
+  waiting_ = true;
+  return RespondLater();
 }
 
 TestSendMessageFunction::~TestSendMessageFunction() {}
 
 void TestSendMessageFunction::Reply(const std::string& message) {
-  SetResult(new base::StringValue(message));
-  SendResponse(true);
+  DCHECK(!response_);
+  response_ = OneArgument(base::MakeUnique<base::StringValue>(message));
+  if (waiting_)
+    Respond(std::move(response_));
 }
 
 void TestSendMessageFunction::ReplyWithError(const std::string& error) {
-  error_ = error;
-  SendResponse(false);
+  DCHECK(!response_);
+  response_ = Error(error);
+  if (waiting_)
+    Respond(std::move(response_));
 }
 
 // static
@@ -126,7 +147,7 @@ bool TestGetConfigFunction::RunSafe() {
     return false;
   }
 
-  SetResult(test_config_state->config_state()->DeepCopy());
+  SetResult(test_config_state->config_state()->CreateDeepCopy());
   return true;
 }
 
@@ -135,7 +156,7 @@ TestWaitForRoundTripFunction::~TestWaitForRoundTripFunction() {}
 bool TestWaitForRoundTripFunction::RunSafe() {
   std::unique_ptr<WaitForRoundTrip::Params> params(
       WaitForRoundTrip::Params::Create(*args_));
-  SetResult(new base::StringValue(params->message));
+  SetResult(base::MakeUnique<base::StringValue>(params->message));
   return true;
 }
 

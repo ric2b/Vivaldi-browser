@@ -40,7 +40,6 @@ namespace content {
 
 class RenderThreadObserver;
 class ResourceDispatcherDelegate;
-class ServiceRegistry;
 
 class CONTENT_EXPORT RenderThread : virtual public ChildThread {
  public:
@@ -108,9 +107,6 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
 
   // Gets the shutdown event for the process.
   virtual base::WaitableEvent* GetShutdownEvent() = 0;
-
-  // Returns the ServiceRegistry for this thread. Never returns nullptr.
-  virtual ServiceRegistry* GetServiceRegistry() = 0;
 };
 
 }  // namespace content

@@ -14,7 +14,7 @@
 #include "components/mus/common/types.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "mojo/public/cpp/bindings/array.h"
-#include "ui/mojo/geometry/geometry.mojom.h"
+#include "ui/gfx/geometry/mojo/geometry.mojom.h"
 
 namespace mus {
 
@@ -28,7 +28,6 @@ enum ChangeType {
   // TODO(sky): nuke NODE.
   CHANGE_TYPE_NODE_ADD_TRANSIENT_WINDOW,
   CHANGE_TYPE_NODE_BOUNDS_CHANGED,
-  CHANGE_TYPE_NODE_VIEWPORT_METRICS_CHANGED,
   CHANGE_TYPE_NODE_HIERARCHY_CHANGED,
   CHANGE_TYPE_NODE_REMOVE_TRANSIENT_WINDOW_FROM_PARENT,
   CHANGE_TYPE_NODE_REORDERED,
@@ -71,13 +70,13 @@ struct Change {
   ~Change();
 
   ChangeType type;
-  ConnectionSpecificId connection_id;
+  ClientSpecificId client_id;
   std::vector<TestWindow> windows;
   Id window_id;
   Id window_id2;
   Id window_id3;
-  mojo::Rect bounds;
-  mojo::Rect bounds2;
+  gfx::Rect bounds;
+  gfx::Rect bounds2;
   int32_t event_action;
   uint32_t event_observer_id;
   mojo::String embed_url;
@@ -134,7 +133,7 @@ class TestChangeTracker {
 
   // Each of these functions generate a Change. There is one per
   // WindowTreeClient function.
-  void OnEmbed(ConnectionSpecificId connection_id,
+  void OnEmbed(ClientSpecificId client_id,
                mojom::WindowDataPtr root,
                bool drawn);
   void OnEmbeddedAppDisconnected(Id window_id);
@@ -143,10 +142,8 @@ class TestChangeTracker {
   void OnTransientWindowAdded(Id window_id, Id transient_window_id);
   void OnTransientWindowRemoved(Id window_id, Id transient_window_id);
   void OnWindowBoundsChanged(Id window_id,
-                             mojo::RectPtr old_bounds,
-                             mojo::RectPtr new_bounds);
-  void OnWindowViewportMetricsChanged(mojom::ViewportMetricsPtr old_bounds,
-                                      mojom::ViewportMetricsPtr new_bounds);
+                             const gfx::Rect& old_bounds,
+                             const gfx::Rect& new_bounds);
   void OnWindowHierarchyChanged(Id window_id,
                                 Id old_parent_id,
                                 Id new_parent_id,
@@ -159,9 +156,9 @@ class TestChangeTracker {
   void OnWindowOpacityChanged(Id window_id, float opacity);
   void OnWindowParentDrawnStateChanged(Id window_id, bool drawn);
   void OnWindowInputEvent(Id window_id,
-                          mojom::EventPtr event,
+                          const ui::Event& event,
                           uint32_t event_observer_id);
-  void OnEventObserved(mojom::EventPtr event, uint32_t event_observer_id);
+  void OnEventObserved(const ui::Event& event, uint32_t event_observer_id);
   void OnWindowSharedPropertyChanged(Id window_id,
                                      mojo::String name,
                                      mojo::Array<uint8_t> data);

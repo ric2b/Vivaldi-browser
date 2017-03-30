@@ -9,28 +9,27 @@
 
 namespace cc {
 
-class BeginFrameSource;
-
 class PixelTestOutputSurface : public OutputSurface {
  public:
   explicit PixelTestOutputSurface(
       scoped_refptr<ContextProvider> context_provider,
       scoped_refptr<ContextProvider> worker_context_provider,
-      bool flipped_output_surface,
-      std::unique_ptr<BeginFrameSource> begin_frame_source);
+      bool flipped_output_surface);
   explicit PixelTestOutputSurface(
       scoped_refptr<ContextProvider> context_provider,
-      bool flipped_output_surface,
-      std::unique_ptr<BeginFrameSource> begin_frame_source);
+      bool flipped_output_surface);
   explicit PixelTestOutputSurface(
-      std::unique_ptr<SoftwareOutputDevice> software_device,
-      std::unique_ptr<BeginFrameSource> begin_frame_source);
+      std::unique_ptr<SoftwareOutputDevice> software_device);
   ~PixelTestOutputSurface() override;
 
-  bool BindToClient(OutputSurfaceClient* client) override;
-  void Reshape(const gfx::Size& size, float scale_factor, bool alpha) override;
+  // OutputSurface implementation.
+  void Reshape(const gfx::Size& size,
+               float scale_factor,
+               const gfx::ColorSpace& color_space,
+               bool alpha) override;
   bool HasExternalStencilTest() const override;
-  void SwapBuffers(CompositorFrame* frame) override;
+  void SwapBuffers(CompositorFrame frame) override;
+  uint32_t GetFramebufferCopyTextureFormat() override;
 
   void set_surface_expansion_size(const gfx::Size& surface_expansion_size) {
     surface_expansion_size_ = surface_expansion_size;
@@ -40,7 +39,6 @@ class PixelTestOutputSurface : public OutputSurface {
   }
 
  private:
-  std::unique_ptr<BeginFrameSource> begin_frame_source_;
   gfx::Size surface_expansion_size_;
   bool external_stencil_test_;
 };

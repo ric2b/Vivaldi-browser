@@ -6,8 +6,8 @@
 
 #include <cmath>
 
-#include "ash/ash_switches.h"
-#include "ash/display/display_info.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/display/display_info.h"
 #include "ash/display/display_manager.h"
 #include "ash/host/root_window_transformer.h"
 #include "ash/magnifier/magnification_controller.h"
@@ -56,7 +56,7 @@ gfx::Transform CreateRotationTransform(aura::Window* root_window,
   DisplayInfo info =
       Shell::GetInstance()->display_manager()->GetDisplayInfo(display.id());
 
-  // TODO(oshima): Add animation. (crossfade+rotation, or just cross-fade)
+// TODO(oshima): Add animation. (crossfade+rotation, or just cross-fade)
 #if defined(OS_WIN)
   // Windows 8 bots refused to resize the host window, and
   // updating the transform results in incorrectly resizing
@@ -128,9 +128,7 @@ gfx::Transform CreateInsetsAndScaleTransform(const gfx::Insets& insets,
 
 gfx::Transform CreateMirrorTransform(const display::Display& display) {
   gfx::Transform transform;
-  transform.matrix().set3x3(-1, 0, 0,
-                            0, 1, 0,
-                            0, 0, 1);
+  transform.matrix().set3x3(-1, 0, 0, 0, 1, 0, 0, 0, 1);
   transform.Translate(-display.size().width(), 0);
   return transform;
 }
@@ -224,27 +222,27 @@ class MirrorRootWindowTransformer : public RootWindowTransformer {
         gfx::Rect(mirror_display_info.bounds_in_native().size());
 
     bool letterbox = root_bounds_.width() * mirror_display_rect.height() >
-        root_bounds_.height() * mirror_display_rect.width();
+                     root_bounds_.height() * mirror_display_rect.width();
     if (letterbox) {
       float mirror_scale_ratio =
           (static_cast<float>(root_bounds_.width()) /
            static_cast<float>(mirror_display_rect.width()));
       float inverted_scale = 1.0f / mirror_scale_ratio;
-      int margin = static_cast<int>(
-          (mirror_display_rect.height() -
-           root_bounds_.height() * inverted_scale) / 2);
+      int margin = static_cast<int>((mirror_display_rect.height() -
+                                     root_bounds_.height() * inverted_scale) /
+                                    2);
       insets_.Set(0, margin, 0, margin);
 
-      transform_.Translate(0,  margin);
+      transform_.Translate(0, margin);
       transform_.Scale(inverted_scale, inverted_scale);
     } else {
       float mirror_scale_ratio =
           (static_cast<float>(root_bounds_.height()) /
            static_cast<float>(mirror_display_rect.height()));
       float inverted_scale = 1.0f / mirror_scale_ratio;
-      int margin = static_cast<int>(
-          (mirror_display_rect.width() -
-           root_bounds_.width() * inverted_scale) / 2);
+      int margin = static_cast<int>((mirror_display_rect.width() -
+                                     root_bounds_.width() * inverted_scale) /
+                                    2);
       insets_.Set(margin, 0, margin, 0);
 
       transform_.Translate(margin, 0);

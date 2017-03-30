@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
@@ -53,11 +54,11 @@
 #include "net/base/net_errors.h"
 #include "net/base/net_module.h"
 #include "net/base/request_priority.h"
-#include "net/base/test_data_directory.h"
 #include "net/base/upload_bytes_element_reader.h"
 #include "net/base/upload_data_stream.h"
 #include "net/base/upload_file_element_reader.h"
 #include "net/base/url_util.h"
+#include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/ct_verifier.h"
 #include "net/cert/ct_verify_result.h"
@@ -85,7 +86,6 @@
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/default_channel_id_store.h"
-#include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_server_config.h"
 #include "net/ssl/token_binding.h"
@@ -94,6 +94,7 @@
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
+#include "net/test/test_data_directory.h"
 #include "net/test/url_request/url_request_failed_job.h"
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/static_http_user_agent_settings.h"
@@ -123,7 +124,6 @@
 #if defined(OS_WIN)
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_comptr.h"
-#include "base/win/windows_version.h"
 #endif
 
 using base::ASCIIToUTF16;
@@ -434,9 +434,9 @@ class BlockingNetworkDelegate : public TestNetworkDelegate {
                          const CompletionCallback& callback,
                          GURL* new_url) override;
 
-  int OnBeforeSendHeaders(URLRequest* request,
-                          const CompletionCallback& callback,
-                          HttpRequestHeaders* headers) override;
+  int OnBeforeStartTransaction(URLRequest* request,
+                               const CompletionCallback& callback,
+                               HttpRequestHeaders* headers) override;
 
   int OnHeadersReceived(
       URLRequest* request,
@@ -545,11 +545,11 @@ int BlockingNetworkDelegate::OnBeforeURLRequest(
   return MaybeBlockStage(ON_BEFORE_URL_REQUEST, callback);
 }
 
-int BlockingNetworkDelegate::OnBeforeSendHeaders(
+int BlockingNetworkDelegate::OnBeforeStartTransaction(
     URLRequest* request,
     const CompletionCallback& callback,
     HttpRequestHeaders* headers) {
-  TestNetworkDelegate::OnBeforeSendHeaders(request, callback, headers);
+  TestNetworkDelegate::OnBeforeStartTransaction(request, callback, headers);
 
   return MaybeBlockStage(ON_BEFORE_SEND_HEADERS, callback);
 }
@@ -661,10 +661,10 @@ class TestURLRequestContextWithProxy : public TestURLRequestContext {
   ~TestURLRequestContextWithProxy() override {}
 };
 
-// A mock ReportSender that just remembers the latest report
+// A mock ReportSenderInterface that just remembers the latest report
 // URI and report to be sent.
 class MockCertificateReportSender
-    : public TransportSecurityState::ReportSender {
+    : public TransportSecurityState::ReportSenderInterface {
  public:
   MockCertificateReportSender() {}
   ~MockCertificateReportSender() override {}
@@ -3323,14 +3323,9 @@ class TestSSLConfigService : public SSLConfigService {
         rev_checking_required_local_anchors_(
             rev_checking_required_local_anchors),
         token_binding_enabled_(token_binding_enabled),
-        min_version_(kDefaultSSLVersionMin),
-        fallback_min_version_(kDefaultSSLVersionFallbackMin) {}
+        min_version_(kDefaultSSLVersionMin) {}
 
   void set_min_version(uint16_t version) { min_version_ = version; }
-
-  void set_fallback_min_version(uint16_t version) {
-    fallback_min_version_ = version;
-  }
 
   // SSLConfigService:
   void GetSSLConfig(SSLConfig* config) override {
@@ -3339,9 +3334,6 @@ class TestSSLConfigService : public SSLConfigService {
     config->verify_ev_cert = ev_enabled_;
     config->rev_checking_required_local_anchors =
         rev_checking_required_local_anchors_;
-    if (fallback_min_version_) {
-      config->version_fallback_min = fallback_min_version_;
-    }
     if (min_version_) {
       config->version_min = min_version_;
     }
@@ -3359,7 +3351,6 @@ class TestSSLConfigService : public SSLConfigService {
   const bool rev_checking_required_local_anchors_;
   const bool token_binding_enabled_;
   uint16_t min_version_;
-  uint16_t fallback_min_version_;
 };
 
 // TODO(svaldez): Update tests to use EmbeddedTestServer.
@@ -3809,8 +3800,9 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateRedirectRequest) {
     base::RunLoop().Run();
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
     EXPECT_TRUE(r->proxy_server().Equals(http_test_server()->host_port_pair()));
-    EXPECT_EQ(
-        1, network_delegate.observed_before_proxy_headers_sent_callbacks());
+    // before_send_headers_with_proxy_count only increments for headers sent
+    // through an untunneled proxy.
+    EXPECT_EQ(1, network_delegate.before_send_headers_with_proxy_count());
     EXPECT_TRUE(network_delegate.last_observed_proxy().Equals(
         http_test_server()->host_port_pair()));
 
@@ -3863,8 +3855,9 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateRedirectRequestSynchronously) {
 
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
     EXPECT_TRUE(r->proxy_server().Equals(http_test_server()->host_port_pair()));
-    EXPECT_EQ(
-        1, network_delegate.observed_before_proxy_headers_sent_callbacks());
+    // before_send_headers_with_proxy_count only increments for headers sent
+    // through an untunneled proxy.
+    EXPECT_EQ(1, network_delegate.before_send_headers_with_proxy_count());
     EXPECT_TRUE(network_delegate.last_observed_proxy().Equals(
         http_test_server()->host_port_pair()));
     EXPECT_EQ(0, r->status().error());
@@ -3961,8 +3954,9 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateRedirectRequestOnHeadersReceived) {
 
     EXPECT_EQ(URLRequestStatus::SUCCESS, r->status().status());
     EXPECT_TRUE(r->proxy_server().Equals(http_test_server()->host_port_pair()));
-    EXPECT_EQ(
-        2, network_delegate.observed_before_proxy_headers_sent_callbacks());
+    // before_send_headers_with_proxy_count only increments for headers sent
+    // through an untunneled proxy.
+    EXPECT_EQ(2, network_delegate.before_send_headers_with_proxy_count());
     EXPECT_TRUE(network_delegate.last_observed_proxy().Equals(
         http_test_server()->host_port_pair()));
 
@@ -4302,7 +4296,8 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateCancelWhileWaiting1) {
 
 // Tests that we can handle when a network request was canceled while we were
 // waiting for the network delegate.
-// Part 2: Request is cancelled while waiting for OnBeforeSendHeaders callback.
+// Part 2: Request is cancelled while waiting for OnBeforeStartTransaction
+// callback.
 TEST_F(URLRequestTestHTTP, NetworkDelegateCancelWhileWaiting2) {
   ASSERT_TRUE(http_test_server()->Start());
 
@@ -4881,10 +4876,10 @@ class AsyncLoggingNetworkDelegate : public TestNetworkDelegate {
     return RunCallbackAsynchronously(request, callback);
   }
 
-  int OnBeforeSendHeaders(URLRequest* request,
-                          const CompletionCallback& callback,
-                          HttpRequestHeaders* headers) override {
-    TestNetworkDelegate::OnBeforeSendHeaders(request, callback, headers);
+  int OnBeforeStartTransaction(URLRequest* request,
+                               const CompletionCallback& callback,
+                               HttpRequestHeaders* headers) override {
+    TestNetworkDelegate::OnBeforeStartTransaction(request, callback, headers);
     return RunCallbackAsynchronously(request, callback);
   }
 
@@ -5165,7 +5160,7 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateInfoRedirect) {
   TestNetLogEntry::List entries;
   net_log_.GetEntries(&entries);
   // The NetworkDelegate logged information in OnBeforeURLRequest,
-  // OnBeforeSendHeaders, and OnHeadersReceived.
+  // OnBeforeStartTransaction, and OnHeadersReceived.
   for (size_t i = 0; i < 3; ++i) {
     log_position = ExpectLogContainsSomewhereAfter(
         entries,
@@ -5247,8 +5242,9 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateInfoAuth) {
   TestNetLogEntry::List entries;
   net_log_.GetEntries(&entries);
   // The NetworkDelegate should have logged information in OnBeforeURLRequest,
-  // OnBeforeSendHeaders, OnHeadersReceived, OnAuthRequired, and then again in
-  // OnBeforeURLRequest and OnBeforeSendHeaders.
+  // OnBeforeStartTransaction, OnHeadersReceived, OnAuthRequired, and then again
+  // in
+  // OnBeforeURLRequest and OnBeforeStartTransaction.
   for (size_t i = 0; i < 6; ++i) {
     log_position = ExpectLogContainsSomewhereAfter(
         entries,
@@ -6218,6 +6214,64 @@ TEST_F(URLRequestTestHTTP, PKPNotProcessedOnIP) {
       security_state->GetDynamicPKPState(test_server_hostname, &pkp_state));
 }
 
+TEST_F(URLRequestTestHTTP, PKPBypassRecorded) {
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  // Set up a MockCertVerifier to be a local root that violates the pin
+  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
+  ASSERT_TRUE(cert);
+
+  MockCertVerifier cert_verifier;
+  CertVerifyResult verify_result;
+  verify_result.verified_cert = cert;
+  verify_result.is_issued_by_known_root = false;
+  HashValue hash;
+  ASSERT_TRUE(
+      hash.FromString("sha256/1111111111111111111111111111111111111111111="));
+  verify_result.public_key_hashes.push_back(hash);
+  cert_verifier.AddResultForCert(cert.get(), verify_result, OK);
+  cert_verifier.set_default_result(OK);
+
+  std::string test_server_hostname = https_test_server.GetURL("/").host();
+
+  // Set up HPKP
+  base::Time current_time = base::Time::Now();
+  const base::Time expiry = current_time + base::TimeDelta::FromSeconds(10000);
+  HashValue pin;
+  ASSERT_TRUE(
+      pin.FromString("sha256/2222222222222222222222222222222222222222222="));
+  HashValueVector hashes;
+  hashes.push_back(pin);
+  GURL report_uri(kHPKPReportUri);
+  TransportSecurityState security_state;
+  security_state.AddHPKP(test_server_hostname, expiry,
+                         false, /* include subdomains */
+                         hashes, report_uri);
+
+  TestNetworkDelegate network_delegate;
+  TestURLRequestContext context(true);
+  context.set_transport_security_state(&security_state);
+  context.set_network_delegate(&network_delegate);
+  context.set_cert_verifier(&cert_verifier);
+  context.Init();
+
+  TestDelegate d;
+  std::unique_ptr<URLRequest> request(context.CreateRequest(
+      https_test_server.GetURL("/hpkp-headers.html"), DEFAULT_PRIORITY, &d));
+  request->Start();
+  base::RunLoop().Run();
+
+  TransportSecurityState::PKPState pkp_state;
+  EXPECT_TRUE(
+      security_state.GetDynamicPKPState(test_server_hostname, &pkp_state));
+  EXPECT_TRUE(request->ssl_info().pkp_bypassed);
+}
+
 TEST_F(URLRequestTestHTTP, ProcessSTSOnce) {
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
@@ -6430,7 +6484,7 @@ TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
   context.set_network_delegate(&network_delegate);
   context.set_cert_verifier(&cert_verifier);
   context.set_cert_transparency_verifier(&ct_verifier);
-  context.set_ct_policy_enforcer(&ct_policy_enforcer);
+  context.set_ct_policy_enforcer(std::move(&ct_policy_enforcer));
   context.Init();
 
   // Now send a request to trigger the violation.
@@ -6514,7 +6568,7 @@ TEST_F(URLRequestTestHTTP, RestrictDataRedirects) {
       http_test_server()->GetURL("/redirect-to-data.html"), DEFAULT_PRIORITY,
       &d));
   req->Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_EQ(URLRequestStatus::FAILED, req->status().status());
   EXPECT_EQ(ERR_UNSAFE_REDIRECT, req->status().error());
@@ -7891,6 +7945,30 @@ TEST_F(URLRequestTestHTTP, NetworkAccessedClearOnLoadOnlyFromCache) {
   EXPECT_FALSE(req->response_info().network_accessed);
 }
 
+TEST_F(URLRequestTestHTTP, RawBodyBytesNoContentEncoding) {
+  ASSERT_TRUE(http_test_server()->Start());
+
+  TestDelegate d;
+  std::unique_ptr<URLRequest> req(default_context().CreateRequest(
+      http_test_server()->GetURL("/simple.html"), DEFAULT_PRIORITY, &d));
+  req->Start();
+  base::RunLoop().Run();
+
+  EXPECT_EQ(5, req->GetRawBodyBytes());
+}
+
+TEST_F(URLRequestTestHTTP, RawBodyBytesGzipEncoding) {
+  ASSERT_TRUE(http_test_server()->Start());
+
+  TestDelegate d;
+  std::unique_ptr<URLRequest> req(default_context().CreateRequest(
+      http_test_server()->GetURL("/gzip-encoded"), DEFAULT_PRIORITY, &d));
+  req->Start();
+  base::RunLoop().Run();
+
+  EXPECT_EQ(30, req->GetRawBodyBytes());
+}
+
 class URLRequestInterceptorTestHTTP : public URLRequestTestHTTP {
  public:
   // TODO(bengr): Merge this with the URLRequestInterceptorHTTPTest fixture,
@@ -7938,7 +8016,7 @@ TEST_F(URLRequestInterceptorTestHTTP,
   EXPECT_EQ(0, d.received_redirect_count());
 
   EXPECT_EQ(1, default_network_delegate()->created_requests());
-  EXPECT_EQ(1, default_network_delegate()->before_send_headers_count());
+  EXPECT_EQ(1, default_network_delegate()->before_start_transaction_count());
   EXPECT_EQ(1, default_network_delegate()->headers_received_count());
 }
 
@@ -7971,7 +8049,7 @@ TEST_F(URLRequestInterceptorTestHTTP,
   EXPECT_EQ(0, d.received_redirect_count());
 
   EXPECT_EQ(1, default_network_delegate()->created_requests());
-  EXPECT_EQ(1, default_network_delegate()->before_send_headers_count());
+  EXPECT_EQ(1, default_network_delegate()->before_start_transaction_count());
   EXPECT_EQ(0, default_network_delegate()->headers_received_count());
 }
 
@@ -8003,7 +8081,7 @@ TEST_F(URLRequestInterceptorTestHTTP,
   EXPECT_EQ(0, d.received_redirect_count());
 
   EXPECT_EQ(1, default_network_delegate()->created_requests());
-  EXPECT_EQ(2, default_network_delegate()->before_send_headers_count());
+  EXPECT_EQ(2, default_network_delegate()->before_start_transaction_count());
   EXPECT_EQ(2, default_network_delegate()->headers_received_count());
 }
 
@@ -8568,24 +8646,31 @@ TEST_F(HTTPSRequestTest, HSTSCrossOriginAddHeaders) {
   EXPECT_EQ(kOriginHeaderValue, received_cors_header);
 }
 
-// This just tests the behaviour of GetHSTSRedirect(). End-to-end tests of HSTS
-// are performed in net/websockets/websocket_end_to_end_test.cc.
-TEST(WebSocketURLRequestTest, HSTSApplied) {
-  TestNetworkDelegate network_delegate;
-  TransportSecurityState transport_security_state;
-  base::Time expiry = base::Time::Now() + base::TimeDelta::FromDays(1);
-  bool include_subdomains = false;
-  transport_security_state.AddHSTS("example.net", expiry, include_subdomains);
-  TestURLRequestContext context(true);
-  context.set_transport_security_state(&transport_security_state);
-  context.set_network_delegate(&network_delegate);
-  context.Init();
-  GURL ws_url("ws://example.net/echo");
-  TestDelegate delegate;
-  std::unique_ptr<URLRequest> request(
-      context.CreateRequest(ws_url, DEFAULT_PRIORITY, &delegate));
-  EXPECT_TRUE(request->GetHSTSRedirect(&ws_url));
-  EXPECT_TRUE(ws_url.SchemeIs("wss"));
+// Test that DHE-only servers fail with the expected dedicated error code.
+TEST_F(HTTPSRequestTest, DHE) {
+  SpawnedTestServer::SSLOptions ssl_options;
+  ssl_options.key_exchanges =
+      SpawnedTestServer::SSLOptions::KEY_EXCHANGE_DHE_RSA;
+  SpawnedTestServer test_server(
+      SpawnedTestServer::TYPE_HTTPS, ssl_options,
+      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
+  ASSERT_TRUE(test_server.Start());
+
+  TestDelegate d;
+  {
+    std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
+        test_server.GetURL("/defaultresponse"), DEFAULT_PRIORITY, &d));
+
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
+
+    base::RunLoop().Run();
+
+    EXPECT_EQ(1, d.response_started_count());
+    EXPECT_FALSE(r->status().is_success());
+    EXPECT_EQ(URLRequestStatus::FAILED, r->status().status());
+    EXPECT_EQ(ERR_SSL_OBSOLETE_CIPHER, r->status().error());
+  }
 }
 
 namespace {
@@ -8772,6 +8857,9 @@ TEST_F(HTTPSRequestTest, SSLSessionCacheShardTest) {
   params.host_resolver = default_context_.host_resolver();
   params.cert_verifier = default_context_.cert_verifier();
   params.transport_security_state = default_context_.transport_security_state();
+  params.cert_transparency_verifier =
+      default_context_.cert_transparency_verifier();
+  params.ct_policy_enforcer = default_context_.ct_policy_enforcer();
   params.proxy_service = default_context_.proxy_service();
   params.ssl_config_service = default_context_.ssl_config_service();
   params.http_auth_handler_factory =
@@ -8806,71 +8894,6 @@ TEST_F(HTTPSRequestTest, SSLSessionCacheShardTest) {
   }
 }
 
-#if defined(OS_WIN)
-
-namespace {
-
-bool IsECDSACipherSuite(uint16_t cipher_suite) {
-  const char* key_exchange;
-  const char* cipher;
-  const char* mac;
-  bool is_aead;
-  SSLCipherSuiteToStrings(&key_exchange, &cipher, &mac, &is_aead, cipher_suite);
-  return std::string(key_exchange).find("ECDSA") != std::string::npos;
-}
-
-}  // namespace
-
-// Test that ECDSA is disabled on Windows XP, where ECDSA certificates cannot be
-// verified.
-TEST_F(HTTPSRequestTest, DisableECDSAOnXP) {
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    LOG(INFO) << "Skipping test on this version.";
-    return;
-  }
-
-  EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  test_server.ServeFilesFromSourceDirectory("net/data/ssl");
-  ASSERT_TRUE(test_server.Start());
-
-  TestDelegate d;
-  std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
-      test_server.GetURL("/client-cipher-list"), DEFAULT_PRIORITY, &d));
-  r->Start();
-  EXPECT_TRUE(r->is_pending());
-
-  base::RunLoop().Run();
-
-  EXPECT_EQ(1, d.response_started_count());
-  std::vector<std::string> lines = base::SplitString(
-      d.data_received(), "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
-
-  for (size_t i = 0; i < lines.size(); i++) {
-    int cipher_suite;
-    ASSERT_TRUE(base::StringToInt(lines[i], &cipher_suite));
-    EXPECT_FALSE(IsECDSACipherSuite(cipher_suite))
-        << "ClientHello advertised " << cipher_suite;
-  }
-}
-
-#endif  // OS_WIN
-
-class FallbackTestURLRequestContext : public TestURLRequestContext {
- public:
-  explicit FallbackTestURLRequestContext(bool delay_initialization)
-      : TestURLRequestContext(delay_initialization) {}
-
-  void set_fallback_min_version(uint16_t version) {
-    TestSSLConfigService* ssl_config_service = new TestSSLConfigService(
-        true /* check for EV */, false /* online revocation checking */,
-        false /* require rev. checking for local
-                                          anchors */,
-        false /* token binding enabled */);
-    ssl_config_service->set_fallback_min_version(version);
-    set_ssl_config_service(ssl_config_service);
-  }
-};
-
 class HTTPSFallbackTest : public testing::Test {
  public:
   HTTPSFallbackTest() : context_(true) {}
@@ -8895,10 +8918,6 @@ class HTTPSFallbackTest : public testing::Test {
     base::RunLoop().Run();
   }
 
-  void set_fallback_min_version(uint16_t version) {
-    context_.set_fallback_min_version(version);
-  }
-
   void ExpectConnection(int version) {
     EXPECT_EQ(1, delegate_.response_started_count());
     EXPECT_NE(0, delegate_.bytes_received());
@@ -8917,7 +8936,7 @@ class HTTPSFallbackTest : public testing::Test {
 
  private:
   TestDelegate delegate_;
-  FallbackTestURLRequestContext context_;
+  TestURLRequestContext context_;
   std::unique_ptr<URLRequest> request_;
 };
 
@@ -8932,7 +8951,7 @@ TEST_F(HTTPSFallbackTest, TLSv1NoFallback) {
   ExpectFailure(ERR_SSL_VERSION_OR_CIPHER_MISMATCH);
 }
 
-// Tests the TLS 1.1 fallback doesn't happen but 1.2-intolerance is detected.
+// Tests the TLS 1.1 fallback doesn't happen.
 TEST_F(HTTPSFallbackTest, TLSv1_1NoFallback) {
   SpawnedTestServer::SSLOptions ssl_options(
       SpawnedTestServer::SSLOptions::CERT_OK);
@@ -8940,165 +8959,7 @@ TEST_F(HTTPSFallbackTest, TLSv1_1NoFallback) {
       SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
 
   ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
-  ExpectFailure(ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION);
-}
-
-// Tests the TLS 1.1 fallback when explicitly enabled.
-TEST_F(HTTPSFallbackTest, TLSv1_1Fallback) {
-  SpawnedTestServer::SSLOptions ssl_options(
-      SpawnedTestServer::SSLOptions::CERT_OK);
-  ssl_options.tls_intolerant =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
-
-  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
-  ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
-  ExpectConnection(SSL_CONNECTION_VERSION_TLS1_1);
-}
-
-// Tests that the TLS 1.1 fallback, if enabled, triggers on closed connections.
-TEST_F(HTTPSFallbackTest, TLSv1_1FallbackClosed) {
-  SpawnedTestServer::SSLOptions ssl_options(
-      SpawnedTestServer::SSLOptions::CERT_OK);
-  ssl_options.tls_intolerant =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
-  ssl_options.tls_intolerance_type =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANCE_CLOSE;
-
-  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
-  ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
-  ExpectConnection(SSL_CONNECTION_VERSION_TLS1_1);
-}
-
-// This test is disabled on Android because the remote test server doesn't cause
-// a TCP reset.
-#if !defined(OS_ANDROID)
-// Tests fallback to TLS 1.1, if enabled, on connection reset.
-TEST_F(HTTPSFallbackTest, TLSv1_1FallbackReset) {
-  SpawnedTestServer::SSLOptions ssl_options(
-      SpawnedTestServer::SSLOptions::CERT_OK);
-  ssl_options.tls_intolerant =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
-  ssl_options.tls_intolerance_type =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANCE_RESET;
-
-  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
-  ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
-  ExpectConnection(SSL_CONNECTION_VERSION_TLS1_1);
-}
-#endif  // !OS_ANDROID
-
-// Tests that we don't fallback, even if enabled, on handshake failure with
-// servers that implement TLS_FALLBACK_SCSV. Also ensure that the original error
-// code is reported.
-TEST_F(HTTPSFallbackTest, FallbackSCSV) {
-  SpawnedTestServer::SSLOptions ssl_options(
-      SpawnedTestServer::SSLOptions::CERT_OK);
-  // Configure HTTPS server to be intolerant of TLS >= 1.1 in order to trigger
-  // a version fallback.
-  ssl_options.tls_intolerant =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_1;
-  // Have the server process TLS_FALLBACK_SCSV so that version fallback
-  // connections are rejected.
-  ssl_options.fallback_scsv_enabled = true;
-
-  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
-  ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
-
-  // ERR_SSL_VERSION_OR_CIPHER_MISMATCH is how the server simulates version
-  // intolerance. If the fallback SCSV is processed when the original error
-  // that caused the fallback should be returned, which should be
-  // ERR_SSL_VERSION_OR_CIPHER_MISMATCH.
   ExpectFailure(ERR_SSL_VERSION_OR_CIPHER_MISMATCH);
-}
-
-// Tests that we don't fallback, even if enabled, on connection closed with
-// servers that implement TLS_FALLBACK_SCSV. Also ensure that the original error
-// code is reported.
-TEST_F(HTTPSFallbackTest, FallbackSCSVClosed) {
-  SpawnedTestServer::SSLOptions ssl_options(
-      SpawnedTestServer::SSLOptions::CERT_OK);
-  // Configure HTTPS server to be intolerant of TLS >= 1.1 in order to trigger
-  // a version fallback.
-  ssl_options.tls_intolerant =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_1;
-  ssl_options.tls_intolerance_type =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANCE_CLOSE;
-  // Have the server process TLS_FALLBACK_SCSV so that version fallback
-  // connections are rejected.
-  ssl_options.fallback_scsv_enabled = true;
-
-  set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
-  ASSERT_NO_FATAL_FAILURE(DoFallbackTest(ssl_options));
-
-  // The original error should be replayed on rejected fallback.
-  ExpectFailure(ERR_CONNECTION_CLOSED);
-}
-
-// Test that fallback probe connections don't cause sessions to be cached.
-TEST_F(HTTPSRequestTest, FallbackProbeNoCache) {
-  SpawnedTestServer::SSLOptions ssl_options(
-      SpawnedTestServer::SSLOptions::CERT_OK);
-  ssl_options.tls_intolerant =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANT_TLS1_2;
-  ssl_options.tls_intolerance_type =
-      SpawnedTestServer::SSLOptions::TLS_INTOLERANCE_CLOSE;
-  ssl_options.record_resume = true;
-
-  SpawnedTestServer test_server(
-      SpawnedTestServer::TYPE_HTTPS,
-      ssl_options,
-      base::FilePath(FILE_PATH_LITERAL("net/data/ssl")));
-  ASSERT_TRUE(test_server.Start());
-
-  SSLClientSocket::ClearSessionCache();
-
-  // Make a connection that does a probe fallback to TLSv1.1 but fails because
-  // fallback is disabled. We don't wish a session for this connection to be
-  // inserted locally.
-  {
-    TestDelegate delegate;
-    FallbackTestURLRequestContext context(true);
-
-    context.Init();
-    std::unique_ptr<URLRequest> request(context.CreateRequest(
-        test_server.GetURL("/"), DEFAULT_PRIORITY, &delegate));
-    request->Start();
-
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, delegate.response_started_count());
-    EXPECT_FALSE(request->status().is_success());
-    EXPECT_EQ(URLRequestStatus::FAILED, request->status().status());
-    EXPECT_EQ(ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION,
-              request->status().error());
-  }
-
-  // Now allow TLSv1.1 fallback connections and request the session cache log.
-  {
-    TestDelegate delegate;
-    FallbackTestURLRequestContext context(true);
-    context.set_fallback_min_version(SSL_PROTOCOL_VERSION_TLS1_1);
-
-    context.Init();
-    std::unique_ptr<URLRequest> request(context.CreateRequest(
-        test_server.GetURL("ssl-session-cache"), DEFAULT_PRIORITY, &delegate));
-    request->Start();
-
-    base::RunLoop().Run();
-
-    EXPECT_EQ(1, delegate.response_started_count());
-    EXPECT_NE(0, delegate.bytes_received());
-    EXPECT_EQ(
-        SSL_CONNECTION_VERSION_TLS1_1,
-        SSLConnectionStatusToVersion(request->ssl_info().connection_status));
-    EXPECT_TRUE(request->ssl_info().connection_status &
-                SSL_CONNECTION_VERSION_FALLBACK);
-
-    std::vector<std::string> lines;
-    // If no sessions were cached then the server should have seen two sessions
-    // inserted with no lookups.
-    AssertTwoDistinctSessionsInserted(delegate.data_received());
-  }
 }
 
 class HTTPSSessionTest : public testing::Test {
@@ -9210,7 +9071,9 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
   }
 
   void SetUp() override {
-    SetupContext(&context_);
+    context_.SetCTPolicyEnforcer(
+        base::MakeUnique<AllowAnyCertCTPolicyEnforcer>());
+    SetupContext();
     context_.Init();
 
     scoped_refptr<X509Certificate> root_cert =
@@ -9253,11 +9116,31 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
   }
 
  protected:
+  class AllowAnyCertCTPolicyEnforcer : public CTPolicyEnforcer {
+   public:
+    AllowAnyCertCTPolicyEnforcer() = default;
+    ~AllowAnyCertCTPolicyEnforcer() override = default;
+
+    ct::CertPolicyCompliance DoesConformToCertPolicy(
+        X509Certificate* cert,
+        const SCTList& verified_scts,
+        const BoundNetLog& net_log) override {
+      return ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
+    }
+
+    ct::EVPolicyCompliance DoesConformToCTEVPolicy(
+        X509Certificate* cert,
+        const ct::EVCertsWhitelist* ev_whitelist,
+        const SCTList& verified_scts,
+        const BoundNetLog& net_log) override {
+      return ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS;
+    }
+  };
   // SetupContext configures the URLRequestContext that will be used for making
   // connetions to testserver. This can be overridden in test subclasses for
   // different behaviour.
-  virtual void SetupContext(URLRequestContext* context) {
-    context->set_ssl_config_service(new TestSSLConfigService(
+  virtual void SetupContext() {
+    context_.set_ssl_config_service(new TestSSLConfigService(
         true /* check for EV */, true /* online revocation checking */,
         false /* require rev. checking for local
                                           anchors */,
@@ -9312,12 +9195,7 @@ static bool SystemUsesChromiumEVMetadata() {
 }
 
 static bool SystemSupportsOCSP() {
-#if defined(USE_OPENSSL_CERTS)
-  // http://crbug.com/117478 - OpenSSL does not support OCSP.
-  return false;
-#elif defined(OS_WIN)
-  return base::win::GetVersion() >= base::win::VERSION_VISTA;
-#elif defined(OS_ANDROID)
+#if defined(OS_ANDROID)
   // TODO(jnd): http://crbug.com/117478 - EV verification is not yet supported.
   return false;
 #else
@@ -9326,10 +9204,8 @@ static bool SystemSupportsOCSP() {
 }
 
 static bool SystemSupportsOCSPStapling() {
-#if defined(USE_NSS_CERTS)
+#if defined(USE_NSS_CERTS) || defined(OS_WIN)
   return true;
-#elif defined(OS_WIN)
-  return base::win::GetVersion() >= base::win::VERSION_VISTA;
 #else
   return false;
 #endif
@@ -9451,8 +9327,8 @@ TEST_F(HTTPSOCSPTest, MAYBE_RevokedStapled) {
 
 class HTTPSHardFailTest : public HTTPSOCSPTest {
  protected:
-  void SetupContext(URLRequestContext* context) override {
-    context->set_ssl_config_service(new TestSSLConfigService(
+  void SetupContext() override {
+    context_.set_ssl_config_service(new TestSSLConfigService(
         false /* check for EV */, false /* online revocation checking */,
         true /* require rev. checking for local
                                          anchors */,
@@ -9488,8 +9364,8 @@ TEST_F(HTTPSHardFailTest, FailsOnOCSPInvalid) {
 
 class HTTPSEVCRLSetTest : public HTTPSOCSPTest {
  protected:
-  void SetupContext(URLRequestContext* context) override {
-    context->set_ssl_config_service(new TestSSLConfigService(
+  void SetupContext() override {
+    context_.set_ssl_config_service(new TestSSLConfigService(
         true /* check for EV */, false /* online revocation checking */,
         false /* require rev. checking for local
                                           anchors */,
@@ -9673,8 +9549,8 @@ TEST_F(HTTPSEVCRLSetTest, ExpiredCRLSetAndRevokedNonEVCert) {
 
 class HTTPSCRLSetTest : public HTTPSOCSPTest {
  protected:
-  void SetupContext(URLRequestContext* context) override {
-    context->set_ssl_config_service(new TestSSLConfigService(
+  void SetupContext() override {
+    context_.set_ssl_config_service(new TestSSLConfigService(
         false /* check for EV */, false /* online revocation checking */,
         false /* require rev. checking for local
                                           anchors */,
@@ -10030,6 +9906,19 @@ TEST_F(URLRequestTestFTP, FTPCacheLoginBoxCredentials) {
     EXPECT_EQ(GetTestFileContents(), d->data_received());
   }
 }
+
+TEST_F(URLRequestTestFTP, RawBodyBytes) {
+  ASSERT_TRUE(ftp_test_server_.Start());
+
+  TestDelegate d;
+  std::unique_ptr<URLRequest> req(default_context().CreateRequest(
+      ftp_test_server_.GetURL("simple.html"), DEFAULT_PRIORITY, &d));
+  req->Start();
+  base::RunLoop().Run();
+
+  EXPECT_EQ(6, req->GetRawBodyBytes());
+}
+
 #endif  // !defined(DISABLE_FTP_SUPPORT)
 
 TEST_F(URLRequestTest, NetworkAccessedClearBeforeNetworkStart) {

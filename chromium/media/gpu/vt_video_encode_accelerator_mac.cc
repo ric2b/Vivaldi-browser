@@ -42,10 +42,15 @@ struct VTVideoEncodeAccelerator::InProgressFrameEncode {
 };
 
 struct VTVideoEncodeAccelerator::EncodeOutput {
-  EncodeOutput(VTEncodeInfoFlags info_flags, CMSampleBufferRef sbuf)
-      : info(info_flags), sample_buffer(sbuf, base::scoped_policy::RETAIN) {}
+  EncodeOutput(VTEncodeInfoFlags info_flags,
+               CMSampleBufferRef sbuf,
+               base::TimeDelta timestamp)
+      : info(info_flags),
+        sample_buffer(sbuf, base::scoped_policy::RETAIN),
+        capture_timestamp(timestamp) {}
   const VTEncodeInfoFlags info;
   const base::ScopedCFTypeRef<CMSampleBufferRef> sample_buffer;
+  const base::TimeDelta capture_timestamp;
 
  private:
   DISALLOW_IMPLICIT_CONSTRUCTORS(EncodeOutput);
@@ -89,7 +94,7 @@ VTVideoEncodeAccelerator::~VTVideoEncodeAccelerator() {
   DCHECK(!encoder_task_weak_factory_.HasWeakPtrs());
 }
 
-media::VideoEncodeAccelerator::SupportedProfiles
+VideoEncodeAccelerator::SupportedProfiles
 VTVideoEncodeAccelerator::GetSupportedProfiles() {
   DVLOG(3) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -107,7 +112,7 @@ VTVideoEncodeAccelerator::GetSupportedProfiles() {
     return profiles;
   }
   const bool rv = CreateCompressionSession(
-      media::video_toolbox::DictionaryWithKeysAndValues(nullptr, nullptr, 0),
+      video_toolbox::DictionaryWithKeysAndValues(nullptr, nullptr, 0),
       gfx::Size(kDefaultResolutionWidth, kDefaultResolutionHeight), true);
   DestroyCompressionSession();
   if (!rv) {
@@ -117,7 +122,7 @@ VTVideoEncodeAccelerator::GetSupportedProfiles() {
   }
 
   SupportedProfile profile;
-  profile.profile = media::H264PROFILE_BASELINE;
+  profile.profile = H264PROFILE_BASELINE;
   profile.max_framerate_numerator = kMaxFrameRateNumerator;
   profile.max_framerate_denominator = kMaxFrameRateDenominator;
   profile.max_resolution = gfx::Size(kMaxResolutionWidth, kMaxResolutionHeight);
@@ -125,26 +130,25 @@ VTVideoEncodeAccelerator::GetSupportedProfiles() {
   return profiles;
 }
 
-bool VTVideoEncodeAccelerator::Initialize(
-    media::VideoPixelFormat format,
-    const gfx::Size& input_visible_size,
-    media::VideoCodecProfile output_profile,
-    uint32_t initial_bitrate,
-    Client* client) {
+bool VTVideoEncodeAccelerator::Initialize(VideoPixelFormat format,
+                                          const gfx::Size& input_visible_size,
+                                          VideoCodecProfile output_profile,
+                                          uint32_t initial_bitrate,
+                                          Client* client) {
   DVLOG(3) << __FUNCTION__
-           << ": input_format=" << media::VideoPixelFormatToString(format)
+           << ": input_format=" << VideoPixelFormatToString(format)
            << ", input_visible_size=" << input_visible_size.ToString()
            << ", output_profile=" << output_profile
            << ", initial_bitrate=" << initial_bitrate;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(client);
 
-  if (media::PIXEL_FORMAT_I420 != format) {
+  if (PIXEL_FORMAT_I420 != format) {
     DLOG(ERROR) << "Input format not supported= "
-                << media::VideoPixelFormatToString(format);
+                << VideoPixelFormatToString(format);
     return false;
   }
-  if (media::H264PROFILE_BASELINE != output_profile) {
+  if (H264PROFILE_BASELINE != output_profile) {
     DLOG(ERROR) << "Output profile not supported= " << output_profile;
     return false;
   }
@@ -185,9 +189,8 @@ bool VTVideoEncodeAccelerator::Initialize(
   return true;
 }
 
-void VTVideoEncodeAccelerator::Encode(
-    const scoped_refptr<media::VideoFrame>& frame,
-    bool force_keyframe) {
+void VTVideoEncodeAccelerator::Encode(const scoped_refptr<VideoFrame>& frame,
+                                      bool force_keyframe) {
   DVLOG(3) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -197,7 +200,7 @@ void VTVideoEncodeAccelerator::Encode(
 }
 
 void VTVideoEncodeAccelerator::UseOutputBitstreamBuffer(
-    const media::BitstreamBuffer& buffer) {
+    const BitstreamBuffer& buffer) {
   DVLOG(3) << __FUNCTION__ << ": buffer size=" << buffer.size();
   DCHECK(thread_checker_.CalledOnValidThread());
 
@@ -256,7 +259,7 @@ void VTVideoEncodeAccelerator::Destroy() {
 }
 
 void VTVideoEncodeAccelerator::EncodeTask(
-    const scoped_refptr<media::VideoFrame>& frame,
+    const scoped_refptr<VideoFrame>& frame,
     bool force_keyframe) {
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
   DCHECK(compression_session_);
@@ -265,15 +268,15 @@ void VTVideoEncodeAccelerator::EncodeTask(
   // TODO(emircan): See if we can eliminate a copy here by using
   // CVPixelBufferPool for the allocation of incoming VideoFrames.
   base::ScopedCFTypeRef<CVPixelBufferRef> pixel_buffer =
-      media::WrapVideoFrameInCVPixelBuffer(*frame);
+      WrapVideoFrameInCVPixelBuffer(*frame);
   base::ScopedCFTypeRef<CFDictionaryRef> frame_props =
-      media::video_toolbox::DictionaryWithKeyValue(
+      video_toolbox::DictionaryWithKeyValue(
           videotoolbox_glue_->kVTEncodeFrameOptionKey_ForceKeyFrame(),
           force_keyframe ? kCFBooleanTrue : kCFBooleanFalse);
 
   base::TimeTicks ref_time;
-  if (!frame->metadata()->GetTimeTicks(
-          media::VideoFrameMetadata::REFERENCE_TIME, &ref_time)) {
+  if (!frame->metadata()->GetTimeTicks(VideoFrameMetadata::REFERENCE_TIME,
+                                       &ref_time)) {
     ref_time = base::TimeTicks::Now();
   }
   auto timestamp_cm = CoreMediaGlue::CMTimeMake(
@@ -327,7 +330,7 @@ void VTVideoEncodeAccelerator::RequestEncodingParametersChangeTask(
   }
 
   if (framerate != static_cast<uint32_t>(frame_rate_)) {
-    media::video_toolbox::SessionPropertySetter session_property_setter(
+    video_toolbox::SessionPropertySetter session_property_setter(
         compression_session_, videotoolbox_glue_);
     session_property_setter.Set(
         videotoolbox_glue_->kVTCompressionPropertyKey_ExpectedFrameRate(),
@@ -348,14 +351,14 @@ void VTVideoEncodeAccelerator::SetAdjustedBitrate(int32_t bitrate) {
     return;
 
   encoder_set_bitrate_ = bitrate;
-  media::video_toolbox::SessionPropertySetter session_property_setter(
+  video_toolbox::SessionPropertySetter session_property_setter(
       compression_session_, videotoolbox_glue_);
   bool rv = session_property_setter.Set(
       videotoolbox_glue_->kVTCompressionPropertyKey_AverageBitRate(),
       encoder_set_bitrate_);
   rv &= session_property_setter.Set(
       videotoolbox_glue_->kVTCompressionPropertyKey_DataRateLimits(),
-      media::video_toolbox::ArrayWithIntegerAndFloat(
+      video_toolbox::ArrayWithIntegerAndFloat(
           encoder_set_bitrate_ / kBitsPerByte, 1.0f));
   DLOG_IF(ERROR, !rv)
       << "Couldn't change bitrate parameters of encode session.";
@@ -374,7 +377,7 @@ void VTVideoEncodeAccelerator::DestroyTask() {
 }
 
 void VTVideoEncodeAccelerator::NotifyError(
-    media::VideoEncodeAccelerator::Error error) {
+    VideoEncodeAccelerator::Error error) {
   DCHECK(encoder_thread_task_runner_->BelongsToCurrentThread());
   client_task_runner_->PostTask(
       FROM_HERE, base::Bind(&Client::NotifyError, client_, error));
@@ -393,15 +396,14 @@ void VTVideoEncodeAccelerator::CompressionCallback(void* encoder_opaque,
   auto encoder = reinterpret_cast<VTVideoEncodeAccelerator*>(encoder_opaque);
   DCHECK(encoder);
 
-  // Release InProgressFrameEncode, since we don't have support to return
-  // timestamps at this point.
-  std::unique_ptr<InProgressFrameEncode> request(
+  // InProgressFrameEncode holds timestamp information of the encoded frame.
+  std::unique_ptr<InProgressFrameEncode> frame_info(
       reinterpret_cast<InProgressFrameEncode*>(request_opaque));
-  request.reset();
 
   // EncodeOutput holds onto CMSampleBufferRef when posting task between
   // threads.
-  std::unique_ptr<EncodeOutput> encode_output(new EncodeOutput(info, sbuf));
+  std::unique_ptr<EncodeOutput> encode_output(
+      new EncodeOutput(info, sbuf, frame_info->timestamp));
 
   // This method is NOT called on |encoder_thread_|, so we still need to
   // post a task back to it to do work.
@@ -444,8 +446,9 @@ void VTVideoEncodeAccelerator::ReturnBitstreamBuffer(
   if (encode_output->info & VideoToolboxGlue::kVTEncodeInfo_FrameDropped) {
     DVLOG(2) << " frame dropped";
     client_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&Client::BitstreamBufferReady, client_,
-                              buffer_ref->id, 0, false));
+        FROM_HERE,
+        base::Bind(&Client::BitstreamBufferReady, client_, buffer_ref->id, 0,
+                   false, encode_output->capture_timestamp));
     return;
   }
 
@@ -457,7 +460,7 @@ void VTVideoEncodeAccelerator::ReturnBitstreamBuffer(
       sample_attachments, CoreMediaGlue::kCMSampleAttachmentKey_NotSync());
 
   size_t used_buffer_size = 0;
-  const bool copy_rv = media::video_toolbox::CopySampleBufferToAnnexBBuffer(
+  const bool copy_rv = video_toolbox::CopySampleBufferToAnnexBBuffer(
       encode_output->sample_buffer.get(), keyframe, buffer_ref->size,
       reinterpret_cast<char*>(buffer_ref->shm->memory()), &used_buffer_size);
   if (!copy_rv) {
@@ -467,8 +470,9 @@ void VTVideoEncodeAccelerator::ReturnBitstreamBuffer(
   bitrate_adjuster_.Update(used_buffer_size);
 
   client_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Client::BitstreamBufferReady, client_,
-                            buffer_ref->id, used_buffer_size, keyframe));
+      FROM_HERE,
+      base::Bind(&Client::BitstreamBufferReady, client_, buffer_ref->id,
+                 used_buffer_size, keyframe, encode_output->capture_timestamp));
 }
 
 bool VTVideoEncodeAccelerator::ResetCompressionSession() {
@@ -483,12 +487,10 @@ bool VTVideoEncodeAccelerator::ResetCompressionSession() {
       CoreVideoGlue::kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange};
   CFTypeRef attributes_values[] = {
       kCFBooleanTrue,
-      media::video_toolbox::DictionaryWithKeysAndValues(nullptr, nullptr, 0)
-          .release(),
-      media::video_toolbox::ArrayWithIntegers(format, arraysize(format))
-          .release()};
+      video_toolbox::DictionaryWithKeysAndValues(nullptr, nullptr, 0).release(),
+      video_toolbox::ArrayWithIntegers(format, arraysize(format)).release()};
   const base::ScopedCFTypeRef<CFDictionaryRef> attributes =
-      media::video_toolbox::DictionaryWithKeysAndValues(
+      video_toolbox::DictionaryWithKeysAndValues(
           attributes_keys, attributes_values, arraysize(attributes_keys));
   for (auto& v : attributes_values)
     CFRelease(v);
@@ -526,7 +528,7 @@ bool VTVideoEncodeAccelerator::CreateCompressionSession(
     encoder_values.push_back(kCFBooleanTrue);
   }
   base::ScopedCFTypeRef<CFDictionaryRef> encoder_spec =
-      media::video_toolbox::DictionaryWithKeysAndValues(
+      video_toolbox::DictionaryWithKeysAndValues(
           encoder_keys.data(), encoder_values.data(), encoder_keys.size());
 
   // Create the compression session.
@@ -557,7 +559,7 @@ bool VTVideoEncodeAccelerator::ConfigureCompressionSession() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(compression_session_);
 
-  media::video_toolbox::SessionPropertySetter session_property_setter(
+  video_toolbox::SessionPropertySetter session_property_setter(
       compression_session_, videotoolbox_glue_);
   bool rv = true;
   rv &= session_property_setter.Set(

@@ -178,6 +178,18 @@ class MediaRouterMojoImplTest : public MediaRouterMojoTest {
  public:
   MediaRouterMojoImplTest() {}
   ~MediaRouterMojoImplTest() override {}
+
+  void ExpectResultBucketCount(const std::string& operation,
+                               RouteRequestResult::ResultCode result_code,
+                               int expected_count) {
+    histogram_tester_.ExpectBucketCount(
+        "MediaRouter.Provider." + operation + ".Result",
+        result_code,
+        expected_count);
+  }
+
+ private:
+  base::HistogramTester histogram_tester_;
 };
 
 // ProcessManager with a mocked method subset, for testing extension suspend
@@ -209,7 +221,7 @@ class TestProcessManager : public extensions::ProcessManager {
 // Mockable class for awaiting RegisterMediaRouteProvider callbacks.
 class RegisterMediaRouteProviderHandler {
  public:
-  MOCK_METHOD1(Invoke, void(const std::string& instance_id));
+  MOCK_METHOD1(Invoke, void(mojo::String instance_id));
 };
 
 TEST_F(MediaRouterMojoImplTest, CreateRoute) {
@@ -375,7 +387,13 @@ TEST_F(MediaRouterMojoImplTest, OffTheRecordRoutesTerminatedOnProfileShutdown) {
   run_loop.RunUntilIdle();
 
   EXPECT_CALL(mock_media_route_provider_,
-              TerminateRoute(mojo::String(kRouteId)));
+              TerminateRoute(mojo::String(kRouteId), _))
+      .WillOnce(Invoke([](
+          const mojo::String& route_id,
+          const interfaces::MediaRouteProvider::TerminateRouteCallback& cb) {
+         cb.Run(mojo::String(), interfaces::RouteRequestResultCode::OK);
+       }));
+
   base::RunLoop run_loop2;
   router()->OnOffTheRecordProfileShutdown();
   run_loop2.RunUntilIdle();
@@ -633,10 +651,36 @@ TEST_F(MediaRouterMojoImplTest, DetachRoute) {
 TEST_F(MediaRouterMojoImplTest, TerminateRoute) {
   base::RunLoop run_loop;
   EXPECT_CALL(mock_media_route_provider_,
-              TerminateRoute(mojo::String(kRouteId)))
-      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
+              TerminateRoute(mojo::String(kRouteId), _))
+      .WillOnce(Invoke([&run_loop](
+          const mojo::String& route_id,
+          const interfaces::MediaRouteProvider::TerminateRouteCallback& cb) {
+        cb.Run(mojo::String(), interfaces::RouteRequestResultCode::OK);
+      }));
   router()->TerminateRoute(kRouteId);
-  run_loop.Run();
+  run_loop.RunUntilIdle();
+  ExpectResultBucketCount("TerminateRoute",
+                          RouteRequestResult::ResultCode::OK,
+                          1);
+}
+
+TEST_F(MediaRouterMojoImplTest, TerminateRouteFails) {
+  base::RunLoop run_loop;
+  EXPECT_CALL(mock_media_route_provider_,
+              TerminateRoute(mojo::String(kRouteId), _))
+      .WillOnce(Invoke([&run_loop](
+          const mojo::String& route_id,
+          const interfaces::MediaRouteProvider::TerminateRouteCallback& cb) {
+        cb.Run(mojo::String(), interfaces::RouteRequestResultCode::TIMED_OUT);
+      }));
+  router()->TerminateRoute(kRouteId);
+  run_loop.RunUntilIdle();
+  ExpectResultBucketCount("TerminateRoute",
+                          RouteRequestResult::ResultCode::OK,
+                          0);
+  ExpectResultBucketCount("TerminateRoute",
+                          RouteRequestResult::ResultCode::TIMED_OUT,
+                          1);
 }
 
 TEST_F(MediaRouterMojoImplTest, HandleIssue) {
@@ -998,16 +1042,13 @@ TEST_F(MediaRouterMojoImplTest, PresentationSessionMessagesSingleObserver) {
 
   base::RunLoop run_loop;
   MediaRoute::Id expected_route_id("foo");
-  interfaces::MediaRouteProvider::ListenForRouteMessagesCallback mojo_callback;
   EXPECT_CALL(mock_media_route_provider_,
-              ListenForRouteMessages(Eq(expected_route_id), _))
-      .WillOnce(DoAll(SaveArg<1>(&mojo_callback),
-                      InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); })));
+              StartListeningForRouteMessages(Eq(expected_route_id)))
+      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
 
-  // |pass_ownership| param is "true" here because there is only one observer.
+  // |pass_ownership| param is |true| here because there is only one observer.
   ListenForMessagesCallbackHandler handler(std::move(expected_messages), true);
 
-  EXPECT_CALL(handler, InvokeObserver());
   // Creating PresentationSessionMessagesObserver will register itself to the
   // MediaRouter, which in turn will start listening for route messages.
   std::unique_ptr<PresentationSessionMessagesObserver> observer(
@@ -1017,30 +1058,9 @@ TEST_F(MediaRouterMojoImplTest, PresentationSessionMessagesSingleObserver) {
           expected_route_id, router()));
   run_loop.Run();
 
-  base::RunLoop run_loop2;
-  // Simulate messages by invoking the saved mojo callback.
-  // We expect one more ListenForRouteMessages call since |observer| was
-  // still registered when the first set of messages arrived.
-  mojo_callback.Run(std::move(mojo_messages), false);
-  interfaces::MediaRouteProvider::ListenForRouteMessagesCallback
-      mojo_callback_2;
-  EXPECT_CALL(mock_media_route_provider_, ListenForRouteMessages(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&mojo_callback_2),
-                      InvokeWithoutArgs([&run_loop2]() { run_loop2.Quit(); })));
-  run_loop2.Run();
-
-  base::RunLoop run_loop3;
-  // Stop listening for messages. In particular, MediaRouterMojoImpl will not
-  // call ListenForRouteMessages again when it sees there are no more observers.
-  mojo::Array<interfaces::RouteMessagePtr> mojo_messages_2(1);
-  mojo_messages_2[0] = interfaces::RouteMessage::New();
-  mojo_messages_2[0]->type = interfaces::RouteMessage::Type::TEXT;
-  mojo_messages_2[0]->message = "foo";
-  observer.reset();
-  mojo_callback_2.Run(std::move(mojo_messages_2), false);
-  EXPECT_CALL(mock_media_route_provider_, StopListeningForRouteMessages(_))
-      .WillOnce(InvokeWithoutArgs([&run_loop3]() { run_loop3.Quit(); }));
-  run_loop3.Run();
+  EXPECT_CALL(handler, InvokeObserver());
+  router()->OnRouteMessagesReceived(expected_route_id,
+                                    std::move(mojo_messages));
 }
 
 TEST_F(MediaRouterMojoImplTest, PresentationSessionMessagesMultipleObservers) {
@@ -1066,17 +1086,14 @@ TEST_F(MediaRouterMojoImplTest, PresentationSessionMessagesMultipleObservers) {
 
   base::RunLoop run_loop;
   MediaRoute::Id expected_route_id("foo");
-  interfaces::MediaRouteProvider::ListenForRouteMessagesCallback mojo_callback;
   EXPECT_CALL(mock_media_route_provider_,
-              ListenForRouteMessages(Eq(expected_route_id), _))
-      .WillOnce(DoAll(SaveArg<1>(&mojo_callback),
-                      InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); })));
+              StartListeningForRouteMessages(Eq(expected_route_id)))
+      .WillOnce(InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); }));
 
-  // |pass_ownership| param is "false" here because there are more than one
+  // |pass_ownership| param is |false| here because there are more than one
   // observers.
   ListenForMessagesCallbackHandler handler(std::move(expected_messages), false);
 
-  EXPECT_CALL(handler, InvokeObserver()).Times(2);
   // Creating PresentationSessionMessagesObserver will register itself to the
   // MediaRouter, which in turn will start listening for route messages.
   std::unique_ptr<PresentationSessionMessagesObserver> observer1(
@@ -1091,56 +1108,9 @@ TEST_F(MediaRouterMojoImplTest, PresentationSessionMessagesMultipleObservers) {
           expected_route_id, router()));
   run_loop.Run();
 
-  base::RunLoop run_loop2;
-  // Simulate messages by invoking the saved mojo callback.
-  // We expect one more ListenForRouteMessages call since |observer| was
-  // still registered when the first set of messages arrived.
-  mojo_callback.Run(std::move(mojo_messages), false);
-  interfaces::MediaRouteProvider::ListenForRouteMessagesCallback
-      mojo_callback_2;
-  EXPECT_CALL(mock_media_route_provider_, ListenForRouteMessages(_, _))
-      .WillOnce(DoAll(SaveArg<1>(&mojo_callback_2),
-                      InvokeWithoutArgs([&run_loop2]() { run_loop2.Quit(); })));
-  run_loop2.Run();
-
-  base::RunLoop run_loop3;
-  // Stop listening for messages. In particular, MediaRouterMojoImpl will not
-  // call ListenForRouteMessages again when it sees there are no more observers.
-  mojo::Array<interfaces::RouteMessagePtr> mojo_messages_2(1);
-  mojo_messages_2[0] = interfaces::RouteMessage::New();
-  mojo_messages_2[0]->type = interfaces::RouteMessage::Type::TEXT;
-  mojo_messages_2[0]->message = "foo";
-  observer1.reset();
-  observer2.reset();
-  mojo_callback_2.Run(std::move(mojo_messages_2), false);
-  EXPECT_CALL(mock_media_route_provider_, StopListeningForRouteMessages(_))
-      .WillOnce(InvokeWithoutArgs([&run_loop3]() { run_loop3.Quit(); }));
-  run_loop3.Run();
-}
-
-TEST_F(MediaRouterMojoImplTest, PresentationSessionMessagesError) {
-  MediaRoute::Id expected_route_id("foo");
-  interfaces::MediaRouteProvider::ListenForRouteMessagesCallback mojo_callback;
-  base::RunLoop run_loop;
-  EXPECT_CALL(mock_media_route_provider_,
-              ListenForRouteMessages(Eq(expected_route_id), _))
-      .WillOnce(DoAll(SaveArg<1>(&mojo_callback),
-                      InvokeWithoutArgs([&run_loop]() { run_loop.Quit(); })));
-
-  ListenForMessagesCallbackHandler handler(
-      ScopedVector<content::PresentationSessionMessage>(), true);
-
-  // Creating PresentationSessionMessagesObserver will register itself to the
-  // MediaRouter, which in turn will start listening for route messages.
-  std::unique_ptr<PresentationSessionMessagesObserver> observer1(
-      new PresentationSessionMessagesObserver(
-          base::Bind(&ListenForMessagesCallbackHandler::Invoke,
-                     base::Unretained(&handler)),
-          expected_route_id, router()));
-  run_loop.Run();
-
-  mojo_callback.Run(mojo::Array<interfaces::RouteMessagePtr>(), true);
-  ProcessEventLoop();
+  EXPECT_CALL(handler, InvokeObserver()).Times(2);
+  router()->OnRouteMessagesReceived(expected_route_id,
+                                    std::move(mojo_messages));
 }
 
 TEST_F(MediaRouterMojoImplTest, PresentationConnectionStateChangedCallback) {
@@ -1317,7 +1287,7 @@ class MediaRouterMojoExtensionTest : public ::testing::Test {
                    base::Unretained(&provide_handler_)));
   }
 
-  void ProcessEventLoop() { message_loop_.RunUntilIdle(); }
+  void ProcessEventLoop() { base::RunLoop().RunUntilIdle(); }
 
   void ExpectWakeReasonBucketCount(MediaRouteProviderWakeReason reason,
                                    int expected_count) {

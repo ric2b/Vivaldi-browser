@@ -26,6 +26,8 @@
 
 #include "core/editing/iterators/TextIteratorTextState.h"
 
+#include "core/layout/LayoutText.h"
+
 namespace blink {
 
 TextIteratorTextState::TextIteratorTextState(bool emitsOriginalText)
@@ -177,7 +179,7 @@ void TextIteratorTextState::appendTextTo(ForwardsTextBuffer* output, unsigned po
             output->pushRange(string().characters16() + offset, lengthToAppend);
         return;
     }
-    ASSERT_NOT_REACHED(); // "We shouldn't be attempting to append text that doesn't exist.";
+    NOTREACHED(); // "We shouldn't be attempting to append text that doesn't exist.";
 }
 
 } // namespace blink

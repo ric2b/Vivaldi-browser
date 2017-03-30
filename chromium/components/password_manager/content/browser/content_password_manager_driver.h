@@ -65,10 +65,13 @@ class ContentPasswordManagerDriver : public PasswordManagerDriver {
                       const base::string16& password) override;
   void PreviewSuggestion(const base::string16& username,
                          const base::string16& password) override;
+  void ShowInitialPasswordAccountSuggestions(
+      const autofill::PasswordFormFillData& form_data) override;
   void ClearPreviewedForm() override;
   void ForceSavePassword() override;
   void GeneratePassword() override;
   void SendLoggingAvailability() override;
+  void AllowToRunFormClassifier() override;
 
   PasswordGenerationManager* GetPasswordGenerationManager() override;
   PasswordManager* GetPasswordManager() override;
@@ -90,6 +93,9 @@ class ContentPasswordManagerDriver : public PasswordManagerDriver {
   void OnPresaveGeneratedPassword(const autofill::PasswordForm& password_form);
   void OnPasswordNoLongerGenerated(const autofill::PasswordForm& password_form);
   void OnFocusedPasswordFormFound(const autofill::PasswordForm& password_form);
+  void OnSaveGenerationFieldDetectedByClassifier(
+      const autofill::PasswordForm& password_form,
+      const base::string16& generation_field);
 
  private:
   bool CheckChildProcessSecurityPolicy(const GURL& url,

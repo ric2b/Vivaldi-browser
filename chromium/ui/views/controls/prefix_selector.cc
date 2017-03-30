@@ -64,6 +64,10 @@ ui::TextInputMode PrefixSelector::GetTextInputMode() const {
   return ui::TEXT_INPUT_MODE_DEFAULT;
 }
 
+base::i18n::TextDirection PrefixSelector::GetTextDirection() const {
+  return base::i18n::UNKNOWN_DIRECTION;
+}
+
 int PrefixSelector::GetTextInputFlags() const {
   return 0;
 }
@@ -135,12 +139,13 @@ void PrefixSelector::ExtendSelectionAndDelete(size_t before, size_t after) {
 void PrefixSelector::EnsureCaretInRect(const gfx::Rect& rect) {
 }
 
-bool PrefixSelector::IsEditCommandEnabled(int command_id) {
+bool PrefixSelector::IsTextEditCommandEnabled(
+    ui::TextEditCommand command) const {
   return false;
 }
 
-void PrefixSelector::SetEditCommandForNextKeyEvent(int command_id) {
-}
+void PrefixSelector::SetTextEditCommandForNextKeyEvent(
+    ui::TextEditCommand command) {}
 
 void PrefixSelector::OnTextInput(const base::string16& text) {
   // Small hack to filter out 'tab' and 'enter' input, as the expectation is

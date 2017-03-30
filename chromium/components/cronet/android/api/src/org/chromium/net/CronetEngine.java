@@ -4,10 +4,12 @@
 
 package org.chromium.net;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.net.http.HttpResponseCache;
 import android.support.annotation.IntDef;
 import android.support.annotation.Nullable;
+import android.support.annotation.VisibleForTesting;
 import android.util.Log;
 
 import java.io.File;
@@ -118,6 +120,7 @@ public abstract class CronetEngine {
         private long mHttpCacheMaxSize;
         private String mExperimentalOptions;
         private long mMockCertVerifier;
+        private boolean mNetworkQualityEstimatorEnabled;
 
         /**
          * Default config enables SPDY, disables QUIC, SDCH and HTTP cache.
@@ -131,6 +134,7 @@ public abstract class CronetEngine {
             enableHTTP2(true);
             enableSDCH(false);
             enableHttpCache(HTTP_CACHE_DISABLED, 0);
+            enableNetworkQualityEstimator(false);
         }
 
         /**
@@ -589,14 +593,44 @@ public abstract class CronetEngine {
          * can be used to create a MockCertVerifier.
          * @param mockCertVerifier pointer to native MockCertVerifier.
          * @return the builder to facilitate chaining.
+         * @hide
          */
-        Builder setMockCertVerifierForTesting(long mockCertVerifier) {
+        @VisibleForTesting
+        public Builder setMockCertVerifierForTesting(long mockCertVerifier) {
             mMockCertVerifier = mockCertVerifier;
             return this;
         }
 
         long mockCertVerifier() {
             return mMockCertVerifier;
+        }
+
+        /**
+         * Enables the network quality estimator, which collects and reports
+         * measurements of round trip time (RTT) and downstream throughput at
+         * various layers of the network stack. After enabling the estimator,
+         * listeners of RTT and throughput can be added with
+         * {@link #addRttListener} and {@link #addThroughputListener} and
+         * removed with {@link #removeRttListener} and
+         * {@link #removeThroughputListener}. The estimator uses memory and CPU
+         * only when enabled.
+         * @param value {@code true} to enable network quality estimator,
+         *            {@code false} to disable.
+         * @hide as it's a prototype.
+         * @return the builder to facilitate chaining.
+         */
+        public Builder enableNetworkQualityEstimator(boolean value) {
+            mNetworkQualityEstimatorEnabled = value;
+            return this;
+        }
+
+        /**
+         * @return true if the network quality estimator has been enabled for
+         * this builder.
+         * @hide as it's a prototype.
+         */
+        boolean networkQualityEstimatorEnabled() {
+            return mNetworkQualityEstimatorEnabled;
         }
 
         /**
@@ -613,11 +647,21 @@ public abstract class CronetEngine {
          * @return constructed {@link CronetEngine}.
          */
         public CronetEngine build() {
-            CronetEngine engine = createContext(this);
+            if (getUserAgent() == null) {
+                setUserAgent(getDefaultUserAgent());
+            }
+            CronetEngine cronetEngine = null;
+            if (!legacyMode()) {
+                cronetEngine = createCronetEngine(this);
+            }
+            if (cronetEngine == null) {
+                cronetEngine = new JavaCronetEngine(getUserAgent());
+            }
+            Log.i(TAG, "Using network stack: " + cronetEngine.getVersionString());
             // Clear MOCK_CERT_VERIFIER reference if there is any, since
             // the ownership has been transferred to the engine.
             mMockCertVerifier = 0;
-            return engine;
+            return cronetEngine;
         }
     }
 
@@ -642,6 +686,7 @@ public abstract class CronetEngine {
      * @hide
      */
     @Deprecated
+    @SuppressLint("WrongConstant") // TODO(jbudorick): Remove this after rolling to the N SDK.
     public final UrlRequest createRequest(
             String url, UrlRequest.Callback callback, Executor executor) {
         return createRequest(url, callback, executor, UrlRequest.Builder.REQUEST_PRIORITY_MEDIUM);
@@ -788,6 +833,18 @@ public abstract class CronetEngine {
     public abstract byte[] getGlobalMetricsDeltas();
 
     /**
+     * Sets the executor which will be used to notify RequestFinished
+     *             listeners, and to notify network quality RTT listeners
+     *             that do not provide an executor.
+     * TODO(tbansal):  http://crbug.com/618034 Remove this API. In short term,
+     * once all Cronet embedders supply a valid executor with
+     * NetworkQualityRTTListener, update the above comment to reflect that
+     * {@link executor} is only used to notify RequestFinishedListeners.
+     * @hide as it's a prototype.
+     */
+    public abstract void setRequestFinishedListenerExecutor(Executor executor);
+
+    /**
      * Enables the network quality estimator, which collects and reports
      * measurements of round trip time (RTT) and downstream throughput at
      * various layers of the network stack. After enabling the estimator,
@@ -798,22 +855,22 @@ public abstract class CronetEngine {
      * only when enabled.
      * @param executor an executor that will be used to notified all
      *            added RTT and throughput listeners.
+     * TODO(tbansal):  http://crbug.com/618034 Remove this API.
      * @hide as it's a prototype.
      */
     public abstract void enableNetworkQualityEstimator(Executor executor);
 
     /**
-     * Enables the network quality estimator for testing. This must be called
-     * before round trip time and throughput listeners are added. Set both
-     * boolean parameters to false for default behavior.
+     * Configures the network quality estimator for testing. This must be called
+     * before round trip time and throughput listeners are added, and after the
+     * network quality estimator has been enabled.
      * @param useLocalHostRequests include requests to localhost in estimates.
-     * @param useSmallerResponses include small responses in throughput estimates.
-     * @param executor an {@link java.util.concurrent.Executor} on which all
-     *            listeners will be called.
+     * @param useSmallerResponses include small responses in throughput
+     * estimates.
      * @hide as it's a prototype.
      */
-    abstract void enableNetworkQualityEstimatorForTesting(
-            boolean useLocalHostRequests, boolean useSmallerResponses, Executor executor);
+    abstract void configureNetworkQualityEstimatorForTesting(
+            boolean useLocalHostRequests, boolean useSmallerResponses);
 
     /**
      * Registers a listener that gets called whenever the network quality
@@ -920,30 +977,6 @@ public abstract class CronetEngine {
      */
     public abstract URLStreamHandlerFactory createURLStreamHandlerFactory();
 
-    /**
-     * Creates a {@link CronetEngine} with the given {@link Builder}.
-     *
-     * @param builder builder to used for creating the CronetEngine instance.
-     * @return the created CronetEngine instance.
-     * @deprecated Use {@link CronetEngine.Builder}.
-     * @hide
-     */
-    @Deprecated
-    public static CronetEngine createContext(Builder builder) {
-        CronetEngine cronetEngine = null;
-        if (builder.getUserAgent() == null) {
-            builder.setUserAgent(builder.getDefaultUserAgent());
-        }
-        if (!builder.legacyMode()) {
-            cronetEngine = createCronetEngine(builder);
-        }
-        if (cronetEngine == null) {
-            cronetEngine = new JavaCronetEngine(builder.getUserAgent());
-        }
-        Log.i(TAG, "Using network stack: " + cronetEngine.getVersionString());
-        return cronetEngine;
-    }
-
     private static CronetEngine createCronetEngine(Builder builder) {
         CronetEngine cronetEngine = null;
         try {
@@ -976,6 +1009,8 @@ public abstract class CronetEngine {
      *
      * @param listener the listener for finished requests.
      *
+     * TODO(tbansal):  http://crbug.com/618034 Remove this API, once all embedders have switched to
+     * using a request finished listener that provides its own executor.
      * @hide as it's a prototype.
      */
     public abstract void addRequestFinishedListener(RequestFinishedListener listener);
@@ -985,6 +1020,8 @@ public abstract class CronetEngine {
      *
      * @param listener the listener to remove.
      *
+     * TODO(tbansal):  http://crbug.com/618034 Remove this API, once all embedders have switched to
+     * using a request finished listener that provides its own executor.
      * @hide it's a prototype.
      */
     public abstract void removeRequestFinishedListener(RequestFinishedListener listener);
@@ -1105,9 +1142,11 @@ public abstract class CronetEngine {
     /**
      * Interface to listen for finished requests that were created via this CronetEngine instance.
      *
+     * TODO(tbansal):  http://crbug.com/618034 Remove this API, and replace it with a listener
+     * whose executor is bound to the lifetime of the listener.
      * @hide as it's a prototype.
      */
-    public interface RequestFinishedListener { // TODO(klm): Add a convenience abstract class.
+    public interface RequestFinishedListener {
         /**
          * Invoked with request info.
          * @param requestInfo {@link UrlRequestInfo} for finished request.

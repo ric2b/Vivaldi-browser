@@ -67,6 +67,11 @@ ConvertToPresentationSessionMessage(interfaces::RouteMessagePtr input) {
   return output;
 }
 
+void ForwardSinkSearchCallback(const MediaSinkSearchResponseCallback& callback,
+                               mojo::String sink_id) {
+  callback.Run(sink_id);
+}
+
 }  // namespace
 
 MediaRouterMojoImpl::MediaRoutesQuery::MediaRoutesQuery() = default;
@@ -270,7 +275,7 @@ void MediaRouterMojoImpl::RouteResponseReceived(
     bool off_the_record,
     const std::vector<MediaRouteResponseCallback>& callbacks,
     interfaces::MediaRoutePtr media_route,
-    const mojo::String& error_text,
+    mojo::String error_text,
     interfaces::RouteRequestResultCode result_code) {
   std::unique_ptr<RouteRequestResult> result;
   if (media_route.is_null()) {
@@ -591,8 +596,11 @@ void MediaRouterMojoImpl::RegisterPresentationSessionMessagesObserver(
   bool should_listen = !observer_list->might_have_observers();
   observer_list->AddObserver(observer);
   if (should_listen) {
-    RunOrDefer(base::Bind(&MediaRouterMojoImpl::DoListenForRouteMessages,
-                          base::Unretained(this), route_id));
+    SetWakeReason(
+        MediaRouteProviderWakeReason::START_LISTENING_FOR_ROUTE_MESSAGES);
+    RunOrDefer(
+        base::Bind(&MediaRouterMojoImpl::DoStartListeningForRouteMessages,
+                   base::Unretained(this), route_id));
   }
 }
 
@@ -678,7 +686,10 @@ void MediaRouterMojoImpl::DoConnectRouteByRouteId(
 
 void MediaRouterMojoImpl::DoTerminateRoute(const MediaRoute::Id& route_id) {
   DVLOG_WITH_INSTANCE(1) << "DoTerminateRoute " << route_id;
-  media_route_provider_->TerminateRoute(route_id);
+  media_route_provider_->TerminateRoute(
+      route_id,
+      base::Bind(&MediaRouterMojoImpl::OnTerminateRouteResult,
+                 base::Unretained(this), route_id));
 }
 
 void MediaRouterMojoImpl::DoDetachRoute(const MediaRoute::Id& route_id) {
@@ -705,24 +716,15 @@ void MediaRouterMojoImpl::DoSendSessionBinaryMessage(
                                                 callback);
 }
 
-void MediaRouterMojoImpl::DoListenForRouteMessages(
+void MediaRouterMojoImpl::DoStartListeningForRouteMessages(
     const MediaRoute::Id& route_id) {
-  DVLOG_WITH_INSTANCE(1) << "ListenForRouteMessages";
-  if (!ContainsValue(route_ids_listening_for_messages_, route_id)) {
-    route_ids_listening_for_messages_.insert(route_id);
-    media_route_provider_->ListenForRouteMessages(
-        route_id, base::Bind(&MediaRouterMojoImpl::OnRouteMessagesReceived,
-                             base::Unretained(this), route_id));
-  }
+  DVLOG_WITH_INSTANCE(1) << "DoStartListeningForRouteMessages";
+  media_route_provider_->StartListeningForRouteMessages(route_id);
 }
 
 void MediaRouterMojoImpl::DoStopListeningForRouteMessages(
     const MediaRoute::Id& route_id) {
   DVLOG_WITH_INSTANCE(1) << "StopListeningForRouteMessages";
-
-  // No need to erase |route_ids_listening_for_messages_| entry here.
-  // It will be removed when there are no more observers by the time
-  // |OnRouteMessagesReceived| is invoked.
   media_route_provider_->StopListeningForRouteMessages(route_id);
 }
 
@@ -737,53 +739,34 @@ void MediaRouterMojoImpl::DoSearchSinks(
   sink_search_criteria->input = search_input;
   sink_search_criteria->domain = domain;
   media_route_provider_->SearchSinks(
-      sink_id, source_id, std::move(sink_search_criteria), sink_callback);
+      sink_id, source_id, std::move(sink_search_criteria),
+      base::Bind(&ForwardSinkSearchCallback, sink_callback));
 }
 
 void MediaRouterMojoImpl::OnRouteMessagesReceived(
-    const MediaRoute::Id& route_id,
-    mojo::Array<interfaces::RouteMessagePtr> messages,
-    bool error) {
-  DVLOG(1) << "OnRouteMessagesReceived";
+    const mojo::String& route_id,
+    mojo::Array<interfaces::RouteMessagePtr> messages) {
+  DVLOG_WITH_INSTANCE(1) << "OnRouteMessagesReceived";
 
-  // If |messages| is null, then no more messages will come from this route.
-  // We can stop listening.
-  if (error) {
-    DVLOG(2) << "Encountered error in OnRouteMessagesReceived for " << route_id;
-    route_ids_listening_for_messages_.erase(route_id);
-    return;
-  }
+  DCHECK(!messages.storage().empty());
 
-  // Check if there are any observers remaining. If not, the messages
-  // can be discarded and we can stop listening for the next batch of messages.
   auto* observer_list = messages_observers_.get(route_id);
   if (!observer_list) {
-    route_ids_listening_for_messages_.erase(route_id);
     return;
   }
 
-  // If |messages| is empty, then |StopListeningForRouteMessages| was invoked
-  // but we have added back an observer since. Keep listening for more messages,
-  // but do not notify observers with empty list.
-  if (!messages.storage().empty()) {
-    ScopedVector<content::PresentationSessionMessage> session_messages;
-    session_messages.reserve(messages.size());
-    for (size_t i = 0; i < messages.size(); ++i) {
-      session_messages.push_back(
-          ConvertToPresentationSessionMessage(std::move(messages[i])));
-    }
-    base::ObserverList<PresentationSessionMessagesObserver>::Iterator
-        observer_it(observer_list);
-    bool single_observer =
-        observer_it.GetNext() != nullptr && observer_it.GetNext() == nullptr;
-    FOR_EACH_OBSERVER(PresentationSessionMessagesObserver, *observer_list,
-                      OnMessagesReceived(session_messages, single_observer));
+  ScopedVector<content::PresentationSessionMessage> session_messages;
+  session_messages.reserve(messages.size());
+  for (size_t i = 0; i < messages.size(); ++i) {
+    session_messages.push_back(
+        ConvertToPresentationSessionMessage(std::move(messages[i])));
   }
-
-  // Listen for more messages.
-  media_route_provider_->ListenForRouteMessages(
-      route_id, base::Bind(&MediaRouterMojoImpl::OnRouteMessagesReceived,
-                           base::Unretained(this), route_id));
+  base::ObserverList<PresentationSessionMessagesObserver>::Iterator observer_it(
+      observer_list);
+  bool single_observer =
+      observer_it.GetNext() != nullptr && observer_it.GetNext() == nullptr;
+  FOR_EACH_OBSERVER(PresentationSessionMessagesObserver, *observer_list,
+                    OnMessagesReceived(session_messages, single_observer));
 }
 
 void MediaRouterMojoImpl::OnSinkAvailabilityUpdated(
@@ -824,6 +807,18 @@ void MediaRouterMojoImpl::OnPresentationConnectionClosed(
   NotifyPresentationConnectionClose(
       route_id, mojo::PresentationConnectionCloseReasonFromMojo(reason),
       message);
+}
+
+void MediaRouterMojoImpl::OnTerminateRouteResult(
+    const MediaRoute::Id& route_id,
+    mojo::String error_text,
+    interfaces::RouteRequestResultCode result_code) {
+  if (result_code != interfaces::RouteRequestResultCode::OK) {
+    LOG(WARNING) << "Failed to terminate route " << route_id <<
+        ": result_code = " << result_code << ", " << error_text;
+  }
+  MediaRouterMojoMetrics::RecordMediaRouteProviderTerminateRoute(
+      mojo::RouteRequestResultCodeFromMojo(result_code));
 }
 
 void MediaRouterMojoImpl::DoStartObservingMediaSinks(

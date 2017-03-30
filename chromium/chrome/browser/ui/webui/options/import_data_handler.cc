@@ -6,8 +6,8 @@
 
 #include <stddef.h>
 
-#include <memory>
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -112,8 +112,8 @@ void ImportDataHandler::StartImport(
     importer_host_->set_observer(NULL);
 
   base::FundamentalValue importing(true);
-  web_ui()->CallJavascriptFunction("ImportDataOverlay.setImportingState",
-                                   importing);
+  web_ui()->CallJavascriptFunctionUnsafe("ImportDataOverlay.setImportingState",
+                                         importing);
   import_did_succeed_ = false;
 
   importer_host_ = new ExternalProcessImporterHost();
@@ -178,7 +178,8 @@ void ImportDataHandler::InitializePage() {
         importer_list_->GetSourceProfileAt(i);
     uint16_t browser_services = source_profile.services_supported;
 
-    base::DictionaryValue* browser_profile = new base::DictionaryValue();
+    std::unique_ptr<base::DictionaryValue> browser_profile(
+        new base::DictionaryValue());
     browser_profile->SetString("name", source_profile.importer_name);
     browser_profile->SetInteger("index", i);
     browser_profile->SetBoolean("history",
@@ -192,11 +193,11 @@ void ImportDataHandler::InitializePage() {
     browser_profile->SetBoolean("autofill-form-data",
         (browser_services & importer::AUTOFILL_FORM_DATA) != 0);
 
-    browser_profiles.Append(browser_profile);
+    browser_profiles.Append(std::move(browser_profile));
   }
 
-  web_ui()->CallJavascriptFunction("ImportDataOverlay.updateSupportedBrowsers",
-                                   browser_profiles);
+  web_ui()->CallJavascriptFunctionUnsafe(
+      "ImportDataOverlay.updateSupportedBrowsers", browser_profiles);
 }
 
 void ImportDataHandler::ImportStarted() {
@@ -223,12 +224,12 @@ void ImportDataHandler::ImportEnded() {
   importer_host_ = NULL;
 
   if (import_did_succeed_) {
-    web_ui()->CallJavascriptFunction("ImportDataOverlay.confirmSuccess");
+    web_ui()->CallJavascriptFunctionUnsafe("ImportDataOverlay.confirmSuccess");
   } else {
     base::FundamentalValue state(false);
-    web_ui()->CallJavascriptFunction("ImportDataOverlay.setImportingState",
-                                     state);
-    web_ui()->CallJavascriptFunction("ImportDataOverlay.dismiss");
+    web_ui()->CallJavascriptFunctionUnsafe(
+        "ImportDataOverlay.setImportingState", state);
+    web_ui()->CallJavascriptFunctionUnsafe("ImportDataOverlay.dismiss");
   }
 }
 

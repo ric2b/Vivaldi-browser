@@ -14,6 +14,7 @@
 
 #include "chrome/browser/ui/tabs/tab_utils.h"
 
+#include "content/public/browser/render_widget_host.h"
 
 namespace extensions {
 

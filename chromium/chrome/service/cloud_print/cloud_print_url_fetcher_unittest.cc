@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
@@ -99,7 +100,6 @@ class CloudPrintURLFetcherTest : public testing::Test,
       const GURL& url,
       const net::URLRequestStatus& status,
       int response_code,
-      const net::ResponseCookies& cookies,
       const std::string& data) override;
 
   CloudPrintURLFetcher::ResponseAction OnRequestAuthError() override {
@@ -125,7 +125,7 @@ class CloudPrintURLFetcherTest : public testing::Test,
     // Deleting the fetcher causes a task to be posted to the IO thread to
     // release references to the URLRequestContextGetter. We need to run all
     // pending tasks to execute that (this is the IO thread).
-    base::MessageLoop::current()->RunUntilIdle();
+    base::RunLoop().RunUntilIdle();
     EXPECT_EQ(0, g_request_context_getter_instances);
   }
 
@@ -151,7 +151,6 @@ class CloudPrintURLFetcherBasicTest : public CloudPrintURLFetcherTest {
       const GURL& url,
       const net::URLRequestStatus& status,
       int response_code,
-      const net::ResponseCookies& cookies,
       const std::string& data) override;
 
   CloudPrintURLFetcher::ResponseAction HandleRawData(
@@ -234,7 +233,6 @@ CloudPrintURLFetcherTest::HandleRawResponse(
     const GURL& url,
     const net::URLRequestStatus& status,
     int response_code,
-    const net::ResponseCookies& cookies,
     const std::string& data) {
   EXPECT_TRUE(status.is_success());
   EXPECT_EQ(200, response_code);  // HTTP OK
@@ -248,7 +246,6 @@ CloudPrintURLFetcherBasicTest::HandleRawResponse(
     const GURL& url,
     const net::URLRequestStatus& status,
     int response_code,
-    const net::ResponseCookies& cookies,
     const std::string& data) {
   EXPECT_TRUE(status.is_success());
   EXPECT_EQ(200, response_code);  // HTTP OK
@@ -338,7 +335,7 @@ TEST_F(CloudPrintURLFetcherBasicTest, HandleRawResponse) {
   SetHandleRawResponse(true);
 
   CreateFetcher(test_server.GetURL("/echo"), 0);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 TEST_F(CloudPrintURLFetcherBasicTest, HandleRawData) {
@@ -348,7 +345,7 @@ TEST_F(CloudPrintURLFetcherBasicTest, HandleRawData) {
 
   SetHandleRawData(true);
   CreateFetcher(test_server.GetURL("/echo"), 0);
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 TEST_F(CloudPrintURLFetcherOverloadTest, Protect) {
@@ -359,7 +356,7 @@ TEST_F(CloudPrintURLFetcherOverloadTest, Protect) {
   GURL url(test_server.GetURL("/defaultresponse"));
   CreateFetcher(url, 11);
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 TEST_F(CloudPrintURLFetcherRetryBackoffTest, GiveUp) {
@@ -370,7 +367,7 @@ TEST_F(CloudPrintURLFetcherRetryBackoffTest, GiveUp) {
   GURL url(test_server.GetURL("/defaultresponse"));
   CreateFetcher(url, 11);
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 }
 
 }  // namespace cloud_print

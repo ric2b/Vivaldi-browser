@@ -134,6 +134,7 @@
     # Because of transitive dependency on make_platform_generated.
     'hard_dependency': 1,
     'dependencies': [
+      '../../public/blink.gyp:mojo_bindings',
       '../config.gyp:config',
       '../wtf/wtf.gyp:wtf',
       'blink_common',
@@ -160,6 +161,7 @@
       '<(DEPTH)/ui/gfx/gfx.gyp:gfx',
       '<(DEPTH)/ui/gfx/gfx.gyp:gfx_geometry',
       '<(DEPTH)/url/url.gyp:url_lib',
+      '<(DEPTH)/url/url.gyp:url_interfaces_mojom_for_blink',
       '<(DEPTH)/v8/src/v8.gyp:v8',
       '<(libjpeg_gyp_path):libjpeg',
     ],
@@ -204,13 +206,15 @@
       '<(blink_platform_output_dir)/RuntimeEnabledFeatures.h',
 
       # Additional .cpp files from the protocol_sources list.
-      '<(blink_platform_output_dir)/inspector_protocol/Frontend.cpp',
-      '<(blink_platform_output_dir)/inspector_protocol/Dispatcher.cpp',
-      '<(blink_platform_output_dir)/inspector_protocol/TypeBuilder.cpp',
+      '<(blink_platform_output_dir)/v8_inspector/protocol/Console.cpp',
+      '<(blink_platform_output_dir)/v8_inspector/protocol/Debugger.cpp',
+      '<(blink_platform_output_dir)/v8_inspector/protocol/HeapProfiler.cpp',
+      '<(blink_platform_output_dir)/v8_inspector/protocol/Profiler.cpp',
+      '<(blink_platform_output_dir)/v8_inspector/protocol/Runtime.cpp',
 
       # Additional .cpp files from the v8_inspector.
-      '<(blink_platform_output_dir)/v8_inspector/DebuggerScript.h',
-      '<(blink_platform_output_dir)/v8_inspector/InjectedScriptSource.h',
+      #'<(blink_platform_output_dir)/v8_inspector/DebuggerScript.h',
+      #'<(blink_platform_output_dir)/v8_inspector/InjectedScriptSource.h',
     ],
     'sources/': [
       # Exclude all platform specific things, reinclude them below on a per-platform basis

@@ -11,18 +11,28 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "components/arc/arc_bridge_service.h"
 #include "components/arc/arc_service.h"
+#include "components/arc/instance_holder.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace arc {
 
 class ArcAudioBridge : public ArcService,
-                       public ArcBridgeService::Observer,
+                       public InstanceHolder<mojom::AudioInstance>::Observer,
+                       public mojom::AudioHost,
                        public chromeos::CrasAudioHandler::AudioObserver {
  public:
   explicit ArcAudioBridge(ArcBridgeService* bridge_service);
   ~ArcAudioBridge() override;
 
+  // InstanceHolder<mojom::AudioInstance>::Observer overrides.
+  void OnInstanceReady() override;
+
+  // mojom::AudioHost overrides.
+  void ShowVolumeControls() override;
+
  private:
+  mojo::Binding<mojom::AudioHost> binding_;
+
   chromeos::CrasAudioHandler* cras_audio_handler_ = nullptr;
 
   // chromeos::CrasAudioHandler::AudioObserver overrides.

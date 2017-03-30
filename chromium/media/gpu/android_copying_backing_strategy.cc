@@ -26,17 +26,17 @@ AndroidCopyingBackingStrategy::AndroidCopyingBackingStrategy(
 
 AndroidCopyingBackingStrategy::~AndroidCopyingBackingStrategy() {}
 
-gfx::ScopedJavaSurface AndroidCopyingBackingStrategy::Initialize(
+gl::ScopedJavaSurface AndroidCopyingBackingStrategy::Initialize(
     int surface_view_id) {
-  if (surface_view_id != media::VideoDecodeAccelerator::Config::kNoSurfaceID) {
+  if (surface_view_id != VideoDecodeAccelerator::Config::kNoSurfaceID) {
     LOG(ERROR) << "The copying strategy should not be initialized with a "
                   "surface id.";
-    return gfx::ScopedJavaSurface();
+    return gl::ScopedJavaSurface();
   }
 
   surface_texture_ =
       state_provider_->CreateAttachedSurfaceTexture(&surface_texture_id_);
-  return gfx::ScopedJavaSurface(surface_texture_.get());
+  return gl::ScopedJavaSurface(surface_texture_.get());
 }
 
 void AndroidCopyingBackingStrategy::BeginCleanup(
@@ -53,7 +53,7 @@ void AndroidCopyingBackingStrategy::BeginCleanup(
 
 void AndroidCopyingBackingStrategy::EndCleanup() {}
 
-scoped_refptr<gfx::SurfaceTexture>
+scoped_refptr<gl::SurfaceTexture>
 AndroidCopyingBackingStrategy::GetSurfaceTexture() const {
   return surface_texture_;
 }
@@ -68,7 +68,7 @@ gfx::Size AndroidCopyingBackingStrategy::GetPictureBufferSize() const {
 
 void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
     int32_t codec_buf_index,
-    const media::PictureBuffer& picture_buffer) {
+    const PictureBuffer& picture_buffer) {
   // Make sure that the decoder is available.
   RETURN_ON_FAILURE(state_provider_, state_provider_->GetGlDecoder().get(),
                     "Failed to get gles2 decoder instance.", ILLEGAL_STATE);
@@ -132,8 +132,7 @@ void AndroidCopyingBackingStrategy::UseCodecBufferForPictureBuffer(
       true, false, false, transform_matrix);
 }
 
-void AndroidCopyingBackingStrategy::CodecChanged(
-    media::VideoCodecBridge* codec) {
+void AndroidCopyingBackingStrategy::CodecChanged(VideoCodecBridge* codec) {
   media_codec_ = codec;
 }
 
@@ -149,7 +148,7 @@ bool AndroidCopyingBackingStrategy::ArePicturesOverlayable() {
 }
 
 void AndroidCopyingBackingStrategy::UpdatePictureBufferSize(
-    media::PictureBuffer* picture_buffer,
+    PictureBuffer* picture_buffer,
     const gfx::Size& new_size) {
   // This strategy uses 2D textures who's allocated memory is dependent on the
   // size. To update size in all places, we must:

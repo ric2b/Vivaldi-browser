@@ -12,9 +12,11 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -32,7 +34,6 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_renderer_host.h"
-#include "mojo/common/url_type_converters.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -159,7 +160,7 @@ base::WeakPtr<PasswordManagerDriver> TestCredentialManagerImpl::GetDriver() {
 
 void RunAllPendingTasks() {
   base::RunLoop run_loop;
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   run_loop.Run();
 }
@@ -354,8 +355,7 @@ class CredentialManagerImplTest : public content::RenderViewHostTestHarness {
                bool include_passwords,
                const std::vector<GURL>& federations,
                const CredentialManagerImpl::GetCallback& callback) {
-    cm_service_impl_->Get(zero_click_only, include_passwords,
-                          mojo::Array<mojo::String>::From(federations),
+    cm_service_impl_->Get(zero_click_only, include_passwords, federations,
                           callback);
   }
 
@@ -689,6 +689,30 @@ TEST_F(CredentialManagerImplTest,
   EXPECT_CALL(*client_, NotifyUserAutoSigninPtr(_)).Times(testing::Exactly(0));
 
   ExpectCredentialType(false, true, federations, mojom::CredentialType::EMPTY);
+}
+
+TEST_F(CredentialManagerImplTest,
+       CredentialManagerOnRequestCredentialWithEmptyUsernames) {
+  form_.username_value.clear();
+  store_->AddLogin(form_);
+  EXPECT_CALL(*client_, PromptUserToChooseCredentialsPtr(_, _, _, _))
+      .Times(testing::Exactly(0));
+  EXPECT_CALL(*client_, NotifyUserAutoSigninPtr(_)).Times(testing::Exactly(0));
+
+  std::vector<GURL> federations;
+  ExpectCredentialType(false, true, federations, mojom::CredentialType::EMPTY);
+}
+
+TEST_F(CredentialManagerImplTest,
+       CredentialManagerOnRequestCredentialWithEmptyAndNonUsernames) {
+  store_->AddLogin(form_);
+  autofill::PasswordForm empty = form_;
+  empty.username_value.clear();
+  store_->AddLogin(empty);
+
+  std::vector<GURL> federations;
+  ExpectZeroClickSignInSuccess(false, true, federations,
+                               mojom::CredentialType::PASSWORD);
 }
 
 TEST_F(CredentialManagerImplTest,

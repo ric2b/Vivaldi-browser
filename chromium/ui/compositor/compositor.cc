@@ -86,8 +86,6 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
       task_runner_(task_runner),
       vsync_manager_(new CompositorVSyncManager()),
       device_scale_factor_(0.0f),
-      last_started_frame_(0),
-      last_ended_frame_(0),
       locks_will_time_out_(true),
       compositor_lock_(NULL),
       layer_animator_collection_(this),
@@ -125,7 +123,7 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
 #if defined(OS_WIN)
   settings.renderer_settings.finish_rendering_on_resize = true;
 #elif defined(OS_MACOSX)
-  settings.renderer_settings.release_overlay_resources_on_swap_complete = true;
+  settings.renderer_settings.release_overlay_resources_after_gpu_query = true;
 #endif
 
   // These flags should be mirrored by renderer versions in content/renderer/.
@@ -203,6 +201,7 @@ Compositor::Compositor(ui::ContextFactory* context_factory,
   params.task_graph_runner = context_factory_->GetTaskGraphRunner();
   params.settings = &settings;
   params.main_task_runner = task_runner_;
+  params.animation_host = cc::AnimationHost::CreateMainInstance();
   host_ = cc::LayerTreeHost::CreateSingleThreaded(this, &params);
   UMA_HISTOGRAM_TIMES("GPU.CreateBrowserCompositor",
                       base::TimeTicks::Now() - before_create);
@@ -315,6 +314,10 @@ void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
     if (root_layer_)
       root_layer_->OnDeviceScaleFactorChanged(scale);
   }
+}
+
+void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
+  context_factory_->SetDisplayColorSpace(this, color_space);
 }
 
 void Compositor::SetBackgroundColor(SkColor color) {

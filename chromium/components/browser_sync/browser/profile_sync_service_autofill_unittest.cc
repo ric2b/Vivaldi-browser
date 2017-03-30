@@ -45,6 +45,7 @@
 #include "components/sync_driver/data_type_manager_impl.h"
 #include "components/sync_driver/sync_api_component_factory_mock.h"
 #include "components/syncable_prefs/pref_service_syncable.h"
+#include "components/version_info/version_info.h"
 #include "components/webdata/common/web_database.h"
 #include "components/webdata_services/web_data_service_test_util.h"
 #include "sync/internal_api/public/base/model_type.h"
@@ -69,8 +70,10 @@ using autofill::AutofillProfileChange;
 using autofill::AutofillProfileSyncableService;
 using autofill::AutofillTable;
 using autofill::AutofillWebDataService;
+using autofill::NAME_FULL;
 using autofill::PersonalDataManager;
 using autofill::ServerFieldType;
+using base::ASCIIToUTF16;
 using base::Time;
 using base::TimeDelta;
 using base::WaitableEvent;
@@ -98,6 +101,10 @@ void RegisterAutofillPrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterBooleanPref(autofill::prefs::kAutofillEnabled, true);
   registry->RegisterBooleanPref(autofill::prefs::kAutofillWalletImportEnabled,
                                 true);
+  registry->RegisterBooleanPref(autofill::prefs::kAutofillProfileUseDatesFixed,
+                                true);
+  registry->RegisterIntegerPref(autofill::prefs::kAutofillLastVersionDeduped,
+                                atoi(version_info::GetVersionNumber().c_str()));
 }
 
 void RunAndSignal(const base::Closure& cb, WaitableEvent* event) {
@@ -117,9 +124,8 @@ AutofillEntry MakeAutofillEntry(const char* name,
   Time date_last_used = date_created;
   if (time_shift1 >= 0)
     date_last_used = base_time + TimeDelta::FromSeconds(time_shift1);
-  return AutofillEntry(
-      AutofillKey(base::ASCIIToUTF16(name), base::ASCIIToUTF16(value)),
-      date_created, date_last_used);
+  return AutofillEntry(AutofillKey(ASCIIToUTF16(name), ASCIIToUTF16(value)),
+                       date_created, date_last_used);
 }
 
 AutofillEntry MakeAutofillEntry(const char* name,
@@ -168,11 +174,14 @@ class WebDatabaseFake : public WebDatabase {
 
 class MockAutofillBackend : public autofill::AutofillWebDataBackend {
  public:
-  MockAutofillBackend(WebDatabase* web_database,
-                      const base::Closure& on_changed,
-                      const scoped_refptr<base::SequencedTaskRunner>& ui_thread)
+  MockAutofillBackend(
+      WebDatabase* web_database,
+      const base::Closure& on_changed,
+      const base::Callback<void(syncer::ModelType)>& on_sync_started,
+      const scoped_refptr<base::SequencedTaskRunner>& ui_thread)
       : web_database_(web_database),
         on_changed_(on_changed),
+        on_sync_started_(on_sync_started),
         ui_thread_(ui_thread) {}
 
   ~MockAutofillBackend() override {}
@@ -186,10 +195,15 @@ class MockAutofillBackend : public autofill::AutofillWebDataBackend {
     DCHECK(!ui_thread_->RunsTasksOnCurrentThread());
     ui_thread_->PostTask(FROM_HERE, on_changed_);
   }
+  void NotifyThatSyncHasStarted(syncer::ModelType model_type) override {
+    DCHECK(!ui_thread_->RunsTasksOnCurrentThread());
+    ui_thread_->PostTask(FROM_HERE, base::Bind(on_sync_started_, model_type));
+  }
 
  private:
   WebDatabase* web_database_;
   base::Closure on_changed_;
+  base::Callback<void(syncer::ModelType)> on_sync_started_;
   const scoped_refptr<base::SequencedTaskRunner> ui_thread_;
 };
 
@@ -246,7 +260,9 @@ class WebDataServiceFake : public AutofillWebDataService {
         web_database_(NULL),
         autocomplete_syncable_service_(NULL),
         autofill_profile_syncable_service_(NULL),
-        syncable_service_created_or_destroyed_(false, false),
+        syncable_service_created_or_destroyed_(
+            base::WaitableEvent::ResetPolicy::AUTOMATIC,
+            base::WaitableEvent::InitialState::NOT_SIGNALED),
         db_thread_(db_thread),
         ui_thread_(ui_thread) {}
 
@@ -260,10 +276,14 @@ class WebDataServiceFake : public AutofillWebDataService {
     const base::Closure& on_changed_callback = base::Bind(
         &WebDataServiceFake::NotifyAutofillMultipleChangedOnUIThread,
         AsWeakPtr());
+    const base::Callback<void(syncer::ModelType)> on_sync_started_callback =
+        base::Bind(&WebDataServiceFake::NotifySyncStartedOnUIThread,
+                   AsWeakPtr());
 
-    db_thread_->PostTask(
-        FROM_HERE, base::Bind(&WebDataServiceFake::CreateSyncableService,
-                              base::Unretained(this), on_changed_callback));
+    db_thread_->PostTask(FROM_HERE,
+                         base::Bind(&WebDataServiceFake::CreateSyncableService,
+                                    base::Unretained(this), on_changed_callback,
+                                    on_sync_started_callback));
     syncable_service_created_or_destroyed_.Wait();
   }
 
@@ -281,7 +301,8 @@ class WebDataServiceFake : public AutofillWebDataService {
   WebDatabase* GetDatabase() override { return web_database_; }
 
   void OnAutofillEntriesChanged(const AutofillChangeList& changes) {
-    WaitableEvent event(true, false);
+    WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
+                        base::WaitableEvent::InitialState::NOT_SIGNALED);
 
     base::Closure notify_cb =
         base::Bind(&AutocompleteSyncableService::AutofillEntriesChanged,
@@ -293,7 +314,8 @@ class WebDataServiceFake : public AutofillWebDataService {
   }
 
   void OnAutofillProfileChanged(const AutofillProfileChange& changes) {
-    WaitableEvent event(true, false);
+    WaitableEvent event(base::WaitableEvent::ResetPolicy::MANUAL,
+                        base::WaitableEvent::InitialState::NOT_SIGNALED);
 
     base::Closure notify_cb =
         base::Bind(&AutocompleteSyncableService::AutofillProfileChanged,
@@ -307,11 +329,13 @@ class WebDataServiceFake : public AutofillWebDataService {
  private:
   ~WebDataServiceFake() override {}
 
-  void CreateSyncableService(const base::Closure& on_changed_callback) {
+  void CreateSyncableService(
+      const base::Closure& on_changed_callback,
+      const base::Callback<void(syncer::ModelType)>& on_sync_started) {
     ASSERT_TRUE(db_thread_->RunsTasksOnCurrentThread());
     // These services are deleted in DestroySyncableService().
     backend_.reset(new MockAutofillBackend(GetDatabase(), on_changed_callback,
-                                           ui_thread_.get()));
+                                           on_sync_started, ui_thread_.get()));
     AutocompleteSyncableService::CreateForWebDataServiceAndBackend(
         this, backend_.get());
     AutofillProfileSyncableService::CreateForWebDataServiceAndBackend(
@@ -710,7 +734,8 @@ class FakeServerUpdater : public base::RefCountedThreadSafe<FakeServerUpdater> {
         service_(service),
         wait_for_start_(wait_for_start),
         wait_for_syncapi_(wait_for_syncapi),
-        is_finished_(false, false),
+        is_finished_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                     base::WaitableEvent::InitialState::NOT_SIGNALED),
         db_thread_(db_thread) {}
 
   void Update() {
@@ -1004,7 +1029,9 @@ TEST_F(
   native_profile->set_use_date(base::Time::FromTimeT(1234));
 
   AutofillProfile expected_profile(sync_profile);
-  expected_profile.OverwriteWith(*native_profile, "en-US");
+  expected_profile.SetRawInfo(NAME_FULL,
+                              ASCIIToUTF16("Billing Mitchell Morrison"));
+  expected_profile.set_use_count(2);
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1032,7 +1059,7 @@ TEST_F(
   // Check that key fields are the same.
   EXPECT_TRUE(new_sync_profiles[0].IsSubsetOf(sync_profile, "en-US"));
   // Make sure the additional information from the sync profile was kept.
-  EXPECT_EQ(base::ASCIIToUTF16("Fox"),
+  EXPECT_EQ(ASCIIToUTF16("Fox"),
             new_sync_profiles[0].GetRawInfo(ServerFieldType::COMPANY_NAME));
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
@@ -1062,7 +1089,10 @@ TEST_F(ProfileSyncServiceAutofillTest,
   native_profile->set_use_date(base::Time::FromTimeT(4321));
 
   AutofillProfile expected_profile(sync_profile);
-  expected_profile.OverwriteWith(*native_profile, "en-US");
+  expected_profile.SetRawInfo(NAME_FULL,
+                              ASCIIToUTF16("Billing Mitchell Morrison"));
+  expected_profile.set_use_count(2);
+  expected_profile.set_use_date(native_profile->use_date());
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1090,7 +1120,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   // Check that key fields are the same.
   EXPECT_TRUE(new_sync_profiles[0].IsSubsetOf(sync_profile, "en-US"));
   // Make sure the additional information from the sync profile was kept.
-  EXPECT_EQ(base::ASCIIToUTF16("Fox"),
+  EXPECT_EQ(ASCIIToUTF16("Fox"),
             new_sync_profiles[0].GetRawInfo(ServerFieldType::COMPANY_NAME));
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
@@ -1121,8 +1151,11 @@ TEST_F(ProfileSyncServiceAutofillTest,
       "unit 5", "Hollywood", "CA", "91601", "US", "12345678910");
   native_profile->set_use_date(base::Time::FromTimeT(1234));
 
-  AutofillProfile expected_profile(sync_profile);
-  expected_profile.OverwriteWith(*native_profile, "en-US");
+  AutofillProfile expected_profile(*native_profile);
+  expected_profile.SetRawInfo(NAME_FULL,
+                              ASCIIToUTF16("Billing Mitchell Morrison"));
+  expected_profile.set_use_date(sync_profile.use_date());
+  expected_profile.set_use_count(2);
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1151,7 +1184,7 @@ TEST_F(ProfileSyncServiceAutofillTest,
   EXPECT_TRUE(new_sync_profiles[0].IsSubsetOf(expected_profile, "en-US"));
   // Make sure the addtional information of the native profile was saved into
   // the sync profile.
-  EXPECT_EQ(base::ASCIIToUTF16("Fox"),
+  EXPECT_EQ(ASCIIToUTF16("Fox"),
             new_sync_profiles[0].GetRawInfo(ServerFieldType::COMPANY_NAME));
   // Check that the latest use date is saved.
   EXPECT_EQ(base::Time::FromTimeT(4321), new_sync_profiles[0].use_date());
@@ -1175,9 +1208,6 @@ TEST_F(ProfileSyncServiceAutofillTest, HasNativeHasSync_DifferentPrimaryInfo) {
       "Smith", "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5", "Hollywood",
       "CA", "91601", "US", "12345678910");
   native_profile->set_use_date(base::Time::FromTimeT(1234));
-
-  AutofillProfile expected_profile(sync_profile);
-  expected_profile.OverwriteWith(*native_profile, "en-US");
 
   std::vector<AutofillProfile*> native_profiles;
   native_profiles.push_back(native_profile);
@@ -1416,10 +1446,12 @@ TEST_F(ProfileSyncServiceAutofillTest, ServerChangeRace) {
   StartSyncService(create_root.callback(), false, AUTOFILL);
   ASSERT_TRUE(create_root.success());
 
-  // (true, false) means we have to reset after |Signal|, init to unsignaled.
-  std::unique_ptr<WaitableEvent> wait_for_start(new WaitableEvent(true, false));
+  std::unique_ptr<WaitableEvent> wait_for_start(
+      new WaitableEvent(base::WaitableEvent::ResetPolicy::MANUAL,
+                        base::WaitableEvent::InitialState::NOT_SIGNALED));
   std::unique_ptr<WaitableEvent> wait_for_syncapi(
-      new WaitableEvent(true, false));
+      new WaitableEvent(base::WaitableEvent::ResetPolicy::MANUAL,
+                        base::WaitableEvent::InitialState::NOT_SIGNALED));
   scoped_refptr<FakeServerUpdater> updater(new FakeServerUpdater(
       sync_service(), wait_for_start.get(), wait_for_syncapi.get(),
       data_type_thread()->task_runner()));

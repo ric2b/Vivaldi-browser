@@ -57,9 +57,9 @@
 #include "net/proxy/proxy_script_fetcher_impl.h"
 #include "net/proxy/proxy_service.h"
 #include "net/ssl/channel_id_service.h"
-#include "net/url_request/certificate_report_sender.h"
 #include "net/url_request/data_protocol_handler.h"
 #include "net/url_request/file_protocol_handler.h"
+#include "net/url_request/report_sender.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_builder.h"
@@ -318,9 +318,9 @@ bool ChromeBrowserStateIOData::GetMetricsEnabledStateOnIOThread() const {
   return enable_metrics_.GetValue();
 }
 
-base::WeakPtr<net::HttpServerProperties>
-ChromeBrowserStateIOData::http_server_properties() const {
-  return http_server_properties_->GetWeakPtr();
+net::HttpServerProperties* ChromeBrowserStateIOData::http_server_properties()
+    const {
+  return http_server_properties_.get();
 }
 
 void ChromeBrowserStateIOData::set_http_server_properties(
@@ -364,9 +364,8 @@ void ChromeBrowserStateIOData::Init(
           pool->GetSequenceToken(), base::SequencedWorkerPool::BLOCK_SHUTDOWN),
       IsOffTheRecord()));
 
-  certificate_report_sender_.reset(new net::CertificateReportSender(
-      main_request_context_.get(),
-      net::CertificateReportSender::DO_NOT_SEND_COOKIES));
+  certificate_report_sender_.reset(new net::ReportSender(
+      main_request_context_.get(), net::ReportSender::DO_NOT_SEND_COOKIES));
   transport_security_state_->SetReportSender(certificate_report_sender_.get());
 
   // Take ownership over these parameters.
@@ -375,6 +374,10 @@ void ChromeBrowserStateIOData::Init(
 
   main_request_context_->set_cert_verifier(
       io_thread_globals->cert_verifier.get());
+  main_request_context_->set_ct_policy_enforcer(
+      io_thread_globals->ct_policy_enforcer.get());
+  main_request_context_->set_cert_transparency_verifier(
+      io_thread_globals->cert_transparency_verifier.get());
 
   InitializeInternal(std::move(network_delegate), profile_params_.get(),
                      protocol_handlers);
@@ -458,12 +461,11 @@ void ChromeBrowserStateIOData::set_channel_id_service(
 std::unique_ptr<net::HttpNetworkSession>
 ChromeBrowserStateIOData::CreateHttpNetworkSession(
     const ProfileParams& profile_params) const {
-  net::HttpNetworkSession::Params params;
   net::URLRequestContext* context = main_request_context();
 
   IOSChromeIOThread* const io_thread = profile_params.io_thread;
 
-  io_thread->InitializeNetworkSessionParams(&params);
+  net::HttpNetworkSession::Params params(io_thread->NetworkSessionParams());
   net::URLRequestContextBuilder::SetHttpNetworkSessionComponents(context,
                                                                  &params);
   if (!IsOffTheRecord() && io_thread->globals()->network_quality_estimator) {

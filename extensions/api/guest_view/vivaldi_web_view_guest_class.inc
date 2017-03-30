@@ -139,4 +139,6 @@
 
 private:
 
+  content::RenderWidgetHost::MouseEventCallback mouseevent_callback_;
+
 // };

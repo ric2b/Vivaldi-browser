@@ -10,7 +10,10 @@
 #include <memory>
 #include <vector>
 
+#include "base/location.h"
 #include "base/logging.h"
+#include "base/single_thread_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gl/gl_bindings.h"
 #include "ui/gl/gl_implementation.h"
@@ -19,7 +22,7 @@
 #include "ui/gl/scoped_cgl.h"
 #include "ui/gl/yuv_to_rgb_converter.h"
 
-namespace gfx {
+namespace gl {
 
 namespace {
 
@@ -139,14 +142,14 @@ bool GLContextCGL::Initialize(GLSurface* compatible_surface,
 
 void GLContextCGL::Destroy() {
   if (yuv_to_rgb_converter_) {
-    gfx::ScopedCGLSetCurrentContext(static_cast<CGLContextObj>(context_));
+    ScopedCGLSetCurrentContext(static_cast<CGLContextObj>(context_));
     yuv_to_rgb_converter_.reset();
   }
   if (discrete_pixelformat_) {
     if (base::MessageLoop::current() != nullptr) {
       // Delay releasing the pixel format for 10 seconds to reduce the number of
       // unnecessary GPU switches.
-      base::MessageLoop::current()->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE, base::Bind(&CGLReleasePixelFormat, discrete_pixelformat_),
           base::TimeDelta::FromSeconds(10));
     } else {
@@ -201,9 +204,9 @@ bool GLContextCGL::ForceGpuSwitchIfNeeded() {
   return true;
 }
 
-gl::YUVToRGBConverter* GLContextCGL::GetYUVToRGBConverter() {
+YUVToRGBConverter* GLContextCGL::GetYUVToRGBConverter() {
   if (!yuv_to_rgb_converter_)
-    yuv_to_rgb_converter_.reset(new gl::YUVToRGBConverter);
+    yuv_to_rgb_converter_.reset(new YUVToRGBConverter);
   return yuv_to_rgb_converter_.get();
 }
 
@@ -285,4 +288,4 @@ GpuPreference GLContextCGL::GetGpuPreference() {
   return gpu_preference_;
 }
 
-}  // namespace gfx
+}  // namespace gl

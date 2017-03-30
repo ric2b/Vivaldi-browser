@@ -5,6 +5,7 @@
 #include "net/tools/quic/quic_simple_server_stream.h"
 
 #include <list>
+#include <utility>
 
 #include "base/logging.h"
 #include "base/stl_util.h"
@@ -126,7 +127,7 @@ void QuicSimpleServerStream::PushResponse(
     return;
   }
   // Change the stream state to emulate a client request.
-  request_headers_ = push_request_headers;
+  request_headers_ = std::move(push_request_headers);
   content_length_ = 0;
   DVLOG(1) << "Stream " << id() << ": Ready to receive server push response.";
 
@@ -168,11 +169,11 @@ void QuicSimpleServerStream::SendResponse() {
   string request_url = request_headers_[":authority"].as_string() +
                        request_headers_[":path"].as_string();
   int response_code;
-  SpdyHeaderBlock response_headers = response->headers();
-  if (!ParseHeaderStatusCode(&response_headers, &response_code)) {
-    DVLOG(1) << "Illegal (non-integer) response :status from cache: "
-             << response_headers[":status"].as_string() << " for request "
-             << request_url;
+  const SpdyHeaderBlock& response_headers = response->headers();
+  if (!ParseHeaderStatusCode(response_headers, &response_code)) {
+    LOG(WARNING) << "Illegal (non-integer) response :status from cache: "
+                 << response_headers.GetHeader(":status") << " for request "
+                 << request_url;
     SendErrorResponse();
     return;
   }
@@ -202,8 +203,8 @@ void QuicSimpleServerStream::SendResponse() {
   }
 
   DVLOG(1) << "Sending response for stream " << id();
-  SendHeadersAndBodyAndTrailers(response->headers(), response->body(),
-                                response->trailers());
+  SendHeadersAndBodyAndTrailers(response->headers().Clone(), response->body(),
+                                response->trailers().Clone());
 }
 
 void QuicSimpleServerStream::SendNotFoundResponse() {
@@ -211,7 +212,7 @@ void QuicSimpleServerStream::SendNotFoundResponse() {
   SpdyHeaderBlock headers;
   headers[":status"] = "404";
   headers["content-length"] = base::IntToString(strlen(kNotFoundResponseBody));
-  SendHeadersAndBody(headers, kNotFoundResponseBody);
+  SendHeadersAndBody(std::move(headers), kNotFoundResponseBody);
 }
 
 void QuicSimpleServerStream::SendErrorResponse() {
@@ -219,19 +220,20 @@ void QuicSimpleServerStream::SendErrorResponse() {
   SpdyHeaderBlock headers;
   headers[":status"] = "500";
   headers["content-length"] = base::UintToString(strlen(kErrorResponseBody));
-  SendHeadersAndBody(headers, kErrorResponseBody);
+  SendHeadersAndBody(std::move(headers), kErrorResponseBody);
 }
 
 void QuicSimpleServerStream::SendHeadersAndBody(
-    const SpdyHeaderBlock& response_headers,
+    SpdyHeaderBlock response_headers,
     StringPiece body) {
-  SendHeadersAndBodyAndTrailers(response_headers, body, SpdyHeaderBlock());
+  SendHeadersAndBodyAndTrailers(std::move(response_headers), body,
+                                SpdyHeaderBlock());
 }
 
 void QuicSimpleServerStream::SendHeadersAndBodyAndTrailers(
-    const SpdyHeaderBlock& response_headers,
+    SpdyHeaderBlock response_headers,
     StringPiece body,
-    const SpdyHeaderBlock& response_trailers) {
+    SpdyHeaderBlock response_trailers) {
   // This server only supports SPDY and HTTP, and neither handles bidirectional
   // streaming.
   if (!reading_stopped()) {
@@ -242,7 +244,7 @@ void QuicSimpleServerStream::SendHeadersAndBodyAndTrailers(
   bool send_fin = (body.empty() && response_trailers.empty());
   DVLOG(1) << "Writing headers (fin = " << send_fin
            << ") : " << response_headers.DebugString();
-  WriteHeaders(response_headers, send_fin, nullptr);
+  WriteHeaders(std::move(response_headers), send_fin, nullptr);
   if (send_fin) {
     // Nothing else to send.
     return;
@@ -261,7 +263,7 @@ void QuicSimpleServerStream::SendHeadersAndBodyAndTrailers(
   // Send the trailers. A FIN is always sent with trailers.
   DVLOG(1) << "Writing trailers (fin = true): "
            << response_trailers.DebugString();
-  WriteTrailers(response_trailers, nullptr);
+  WriteTrailers(std::move(response_trailers), nullptr);
 }
 
 const char* const QuicSimpleServerStream::kErrorResponseBody = "bad";

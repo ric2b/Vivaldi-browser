@@ -96,7 +96,6 @@ class TEST_RUNNER_EXPORT WebTestProxyBase {
   void SetInterfaces(WebTestInterfaces* web_test_interfaces);
 
   EventSender* event_sender() { return event_sender_.get(); }
-  void SetSendWheelGestures(bool send_gestures);
 
   AccessibilityController* accessibility_controller() {
     return accessibility_controller_.get();
@@ -230,10 +229,6 @@ class WebTestProxy : public Base, public WebTestProxyBase {
   }
   blink::WebSpeechRecognizer* speechRecognizer() override {
     return view_test_client()->speechRecognizer();
-  }
-  bool runFileChooser(const blink::WebFileChooserParams& params,
-                      blink::WebFileChooserCompletion* completion) override {
-    return view_test_client()->runFileChooser(params, completion);
   }
   void showValidationMessage(
       const blink::WebRect& anchor_in_root_view,

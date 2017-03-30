@@ -67,6 +67,10 @@ def attribute_context(interface, attribute):
     # are not methods.  Constructors must be data-type properties, and we can
     # support them as a kind of methods.
     constructor_type = idl_type.constructor_type_name if is_constructor_attribute(attribute) else None
+    # [CEReactions]
+    is_ce_reactions = 'CEReactions' in extended_attributes
+    if is_ce_reactions:
+        includes.add('core/dom/custom/CEReactionsScope.h')
     # [CustomElementCallbacks], [Reflect]
     is_custom_element_callbacks = 'CustomElementCallbacks' in extended_attributes
     is_reflect = 'Reflect' in extended_attributes
@@ -83,6 +87,12 @@ def attribute_context(interface, attribute):
     # [PerWorldBindings]
     if 'PerWorldBindings' in extended_attributes:
         assert idl_type.is_wrapper_type or 'LogActivity' in extended_attributes, '[PerWorldBindings] should only be used with wrapper types: %s.%s' % (interface.name, attribute.name)
+    # [SaveSameObject]
+    is_save_same_object = (
+        'SameObject' in attribute.extended_attributes and
+        'SaveSameObject' in attribute.extended_attributes)
+    if is_save_same_object:
+        includes.add('bindings/core/v8/V8PrivateProperty.h')
 
     if (base_idl_type == 'EventHandler' and
             interface.name in ['Window', 'WorkerGlobalScope'] and
@@ -115,6 +125,7 @@ def attribute_context(interface, attribute):
         'idl_type': str(idl_type),  # need trailing [] on array for Dictionary::ConversionContext::setConversionType
         'is_call_with_execution_context': has_extended_attribute_value(attribute, 'CallWith', 'ExecutionContext'),
         'is_call_with_script_state': has_extended_attribute_value(attribute, 'CallWith', 'ScriptState'),
+        'is_ce_reactions': is_ce_reactions,
         'is_check_security_for_receiver': is_check_security_for_receiver,
         'is_check_security_for_return_value': is_check_security_for_return_value,
         'is_custom_element_callbacks': is_custom_element_callbacks,
@@ -135,14 +146,14 @@ def attribute_context(interface, attribute):
         'is_read_only': attribute.is_read_only,
         'is_reflect': is_reflect,
         'is_replaceable': 'Replaceable' in attribute.extended_attributes,
-        'is_same_object': 'SameObject' in attribute.extended_attributes,
+        'is_save_same_object': is_save_same_object,
         'is_static': attribute.is_static,
         'is_url': 'URL' in extended_attributes,
         'is_unforgeable': is_unforgeable(interface, attribute),
         'on_instance': v8_utilities.on_instance(interface, attribute),
         'on_interface': v8_utilities.on_interface(interface, attribute),
         'on_prototype': v8_utilities.on_prototype(interface, attribute),
-        'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(attribute, interface),  # [OriginTrialEnabled]
+        'origin_trial_enabled_function': v8_utilities.origin_trial_enabled_function_name(attribute),  # [OriginTrialEnabled]
         'origin_trial_feature_name': v8_utilities.origin_trial_feature_name(attribute),  # [OriginTrialEnabled]
         'use_output_parameter_for_result': idl_type.use_output_parameter_for_result,
         'measure_as': v8_utilities.measure_as(attribute, interface),  # [MeasureAs]
@@ -215,8 +226,7 @@ def attribute_filters():
     return {'has_accessor_configuration': filter_has_accessor_configuration,
             'has_attribute_configuration': filter_has_attribute_configuration,
             'origin_trial_enabled_attributes': filter_origin_trial_enabled,
-            'runtime_enabled_attributes': filter_runtime_enabled,
-            }
+            'runtime_enabled_attributes': filter_runtime_enabled}
 
 
 ################################################################################
@@ -375,7 +385,7 @@ def setter_context(interface, attribute, context):
                             (target_attribute_name, target_interface_name))
 
     if ('Replaceable' in attribute.extended_attributes):
-        context['cpp_setter'] = 'v8CallBoolean(info.This()->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), propertyName, v8Value))'
+        context['cpp_setter'] = 'v8CallBoolean(info.Holder()->CreateDataProperty(info.GetIsolate()->GetCurrentContext(), propertyName, v8Value))'
         return
 
     extended_attributes = attribute.extended_attributes

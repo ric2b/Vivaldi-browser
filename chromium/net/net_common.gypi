@@ -28,6 +28,7 @@
   ],
   'export_dependent_settings': [
     '../base/base.gyp:base',
+    '../third_party/boringssl/boringssl.gyp:boringssl',
   ],
   'conditions': [
     ['chromeos==1', {
@@ -211,6 +212,7 @@
         ],
     }],
     [ 'enable_websockets == 1', {
+        'defines': ['ENABLE_WEBSOCKETS'],
         'sources': ['<@(net_websockets_sources)']
     }],
     [ 'enable_mdns != 1', {

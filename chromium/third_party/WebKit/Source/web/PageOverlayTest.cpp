@@ -5,7 +5,6 @@
 #include "web/PageOverlay.h"
 
 #include "core/frame/FrameView.h"
-#include "core/layout/LayoutView.h"
 #include "platform/graphics/Color.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/paint/DrawingRecorder.h"
@@ -23,6 +22,7 @@
 #include "web/WebLocalFrameImpl.h"
 #include "web/WebViewImpl.h"
 #include "web/tests/FrameTestHelpers.h"
+#include <memory>
 
 using testing::_;
 using testing::AtLeast;
@@ -80,7 +80,7 @@ protected:
 
     WebViewImpl* webViewImpl() const { return m_helper.webViewImpl(); }
 
-    PassOwnPtr<PageOverlay> createSolidYellowOverlay()
+    std::unique_ptr<PageOverlay> createSolidYellowOverlay()
     {
         return PageOverlay::create(webViewImpl(), new SolidColorOverlay(SK_ColorYELLOW));
     }
@@ -112,7 +112,7 @@ TEST_F(PageOverlayTest, PageOverlay_AcceleratedCompositing)
     initialize(AcceleratedCompositing);
     webViewImpl()->layerTreeView()->setViewportSize(WebSize(viewportWidth, viewportHeight));
 
-    OwnPtr<PageOverlay> pageOverlay = createSolidYellowOverlay();
+    std::unique_ptr<PageOverlay> pageOverlay = createSolidYellowOverlay();
     pageOverlay->update();
     webViewImpl()->updateAllLifecyclePhases();
 
@@ -142,7 +142,7 @@ TEST_F(PageOverlayTest, PageOverlay_AcceleratedCompositing)
 TEST_F(PageOverlayTest, PageOverlay_VisualRect)
 {
     initialize(AcceleratedCompositing);
-    OwnPtr<PageOverlay> pageOverlay = createSolidYellowOverlay();
+    std::unique_ptr<PageOverlay> pageOverlay = createSolidYellowOverlay();
     pageOverlay->update();
     webViewImpl()->updateAllLifecyclePhases();
     EXPECT_EQ(LayoutRect(0, 0, viewportWidth, viewportHeight), pageOverlay->visualRect());

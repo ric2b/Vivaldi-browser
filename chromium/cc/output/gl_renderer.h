@@ -63,8 +63,11 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   // Waits for rendering to finish.
   void Finish() override;
 
-  void SwapBuffers(const CompositorFrameMetadata& metadata) override;
+  void SwapBuffers(CompositorFrameMetadata metadata) override;
   void SwapBuffersComplete() override;
+
+  void DidReceiveTextureInUseResponses(
+      const gpu::TextureInUseResponses& responses) override;
 
   virtual bool IsContextLost();
 
@@ -89,7 +92,6 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
                                  const gfx::Rect& rect,
                                  std::unique_ptr<CopyOutputRequest> request);
   void GetFramebufferTexture(unsigned texture_id,
-                             ResourceFormat texture_format,
                              const gfx::Rect& device_rect);
   void ReleaseRenderPassTextures();
   enum BoundGeometry { NO_BINDING, SHARED_BINDING, CLIPPED_BINDING };
@@ -177,9 +179,16 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
                                         ScopedResource* background_texture,
                                         const gfx::RectF& rect);
 
+  const TileDrawQuad* CanPassBeDrawnDirectly(const RenderPass* pass) override;
+
   void DrawRenderPassQuad(DrawingFrame* frame,
                           const RenderPassDrawQuad* quadi,
                           const gfx::QuadF* clip_region);
+  void DrawRenderPassQuadInternal(DrawingFrame* frame,
+                                  const RenderPassDrawQuad* quad,
+                                  const gfx::QuadF* clip_region,
+                                  const Resource* contents_texture,
+                                  bool is_render_pass_input);
   void DrawSolidColorQuad(const DrawingFrame* frame,
                           const SolidColorDrawQuad* quad,
                           const gfx::QuadF* clip_region);
@@ -254,10 +263,19 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   void ScheduleCALayers(DrawingFrame* frame);
   void ScheduleOverlays(DrawingFrame* frame);
 
-  using OverlayResourceLockList =
-      std::vector<std::unique_ptr<ResourceProvider::ScopedReadLockGL>>;
+  using OverlayResourceLock =
+      std::unique_ptr<ResourceProvider::ScopedReadLockGL>;
+  using OverlayResourceLockList = std::vector<OverlayResourceLock>;
+
+  // Resources that have been sent to the GPU process, but not yet swapped.
   OverlayResourceLockList pending_overlay_resources_;
-  std::deque<OverlayResourceLockList> swapped_overlay_resources_;
+
+  // Resources that should be shortly swapped by the GPU process.
+  std::deque<OverlayResourceLockList> swapping_overlay_resources_;
+
+  // Resources that the GPU process has finished swapping. The key is the
+  // texture id of the resource.
+  std::map<unsigned, OverlayResourceLock> swapped_and_acked_overlay_resources_;
 
   RendererCapabilitiesImpl capabilities_;
 
@@ -326,12 +344,6 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
       VideoStreamTextureProgram;
   typedef ProgramBinding<VertexShaderPosTexYUVStretchOffset,
                          FragmentShaderYUVVideo> VideoYUVProgram;
-  typedef ProgramBinding<VertexShaderPosTexYUVStretchOffset,
-                         FragmentShaderNV12Video>
-      VideoNV12Program;
-  typedef ProgramBinding<VertexShaderPosTexYUVStretchOffset,
-                         FragmentShaderYUVAVideo>
-      VideoYUVAProgram;
 
   // Special purpose / effects shaders.
   typedef ProgramBinding<VertexShaderPos, FragmentShaderColor>
@@ -398,11 +410,9 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
                                               SamplerType sampler);
 
   const VideoYUVProgram* GetVideoYUVProgram(TexCoordPrecision precision,
-                                            SamplerType sampler);
-  const VideoNV12Program* GetVideoNV12Program(TexCoordPrecision precision,
-                                              SamplerType sampler);
-  const VideoYUVAProgram* GetVideoYUVAProgram(TexCoordPrecision precision,
-                                              SamplerType sampler);
+                                            SamplerType sampler,
+                                            bool use_alpha_texture,
+                                            bool use_nv12);
   const VideoStreamTextureProgram* GetVideoStreamTextureProgram(
       TexCoordPrecision precision);
 
@@ -467,12 +477,8 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
                                                [LAST_BLEND_MODE + 1]
                                                [LAST_MASK_VALUE + 1];
 
-  VideoYUVProgram
-      video_yuv_program_[LAST_TEX_COORD_PRECISION + 1][LAST_SAMPLER_TYPE + 1];
-  VideoNV12Program video_nv12_program_[LAST_TEX_COORD_PRECISION + 1]
-                                      [LAST_SAMPLER_TYPE + 1];
-  VideoYUVAProgram
-      video_yuva_program_[LAST_TEX_COORD_PRECISION + 1][LAST_SAMPLER_TYPE + 1];
+  VideoYUVProgram video_yuv_program_[LAST_TEX_COORD_PRECISION + 1]
+                                    [LAST_SAMPLER_TYPE + 1][2][2];
   VideoStreamTextureProgram
       video_stream_texture_program_[LAST_TEX_COORD_PRECISION + 1];
 
@@ -504,6 +510,8 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
 
   std::unique_ptr<ResourceProvider::ScopedWriteLockGL>
       current_framebuffer_lock_;
+  // This is valid when current_framebuffer_lock_ is not null.
+  ResourceFormat current_framebuffer_format_;
 
   class SyncQuery;
   std::deque<std::unique_ptr<SyncQuery>> pending_sync_queries_;

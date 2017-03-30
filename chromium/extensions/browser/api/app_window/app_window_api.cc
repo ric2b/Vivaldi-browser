@@ -4,6 +4,9 @@
 
 #include "extensions/browser/api/app_window/app_window_api.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/string_number_conversions.h"
@@ -197,9 +200,10 @@ bool AppWindowCreateFunction::RunAsync() {
               existing_window->Show(AppWindow::SHOW_ACTIVE);
           }
 
-          base::DictionaryValue* result = new base::DictionaryValue;
+          std::unique_ptr<base::DictionaryValue> result(
+              new base::DictionaryValue);
           result->Set("frameId", new base::FundamentalValue(frame_id));
-          existing_window->GetSerializedState(result);
+          existing_window->GetSerializedState(result.get());
           result->SetBoolean("existingWindow", true);
 
           if (options->ext_data.get()) {
@@ -207,7 +211,7 @@ bool AppWindowCreateFunction::RunAsync() {
                         new base::StringValue(*options->ext_data.get()));
           }
 
-          SetResult(result);
+          SetResult(std::move(result));
           SendResponse(true);
           return true;
         }
@@ -366,11 +370,14 @@ bool AppWindowCreateFunction::RunAsync() {
   if (create_params.creator_process_id == created_frame->GetProcess()->GetID())
     frame_id = created_frame->GetRoutingID();
 
-  base::DictionaryValue* result = new base::DictionaryValue;
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
   result->Set("frameId", new base::FundamentalValue(frame_id));
   result->Set("id", new base::StringValue(app_window->window_key()));
-  app_window->GetSerializedState(result);
-  SetResult(result);
+  app_window->GetSerializedState(result.get());
+  if (options && options->ext_data.get()) {
+    result->Set("extData", new base::StringValue(*options->ext_data.get()));
+  }
+  SetResult(std::move(result));
 
   if (AppWindowRegistry::Get(browser_context())
           ->HadDevToolsAttached(app_window->web_contents())) {
@@ -380,9 +387,6 @@ bool AppWindowCreateFunction::RunAsync() {
     return true;
   }
 
-  if (options && options->ext_data.get()) {
-    result->Set("extData", new base::StringValue(*options->ext_data.get()));
-  }
 
   // PlzNavigate: delay sending the response until the newly created window has
   // been told to navigate, and blink has been correctly initialized in the

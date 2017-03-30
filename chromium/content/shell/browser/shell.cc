@@ -10,6 +10,7 @@
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -142,7 +143,7 @@ void Shell::CloseAllWindows() {
   std::vector<Shell*> open_windows(windows_);
   for (size_t i = 0; i < open_windows.size(); ++i)
     open_windows[i]->Close();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   PlatformExit();
 }
 
@@ -324,12 +325,9 @@ WebContents* Shell::OpenURLFromTab(WebContents* source,
   load_url_params.should_replace_current_entry =
       params.should_replace_current_entry;
 
-  // Only allows the browser-initiated navigation to use POST.
-  if (params.uses_post && !params.is_renderer_initiated) {
-    load_url_params.load_type =
-        NavigationController::LOAD_TYPE_BROWSER_INITIATED_HTTP_POST;
-    load_url_params.browser_initiated_post_data =
-        params.browser_initiated_post_data;
+  if (params.uses_post) {
+    load_url_params.load_type = NavigationController::LOAD_TYPE_HTTP_POST;
+    load_url_params.post_data = params.post_data;
   }
 
   source->GetController().LoadURLWithParams(load_url_params);

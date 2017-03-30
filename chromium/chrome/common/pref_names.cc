@@ -16,8 +16,17 @@ namespace prefs {
 #if defined(OS_CHROMEOS) && defined(ENABLE_APP_LIST)
 // A preference to keep list of Android apps and their state.
 const char kArcApps[] = "arc.apps";
+// A preference to store backup and restore state for Android apps.
+const char kArcBackupRestoreEnabled[] = "arc.backup_restore.enabled";
 // A preference to keep Android apps enabled state.
 const char kArcEnabled[] = "arc.enabled";
+// A preference to keep user's consent to use location service.
+const char kArcLocationServiceEnabled[] = "arc.location_service.enabled";
+// A preference to keep list of Android packages and their infomation.
+const char kArcPackages[] = "arc.packages";
+// A preference to keep deferred requests of setting notifications enabled flag.
+const char kArcSetNotificationsEnabledDeferred[] =
+    "arc.set_notifications_enabled_deferred";
 // A preference that indicates status of Android sign-in.
 const char kArcSignedIn[] = "arc.signedin";
 #endif
@@ -73,6 +82,12 @@ const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 // shutdown. Used to determine the exit type the last time the profile was open.
 const char kSessionExitType[] = "profile.exit_type";
 
+// The last time that the site engagement service recorded an engagement event
+// for this profile for any URL. Recorded only during shutdown. Used to prevent
+// the service from decaying engagement when a user does not use Chrome at all
+// for an extended period of time.
+const char kSiteEngagementLastUpdateTime[] = "profile.last_engagement_time";
+
 // An integer pref. Holds one of several values:
 // 0: unused, previously indicated to open the homepage on startup
 // 1: restore the last session.
@@ -112,6 +127,11 @@ const char kSupervisedUserManualHosts[] = "profile.managed.manual_hosts";
 // Maps URLs to whether the URL is manually allowed or blocked.
 const char kSupervisedUserManualURLs[] = "profile.managed.manual_urls";
 
+// Maps extension ids to the approved version of this extension for a
+// supervised user. Missing extensions are not approved.
+const char kSupervisedUserApprovedExtensions[] =
+    "profile.managed.approved_extensions";
+
 // Stores whether the SafeSites filter is enabled.
 const char kSupervisedUserSafeSites[] = "profile.managed.safe_sites";
 
@@ -147,9 +167,10 @@ const char kSupervisedUserSharedSettings[] = "profile.managed.shared_settings";
 const char kSupervisedUserWhitelists[] = "profile.managed.whitelists";
 
 // The application locale.
-// For OS_CHROMEOS we maintain kApplicationLocale property in both local state
-// and user's profile.  Global property determines locale of login screen,
-// while user's profile determines his personal locale preference.
+// For OS_CHROMEOS we maintain the kApplicationLocale property in both local
+// state and the user's profile.  The global property determines the locale of
+// the login screen, while the user's profile determines their personal locale
+// preference.
 const char kApplicationLocale[] = "intl.app_locale";
 #if defined(OS_CHROMEOS)
 // Locale preference of device' owner.  ChromeOS device appears in this locale
@@ -868,6 +889,21 @@ const char kAllowScreenLock[] = "allow_screen_lock";
 // An int64 pref. This is a timestamp of the most recent time the profile took
 // or dismissed HaTS (happiness-tracking) survey.
 const char kHatsLastInteractionTimestamp[] = "hats_last_interaction_timestamp";
+
+// The salt and hash for the pin quick unlock mechanism.
+const char kQuickUnlockPinSalt[] = "quick_unlock.pin.salt";
+const char kQuickUnlockPinSecret[] = "quick_unlock.pin.secret";
+
+// An integer pref. Holds one of several values:
+// 0: Supported. Device is in supported state.
+// 1: Security Only. Device is in Security-Only update (after initial 5 years).
+// 2: EOL. Device is End of Life(No more updates expected).
+// This value needs to be consistent with EndOfLifeStatus enum.
+const char kEolStatus[] = "eol_status";
+
+// Boolean pref indicating the End Of Life notification was dismissed by the
+// user.
+const char kEolNotificationDismissed[] = "eol_notification_dismissed";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -886,8 +922,7 @@ const char kDeleteCookies[] = "browser.clear_data.cookies";
 const char kDeletePasswords[] = "browser.clear_data.passwords";
 const char kDeleteFormData[] = "browser.clear_data.form_data";
 const char kDeleteHostedAppsData[] = "browser.clear_data.hosted_apps_data";
-const char kDeauthorizeContentLicenses[] =
-    "browser.clear_data.content_licenses";
+const char kDeleteMediaLicenses[] = "browser.clear_data.media_licenses";
 const char kDeleteTimePeriod[] = "browser.clear_data.time_period";
 const char kLastClearBrowsingDataTime[] =
     "browser.last_clear_browsing_data_time";
@@ -918,6 +953,11 @@ const char kForceYouTubeSafetyMode[] = "settings.force_youtube_safety_mode";
 // Boolean controlling whether history is recorded via Session Sync
 // (for supervised users).
 const char kForceSessionSync[] = "settings.history_recorded";
+
+// Comma separated list of domain names (e.g. "google.com,school.edu").
+// When this pref is set, the user will be able to access Google Apps
+// only using an account that belongs to one of the domains from this pref.
+const char kAllowedDomainsForApps[] = "settings.allowed_domains_for_apps";
 
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 // Linux specific preference on whether we should match the system theme.
@@ -1176,6 +1216,11 @@ const char kFullscreenAllowed[] = "fullscreen.allowed";
 const char kLocalDiscoveryNotificationsEnabled[] =
     "local_discovery.notifications_enabled";
 
+#if defined(OS_ANDROID)
+// Enable vibration for web notifications.
+const char kNotificationsVibrateEnabled[] = "notifications.vibrate_enabled";
+#endif
+
 // Maps from app ids to origin + Service Worker registration ID.
 const char kPushMessagingAppIdentifierMap[] =
     "gcm.push_messaging_application_id_map";
@@ -1270,13 +1315,6 @@ const char kProfileInfoCache[] = "profile.info_cache";
 const char kCrashReportingEnabled[] =
     "user_experience_metrics_crash.reporting_enabled";
 #endif
-
-// An enum value indicating the default value of the enable metrics reporting
-// checkbox shown during first-run. If it's opt-in, then the checkbox defaulted
-// to unchecked, if it's opt-out, then it defaulted to checked. This value is
-// only recorded during first-run, so older clients will not set it. The enum
-// used for the value is metrics::MetricsServiceClient::EnableMetricsDefault.
-const char kMetricsDefaultOptIn[] = "user_experience_metrics.default_opt_in";
 
 // This is the location of a list of dictionaries of plugin stability stats.
 const char kStabilityPluginStats[] =
@@ -2218,5 +2256,12 @@ const char kMediaRouterEnableCloudServices[] =
 const char kMediaRouterFirstRunFlowAcknowledged[] =
     "media_router.firstrunflow.acknowledged";
 #endif
+
+// The base64-encoded representation of the public key to use to validate origin
+// trial token signatures.
+const char kOriginTrialPublicKey[] = "origin_trials.public_key";
+
+// A list of origin trial features to disable by policy.
+const char kOriginTrialDisabledFeatures[] = "origin_trials.disabled_features";
 
 }  // namespace prefs

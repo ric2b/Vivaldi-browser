@@ -10,13 +10,13 @@
 #include <vector>
 
 #include "base/bit_cast.h"
-#include "base/message_loop/message_loop.h"
-#include "base/metrics/field_trial.h"
+#include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_cache.h"
@@ -42,12 +42,6 @@ const int kMaxHttpRequestTimeSeconds = 60 * 5;  // 5 minutes.
 // Helper method for logging timeouts via UMA.
 void LogTimeout(bool timed_out) {
   UMA_HISTOGRAM_BOOLEAN("Sync.URLFetchTimedOut", timed_out);
-}
-
-bool IsSyncHttpContentCompressionEnabled() {
-  const std::string group_name =
-      base::FieldTrialList::FindFullName("SyncHttpContentCompression");
-  return StartsWith(group_name, "Enabled", base::CompareCase::SENSITIVE);
 }
 
 void RecordSyncRequestContentLengthHistograms(int64_t compressed_content_length,
@@ -136,9 +130,9 @@ HttpBridge::HttpBridge(
     const scoped_refptr<net::URLRequestContextGetter>& context_getter,
     const NetworkTimeUpdateCallback& network_time_update_callback,
     const BindToTrackerCallback& bind_to_tracker_callback)
-    : created_on_loop_(base::MessageLoop::current()),
-      user_agent_(user_agent),
-      http_post_completed_(false, false),
+    : user_agent_(user_agent),
+      http_post_completed_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                           base::WaitableEvent::InitialState::NOT_SIGNALED),
       request_context_getter_(context_getter),
       network_task_runner_(request_context_getter_->GetNetworkTaskRunner()),
       network_time_update_callback_(network_time_update_callback),
@@ -155,7 +149,7 @@ void HttpBridge::SetExtraRequestHeaders(const char * headers) {
 
 void HttpBridge::SetURL(const char* url, int port) {
 #if DCHECK_IS_ON()
-  DCHECK_EQ(base::MessageLoop::current(), created_on_loop_);
+  DCHECK(thread_checker_.CalledOnValidThread());
   {
     base::AutoLock lock(fetch_state_lock_);
     DCHECK(!fetch_state_.request_completed);
@@ -174,7 +168,7 @@ void HttpBridge::SetPostPayload(const char* content_type,
                                 int content_length,
                                 const char* content) {
 #if DCHECK_IS_ON()
-  DCHECK_EQ(base::MessageLoop::current(), created_on_loop_);
+  DCHECK(thread_checker_.CalledOnValidThread());
   {
     base::AutoLock lock(fetch_state_lock_);
     DCHECK(!fetch_state_.request_completed);
@@ -195,7 +189,7 @@ void HttpBridge::SetPostPayload(const char* content_type,
 
 bool HttpBridge::MakeSynchronousPost(int* error_code, int* response_code) {
 #if DCHECK_IS_ON()
-  DCHECK_EQ(base::MessageLoop::current(), created_on_loop_);
+  DCHECK(thread_checker_.CalledOnValidThread());
   {
     base::AutoLock lock(fetch_state_lock_);
     DCHECK(!fetch_state_.request_completed);
@@ -249,13 +243,6 @@ void HttpBridge::MakeAsynchronousPost() {
   fetch_state_.url_poster->SetRequestContext(request_context_getter_.get());
   fetch_state_.url_poster->SetExtraRequestHeaders(extra_headers_);
 
-  if (!IsSyncHttpContentCompressionEnabled()) {
-    // We set "accept-encoding" here to avoid URLRequestHttpJob adding "gzip"
-    // into "accept-encoding" later.
-    fetch_state_.url_poster->AddExtraRequestHeader(base::StringPrintf(
-        "%s: %s", net::HttpRequestHeaders::kAcceptEncoding, "deflate"));
-  }
-
   fetch_state_.url_poster->SetUploadData(content_type_, request_content_);
   RecordSyncRequestContentLengthHistograms(request_content_.size(),
                                            request_content_.size());
@@ -271,14 +258,14 @@ void HttpBridge::MakeAsynchronousPost() {
 }
 
 int HttpBridge::GetResponseContentLength() const {
-  DCHECK_EQ(base::MessageLoop::current(), created_on_loop_);
+  DCHECK(thread_checker_.CalledOnValidThread());
   base::AutoLock lock(fetch_state_lock_);
   DCHECK(fetch_state_.request_completed);
   return fetch_state_.response_content.size();
 }
 
 const char* HttpBridge::GetResponseContent() const {
-  DCHECK_EQ(base::MessageLoop::current(), created_on_loop_);
+  DCHECK(thread_checker_.CalledOnValidThread());
   base::AutoLock lock(fetch_state_lock_);
   DCHECK(fetch_state_.request_completed);
   return fetch_state_.response_content.data();
@@ -286,8 +273,7 @@ const char* HttpBridge::GetResponseContent() const {
 
 const std::string HttpBridge::GetResponseHeaderValue(
     const std::string& name) const {
-
-  DCHECK_EQ(base::MessageLoop::current(), created_on_loop_);
+  DCHECK(thread_checker_.CalledOnValidThread());
   base::AutoLock lock(fetch_state_lock_);
   DCHECK(fetch_state_.request_completed);
 
@@ -378,7 +364,8 @@ void HttpBridge::OnURLFetchComplete(const net::URLFetcher* source) {
   // End of the line for url_poster_. It lives only on the IO loop.
   // We defer deletion because we're inside a callback from a component of the
   // URLFetcher, so it seems most natural / "polite" to let the stack unwind.
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, fetch_state_.url_poster);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE,
+                                                  fetch_state_.url_poster);
   fetch_state_.url_poster = NULL;
 
   // Wake the blocked syncer thread in MakeSynchronousPost.

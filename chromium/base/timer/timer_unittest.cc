@@ -10,7 +10,9 @@
 
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/run_loop.h"
 #include "base/test/test_simple_task_runner.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -115,7 +117,7 @@ void RunTest_OneShotTimer(base::MessageLoop::Type message_loop_type) {
   OneShotTimerTester f(&did_run);
   f.Start();
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_TRUE(did_run);
 }
@@ -127,7 +129,7 @@ void RunTest_OneShotTimer_Cancel(base::MessageLoop::Type message_loop_type) {
   OneShotTimerTester* a = new OneShotTimerTester(&did_run_a);
 
   // This should run before the timer expires.
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, a);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, a);
 
   // Now start the timer.
   a->Start();
@@ -136,7 +138,7 @@ void RunTest_OneShotTimer_Cancel(base::MessageLoop::Type message_loop_type) {
   OneShotTimerTester b(&did_run_b);
   b.Start();
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_FALSE(did_run_a);
   EXPECT_TRUE(did_run_b);
@@ -150,7 +152,7 @@ void RunTest_OneShotSelfDeletingTimer(
   OneShotSelfDeletingTimerTester f(&did_run);
   f.Start();
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_TRUE(did_run);
 }
@@ -163,7 +165,7 @@ void RunTest_RepeatingTimer(base::MessageLoop::Type message_loop_type,
   RepeatingTimerTester f(&did_run, delay);
   f.Start();
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_TRUE(did_run);
 }
@@ -176,7 +178,7 @@ void RunTest_RepeatingTimer_Cancel(base::MessageLoop::Type message_loop_type,
   RepeatingTimerTester* a = new RepeatingTimerTester(&did_run_a, delay);
 
   // This should run before the timer expires.
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, a);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, a);
 
   // Now start the timer.
   a->Start();
@@ -185,7 +187,7 @@ void RunTest_RepeatingTimer_Cancel(base::MessageLoop::Type message_loop_type,
   RepeatingTimerTester b(&did_run_b, delay);
   b.Start();
 
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   EXPECT_FALSE(did_run_a);
   EXPECT_TRUE(did_run_b);
@@ -215,7 +217,7 @@ void RunTest_DelayTimer_NoCall(base::MessageLoop::Type message_loop_type) {
   bool did_run = false;
   OneShotTimerTester tester(&did_run);
   tester.Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   ASSERT_FALSE(target.signaled());
 }
@@ -231,7 +233,7 @@ void RunTest_DelayTimer_OneCall(base::MessageLoop::Type message_loop_type) {
   bool did_run = false;
   OneShotTimerTester tester(&did_run, 100 /* milliseconds */);
   tester.Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   ASSERT_TRUE(target.signaled());
 }
@@ -270,7 +272,7 @@ void RunTest_DelayTimer_Reset(base::MessageLoop::Type message_loop_type) {
   bool did_run = false;
   OneShotTimerTester tester(&did_run, 300);
   tester.Start();
-  base::MessageLoop::current()->Run();
+  base::RunLoop().Run();
 
   ASSERT_TRUE(target.signaled());
 }
@@ -513,7 +515,7 @@ TEST(TimerTest, ContinuationStopStart) {
     timer.Stop();
     timer.Start(FROM_HERE, TimeDelta::FromMilliseconds(40),
                 base::Bind(&SetCallbackHappened2));
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
     EXPECT_FALSE(g_callback_happened1);
     EXPECT_TRUE(g_callback_happened2);
   }
@@ -529,7 +531,7 @@ TEST(TimerTest, ContinuationReset) {
     timer.Reset();
     // Since Reset happened before task ran, the user_task must not be cleared:
     ASSERT_FALSE(timer.user_task().is_null());
-    base::MessageLoop::current()->Run();
+    base::RunLoop().Run();
     EXPECT_TRUE(g_callback_happened1);
   }
 }

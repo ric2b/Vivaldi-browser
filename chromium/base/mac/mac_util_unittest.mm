@@ -145,60 +145,56 @@ TEST_F(MacUtilTest, IsOSEllipsis) {
   base::SysInfo::OperatingSystemVersionNumbers(&major, &minor, &bugfix);
 
   if (major == 10) {
-    if (minor == 8) {
-      EXPECT_TRUE(IsOSMountainLion());
-      EXPECT_TRUE(IsOSMountainLionOrEarlier());
-      EXPECT_TRUE(IsOSMountainLionOrLater());
-      EXPECT_FALSE(IsOSMavericks());
-      EXPECT_TRUE(IsOSMavericksOrEarlier());
-      EXPECT_FALSE(IsOSMavericksOrLater());
-      EXPECT_FALSE(IsOSYosemite());
-      EXPECT_TRUE(IsOSYosemiteOrEarlier());
-      EXPECT_FALSE(IsOSYosemiteOrLater());
-      EXPECT_FALSE(IsOSElCapitan());
-      EXPECT_FALSE(IsOSElCapitanOrLater());
-      EXPECT_FALSE(IsOSLaterThanElCapitan_DontCallThis());
-    } else if (minor == 9) {
-      EXPECT_FALSE(IsOSMountainLion());
-      EXPECT_FALSE(IsOSMountainLionOrEarlier());
-      EXPECT_TRUE(IsOSMountainLionOrLater());
+    if (minor == 9) {
       EXPECT_TRUE(IsOSMavericks());
-      EXPECT_TRUE(IsOSMavericksOrEarlier());
       EXPECT_TRUE(IsOSMavericksOrLater());
       EXPECT_FALSE(IsOSYosemite());
       EXPECT_TRUE(IsOSYosemiteOrEarlier());
       EXPECT_FALSE(IsOSYosemiteOrLater());
       EXPECT_FALSE(IsOSElCapitan());
+      EXPECT_TRUE(IsOSElCapitanOrEarlier());
       EXPECT_FALSE(IsOSElCapitanOrLater());
-      EXPECT_FALSE(IsOSLaterThanElCapitan_DontCallThis());
+      EXPECT_FALSE(IsOSSierra());
+      EXPECT_FALSE(IsOSSierraOrLater());
+      EXPECT_FALSE(IsOSLaterThanSierra_DontCallThis());
     } else if (minor == 10) {
-      EXPECT_FALSE(IsOSMountainLion());
-      EXPECT_FALSE(IsOSMountainLionOrEarlier());
-      EXPECT_TRUE(IsOSMountainLionOrLater());
       EXPECT_FALSE(IsOSMavericks());
-      EXPECT_FALSE(IsOSMavericksOrEarlier());
       EXPECT_TRUE(IsOSMavericksOrLater());
       EXPECT_TRUE(IsOSYosemite());
       EXPECT_TRUE(IsOSYosemiteOrEarlier());
       EXPECT_TRUE(IsOSYosemiteOrLater());
       EXPECT_FALSE(IsOSElCapitan());
+      EXPECT_TRUE(IsOSElCapitanOrEarlier());
       EXPECT_FALSE(IsOSElCapitanOrLater());
-      EXPECT_FALSE(IsOSLaterThanElCapitan_DontCallThis());
+      EXPECT_FALSE(IsOSSierra());
+      EXPECT_FALSE(IsOSSierraOrLater());
+      EXPECT_FALSE(IsOSLaterThanSierra_DontCallThis());
     } else if (minor == 11) {
-      EXPECT_FALSE(IsOSMountainLion());
-      EXPECT_FALSE(IsOSMountainLionOrEarlier());
-      EXPECT_TRUE(IsOSMountainLionOrLater());
       EXPECT_FALSE(IsOSMavericks());
-      EXPECT_FALSE(IsOSMavericksOrEarlier());
       EXPECT_TRUE(IsOSMavericksOrLater());
       EXPECT_FALSE(IsOSYosemite());
       EXPECT_FALSE(IsOSYosemiteOrEarlier());
       EXPECT_TRUE(IsOSYosemiteOrLater());
       EXPECT_TRUE(IsOSElCapitan());
+      EXPECT_TRUE(IsOSElCapitanOrEarlier());
       EXPECT_TRUE(IsOSElCapitanOrLater());
-      EXPECT_FALSE(IsOSLaterThanElCapitan_DontCallThis());
+      EXPECT_FALSE(IsOSSierra());
+      EXPECT_FALSE(IsOSSierraOrLater());
+      EXPECT_FALSE(IsOSLaterThanSierra_DontCallThis());
+    } else if (minor == 12) {
+      EXPECT_FALSE(IsOSMavericks());
+      EXPECT_TRUE(IsOSMavericksOrLater());
+      EXPECT_FALSE(IsOSYosemite());
+      EXPECT_FALSE(IsOSYosemiteOrEarlier());
+      EXPECT_TRUE(IsOSYosemiteOrLater());
+      EXPECT_FALSE(IsOSElCapitan());
+      EXPECT_FALSE(IsOSElCapitanOrEarlier());
+      EXPECT_TRUE(IsOSElCapitanOrLater());
+      EXPECT_TRUE(IsOSSierra());
+      EXPECT_TRUE(IsOSSierraOrLater());
+      EXPECT_FALSE(IsOSLaterThanSierra_DontCallThis());
     } else {
-      // Not six, seven, eight, nine, ten, or eleven. Ah, ah, ah.
+      // Not nine, ten, eleven, or twelve. Ah, ah, ah.
       EXPECT_TRUE(false);
     }
   } else {

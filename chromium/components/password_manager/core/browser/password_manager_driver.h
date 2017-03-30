@@ -67,6 +67,11 @@ class PasswordManagerDriver
   virtual void PreviewSuggestion(const base::string16& username,
                                  const base::string16& password) = 0;
 
+  // Tells the driver to show an initial set of accounts to suggest for the
+  // form.
+  virtual void ShowInitialPasswordAccountSuggestions(
+      const autofill::PasswordFormFillData& form_data) = 0;
+
   // Tells the driver to clear previewed password and username fields.
   virtual void ClearPreviewedForm() = 0;
 
@@ -90,6 +95,9 @@ class PasswordManagerDriver
   // Sends a message to the renderer whether logging to
   // chrome://password-manager-internals is available.
   virtual void SendLoggingAvailability() {}
+
+  // Allows the form classifier to find generation fields.
+  virtual void AllowToRunFormClassifier() {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerDriver);

@@ -10,11 +10,11 @@
 #include "wtf/Allocator.h"
 #include "wtf/Compiler.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/TypeTraits.h"
 #include "wtf/Vector.h"
 #include <cstddef>
 #include <iterator>
+#include <memory>
 #include <utility>
 
 namespace blink {
@@ -67,12 +67,9 @@ private:
 
     Buffer* allocateNewBufferForNextAllocation(size_t, const char* typeName);
 
-    Vector<OwnPtr<Buffer>> m_buffers;
+    Vector<std::unique_ptr<Buffer>> m_buffers;
     unsigned m_endIndex;
     size_t m_maxObjectSize;
-
-    // Makes Buffer accessible when clearing m_buffers. Fixes MSVC build.
-    friend struct WTF::OwnedPtrDeleter<Buffer>;
 };
 
 // For most cases, no alignment stricter than pointer alignment is required. If

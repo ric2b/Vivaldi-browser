@@ -44,6 +44,9 @@ class WebContents;
   // for enterprise users with DevTools disabled.
   NSButton* securityDetailsButton_;
 
+  // URL of the page for which the bubble is shown.
+  GURL url_;
+
   // Whether DevTools is disabled for the relevant profile.
   BOOL isDevToolsDisabled_;
 
@@ -81,19 +84,13 @@ class WebContents;
   std::unique_ptr<WebsiteSettingsUIBridge> bridge_;
 }
 
-enum BubbleType {
-  WEB_PAGE,        // Bubble for web URLs
-  INTERNAL_PAGE,   // For chrome: URLs
-  EXTENSION_PAGE,  // For chrome-extension: URLs
-};
-
 // Designated initializer. The controller will release itself when the bubble
 // is closed. |parentWindow| cannot be nil. |webContents| may be nil for
 // testing purposes.
 - (id)initWithParentWindow:(NSWindow*)parentWindow
     websiteSettingsUIBridge:(WebsiteSettingsUIBridge*)bridge
                 webContents:(content::WebContents*)webContents
-                 bubbleType:(BubbleType)bubbleType
+                        url:(const GURL&)url
          isDevToolsDisabled:(BOOL)isDevToolsDisabled;
 
 // Return the default width of the window. It may be wider to fit the content.
@@ -113,7 +110,7 @@ class WebsiteSettingsUIBridge : public content::WebContentsObserver,
   // Creates a |WebsiteSettingsBubbleController| and displays the UI. |parent|
   // is the currently active window. |profile| points to the currently active
   // profile. |web_contents| points to the WebContents that wraps the currently
-  // active tab. |url| is the GURL of the currently active
+  // active tab. |virtual_url| is the virtual GURL of the currently active
   // tab. |security_info| is the
   // |security_state::SecurityStateModel::SecurityInfo| of
   // the connection to the website in the currently active tab.
@@ -121,7 +118,7 @@ class WebsiteSettingsUIBridge : public content::WebContentsObserver,
       gfx::NativeWindow parent,
       Profile* profile,
       content::WebContents* web_contents,
-      const GURL& url,
+      const GURL& virtual_url,
       const security_state::SecurityStateModel::SecurityInfo& security_info);
 
   static void ShowAt(gfx::NativeWindow parent,

@@ -9,9 +9,13 @@ shows a graph of the amount of data to download for a new visit to the same
 page, with a given time interval.
 """
 
+import collections
+import urlparse
+
 import content_classification_lens
 from request_track import CachingPolicy
 
+HTTP_OK_LENGTH = len("HTTP/1.1 200 OK\r\n")
 
 def _RequestTransferSize(request):
   def HeadersSize(headers):
@@ -25,7 +29,7 @@ def _RequestTransferSize(request):
           'body': request.encoded_data_length}
 
 
-def _TransferSize(requests):
+def TransferSize(requests):
   """Returns the total transfer size (uploaded, downloaded) of requests.
 
   This is an estimate as we assume:
@@ -43,7 +47,7 @@ def _TransferSize(requests):
   for request in requests:
     request_bytes = _RequestTransferSize(request)
     uploaded_bytes += request_bytes['get'] + request_bytes['request_headers']
-    downloaded_bytes += (len('HTTP/1.1 200 OK')
+    downloaded_bytes += (HTTP_OK_LENGTH
                          + request_bytes['response_headers']
                          + request_bytes['body'])
   return (uploaded_bytes, downloaded_bytes)
@@ -51,7 +55,7 @@ def _TransferSize(requests):
 
 def TotalTransferSize(trace):
   """Returns the total transfer size (uploaded, downloaded) from a trace."""
-  return _TransferSize(trace.request_track.GetEvents())
+  return TransferSize(trace.request_track.GetEvents())
 
 
 def TransferredDataRevisit(trace, after_time_s, assume_validation_ok=False):
@@ -80,7 +84,7 @@ def TransferredDataRevisit(trace, after_time_s, assume_validation_ok=False):
         and caching_policy.HasValidators() and assume_validation_ok):
       downloaded_bytes += len('HTTP/1.1 304 NOT MODIFIED\r\n')
       continue
-    downloaded_bytes += (len('HTTP/1.1 200 OK\r\n')
+    downloaded_bytes += (HTTP_OK_LENGTH
                          + request_bytes['response_headers']
                          + request_bytes['body'])
   return (uploaded_bytes, downloaded_bytes)
@@ -102,7 +106,63 @@ def AdsAndTrackingTransferSize(trace, ad_rules_filename,
       content_classification_lens.ContentClassificationLens.WithRulesFiles(
           trace, ad_rules_filename, tracking_rules_filename))
   requests = content_lens.AdAndTrackingRequests()
-  return _TransferSize(requests)
+  return TransferSize(requests)
+
+
+def DnsRequestsAndCost(trace):
+  """Returns the number and cost of DNS requests for a trace."""
+  requests = trace.request_track.GetEvents()
+  requests_with_dns = [r for r in requests if r.timing.dns_start != -1]
+  dns_requests_count = len(requests_with_dns)
+  dns_cost = sum(r.timing.dns_end - r.timing.dns_start
+                 for r in requests_with_dns)
+  return (dns_requests_count, dns_cost)
+
+
+def ConnectionMetrics(trace):
+  """Returns the connection metrics for a given trace.
+
+  Returns:
+  {
+    'connections': int,
+    'connection_cost_ms': float,
+    'ssl_connections': int,
+    'ssl_cost_ms': float,
+    'http11_requests': int,
+    'h2_requests': int,
+    'data_requests': int,
+    'domains': int
+  }
+  """
+  requests = trace.request_track.GetEvents()
+  requests_with_connect = [r for r in requests if r.timing.connect_start != -1]
+  requests_with_connect_count = len(requests_with_connect)
+  connection_cost = sum(r.timing.connect_end - r.timing.connect_start
+                        for r in requests_with_connect)
+  ssl_requests = [r for r in requests if r.timing.ssl_start != -1]
+  ssl_requests_count = len(ssl_requests)
+  ssl_cost = sum(r.timing.ssl_end - r.timing.ssl_start for r in ssl_requests)
+  requests_per_protocol = collections.defaultdict(int)
+  for r in requests:
+    requests_per_protocol[r.protocol] += 1
+
+  domains = set()
+  for r in requests:
+    if r.protocol == 'data':
+      continue
+    domain = urlparse.urlparse(r.url).hostname
+    domains.add(domain)
+
+  return {
+    'connections': requests_with_connect_count,
+    'connection_cost_ms': connection_cost,
+    'ssl_connections': ssl_requests_count,
+    'ssl_cost_ms': ssl_cost,
+    'http11_requests': requests_per_protocol['http/1.1'],
+    'h2_requests': requests_per_protocol['h2'],
+    'data_requests': requests_per_protocol['data'],
+    'domains': len(domains)
+  }
 
 
 def PlotTransferSizeVsTimeBetweenVisits(trace):

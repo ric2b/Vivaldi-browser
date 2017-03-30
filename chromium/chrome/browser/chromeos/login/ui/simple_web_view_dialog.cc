@@ -4,8 +4,8 @@
 
 #include "chrome/browser/chromeos/login/ui/simple_web_view_dialog.h"
 
+#include "ash/common/shell_window_ids.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/strings/utf_string_conversions.h"
@@ -303,7 +303,7 @@ SimpleWebViewDialog::GetContentSettingBubbleModelDelegate() {
 
 void SimpleWebViewDialog::ShowWebsiteSettings(
     content::WebContents* web_contents,
-    const GURL& url,
+    const GURL& virtual_url,
     const security_state::SecurityStateModel::SecurityInfo& security_info) {
   NOTIMPLEMENTED();
   // TODO (markusheintz@): implement this

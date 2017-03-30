@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <stddef.h>
+#include <stdint.h>
+
 #include "base/macros.h"
 #include "net/cert/internal/certificate_policies.h"
 #include "net/cert/internal/extended_key_usage.h"
@@ -49,6 +52,8 @@ void ParseCertificateForFuzzer(const der::Input& in) {
     der::BitString key_usage;
     std::vector<der::Input> policies;
     std::vector<der::Input> eku_oids;
+    std::vector<base::StringPiece> ca_issuers_uris;
+    std::vector<base::StringPiece> ocsp_uris;
     if (FindExtension(BasicConstraintsOid(), &extensions, &extension))
       ignore_result(ParseBasicConstraints(extension.value, &basic_constraints));
     if (FindExtension(KeyUsageOid(), &extensions, &extension))
@@ -59,13 +64,16 @@ void ParseCertificateForFuzzer(const der::Input& in) {
       ParseCertificatePoliciesExtension(extension.value, &policies);
     if (FindExtension(ExtKeyUsageOid(), &extensions, &extension))
       ParseEKUExtension(extension.value, &eku_oids);
+    if (FindExtension(AuthorityInfoAccessOid(), &extensions, &extension))
+      ignore_result(ParseAuthorityInfoAccess(extension.value, &ca_issuers_uris,
+                                             &ocsp_uris));
   }
 }
 
 }  // namespace
 }  // namespace net
 
-extern "C" int LLVMFuzzerTestOneInput(const unsigned char* data, size_t size) {
+extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   net::der::Input in(data, size);
   net::ParseCertificateForFuzzer(in);
   return 0;

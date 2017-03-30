@@ -8,8 +8,8 @@
 
 #include <vector>
 
+#include "ash/common/wm/window_state.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
-#include "ash/wm/common/window_state.h"
 #include "ash/wm/window_state_aura.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
@@ -27,7 +27,7 @@
 #include "components/user_manager/user_manager.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/events/devices/device_data_manager.h"
+#include "ui/events/devices/input_device_manager.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/dom/dom_code.h"
@@ -1140,11 +1140,11 @@ EventRewriter::DeviceType EventRewriter::KeyboardDeviceAddedInternal(
 }
 
 EventRewriter::DeviceType EventRewriter::KeyboardDeviceAdded(int device_id) {
-  if (!ui::DeviceDataManager::HasInstance())
+  if (!ui::InputDeviceManager::HasInstance())
     return kDeviceUnknown;
-  const std::vector<ui::KeyboardDevice>& keyboards =
-      ui::DeviceDataManager::GetInstance()->keyboard_devices();
-  for (const auto& keyboard : keyboards) {
+  const std::vector<ui::InputDevice>& keyboard_devices =
+      ui::InputDeviceManager::GetInstance()->GetKeyboardDevices();
+  for (const auto& keyboard : keyboard_devices) {
     if (keyboard.id == device_id) {
       return KeyboardDeviceAddedInternal(
           keyboard.id, keyboard.name, keyboard.vendor_id, keyboard.product_id);

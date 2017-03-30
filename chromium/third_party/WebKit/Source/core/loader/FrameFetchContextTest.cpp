@@ -31,6 +31,7 @@
 #include "core/loader/FrameFetchContext.h"
 
 #include "core/fetch/FetchInitiatorInfo.h"
+#include "core/fetch/UniqueIdentifier.h"
 #include "core/frame/FrameHost.h"
 #include "core/frame/FrameOwner.h"
 #include "core/frame/FrameView.h"
@@ -44,8 +45,10 @@
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebCachePolicy.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "testing/gmock/include/gmock/gmock-generated-function-mockers.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include <memory>
 
 namespace blink {
 
@@ -120,7 +123,7 @@ protected:
         return childFetchContext;
     }
 
-    OwnPtr<DummyPageHolder> dummyPageHolder;
+    std::unique_ptr<DummyPageHolder> dummyPageHolder;
     // We don't use the DocumentLoader directly in any tests, but need to keep it around as long
     // as the ResourceFetcher and Document live due to indirect usage.
     Persistent<DocumentLoader> documentLoader;
@@ -231,7 +234,7 @@ TEST_F(FrameFetchContextUpgradeTest, UpgradeInsecureResourceRequests)
     };
 
     FrameFetchContext::provideDocumentToContext(*fetchContext, document.get());
-    document->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsUpgrade);
+    document->setInsecureRequestPolicy(kUpgradeInsecureRequests);
 
     for (const auto& test : tests) {
         document->insecureNavigationsToUpgrade()->clear();
@@ -259,7 +262,7 @@ TEST_F(FrameFetchContextUpgradeTest, DoNotUpgradeInsecureResourceRequests)
 {
     FrameFetchContext::provideDocumentToContext(*fetchContext, document.get());
     document->setSecurityOrigin(secureOrigin);
-    document->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsDoNotUpgrade);
+    document->setInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
 
     expectUpgrade("http://example.test/image.png", "http://example.test/image.png");
     expectUpgrade("http://example.test:80/image.png", "http://example.test:80/image.png");
@@ -295,20 +298,20 @@ TEST_F(FrameFetchContextUpgradeTest, SendHTTPSHeader)
     // when it doesn't (e.g. during main frame navigations), so run through the tests
     // both before and after providing a document to the context.
     for (const auto& test : tests) {
-        document->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsDoNotUpgrade);
+        document->setInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
         expectHTTPSHeader(test.toRequest, test.frameType, test.shouldPrefer);
 
-        document->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsUpgrade);
+        document->setInsecureRequestPolicy(kUpgradeInsecureRequests);
         expectHTTPSHeader(test.toRequest, test.frameType, test.shouldPrefer);
     }
 
     FrameFetchContext::provideDocumentToContext(*fetchContext, document.get());
 
     for (const auto& test : tests) {
-        document->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsDoNotUpgrade);
+        document->setInsecureRequestPolicy(kLeaveInsecureRequestsAlone);
         expectHTTPSHeader(test.toRequest, test.frameType, test.shouldPrefer);
 
-        document->setInsecureRequestsPolicy(SecurityContext::InsecureRequestsUpgrade);
+        document->setInsecureRequestPolicy(kUpgradeInsecureRequests);
         expectHTTPSHeader(test.toRequest, test.frameType, test.shouldPrefer);
     }
 }
@@ -439,89 +442,6 @@ TEST_F(FrameFetchContextTest, MainResource)
     EXPECT_EQ(WebCachePolicy::BypassingCache, childFetchContext->resourceRequestCachePolicy(request, Resource::MainResource, FetchRequest::NoDefer));
 }
 
-TEST_F(FrameFetchContextTest, ModifyPriorityForExperiments)
-{
-    Settings* settings = document->frame()->settings();
-    FetchRequest request(ResourceRequest("http://www.example.com"), FetchInitiatorInfo());
-
-    FetchRequest preloadRequest(ResourceRequest("http://www.example.com"), FetchInitiatorInfo());
-    preloadRequest.setForPreload(true);
-
-    FetchRequest deferredRequest(ResourceRequest("http://www.example.com"), FetchInitiatorInfo());
-    deferredRequest.setDefer(FetchRequest::LazyLoad);
-
-    // Start with all experiments disabled.
-    settings->setFEtchIncreaseAsyncScriptPriority(false);
-    settings->setFEtchIncreaseFontPriority(false);
-    settings->setFEtchDeferLateScripts(false);
-    settings->setFEtchIncreasePriorities(false);
-
-    // Base case, no priority change. Note that this triggers m_imageFetched, which will matter for setFetchDeferLateScripts() case below.
-    EXPECT_EQ(ResourceLoadPriorityVeryLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::NotVisible));
-
-    // RAW (XHR/Fetch) should default to Medium with no experiments running
-    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Raw, request, ResourcePriority::NotVisible));
-
-    // Image visibility should increase priority
-    EXPECT_EQ(ResourceLoadPriorityLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::Visible));
-
-    // Font priority with and without fetchIncreaseFontPriority()
-    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Font, request, ResourcePriority::NotVisible));
-    settings->setFEtchIncreaseFontPriority(true);
-    EXPECT_EQ(ResourceLoadPriorityHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Font, request, ResourcePriority::NotVisible));
-
-    // Basic script cases
-    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, request, ResourcePriority::NotVisible));
-    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, preloadRequest, ResourcePriority::NotVisible));
-
-    // Enable deferring late scripts. Preload priority should drop.
-    settings->setFEtchDeferLateScripts(true);
-    EXPECT_EQ(ResourceLoadPriorityLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, preloadRequest, ResourcePriority::NotVisible));
-
-    // Enable increasing priority of async scripts.
-    EXPECT_EQ(ResourceLoadPriorityLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, deferredRequest, ResourcePriority::NotVisible));
-    settings->setFEtchIncreaseAsyncScriptPriority(true);
-    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, deferredRequest, ResourcePriority::NotVisible));
-
-    // Enable increased priorities for the remainder.
-    settings->setFEtchIncreasePriorities(true);
-
-    // Re-test image priority based on visibility with increased priorities
-    EXPECT_EQ(ResourceLoadPriorityLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::NotVisible));
-    EXPECT_EQ(ResourceLoadPriorityHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Image, request, ResourcePriority::Visible));
-
-    // Re-test RAW (XHR/Fetch) with increased priorities
-    EXPECT_EQ(ResourceLoadPriorityHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Raw, request, ResourcePriority::NotVisible));
-
-    // Re-test font priority with increased prioriries
-    settings->setFEtchIncreaseFontPriority(false);
-    EXPECT_EQ(ResourceLoadPriorityHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Font, request, ResourcePriority::NotVisible));
-    settings->setFEtchIncreaseFontPriority(true);
-    EXPECT_EQ(ResourceLoadPriorityVeryHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Font, request, ResourcePriority::NotVisible));
-
-    // Re-test basic script cases and deferring late script case with increased prioriries
-    settings->setFEtchDeferLateScripts(false);
-    EXPECT_EQ(ResourceLoadPriorityVeryHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, request, ResourcePriority::NotVisible));
-    EXPECT_EQ(ResourceLoadPriorityHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, preloadRequest, ResourcePriority::NotVisible));
-
-    // Re-test deferring late scripts.
-    settings->setFEtchDeferLateScripts(true);
-    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, preloadRequest, ResourcePriority::NotVisible));
-
-    // Re-test increasing priority of async scripts. Should ignore general incraesed priorities.
-    settings->setFEtchIncreaseAsyncScriptPriority(false);
-    EXPECT_EQ(ResourceLoadPriorityLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, deferredRequest, ResourcePriority::NotVisible));
-    settings->setFEtchIncreaseAsyncScriptPriority(true);
-    EXPECT_EQ(ResourceLoadPriorityMedium, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, deferredRequest, ResourcePriority::NotVisible));
-
-    // Ensure we don't go out of bounds
-    settings->setFEtchIncreasePriorities(true);
-    EXPECT_EQ(ResourceLoadPriorityVeryHigh, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryHigh, Resource::Script, request, ResourcePriority::NotVisible));
-    settings->setFEtchIncreasePriorities(false);
-    settings->setFEtchDeferLateScripts(true);
-    EXPECT_EQ(ResourceLoadPriorityVeryLow, fetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryLow, Resource::Script, preloadRequest, ResourcePriority::NotVisible));
-}
-
 TEST_F(FrameFetchContextTest, ModifyPriorityForLowPriorityIframes)
 {
     Settings* settings = document->frame()->settings();
@@ -530,13 +450,13 @@ TEST_F(FrameFetchContextTest, ModifyPriorityForLowPriorityIframes)
     FrameFetchContext* childFetchContext = createChildFrame();
 
     // No low priority iframes, expect default values.
-    EXPECT_EQ(ResourceLoadPriorityVeryHigh, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryHigh, Resource::MainResource, request, ResourcePriority::NotVisible));
-    EXPECT_EQ(ResourceLoadPriorityMedium, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, request, ResourcePriority::NotVisible));
+    EXPECT_EQ(ResourceLoadPriorityVeryHigh, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryHigh));
+    EXPECT_EQ(ResourceLoadPriorityMedium, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium));
 
     // Low priority iframes enabled, everything should be low priority
     settings->setLowPriorityIframes(true);
-    EXPECT_EQ(ResourceLoadPriorityVeryLow, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryHigh, Resource::MainResource, request, ResourcePriority::NotVisible));
-    EXPECT_EQ(ResourceLoadPriorityVeryLow, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium, Resource::Script, request, ResourcePriority::NotVisible));
+    EXPECT_EQ(ResourceLoadPriorityVeryLow, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityVeryHigh));
+    EXPECT_EQ(ResourceLoadPriorityVeryLow, childFetchContext->modifyPriorityForExperiments(ResourceLoadPriorityMedium));
 }
 
 TEST_F(FrameFetchContextTest, EnableDataSaver)
@@ -571,7 +491,7 @@ TEST_F(FrameFetchContextDisplayedCertificateErrorsTest, MemoryCacheCertificateEr
     response.setHasMajorCertificateErrors(true);
     Resource* resource = Resource::create(resourceRequest, Resource::Image);
     resource->setResponse(response);
-    fetchContext->dispatchDidLoadResourceFromMemoryCache(resource, WebURLRequest::FrameTypeNone, WebURLRequest::RequestContextImage);
+    fetchContext->dispatchDidLoadResourceFromMemoryCache(createUniqueIdentifier(), resource, WebURLRequest::FrameTypeNone, WebURLRequest::RequestContextImage);
 }
 
 TEST_F(FrameFetchContextTest, SetIsExternalRequestForPublicDocument)

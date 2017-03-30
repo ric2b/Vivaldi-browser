@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
@@ -27,7 +28,8 @@ class CdmFactory;
 
 // A mojom::ContentDecryptionModule implementation backed by a
 // media::MediaKeys.
-class MojoCdmService : public mojom::ContentDecryptionModule {
+class MEDIA_MOJO_EXPORT MojoCdmService
+    : NON_EXPORTED_BASE(public mojom::ContentDecryptionModule) {
  public:
   // Get the CDM associated with |cdm_id|, which is unique per process.
   // Can be called on any thread. The returned CDM is not guaranteed to be
@@ -37,7 +39,7 @@ class MojoCdmService : public mojom::ContentDecryptionModule {
   // render frame the caller is associated with. In the future, we should move
   // all out-of-process media players into the MojoMediaApplicaiton so that we
   // can use MojoCdmServiceContext (per render frame) to get the CDM.
-  static scoped_refptr<MediaKeys> MEDIA_MOJO_EXPORT LegacyGetCdm(int cdm_id);
+  static scoped_refptr<MediaKeys> LegacyGetCdm(int cdm_id);
 
   // Constructs a MojoCdmService and strongly binds it to the |request|.
   MojoCdmService(
@@ -53,29 +55,23 @@ class MojoCdmService : public mojom::ContentDecryptionModule {
                   const mojo::String& security_origin,
                   mojom::CdmConfigPtr cdm_config,
                   const InitializeCallback& callback) final;
-  void SetServerCertificate(
-      mojo::Array<uint8_t> certificate_data,
-      const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) final;
+  void SetServerCertificate(mojo::Array<uint8_t> certificate_data,
+                            const SetServerCertificateCallback& callback) final;
   void CreateSessionAndGenerateRequest(
       mojom::ContentDecryptionModule::SessionType session_type,
       mojom::ContentDecryptionModule::InitDataType init_data_type,
       mojo::Array<uint8_t> init_data,
-      const mojo::Callback<void(mojom::CdmPromiseResultPtr, mojo::String)>&
-          callback) final;
+      const CreateSessionAndGenerateRequestCallback& callback) final;
   void LoadSession(mojom::ContentDecryptionModule::SessionType session_type,
                    const mojo::String& session_id,
-                   const mojo::Callback<void(mojom::CdmPromiseResultPtr,
-                                             mojo::String)>& callback) final;
-  void UpdateSession(
-      const mojo::String& session_id,
-      mojo::Array<uint8_t> response,
-      const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) final;
-  void CloseSession(
-      const mojo::String& session_id,
-      const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) final;
-  void RemoveSession(
-      const mojo::String& session_id,
-      const mojo::Callback<void(mojom::CdmPromiseResultPtr)>& callback) final;
+                   const LoadSessionCallback& callback) final;
+  void UpdateSession(const mojo::String& session_id,
+                     mojo::Array<uint8_t> response,
+                     const UpdateSessionCallback& callback) final;
+  void CloseSession(const mojo::String& session_id,
+                    const CloseSessionCallback& callback) final;
+  void RemoveSession(const mojo::String& session_id,
+                     const RemoveSessionCallback& callback) final;
 
   // Get CDM to be used by the media pipeline.
   scoped_refptr<MediaKeys> GetCdm();

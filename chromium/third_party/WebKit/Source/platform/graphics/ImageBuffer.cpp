@@ -54,29 +54,31 @@
 #include "third_party/skia/include/gpu/gl/GrGLTypes.h"
 #include "wtf/CheckedNumeric.h"
 #include "wtf/MathExtras.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/Vector.h"
 #include "wtf/text/Base64.h"
 #include "wtf/text/WTFString.h"
 #include "wtf/typed_arrays/ArrayBufferContents.h"
+#include <memory>
 
 namespace blink {
 
-PassOwnPtr<ImageBuffer> ImageBuffer::create(PassOwnPtr<ImageBufferSurface> surface)
+std::unique_ptr<ImageBuffer> ImageBuffer::create(std::unique_ptr<ImageBufferSurface> surface)
 {
     if (!surface->isValid())
         return nullptr;
-    return adoptPtr(new ImageBuffer(std::move(surface)));
+    return wrapUnique(new ImageBuffer(std::move(surface)));
 }
 
-PassOwnPtr<ImageBuffer> ImageBuffer::create(const IntSize& size, OpacityMode opacityMode, ImageInitializationMode initializationMode)
+std::unique_ptr<ImageBuffer> ImageBuffer::create(const IntSize& size, OpacityMode opacityMode, ImageInitializationMode initializationMode)
 {
-    OwnPtr<ImageBufferSurface> surface(adoptPtr(new UnacceleratedImageBufferSurface(size, opacityMode, initializationMode)));
+    std::unique_ptr<ImageBufferSurface> surface(wrapUnique(new UnacceleratedImageBufferSurface(size, opacityMode, initializationMode)));
     if (!surface->isValid())
         return nullptr;
-    return adoptPtr(new ImageBuffer(std::move(surface)));
+    return wrapUnique(new ImageBuffer(std::move(surface)));
 }
 
-ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
+ImageBuffer::ImageBuffer(std::unique_ptr<ImageBufferSurface> surface)
     : m_snapshotState(InitialSnapshotState)
     , m_surface(std::move(surface))
     , m_client(0)
@@ -87,9 +89,14 @@ ImageBuffer::ImageBuffer(PassOwnPtr<ImageBufferSurface> surface)
 }
 
 intptr_t ImageBuffer::s_globalGPUMemoryUsage = 0;
+unsigned ImageBuffer::s_globalAcceleratedImageBufferCount = 0;
 
 ImageBuffer::~ImageBuffer()
 {
+    if (m_gpuMemoryUsage) {
+        DCHECK_GT(s_globalAcceleratedImageBufferCount, 0u);
+        s_globalAcceleratedImageBufferCount--;
+    }
     ImageBuffer::s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
 }
 
@@ -199,12 +206,12 @@ bool ImageBuffer::copyToPlatformTexture(gpu::gles2::GLES2Interface* gl, GLuint t
     if (!textureInfo || !textureInfo->fID)
         return false;
 
-    OwnPtr<WebGraphicsContext3DProvider> provider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    std::unique_ptr<WebGraphicsContext3DProvider> provider = wrapUnique(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!provider)
         return false;
     gpu::gles2::GLES2Interface* sharedGL = provider->contextGL();
 
-    OwnPtr<WebExternalTextureMailbox> mailbox = adoptPtr(new WebExternalTextureMailbox);
+    std::unique_ptr<WebExternalTextureMailbox> mailbox = wrapUnique(new WebExternalTextureMailbox);
     mailbox->textureSize = WebSize(textureImage->width(), textureImage->height());
 
     // Contexts may be in a different share group. We must transfer the texture through a mailbox first
@@ -243,7 +250,7 @@ bool ImageBuffer::copyRenderingResultsFromDrawingBuffer(DrawingBuffer* drawingBu
 {
     if (!drawingBuffer || !m_surface->isAccelerated())
         return false;
-    OwnPtr<WebGraphicsContext3DProvider> provider = adoptPtr(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
+    std::unique_ptr<WebGraphicsContext3DProvider> provider = wrapUnique(Platform::current()->createSharedOffscreenGraphicsContext3DProvider());
     if (!provider)
         return false;
     gpu::gles2::GLES2Interface* gl = provider->contextGL();
@@ -299,7 +306,7 @@ bool ImageBuffer::getImageData(Multiply multiplied, const IntRect& rect, WTF::Ar
         return true;
     }
 
-    ASSERT(canvas());
+    DCHECK(canvas());
     RefPtr<SkImage> snapshot = m_surface->newImageSnapshot(PreferNoAcceleration, SnapshotReasonGetImageData);
     if (!snapshot)
         return false;
@@ -365,11 +372,16 @@ void ImageBuffer::updateGPUMemoryUsage() const
         checkedGPUUsage *= this->size().height();
         intptr_t gpuMemoryUsage = checkedGPUUsage.ValueOrDefault(std::numeric_limits<intptr_t>::max());
 
+        if (!m_gpuMemoryUsage) // was not accelerated before
+            s_globalAcceleratedImageBufferCount++;
+
         s_globalGPUMemoryUsage += (gpuMemoryUsage - m_gpuMemoryUsage);
         m_gpuMemoryUsage = gpuMemoryUsage;
-    } else if (m_gpuMemoryUsage > 0) {
+    } else if (m_gpuMemoryUsage) {
         // In case of switching from accelerated to non-accelerated mode,
         // the GPU memory usage needs to be updated too.
+        DCHECK_GT(s_globalAcceleratedImageBufferCount, 0u);
+        s_globalAcceleratedImageBufferCount--;
         s_globalGPUMemoryUsage -= m_gpuMemoryUsage;
         m_gpuMemoryUsage = 0;
     }

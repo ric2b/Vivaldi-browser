@@ -33,6 +33,8 @@
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/Text.h"
 #include "core/dom/shadow/FlatTreeTraversal.h"
+#include "core/editing/markers/DocumentMarkerController.h"
+#include "core/frame/FrameView.h"
 #include "core/html/HTMLDListElement.h"
 #include "core/html/HTMLFieldSetElement.h"
 #include "core/html/HTMLFrameElementBase.h"
@@ -50,6 +52,7 @@
 #include "core/html/HTMLTableRowElement.h"
 #include "core/html/HTMLTableSectionElement.h"
 #include "core/html/HTMLTextAreaElement.h"
+#include "core/html/LabelsNodeList.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/html/shadow/MediaControlElements.h"
 #include "core/layout/LayoutBlockFlow.h"
@@ -143,7 +146,7 @@ void AXNodeObject::alterSliderValue(bool increase)
     axObjectCache().postNotification(getNode(), AXObjectCacheImpl::AXValueChanged);
 }
 
-AXObject* AXNodeObject::activeDescendant() const
+AXObject* AXNodeObject::activeDescendant()
 {
     if (!getNode() || !getNode()->isElementNode())
         return nullptr;
@@ -641,24 +644,6 @@ bool AXNodeObject::isGenericFocusableElement() const
         return false;
 
     return true;
-}
-
-HTMLLabelElement* AXNodeObject::labelForElement(const Element* element) const
-{
-    if (!element->isHTMLElement() || !toHTMLElement(element)->isLabelable())
-        return 0;
-
-    const AtomicString& id = element->getIdAttribute();
-    if (!id.isEmpty()) {
-        if (HTMLLabelElement* labelFor = element->treeScope().labelElementForId(id))
-            return labelFor;
-    }
-
-    HTMLLabelElement* labelWrappedElement = Traversal<HTMLLabelElement>::firstAncestor(*element);
-    if (labelWrappedElement && labelWrappedElement->control() == toLabelableElement(element))
-        return labelWrappedElement;
-
-    return 0;
 }
 
 AXObject* AXNodeObject::menuButtonForMenu() const
@@ -1221,6 +1206,32 @@ String AXNodeObject::ariaAutoComplete() const
     return String();
 }
 
+void AXNodeObject::markers(
+    Vector<DocumentMarker::MarkerType>& markerTypes,
+    Vector<AXRange>& markerRanges) const
+{
+    if (!getNode() || !getDocument() || !getDocument()->view())
+        return;
+
+    DocumentMarkerController& markerController = getDocument()->markers();
+    DocumentMarkerVector markers = markerController.markersFor(getNode());
+    for (size_t i = 0; i < markers.size(); ++i) {
+        DocumentMarker* marker = markers[i];
+        switch (marker->type()) {
+        case DocumentMarker::Spelling:
+        case DocumentMarker::Grammar:
+        case DocumentMarker::TextMatch:
+            markerTypes.append(marker->type());
+            markerRanges.append(AXRange(marker->startOffset(), marker->endOffset()));
+            break;
+        case DocumentMarker::InvisibleSpellcheck:
+        case DocumentMarker::Composition:
+            // No need for accessibility to know about these marker types.
+            break;
+        }
+    }
+}
+
 AccessibilityOrientation AXNodeObject::orientation() const
 {
     const AtomicString& ariaOrientation = getAttribute(aria_orientationAttr);
@@ -1641,7 +1652,7 @@ String AXNodeObject::textAlternative(bool recursive, bool inAriaLabelledByTraver
 
     nameFrom = AXNameFromUninitialized;
 
-    if (foundTextAlternative) {
+    if (nameSources && foundTextAlternative) {
         for (size_t i = 0; i < nameSources->size(); ++i) {
             if (!(*nameSources)[i].text.isNull() && !(*nameSources)[i].superseded) {
                 NameSource& nameSource = (*nameSources)[i];
@@ -1735,9 +1746,8 @@ bool AXNodeObject::nameFromLabelElement() const
     HTMLElement* htmlElement = nullptr;
     if (getNode()->isHTMLElement())
         htmlElement = toHTMLElement(getNode());
-    if (htmlElement && htmlElement->isLabelable()) {
-        HTMLLabelElement* label = labelForElement(htmlElement);
-        if (label)
+    if (htmlElement && isLabelableElement(htmlElement)) {
+        if (toLabelableElement(htmlElement)->labels() && toLabelableElement(htmlElement)->labels()->length() > 0)
             return true;
     }
 
@@ -1868,7 +1878,7 @@ void AXNodeObject::addChildren()
 
     for (Node& child : NodeTraversal::childrenOf(*m_node)) {
         AXObject* childObj = axObjectCache().getOrCreate(&child);
-        if (!axObjectCache().isAriaOwned(childObj))
+        if (childObj && !axObjectCache().isAriaOwned(childObj))
             addChild(childObj);
     }
 
@@ -1981,10 +1991,11 @@ Element* AXNodeObject::actionElement() const
         break;
     }
 
-    Element* elt = anchorElement();
-    if (!elt)
-        elt = mouseButtonListener();
-    return elt;
+    Element* anchor = anchorElement();
+    Element* clickElement = mouseButtonListener();
+    if (!anchor || (clickElement && clickElement->isDescendantOf(anchor)))
+        return clickElement;
+    return anchor;
 }
 
 Element* AXNodeObject::anchorElement() const
@@ -2177,7 +2188,8 @@ void AXNodeObject::computeAriaOwnsChildren(HeapVector<Member<AXObject>>& ownedCh
         return;
 
     Vector<String> idVector;
-    tokenVectorFromAttribute(idVector, aria_ownsAttr);
+    if (canHaveChildren())
+        tokenVectorFromAttribute(idVector, aria_ownsAttr);
 
     axObjectCache().updateAriaOwns(this, idVector, ownedChildren);
 }
@@ -2204,39 +2216,41 @@ String AXNodeObject::nativeTextAlternative(AXObjectSet& visited, AXNameFrom& nam
     HTMLElement* htmlElement = nullptr;
     if (getNode()->isHTMLElement())
         htmlElement = toHTMLElement(getNode());
+
     if (htmlElement && htmlElement->isLabelable()) {
-        // label
         nameFrom = AXNameFromRelatedElement;
         if (nameSources) {
             nameSources->append(NameSource(*foundTextAlternative));
             nameSources->last().type = nameFrom;
             nameSources->last().nativeSource = AXTextFromNativeHTMLLabel;
         }
-        HTMLLabelElement* label = labelForElement(htmlElement);
-        if (label) {
-            AXObject* labelAXObject = axObjectCache().getOrCreate(label);
-            // Avoid an infinite loop for label wrapped
-            if (labelAXObject && !visited.contains(labelAXObject)) {
-                textAlternative = recursiveTextAlternative(*labelAXObject, false, visited);
 
-                if (relatedObjects) {
-                    localRelatedObjects.append(new NameSourceRelatedObject(labelAXObject, textAlternative));
-                    *relatedObjects = localRelatedObjects;
-                    localRelatedObjects.clear();
+        LabelsNodeList* labels = toLabelableElement(htmlElement)->labels();
+        if (labels && labels->length() > 0) {
+            HeapVector<Member<Element>> labelElements;
+            for (unsigned labelIndex = 0; labelIndex < labels->length(); ++labelIndex) {
+                Element* label = labels->item(labelIndex);
+                if (nameSources) {
+                    if (label->getAttribute(forAttr) == htmlElement->getIdAttribute())
+                        nameSources->last().nativeSource = AXTextFromNativeHTMLLabelFor;
+                    else
+                        nameSources->last().nativeSource = AXTextFromNativeHTMLLabelWrapped;
                 }
+                labelElements.append(label);
+            }
 
+            textAlternative = textFromElements(false, visited, labelElements, relatedObjects);
+            if (!textAlternative.isNull()) {
+                *foundTextAlternative = true;
                 if (nameSources) {
                     NameSource& source = nameSources->last();
                     source.relatedObjects = *relatedObjects;
                     source.text = textAlternative;
-                    if (label->getAttribute(forAttr) == htmlElement->getIdAttribute())
-                        source.nativeSource = AXTextFromNativeHTMLLabelFor;
-                    else
-                        source.nativeSource = AXTextFromNativeHTMLLabelWrapped;
-                    *foundTextAlternative = true;
                 } else {
                     return textAlternative;
                 }
+            } else if (nameSources) {
+                nameSources->last().invalid = true;
             }
         }
     }

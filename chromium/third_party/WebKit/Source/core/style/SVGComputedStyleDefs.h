@@ -33,8 +33,6 @@
 #include "platform/Length.h"
 #include "platform/graphics/Color.h"
 #include "wtf/Allocator.h"
-#include "wtf/OwnPtr.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/RefCounted.h"
 #include "wtf/RefPtr.h"
 #include "wtf/RefVector.h"
@@ -251,7 +249,6 @@ public:
     }
 
     AtomicString clipper;
-    AtomicString filter;
     AtomicString masker;
 
 private:
@@ -280,28 +277,29 @@ private:
     StyleInheritedResourceData(const StyleInheritedResourceData&);
 };
 
-// Positioning and sizing properties.
-class StyleLayoutData : public RefCounted<StyleLayoutData> {
-    public:
-        static PassRefPtr<StyleLayoutData> create() { return adoptRef(new StyleLayoutData); }
-        PassRefPtr<StyleLayoutData> copy() const;
-        bool operator==(const StyleLayoutData&) const;
-        bool operator!=(const StyleLayoutData& other) const
-        {
-            return !(*this == other);
-        }
-        RefPtr<StylePath> d;
-        Length cx;
-        Length cy;
-        Length x;
-        Length y;
-        Length r;
-        Length rx;
-        Length ry;
-    private:
-        StyleLayoutData();
-        StyleLayoutData(const StyleLayoutData&);
-    };
+// Geometry properties
+class StyleGeometryData : public RefCounted<StyleGeometryData> {
+public:
+    static PassRefPtr<StyleGeometryData> create() { return adoptRef(new StyleGeometryData); }
+    PassRefPtr<StyleGeometryData> copy() const;
+    bool operator==(const StyleGeometryData&) const;
+    bool operator!=(const StyleGeometryData& other) const
+    {
+        return !(*this == other);
+    }
+    RefPtr<StylePath> d;
+    Length cx;
+    Length cy;
+    Length x;
+    Length y;
+    Length r;
+    Length rx;
+    Length ry;
+
+private:
+    StyleGeometryData();
+    StyleGeometryData(const StyleGeometryData&);
+};
 
 } // namespace blink
 

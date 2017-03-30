@@ -8,6 +8,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -108,8 +109,7 @@ base::string16 LauncherControllerHelper::GetAppTitle(
 
   // Get title if the app is an Arc app.
   ArcAppListPrefs* arc_prefs = ArcAppListPrefs::Get(profile);
-  DCHECK(arc_prefs);
-  if (arc_prefs->IsRegistered(app_id)) {
+  if (arc_prefs && arc_prefs->IsRegistered(app_id)) {
     std::unique_ptr<ArcAppListPrefs::AppInfo> app_info =
         arc_prefs->GetApp(app_id);
     DCHECK(app_info.get());
@@ -145,9 +145,23 @@ std::string LauncherControllerHelper::GetAppID(content::WebContents* tab) {
 
 bool LauncherControllerHelper::IsValidIDForCurrentUser(
     const std::string& id) const {
-  if (GetArcAppListPrefs()->IsRegistered(id))
+  const ArcAppListPrefs* arc_prefs = GetArcAppListPrefs();
+  if (arc_prefs && arc_prefs->IsRegistered(id))
     return true;
-  return GetExtensionByID(profile_, id) != nullptr;
+  if (!GetExtensionByID(profile_, id))
+    return false;
+  if (id == ArcSupportHost::kHostAppId) {
+    if (!arc::ArcAuthService::IsAllowedForProfile(profile()))
+      return false;
+    const arc::ArcAuthService* arc_auth_service = arc::ArcAuthService::Get();
+    DCHECK(arc_auth_service);
+    if (!arc_auth_service->IsAllowed())
+      return false;
+    if (!arc_auth_service->IsArcEnabled() && arc_auth_service->IsArcManaged())
+      return false;
+  }
+
+  return true;
 }
 
 void LauncherControllerHelper::SetCurrentUser(Profile* profile) {
@@ -157,7 +171,8 @@ void LauncherControllerHelper::SetCurrentUser(Profile* profile) {
 void LauncherControllerHelper::LaunchApp(const std::string& app_id,
                                          ash::LaunchSource source,
                                          int event_flags) {
-  if (GetArcAppListPrefs()->IsRegistered(app_id)) {
+  const ArcAppListPrefs* arc_prefs = GetArcAppListPrefs();
+  if (arc_prefs && arc_prefs->IsRegistered(app_id)) {
     arc::LaunchApp(profile_, app_id);
     return;
   }

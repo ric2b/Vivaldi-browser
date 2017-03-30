@@ -14,6 +14,7 @@
 #include "cc/debug/debug_colors.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/render_pass_sink.h"
+#include "cc/output/filter_operations.h"
 #include "cc/quads/debug_border_draw_quad.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/render_pass_draw_quad.h"
@@ -75,13 +76,15 @@ gfx::RectF RenderSurfaceImpl::DrawableContentRect() const {
 
   gfx::Rect surface_content_rect = content_rect();
   if (!owning_layer_->filters().IsEmpty()) {
-    int left, top, right, bottom;
-    owning_layer_->filters().GetOutsets(&top, &right, &bottom, &left);
-    surface_content_rect.Inset(-left, -top, -right, -bottom);
+    const gfx::Transform& owning_layer_draw_transform =
+        owning_layer_->DrawTransform();
+    DCHECK(owning_layer_draw_transform.IsScale2d());
+    surface_content_rect = owning_layer_->filters().MapRect(
+        surface_content_rect, owning_layer_draw_transform.matrix());
   }
   gfx::RectF drawable_content_rect = MathUtil::MapClippedRect(
       draw_transform(), gfx::RectF(surface_content_rect));
-  if (owning_layer_->has_replica()) {
+  if (HasReplica()) {
     drawable_content_rect.Union(MathUtil::MapClippedRect(
         replica_draw_transform(), gfx::RectF(surface_content_rect)));
   } else if (!owning_layer_->filters().IsEmpty() && is_clipped()) {
@@ -122,11 +125,43 @@ int RenderSurfaceImpl::OwningLayerId() const {
 }
 
 bool RenderSurfaceImpl::HasReplica() const {
-  return owning_layer_->has_replica();
+  return OwningEffectNode()->data.replica_layer_id != -1;
 }
 
 const LayerImpl* RenderSurfaceImpl::ReplicaLayer() const {
-  return owning_layer_->replica_layer();
+  int replica_layer_id = OwningEffectNode()->data.replica_layer_id;
+  return owning_layer_->layer_tree_impl()->LayerById(replica_layer_id);
+}
+
+LayerImpl* RenderSurfaceImpl::ReplicaLayer() {
+  int replica_layer_id = OwningEffectNode()->data.replica_layer_id;
+  return owning_layer_->layer_tree_impl()->LayerById(replica_layer_id);
+}
+
+LayerImpl* RenderSurfaceImpl::MaskLayer() {
+  int mask_layer_id = OwningEffectNode()->data.mask_layer_id;
+  return owning_layer_->layer_tree_impl()->LayerById(mask_layer_id);
+}
+
+bool RenderSurfaceImpl::HasMask() const {
+  return OwningEffectNode()->data.mask_layer_id != -1;
+}
+
+LayerImpl* RenderSurfaceImpl::ReplicaMaskLayer() {
+  int replica_mask_layer_id = OwningEffectNode()->data.replica_mask_layer_id;
+  return owning_layer_->layer_tree_impl()->LayerById(replica_mask_layer_id);
+}
+
+bool RenderSurfaceImpl::HasReplicaMask() const {
+  return OwningEffectNode()->data.replica_mask_layer_id != -1;
+}
+
+const FilterOperations& RenderSurfaceImpl::BackgroundFilters() const {
+  return OwningEffectNode()->data.background_filters;
+}
+
+bool RenderSurfaceImpl::HasCopyRequest() const {
+  return OwningEffectNode()->data.has_copy_request;
 }
 
 int RenderSurfaceImpl::TransformTreeIndex() const {
@@ -139,6 +174,11 @@ int RenderSurfaceImpl::ClipTreeIndex() const {
 
 int RenderSurfaceImpl::EffectTreeIndex() const {
   return owning_layer_->effect_tree_index();
+}
+
+const EffectNode* RenderSurfaceImpl::OwningEffectNode() const {
+  return owning_layer_->layer_tree_impl()->property_trees()->effect_tree.Node(
+      EffectTreeIndex());
 }
 
 void RenderSurfaceImpl::SetClipRect(const gfx::Rect& clip_rect) {
@@ -162,8 +202,7 @@ void RenderSurfaceImpl::SetContentRectForTesting(const gfx::Rect& rect) {
 }
 
 gfx::Rect RenderSurfaceImpl::CalculateClippedAccumulatedContentRect() {
-  if (owning_layer_->replica_layer() || owning_layer_->HasCopyRequest() ||
-      !is_clipped())
+  if (ReplicaLayer() || HasCopyRequest() || !is_clipped())
     return accumulated_content_rect();
 
   if (accumulated_content_rect().IsEmpty())
@@ -357,8 +396,7 @@ void RenderSurfaceImpl::AppendQuads(RenderPass* render_pass,
   quad->SetNew(shared_quad_state, content_rect(), visible_layer_rect,
                render_pass_id, mask_resource_id, mask_uv_scale,
                mask_texture_size, owning_layer_->filters(),
-               owning_layer_to_target_scale,
-               owning_layer_->background_filters());
+               owning_layer_to_target_scale, BackgroundFilters());
 }
 
 }  // namespace cc

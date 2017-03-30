@@ -27,9 +27,9 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
  public:
   AVDACodecImage(int picture_buffer_id,
                  const scoped_refptr<AVDASharedState>& shared_state,
-                 media::VideoCodecBridge* codec,
+                 VideoCodecBridge* codec,
                  const base::WeakPtr<gpu::gles2::GLES2Decoder>& decoder,
-                 const scoped_refptr<gfx::SurfaceTexture>& surface_texture);
+                 const scoped_refptr<gl::SurfaceTexture>& surface_texture);
 
   // gl::GLImage implementation
   void Destroy(bool have_context) override;
@@ -72,7 +72,7 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
   void UpdateSurface(UpdateMode update_mode);
 
   // Updates the MediaCodec for this image; clears |codec_buffer_index_|.
-  void CodecChanged(media::MediaCodecBridge* codec);
+  void CodecChanged(MediaCodecBridge* codec);
 
   void set_texture(gpu::gles2::Texture* texture) { texture_ = texture; }
 
@@ -139,13 +139,13 @@ class AVDACodecImage : public gpu::gles2::GLStreamTextureImage {
   gfx::Size size_;
 
   // May be null.
-  media::MediaCodecBridge* media_codec_;
+  MediaCodecBridge* media_codec_;
 
   const base::WeakPtr<gpu::gles2::GLES2Decoder> decoder_;
 
   // The SurfaceTexture to render to. This is null when rendering to a
   // SurfaceView.
-  const scoped_refptr<gfx::SurfaceTexture> surface_texture_;
+  const scoped_refptr<gl::SurfaceTexture> surface_texture_;
 
   // The texture that we're attached to.
   gpu::gles2::Texture* texture_;

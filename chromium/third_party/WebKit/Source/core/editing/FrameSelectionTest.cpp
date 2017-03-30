@@ -16,13 +16,12 @@
 #include "core/paint/PaintInfo.h"
 #include "core/paint/PaintLayer.h"
 #include "core/testing/DummyPageHolder.h"
-#include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintController.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
 #include "wtf/RefPtr.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 namespace blink {
 
@@ -69,25 +68,6 @@ TEST_F(FrameSelectionTest, SetValidSelection)
     EXPECT_FALSE(selection().isNone());
 }
 
-TEST_F(FrameSelectionTest, SetInvalidSelection)
-{
-    // Create a new document without frame by using DOMImplementation.
-    DocumentInit dummy;
-    Document* documentWithoutFrame = Document::create();
-    Element* body = HTMLBodyElement::create(*documentWithoutFrame);
-    documentWithoutFrame->appendChild(body);
-    Text* anotherText = documentWithoutFrame->createTextNode("Hello, another world");
-    body->appendChild(anotherText);
-
-    // Create a new VisibleSelection for the new document without frame and
-    // update FrameSelection with the selection.
-    VisibleSelection invalidSelection;
-    invalidSelection.setWithoutValidation(Position(anotherText, 0), Position(anotherText, 5));
-    setSelection(invalidSelection);
-
-    EXPECT_TRUE(selection().isNone());
-}
-
 TEST_F(FrameSelectionTest, InvalidateCaretRect)
 {
     Text* text = appendTextNode("Hello, World!");
@@ -132,10 +112,12 @@ TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout)
         frameRect.setHeight(frameRect.height() + 1);
         dummyPageHolder().frameView().setFrameRect(frameRect);
     }
-    OwnPtr<PaintController> paintController = PaintController::create();
-    GraphicsContext context(*paintController);
-    DrawingRecorder drawingRecorder(context, *dummyPageHolder().frameView().layoutView(), DisplayItem::Caret, LayoutRect::infiniteIntRect());
-    selection().paintCaret(context, LayoutPoint());
+    std::unique_ptr<PaintController> paintController = PaintController::create();
+    {
+        GraphicsContext context(*paintController);
+        selection().paintCaret(context, LayoutPoint());
+    }
+    paintController->commitNewDisplayItems();
     EXPECT_EQ(startCount, layoutCount());
 }
 

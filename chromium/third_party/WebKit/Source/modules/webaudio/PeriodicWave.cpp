@@ -26,11 +26,17 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "modules/webaudio/PeriodicWave.h"
+#include "bindings/core/v8/ExceptionMessages.h"
+#include "bindings/core/v8/ExceptionState.h"
+#include "core/dom/ExceptionCode.h"
+#include "modules/webaudio/AbstractAudioContext.h"
 #include "modules/webaudio/OscillatorNode.h"
+#include "modules/webaudio/PeriodicWave.h"
 #include "platform/audio/FFTFrame.h"
 #include "platform/audio/VectorMath.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
+#include <memory>
 
 namespace blink {
 
@@ -45,17 +51,33 @@ const float CentsPerRange = 1200 / kNumberOfOctaveBands;
 
 using namespace VectorMath;
 
-PeriodicWave* PeriodicWave::create(float sampleRate, DOMFloat32Array* real, DOMFloat32Array* imag, bool disableNormalization)
+PeriodicWave* PeriodicWave::create(
+    AbstractAudioContext& context,
+    DOMFloat32Array* real,
+    DOMFloat32Array* imag,
+    bool disableNormalization,
+    ExceptionState& exceptionState)
 {
-    bool isGood = real && imag && real->length() == imag->length();
-    ASSERT(isGood);
-    if (isGood) {
-        PeriodicWave* periodicWave = new PeriodicWave(sampleRate);
-        size_t numberOfComponents = real->length();
-        periodicWave->createBandLimitedTables(real->data(), imag->data(), numberOfComponents, disableNormalization);
-        return periodicWave;
+    DCHECK(isMainThread());
+
+    if (context.isContextClosed()) {
+        context.throwExceptionForClosedState(exceptionState);
+        return nullptr;
     }
-    return nullptr;
+
+    if (real->length() != imag->length()) {
+        exceptionState.throwDOMException(
+            IndexSizeError,
+            "length of real array (" + String::number(real->length())
+            + ") and length of imaginary array (" +  String::number(imag->length())
+            + ") must match.");
+        return nullptr;
+    }
+
+    PeriodicWave* periodicWave = new PeriodicWave(context.sampleRate());
+    size_t numberOfComponents = real->length();
+    periodicWave->createBandLimitedTables(real->data(), imag->data(), numberOfComponents, disableNormalization);
+    return periodicWave;
 }
 
 PeriodicWave* PeriodicWave::createSine(float sampleRate)
@@ -222,7 +244,7 @@ void PeriodicWave::createBandLimitedTables(const float* realData, const float* i
 
         // Create the band-limited table.
         unsigned waveSize = periodicWaveSize();
-        OwnPtr<AudioFloatArray> table = adoptPtr(new AudioFloatArray(waveSize));
+        std::unique_ptr<AudioFloatArray> table = wrapUnique(new AudioFloatArray(waveSize));
         adjustV8ExternalMemory(waveSize * sizeof(float));
         m_bandLimitedTables.append(std::move(table));
 

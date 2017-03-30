@@ -203,7 +203,7 @@ void LayoutSVGText::layout()
     // scale factor has changed, then recompute the on-screen font size. Since
     // the computation of layout attributes uses the text metrics, we need to
     // update them before updating the layout attributes.
-    if (m_needsTextMetricsUpdate || SVGLayoutSupport::findTreeRootObject(this)->isLayoutSizeChanged()) {
+    if (m_needsTextMetricsUpdate) {
         updateFontAndMetrics(*this);
         m_needsTextMetricsUpdate = false;
         updateParentBoundaries = true;
@@ -247,9 +247,7 @@ void LayoutSVGText::layout()
     setLogicalHeight(beforeEdge);
 
     LayoutState state(*this, locationOffset());
-    LayoutUnit paintInvalidationLogicalTop;
-    LayoutUnit paintInvalidationLogicalBottom;
-    layoutInlineChildren(true, paintInvalidationLogicalTop, paintInvalidationLogicalBottom, afterEdge);
+    layoutInlineChildren(true, afterEdge);
 
     m_needsReordering = false;
 
@@ -257,7 +255,7 @@ void LayoutSVGText::layout()
     if (!firstLineBox())
         setFrameRect(LayoutRect());
 
-    m_overflow.clear();
+    m_overflow.reset();
     addVisualEffectOverflow();
 
     if (!updateParentBoundaries)

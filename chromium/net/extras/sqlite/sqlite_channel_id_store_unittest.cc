@@ -10,17 +10,16 @@
 #include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "crypto/ec_private_key.h"
-#include "net/base/test_data_directory.h"
 #include "net/cert/asn1_util.h"
 #include "net/ssl/channel_id_service.h"
 #include "net/ssl/ssl_client_cert_type.h"
 #include "net/test/cert_test_util.h"
 #include "net/test/channel_id_test_util.h"
+#include "net/test/test_data_directory.h"
 #include "sql/statement.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -66,8 +65,8 @@ class SQLiteChannelIDStoreTest : public testing::Test {
     ASSERT_TRUE(asn1::ExtractSPKIFromDERCert(*cert_data, &spki));
     std::vector<uint8_t> public_key(spki.size());
     memcpy(public_key.data(), spki.data(), spki.size());
-    key->reset(crypto::ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
-        ChannelIDService::kEPKIPassword, private_key, public_key));
+    *key = crypto::ECPrivateKey::CreateFromEncryptedPrivateKeyInfo(
+        ChannelIDService::kEPKIPassword, private_key, public_key);
   }
 
   static base::Time GetTestCertExpirationTime() {
@@ -111,10 +110,9 @@ class SQLiteChannelIDStoreTest : public testing::Test {
     Load(&channel_ids);
     ASSERT_EQ(0u, channel_ids.size());
     // Make sure the store gets written at least once.
-    google_key_.reset(crypto::ECPrivateKey::Create());
+    google_key_ = crypto::ECPrivateKey::Create();
     store_->AddChannelID(DefaultChannelIDStore::ChannelID(
-        "google.com", base::Time::FromInternalValue(1),
-        base::WrapUnique(google_key_->Copy())));
+        "google.com", base::Time::FromInternalValue(1), google_key_->Copy()));
   }
 
   base::ScopedTempDir temp_dir_;
@@ -127,8 +125,7 @@ class SQLiteChannelIDStoreTest : public testing::Test {
 TEST_F(SQLiteChannelIDStoreTest, TestPersistence) {
   std::unique_ptr<crypto::ECPrivateKey> foo_key(crypto::ECPrivateKey::Create());
   store_->AddChannelID(DefaultChannelIDStore::ChannelID(
-      "foo.com", base::Time::FromInternalValue(3),
-      base::WrapUnique(foo_key->Copy())));
+      "foo.com", base::Time::FromInternalValue(3), foo_key->Copy()));
 
   std::vector<std::unique_ptr<DefaultChannelIDStore::ChannelID>> channel_ids;
   // Replace the store effectively destroying the current one and forcing it
@@ -184,7 +181,7 @@ TEST_F(SQLiteChannelIDStoreTest, TestPersistence) {
 TEST_F(SQLiteChannelIDStoreTest, TestDeleteAll) {
   store_->AddChannelID(DefaultChannelIDStore::ChannelID(
       "foo.com", base::Time::FromInternalValue(3),
-      base::WrapUnique(crypto::ECPrivateKey::Create())));
+      crypto::ECPrivateKey::Create()));
 
   std::vector<std::unique_ptr<DefaultChannelIDStore::ChannelID>> channel_ids;
   // Replace the store effectively destroying the current one and forcing it

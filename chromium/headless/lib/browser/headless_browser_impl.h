@@ -9,8 +9,8 @@
 
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
-#include "base/synchronization/lock.h"
 #include "headless/lib/browser/headless_web_contents_impl.h"
 
 namespace aura {
@@ -30,13 +30,17 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
  public:
   HeadlessBrowserImpl(
       const base::Callback<void(HeadlessBrowser*)>& on_start_callback,
-      const HeadlessBrowser::Options& options);
+      HeadlessBrowser::Options options);
   ~HeadlessBrowserImpl() override;
 
   // HeadlessBrowser implementation:
+  HeadlessWebContents::Builder CreateWebContentsBuilder() override;
+  HeadlessBrowserContext::Builder CreateBrowserContextBuilder() override;
   HeadlessWebContents* CreateWebContents(const GURL& initial_url,
                                          const gfx::Size& size) override;
   scoped_refptr<base::SingleThreadTaskRunner> BrowserMainThread()
+      const override;
+  scoped_refptr<base::SingleThreadTaskRunner> BrowserFileThread()
       const override;
 
   void Shutdown() override;
@@ -46,12 +50,11 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
   void set_browser_main_parts(HeadlessBrowserMainParts* browser_main_parts);
   HeadlessBrowserMainParts* browser_main_parts() const;
 
-  HeadlessBrowserContext* browser_context() const;
-
   void RunOnStartCallback();
 
-  const HeadlessBrowser::Options& options() const { return options_; }
+  HeadlessBrowser::Options* options() { return &options_; }
 
+  HeadlessWebContents* CreateWebContents(HeadlessWebContents::Builder* builder);
   HeadlessWebContentsImpl* RegisterWebContents(
       std::unique_ptr<HeadlessWebContentsImpl> web_contents);
 
@@ -61,7 +64,7 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
   // Customize the options used by this headless browser instance. Note that
   // options which take effect before the message loop has been started (e.g.,
   // custom message pumps) cannot be set via this method.
-  void SetOptionsForTesting(const HeadlessBrowser::Options& options);
+  void SetOptionsForTesting(HeadlessBrowser::Options options);
 
  protected:
   base::Callback<void(HeadlessBrowser*)> on_start_callback_;
@@ -73,6 +76,7 @@ class HeadlessBrowserImpl : public HeadlessBrowser {
   std::unordered_map<HeadlessWebContents*, std::unique_ptr<HeadlessWebContents>>
       web_contents_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowserImpl);
 };
 

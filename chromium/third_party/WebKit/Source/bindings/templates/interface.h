@@ -42,10 +42,10 @@ public:
     };
 
     {% endif %}
-    {{exported}}static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
     {% if is_array_buffer_or_view %}
     {{exported}}static {{cpp_class}}* toImpl(v8::Local<v8::Object> object);
     {% else %}
+    {{exported}}static bool hasInstance(v8::Local<v8::Value>, v8::Isolate*);
     static v8::Local<v8::Object> findInstanceInPrototypeChain(v8::Local<v8::Value>, v8::Isolate*);
     {{exported}}static v8::Local<v8::FunctionTemplate> domTemplate(v8::Isolate*, const DOMWrapperWorld&);
     {% if has_named_properties_object %}
@@ -62,14 +62,14 @@ public:
     {% else %}
     {{exported}}static const WrapperTypeInfo wrapperTypeInfo;
     {% endif %}
-    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
-    {
-        visitor->traceWrappers(scriptWrappable->toImpl<{{cpp_class}}>());
-    }
     template<typename VisitorDispatcher>
     static void trace(VisitorDispatcher visitor, ScriptWrappable* scriptWrappable)
     {
         visitor->trace(scriptWrappable->toImpl<{{cpp_class}}>());
+    }
+    static void traceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable)
+    {
+        visitor->traceWrappers(scriptWrappable->toImpl<{{cpp_class}}>());
     }
     {% if has_visit_dom_wrapper %}
     static void visitDOMWrapper(v8::Isolate*, ScriptWrappable*, const v8::Persistent<v8::Object>&);
@@ -158,7 +158,7 @@ public:
     {% if has_conditional_attributes %}
     static void installConditionallyEnabledProperties(v8::Local<v8::Object>, v8::Isolate*);
     {% endif %}
-    {{exported}}static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate){% if unscopeables or has_conditional_attributes_on_prototype or conditionally_enabled_methods %};
+    {{exported}}static void preparePrototypeAndInterfaceObject(v8::Local<v8::Context>, const DOMWrapperWorld&, v8::Local<v8::Object> prototypeObject, v8::Local<v8::Function> interfaceObject, v8::Local<v8::FunctionTemplate> interfaceTemplate){% if unscopeables or has_conditional_attributes_on_prototype or methods | conditionally_exposed(is_partial) %};
     {% else %} { }
     {% endif %}
     {% if has_partial_interface %}
@@ -168,8 +168,8 @@ public:
     {{exported}}static void register{{method.name | blink_capitalize}}MethodForPartialInterface(void (*)(const v8::FunctionCallbackInfo<v8::Value>&));
     {% endfor %}
     {% endif %}
-    {% for group in attributes|origin_trial_enabled_attributes|groupby('origin_trial_feature_name') %}{{newline}}
-    static void install{{group.grouper}}(ScriptState*, v8::Local<v8::Object> instance);
+    {% for origin_trial_feature_name in origin_trial_feature_names %}{{newline}}
+    static void install{{origin_trial_feature_name}}(ScriptState*, v8::Local<v8::Object> instance);
     {% endfor %}
     {% if has_partial_interface %}
 

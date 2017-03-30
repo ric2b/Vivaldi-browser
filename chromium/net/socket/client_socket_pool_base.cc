@@ -11,6 +11,7 @@
 #include "base/format_macros.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
@@ -623,7 +624,7 @@ ClientSocketPoolBaseHelper::GetInfoAsValue(const std::string& name,
          idle_socket != group->idle_sockets().end();
          idle_socket++) {
       int source_id = idle_socket->socket->NetLog().source().id;
-      idle_socket_list->Append(new base::FundamentalValue(source_id));
+      idle_socket_list->AppendInteger(source_id);
     }
     group_dict->Set("idle_sockets", idle_socket_list);
 
@@ -631,7 +632,7 @@ ClientSocketPoolBaseHelper::GetInfoAsValue(const std::string& name,
     std::list<ConnectJob*>::const_iterator job = group->jobs().begin();
     for (job = group->jobs().begin(); job != group->jobs().end(); job++) {
       int source_id = (*job)->net_log().source().id;
-      connect_jobs_list->Append(new base::FundamentalValue(source_id));
+      connect_jobs_list->AppendInteger(source_id);
     }
     group_dict->Set("connect_jobs", connect_jobs_list);
 
@@ -975,11 +976,21 @@ void ClientSocketPoolBaseHelper::HandOutSocket(
   handle->set_pool_id(pool_generation_number_);
   handle->set_connect_timing(connect_timing);
 
-  if (handle->is_reused()) {
+  if (reuse_type == ClientSocketHandle::REUSED_IDLE) {
     net_log.AddEvent(
         NetLog::TYPE_SOCKET_POOL_REUSED_AN_EXISTING_SOCKET,
         NetLog::IntCallback("idle_ms",
                             static_cast<int>(idle_time.InMilliseconds())));
+
+    UMA_HISTOGRAM_COUNTS_1000("Net.Socket.IdleSocketReuseTime",
+                              idle_time.InSeconds());
+  }
+
+  if (reuse_type != ClientSocketHandle::UNUSED) {
+    // The socket being handed out is no longer considered idle, but was
+    // considered idle until just before this method was called.
+    UMA_HISTOGRAM_CUSTOM_COUNTS("Net.Socket.NumIdleSockets",
+                                idle_socket_count() + 1, 1, 256, 50);
   }
 
   net_log.AddEvent(

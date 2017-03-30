@@ -16,6 +16,7 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths_internal.h"
+#include "media/cdm/cdm_paths.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/path_utils.h"
@@ -368,7 +369,7 @@ bool PathProvider(int key, base::FilePath* result) {
     case chrome::DIR_COMPONENT_WIDEVINE_CDM:
       if (!PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
-      cur = cur.Append(FILE_PATH_LITERAL("WidevineCDM"));
+      cur = cur.AppendASCII(kWidevineCdmBaseDirectory);
       break;
 #endif  // defined(WIDEVINE_CDM_IS_COMPONENT)
     // TODO(xhwang): FILE_WIDEVINE_CDM_ADAPTER has different meanings.
@@ -377,6 +378,8 @@ bool PathProvider(int key, base::FilePath* result) {
     case chrome::FILE_WIDEVINE_CDM_ADAPTER:
       if (!GetComponentDirectory(&cur))
         return false;
+      cur = cur.Append(
+          media::GetPlatformSpecificDirectory(kWidevineCdmBaseDirectory));
       cur = cur.AppendASCII(kWidevineCdmAdapterFileName);
       break;
 #endif  // defined(WIDEVINE_CDM_AVAILABLE) && defined(ENABLE_PEPPER_CDMS)
@@ -441,7 +444,7 @@ bool PathProvider(int key, base::FilePath* result) {
 #if defined(OS_ANDROID)
       // On Android, our tests don't have permission to write to DIR_MODULE.
       // gtest/test_runner.py pushes data to external storage.
-      if (!PathService::Get(base::DIR_ANDROID_EXTERNAL_STORAGE, &cur))
+      if (!PathService::Get(base::DIR_SOURCE_ROOT, &cur))
         return false;
 #else
       if (!PathService::Get(base::DIR_MODULE, &cur))

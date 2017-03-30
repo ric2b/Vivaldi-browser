@@ -25,11 +25,15 @@
 #include "chrome/browser/engagement/site_engagement_score.h"
 #include "chrome/browser/engagement/site_engagement_service_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
 namespace {
@@ -49,24 +53,6 @@ std::unique_ptr<ContentSettingsForOneType> GetEngagementContentSettings(
   settings_map->GetSettingsForOneType(CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
                                       std::string(), engagement_settings.get());
   return engagement_settings;
-}
-
-std::unique_ptr<base::DictionaryValue> GetScoreDictForOrigin(
-    HostContentSettingsMap* settings,
-    const GURL& origin_url) {
-  if (!settings)
-    return std::unique_ptr<base::DictionaryValue>();
-
-  std::unique_ptr<base::Value> value = settings->GetWebsiteSetting(
-      origin_url, origin_url, CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT,
-      std::string(), NULL);
-  if (!value.get())
-    return base::WrapUnique(new base::DictionaryValue());
-
-  if (!value->IsType(base::Value::TYPE_DICTIONARY))
-    return base::WrapUnique(new base::DictionaryValue());
-
-  return base::WrapUnique(static_cast<base::DictionaryValue*>(value.release()));
 }
 
 // Only accept a navigation event for engagement if it is one of:
@@ -173,23 +159,19 @@ std::map<GURL, double> SiteEngagementService::GetScoreMap() const {
     if (!origin.is_valid())
       continue;
 
-    std::unique_ptr<base::DictionaryValue> score_dict =
-        GetScoreDictForOrigin(settings_map, origin);
-    SiteEngagementScore score(clock_.get(), *score_dict);
-    score_map[origin] = score.GetScore();
+    score_map[origin] = GetScore(origin);
   }
 
   return score_map;
 }
 
-bool SiteEngagementService::IsBootstrapped() {
+bool SiteEngagementService::IsBootstrapped() const {
   return GetTotalEngagementPoints() >=
          SiteEngagementScore::GetBootstrapPoints();
 }
 
-bool SiteEngagementService::IsEngagementAtLeast(
-    const GURL& url,
-    EngagementLevel level) const {
+bool SiteEngagementService::IsEngagementAtLeast(const GURL& url,
+                                                EngagementLevel level) const {
   DCHECK_LT(SiteEngagementScore::GetMediumEngagementBoundary(),
             SiteEngagementScore::GetHighEngagementBoundary());
   double score = GetScore(url);
@@ -209,16 +191,22 @@ bool SiteEngagementService::IsEngagementAtLeast(
   return false;
 }
 
+void SiteEngagementService::AddObserver(SiteEngagementObserver* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void SiteEngagementService::RemoveObserver(SiteEngagementObserver* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
 void SiteEngagementService::ResetScoreForURL(const GURL& url, double score) {
-  ResetScoreAndAccessTimesForURL(url, score, nullptr);
+  SiteEngagementScore engagement_score = CreateEngagementScore(url);
+  engagement_score.Reset(score, clock_->Now());
+  engagement_score.Commit();
 }
 
 void SiteEngagementService::SetLastShortcutLaunchTime(const GURL& url) {
-  HostContentSettingsMap* settings_map =
-    HostContentSettingsMapFactory::GetForProfile(profile_);
-  std::unique_ptr<base::DictionaryValue> score_dict =
-      GetScoreDictForOrigin(settings_map, url);
-  SiteEngagementScore score(clock_.get(), *score_dict);
+  SiteEngagementScore score = CreateEngagementScore(url);
 
   // Record the number of days since the last launch in UMA. If the user's clock
   // has changed back in time, set this to 0.
@@ -232,21 +220,16 @@ void SiteEngagementService::SetLastShortcutLaunchTime(const GURL& url) {
       SiteEngagementMetrics::ENGAGEMENT_WEBAPP_SHORTCUT_LAUNCH);
 
   score.set_last_shortcut_launch_time(now);
-  if (score.UpdateScoreDict(score_dict.get())) {
-    settings_map->SetWebsiteSettingDefaultScope(
-        url, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-        score_dict.release());
-  }
+  score.Commit();
 }
 
 double SiteEngagementService::GetScore(const GURL& url) const {
-  HostContentSettingsMap* settings_map =
-    HostContentSettingsMapFactory::GetForProfile(profile_);
-  std::unique_ptr<base::DictionaryValue> score_dict =
-      GetScoreDictForOrigin(settings_map, url);
-  SiteEngagementScore score(clock_.get(), *score_dict);
+  // Ensure that if engagement is stale, we clean things up before fetching the
+  // score.
+  if (IsLastEngagementStale())
+    CleanupEngagementScores(true);
 
-  return score.GetScore();
+  return CreateEngagementScore(url).GetScore();
 }
 
 double SiteEngagementService::GetTotalEngagementPoints() const {
@@ -270,45 +253,81 @@ SiteEngagementService::SiteEngagementService(Profile* profile,
 }
 
 void SiteEngagementService::AddPoints(const GURL& url, double points) {
-  HostContentSettingsMap* settings_map =
-    HostContentSettingsMapFactory::GetForProfile(profile_);
-  std::unique_ptr<base::DictionaryValue> score_dict =
-      GetScoreDictForOrigin(settings_map, url);
-  SiteEngagementScore score(clock_.get(), *score_dict);
+  // Trigger a cleanup and date adjustment if it has been a substantial length
+  // of time since *any* engagement was recorded by the service. This will
+  // ensure that we do not decay scores when the user did not use the browser.
+  if (IsLastEngagementStale())
+    CleanupEngagementScores(true);
 
+  SiteEngagementScore score = CreateEngagementScore(url);
   score.AddPoints(points);
-  if (score.UpdateScoreDict(score_dict.get())) {
-    settings_map->SetWebsiteSettingDefaultScope(
-        url, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-        score_dict.release());
-  }
+  score.Commit();
+
+  SetLastEngagementTime(score.last_engagement_time());
 }
 
 void SiteEngagementService::AfterStartupTask() {
-  CleanupEngagementScores();
+  // Check if we need to reset last engagement times on startup - we want to
+  // avoid doing this in AddPoints() if possible. It is still necessary to check
+  // in AddPoints for people who never restart Chrome, but leave it open and
+  // their computer on standby.
+  CleanupEngagementScores(IsLastEngagementStale());
   RecordMetrics();
 }
 
-void SiteEngagementService::CleanupEngagementScores() {
+void SiteEngagementService::CleanupEngagementScores(
+    bool update_last_engagement_time) const {
+  // This method should not be called with |update_last_engagement_time| = true
+  // if the last engagement time isn't stale.
+  DCHECK(!update_last_engagement_time || IsLastEngagementStale());
+
   HostContentSettingsMap* settings_map =
-    HostContentSettingsMapFactory::GetForProfile(profile_);
+      HostContentSettingsMapFactory::GetForProfile(profile_);
   std::unique_ptr<ContentSettingsForOneType> engagement_settings =
       GetEngagementContentSettings(settings_map);
 
+  // We want to rebase last engagement times relative to MaxDecaysPerScore
+  // periods of decay in the past.
+  base::Time now = clock_->Now();
+  base::Time last_engagement_time = GetLastEngagementTime();
+  base::Time rebase_time = now - GetMaxDecayPeriod();
+  base::Time new_last_engagement_time;
   for (const auto& site : *engagement_settings) {
     GURL origin(site.primary_pattern.ToString());
+
     if (origin.is_valid()) {
-      std::unique_ptr<base::DictionaryValue> score_dict =
-          GetScoreDictForOrigin(settings_map, origin);
-      SiteEngagementScore score(clock_.get(), *score_dict);
+      SiteEngagementScore score = CreateEngagementScore(origin);
+      if (update_last_engagement_time) {
+        // Work out the offset between this score's last engagement time and the
+        // last time the service recorded any engagement. Set the score's last
+        // engagement time to rebase_time - offset to preserve its state,
+        // relative to the rebase date. This ensures that the score will decay
+        // the next time it is used, but will not decay too much.
+        DCHECK_LE(score.last_engagement_time(), rebase_time);
+        base::TimeDelta offset =
+            last_engagement_time - score.last_engagement_time();
+        base::Time rebase_score_time = rebase_time - offset;
+        score.set_last_engagement_time(rebase_score_time);
+        if (rebase_score_time > new_last_engagement_time)
+          new_last_engagement_time = rebase_score_time;
+
+        score.Commit();
+      }
+
       if (score.GetScore() != 0)
         continue;
     }
 
+    // This origin has a score of 0. Wipe it from content settings.
     settings_map->SetWebsiteSettingDefaultScope(
         origin, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
         nullptr);
   }
+
+  // Set the last engagement time to be consistent with the scores. This will
+  // only occur if |update_last_engagement_time| is true.
+  if (!new_last_engagement_time.is_null())
+    SetLastEngagementTime(new_last_engagement_time);
 }
 
 void SiteEngagementService::RecordMetrics() {
@@ -321,8 +340,9 @@ void SiteEngagementService::RecordMetrics() {
     int origins_with_max_engagement = OriginsWithMaxEngagement(score_map);
     int total_origins = score_map.size();
     int percent_origins_with_max_engagement =
-        (total_origins == 0 ? 0 : (origins_with_max_engagement * 100) /
-                                      total_origins);
+        (total_origins == 0
+             ? 0
+             : (origins_with_max_engagement * 100) / total_origins);
 
     double total_engagement = GetTotalEngagementPoints();
     double mean_engagement =
@@ -342,6 +362,29 @@ void SiteEngagementService::RecordMetrics() {
     SiteEngagementMetrics::RecordPercentOriginsWithMaxEngagement(
         percent_origins_with_max_engagement);
   }
+}
+
+base::Time SiteEngagementService::GetLastEngagementTime() const {
+  return base::Time::FromInternalValue(
+      profile_->GetPrefs()->GetInt64(prefs::kSiteEngagementLastUpdateTime));
+}
+
+void SiteEngagementService::SetLastEngagementTime(
+    base::Time last_engagement_time) const {
+  profile_->GetPrefs()->SetInt64(prefs::kSiteEngagementLastUpdateTime,
+                                 last_engagement_time.ToInternalValue());
+}
+
+base::TimeDelta SiteEngagementService::GetMaxDecayPeriod() const {
+  return base::TimeDelta::FromHours(
+             SiteEngagementScore::GetDecayPeriodInHours()) *
+         SiteEngagementScore::GetMaxDecaysPerScore();
+}
+
+base::TimeDelta SiteEngagementService::GetStalePeriod() const {
+  return GetMaxDecayPeriod() +
+         base::TimeDelta::FromHours(
+             SiteEngagementScore::GetLastEngagementGracePeriodInHours());
 }
 
 double SiteEngagementService::GetMedianEngagement(
@@ -365,32 +408,58 @@ double SiteEngagementService::GetMedianEngagement(
     return (scores[mid - 1] + scores[mid]) / 2;
 }
 
-void SiteEngagementService::HandleMediaPlaying(const GURL& url,
-                                               bool is_hidden) {
+void SiteEngagementService::HandleMediaPlaying(
+    content::WebContents* web_contents,
+    bool is_hidden) {
+  const GURL& url = web_contents->GetVisibleURL();
   SiteEngagementMetrics::RecordEngagement(
       is_hidden ? SiteEngagementMetrics::ENGAGEMENT_MEDIA_HIDDEN
                 : SiteEngagementMetrics::ENGAGEMENT_MEDIA_VISIBLE);
   AddPoints(url, is_hidden ? SiteEngagementScore::GetHiddenMediaPoints()
                            : SiteEngagementScore::GetVisibleMediaPoints());
+
   RecordMetrics();
+  FOR_EACH_OBSERVER(
+      SiteEngagementObserver, observer_list_,
+      OnEngagementIncreased(web_contents, url, GetScore(url)));
 }
 
-void SiteEngagementService::HandleNavigation(const GURL& url,
+void SiteEngagementService::HandleNavigation(content::WebContents* web_contents,
                                              ui::PageTransition transition) {
   if (IsEngagementNavigation(transition)) {
+    const GURL& url = web_contents->GetLastCommittedURL();
     SiteEngagementMetrics::RecordEngagement(
         SiteEngagementMetrics::ENGAGEMENT_NAVIGATION);
     AddPoints(url, SiteEngagementScore::GetNavigationPoints());
+
     RecordMetrics();
+    FOR_EACH_OBSERVER(
+        SiteEngagementObserver, observer_list_,
+        OnEngagementIncreased(web_contents, url, GetScore(url)));
   }
 }
 
 void SiteEngagementService::HandleUserInput(
-    const GURL& url,
+    content::WebContents* web_contents,
     SiteEngagementMetrics::EngagementType type) {
+  const GURL& url = web_contents->GetVisibleURL();
   SiteEngagementMetrics::RecordEngagement(type);
   AddPoints(url, SiteEngagementScore::GetUserInputPoints());
+
   RecordMetrics();
+  FOR_EACH_OBSERVER(
+      SiteEngagementObserver, observer_list_,
+      OnEngagementIncreased(web_contents, url, GetScore(url)));
+}
+
+bool SiteEngagementService::IsLastEngagementStale() const {
+  // This only happens when Chrome is first run and the user has never recorded
+  // any engagement.
+  base::Time last_engagement_time = GetLastEngagementTime();
+  if (last_engagement_time.is_null())
+    return false;
+
+  return (clock_->Now() - last_engagement_time) >= GetStalePeriod();
 }
 
 void SiteEngagementService::OnURLsDeleted(
@@ -412,6 +481,13 @@ void SiteEngagementService::OnURLsDeleted(
           weak_factory_.GetWeakPtr(), hs, origins, expired));
 }
 
+SiteEngagementScore SiteEngagementService::CreateEngagementScore(
+    const GURL& origin) const {
+  return SiteEngagementScore(
+      clock_.get(), origin,
+      HostContentSettingsMapFactory::GetForProfile(profile_));
+}
+
 int SiteEngagementService::OriginsWithMaxDailyEngagement() const {
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile_);
@@ -426,10 +502,7 @@ int SiteEngagementService::OriginsWithMaxDailyEngagement() const {
     if (!origin.is_valid())
       continue;
 
-    std::unique_ptr<base::DictionaryValue> score_dict =
-        GetScoreDictForOrigin(settings_map, origin);
-    SiteEngagementScore score(clock_.get(), *score_dict);
-    if (score.MaxPointsPerDayAdded())
+    if (CreateEngagementScore(origin).MaxPointsPerDayAdded())
       ++total_origins;
   }
 
@@ -452,7 +525,6 @@ void SiteEngagementService::GetCountsAndLastVisitForOriginsComplete(
     const std::multiset<GURL>& deleted_origins,
     bool expired,
     const history::OriginCountAndLastVisitMap& remaining_origins) {
-
   // The most in-the-past option in the Clear Browsing Dialog aside from "all
   // time" is 4 weeks ago. Set the last updated date to 4 weeks ago for origins
   // where we can't find a valid last visit date.
@@ -462,6 +534,11 @@ void SiteEngagementService::GetCountsAndLastVisitForOriginsComplete(
 
   for (const auto& origin_to_count : remaining_origins) {
     GURL origin = origin_to_count.first;
+    // It appears that the history service occasionally sends bad URLs to us.
+    // See crbug.com/612881.
+    if (!origin.is_valid())
+      continue;
+
     int remaining = origin_to_count.second.first;
     base::Time last_visit = origin_to_count.second.second;
     int deleted = deleted_origins.count(origin);
@@ -489,43 +566,26 @@ void SiteEngagementService::GetCountsAndLastVisitForOriginsComplete(
     // reduced value rather than being decayed once here, and then once again
     // when it is next accessed.
     int undecay = 0;
-    int days_since_engagement = (now - last_visit).InDays();
-    if (days_since_engagement > 0) {
-      int periods = days_since_engagement /
-                    SiteEngagementScore::GetDecayPeriodInDays();
+    int hours_since_engagement = (now - last_visit).InHours();
+    if (hours_since_engagement > 0) {
+      int periods =
+          hours_since_engagement / SiteEngagementScore::GetDecayPeriodInHours();
       undecay = periods * SiteEngagementScore::GetDecayPoints();
     }
 
-    double score =
-        std::min(SiteEngagementScore::kMaxPoints,
-                 (proportion_remaining * GetScore(origin)) + undecay);
-    ResetScoreAndAccessTimesForURL(origin, score, &last_visit);
-  }
-}
+    SiteEngagementScore engagement_score = CreateEngagementScore(origin);
 
-void SiteEngagementService::ResetScoreAndAccessTimesForURL(
-    const GURL& url, double score, const base::Time* updated_time) {
-  DCHECK(url.is_valid());
-  DCHECK_GE(score, 0);
-  DCHECK_LE(score, SiteEngagementScore::kMaxPoints);
+    double score = std::min(
+        SiteEngagementScore::kMaxPoints,
+        (proportion_remaining * engagement_score.GetScore()) + undecay);
+    engagement_score.Reset(score, last_visit);
+    if (!engagement_score.last_shortcut_launch_time().is_null() &&
+        engagement_score.last_shortcut_launch_time() > last_visit) {
+      engagement_score.set_last_shortcut_launch_time(last_visit);
+    }
 
-  HostContentSettingsMap* settings_map =
-      HostContentSettingsMapFactory::GetForProfile(profile_);
-  std::unique_ptr<base::DictionaryValue> score_dict =
-      GetScoreDictForOrigin(settings_map, url);
-  SiteEngagementScore engagement_score(clock_.get(), *score_dict);
-
-  engagement_score.Reset(score, updated_time);
-  if (score == 0) {
-    settings_map->SetWebsiteSettingDefaultScope(
-        url, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-        nullptr);
-    return;
+    engagement_score.Commit();
   }
 
-  if (engagement_score.UpdateScoreDict(score_dict.get())) {
-    settings_map->SetWebsiteSettingDefaultScope(
-        url, GURL(), CONTENT_SETTINGS_TYPE_SITE_ENGAGEMENT, std::string(),
-        score_dict.release());
-  }
+  SetLastEngagementTime(now);
 }

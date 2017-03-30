@@ -40,7 +40,6 @@ class RenderWidgetHost;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewChildFrameTest;
 class RenderWidgetHostViewGuestSurfaceTest;
-struct TextInputState;
 
 // RenderWidgetHostViewChildFrame implements the view for a RenderWidgetHost
 // associated with content being rendered in a separate process from
@@ -89,6 +88,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   gfx::NativeViewAccessible GetNativeViewAccessible() override;
   void SetBackgroundColor(SkColor color) override;
   gfx::Size GetPhysicalBackingSize() const override;
+  bool IsMouseLocked() override;
 
   // RenderWidgetHostViewBase implementation.
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
@@ -96,8 +96,6 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
   void UpdateCursor(const WebCursor& cursor) override;
   void SetIsLoading(bool is_loading) override;
-  void TextInputStateChanged(const TextInputState& params) override;
-  void ImeCancelComposition() override;
   void ImeCompositionRangeChanged(
       const gfx::Range& range,
       const std::vector<gfx::Rect>& character_bounds) override;
@@ -125,14 +123,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
                      InputEventAckState ack_result) override;
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result) override;
-  void OnSwapCompositorFrame(
-      uint32_t output_surface_id,
-      std::unique_ptr<cc::CompositorFrame> frame) override;
+  void OnSwapCompositorFrame(uint32_t output_surface_id,
+                             cc::CompositorFrame frame) override;
   // Since the URL of content rendered by this class is not displayed in
   // the URL bar, this method does not need an implementation.
   void ClearCompositorFrame() override {}
   void GetScreenInfo(blink::WebScreenInfo* results) override;
-  bool GetScreenColorProfile(std::vector<char>* color_profile) override;
   gfx::Rect GetBoundsInRootWindow() override;
   void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
                               InputEventAckState ack_result) override;
@@ -140,8 +136,10 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void UnlockMouse() override;
   uint32_t GetSurfaceIdNamespace() override;
   void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event) override;
-  void ProcessMouseEvent(const blink::WebMouseEvent& event) override;
-  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event) override;
+  void ProcessMouseEvent(const blink::WebMouseEvent& event,
+                         const ui::LatencyInfo& latency) override;
+  void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
+                              const ui::LatencyInfo& latency) override;
   void ProcessTouchEvent(const blink::WebTouchEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
@@ -163,6 +161,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void LockCompositingSurface() override;
   void UnlockCompositingSurface() override;
 
+  InputEventAckState FilterInputEvent(
+      const blink::WebInputEvent& input_event) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
 

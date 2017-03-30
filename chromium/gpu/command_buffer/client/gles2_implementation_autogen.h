@@ -913,6 +913,10 @@ GLuint CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
                                           GLenum internalformat,
                                           GLenum usage) override;
 
+void GetImageivCHROMIUM(GLuint image_id, GLenum param, GLint* data) override;
+
+void DescheduleUntilFinishedCHROMIUM() override;
+
 void GetTranslatedShaderSourceANGLE(GLuint shader,
                                     GLsizei bufsize,
                                     GLsizei* length,
@@ -922,12 +926,6 @@ void PostSubBufferCHROMIUM(GLint x,
                            GLint y,
                            GLint width,
                            GLint height) override;
-
-void TexImageIOSurface2DCHROMIUM(GLenum target,
-                                 GLsizei width,
-                                 GLsizei height,
-                                 GLuint ioSurfaceId,
-                                 GLuint plane) override;
 
 void CopyTextureCHROMIUM(GLenum source_id,
                          GLenum dest_id,
@@ -1034,6 +1032,9 @@ void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                              GLint sorting_context_id,
                              const GLfloat* transform,
                              GLuint filter) override;
+
+void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
+                                       const GLuint* textures) override;
 
 void CommitOverlayPlanesCHROMIUM() override;
 

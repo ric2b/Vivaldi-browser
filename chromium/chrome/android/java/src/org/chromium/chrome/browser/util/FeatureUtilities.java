@@ -26,9 +26,8 @@ import org.chromium.base.VisibleForTesting;
 import org.chromium.chrome.browser.AppLinkHandler;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.ChromeSwitches;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
-import org.chromium.chrome.browser.preferences.DocumentModeManager;
+import org.chromium.chrome.browser.tabmodel.DocumentModeAssassin;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.ui.base.DeviceFormFactor;
 
@@ -115,14 +114,7 @@ public class FeatureUtilities {
      * @return Whether Chrome should be running on document mode.
      */
     public static boolean isDocumentMode(Context context) {
-        if (sDocumentModeDisabled == null && CommandLine.isInitialized()) {
-            initResetListener();
-            sDocumentModeDisabled = CommandLine.getInstance().hasSwitch(
-                    ChromeSwitches.DISABLE_DOCUMENT_MODE);
-        }
-        return isDocumentModeEligible(context)
-                && !DocumentModeManager.getInstance(context).isOptedOutOfDocumentMode()
-                && (sDocumentModeDisabled == null || !sDocumentModeDisabled.booleanValue());
+        return isDocumentModeEligible(context) && !DocumentModeAssassin.isOptedOutOfDocumentMode();
     }
 
     /**
@@ -188,21 +180,8 @@ public class FeatureUtilities {
                 ChromeSwitches.ENABLE_TAB_SWITCHER_IN_DOCUMENT_MODE);
     }
 
-    private static void initResetListener() {
-        if (sResetListener != null) return;
-
-        sResetListener = new CommandLine.ResetListener() {
-            @Override
-            public void onCommandLineReset() {
-                sDocumentModeDisabled = null;
-            }
-        };
-        CommandLine.addResetListener(sResetListener);
-    }
-
     private static boolean isHerbDisallowed(Context context) {
-        return isDocumentMode(context) || ChromeVersionInfo.isStableBuild()
-                || ChromeVersionInfo.isBetaBuild() || DeviceFormFactor.isTablet(context);
+        return isDocumentMode(context);
     }
 
     /**
@@ -291,6 +270,14 @@ public class FeatureUtilities {
         if (!TextUtils.equals(oldFlavor, newFlavor)) {
             ChromePreferenceManager.getInstance(context).setCachedHerbFlavor(newFlavor);
         }
+    }
+
+    /**
+     * @return True if theme colors in the tab switcher are enabled.
+     */
+    public static boolean areTabSwitcherThemeColorsEnabled() {
+        return CommandLine.getInstance().hasSwitch(
+                ChromeSwitches.ENABLE_TAB_SWITCHER_THEME_COLORS);
     }
 
     private static native void nativeSetDocumentModeEnabled(boolean enabled);

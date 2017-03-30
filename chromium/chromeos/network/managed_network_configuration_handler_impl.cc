@@ -13,8 +13,9 @@
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chromeos/dbus/shill_manager_client.h"
 #include "chromeos/dbus/shill_profile_client.h"
@@ -597,7 +598,7 @@ void ManagedNetworkConfigurationHandlerImpl::OnPoliciesApplied(
   const std::string& userhash = profile.userhash;
   VLOG(1) << "Policy application for user '" << userhash << "' finished.";
 
-  base::MessageLoop::current()->DeleteSoon(
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
       FROM_HERE, policy_applicators_[userhash].release());
   policy_applicators_.erase(userhash);
 
@@ -706,7 +707,7 @@ ManagedNetworkConfigurationHandlerImpl::ManagedNetworkConfigurationHandlerImpl()
       network_configuration_handler_(NULL),
       network_device_handler_(NULL),
       weak_ptr_factory_(this) {
-  CHECK(base::MessageLoop::current());
+  CHECK(base::ThreadTaskRunnerHandle::IsSet());
 }
 
 ManagedNetworkConfigurationHandlerImpl::

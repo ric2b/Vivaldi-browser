@@ -8,20 +8,32 @@
 #include "platform/PlatformExport.h"
 #include "wtf/Allocator.h"
 
+namespace v8 {
+class Value;
+class Object;
+template <class T> class PersistentBase;
+}
+
 namespace blink {
 
 template<typename T> class TraceTrait;
 template<typename T> class Member;
 class ScriptWrappable;
+template<typename T> class ScopedPersistent;
 
 // TODO(hlopko): Find a way to remove special-casing using templates
 #define WRAPPER_VISITOR_SPECIAL_CLASSES(V)                           \
-    V(HTMLImportsController)                                         \
-    V(NodeRareData);                                                 \
-    V(NodeListsNodeData);                                            \
-    V(ElementRareData);                                              \
-    V(StyleEngine);                                                  \
     V(DocumentStyleSheetCollection);                                 \
+    V(ElementRareData);                                              \
+    V(ElementShadow);                                                \
+    V(HTMLImportsController)                                         \
+    V(MutationObserverRegistration);                                 \
+    V(NodeIntersectionObserverData)                                  \
+    V(NodeListsNodeData);                                            \
+    V(NodeMutationObserverData);                                     \
+    V(NodeRareData);                                                 \
+    V(StyleEngine);                                                  \
+    V(V8AbstractEventListener);                                      \
 
 #define FORWARD_DECLARE_SPECIAL_CLASSES(className)                   \
     class className;
@@ -87,7 +99,14 @@ public:
         if (!traceable)
             return;
 
-        TraceTrait<T>::markWrapper(this, traceable);
+        if (TraceTrait<T>::heapObjectHeader(traceable)->isWrapperHeaderMarked()) {
+            return;
+        }
+
+        pushToMarkingDeque(
+            TraceTrait<T>::markWrapper,
+            TraceTrait<T>::heapObjectHeader,
+            traceable);
     }
 
     template<typename T>
@@ -96,11 +115,9 @@ public:
         traceWrappers(t.get());
     }
 
-    template<typename T>
-    bool markWrapperHeader(const T* object) const
-    {
-        return markWrapperHeader(object, object);
-    }
+    virtual void traceWrappers(const ScopedPersistent<v8::Value>* persistent) const = 0;
+    virtual void traceWrappers(const ScopedPersistent<v8::Object>* persistent) const = 0;
+    virtual void markWrapper(const v8::PersistentBase<v8::Object>* persistent) const = 0;
 
     virtual void dispatchTraceWrappers(const ScriptWrappable*) const = 0;
 #define DECLARE_DISPATCH_TRACE_WRAPPERS(className)                   \
@@ -111,9 +128,13 @@ public:
 #undef DECLARE_DISPATCH_TRACE_WRAPPERS
     virtual void dispatchTraceWrappers(const void*) const = 0;
 
-protected:
-    virtual bool markWrapperHeader(const ScriptWrappable*, const void*) const = 0;
-    virtual bool markWrapperHeader(const void*, const void*) const = 0;
+    virtual bool markWrapperHeader(HeapObjectHeader*) const = 0;
+    virtual void markWrappersInAllWorlds(const ScriptWrappable*) const = 0;
+    virtual void markWrappersInAllWorlds(const void*) const = 0;
+    virtual void pushToMarkingDeque(
+        void (*traceWrappersCallback)(const WrapperVisitor*, const void*),
+        HeapObjectHeader* (*heapObjectHeaderCallback)(const void*),
+        const void*) const = 0;
 };
 
 } // namespace blink

@@ -8,6 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "cc/base/region.h"
+#include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_metadata.h"
 #include "cc/output/gl_renderer.h"
 #include "cc/output/output_surface.h"
@@ -133,8 +134,9 @@ size_t DefaultOverlayProcessor::GetStrategyCount() {
 
 class OverlayOutputSurface : public OutputSurface {
  public:
-  explicit OverlayOutputSurface(scoped_refptr<ContextProvider> context_provider)
-      : OutputSurface(context_provider) {
+  explicit OverlayOutputSurface(
+      scoped_refptr<TestContextProvider> context_provider)
+      : OutputSurface(std::move(context_provider), nullptr, nullptr) {
     surface_size_ = kDisplaySize;
     device_scale_factor_ = 1;
     is_displayed_as_overlay_plane_ = true;
@@ -149,7 +151,11 @@ class OverlayOutputSurface : public OutputSurface {
     OutputSurface::BindFramebuffer();
     bind_framebuffer_count_ += 1;
   }
-  void SwapBuffers(CompositorFrame* frame) override {
+  uint32_t GetFramebufferCopyTextureFormat() override {
+    // TestContextProvider has no real framebuffer, just use RGB.
+    return GL_RGB;
+  }
+  void SwapBuffers(CompositorFrame frame) override {
     client_->DidSwapBuffers();
   }
   void OnSwapBuffersComplete() override { client_->DidSwapBuffersComplete(); }
@@ -197,9 +203,9 @@ std::unique_ptr<RenderPass> CreateRenderPass() {
 ResourceId CreateResource(ResourceProvider* resource_provider,
                           const gfx::Size& size,
                           bool is_overlay_candidate) {
-  TextureMailbox mailbox = TextureMailbox(
-      gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D, size,
-      gfx::GpuMemoryBufferId(), is_overlay_candidate, false);
+  TextureMailbox mailbox =
+      TextureMailbox(gpu::Mailbox::Generate(), gpu::SyncToken(), GL_TEXTURE_2D,
+                     size, is_overlay_candidate, false);
   std::unique_ptr<SingleReleaseCallbackImpl> release_callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&MailboxReleased));
 
@@ -1214,6 +1220,10 @@ class GLRendererWithOverlaysTest : public testing::Test {
         resource_provider_.get()));
   }
 
+  void DrawFrame(RenderPassList* pass_list, const gfx::Rect& viewport_rect) {
+    renderer_->DrawFrame(pass_list, 1.f, gfx::ColorSpace(), viewport_rect,
+                         viewport_rect, false);
+  }
   void SwapBuffers() {
     renderer_->SwapBuffers(CompositorFrameMetadata());
     output_surface_->OnSwapBuffersComplete();
@@ -1225,6 +1235,15 @@ class GLRendererWithOverlaysTest : public testing::Test {
   void SwapBuffersComplete() {
     output_surface_->OnSwapBuffersComplete();
     renderer_->SwapBuffersComplete();
+  }
+  void ReturnResourceInUseQuery(ResourceId id) {
+    ResourceProvider::ScopedReadLockGL lock(resource_provider_.get(), id);
+    gpu::TextureInUseResponse response;
+    response.texture = lock.texture_id();
+    response.in_use = false;
+    gpu::TextureInUseResponses responses;
+    responses.push_back(response);
+    renderer_->DidReceiveTextureInUseResponses(responses);
   }
 
   RendererSettings settings_;
@@ -1267,7 +1286,7 @@ TEST_F(GLRendererWithOverlaysTest, OverlayQuadNotDrawn) {
                                    kOverlayBottomRightRect,
                                    BoundingRect(kUVTopLeft, kUVBottomRight)))
       .Times(1);
-  renderer_->DrawFrame(&pass_list, 1.f, viewport_rect, viewport_rect, false);
+  DrawFrame(&pass_list, viewport_rect);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
 
   SwapBuffers();
@@ -1307,7 +1326,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadInUnderlay) {
               Schedule(-1, gfx::OVERLAY_TRANSFORM_NONE, _, kOverlayRect,
                        BoundingRect(kUVTopLeft, kUVBottomRight)))
       .Times(1);
-  renderer_->DrawFrame(&pass_list, 1.f, viewport_rect, viewport_rect, false);
+  DrawFrame(&pass_list, viewport_rect);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
 
   SwapBuffers();
@@ -1340,7 +1359,7 @@ TEST_F(GLRendererWithOverlaysTest, NoValidatorNoOverlay) {
   output_surface_->set_is_displayed_as_overlay_plane(false);
   EXPECT_CALL(*renderer_, DoDrawQuad(_, _, _)).Times(3);
   EXPECT_CALL(scheduler_, Schedule(_, _, _, _, _)).Times(0);
-  renderer_->DrawFrame(&pass_list, 1.f, viewport_rect, viewport_rect, false);
+  DrawFrame(&pass_list, viewport_rect);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
   SwapBuffers();
   Mock::VerifyAndClearExpectations(renderer_.get());
@@ -1372,7 +1391,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadNotDrawnWhenPartialSwapEnabled) {
   output_surface_->set_is_displayed_as_overlay_plane(true);
   EXPECT_CALL(*renderer_, DoDrawQuad(_, _, _)).Times(0);
   EXPECT_CALL(scheduler_, Schedule(_, _, _, _, _)).Times(2);
-  renderer_->DrawFrame(&pass_list, 1.f, viewport_rect, viewport_rect, false);
+  DrawFrame(&pass_list, viewport_rect);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
   SwapBuffers();
   Mock::VerifyAndClearExpectations(renderer_.get());
@@ -1404,7 +1423,7 @@ TEST_F(GLRendererWithOverlaysTest, OccludedQuadNotDrawnWhenEmptySwapAllowed) {
   output_surface_->set_is_displayed_as_overlay_plane(true);
   EXPECT_CALL(*renderer_, DoDrawQuad(_, _, _)).Times(0);
   EXPECT_CALL(scheduler_, Schedule(_, _, _, _, _)).Times(2);
-  renderer_->DrawFrame(&pass_list, 1.f, viewport_rect, viewport_rect, false);
+  DrawFrame(&pass_list, viewport_rect);
   EXPECT_EQ(1U, output_surface_->bind_framebuffer_count());
   SwapBuffers();
   Mock::VerifyAndClearExpectations(renderer_.get());
@@ -1533,9 +1552,9 @@ TEST_F(GLRendererWithOverlaysTest, ResourcesExportedAndReturnedWithDelay) {
   Mock::VerifyAndClearExpectations(&scheduler_);
 }
 
-TEST_F(GLRendererWithOverlaysTest, ResourcesExportedAndReturnedAtSwapComplete) {
+TEST_F(GLRendererWithOverlaysTest, ResourcesExportedAndReturnedAfterGpuQuery) {
   bool use_validator = true;
-  settings_.release_overlay_resources_on_swap_complete = true;
+  settings_.release_overlay_resources_after_gpu_query = true;
   Init(use_validator);
   renderer_->set_expect_overlays(true);
 
@@ -1610,18 +1629,26 @@ TEST_F(GLRendererWithOverlaysTest, ResourcesExportedAndReturnedAtSwapComplete) {
 
   // This completion corresponds to the first frame.
   SwapBuffersComplete();
+  EXPECT_TRUE(resource_provider_->InUseByConsumer(resource1));
+  EXPECT_TRUE(resource_provider_->InUseByConsumer(resource2));
+  EXPECT_TRUE(resource_provider_->InUseByConsumer(resource3));
+
+  // This completion corresponds to the second frame. The first resource is no
+  // longer in use.
+  ReturnResourceInUseQuery(resource1);
+  SwapBuffersComplete();
   EXPECT_FALSE(resource_provider_->InUseByConsumer(resource1));
   EXPECT_TRUE(resource_provider_->InUseByConsumer(resource2));
   EXPECT_TRUE(resource_provider_->InUseByConsumer(resource3));
 
-  // This completion corresponds to the second frame.
-  SwapBuffersComplete();
-  EXPECT_FALSE(resource_provider_->InUseByConsumer(resource1));
-  EXPECT_FALSE(resource_provider_->InUseByConsumer(resource2));
-  EXPECT_TRUE(resource_provider_->InUseByConsumer(resource3));
-
   // This completion corresponds to the third frame.
   SwapBuffersComplete();
+  EXPECT_FALSE(resource_provider_->InUseByConsumer(resource1));
+  EXPECT_TRUE(resource_provider_->InUseByConsumer(resource2));
+  EXPECT_TRUE(resource_provider_->InUseByConsumer(resource3));
+
+  ReturnResourceInUseQuery(resource2);
+  ReturnResourceInUseQuery(resource3);
   EXPECT_FALSE(resource_provider_->InUseByConsumer(resource1));
   EXPECT_FALSE(resource_provider_->InUseByConsumer(resource2));
   EXPECT_FALSE(resource_provider_->InUseByConsumer(resource3));

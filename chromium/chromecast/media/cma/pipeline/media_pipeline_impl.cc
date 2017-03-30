@@ -15,7 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
-#include "chromecast/media/cdm/browser_cdm_cast.h"
+#include "chromecast/media/cdm/cast_cdm_context.h"
 #include "chromecast/media/cma/base/buffering_controller.h"
 #include "chromecast/media/cma/base/buffering_state.h"
 #include "chromecast/media/cma/base/cma_logging.h"
@@ -51,6 +51,9 @@ const base::TimeDelta kTimeUpdateInterval(
 // kTimeUpdateInterval * kStatisticsUpdatePeriod.
 const int kStatisticsUpdatePeriod = 4;
 
+// Stall duration threshold that triggers a playback stall event.
+constexpr int kPlaybackStallEventThresholdMs = 2500;
+
 void LogEstimatedBitrate(int decoded_bytes,
                          base::TimeDelta elapsed_time,
                          const char* tag,
@@ -78,15 +81,18 @@ struct MediaPipelineImpl::FlushTask {
 };
 
 MediaPipelineImpl::MediaPipelineImpl()
-    : cdm_(nullptr),
+    : cdm_context_(nullptr),
       backend_state_(BACKEND_STATE_UNINITIALIZED),
       playback_rate_(1.0f),
       audio_decoder_(nullptr),
       video_decoder_(nullptr),
       pending_time_update_task_(false),
+      last_media_time_(::media::kNoTimestamp()),
       statistics_rolling_counter_(0),
       audio_bytes_for_bitrate_estimation_(0),
       video_bytes_for_bitrate_estimation_(0),
+      playback_stalled_(false),
+      playback_stalled_notification_sent_(false),
       weak_factory_(this) {
   CMALOG(kLogControl) << __FUNCTION__;
   weak_this_ = weak_factory_.GetWeakPtr();
@@ -154,14 +160,14 @@ void MediaPipelineImpl::SetCdm(int cdm_id) {
   // One possibility would be a GetCdmByIdCB that's passed in.
 }
 
-void MediaPipelineImpl::SetCdm(BrowserCdmCast* cdm) {
+void MediaPipelineImpl::SetCdm(CastCdmContext* cdm_context) {
   CMALOG(kLogControl) << __FUNCTION__;
   DCHECK(thread_checker_.CalledOnValidThread());
-  cdm_ = cdm;
+  cdm_context_ = cdm_context;
   if (audio_pipeline_)
-    audio_pipeline_->SetCdm(cdm);
+    audio_pipeline_->SetCdm(cdm_context);
   if (video_pipeline_)
-    video_pipeline_->SetCdm(cdm);
+    video_pipeline_->SetCdm(cdm_context);
 }
 
 ::media::PipelineStatus MediaPipelineImpl::InitializeAudio(
@@ -178,8 +184,8 @@ void MediaPipelineImpl::SetCdm(BrowserCdmCast* cdm) {
   }
   audio_decoder_.reset(new AudioDecoderSoftwareWrapper(backend_audio_decoder));
   audio_pipeline_.reset(new AudioPipelineImpl(audio_decoder_.get(), client));
-  if (cdm_)
-    audio_pipeline_->SetCdm(cdm_);
+  if (cdm_context_)
+    audio_pipeline_->SetCdm(cdm_context_);
   return audio_pipeline_->Initialize(config, std::move(frame_provider));
 }
 
@@ -195,8 +201,8 @@ void MediaPipelineImpl::SetCdm(BrowserCdmCast* cdm) {
     return ::media::PIPELINE_ERROR_ABORT;
   }
   video_pipeline_.reset(new VideoPipelineImpl(video_decoder_, client));
-  if (cdm_)
-    video_pipeline_->SetCdm(cdm_);
+  if (cdm_context_)
+    video_pipeline_->SetCdm(cdm_context_);
   return video_pipeline_->Initialize(configs, std::move(frame_provider));
 }
 
@@ -423,6 +429,55 @@ void MediaPipelineImpl::OnBufferingNotification(bool is_buffering) {
   }
 }
 
+void MediaPipelineImpl::CheckForPlaybackStall(base::TimeDelta media_time,
+                                              base::TimeTicks current_stc) {
+  DCHECK(media_time != ::media::kNoTimestamp());
+
+  // A playback stall is defined as a scenario where the underlying media
+  // pipeline has unexpectedly stopped making forward progress. The pipeline is
+  // NOT stalled if:
+  //
+  // 1. Media time is progressing
+  // 2. The backend is paused
+  // 3. We are currently buffering (this is captured in a separate event)
+  if (media_time != last_media_time_ ||
+      backend_state_ != BACKEND_STATE_PLAYING ||
+      (buffering_controller_ && buffering_controller_->IsBuffering())) {
+    if (playback_stalled_) {
+      // Transition out of the stalled condition.
+      base::TimeDelta stall_duration = current_stc - playback_stalled_time_;
+      CMALOG(kLogControl)
+          << "Transitioning out of stalled state. Stall duration was "
+          << stall_duration.InMilliseconds() << " ms";
+      playback_stalled_ = false;
+      playback_stalled_notification_sent_ = false;
+    }
+    return;
+  }
+
+  // Check to see if this is a new stall condition.
+  if (!playback_stalled_) {
+    playback_stalled_ = true;
+    playback_stalled_time_ = current_stc;
+    return;
+  }
+
+  // If we are in an existing stall, check to see if we've been stalled for more
+  // than 2.5 s. If so, send a single notification of the stall event.
+  if (!playback_stalled_notification_sent_) {
+    base::TimeDelta current_stall_duration =
+        current_stc - playback_stalled_time_;
+    if (current_stall_duration.InMilliseconds() >=
+        kPlaybackStallEventThresholdMs) {
+      CMALOG(kLogControl) << "Playback stalled";
+      metrics::CastMetricsHelper::GetInstance()->RecordApplicationEvent(
+          "Cast.Platform.PlaybackStall");
+      playback_stalled_notification_sent_ = true;
+    }
+    return;
+  }
+}
+
 void MediaPipelineImpl::UpdateMediaTime() {
   pending_time_update_task_ = false;
   if ((backend_state_ != BACKEND_STATE_PLAYING) &&
@@ -473,6 +528,8 @@ void MediaPipelineImpl::UpdateMediaTime() {
   }
   base::TimeTicks stc = base::TimeTicks::Now();
 
+  CheckForPlaybackStall(media_time, stc);
+
   base::TimeDelta max_rendering_time = media_time;
   if (buffering_controller_) {
     buffering_controller_->SetMediaTime(media_time);
@@ -504,8 +561,8 @@ void MediaPipelineImpl::OnError(::media::PipelineStatus error) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK_NE(error, ::media::PIPELINE_OK) << "PIPELINE_OK is not an error!";
 
-  metrics::CastMetricsHelper::GetInstance()->RecordApplicationEvent(
-      "Cast.Platform.Error");
+  metrics::CastMetricsHelper::GetInstance()->RecordApplicationEventWithValue(
+      "Cast.Platform.Error", error);
 
   if (!client_.error_cb.is_null())
     client_.error_cb.Run(error);

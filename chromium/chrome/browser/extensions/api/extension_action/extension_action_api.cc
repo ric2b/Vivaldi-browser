@@ -10,6 +10,7 @@
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -235,8 +236,7 @@ void ExtensionActionAPI::DispatchExtensionActionClicked(
 
   if (event_name) {
     std::unique_ptr<base::ListValue> args(new base::ListValue());
-    args->Append(
-        ExtensionTabUtil::CreateTabObject(web_contents)->ToValue().release());
+    args->Append(ExtensionTabUtil::CreateTabObject(web_contents)->ToValue());
 
     DispatchEventToExtension(web_contents->GetBrowserContext(),
                              extension_action.extension_id(), histogram_value,
@@ -536,33 +536,31 @@ bool ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
 }
 
 bool ExtensionActionGetTitleFunction::RunExtensionAction() {
-  SetResult(new base::StringValue(extension_action_->GetTitle(tab_id_)));
+  SetResult(base::MakeUnique<base::StringValue>(
+      extension_action_->GetTitle(tab_id_)));
   return true;
 }
 
 bool ExtensionActionGetPopupFunction::RunExtensionAction() {
-  SetResult(
-      new base::StringValue(extension_action_->GetPopupUrl(tab_id_).spec()));
+  SetResult(base::MakeUnique<base::StringValue>(
+      extension_action_->GetPopupUrl(tab_id_).spec()));
   return true;
 }
 
 bool ExtensionActionGetBadgeTextFunction::RunExtensionAction() {
-  SetResult(new base::StringValue(extension_action_->GetBadgeText(tab_id_)));
+  SetResult(base::MakeUnique<base::StringValue>(
+      extension_action_->GetBadgeText(tab_id_)));
   return true;
 }
 
 bool ExtensionActionGetBadgeBackgroundColorFunction::RunExtensionAction() {
-  base::ListValue* list = new base::ListValue();
+  std::unique_ptr<base::ListValue> list(new base::ListValue());
   SkColor color = extension_action_->GetBadgeBackgroundColor(tab_id_);
-  list->Append(
-      new base::FundamentalValue(static_cast<int>(SkColorGetR(color))));
-  list->Append(
-      new base::FundamentalValue(static_cast<int>(SkColorGetG(color))));
-  list->Append(
-      new base::FundamentalValue(static_cast<int>(SkColorGetB(color))));
-  list->Append(
-      new base::FundamentalValue(static_cast<int>(SkColorGetA(color))));
-  SetResult(list);
+  list->AppendInteger(static_cast<int>(SkColorGetR(color)));
+  list->AppendInteger(static_cast<int>(SkColorGetG(color)));
+  list->AppendInteger(static_cast<int>(SkColorGetB(color)));
+  list->AppendInteger(static_cast<int>(SkColorGetA(color)));
+  SetResult(std::move(list));
   return true;
 }
 

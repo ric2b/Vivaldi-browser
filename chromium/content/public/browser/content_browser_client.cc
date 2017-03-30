@@ -5,8 +5,11 @@
 #include "content/public/browser/content_browser_client.h"
 
 #include "base/files/file_path.h"
+#include "base/guid.h"
 #include "build/build_config.h"
 #include "content/public/browser/client_certificate_delegate.h"
+#include "content/public/browser/geolocation_delegate.h"
+#include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
 #include "media/base/cdm_factory.h"
 #include "storage/browser/quota/quota_manager.h"
@@ -305,7 +308,8 @@ net::NetLog* ContentBrowserClient::GetNetLog() {
   return nullptr;
 }
 
-AccessTokenStore* ContentBrowserClient::CreateAccessTokenStore() {
+GeolocationDelegate* ContentBrowserClient::CreateGeolocationDelegate() {
+  // We don't need to override anything, the default implementation is good.
   return nullptr;
 }
 
@@ -344,12 +348,13 @@ bool ContentBrowserClient::IsPepperVpnProviderAPIAllowed(
   return false;
 }
 
-ui::SelectFilePolicy* ContentBrowserClient::CreateSelectFilePolicy(
-    WebContents* web_contents) {
+std::unique_ptr<VpnServiceProxy> ContentBrowserClient::GetVpnServiceProxy(
+    BrowserContext* browser_context) {
   return nullptr;
 }
 
-LocationProvider* ContentBrowserClient::OverrideSystemLocationProvider() {
+ui::SelectFilePolicy* ContentBrowserClient::CreateSelectFilePolicy(
+    WebContents* web_contents) {
   return nullptr;
 }
 
@@ -371,6 +376,11 @@ bool ContentBrowserClient::IsPluginAllowedToUseDevChannelAPIs(
     BrowserContext* browser_context,
     const GURL& url) {
   return false;
+}
+
+std::string ContentBrowserClient::GetShellUserIdForBrowserContext(
+    BrowserContext* browser_context) {
+  return base::GenerateGUID();
 }
 
 PresentationServiceDelegate*
@@ -416,10 +426,6 @@ bool ContentBrowserClient::IsWin32kLockdownEnabledForMimeType(
   // TODO(wfh): Enable this by default once Win32k lockdown for PPAPI processes
   // is enabled by default in Chrome. See crbug.com/523278.
   return false;
-}
-
-bool ContentBrowserClient::ShouldUseWindowsPrefetchArgument() const {
-  return true;
 }
 #endif  // defined(OS_WIN)
 

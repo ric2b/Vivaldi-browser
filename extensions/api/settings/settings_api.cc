@@ -276,7 +276,7 @@ void VivaldiSettingsApiNotificationFactory::RegisterProfilePrefs(
   registry->RegisterBooleanPref(vivaldiprefs::kVivaldiTabsToLinks, false,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
-  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiTabZoom, false,
+  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiTabZoom, true,
     user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 
   registry->RegisterStringPref(vivaldiprefs::kVivaldiHomepage,

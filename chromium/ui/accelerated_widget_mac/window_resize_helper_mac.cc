@@ -175,7 +175,8 @@ void WrappedTask::RemoveFromTaskRunnerQueue() {
 PumpableTaskRunner::PumpableTaskRunner(
     const EventTimedWaitCallback& event_timed_wait_callback,
     const scoped_refptr<base::SingleThreadTaskRunner>& target_task_runner)
-    : event_(false /* auto-reset */, false /* initially signalled */),
+    : event_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+             base::WaitableEvent::InitialState::NOT_SIGNALED),
       event_timed_wait_callback_(event_timed_wait_callback),
       target_task_runner_(target_task_runner) {}
 
@@ -298,6 +299,10 @@ void WindowResizeHelperMac::Init(
   DCHECK(!task_runner_);
   task_runner_ = new PumpableTaskRunner(
       base::Bind(&WindowResizeHelperMac::EventTimedWait), target_task_runner);
+}
+
+void WindowResizeHelperMac::ShutdownForTests() {
+  task_runner_ = nullptr;
 }
 
 bool WindowResizeHelperMac::WaitForSingleTaskToRun(

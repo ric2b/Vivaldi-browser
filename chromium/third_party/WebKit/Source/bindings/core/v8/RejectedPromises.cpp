@@ -5,21 +5,21 @@
 #include "bindings/core/v8/RejectedPromises.h"
 
 #include "bindings/core/v8/ScopedPersistent.h"
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptState.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "bindings/core/v8/V8Binding.h"
+#include "bindings/core/v8/V8PerIsolateData.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/events/EventTarget.h"
 #include "core/events/PromiseRejectionEvent.h"
-#include "core/inspector/ConsoleMessage.h"
-#include "core/inspector/ScriptArguments.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/inspector/ThreadDebugger.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebScheduler.h"
 #include "public/platform/WebTaskRunner.h"
 #include "public/platform/WebThread.h"
 #include "wtf/Functional.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
@@ -27,9 +27,9 @@ static const unsigned maxReportedHandlersPendingResolution = 1000;
 
 class RejectedPromises::Message final {
 public:
-    static PassOwnPtr<Message> create(ScriptState* scriptState, v8::Local<v8::Promise> promise, v8::Local<v8::Value> exception, const String& errorMessage, const String& resourceName, int scriptId, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack, AccessControlStatus corsStatus)
+    static std::unique_ptr<Message> create(ScriptState* scriptState, v8::Local<v8::Promise> promise, v8::Local<v8::Value> exception, const String& errorMessage, std::unique_ptr<SourceLocation> location, AccessControlStatus corsStatus)
     {
-        return adoptPtr(new Message(scriptState, promise, exception, errorMessage, resourceName, scriptId, lineNumber, columnNumber, callStack, corsStatus));
+        return wrapUnique(new Message(scriptState, promise, exception, errorMessage, std::move(location), corsStatus));
     }
 
     bool isCollected()
@@ -63,7 +63,7 @@ public:
         ASSERT(!hasHandler());
 
         EventTarget* target = executionContext->errorEventTarget();
-        if (RuntimeEnabledFeatures::promiseRejectionEventEnabled() && target && !executionContext->shouldSanitizeScriptError(m_resourceName, m_corsStatus)) {
+        if (target && !executionContext->shouldSanitizeScriptError(m_resourceName, m_corsStatus)) {
             PromiseRejectionEventInit init;
             init.setPromise(ScriptPromise(m_scriptState, value));
             init.setReason(ScriptValue(m_scriptState, reason));
@@ -74,27 +74,12 @@ public:
         }
 
         if (m_shouldLogToConsole) {
-            const String errorMessage = "Uncaught (in promise)";
-            Vector<ScriptValue> args;
-            args.append(ScriptValue(m_scriptState, v8String(m_scriptState->isolate(), errorMessage)));
-            args.append(ScriptValue(m_scriptState, reason));
-            ScriptArguments* arguments = ScriptArguments::create(m_scriptState, args);
-
-            String embedderErrorMessage = m_errorMessage;
-            if (embedderErrorMessage.isEmpty())
-                embedderErrorMessage = errorMessage;
-            else if (embedderErrorMessage.startsWith("Uncaught "))
-                embedderErrorMessage.insert(" (in promise)", 8);
-
-            ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, embedderErrorMessage, m_resourceName, m_lineNumber, m_columnNumber);
-            consoleMessage->setScriptArguments(arguments);
-            consoleMessage->setCallStack(m_callStack);
-            consoleMessage->setScriptId(m_scriptId);
-            m_consoleMessageId = consoleMessage->assignMessageId();
-            executionContext->addConsoleMessage(consoleMessage);
+            V8PerIsolateData* data = V8PerIsolateData::from(m_scriptState->isolate());
+            if (data->threadDebugger())
+                m_promiseRejectionId = data->threadDebugger()->debugger()->promiseRejected(m_scriptState->context(), m_errorMessage, reason, m_location->url(), m_location->lineNumber(), m_location->columnNumber(), m_location->cloneStackTrace(), m_location->scriptId());
         }
 
-        m_callStack.clear();
+        m_location.reset();
     }
 
     void revoke()
@@ -111,7 +96,7 @@ public:
             return;
 
         EventTarget* target = executionContext->errorEventTarget();
-        if (RuntimeEnabledFeatures::promiseRejectionEventEnabled() && target && !executionContext->shouldSanitizeScriptError(m_resourceName, m_corsStatus)) {
+        if (target && !executionContext->shouldSanitizeScriptError(m_resourceName, m_corsStatus)) {
             PromiseRejectionEventInit init;
             init.setPromise(ScriptPromise(m_scriptState, value));
             init.setReason(ScriptValue(m_scriptState, reason));
@@ -119,10 +104,10 @@ public:
             target->dispatchEvent(event);
         }
 
-        if (m_shouldLogToConsole) {
-            ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, RevokedErrorMessageLevel, "Handler added to rejected promise");
-            consoleMessage->setRelatedMessageId(m_consoleMessageId);
-            executionContext->addConsoleMessage(consoleMessage);
+        if (m_shouldLogToConsole && m_promiseRejectionId) {
+            V8PerIsolateData* data = V8PerIsolateData::from(m_scriptState->isolate());
+            if (data->threadDebugger())
+                data->threadDebugger()->debugger()->promiseRejectionRevoked(m_scriptState->context(), m_promiseRejectionId);
         }
     }
 
@@ -149,17 +134,14 @@ public:
     }
 
 private:
-    Message(ScriptState* scriptState, v8::Local<v8::Promise> promise, v8::Local<v8::Value> exception, const String& errorMessage, const String& resourceName, int scriptId, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack, AccessControlStatus corsStatus)
+    Message(ScriptState* scriptState, v8::Local<v8::Promise> promise, v8::Local<v8::Value> exception, const String& errorMessage, std::unique_ptr<SourceLocation> location, AccessControlStatus corsStatus)
         : m_scriptState(scriptState)
         , m_promise(scriptState->isolate(), promise)
         , m_exception(scriptState->isolate(), exception)
         , m_errorMessage(errorMessage)
-        , m_resourceName(resourceName)
-        , m_scriptId(scriptId)
-        , m_lineNumber(lineNumber)
-        , m_columnNumber(columnNumber)
-        , m_callStack(callStack)
-        , m_consoleMessageId(0)
+        , m_resourceName(location->url())
+        , m_location(std::move(location))
+        , m_promiseRejectionId(0)
         , m_collected(false)
         , m_shouldLogToConsole(true)
         , m_corsStatus(corsStatus)
@@ -182,11 +164,8 @@ private:
     ScopedPersistent<v8::Value> m_exception;
     String m_errorMessage;
     String m_resourceName;
-    int m_scriptId;
-    int m_lineNumber;
-    int m_columnNumber;
-    RefPtr<ScriptCallStack> m_callStack;
-    unsigned m_consoleMessageId;
+    std::unique_ptr<SourceLocation> m_location;
+    unsigned m_promiseRejectionId;
     bool m_collected;
     bool m_shouldLogToConsole;
     AccessControlStatus m_corsStatus;
@@ -200,9 +179,9 @@ RejectedPromises::~RejectedPromises()
 {
 }
 
-void RejectedPromises::rejectedWithNoHandler(ScriptState* scriptState, v8::PromiseRejectMessage data, const String& errorMessage, const String& resourceName, int scriptId, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack, AccessControlStatus corsStatus)
+void RejectedPromises::rejectedWithNoHandler(ScriptState* scriptState, v8::PromiseRejectMessage data, const String& errorMessage, std::unique_ptr<SourceLocation> location, AccessControlStatus corsStatus)
 {
-    m_queue.append(Message::create(scriptState, data.GetPromise(), data.GetValue(), errorMessage, resourceName, scriptId, lineNumber, columnNumber, callStack, corsStatus));
+    m_queue.append(Message::create(scriptState, data.GetPromise(), data.GetValue(), errorMessage, std::move(location), corsStatus));
 }
 
 void RejectedPromises::handlerAdded(v8::PromiseRejectMessage data)
@@ -217,19 +196,19 @@ void RejectedPromises::handlerAdded(v8::PromiseRejectMessage data)
 
     // Then look it up in the reported errors.
     for (size_t i = 0; i < m_reportedAsErrors.size(); ++i) {
-        OwnPtr<Message>& message = m_reportedAsErrors.at(i);
+        std::unique_ptr<Message>& message = m_reportedAsErrors.at(i);
         if (!message->isCollected() && message->hasPromise(data.GetPromise())) {
             message->makePromiseStrong();
-            Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, bind(&RejectedPromises::revokeNow, this, passed(std::move(message))));
+            Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&RejectedPromises::revokeNow, RefPtr<RejectedPromises>(this), passed(std::move(message))));
             m_reportedAsErrors.remove(i);
             return;
         }
     }
 }
 
-PassOwnPtr<RejectedPromises::MessageQueue> RejectedPromises::createMessageQueue()
+std::unique_ptr<RejectedPromises::MessageQueue> RejectedPromises::createMessageQueue()
 {
-    return adoptPtr(new MessageQueue());
+    return wrapUnique(new MessageQueue());
 }
 
 void RejectedPromises::dispose()
@@ -237,7 +216,7 @@ void RejectedPromises::dispose()
     if (m_queue.isEmpty())
         return;
 
-    OwnPtr<MessageQueue> queue = createMessageQueue();
+    std::unique_ptr<MessageQueue> queue = createMessageQueue();
     queue->swap(m_queue);
     processQueueNow(std::move(queue));
 }
@@ -247,12 +226,12 @@ void RejectedPromises::processQueue()
     if (m_queue.isEmpty())
         return;
 
-    OwnPtr<MessageQueue> queue = createMessageQueue();
+    std::unique_ptr<MessageQueue> queue = createMessageQueue();
     queue->swap(m_queue);
-    Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, bind(&RejectedPromises::processQueueNow, PassRefPtr<RejectedPromises>(this), passed(std::move(queue))));
+    Platform::current()->currentThread()->scheduler()->timerTaskRunner()->postTask(BLINK_FROM_HERE, WTF::bind(&RejectedPromises::processQueueNow, PassRefPtr<RejectedPromises>(this), passed(std::move(queue))));
 }
 
-void RejectedPromises::processQueueNow(PassOwnPtr<MessageQueue> queue)
+void RejectedPromises::processQueueNow(std::unique_ptr<MessageQueue> queue)
 {
     // Remove collected handlers.
     for (size_t i = 0; i < m_reportedAsErrors.size();) {
@@ -263,7 +242,7 @@ void RejectedPromises::processQueueNow(PassOwnPtr<MessageQueue> queue)
     }
 
     while (!queue->isEmpty()) {
-        OwnPtr<Message> message = queue->takeFirst();
+        std::unique_ptr<Message> message = queue->takeFirst();
         if (message->isCollected())
             continue;
         if (!message->hasHandler()) {
@@ -276,7 +255,7 @@ void RejectedPromises::processQueueNow(PassOwnPtr<MessageQueue> queue)
     }
 }
 
-void RejectedPromises::revokeNow(PassOwnPtr<Message> message)
+void RejectedPromises::revokeNow(std::unique_ptr<Message> message)
 {
     message->revoke();
 }

@@ -4,6 +4,9 @@
 
 #include "chrome/browser/extensions/api/autotest_private/autotest_private_api.h"
 
+#include <memory>
+#include <utility>
+
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
@@ -46,7 +49,7 @@ base::ListValue* GetHostPermissions(const Extension* ext, bool effective_perm) {
   for (URLPatternSet::const_iterator perm = pattern_set.begin();
        perm != pattern_set.end();
        ++perm) {
-    permissions->Append(new base::StringValue(perm->GetAsString()));
+    permissions->AppendString(perm->GetAsString());
   }
 
   return permissions;
@@ -58,7 +61,7 @@ base::ListValue* GetAPIPermissions(const Extension* ext) {
       ext->permissions_data()->active_permissions().GetAPIsAsStrings();
   for (std::set<std::string>::const_iterator perm = perm_list.begin();
        perm != perm_list.end(); ++perm) {
-    permissions->Append(new base::StringValue(perm->c_str()));
+    permissions->AppendString(perm->c_str());
   }
   return permissions;
 }
@@ -98,7 +101,7 @@ bool AutotestPrivateShutdownFunction::RunSync() {
 bool AutotestPrivateLoginStatusFunction::RunSync() {
   DVLOG(1) << "AutotestPrivateLoginStatusFunction";
 
-  base::DictionaryValue* result(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
 #if defined(OS_CHROMEOS)
   const user_manager::UserManager* user_manager =
       user_manager::UserManager::Get();
@@ -138,7 +141,7 @@ bool AutotestPrivateLoginStatusFunction::RunSync() {
   }
 #endif
 
-  SetResult(result);
+  SetResult(std::move(result));
   return true;
 }
 
@@ -170,7 +173,8 @@ bool AutotestPrivateGetExtensionsInfoFunction::RunSync() {
        it != all.end(); ++it) {
     const Extension* extension = it->get();
     std::string id = extension->id();
-    base::DictionaryValue* extension_value = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> extension_value(
+        new base::DictionaryValue);
     extension_value->SetString("id", id);
     extension_value->SetString("version", extension->VersionString());
     extension_value->SetString("name", extension->name());
@@ -202,12 +206,13 @@ bool AutotestPrivateGetExtensionsInfoFunction::RunSync() {
         "hasPageAction",
         extension_action_manager->GetPageAction(*extension) != NULL);
 
-    extensions_values->Append(extension_value);
+    extensions_values->Append(std::move(extension_value));
   }
 
-  base::DictionaryValue* return_value(new base::DictionaryValue);
+  std::unique_ptr<base::DictionaryValue> return_value(
+      new base::DictionaryValue);
   return_value->Set("extensions", extensions_values);
-  SetResult(return_value);
+  SetResult(std::move(return_value));
   return true;
 }
 
@@ -348,9 +353,9 @@ std::string AutotestPrivateGetVisibleNotificationsFunction::ConvertToString(
 
 bool AutotestPrivateGetVisibleNotificationsFunction::RunSync() {
   DVLOG(1) << "AutotestPrivateGetVisibleNotificationsFunction";
-  base::ListValue* values = new base::ListValue;
+  std::unique_ptr<base::ListValue> values(new base::ListValue);
 #if defined(OS_CHROMEOS)
-  for (auto notification :
+  for (auto* notification :
        message_center::MessageCenter::Get()->GetVisibleNotifications()) {
     base::DictionaryValue* result(new base::DictionaryValue);
     result->SetString("id", notification->id());
@@ -363,7 +368,7 @@ bool AutotestPrivateGetVisibleNotificationsFunction::RunSync() {
   }
 
 #endif
-  SetResult(values);
+  SetResult(std::move(values));
   return true;
 }
 

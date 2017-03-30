@@ -17,6 +17,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/feature_list.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
@@ -48,7 +49,6 @@
 #include "net/ssl/ssl_cipher_suite_names.h"
 #include "net/ssl/ssl_client_session_cache.h"
 #include "net/ssl/ssl_connection_status_flags.h"
-#include "net/ssl/ssl_failure_state.h"
 #include "net/ssl/ssl_info.h"
 #include "net/ssl/ssl_private_key.h"
 #include "net/ssl/token_binding.h"
@@ -64,17 +64,6 @@
 namespace net {
 
 namespace {
-
-// Enable this to see logging for state machine state transitions.
-#if 0
-#define GotoState(s)                                                          \
-  do {                                                                        \
-    DVLOG(2) << (void*)this << " " << __FUNCTION__ << " jump to state " << s; \
-    next_handshake_state_ = s;                                                \
-  } while (0)
-#else
-#define GotoState(s) next_handshake_state_ = s
-#endif
 
 // This constant can be any non-negative/non-zero value (eg: it does not
 // overlap with any value of the net::Error range, including net::OK).
@@ -92,9 +81,14 @@ const unsigned int kTbExtNum = 24;
 
 // Token Binding ProtocolVersions supported.
 const uint8_t kTbProtocolVersionMajor = 0;
-const uint8_t kTbProtocolVersionMinor = 5;
+const uint8_t kTbProtocolVersionMinor = 6;
 const uint8_t kTbMinProtocolVersionMajor = 0;
-const uint8_t kTbMinProtocolVersionMinor = 3;
+const uint8_t kTbMinProtocolVersionMinor = 6;
+
+#if !defined(OS_NACL)
+const base::Feature kPostQuantumExperiment{"SSLPostQuantumExperiment",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 bool EVP_MDToPrivateKeyHash(const EVP_MD* md, SSLPrivateKey::Hash* hash) {
   switch (EVP_MD_type(md)) {
@@ -522,13 +516,16 @@ SSLClientSocketImpl::SSLClientSocketImpl(
       channel_id_sent_(false),
       session_pending_(false),
       certificate_verified_(false),
-      ssl_failure_state_(SSL_FAILURE_NONE),
       signature_result_(kNoPendingResult),
       transport_security_state_(context.transport_security_state),
       policy_enforcer_(context.ct_policy_enforcer),
+      pkp_bypassed_(false),
       net_log_(transport_->socket()->NetLog()),
       weak_factory_(this) {
-  DCHECK(cert_verifier_);
+  CHECK(cert_verifier_);
+  CHECK(transport_security_state_);
+  CHECK(cert_transparency_verifier_);
+  CHECK(policy_enforcer_);
 }
 
 SSLClientSocketImpl::~SSLClientSocketImpl() {
@@ -597,10 +594,6 @@ crypto::ECPrivateKey* SSLClientSocketImpl::GetChannelIDKey() const {
   return channel_id_key_.get();
 }
 
-SSLFailureState SSLClientSocketImpl::GetSSLFailureState() const {
-  return ssl_failure_state_;
-}
-
 int SSLClientSocketImpl::ExportKeyingMaterial(const base::StringPiece& label,
                                               bool has_context,
                                               const base::StringPiece& context,
@@ -626,10 +619,6 @@ int SSLClientSocketImpl::ExportKeyingMaterial(const base::StringPiece& label,
 }
 
 int SSLClientSocketImpl::Connect(const CompletionCallback& callback) {
-  // It is an error to create an SSLClientSocket whose context has no
-  // TransportSecurityState.
-  DCHECK(transport_security_state_);
-
   // Although StreamSocket does allow calling Connect() after Disconnect(),
   // this has never worked for layered sockets. CHECK to detect any consumers
   // reconnecting an SSL socket.
@@ -650,7 +639,7 @@ int SSLClientSocketImpl::Connect(const CompletionCallback& callback) {
   // Set SSL to client mode. Handshake happens in the loop below.
   SSL_set_connect_state(ssl_);
 
-  GotoState(STATE_HANDSHAKE);
+  next_handshake_state_ = STATE_HANDSHAKE;
   rv = DoHandshakeLoop(OK);
   if (rv == ERR_IO_PENDING) {
     user_connect_callback_ = callback;
@@ -719,7 +708,6 @@ void SSLClientSocketImpl::Disconnect() {
   session_pending_ = false;
   certificate_verified_ = false;
   channel_id_request_.Cancel();
-  ssl_failure_state_ = SSL_FAILURE_NONE;
 
   signature_result_ = kNoPendingResult;
   signature_.clear();
@@ -799,6 +787,7 @@ bool SSLClientSocketImpl::GetSSLInfo(SSLInfo* ssl_info) {
   ssl_info->cert_status = server_cert_verify_result_.cert_status;
   ssl_info->is_issued_by_known_root =
       server_cert_verify_result_.is_issued_by_known_root;
+  ssl_info->pkp_bypassed = pkp_bypassed_;
   ssl_info->public_key_hashes = server_cert_verify_result_.public_key_hashes;
   ssl_info->client_cert_sent =
       ssl_config_.send_client_cert && ssl_config_.client_cert.get();
@@ -831,10 +820,6 @@ bool SSLClientSocketImpl::GetSSLInfo(SSLInfo* ssl_info) {
                                  ? SSLInfo::HANDSHAKE_RESUME
                                  : SSLInfo::HANDSHAKE_FULL;
 
-  DVLOG(3) << "Encoded connection status: cipher suite = "
-           << SSLConnectionStatusToCipherSuite(ssl_info->connection_status)
-           << " version = "
-           << SSLConnectionStatusToVersion(ssl_info->connection_status);
   return true;
 }
 
@@ -987,16 +972,32 @@ int SSLClientSocketImpl::Init() {
   // DHE_RSA_WITH_AES_256_GCM_SHA384. Historically, AES_256_GCM was not
   // supported. As DHE is being deprecated, don't add a cipher only to remove it
   // immediately.
-  std::string command(
-      "DEFAULT:!SHA256:!SHA384:!DHE-RSA-AES256-GCM-SHA384:!aPSK");
+  std::string command;
+#if !defined(OS_NACL)
+  if (base::FeatureList::IsEnabled(kPostQuantumExperiment)) {
+    // These are experimental, non-standard ciphersuites.  They are part of an
+    // experiment in post-quantum cryptography.  They're not intended to
+    // represent a de-facto standard, and will be removed from BoringSSL in
+    // ~2018.
+    if (EVP_has_aes_hardware()) {
+      command.append(
+          "CECPQ1-RSA-AES256-GCM-SHA384:"
+          "CECPQ1-ECDSA-AES256-GCM-SHA384:");
+    }
+    command.append(
+        "CECPQ1-RSA-CHACHA20-POLY1305-SHA256:"
+        "CECPQ1-ECDSA-CHACHA20-POLY1305-SHA256:");
+    if (!EVP_has_aes_hardware()) {
+      command.append(
+          "CECPQ1-RSA-AES256-GCM-SHA384:"
+          "CECPQ1-ECDSA-AES256-GCM-SHA384:");
+    }
+  }
+#endif
+  command.append("ALL:!SHA256:!SHA384:!DHE-RSA-AES256-GCM-SHA384:!aPSK:!RC4");
 
   if (ssl_config_.require_ecdhe)
     command.append(":!kRSA:!kDHE");
-
-  if (!(ssl_config_.rc4_enabled &&
-        ssl_config_.deprecated_cipher_suites_enabled)) {
-    command.append(":!RC4");
-  }
 
   if (!ssl_config_.deprecated_cipher_suites_enabled) {
     // Only offer DHE on the second handshake. https://crbug.com/538690
@@ -1026,22 +1027,8 @@ int SSLClientSocketImpl::Init() {
   }
 
   if (!ssl_config_.alpn_protos.empty()) {
-    // Get list of ciphers that are enabled.
-    STACK_OF(SSL_CIPHER)* enabled_ciphers = SSL_get_ciphers(ssl_);
-    DCHECK(enabled_ciphers);
-    std::vector<uint16_t> enabled_ciphers_vector;
-    for (size_t i = 0; i < sk_SSL_CIPHER_num(enabled_ciphers); ++i) {
-      const SSL_CIPHER* cipher = sk_SSL_CIPHER_value(enabled_ciphers, i);
-      const uint16_t id = static_cast<uint16_t>(SSL_CIPHER_get_id(cipher));
-      enabled_ciphers_vector.push_back(id);
-    }
-
-    NextProtoVector alpn_protos = ssl_config_.alpn_protos;
-    if (!HasCipherAdequateForHTTP2(enabled_ciphers_vector) ||
-        !IsTLSVersionAdequateForHTTP2(ssl_config_)) {
-      DisableHTTP2(&alpn_protos);
-    }
-    std::vector<uint8_t> wire_protos = SerializeNextProtos(alpn_protos);
+    std::vector<uint8_t> wire_protos =
+        SerializeNextProtos(ssl_config_.alpn_protos);
     SSL_set_alpn_protos(ssl_, wire_protos.empty() ? NULL : &wire_protos[0],
                         wire_protos.size());
   }
@@ -1129,7 +1116,7 @@ int SSLClientSocketImpl::DoHandshake() {
     if (ssl_error == SSL_ERROR_WANT_CHANNEL_ID_LOOKUP) {
       // The server supports channel ID. Stop to look one up before returning to
       // the handshake.
-      GotoState(STATE_CHANNEL_ID_LOOKUP);
+      next_handshake_state_ = STATE_CHANNEL_ID_LOOKUP;
       return OK;
     }
     if (ssl_error == SSL_ERROR_WANT_X509_LOOKUP &&
@@ -1139,7 +1126,7 @@ int SSLClientSocketImpl::DoHandshake() {
     if (ssl_error == SSL_ERROR_WANT_PRIVATE_KEY_OPERATION) {
       DCHECK(ssl_config_.client_private_key);
       DCHECK_NE(kNoPendingResult, signature_result_);
-      GotoState(STATE_HANDSHAKE);
+      next_handshake_state_ = STATE_HANDSHAKE;
       return ERR_IO_PENDING;
     }
 
@@ -1147,7 +1134,7 @@ int SSLClientSocketImpl::DoHandshake() {
     net_error = MapOpenSSLErrorWithDetails(ssl_error, err_tracer, &error_info);
     if (net_error == ERR_IO_PENDING) {
       // If not done, stay in this state
-      GotoState(STATE_HANDSHAKE);
+      next_handshake_state_ = STATE_HANDSHAKE;
       return ERR_IO_PENDING;
     }
 
@@ -1156,34 +1143,9 @@ int SSLClientSocketImpl::DoHandshake() {
     net_log_.AddEvent(
         NetLog::TYPE_SSL_HANDSHAKE_ERROR,
         CreateNetLogOpenSSLErrorCallback(net_error, ssl_error, error_info));
-
-    // Classify the handshake failure. This is used to determine causes of the
-    // TLS version fallback.
-
-    // |cipher| is the current outgoing cipher suite, so it is non-null iff
-    // ChangeCipherSpec was sent.
-    const SSL_CIPHER* cipher = SSL_get_current_cipher(ssl_);
-    if (SSL_get_state(ssl_) == SSL3_ST_CR_SRVR_HELLO_A) {
-      ssl_failure_state_ = SSL_FAILURE_CLIENT_HELLO;
-    } else if (cipher && (SSL_CIPHER_get_id(cipher) ==
-                              TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256 ||
-                          SSL_CIPHER_get_id(cipher) ==
-                              TLS1_CK_RSA_WITH_AES_128_GCM_SHA256)) {
-      ssl_failure_state_ = SSL_FAILURE_BUGGY_GCM;
-    } else if (cipher && ssl_config_.send_client_cert) {
-      ssl_failure_state_ = SSL_FAILURE_CLIENT_AUTH;
-    } else if (ERR_GET_LIB(error_info.error_code) == ERR_LIB_SSL &&
-               ERR_GET_REASON(error_info.error_code) ==
-                   SSL_R_OLD_SESSION_VERSION_NOT_RETURNED) {
-      ssl_failure_state_ = SSL_FAILURE_SESSION_MISMATCH;
-    } else if (cipher && npn_status_ != kNextProtoUnsupported) {
-      ssl_failure_state_ = SSL_FAILURE_NEXT_PROTO;
-    } else {
-      ssl_failure_state_ = SSL_FAILURE_UNKNOWN;
-    }
   }
 
-  GotoState(STATE_HANDSHAKE_COMPLETE);
+  next_handshake_state_ = STATE_HANDSHAKE_COMPLETE;
   return net_error;
 }
 
@@ -1194,6 +1156,16 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
   if (ssl_config_.version_fallback &&
       ssl_config_.version_max < ssl_config_.version_fallback_min) {
     return ERR_SSL_FALLBACK_BEYOND_MINIMUM_VERSION;
+  }
+
+  // DHE is offered on the deprecated cipher fallback and then rejected
+  // afterwards. This is to aid in diagnosing connection failures because a
+  // server requires DHE ciphers.
+  //
+  // TODO(davidben): A few releases after DHE's removal, remove this logic.
+  if (!ssl_config_.dhe_enabled &&
+      SSL_CIPHER_is_DHE(SSL_get_current_cipher(ssl_))) {
+    return ERR_SSL_OBSOLETE_CIPHER;
   }
 
   // Check that if token binding was negotiated, then extended master secret
@@ -1244,7 +1216,7 @@ int SSLClientSocketImpl::DoHandshakeComplete(int result) {
 
   // Verify the certificate.
   UpdateServerCert();
-  GotoState(STATE_VERIFY_CERT);
+  next_handshake_state_ = STATE_VERIFY_CERT;
   return OK;
 }
 
@@ -1252,7 +1224,7 @@ int SSLClientSocketImpl::DoChannelIDLookup() {
   NetLog::ParametersCallback callback = base::Bind(
       &NetLogChannelIDLookupCallback, base::Unretained(channel_id_service_));
   net_log_.BeginEvent(NetLog::TYPE_SSL_GET_CHANNEL_ID, callback);
-  GotoState(STATE_CHANNEL_ID_LOOKUP_COMPLETE);
+  next_handshake_state_ = STATE_CHANNEL_ID_LOOKUP_COMPLETE;
   return channel_id_service_->GetOrCreateChannelID(
       host_and_port_.host(), &channel_id_key_,
       base::Bind(&SSLClientSocketImpl::OnHandshakeIOComplete,
@@ -1280,7 +1252,7 @@ int SSLClientSocketImpl::DoChannelIDLookupComplete(int result) {
 
   // Return to the handshake.
   channel_id_sent_ = true;
-  GotoState(STATE_HANDSHAKE);
+  next_handshake_state_ = STATE_HANDSHAKE;
   return OK;
 }
 
@@ -1288,7 +1260,7 @@ int SSLClientSocketImpl::DoVerifyCert(int result) {
   DCHECK(!server_cert_chain_->empty());
   DCHECK(start_cert_verification_time_.is_null());
 
-  GotoState(STATE_VERIFY_CERT_COMPLETE);
+  next_handshake_state_ = STATE_VERIFY_CERT_COMPLETE;
 
   // OpenSSL decoded the certificate, but the platform certificate
   // implementation could not. This is treated as a fatal SSL-level protocol
@@ -1305,7 +1277,6 @@ int SSLClientSocketImpl::DoVerifyCert(int result) {
   }
   CertStatus cert_status;
   if (ssl_config_.IsAllowedBadCert(der_cert, &cert_status)) {
-    VLOG(1) << "Received an expected bad cert with status: " << cert_status;
     server_cert_verify_result_.Reset();
     server_cert_verify_result_.cert_status = cert_status;
     server_cert_verify_result_.verified_cert = server_cert_;
@@ -1324,8 +1295,9 @@ int SSLClientSocketImpl::DoVerifyCert(int result) {
   start_cert_verification_time_ = base::TimeTicks::Now();
 
   return cert_verifier_->Verify(
-      server_cert_.get(), host_and_port_.host(), ocsp_response,
-      ssl_config_.GetCertVerifyFlags(),
+      CertVerifier::RequestParams(server_cert_, host_and_port_.host(),
+                                  ssl_config_.GetCertVerifyFlags(),
+                                  ocsp_response, CertificateList()),
       // TODO(davidben): Route the CRLSet through SSLConfig so
       // SSLClientSocket doesn't depend on SSLConfigService.
       SSLConfigService::GetCRLSet().get(), &server_cert_verify_result_,
@@ -1347,29 +1319,39 @@ int SSLClientSocketImpl::DoVerifyCertComplete(int result) {
     }
   }
 
+  // If the connection was good, check HPKP and CT status simultaneously,
+  // but prefer to treat the HPKP error as more serious, if there was one.
   const CertStatus cert_status = server_cert_verify_result_.cert_status;
-  if (transport_security_state_ &&
-      (result == OK ||
-       (IsCertificateError(result) && IsCertStatusMinorError(cert_status))) &&
-      !transport_security_state_->CheckPublicKeyPins(
-          host_and_port_, server_cert_verify_result_.is_issued_by_known_root,
-          server_cert_verify_result_.public_key_hashes, server_cert_.get(),
-          server_cert_verify_result_.verified_cert.get(),
-          TransportSecurityState::ENABLE_PIN_REPORTS, &pinning_failure_log_)) {
-    result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+  if ((result == OK ||
+       (IsCertificateError(result) && IsCertStatusMinorError(cert_status)))) {
+    int ct_result = VerifyCT();
+    TransportSecurityState::PKPStatus pin_validity =
+        transport_security_state_->CheckPublicKeyPins(
+            host_and_port_, server_cert_verify_result_.is_issued_by_known_root,
+            server_cert_verify_result_.public_key_hashes, server_cert_.get(),
+            server_cert_verify_result_.verified_cert.get(),
+            TransportSecurityState::ENABLE_PIN_REPORTS, &pinning_failure_log_);
+    switch (pin_validity) {
+      case TransportSecurityState::PKPStatus::VIOLATED:
+        server_cert_verify_result_.cert_status |=
+            CERT_STATUS_PINNED_KEY_MISSING;
+        result = ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+        break;
+      case TransportSecurityState::PKPStatus::BYPASSED:
+        pkp_bypassed_ = true;
+      // Fall through.
+      case TransportSecurityState::PKPStatus::OK:
+        // Do nothing.
+        break;
+    }
+    if (result != ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN && ct_result != OK)
+      result = ct_result;
   }
 
   if (result == OK) {
-    // Only check Certificate Transparency if there were no other errors with
-    // the connection.
-    VerifyCT();
-
     DCHECK(!certificate_verified_);
     certificate_verified_ = true;
     MaybeCacheSession();
-  } else {
-    DVLOG(1) << "DoVerifyCertComplete error " << ErrorToString(result) << " ("
-             << result << ")";
   }
 
   completed_connect_ = true;
@@ -1393,68 +1375,6 @@ void SSLClientSocketImpl::UpdateServerCert() {
     net_log_.AddEvent(NetLog::TYPE_SSL_CERTIFICATES_RECEIVED,
                       base::Bind(&NetLogX509CertificateCallback,
                                  base::Unretained(server_cert_.get())));
-  }
-}
-
-void SSLClientSocketImpl::VerifyCT() {
-  if (!cert_transparency_verifier_)
-    return;
-
-  const uint8_t* ocsp_response_raw;
-  size_t ocsp_response_len;
-  SSL_get0_ocsp_response(ssl_, &ocsp_response_raw, &ocsp_response_len);
-  std::string ocsp_response;
-  if (ocsp_response_len > 0) {
-    ocsp_response.assign(reinterpret_cast<const char*>(ocsp_response_raw),
-                         ocsp_response_len);
-  }
-
-  const uint8_t* sct_list_raw;
-  size_t sct_list_len;
-  SSL_get0_signed_cert_timestamp_list(ssl_, &sct_list_raw, &sct_list_len);
-  std::string sct_list;
-  if (sct_list_len > 0)
-    sct_list.assign(reinterpret_cast<const char*>(sct_list_raw), sct_list_len);
-
-  // Note that this is a completely synchronous operation: The CT Log Verifier
-  // gets all the data it needs for SCT verification and does not do any
-  // external communication.
-  cert_transparency_verifier_->Verify(
-      server_cert_verify_result_.verified_cert.get(), ocsp_response, sct_list,
-      &ct_verify_result_, net_log_);
-
-  ct_verify_result_.ct_policies_applied = (policy_enforcer_ != nullptr);
-  ct_verify_result_.ev_policy_compliance =
-      ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY;
-  if (policy_enforcer_) {
-    if ((server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV)) {
-      scoped_refptr<ct::EVCertsWhitelist> ev_whitelist =
-          SSLConfigService::GetEVCertsWhitelist();
-      ct::EVPolicyCompliance ev_policy_compliance =
-          policy_enforcer_->DoesConformToCTEVPolicy(
-              server_cert_verify_result_.verified_cert.get(),
-              ev_whitelist.get(), ct_verify_result_.verified_scts, net_log_);
-      ct_verify_result_.ev_policy_compliance = ev_policy_compliance;
-      if (ev_policy_compliance !=
-              ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY &&
-          ev_policy_compliance !=
-              ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_WHITELIST &&
-          ev_policy_compliance !=
-              ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS) {
-        // TODO(eranm): Log via the BoundNetLog, see crbug.com/437766
-        VLOG(1) << "EV certificate for "
-                << server_cert_verify_result_.verified_cert->subject()
-                       .GetDisplayName()
-                << " does not conform to CT policy, removing EV status.";
-        server_cert_verify_result_.cert_status |=
-            CERT_STATUS_CT_COMPLIANCE_FAILED;
-        server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
-      }
-    }
-    ct_verify_result_.cert_policy_compliance =
-        policy_enforcer_->DoesConformToCertPolicy(
-            server_cert_verify_result_.verified_cert.get(),
-            ct_verify_result_.verified_scts, net_log_);
   }
 }
 
@@ -1506,7 +1426,7 @@ int SSLClientSocketImpl::DoHandshakeLoop(int last_io_result) {
     // State handlers can and often do call GotoState just
     // to stay in the current state.
     State state = next_handshake_state_;
-    GotoState(STATE_NONE);
+    next_handshake_state_ = STATE_NONE;
     switch (state) {
       case STATE_HANDSHAKE:
         rv = DoHandshake();
@@ -1833,7 +1753,6 @@ int SSLClientSocketImpl::TransportReadComplete(int result) {
     result = ERR_CONNECTION_CLOSED;
   int bytes_read = 0;
   if (result < 0) {
-    DVLOG(1) << "TransportReadComplete result " << result;
     // Received an error. Save it to be reported in a future read on
     // transport_bio_'s peer.
     transport_read_error_ = result;
@@ -1847,8 +1766,71 @@ int SSLClientSocketImpl::TransportReadComplete(int result) {
   return result;
 }
 
+int SSLClientSocketImpl::VerifyCT() {
+  const uint8_t* ocsp_response_raw;
+  size_t ocsp_response_len;
+  SSL_get0_ocsp_response(ssl_, &ocsp_response_raw, &ocsp_response_len);
+  std::string ocsp_response;
+  if (ocsp_response_len > 0) {
+    ocsp_response.assign(reinterpret_cast<const char*>(ocsp_response_raw),
+                         ocsp_response_len);
+  }
+
+  const uint8_t* sct_list_raw;
+  size_t sct_list_len;
+  SSL_get0_signed_cert_timestamp_list(ssl_, &sct_list_raw, &sct_list_len);
+  std::string sct_list;
+  if (sct_list_len > 0)
+    sct_list.assign(reinterpret_cast<const char*>(sct_list_raw), sct_list_len);
+
+  // Note that this is a completely synchronous operation: The CT Log Verifier
+  // gets all the data it needs for SCT verification and does not do any
+  // external communication.
+  cert_transparency_verifier_->Verify(
+      server_cert_verify_result_.verified_cert.get(), ocsp_response, sct_list,
+      &ct_verify_result_, net_log_);
+
+  ct_verify_result_.ct_policies_applied = true;
+  ct_verify_result_.ev_policy_compliance =
+      ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY;
+  if (server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV) {
+    scoped_refptr<ct::EVCertsWhitelist> ev_whitelist =
+        SSLConfigService::GetEVCertsWhitelist();
+    ct::EVPolicyCompliance ev_policy_compliance =
+        policy_enforcer_->DoesConformToCTEVPolicy(
+            server_cert_verify_result_.verified_cert.get(), ev_whitelist.get(),
+            ct_verify_result_.verified_scts, net_log_);
+    ct_verify_result_.ev_policy_compliance = ev_policy_compliance;
+    if (ev_policy_compliance !=
+            ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY &&
+        ev_policy_compliance !=
+            ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_WHITELIST &&
+        ev_policy_compliance !=
+            ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS) {
+      server_cert_verify_result_.cert_status |=
+          CERT_STATUS_CT_COMPLIANCE_FAILED;
+      server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
+    }
+  }
+  ct_verify_result_.cert_policy_compliance =
+      policy_enforcer_->DoesConformToCertPolicy(
+          server_cert_verify_result_.verified_cert.get(),
+          ct_verify_result_.verified_scts, net_log_);
+
+  if (ct_verify_result_.cert_policy_compliance !=
+          ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS &&
+      transport_security_state_->ShouldRequireCT(
+          host_and_port_.host(), server_cert_verify_result_.verified_cert.get(),
+          server_cert_verify_result_.public_key_hashes)) {
+    server_cert_verify_result_.cert_status |=
+        CERT_STATUS_CERTIFICATE_TRANSPARENCY_REQUIRED;
+    return ERR_CERTIFICATE_TRANSPARENCY_REQUIRED;
+  }
+
+  return OK;
+}
+
 int SSLClientSocketImpl::ClientCertRequestCallback(SSL* ssl) {
-  DVLOG(3) << "OpenSSL ClientCertRequestCallback called";
   DCHECK(ssl == ssl_);
 
   net_log_.AddEvent(NetLog::TYPE_SSL_CLIENT_CERT_REQUESTED);
@@ -2031,7 +2013,6 @@ int SSLClientSocketImpl::SelectNextProtoCallback(unsigned char** out,
   }
 
   npn_proto_.assign(reinterpret_cast<const char*>(*out), *outlen);
-  DVLOG(2) << "next protocol: '" << npn_proto_ << "' status: " << npn_status_;
   set_negotiation_extension(kExtensionNPN);
   return SSL_TLSEXT_ERR_OK;
 }

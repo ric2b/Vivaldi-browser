@@ -37,9 +37,11 @@
 #include "core/frame/LocalFrameLifecycleObserver.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
+#include "platform/heap/SelfKeepAlive.h"
 #include "public/platform/WebURLLoaderClient.h"
+#include "wtf/Forward.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/RefPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -94,7 +96,7 @@ private:
 
     void didFailLoading(LocalFrame*);
 
-    OwnPtr<WebURLLoader> m_loader;
+    std::unique_ptr<WebURLLoader> m_loader;
     Timer<PingLoader> m_timeout;
     String m_url;
     unsigned long m_identifier;

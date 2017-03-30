@@ -21,11 +21,11 @@
 #include "components/safe_json/utility/safe_json_parser_mojo_impl.h"
 #include "content/public/child/image_decoder_utils.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_registry.h"
 #include "content/public/utility/utility_thread.h"
 #include "courgette/courgette.h"
 #include "courgette/third_party/bsdiff/bsdiff.h"
 #include "ipc/ipc_channel.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "third_party/zlib/google/zip.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -46,7 +46,8 @@
 #include "chrome/utility/image_writer/image_writer_handler.h"
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW) || defined(OS_WIN)
+#if defined(ENABLE_PRINT_PREVIEW) || \
+    (defined(ENABLE_BASIC_PRINTING) && defined(OS_WIN))
 #include "chrome/utility/printing_handler.h"
 #endif
 
@@ -82,8 +83,7 @@ class ResourceUsageReporterImpl : public mojom::ResourceUsageReporter {
   ~ResourceUsageReporterImpl() override {}
 
  private:
-  void GetUsageData(const mojo::Callback<void(mojom::ResourceUsageDataPtr)>&
-                        callback) override {
+  void GetUsageData(const GetUsageDataCallback& callback) override {
     mojom::ResourceUsageDataPtr data = mojom::ResourceUsageData::New();
     size_t total_heap_size = net::ProxyResolverV8::GetTotalHeapSize();
     if (total_heap_size) {
@@ -121,7 +121,8 @@ ChromeContentUtilityClient::ChromeContentUtilityClient()
   handlers_.push_back(new image_writer::ImageWriterHandler());
 #endif
 
-#if defined(ENABLE_PRINT_PREVIEW) || defined(OS_WIN)
+#if defined(ENABLE_PRINT_PREVIEW) || \
+    (defined(ENABLE_BASIC_PRINTING) && defined(OS_WIN))
   handlers_.push_back(new printing::PrintingHandler());
 #endif
 
@@ -189,24 +190,25 @@ bool ChromeContentUtilityClient::OnMessageReceived(
   return false;
 }
 
-void ChromeContentUtilityClient::RegisterMojoServices(
-    content::ServiceRegistry* registry) {
+void ChromeContentUtilityClient::ExposeInterfacesToBrowser(
+    shell::InterfaceRegistry* registry) {
   // When the utility process is running with elevated privileges, we need to
   // filter messages so that only a whitelist of IPCs can run. In Mojo, there's
   // no way of filtering individual messages. Instead, we can avoid adding
-  // non-whitelisted Mojo services to the ServiceRegistry.
+  // non-whitelisted Mojo services to the shell::InterfaceRegistry.
   // TODO(amistry): Use a whitelist once the whistlisted IPCs have been
   // converted to Mojo.
   if (filter_messages_)
     return;
 
 #if !defined(OS_ANDROID)
-  registry->AddService<net::interfaces::ProxyResolverFactory>(
+  registry->AddInterface<net::interfaces::ProxyResolverFactory>(
       base::Bind(CreateProxyResolverFactory));
-  registry->AddService(base::Bind(CreateResourceUsageReporter));
+  registry->AddInterface(base::Bind(CreateResourceUsageReporter));
 #endif
-  registry->AddService(base::Bind(&CreateImageDecoder));
-  registry->AddService(base::Bind(&safe_json::SafeJsonParserMojoImpl::Create));
+  registry->AddInterface(base::Bind(&CreateImageDecoder));
+  registry->AddInterface(
+      base::Bind(&safe_json::SafeJsonParserMojoImpl::Create));
 }
 
 void ChromeContentUtilityClient::AddHandler(

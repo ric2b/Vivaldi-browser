@@ -16,7 +16,7 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 
-namespace gfx {
+namespace gl {
 class GLSurface;
 }
 
@@ -29,12 +29,16 @@ namespace android_webview {
 class AwRenderThreadContextProvider : public cc::ContextProvider {
  public:
   static scoped_refptr<AwRenderThreadContextProvider> Create(
-      scoped_refptr<gfx::GLSurface> surface,
+      scoped_refptr<gl::GLSurface> surface,
       scoped_refptr<gpu::InProcessCommandBuffer::Service> service);
+
+  // Gives the GL internal format that should be used for calling CopyTexImage2D
+  // on the default framebuffer.
+  uint32_t GetCopyTextureInternalFormat();
 
  private:
   AwRenderThreadContextProvider(
-      scoped_refptr<gfx::GLSurface> surface,
+      scoped_refptr<gl::GLSurface> surface,
       scoped_refptr<gpu::InProcessCommandBuffer::Service> service);
   ~AwRenderThreadContextProvider() override;
 

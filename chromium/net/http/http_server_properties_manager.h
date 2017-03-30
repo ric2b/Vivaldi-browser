@@ -106,7 +106,6 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // HttpServerProperties methods:
   // ----------------------------------
 
-  base::WeakPtr<HttpServerProperties> GetWeakPtr() override;
   void Clear() override;
   bool SupportsRequestPriority(const url::SchemeHostPort& server) override;
   bool GetSupportsSpdy(const url::SchemeHostPort& server) override;
@@ -134,7 +133,6 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
       const AlternativeService& alternative_service) override;
   void ConfirmAlternativeService(
       const AlternativeService& alternative_service) override;
-  void ClearAlternativeServices(const url::SchemeHostPort& origin) override;
   const AlternativeServiceMap& alternative_service_map() const override;
   std::unique_ptr<base::Value> GetAlternativeServiceInfoAsValue()
       const override;
@@ -247,6 +245,8 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
 
   FRIEND_TEST_ALL_PREFIXES(HttpServerPropertiesManagerTest,
                            AddToAlternativeServiceMap);
+  FRIEND_TEST_ALL_PREFIXES(HttpServerPropertiesManagerTest,
+                           DoNotLoadAltSvcForInsecureOrigins);
   FRIEND_TEST_ALL_PREFIXES(HttpServerPropertiesManagerTest,
                            DoNotLoadExpiredAlternativeService);
   void OnHttpServerPropertiesChanged();

@@ -548,6 +548,7 @@ ImportDataSetVivaldiAsDefaultBrowserFunction::
 
 ImportDataSetVivaldiAsDefaultBrowserFunction::
     ~ImportDataSetVivaldiAsDefaultBrowserFunction() {
+  Respond(ArgumentList(std::move(results_)));
 }
 
 void
@@ -557,7 +558,6 @@ ImportDataSetVivaldiAsDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
     results_ =
         vivaldi::import_data::SetVivaldiAsDefaultBrowser::Results::Create(
             "true");
-    SendResponse(true);  // Already default
     Release();
   } else if (state == shell_integration::NOT_DEFAULT) {
     if (shell_integration::CanSetAsDefaultBrowser() ==
@@ -567,7 +567,6 @@ ImportDataSetVivaldiAsDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
       results_ =
           vivaldi::import_data::SetVivaldiAsDefaultBrowser::Results::Create(
               "false");
-      SendResponse(true);
       Release();
     }
   } else if (state == shell_integration::UNKNOWN_DEFAULT) {
@@ -579,7 +578,6 @@ ImportDataSetVivaldiAsDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
 bool ImportDataSetVivaldiAsDefaultBrowserFunction::RunAsync() {
   AddRef();  // balanced from SetDefaultWebClientUIState()
   default_browser_worker_->StartSetAsDefault();
-  // SendResponse(true);
   return true;
 }
 
@@ -595,6 +593,7 @@ ImportDataIsVivaldiDefaultBrowserFunction::
 
 ImportDataIsVivaldiDefaultBrowserFunction::
     ~ImportDataIsVivaldiDefaultBrowserFunction() {
+  Respond(ArgumentList(std::move(results_)));
 }
 
 bool ImportDataIsVivaldiDefaultBrowserFunction::RunAsync() {
@@ -609,7 +608,6 @@ void ImportDataIsVivaldiDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
   if (state == shell_integration::IS_DEFAULT) {
     results_ =
         vivaldi::import_data::IsVivaldiDefaultBrowser::Results::Create("true");
-    SendResponse(true);  // Already default
     Release();
   } else if (state == shell_integration::NOT_DEFAULT) {
     if (shell_integration::CanSetAsDefaultBrowser() ==
@@ -618,7 +616,6 @@ void ImportDataIsVivaldiDefaultBrowserFunction::OnDefaultBrowserWorkerFinished(
       // Not default browser
       results_ = vivaldi::import_data::IsVivaldiDefaultBrowser::Results::Create(
           "false");
-      SendResponse(true);
       Release();
     }
   } else if (state == shell_integration::UNKNOWN_DEFAULT) {

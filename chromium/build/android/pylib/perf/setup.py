@@ -18,16 +18,14 @@ from pylib.utils import test_environment
 
 
 def _GetAllDevices(active_devices, devices_path):
-  # TODO(rnephew): Delete this when recipes change to pass file path.
-  if not devices_path:
-    logging.warning('Known devices file path not being passed. For device '
-                    'affinity to work properly, it must be passed.')
-    devices_path = os.path.join(os.environ.get('CHROMIUM_OUT_DIR', 'out'),
-                                device_list.LAST_DEVICES_FILENAME)
   try:
     if devices_path:
       devices = [device_utils.DeviceUtils(s)
                  for s in device_list.GetPersistentDeviceList(devices_path)]
+      if not devices and active_devices:
+        logging.warning('%s is empty. Falling back to active devices.',
+                        devices_path)
+        devices = active_devices
     else:
       logging.warning('Known devices file path not being passed. For device '
                       'affinity to work properly, it must be passed.')
@@ -98,8 +96,10 @@ def Setup(test_options, active_devices):
       flaky_steps = json.load(f)
 
   def TestRunnerFactory(device, shard_index):
-    return test_runner.TestRunner(
-        test_options, device, shard_index, len(all_devices),
-        steps_dict, flaky_steps)
+    if str(device) in active_devices:
+      return test_runner.TestRunner(
+          test_options, device, shard_index, len(all_devices),
+          steps_dict, flaky_steps)
+    return None
 
   return (TestRunnerFactory, sorted_step_names, all_devices)

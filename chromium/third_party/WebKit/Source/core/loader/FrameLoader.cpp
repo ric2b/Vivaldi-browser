@@ -85,6 +85,7 @@
 #include "core/xml/parser/XMLDocumentParser.h"
 #include "platform/Logging.h"
 #include "platform/PluginScriptForbiddenScope.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/TraceEvent.h"
 #include "platform/UserGestureIndicator.h"
@@ -99,6 +100,7 @@
 #include "wtf/TemporaryChange.h"
 #include "wtf/text/CString.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 using blink::WebURLRequest;
 
@@ -158,7 +160,7 @@ ResourceRequest FrameLoader::resourceRequestForReload(FrameLoadType frameLoadTyp
         request.setURL(overrideURL);
         request.clearHTTPReferrer();
     }
-    request.setSkipServiceWorker(frameLoadType == FrameLoadTypeReloadBypassingCache);
+    request.setSkipServiceWorker(frameLoadType == FrameLoadTypeReloadBypassingCache ? WebURLRequest::SkipServiceWorker::All : WebURLRequest::SkipServiceWorker::None);
     return request;
 }
 
@@ -203,6 +205,11 @@ void FrameLoader::init()
     m_provisionalDocumentLoader->startLoadingMainResource();
     m_frame->document()->cancelParsing();
     m_stateMachine.advanceTo(FrameLoaderStateMachine::DisplayingInitialEmptyDocument);
+    // Self-suspend if created in an already deferred Page. Note that both
+    // startLoadingMainResource() and cancelParsing() may have already detached
+    // the frame, since they both fire JS events.
+    if (m_frame->page() && m_frame->page()->defersLoading())
+        setDefersLoading(true);
     takeObjectSnapshot();
 }
 
@@ -257,6 +264,8 @@ void FrameLoader::saveScrollState()
 
 void FrameLoader::dispatchUnloadEvent()
 {
+    NavigationCounterForUnload counter;
+
     // If the frame is unloading, the provisional loader should no longer be
     // protected. It will be detached soon.
     m_protectProvisionalLoader = false;
@@ -301,7 +310,6 @@ void FrameLoader::clear()
 
     m_frame->editor().clear();
     m_frame->document()->removeFocusedElementOfSubtree(m_frame->document());
-    m_frame->selection().prepareForDestruction();
     m_frame->eventHandler().clear();
     if (m_frame->view())
         m_frame->view()->clear();
@@ -511,6 +519,13 @@ void FrameLoader::didBeginDocument()
         }
 
         OriginTrialContext::addTokensFromHeader(m_frame->document(), m_documentLoader->response().httpHeaderField(HTTPNames::Origin_Trial));
+    }
+
+    if (m_documentLoader && RuntimeEnabledFeatures::referrerPolicyHeaderEnabled()) {
+        String referrerPolicyHeader = m_documentLoader->response().httpHeaderField(HTTPNames::Referrer_Policy);
+        if (!referrerPolicyHeader.isNull()) {
+            m_frame->document()->parseAndSetReferrerPolicy(referrerPolicyHeader);
+        }
     }
 
     client()->didCreateNewDocument();
@@ -766,15 +781,19 @@ void FrameLoader::loadInSameDocument(const KURL& url, PassRefPtr<SerializedScrip
     takeObjectSnapshot();
 }
 
-void FrameLoader::setReferrerForFrameRequest(ResourceRequest& request, ShouldSendReferrer shouldSendReferrer, Document* originDocument)
+// static
+void FrameLoader::setReferrerForFrameRequest(FrameLoadRequest& frameRequest)
 {
+    ResourceRequest& request = frameRequest.resourceRequest();
+    Document* originDocument = frameRequest.originDocument();
+
     if (!originDocument)
         return;
     // Anchor elements with the 'referrerpolicy' attribute will have
     // already set the referrer on the request.
     if (request.didSetHTTPReferrer())
         return;
-    if (shouldSendReferrer == NeverSendReferrer)
+    if (frameRequest.getShouldSendReferrer() == NeverSendReferrer)
         return;
 
     // Always use the initiating document to generate the referrer.
@@ -949,7 +968,7 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest, FrameLoadType fram
         return;
     }
 
-    setReferrerForFrameRequest(request.resourceRequest(), request.getShouldSendReferrer(), request.originDocument());
+    setReferrerForFrameRequest(request);
 
     FrameLoadType newLoadType = (frameLoadType == FrameLoadTypeStandard) ?
         determineFrameLoadType(request) : frameLoadType;
@@ -959,7 +978,7 @@ void FrameLoader::load(const FrameLoadRequest& passedRequest, FrameLoadType fram
             client()->loadURLExternally(request.resourceRequest(), NavigationPolicyDownload, String(), false);
         } else {
             request.resourceRequest().setFrameType(WebURLRequest::FrameTypeAuxiliary);
-            createWindowForRequest(request, *m_frame, policy, request.getShouldSendReferrer(), request.getShouldSetOpener());
+            createWindowForRequest(request, *m_frame, policy);
         }
         return;
     }
@@ -1342,6 +1361,7 @@ bool FrameLoader::shouldClose(bool isReload)
         if (i == targetFrames.size())
             shouldClose = true;
     }
+
     return shouldClose;
 }
 
@@ -1359,10 +1379,7 @@ bool FrameLoader::shouldContinueForNavigationPolicy(const ResourceRequest& reque
         Frame* parentFrame = m_frame->tree().parent();
         if (parentFrame) {
             ContentSecurityPolicy* parentPolicy = parentFrame->securityContext()->contentSecurityPolicy();
-            ContentSecurityPolicy::RedirectStatus redirectStatus = request.followedRedirect()
-                ? ContentSecurityPolicy::DidRedirect
-                : ContentSecurityPolicy::DidNotRedirect;
-            if (!parentPolicy->allowChildFrameFromSource(request.url(), redirectStatus)) {
+            if (!parentPolicy->allowChildFrameFromSource(request.url(), request.redirectStatus())) {
                 // Fire a load event, as timing attacks would otherwise reveal that the
                 // frame was blocked. This way, it looks like every other cross-origin
                 // page load.
@@ -1404,8 +1421,6 @@ void FrameLoader::startLoad(FrameLoadRequest& frameLoadRequest, FrameLoadType ty
     frameLoadRequest.resourceRequest().setFrameType(m_frame->isMainFrame() ? WebURLRequest::FrameTypeTopLevel : WebURLRequest::FrameTypeNested);
     ResourceRequest& request = frameLoadRequest.resourceRequest();
     if (!shouldContinueForNavigationPolicy(request, frameLoadRequest.substituteData(), nullptr, frameLoadRequest.shouldCheckMainWorldContentSecurityPolicy(), navigationType, navigationPolicy, type == FrameLoadTypeReplaceCurrentItem, frameLoadRequest.clientRedirect() == ClientRedirectPolicy::ClientRedirect))
-        return;
-    if (!shouldClose(navigationType == NavigationTypeReload))
         return;
 
     m_frame->document()->cancelParsing();
@@ -1480,14 +1495,12 @@ bool FrameLoader::shouldInterruptLoadForXFrameOptions(const String& content, con
     case XFrameOptionsAllowAll:
         return false;
     case XFrameOptionsConflict: {
-        ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, "Multiple 'X-Frame-Options' headers with conflicting values ('" + content + "') encountered when loading '" + url.elidedString() + "'. Falling back to 'DENY'.");
-        consoleMessage->setRequestIdentifier(requestIdentifier);
+        ConsoleMessage* consoleMessage = ConsoleMessage::createForRequest(JSMessageSource, ErrorMessageLevel, "Multiple 'X-Frame-Options' headers with conflicting values ('" + content + "') encountered when loading '" + url.elidedString() + "'. Falling back to 'DENY'.", url, requestIdentifier);
         m_frame->document()->addConsoleMessage(consoleMessage);
         return true;
     }
     case XFrameOptionsInvalid: {
-        ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, "Invalid 'X-Frame-Options' header encountered when loading '" + url.elidedString() + "': '" + content + "' is not a recognized directive. The header will be ignored.");
-        consoleMessage->setRequestIdentifier(requestIdentifier);
+        ConsoleMessage* consoleMessage = ConsoleMessage::createForRequest(JSMessageSource, ErrorMessageLevel, "Invalid 'X-Frame-Options' header encountered when loading '" + url.elidedString() + "': '" + content + "' is not a recognized directive. The header will be ignored.", url, requestIdentifier);
         m_frame->document()->addConsoleMessage(consoleMessage);
         return false;
     }
@@ -1563,28 +1576,13 @@ SandboxFlags FrameLoader::effectiveSandboxFlags() const
     return flags;
 }
 
-bool FrameLoader::shouldEnforceStrictMixedContentChecking() const
+WebInsecureRequestPolicy FrameLoader::getInsecureRequestPolicy() const
 {
     Frame* parentFrame = m_frame->tree().parent();
     if (!parentFrame)
-        return false;
+        return kLeaveInsecureRequestsAlone;
 
-    return parentFrame->securityContext()->shouldEnforceStrictMixedContentChecking();
-}
-
-SecurityContext::InsecureRequestsPolicy FrameLoader::getInsecureRequestsPolicy() const
-{
-    Frame* parentFrame = m_frame->tree().parent();
-    if (!parentFrame)
-        return SecurityContext::InsecureRequestsDoNotUpgrade;
-
-    // FIXME: We need a way to propagate insecure requests policy flags to
-    // out-of-process frames. For now, we'll always use default behavior.
-    if (!parentFrame->isLocalFrame())
-        return SecurityContext::InsecureRequestsDoNotUpgrade;
-
-    ASSERT(toLocalFrame(parentFrame)->document());
-    return toLocalFrame(parentFrame)->document()->getInsecureRequestsPolicy();
+    return parentFrame->securityContext()->getInsecureRequestPolicy();
 }
 
 SecurityContext::InsecureNavigationsSet* FrameLoader::insecureNavigationsToUpgrade() const
@@ -1603,9 +1601,9 @@ SecurityContext::InsecureNavigationsSet* FrameLoader::insecureNavigationsToUpgra
     return toLocalFrame(parentFrame)->document()->insecureNavigationsToUpgrade();
 }
 
-PassOwnPtr<TracedValue> FrameLoader::toTracedValue() const
+std::unique_ptr<TracedValue> FrameLoader::toTracedValue() const
 {
-    OwnPtr<TracedValue> tracedValue = TracedValue::create();
+    std::unique_ptr<TracedValue> tracedValue = TracedValue::create();
     tracedValue->beginDictionary("frame");
     tracedValue->setString("id_ref", String::format("0x%" PRIx64, static_cast<uint64_t>(reinterpret_cast<uintptr_t>(m_frame.get()))));
     tracedValue->endDictionary();

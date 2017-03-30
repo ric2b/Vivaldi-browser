@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/shell_window_ids.h"
 #include "components/exo/buffer.h"
 #include "components/exo/display.h"
 #include "components/exo/shared_memory.h"
@@ -54,11 +55,11 @@ TEST_F(DisplayTest, CreateSharedMemory) {
 }
 
 #if defined(USE_OZONE)
-TEST_F(DisplayTest, CreateLinuxDMABufBuffer) {
+// The test crashes: crbug.com/622724
+TEST_F(DisplayTest, DISABLED_CreateLinuxDMABufBuffer) {
   const gfx::Size buffer_size(256, 256);
 
   std::unique_ptr<Display> display(new Display);
-
   // Creating a prime buffer from a native pixmap handle should succeed.
   scoped_refptr<ui::NativePixmap> pixmap =
       ui::OzonePlatform::GetInstance()
@@ -67,17 +68,30 @@ TEST_F(DisplayTest, CreateLinuxDMABufBuffer) {
                                gfx::BufferFormat::RGBA_8888,
                                gfx::BufferUsage::GPU_READ);
   gfx::NativePixmapHandle native_pixmap_handle = pixmap->ExportHandle();
+  std::vector<int> strides;
+  std::vector<int> offsets;
+  std::vector<base::ScopedFD> fds;
+  strides.push_back(native_pixmap_handle.strides_and_offsets[0].first);
+  offsets.push_back(native_pixmap_handle.strides_and_offsets[0].second);
+  fds.push_back(base::ScopedFD(native_pixmap_handle.fds[0].fd));
+
   std::unique_ptr<Buffer> buffer1 = display->CreateLinuxDMABufBuffer(
-      base::ScopedFD(native_pixmap_handle.fd.fd), buffer_size,
-      gfx::BufferFormat::RGBA_8888, native_pixmap_handle.stride);
+      buffer_size, gfx::BufferFormat::RGBA_8888, strides, offsets,
+      std::move(fds));
   EXPECT_TRUE(buffer1);
 
+  std::vector<base::ScopedFD> invalid_fds;
+  invalid_fds.push_back(base::ScopedFD());
   // Creating a prime buffer using an invalid fd should fail.
   std::unique_ptr<Buffer> buffer2 = display->CreateLinuxDMABufBuffer(
-      base::ScopedFD(), buffer_size, gfx::BufferFormat::RGBA_8888,
-      buffer_size.width() * 4);
+      buffer_size, gfx::BufferFormat::RGBA_8888, strides, offsets,
+      std::move(invalid_fds));
   EXPECT_FALSE(buffer2);
 }
+
+// TODO(dcastagna): Add YV12 unittest once we can allocate the buffer
+// via Ozone. crbug.com/618516
+
 #endif
 
 TEST_F(DisplayTest, CreateShellSurface) {
@@ -121,6 +135,28 @@ TEST_F(DisplayTest, CreatePopupShellSurface) {
   std::unique_ptr<ShellSurface> shell_surface2 =
       display->CreatePopupShellSurface(surface2.get(), shell_surface1.get(),
                                        gfx::Point());
+  EXPECT_TRUE(shell_surface2);
+}
+
+TEST_F(DisplayTest, CreateRemoteShellSurface) {
+  std::unique_ptr<Display> display(new Display);
+
+  // Create two surfaces.
+  std::unique_ptr<Surface> surface1 = display->CreateSurface();
+  ASSERT_TRUE(surface1);
+  std::unique_ptr<Surface> surface2 = display->CreateSurface();
+  ASSERT_TRUE(surface2);
+
+  // Create a remote shell surface for surface1.
+  std::unique_ptr<ShellSurface> shell_surface1 =
+      display->CreateRemoteShellSurface(
+          surface1.get(), ash::kShellWindowId_SystemModalContainer);
+  EXPECT_TRUE(shell_surface1);
+
+  // Create a remote shell surface for surface2.
+  std::unique_ptr<ShellSurface> shell_surface2 =
+      display->CreateRemoteShellSurface(surface2.get(),
+                                        ash::kShellWindowId_DefaultContainer);
   EXPECT_TRUE(shell_surface2);
 }
 

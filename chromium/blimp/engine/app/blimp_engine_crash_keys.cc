@@ -35,6 +35,9 @@ size_t RegisterEngineCrashKeys() {
       { "subresource_url", crash_keys::kLargeSize },
       { "total-discardable-memory-allocated", crash_keys::kSmallSize },
 
+      // gin/:
+      { "v8-ignition", crash_keys::kSmallSize },
+
       // Temporary for http://crbug.com/575245.
       { "commit_frame_id", crash_keys::kSmallSize },
       { "commit_proxy_id", crash_keys::kSmallSize },
@@ -66,6 +69,9 @@ size_t RegisterEngineCrashKeys() {
         crash_keys::kSmallSize},
       { "initrf_root_process_is_live", crash_keys::kSmallSize},
       { "initrf_root_proxy_is_live", crash_keys::kSmallSize},
+
+      // Temporary for https://crbug.com/612711.
+      { "aci_wrong_sp_extension_id", crash_keys::kSmallSize },
 
       // Temporary for https://crbug.com/616149.
       { "existing_extension_pref_value_type", crash_keys::kSmallSize },

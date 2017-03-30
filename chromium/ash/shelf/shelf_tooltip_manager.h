@@ -72,7 +72,7 @@ class ASH_EXPORT ShelfTooltipManager : public ui::EventHandler,
                       views::Widget* target) override;
 
   // ShelfLayoutManagerObserver overrides:
-  void WillDeleteShelf() override;
+  void WillDeleteShelfLayoutManager() override;
   void WillChangeVisibilityState(ShelfVisibilityState new_state) override;
   void OnAutoHideStateChanged(ShelfAutoHideState new_state) override;
 
@@ -80,6 +80,9 @@ class ASH_EXPORT ShelfTooltipManager : public ui::EventHandler,
   class ShelfTooltipBubble;
   friend class test::ShelfViewTest;
   friend class test::ShelfTooltipManagerTest;
+
+  // A helper function to check for shelf visibility and view validity.
+  bool ShouldShowTooltipForView(views::View* view);
 
   int timer_delay_;
   base::OneShotTimer timer_;

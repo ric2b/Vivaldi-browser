@@ -6,8 +6,8 @@
 // native capture API. AVFoundation is available in versions 10.7 (Lion) and
 // later.
 
-#ifndef MEDIA_VIDEO_CAPTURE_MAC_VIDEO_CAPTURE_DEVICE_MAC_H_
-#define MEDIA_VIDEO_CAPTURE_MAC_VIDEO_CAPTURE_DEVICE_MAC_H_
+#ifndef MEDIA_CAPTURE_VIDEO_MAC_VIDEO_CAPTURE_DEVICE_MAC_H_
+#define MEDIA_CAPTURE_VIDEO_MAC_VIDEO_CAPTURE_DEVICE_MAC_H_
 
 #import <Foundation/Foundation.h>
 #include <stdint.h>
@@ -33,7 +33,7 @@ class Location;
 }  // namespace tracked_objects
 
 // Small class to bundle device name and connection type into a dictionary.
-MEDIA_EXPORT
+CAPTURE_EXPORT
 @interface DeviceNameAndTransportType : NSObject {
  @private
   base::scoped_nsobject<NSString> deviceName_;
@@ -99,9 +99,6 @@ class VideoCaptureDeviceMac : public VideoCaptureDevice {
 
   base::scoped_nsobject<VideoCaptureDeviceAVFoundation> capture_device_;
 
-  base::TimeDelta first_timestamp_;
-  base::TimeTicks first_aligned_timestamp_;
-
   // Used with Bind and PostTask to ensure that methods aren't called after the
   // VideoCaptureDeviceMac is destroyed.
   // NOTE: Weak pointers must be invalidated before all other member variables.
@@ -112,4 +109,4 @@ class VideoCaptureDeviceMac : public VideoCaptureDevice {
 
 }  // namespace media
 
-#endif  // MEDIA_VIDEO_CAPTURE_MAC_VIDEO_CAPTURE_DEVICE_MAC_H_
+#endif  // MEDIA_CAPTURE_VIDEO_MAC_VIDEO_CAPTURE_DEVICE_MAC_H_

@@ -46,6 +46,8 @@ class Node;
 class Widget;
 
 class MODULES_EXPORT AXLayoutObject : public AXNodeObject {
+    WTF_MAKE_NONCOPYABLE(AXLayoutObject);
+
 protected:
     AXLayoutObject(LayoutObject*, AXObjectCacheImpl&);
 
@@ -59,6 +61,7 @@ public:
     LayoutBoxModelObject* getLayoutBoxModelObject() const;
     SkMatrix44 transformFromLocalParentFrame() const override;
     ScrollableArea* getScrollableAreaIfScrollable() const final;
+    void getRelativeBounds(AXObject** container, FloatRect& boundsInContainer, SkMatrix44& containerTransform) const override;
     AccessibilityRole determineAccessibilityRole() override;
     AccessibilityRole nativeAccessibilityRoleIgnoringAria() const override;
     void checkCachedElementRect() const;
@@ -99,7 +102,7 @@ protected:
 
     // Properties of static elements.
     const AtomicString& accessKey() const override;
-    RGBA32 backgroundColor() const final;
+    RGBA32 computeBackgroundColor() const final;
     RGBA32 color() const final;
     String fontFamily() const final;
     // Font size is in pixels.

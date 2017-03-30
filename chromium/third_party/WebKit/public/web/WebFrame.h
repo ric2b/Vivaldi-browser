@@ -38,6 +38,7 @@
 #include "WebURLLoaderOptions.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebCanvas.h"
+#include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebMessagePortChannel.h"
 #include "public/platform/WebPrivateOwnPtr.h"
 #include "public/platform/WebReferrerPolicy.h"
@@ -170,8 +171,15 @@ public:
     // navigation.
     BLINK_EXPORT void setFrameOwnerSandboxFlags(WebSandboxFlags);
 
-    // Returns true if the frame is enforcing strict mixed content checking.
-    BLINK_EXPORT bool shouldEnforceStrictMixedContentChecking() const;
+    // The frame's insecure request policy.
+    BLINK_EXPORT WebInsecureRequestPolicy getInsecureRequestPolicy() const;
+
+    // Updates this frame's FrameOwner properties, such as scrolling, margin,
+    // or allowfullscreen.  This is used when this frame's parent is in
+    // another process and it dynamically updates these properties.
+    // TODO(dcheng): Currently, the update only takes effect on next frame
+    // navigation.  This matches the in-process frame behavior.
+    BLINK_EXPORT void setFrameOwnerProperties(const WebFrameOwnerProperties&);
 
     // Geometry -----------------------------------------------------------
 
@@ -253,10 +261,6 @@ public:
 
 
     // Closing -------------------------------------------------------------
-
-    // Runs beforeunload handlers for this frame, returning false if a
-    // handler suppressed unloading.
-    virtual bool dispatchBeforeUnloadEvent() = 0;
 
     // Runs unload handlers for this frame.
     virtual void dispatchUnloadEvent() = 0;

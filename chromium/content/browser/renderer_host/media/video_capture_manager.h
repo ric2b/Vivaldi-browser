@@ -19,7 +19,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/memory/weak_ptr.h"
 #include "base/message_loop/message_loop.h"
 #include "base/process/process_handle.h"
@@ -46,9 +45,11 @@ class VideoCaptureControllerEventHandler;
 // VideoCaptureManager opens/closes and start/stops video capture devices.
 class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
  public:
+  using VideoCaptureDevice = media::VideoCaptureDevice;
+
   // Callback used to signal the completion of a controller lookup.
-  typedef base::Callback<
-      void(const base::WeakPtr<VideoCaptureController>&)> DoneCB;
+  using DoneCB =
+      base::Callback<void(const base::WeakPtr<VideoCaptureController>&)>;
 
   explicit VideoCaptureManager(
       std::unique_ptr<media::VideoCaptureDeviceFactory> factory);
@@ -157,11 +158,13 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
     return device_task_runner_;
   }
 
-
-  bool TakePhoto(int session_id,
-                 const media::VideoCaptureDevice::TakePhotoCallback&
-                     photo_callback) WARN_UNUSED_RESULT;
-
+  void GetPhotoCapabilities(
+      int session_id,
+      media::ScopedResultCallback<
+          VideoCaptureDevice::GetPhotoCapabilitiesCallback> callback);
+  void TakePhoto(int session_id,
+                 media::ScopedResultCallback<
+                     VideoCaptureDevice::TakePhotoCallback> callback);
 #if defined(OS_ANDROID)
   // Some devices had troubles when stopped and restarted quickly, so the device
   // is only stopped when Chrome is sent to background and not when, e.g., a tab
@@ -170,14 +173,14 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
 #endif
 
  private:
+  class CaptureDeviceStartRequest;
   class DeviceEntry;
 
-  ~VideoCaptureManager() override;
+  using SessionMap = std::map<media::VideoCaptureSessionId, MediaStreamDevice>;
+  using DeviceEntries = std::vector<std::unique_ptr<DeviceEntry>>;
+  using DeviceStartQueue = std::list<CaptureDeviceStartRequest>;
 
-  // Checks to see if |entry| has no clients left on its controller. If so,
-  // remove it from the list of devices, and delete it asynchronously. |entry|
-  // may be freed by this function.
-  void DestroyDeviceEntryIfNoClients(DeviceEntry* entry);
+  ~VideoCaptureManager() override;
 
   // Helpers to report an event to our Listener.
   void OnOpened(MediaStreamType type,
@@ -189,20 +192,6 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
       base::ElapsedTimer* timer,
       const media::VideoCaptureDeviceInfos& new_devices_info_cache);
 
-  // Finds a DeviceEntry by its device ID and type, if it is already opened.
-  DeviceEntry* GetDeviceEntryForMediaStreamDevice(
-      const MediaStreamDevice& device_info);
-
-  // Finds a DeviceEntry entry for the indicated session, creating a fresh one
-  // if necessary. Returns NULL if the session id is invalid.
-  DeviceEntry* GetOrCreateDeviceEntry(
-      media::VideoCaptureSessionId capture_session_id,
-      const media::VideoCaptureParams& params);
-
-  // Finds the DeviceEntry that owns a particular controller pointer.
-  DeviceEntry* GetDeviceEntryForController(
-      const VideoCaptureController* controller) const;
-
   bool IsOnDeviceThread() const;
 
   // Consolidates the cached devices list with the list of currently connected
@@ -213,7 +202,35 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
           on_devices_enumerated_callback,
       MediaStreamType stream_type,
       const media::VideoCaptureDeviceInfos& old_device_info_cache,
-      std::unique_ptr<media::VideoCaptureDevice::Names> names_snapshot);
+      std::unique_ptr<VideoCaptureDevice::Names> names_snapshot);
+
+  // Checks to see if |entry| has no clients left on its controller. If so,
+  // remove it from the list of devices, and delete it asynchronously. |entry|
+  // may be freed by this function.
+  void DestroyDeviceEntryIfNoClients(DeviceEntry* entry);
+
+  // Retrieve the VideoCaptureDevice associated to |session_id|, or nullptr
+  // if not found.
+  VideoCaptureDevice* GetVideoCaptureDeviceBySessionId(int session_id);
+
+  // Finds a DeviceEntry in different ways: by its |device_id| and |type| (if it
+  // is already opened), by its |controller| or by its |serial_id|. In all
+  // cases, if not found, nullptr is returned.
+  DeviceEntry* GetDeviceEntryByTypeAndId(MediaStreamType type,
+                                         const std::string& device_id) const;
+  DeviceEntry* GetDeviceEntryByController(
+      const VideoCaptureController* controller) const;
+  DeviceEntry* GetDeviceEntryBySerialId(int serial_id) const;
+
+  // Finds the device info by |id| in |devices_info_cache_|, or nullptr.
+  media::VideoCaptureDeviceInfo* GetDeviceInfoById(const std::string& id);
+
+  // Finds a DeviceEntry entry for the indicated |capture_session_id|, creating
+  // a fresh one if necessary. Returns nullptr if said |capture_session_id| is
+  // invalid.
+  DeviceEntry* GetOrCreateDeviceEntry(
+      media::VideoCaptureSessionId capture_session_id,
+      const media::VideoCaptureParams& params);
 
   // Starting a capture device can take 1-2 seconds.
   // To avoid multiple unnecessary start/stop commands to the OS, each start
@@ -225,7 +242,7 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
                         DeviceEntry* entry,
                         const media::VideoCaptureParams& params);
   void OnDeviceStarted(int serial_id,
-                       std::unique_ptr<media::VideoCaptureDevice> device);
+                       std::unique_ptr<VideoCaptureDevice> device);
   void DoStopDevice(DeviceEntry* entry);
   void HandleQueuedStartRequest();
 
@@ -233,33 +250,23 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   // VideoCaptureDevice is returned to the IO-thread and stored in
   // a DeviceEntry in |devices_|. Ownership of |client| passes to
   // the device.
-  std::unique_ptr<media::VideoCaptureDevice> DoStartDeviceCaptureOnDeviceThread(
-      const media::VideoCaptureDevice::Name& name,
+  std::unique_ptr<VideoCaptureDevice> DoStartDeviceCaptureOnDeviceThread(
+      const VideoCaptureDevice::Name& name,
       const media::VideoCaptureParams& params,
-      std::unique_ptr<media::VideoCaptureDevice::Client> client);
+      std::unique_ptr<VideoCaptureDevice::Client> client);
 
-  std::unique_ptr<media::VideoCaptureDevice> DoStartTabCaptureOnDeviceThread(
+  std::unique_ptr<VideoCaptureDevice> DoStartTabCaptureOnDeviceThread(
       const std::string& device_id,
       const media::VideoCaptureParams& params,
-      std::unique_ptr<media::VideoCaptureDevice::Client> client);
+      std::unique_ptr<VideoCaptureDevice::Client> client);
 
-  std::unique_ptr<media::VideoCaptureDevice>
-  DoStartDesktopCaptureOnDeviceThread(
+  std::unique_ptr<VideoCaptureDevice> DoStartDesktopCaptureOnDeviceThread(
       const std::string& device_id,
       const media::VideoCaptureParams& params,
-      std::unique_ptr<media::VideoCaptureDevice::Client> client);
+      std::unique_ptr<VideoCaptureDevice::Client> client);
 
   // Stops and destroys the VideoCaptureDevice held in |device|.
-  void DoStopDeviceOnDeviceThread(
-      std::unique_ptr<media::VideoCaptureDevice> device);
-
-  void DoTakePhotoOnDeviceThread(
-      media::VideoCaptureDevice* device,
-      const media::VideoCaptureDevice::TakePhotoCallback& photo_callback);
-
-  media::VideoCaptureDeviceInfo* FindDeviceInfoById(
-      const std::string& id,
-      media::VideoCaptureDeviceInfos& device_vector);
+  void DoStopDeviceOnDeviceThread(std::unique_ptr<VideoCaptureDevice> device);
 
   void MaybePostDesktopCaptureWindowId(media::VideoCaptureSessionId session_id);
   void SetDesktopCaptureWindowIdOnDeviceThread(
@@ -292,6 +299,7 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
 
   std::unique_ptr<base::android::ApplicationStatusListener>
       app_status_listener_;
+  bool application_state_has_running_activities_;
 #endif
 
   // The message loop of media stream device thread, where VCD's live.
@@ -305,16 +313,13 @@ class CONTENT_EXPORT VideoCaptureManager : public MediaStreamProvider {
   // the Open() entry point. The keys are session_id's. This map is used to
   // determine which device to use when StartCaptureForClient() occurs. Used
   // only on the IO thread.
-  typedef std::map<media::VideoCaptureSessionId, MediaStreamDevice> SessionMap;
   SessionMap sessions_;
 
-  // Currently opened devices. The device may or may not be started. This member
-  // is only accessed on IO tbhread.
-  typedef ScopedVector<DeviceEntry> DeviceEntries;
+  // Currently opened DeviceEntry instances (each owning a VideoCaptureDevice -
+  // VideoCaptureController pair). The device may or may not be started. This
+  // member is only accessed on IO thread.
   DeviceEntries devices_;
 
-  class CaptureDeviceStartRequest;
-  typedef std::list<CaptureDeviceStartRequest> DeviceStartQueue;
   DeviceStartQueue device_start_queue_;
 
   // Device creation factory injected on construction from MediaStreamManager or

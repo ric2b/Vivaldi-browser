@@ -42,6 +42,7 @@
 #include "core/animation/css/CSSAnimatableValueFactory.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/css/CSSCalculationValue.h"
+#include "core/css/CSSCustomIdentValue.h"
 #include "core/css/CSSDefaultStyleSheets.h"
 #include "core/css/CSSFontSelector.h"
 #include "core/css/CSSKeyframeRule.h"
@@ -51,7 +52,6 @@
 #include "core/css/CSSSelector.h"
 #include "core/css/CSSStyleRule.h"
 #include "core/css/CSSValueList.h"
-#include "core/css/CSSValuePool.h"
 #include "core/css/ElementRuleCollector.h"
 #include "core/css/FontFace.h"
 #include "core/css/MediaQueryEvaluator.h"
@@ -512,15 +512,15 @@ void StyleResolver::matchScopedRules(const Element& element, ElementRuleCollecto
     bool matchElementScopeDone = !elementScopeResolver && !element.inlineStyle();
 
     for (auto it = m_treeBoundaryCrossingScopes.rbegin(); it != m_treeBoundaryCrossingScopes.rend(); ++it) {
-        const TreeScope& scope = (*it)->treeScope();
+        const TreeScope& scope = (*it)->containingTreeScope();
         ScopedStyleResolver* resolver = scope.scopedStyleResolver();
         ASSERT(resolver);
 
-        bool isInnerTreeScope = element.treeScope().isInclusiveAncestorOf(scope);
+        bool isInnerTreeScope = element.containingTreeScope().isInclusiveAncestorOf(scope);
         if (!shouldCheckScope(element, **it, isInnerTreeScope))
             continue;
 
-        if (!matchElementScopeDone && scope.isInclusiveAncestorOf(element.treeScope())) {
+        if (!matchElementScopeDone && scope.isInclusiveAncestorOf(element.containingTreeScope())) {
 
             matchElementScopeDone = true;
 
@@ -660,7 +660,7 @@ void StyleResolver::collectTreeBoundaryCrossingRules(const Element& element, Ele
     for (const auto& scopingNode : m_treeBoundaryCrossingScopes) {
         // Skip rule collection for element when tree boundary crossing rules of scopingNode's
         // scope can never apply to it.
-        bool isInnerTreeScope = element.treeScope().isInclusiveAncestorOf(scopingNode->treeScope());
+        bool isInnerTreeScope = element.containingTreeScope().isInclusiveAncestorOf(scopingNode->containingTreeScope());
         if (!shouldCheckScope(element, *scopingNode, isInnerTreeScope))
             continue;
 
@@ -841,17 +841,17 @@ PassRefPtr<ComputedStyle> StyleResolver::styleForElement(Element* element, const
 
 // This function is used by the WebAnimations JavaScript API method animate().
 // FIXME: Remove this when animate() switches away from resolution-dependent parsing.
-PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(Element& element, const ComputedStyle* baseStyle, CSSPropertyID property, CSSValue* value)
+PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(Element& element, const ComputedStyle* baseStyle, CSSPropertyID property, const CSSValue* value)
 {
     StyleResolverState state(element.document(), &element);
     state.setStyle(baseStyle ? ComputedStyle::clone(*baseStyle) : ComputedStyle::create());
     return createAnimatableValueSnapshot(state, property, value);
 }
 
-PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(StyleResolverState& state, CSSPropertyID property, CSSValue* value)
+PassRefPtr<AnimatableValue> StyleResolver::createAnimatableValueSnapshot(StyleResolverState& state, CSSPropertyID property, const CSSValue* value)
 {
     if (value) {
-        StyleBuilder::applyProperty(property, state, value);
+        StyleBuilder::applyProperty(property, state, *value);
         state.fontBuilder().createFont(state.document().styleEngine().fontSelector(), state.mutableStyleRef());
     }
     return CSSAnimatableValueFactory::create(property, *state.style());
@@ -1418,7 +1418,7 @@ void StyleResolver::applyAllProperty(StyleResolverState& state, CSSValue* allVal
         if (inheritedOnly && !CSSPropertyMetadata::isInheritedProperty(propertyId))
             continue;
 
-        StyleBuilder::applyProperty(propertyId, state, allValue);
+        StyleBuilder::applyProperty(propertyId, state, *allValue);
     }
 }
 
@@ -1468,7 +1468,7 @@ void StyleResolver::applyProperties(StyleResolverState& state, const StyleProper
         if (!CSSPropertyPriorityData<priority>::propertyHasPriority(property))
             continue;
 
-        StyleBuilder::applyProperty(current.id(), state, current.value());
+        StyleBuilder::applyProperty(current.id(), state, *current.value());
     }
 }
 
@@ -1689,7 +1689,7 @@ void StyleResolver::computeFont(ComputedStyle* style, const StylePropertySet& pr
     for (CSSPropertyID property : properties) {
         if (property == CSSPropertyLineHeight)
             updateFont(state);
-        StyleBuilder::applyProperty(property, state, propertySet.getPropertyCSSValue(property));
+        StyleBuilder::applyProperty(property, state, *propertySet.getPropertyCSSValue(property));
     }
 }
 

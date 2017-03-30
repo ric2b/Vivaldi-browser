@@ -45,15 +45,17 @@
 #include "platform/fonts/TextRenderingMode.h"
 #include "platform/fonts/opentype/OpenTypeVerticalData.h"
 #include "platform/fonts/shaping/ShapeCache.h"
+#include "platform/web_memory_allocator_dump.h"
+#include "platform/web_process_memory_dump.h"
 #include "public/platform/Platform.h"
-#include "public/platform/WebMemoryAllocatorDump.h"
-#include "public/platform/WebProcessMemoryDump.h"
 #include "wtf/HashMap.h"
 #include "wtf/ListHashSet.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
 #include "wtf/Vector.h"
 #include "wtf/text/AtomicStringHash.h"
 #include "wtf/text/StringHash.h"
+#include <memory>
 
 using namespace WTF;
 
@@ -67,8 +69,9 @@ FontCache::FontCache()
 }
 #endif // !OS(WIN) && !OS(LINUX)
 
-typedef HashMap<FontCacheKey, OwnPtr<FontPlatformData>, FontCacheKeyHash, FontCacheKeyTraits> FontPlatformDataCache;
-typedef HashMap<FallbackListCompositeKey, OwnPtr<ShapeCache>, FallbackListCompositeKeyHash, FallbackListCompositeKeyTraits> FallbackListShaperCache;
+typedef HashMap<unsigned, std::unique_ptr<FontPlatformData>, WTF::IntHash<unsigned>, WTF::UnsignedWithZeroKeyHashTraits<unsigned>> SizedFontPlatformDataSet;
+typedef HashMap<FontCacheKey, SizedFontPlatformDataSet, FontCacheKeyHash, FontCacheKeyTraits> FontPlatformDataCache;
+typedef HashMap<FallbackListCompositeKey, std::unique_ptr<ShapeCache>, FallbackListCompositeKeyHash, FallbackListCompositeKeyTraits> FallbackListShaperCache;
 
 static FontPlatformDataCache* gFontPlatformDataCache = nullptr;
 static FallbackListShaperCache* gFallbackListShaperCache = nullptr;
@@ -96,17 +99,36 @@ FontPlatformData* FontCache::getFontPlatformData(const FontDescription& fontDesc
         platformInit();
     }
 
+    float size = fontDescription.effectiveFontSize();
+    unsigned roundedSize = size * FontCacheKey::precisionMultiplier();
     FontCacheKey key = fontDescription.cacheKey(creationParams);
+
+    // Remove the font size from the cache key, and handle the font size separately in the inner
+    // HashMap. So that different size of FontPlatformData can share underlying SkTypeface.
+    if (RuntimeEnabledFeatures::fontCacheScalingEnabled())
+        key.clearFontSize();
+
     FontPlatformData* result;
     bool foundResult;
+
     {
         // addResult's scope must end before we recurse for alternate family names below,
         // to avoid trigering its dtor hash-changed asserts.
-        auto addResult = gFontPlatformDataCache->add(key, nullptr);
-        if (addResult.isNewEntry)
-            addResult.storedValue->value = createFontPlatformData(fontDescription, creationParams, fontDescription.effectiveFontSize());
+        SizedFontPlatformDataSet* sizedFonts = &gFontPlatformDataCache->add(key, SizedFontPlatformDataSet()).storedValue->value;
+        bool wasEmpty = sizedFonts->isEmpty();
 
-        result = addResult.storedValue->value.get();
+        // Take a different size instance of the same font before adding an entry to |sizedFont|.
+        FontPlatformData* anotherSize = wasEmpty ? nullptr : sizedFonts->begin()->value.get();
+        auto addResult = sizedFonts->add(roundedSize, nullptr);
+        std::unique_ptr<FontPlatformData>* found = &addResult.storedValue->value;
+        if (addResult.isNewEntry) {
+            if (wasEmpty)
+                *found = createFontPlatformData(fontDescription, creationParams, size);
+            else if (anotherSize)
+                *found = scaleFontPlatformData(*anotherSize, fontDescription, creationParams, size);
+        }
+
+        result = found->get();
         foundResult = result || !addResult.isNewEntry;
     }
 
@@ -118,11 +140,23 @@ FontPlatformData* FontCache::getFontPlatformData(const FontDescription& fontDesc
             FontFaceCreationParams createByAlternateFamily(alternateName);
             result = getFontPlatformData(fontDescription, createByAlternateFamily, true);
         }
-        if (result)
-            gFontPlatformDataCache->set(key, adoptPtr(new FontPlatformData(*result))); // Cache the result under the old name.
+        if (result) {
+            // Cache the result under the old name.
+            auto adding = &gFontPlatformDataCache->add(key, SizedFontPlatformDataSet()).storedValue->value;
+            adding->set(roundedSize, wrapUnique(new FontPlatformData(*result)));
+        }
     }
 
     return result;
+}
+
+std::unique_ptr<FontPlatformData> FontCache::scaleFontPlatformData(const FontPlatformData& fontPlatformData, const FontDescription& fontDescription, const FontFaceCreationParams& creationParams, float fontSize)
+{
+#if OS(MACOSX)
+    return createFontPlatformData(fontDescription, creationParams, fontSize);
+#else
+    return wrapUnique(new FontPlatformData(fontPlatformData, fontSize));
+#endif
 }
 
 ShapeCache* FontCache::getShapeCache(const FallbackListCompositeKey& key)
@@ -134,7 +168,7 @@ ShapeCache* FontCache::getShapeCache(const FallbackListCompositeKey& key)
     ShapeCache* result = nullptr;
     if (it == gFallbackListShaperCache->end()) {
         result = new ShapeCache();
-        gFallbackListShaperCache->set(key, adoptPtr(result));
+        gFallbackListShaperCache->set(key, wrapUnique(result));
     } else {
         result = it->value.get();
     }
@@ -226,10 +260,16 @@ static inline void purgePlatformFontDataCache()
 
     Vector<FontCacheKey> keysToRemove;
     keysToRemove.reserveInitialCapacity(gFontPlatformDataCache->size());
-    FontPlatformDataCache::iterator platformDataEnd = gFontPlatformDataCache->end();
-    for (FontPlatformDataCache::iterator platformData = gFontPlatformDataCache->begin(); platformData != platformDataEnd; ++platformData) {
-        if (platformData->value && !gFontDataCache->contains(platformData->value.get()))
-            keysToRemove.append(platformData->key);
+    for (auto& sizedFonts : *gFontPlatformDataCache) {
+        Vector<unsigned> sizesToRemove;
+        sizesToRemove.reserveInitialCapacity(sizedFonts.value.size());
+        for (const auto& platformData : sizedFonts.value) {
+            if (platformData.value && !gFontDataCache->contains(platformData.value.get()))
+                sizesToRemove.append(platformData.key);
+        }
+        sizedFonts.value.removeAll(sizesToRemove);
+        if (sizedFonts.value.isEmpty())
+            keysToRemove.append(sizedFonts.key);
     }
     gFontPlatformDataCache->removeAll(keysToRemove);
 }

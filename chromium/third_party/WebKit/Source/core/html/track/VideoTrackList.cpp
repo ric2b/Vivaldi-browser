@@ -46,10 +46,10 @@ void VideoTrackList::trackSelected(WebMediaPlayer::TrackId selectedTrackId)
     for (unsigned i = 0; i < length(); ++i) {
         VideoTrack* track = anonymousIndexedGetter(i);
 
-        if (track->trackId() != selectedTrackId)
+        if (track->id() != selectedTrackId)
             track->clearSelected();
         else
-            ASSERT(track->selected());
+            DCHECK(track->selected());
     }
 
     scheduleChangeEvent();

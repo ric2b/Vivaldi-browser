@@ -283,7 +283,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, DISABLED_DecodingError) {
 
 #if defined(OS_MACOSX)
   // AVPlayer hides the error.
-  if (base::mac::IsOSMavericksOrEarlier())
+  if (base::mac::IsOSMavericks())
     return;
 #endif
 

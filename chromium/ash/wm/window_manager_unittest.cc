@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "ash/common/shell_window_ids.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_activation_delegate.h"
 #include "ash/wm/window_util.h"
@@ -24,32 +24,11 @@
 #include "ui/wm/core/compound_event_filter.h"
 #include "ui/wm/public/activation_client.h"
 #include "ui/wm/public/activation_delegate.h"
+#include "ui/wm/test/testing_cursor_client_observer.h"
 
 namespace {
 
-class TestingCursorClientObserver : public aura::client::CursorClientObserver {
- public:
-  TestingCursorClientObserver()
-      : cursor_visibility_(false),
-        did_visibility_change_(false) {}
-  void reset() { cursor_visibility_ = did_visibility_change_ = false; }
-  bool is_cursor_visible() const { return cursor_visibility_; }
-  bool did_visibility_change() const { return did_visibility_change_; }
-
-  // Overridden from aura::client::CursorClientObserver:
-  void OnCursorVisibilityChanged(bool is_visible) override {
-    cursor_visibility_ = is_visible;
-    did_visibility_change_ = true;
-  }
-
- private:
-  bool cursor_visibility_;
-  bool did_visibility_change_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestingCursorClientObserver);
-};
-
-base::TimeDelta getTime() {
+base::TimeTicks getTime() {
   return ui::EventTimeForNow();
 }
 
@@ -58,9 +37,7 @@ base::TimeDelta getTime() {
 class CustomEventHandler : public ui::test::TestEventHandler {
  public:
   CustomEventHandler()
-      : key_result_(ui::ER_UNHANDLED),
-        mouse_result_(ui::ER_UNHANDLED) {
-  }
+      : key_result_(ui::ER_UNHANDLED), mouse_result_(ui::ER_UNHANDLED) {}
 
   ~CustomEventHandler() override {}
 
@@ -114,9 +91,7 @@ class NonFocusableDelegate : public aura::test::TestWindowDelegate {
 
 class HitTestWindowDelegate : public aura::test::TestWindowDelegate {
  public:
-  HitTestWindowDelegate()
-      : hittest_code_(HTNOWHERE) {
-  }
+  HitTestWindowDelegate() : hittest_code_(HTNOWHERE) {}
   ~HitTestWindowDelegate() override {}
   void set_hittest_code(int hittest_code) { hittest_code_ = hittest_code; }
 
@@ -662,8 +637,7 @@ TEST_F(WindowManagerTest, AdditionalFilters) {
   std::unique_ptr<CustomEventHandler> f2(new CustomEventHandler);
 
   // Adds them to root window event filter.
-  ::wm::CompoundEventFilter* env_filter =
-      Shell::GetInstance()->env_filter();
+  ::wm::CompoundEventFilter* env_filter = Shell::GetInstance()->env_filter();
   env_filter->AddHandler(f1.get());
   env_filter->AddHandler(f2.get());
 
@@ -803,8 +777,8 @@ TEST_F(WindowManagerTest, TestCursorClientObserver) {
 
   // Add two observers. Both should have OnCursorVisibilityChanged()
   // invoked when an event changes the visibility of the cursor.
-  TestingCursorClientObserver observer_a;
-  TestingCursorClientObserver observer_b;
+  ::wm::TestingCursorClientObserver observer_a;
+  ::wm::TestingCursorClientObserver observer_b;
   cursor_manager->AddObserver(&observer_a);
   cursor_manager->AddObserver(&observer_b);
 
@@ -815,6 +789,8 @@ TEST_F(WindowManagerTest, TestCursorClientObserver) {
   EXPECT_FALSE(observer_b.did_visibility_change());
   EXPECT_FALSE(observer_a.is_cursor_visible());
   EXPECT_FALSE(observer_b.is_cursor_visible());
+  EXPECT_FALSE(observer_a.did_cursor_set_change());
+  EXPECT_FALSE(observer_b.did_cursor_set_change());
 
   // Keypress should hide the cursor.
   generator.PressKey(ui::VKEY_A, ui::EF_NONE);
@@ -822,6 +798,13 @@ TEST_F(WindowManagerTest, TestCursorClientObserver) {
   EXPECT_TRUE(observer_b.did_visibility_change());
   EXPECT_FALSE(observer_a.is_cursor_visible());
   EXPECT_FALSE(observer_b.is_cursor_visible());
+
+  // Set cursor set.
+  cursor_manager->SetCursorSet(ui::CURSOR_SET_LARGE);
+  EXPECT_TRUE(observer_a.did_cursor_set_change());
+  EXPECT_EQ(ui::CURSOR_SET_LARGE, observer_a.cursor_set());
+  EXPECT_TRUE(observer_b.did_cursor_set_change());
+  EXPECT_EQ(ui::CURSOR_SET_LARGE, observer_b.cursor_set());
 
   // Mouse move should show the cursor.
   observer_a.reset();
@@ -843,6 +826,12 @@ TEST_F(WindowManagerTest, TestCursorClientObserver) {
   EXPECT_TRUE(observer_a.did_visibility_change());
   EXPECT_FALSE(observer_b.did_visibility_change());
   EXPECT_FALSE(observer_a.is_cursor_visible());
+
+  // Set back cursor set to normal.
+  cursor_manager->SetCursorSet(ui::CURSOR_SET_NORMAL);
+  EXPECT_TRUE(observer_a.did_cursor_set_change());
+  EXPECT_EQ(ui::CURSOR_SET_NORMAL, observer_a.cursor_set());
+  EXPECT_FALSE(observer_b.did_cursor_set_change());
 
   // Mouse move should show the cursor.
   observer_a.reset();

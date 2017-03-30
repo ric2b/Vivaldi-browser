@@ -28,8 +28,10 @@
 #include "core/css/CSSValueList.h"
 #include "core/css/CSSValuePool.h"
 #include "core/css/StylePropertySet.h"
+#include "core/css/parser/CSSParser.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "wtf/text/StringBuilder.h"
+#include "wtf/text/StringToNumber.h"
 
 using namespace WTF;
 
@@ -137,6 +139,17 @@ static bool parseFontSize(const String& input, int& size)
     return parseFontSize(input.characters16(), input.length(), size);
 }
 
+static const CSSValueList* createFontFaceValueWithPool(const AtomicString& string)
+{
+    CSSValuePool::FontFaceValueCache::AddResult entry = cssValuePool().getFontFaceCacheEntry(string);
+    if (!entry.storedValue->value) {
+        const CSSValue* parsedValue = CSSParser::parseSingleValue(CSSPropertyFontFamily, string);
+        if (parsedValue && parsedValue->isValueList())
+            entry.storedValue->value = toCSSValueList(parsedValue);
+    }
+    return entry.storedValue->value;
+}
+
 bool HTMLFontElement::cssValueFromFontSizeNumber(const String& s, CSSValueID& size)
 {
     int num = 0;
@@ -188,8 +201,8 @@ void HTMLFontElement::collectStyleForPresentationAttribute(const QualifiedName& 
     } else if (name == colorAttr) {
         addHTMLColorToStyle(style, CSSPropertyColor, value);
     } else if (name == faceAttr && !value.isEmpty()) {
-        if (CSSValueList* fontFaceValue = cssValuePool().createFontFaceValue(value))
-            style->setProperty(CSSProperty(CSSPropertyFontFamily, fontFaceValue));
+        if (const CSSValueList* fontFaceValue = createFontFaceValueWithPool(value))
+            style->setProperty(CSSProperty(CSSPropertyFontFamily, *fontFaceValue));
     } else {
         HTMLElement::collectStyleForPresentationAttribute(name, value, style);
     }

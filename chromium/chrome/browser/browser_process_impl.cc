@@ -18,14 +18,17 @@
 #include "base/debug/alias.h"
 #include "base/debug/leak_annotations.h"
 #include "base/files/file_path.h"
+#include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
+#include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/trace_event/trace_event.h"
@@ -95,6 +98,9 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_json/safe_json_parser.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "components/subresource_filter/content/browser/content_ruleset_distributor.h"
+#include "components/subresource_filter/core/browser/ruleset_service.h"
+#include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/update_client/update_query_params.h"
 #include "components/web_resource/web_resource_pref_names.h"
@@ -116,7 +122,6 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "ui/views/focus/view_storage.h"
 #elif defined(OS_MACOSX)
 #include "chrome/browser/chrome_browser_main_mac.h"
@@ -192,6 +197,7 @@ BrowserProcessImpl::BrowserProcessImpl(
       created_notification_ui_manager_(false),
       created_notification_bridge_(false),
       created_safe_browsing_service_(false),
+      created_subresource_filter_ruleset_service_(false),
       shutting_down_(false),
       tearing_down_(false),
       download_status_updater_(new DownloadStatusUpdater),
@@ -401,8 +407,9 @@ class RundownTaskCounter :
 };
 
 RundownTaskCounter::RundownTaskCounter()
-    : count_(1), waitable_event_(true, false) {
-}
+    : count_(1),
+      waitable_event_(base::WaitableEvent::ResetPolicy::MANUAL,
+                      base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
 void RundownTaskCounter::Post(base::SequencedTaskRunner* task_runner) {
   // As the count starts off at one, it should never get to zero unless
@@ -852,6 +859,14 @@ safe_browsing::ClientSideDetectionService*
   return NULL;
 }
 
+subresource_filter::RulesetService*
+BrowserProcessImpl::subresource_filter_ruleset_service() {
+  DCHECK(CalledOnValidThread());
+  if (!created_subresource_filter_ruleset_service_)
+    CreateSubresourceFilterRulesetService();
+  return subresource_filter_ruleset_service_.get();
+}
+
 #if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
 void BrowserProcessImpl::StartAutoupdateTimer() {
   autoupdate_timer_.Start(FROM_HERE,
@@ -937,7 +952,7 @@ void BrowserProcessImpl::OnKeepAliveRestartStateChanged(bool can_restart){
 }
 
 void BrowserProcessImpl::CreateWatchdogThread() {
-  DCHECK(!created_watchdog_thread_ && watchdog_thread_.get() == NULL);
+  DCHECK(!created_watchdog_thread_ && !watchdog_thread_);
   created_watchdog_thread_ = true;
 
   std::unique_ptr<WatchDogThread> thread(new WatchDogThread());
@@ -949,7 +964,7 @@ void BrowserProcessImpl::CreateWatchdogThread() {
 }
 
 void BrowserProcessImpl::CreateProfileManager() {
-  DCHECK(!created_profile_manager_ && profile_manager_.get() == NULL);
+  DCHECK(!created_profile_manager_ && !profile_manager_);
   created_profile_manager_ = true;
 
   base::FilePath user_data_dir;
@@ -958,7 +973,7 @@ void BrowserProcessImpl::CreateProfileManager() {
 }
 
 void BrowserProcessImpl::CreateLocalState() {
-  DCHECK(!created_local_state_ && local_state_.get() == NULL);
+  DCHECK(!created_local_state_ && !local_state_);
   created_local_state_ = true;
 
   base::FilePath local_state_path;
@@ -1049,13 +1064,13 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
 }
 
 void BrowserProcessImpl::CreateIconManager() {
-  DCHECK(!created_icon_manager_ && icon_manager_.get() == NULL);
+  DCHECK(!created_icon_manager_ && !icon_manager_);
   created_icon_manager_ = true;
   icon_manager_.reset(new IconManager);
 }
 
 void BrowserProcessImpl::CreateIntranetRedirectDetector() {
-  DCHECK(intranet_redirect_detector_.get() == NULL);
+  DCHECK(!intranet_redirect_detector_);
   std::unique_ptr<IntranetRedirectDetector> intranet_redirect_detector(
       new IntranetRedirectDetector);
   intranet_redirect_detector_.swap(intranet_redirect_detector);
@@ -1063,7 +1078,7 @@ void BrowserProcessImpl::CreateIntranetRedirectDetector() {
 
 void BrowserProcessImpl::CreateNotificationPlatformBridge() {
 #if (defined(OS_ANDROID) || defined(OS_MACOSX)) && defined(ENABLE_NOTIFICATIONS)
-  DCHECK(notification_bridge_.get() == NULL);
+  DCHECK(!notification_bridge_);
   notification_bridge_.reset(NotificationPlatformBridge::Create());
   created_notification_bridge_ = true;
 #endif
@@ -1073,7 +1088,7 @@ void BrowserProcessImpl::CreateNotificationUIManager() {
 // Android does not use the NotificationUIManager anuymore
 // All notification traffic is routed through NotificationPlatformBridge.
 #if defined(ENABLE_NOTIFICATIONS) && !defined(OS_ANDROID)
-  DCHECK(notification_ui_manager_.get() == NULL);
+  DCHECK(!notification_ui_manager_);
   notification_ui_manager_.reset(NotificationUIManager::Create(local_state()));
   created_notification_ui_manager_ = true;
 #endif
@@ -1081,7 +1096,7 @@ void BrowserProcessImpl::CreateNotificationUIManager() {
 
 void BrowserProcessImpl::CreateBackgroundModeManager() {
 #if BUILDFLAG(ENABLE_BACKGROUND)
-  DCHECK(background_mode_manager_.get() == NULL);
+  DCHECK(!background_mode_manager_);
   background_mode_manager_.reset(
       new BackgroundModeManager(
               *base::CommandLine::ForCurrentProcess(),
@@ -1090,13 +1105,13 @@ void BrowserProcessImpl::CreateBackgroundModeManager() {
 }
 
 void BrowserProcessImpl::CreateStatusTray() {
-  DCHECK(status_tray_.get() == NULL);
+  DCHECK(!status_tray_);
   status_tray_.reset(StatusTray::Create());
 }
 
 void BrowserProcessImpl::CreatePrintPreviewDialogController() {
 #if defined(ENABLE_PRINT_PREVIEW)
-  DCHECK(print_preview_dialog_controller_.get() == NULL);
+  DCHECK(!print_preview_dialog_controller_);
   print_preview_dialog_controller_ =
       new printing::PrintPreviewDialogController();
 #else
@@ -1106,7 +1121,7 @@ void BrowserProcessImpl::CreatePrintPreviewDialogController() {
 
 void BrowserProcessImpl::CreateBackgroundPrintingManager() {
 #if defined(ENABLE_PRINT_PREVIEW)
-  DCHECK(background_printing_manager_.get() == NULL);
+  DCHECK(!background_printing_manager_);
   background_printing_manager_.reset(new printing::BackgroundPrintingManager());
 #else
   NOTIMPLEMENTED();
@@ -1114,13 +1129,34 @@ void BrowserProcessImpl::CreateBackgroundPrintingManager() {
 }
 
 void BrowserProcessImpl::CreateSafeBrowsingService() {
-  DCHECK(safe_browsing_service_.get() == NULL);
+  DCHECK(!safe_browsing_service_);
   // Set this flag to true so that we don't retry indefinitely to
   // create the service class if there was an error.
   created_safe_browsing_service_ = true;
   safe_browsing_service_ =
       safe_browsing::SafeBrowsingService::CreateSafeBrowsingService();
   safe_browsing_service_->Initialize();
+}
+
+void BrowserProcessImpl::CreateSubresourceFilterRulesetService() {
+  DCHECK(!subresource_filter_ruleset_service_);
+  created_subresource_filter_ruleset_service_ = true;
+
+  base::SequencedWorkerPool* blocking_pool =
+      content::BrowserThread::GetBlockingPool();
+  scoped_refptr<base::SequencedTaskRunner> blocking_task_runner(
+      blocking_pool->GetSequencedTaskRunnerWithShutdownBehavior(
+          blocking_pool->GetSequenceToken(),
+          base::SequencedWorkerPool::SKIP_ON_SHUTDOWN));
+
+  base::FilePath user_data_dir;
+  PathService::Get(chrome::DIR_USER_DATA, &user_data_dir);
+  subresource_filter_ruleset_service_.reset(
+      new subresource_filter::RulesetService(
+          local_state(), blocking_task_runner,
+          user_data_dir.Append(subresource_filter::kRulesetBaseDirectoryName)));
+  subresource_filter_ruleset_service_->RegisterDistributor(
+      base::WrapUnique(new subresource_filter::ContentRulesetDistributor));
 }
 
 void BrowserProcessImpl::CreateGCMDriver() {
@@ -1228,7 +1264,7 @@ void BrowserProcessImpl::Unpin() {
   CHECK(base::MessageLoop::current()->is_running());
 
 #if defined(OS_MACOSX)
-  base::MessageLoop::current()->PostTask(
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, base::Bind(ChromeBrowserMainPartsMac::DidEndMainMessageLoop));
 #endif
   base::MessageLoop::current()->QuitWhenIdle();
@@ -1284,8 +1320,7 @@ void BrowserProcessImpl::RestartBackgroundInstance() {
   }
 
 #if defined(OS_WIN)
-  if (startup_metric_utils::GetPreReadOptions().use_prefetch_argument)
-    new_cl->AppendArg(switches::kPrefetchArgumentBrowserBackground);
+  new_cl->AppendArg(switches::kPrefetchArgumentBrowserBackground);
 #endif  // defined(OS_WIN)
 
   DLOG(WARNING) << "Shutting down current instance of the browser.";

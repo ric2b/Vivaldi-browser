@@ -676,6 +676,8 @@ virtual GLuint CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
                                                   GLsizei height,
                                                   GLenum internalformat,
                                                   GLenum usage) = 0;
+virtual void GetImageivCHROMIUM(GLuint image_id, GLenum param, GLint* data) = 0;
+virtual void DescheduleUntilFinishedCHROMIUM() = 0;
 virtual void GetTranslatedShaderSourceANGLE(GLuint shader,
                                             GLsizei bufsize,
                                             GLsizei* length,
@@ -684,11 +686,6 @@ virtual void PostSubBufferCHROMIUM(GLint x,
                                    GLint y,
                                    GLint width,
                                    GLint height) = 0;
-virtual void TexImageIOSurface2DCHROMIUM(GLenum target,
-                                         GLsizei width,
-                                         GLsizei height,
-                                         GLuint ioSurfaceId,
-                                         GLuint plane) = 0;
 virtual void CopyTextureCHROMIUM(GLenum source_id,
                                  GLenum dest_id,
                                  GLint internalformat,
@@ -769,6 +766,8 @@ virtual void ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
                                      GLint sorting_context_id,
                                      const GLfloat* transform,
                                      GLuint filter) = 0;
+virtual void ScheduleCALayerInUseQueryCHROMIUM(GLsizei count,
+                                               const GLuint* textures) = 0;
 virtual void CommitOverlayPlanesCHROMIUM() = 0;
 virtual void SwapInterval(GLint interval) = 0;
 virtual void FlushDriverCachesCHROMIUM() = 0;

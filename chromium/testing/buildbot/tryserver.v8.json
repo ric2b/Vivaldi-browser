@@ -8,14 +8,13 @@
   "v8_linux_chromium_gn_rel": {
     "additional_compile_targets": [
       "accessibility_unittests",
-      "app_list_unittests",
-      "app_list_presenter_unittests",
       "aura_unittests",
       "browser_tests",
       "cacheinvalidation_unittests",
       "cast_unittests",
       "cc_unittests",
       "chromedriver_unittests",
+      "capture_unittests",
       "components_browsertests",
       "components_unittests",
       "content_browsertests",
@@ -34,7 +33,6 @@
       "gpu_ipc_service_unittests",
       "gpu_unittests",
       "interactive_ui_tests",
-      "ipc_mojo_unittests",
       "ipc_tests",
       "jingle_unittests",
       "media_unittests",

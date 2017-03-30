@@ -29,12 +29,12 @@
 #include "core/html/HTMLTableCellElement.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutTableCol.h"
-#include "core/layout/LayoutView.h"
 #include "core/layout/SubtreeLayoutScope.h"
 #include "core/paint/TableCellPainter.h"
 #include "core/style/CollapsedBorderValue.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/TransformState.h"
+#include "wtf/PtrUtil.h"
 
 namespace blink {
 
@@ -923,7 +923,7 @@ void LayoutTableCell::collectBorderValues(LayoutTable::CollapsedBorderValues& bo
         m_collapsedBorderValues = nullptr;
     } else if (!m_collapsedBorderValues) {
         changed = true;
-        m_collapsedBorderValues = adoptPtr(new CollapsedBorderValues(newValues));
+        m_collapsedBorderValues = wrapUnique(new CollapsedBorderValues(newValues));
     } else {
         // We check visuallyEquals so that the table cell is invalidated only if a changed
         // collapsed border is visible in the first place.
@@ -938,7 +938,7 @@ void LayoutTableCell::collectBorderValues(LayoutTable::CollapsedBorderValues& bo
     // If collapsed borders changed, invalidate the cell's display item client on the table's backing.
     // TODO(crbug.com/451090#c5): Need a way to invalidate/repaint the borders only.
     if (changed)
-        table()->invalidateDisplayItemClient(*this);
+        table()->slowSetPaintingLayerNeedsRepaintAndInvalidateDisplayItemClient(*this, PaintInvalidationStyleChange);
 
     addBorderStyle(borderValues, newValues.startBorder);
     addBorderStyle(borderValues, newValues.endBorder);

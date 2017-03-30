@@ -15,10 +15,13 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -251,7 +254,7 @@ WizardController::WizardController(LoginDisplayHost* host, OobeUI* oobe_ui)
 
 WizardController::~WizardController() {
   if (shark_connection_listener_.get()) {
-    base::MessageLoop::current()->DeleteSoon(
+    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
         FROM_HERE, shark_connection_listener_.release());
   }
   if (default_controller_ == this) {
@@ -557,6 +560,11 @@ void WizardController::SkipToLoginForTesting(
   OnDeviceDisabledChecked(false /* device_disabled */);
 }
 
+pairing_chromeos::SharkConnectionListener*
+WizardController::GetSharkConnectionListenerForTesting() {
+  return shark_connection_listener_.get();
+}
+
 void WizardController::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);
 }
@@ -589,7 +597,7 @@ void WizardController::OnNetworkConnected() {
       // Possible cases:
       // 1. EULA was accepted, forced shutdown/reboot during update.
       // 2. EULA was accepted, planned reboot after update.
-      // Make sure that device is up-to-date.
+      // Make sure that device is up to date.
       InitiateOOBEUpdate();
     }
   } else {
@@ -1357,7 +1365,7 @@ void WizardController::OnSharkConnected(
         remora_controller) {
   VLOG(1) << "OnSharkConnected";
   remora_controller_ = std::move(remora_controller);
-  base::MessageLoop::current()->DeleteSoon(
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
       FROM_HERE, shark_connection_listener_.release());
   SetControllerDetectedPref(true);
   ShowHostPairingScreen();

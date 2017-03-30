@@ -10,11 +10,11 @@
 #include <string>
 #include <vector>
 
-#include "ash/session/session_state_observer.h"
+#include "ash/common/accessibility_types.h"
+#include "ash/common/session/session_state_observer.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
 #include "ash/system/chromeos/supervised/custodian_info_tray_observer.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/system_tray_notifier.h"
 #include "base/callback_forward.h"
 #include "base/callback_list.h"
 #include "base/compiler_specific.h"
@@ -44,6 +44,7 @@
 #include "ui/chromeos/ime/input_method_menu_manager.h"
 
 namespace ash {
+class SystemTrayNotifier;
 class VPNDelegate;
 }
 
@@ -80,9 +81,8 @@ class SystemTrayDelegateChromeOS
 
   // Overridden from ash::SystemTrayDelegate:
   void Initialize() override;
-  void Shutdown() override;
   bool GetTrayVisibilityOnStartup() override;
-  ash::user::LoginStatus GetUserLoginStatus() const override;
+  ash::LoginStatus GetUserLoginStatus() const override;
   void ChangeProfilePicture() override;
   std::string GetEnterpriseDomain() const override;
   base::string16 GetEnterpriseMessage() const override;
@@ -113,6 +113,7 @@ class SystemTrayDelegateChromeOS
   void SignOut() override;
   void RequestLockScreen() override;
   void RequestRestartForUpdate() override;
+  void RequestShutdown() override;
   void GetAvailableBluetoothDevices(ash::BluetoothDeviceList* list) override;
   void BluetoothStartDiscovering() override;
   void BluetoothStopDiscovering() override;
@@ -165,7 +166,6 @@ class SystemTrayDelegateChromeOS
   void OnSystemClockChanged(system::SystemClock*) override;
 
  private:
-
   ash::SystemTray* GetPrimarySystemTray();
 
   ash::SystemTrayNotifier* GetSystemTrayNotifier();
@@ -206,7 +206,7 @@ class SystemTrayDelegateChromeOS
   void OnLanguageRemapSearchKeyToChanged();
 
   void OnAccessibilityModeChanged(
-      ui::AccessibilityNotificationVisibility notify);
+      ash::AccessibilityNotificationVisibility notify);
 
   void UpdatePerformanceTracing();
 

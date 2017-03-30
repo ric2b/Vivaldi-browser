@@ -99,6 +99,7 @@ void DragCaretController::nodeWillBeRemoved(Node& node)
 DEFINE_TRACE(DragCaretController)
 {
     visitor->trace(m_position);
+    visitor->trace(m_caretBase);
 }
 
 LayoutBlock* DragCaretController::caretLayoutObject() const
@@ -114,7 +115,7 @@ bool DragCaretController::isContentEditable() const
 void DragCaretController::paintDragCaret(LocalFrame* frame, GraphicsContext& context, const LayoutPoint& paintOffset) const
 {
     if (m_position.deepEquivalent().anchorNode()->document().frame() == frame)
-        m_caretBase->paintCaret(m_position.deepEquivalent().anchorNode(), context, paintOffset);
+        m_caretBase->paintCaret(m_position.deepEquivalent().anchorNode(), context, paintOffset, DisplayItem::DragCaret);
 }
 
 } // namespace blink

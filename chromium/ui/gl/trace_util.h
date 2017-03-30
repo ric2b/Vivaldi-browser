@@ -10,7 +10,7 @@
 #include "base/trace_event/memory_allocator_dump.h"
 #include "ui/gl/gl_export.h"
 
-namespace gfx {
+namespace gl {
 
 GL_EXPORT base::trace_event::MemoryAllocatorDumpGuid
 GetGLTextureClientGUIDForTracing(uint64_t share_group_guid,
@@ -28,6 +28,6 @@ GL_EXPORT base::trace_event::MemoryAllocatorDumpGuid GetGLBufferGUIDForTracing(
     uint64_t share_group_guid,
     uint32_t buffer_id);
 
-}  // namespace ui
+}  // namespace gl
 
 #endif  // UI_GL_TRACE_UTIL_H_

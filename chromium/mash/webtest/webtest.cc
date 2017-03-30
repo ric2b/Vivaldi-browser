@@ -12,9 +12,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "components/mus/public/cpp/window.h"
-#include "components/mus/public/cpp/window_tree_connection.h"
+#include "components/mus/public/cpp/window_tree_client.h"
 #include "mash/public/interfaces/launchable.mojom.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
 #include "mojo/public/c/system/main.h"
 #include "services/navigation/public/interfaces/view.mojom.h"
 #include "services/shell/public/cpp/application_runner.h"
@@ -45,11 +44,9 @@ class UI : public views::WidgetDelegateView,
            public navigation::mojom::ViewClient {
  public:
   UI(Webtest* webtest,
-     bool is_popup,
      navigation::mojom::ViewPtr view,
      navigation::mojom::ViewClientRequest request)
       : webtest_(webtest),
-        is_popup_(is_popup),
         view_(std::move(view)),
         view_client_binding_(this, std::move(request)) {}
   ~UI() override {
@@ -92,7 +89,7 @@ class UI : public views::WidgetDelegateView,
       const views::View::ViewHierarchyChangedDetails& details) override {
     if (details.is_add && GetWidget() && !content_area_) {
       mus::Window* window = aura::GetMusWindow(GetWidget()->GetNativeWindow());
-      content_area_ = window->connection()->NewWindow(nullptr);
+      content_area_ = window->window_tree()->NewWindow(nullptr);
       window->AddChild(content_area_);
 
       mus::mojom::WindowTreeClientPtr client;
@@ -102,6 +99,7 @@ class UI : public views::WidgetDelegateView,
   }
 
   // navigation::mojom::ViewClient:
+  void OpenURL(navigation::mojom::OpenURLParamsPtr params) override {}
   void LoadingStateChanged(bool is_loading) override {}
   void NavigationStateChanged(const GURL& url,
                               const mojo::String& title,
@@ -111,23 +109,31 @@ class UI : public views::WidgetDelegateView,
     GetWidget()->UpdateWindowTitle();
   }
   void LoadProgressChanged(double progress) override {}
+  void UpdateHoverURL(const GURL& url) override {}
   void ViewCreated(navigation::mojom::ViewPtr view,
                    navigation::mojom::ViewClientRequest request,
                    bool is_popup,
-                   mojo::RectPtr initial_rect,
+                   const gfx::Rect& initial_rect,
                    bool user_gesture) override {
     views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
-        new UI(webtest_, is_popup, std::move(view), std::move(request)),
-               nullptr, initial_rect.To<gfx::Rect>());
+        new UI(webtest_, std::move(view), std::move(request)), nullptr,
+        initial_rect);
     window->Show();
     webtest_->AddWindow(window);
   }
   void Close() override {
     GetWidget()->Close();
   }
+  void NavigationPending(navigation::mojom::NavigationEntryPtr entry) override {
+  }
+  void NavigationCommitted(
+      navigation::mojom::NavigationCommittedDetailsPtr details,
+      int current_index) override {}
+  void NavigationEntryChanged(navigation::mojom::NavigationEntryPtr entry,
+                              int entry_index) override {}
+  void NavigationListPruned(bool from_front, int count) override {}
 
   Webtest* webtest_;
-  bool is_popup_;
   mus::Window* content_area_ = nullptr;
   navigation::mojom::ViewPtr view_;
   mojo::Binding<navigation::mojom::ViewClient> view_client_binding_;
@@ -158,7 +164,8 @@ void Webtest::Initialize(shell::Connector* connector,
   tracing_.Initialize(connector, identity.name());
 
   aura_init_.reset(new views::AuraInit(connector, "views_mus_resources.pak"));
-  views::WindowManagerConnection::Create(connector, identity);
+  window_manager_connection_ =
+      views::WindowManagerConnection::Create(connector, identity);
 }
 
 bool Webtest::AcceptConnection(shell::Connection* connection) {
@@ -181,7 +188,7 @@ void Webtest::Launch(uint32_t what, mojom::LaunchMode how) {
   navigation::mojom::ViewClientRequest view_client_request =
       GetProxy(&view_client);
   view_factory->CreateView(std::move(view_client), GetProxy(&view));
-  UI* ui = new UI(this, false, std::move(view), std::move(view_client_request));
+  UI* ui = new UI(this, std::move(view), std::move(view_client_request));
   views::Widget* window = views::Widget::CreateWindowWithContextAndBounds(
       ui, nullptr, gfx::Rect(50, 10, 600, 600));
   ui->NavigateTo(GURL("http://www.theverge.com/"));

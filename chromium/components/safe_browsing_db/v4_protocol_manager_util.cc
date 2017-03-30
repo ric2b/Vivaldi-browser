@@ -9,11 +9,19 @@
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
 #include "net/base/escape.h"
+#include "net/http/http_request_headers.h"
 
 using base::Time;
 using base::TimeDelta;
 
 namespace safe_browsing {
+
+std::ostream& operator<<(std::ostream& os, const UpdateListIdentifier& id) {
+  os << "{hash: " << id.hash() << "; platform_type: " << id.platform_type
+     << "; threat_entry_type: " << id.threat_entry_type
+     << "; threat_type: " << id.threat_type << "}";
+  return os;
+}
 
 // The Safe Browsing V4 server URL prefix.
 const char kSbV4UrlPrefix[] = "https://safebrowsing.googleapis.com/v4";
@@ -36,6 +44,24 @@ size_t UpdateListIdentifier::hash() const {
   std::size_t interim = base::HashInts(first, second);
   return base::HashInts(interim, third);
 }
+
+UpdateListIdentifier::UpdateListIdentifier() {}
+
+UpdateListIdentifier::UpdateListIdentifier(PlatformType platform_type,
+                                           ThreatEntryType threat_entry_type,
+                                           ThreatType threat_type)
+    : platform_type(platform_type),
+      threat_entry_type(threat_entry_type),
+      threat_type(threat_type) {
+  DCHECK(PlatformType_IsValid(platform_type));
+  DCHECK(ThreatEntryType_IsValid(threat_entry_type));
+  DCHECK(ThreatType_IsValid(threat_type));
+}
+
+UpdateListIdentifier::UpdateListIdentifier(const ListUpdateResponse& response)
+    : UpdateListIdentifier(response.platform_type(),
+                           response.threat_entry_type(),
+                           response.threat_type()) {}
 
 V4ProtocolConfig::V4ProtocolConfig() : disable_auto_update(false) {}
 
@@ -77,34 +103,39 @@ void V4ProtocolManagerUtil::RecordHttpResponseOrErrorCode(
 }
 
 // static
-// The API hash call uses the pver4 Safe Browsing server.
-GURL V4ProtocolManagerUtil::GetRequestUrl(const std::string& request_base64,
-                                          const std::string& method_name,
-                                          const V4ProtocolConfig& config) {
-  std::string url =
-      ComposeUrl(kSbV4UrlPrefix, method_name, request_base64,
-                 config.client_name, config.version, config.key_param);
-  return GURL(url);
+void V4ProtocolManagerUtil::GetRequestUrlAndHeaders(
+    const std::string& request_base64,
+    const std::string& method_name,
+    const V4ProtocolConfig& config,
+    GURL* gurl,
+    net::HttpRequestHeaders* headers) {
+  *gurl = GURL(ComposeUrl(kSbV4UrlPrefix, method_name, request_base64,
+                          config.key_param));
+  UpdateHeaders(headers);
 }
 
 // static
 std::string V4ProtocolManagerUtil::ComposeUrl(const std::string& prefix,
                                               const std::string& method,
                                               const std::string& request_base64,
-                                              const std::string& client_id,
-                                              const std::string& version,
                                               const std::string& key_param) {
-  DCHECK(!prefix.empty() && !method.empty() && !client_id.empty() &&
-         !version.empty());
-  std::string url =
-      base::StringPrintf("%s/%s/%s?alt=proto&client_id=%s&client_version=%s",
-                         prefix.c_str(), method.c_str(), request_base64.c_str(),
-                         client_id.c_str(), version.c_str());
+  DCHECK(!prefix.empty() && !method.empty());
+  std::string url = base::StringPrintf(
+      "%s/%s?$req=%s&$ct=application/x-protobuf", prefix.c_str(),
+      method.c_str(), request_base64.c_str());
   if (!key_param.empty()) {
     base::StringAppendF(&url, "&key=%s",
                         net::EscapeQueryParamValue(key_param, true).c_str());
   }
   return url;
+}
+
+// static
+void V4ProtocolManagerUtil::UpdateHeaders(net::HttpRequestHeaders* headers) {
+  // NOTE(vakh): The following header informs the envelope server (which sits in
+  // front of Google's stubby server) that the received GET request should be
+  // interpreted as a POST.
+  headers->SetHeaderIfMissing("X-HTTP-Method-Override", "POST");
 }
 
 }  // namespace safe_browsing

@@ -196,7 +196,7 @@ class FilePathWatcherTest : public testing::Test {
 
   bool WaitForEvents() WARN_UNUSED_RESULT {
     collector_->Reset();
-    loop_.Run();
+    RunLoop().Run();
     return collector_->Success();
   }
 
@@ -215,7 +215,8 @@ bool FilePathWatcherTest::SetupWatch(const FilePath& target,
                                      FilePathWatcher* watcher,
                                      TestDelegateBase* delegate,
                                      bool recursive_watch) {
-  base::WaitableEvent completion(false, false);
+  base::WaitableEvent completion(WaitableEvent::ResetPolicy::AUTOMATIC,
+                                 WaitableEvent::InitialState::NOT_SIGNALED);
   bool result;
   file_thread_.task_runner()->PostTask(
       FROM_HERE, base::Bind(SetupWatchCallback, target, watcher, delegate,
@@ -889,9 +890,9 @@ TEST_F(FilePathWatcherTest, DirAttributesChanged) {
   // We should not get notified in this case as it hasn't affected our ability
   // to access the file.
   ASSERT_TRUE(ChangeFilePermissions(test_dir1, Read, false));
-  loop_.PostDelayedTask(FROM_HERE,
-                        MessageLoop::QuitWhenIdleClosure(),
-                        TestTimeouts::tiny_timeout());
+  loop_.task_runner()->PostDelayedTask(FROM_HERE,
+                                       MessageLoop::QuitWhenIdleClosure(),
+                                       TestTimeouts::tiny_timeout());
   ASSERT_FALSE(WaitForEvents());
   ASSERT_TRUE(ChangeFilePermissions(test_dir1, Read, true));
 

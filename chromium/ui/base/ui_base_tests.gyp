@@ -90,7 +90,6 @@
         'test/scoped_fake_nswindow_fullscreen_unittest.mm',
         'test/test_clipboard_unittest.cc',
         'text/bytes_formatting_unittest.cc',
-        'touch/selection_bound_unittest.cc',
         'user_activity/user_activity_detector_unittest.cc',
         'view_prop_unittest.cc',
         'webui/web_ui_util_unittest.cc',
@@ -133,6 +132,7 @@
             'dragdrop/os_exchange_data_win_unittest.cc',
             'win/hwnd_subclass_unittest.cc',
             'win/open_file_name_win_unittest.cc',
+            'win/osk_display_manager_unittest.cc',
           ],
           'msvs_settings': {
             'VCLinkerTool': {
@@ -160,7 +160,6 @@
             '../../testing/android/native_test.gyp:native_test_native_code',
           ],
           'sources!': [
-            'touch/selection_bound_unittest.cc',
             'user_activity/user_activity_detector_unittest.cc',
           ],
         }],

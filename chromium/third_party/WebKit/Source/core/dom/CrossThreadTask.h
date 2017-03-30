@@ -33,14 +33,13 @@
 
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ExecutionContextTask.h"
-#include "platform/ThreadSafeFunctional.h"
-#include "wtf/PassOwnPtr.h"
+#include "platform/CrossThreadFunctional.h"
 #include <type_traits>
 
 namespace blink {
 
 // createCrossThreadTask(...) is ExecutionContextTask version of
-// threadSafeBind().
+// crossThreadBind().
 // Using WTF::bind() directly is not thread-safe due to temporary objects, see
 // https://crbug.com/390851 for details.
 //
@@ -76,27 +75,17 @@ namespace blink {
 // ExecutionContext:
 //     |context| is supplied by the target thread.
 //
-// Deep copies by threadSafeBind():
-//     |ptr|, |p1|, ..., |pn| are processed by threadSafeBind() and thus
+// Deep copies by crossThreadBind():
+//     |ptr|, |p1|, ..., |pn| are processed by crossThreadBind() and thus
 //     CrossThreadCopier.
 //     You don't have to call manually e.g. isolatedCopy().
 //     To pass things that cannot be copied by CrossThreadCopier
-//     (e.g. pointers), use AllowCrossThreadAccess() explicitly.
+//     (e.g. pointers), use crossThreadUnretained() explicitly.
 
-// RETTYPE, PS, and MPS are added as template parameters to circumvent MSVC 18.00.21005.1 (VS 2013) issues.
-
-template<typename FunctionType, typename... P,
-    typename RETTYPE = std::unique_ptr<ExecutionContextTask>, size_t PS = sizeof...(P), size_t MPS = WTF::FunctionWrapper<FunctionType>::numberOfArguments>
-typename std::enable_if<PS + 1 == MPS, RETTYPE>::type createCrossThreadTask(FunctionType function, P&&... parameters)
+template<typename FunctionType, typename... P>
+std::unique_ptr<ExecutionContextTask> createCrossThreadTask(FunctionType function, P&&... parameters)
 {
-    return internal::createCallClosureTask(threadSafeBind<ExecutionContext*>(function, std::forward<P>(parameters)...));
-}
-
-template<typename FunctionType, typename... P,
-    typename RETTYPE = std::unique_ptr<ExecutionContextTask>, size_t PS = sizeof...(P), size_t MPS = WTF::FunctionWrapper<FunctionType>::numberOfArguments>
-typename std::enable_if<PS == MPS, RETTYPE>::type createCrossThreadTask(FunctionType function, P&&... parameters)
-{
-    return internal::createCallClosureTask(threadSafeBind(function, std::forward<P>(parameters)...));
+    return internal::createCallClosureTask(crossThreadBind(function, std::forward<P>(parameters)...));
 }
 
 } // namespace blink

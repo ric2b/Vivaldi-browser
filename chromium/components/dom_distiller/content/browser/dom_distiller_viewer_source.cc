@@ -9,12 +9,14 @@
 #include <utility>
 #include <vector>
 
+#include "base/location.h"
 #include "base/memory/ref_counted_memory.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "components/dom_distiller/content/browser/distiller_javascript_service_impl.h"
 #include "components/dom_distiller/content/browser/distiller_javascript_utils.h"
 #include "components/dom_distiller/content/browser/distiller_ui_handle.h"
@@ -34,11 +36,12 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/service_registry.h"
 #include "grit/components_strings.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
+#include "services/shell/public/cpp/interface_provider.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace dom_distiller {
@@ -147,7 +150,7 @@ void DomDistillerViewerSource::RequestViewerHandle::Cancel() {
 
   // Schedule the Viewer for deletion. Ensures distillation is cancelled, and
   // any pending data stored in |buffer_| is released.
-  base::MessageLoop::current()->DeleteSoon(FROM_HERE, this);
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
 }
 
 void DomDistillerViewerSource::RequestViewerHandle::DidFinishLoad(
@@ -242,15 +245,15 @@ void DomDistillerViewerSource::StartDataRequest(
 
   // Add mojo service for JavaScript functionality. This is the receiving end
   // of this particular service.
-  render_frame_host->GetServiceRegistry()->AddService(
+  render_frame_host->GetInterfaceRegistry()->AddInterface(
       base::Bind(&CreateDistillerJavaScriptService,
           render_frame_host,
           distiller_ui_handle_.get()));
 
   // Tell the renderer that this is currently a distilled page.
   mojom::DistillerPageNotifierServicePtr page_notifier_service;
-  render_frame_host->GetServiceRegistry()->ConnectToRemoteService(
-      mojo::GetProxy(&page_notifier_service));
+  render_frame_host->GetRemoteInterfaces()->GetInterface(
+      &page_notifier_service);
   DCHECK(page_notifier_service);
   page_notifier_service->NotifyIsDistillerPage();
 
@@ -289,13 +292,13 @@ void DomDistillerViewerSource::WillServiceRequest(
     std::string* path) const {
 }
 
-std::string DomDistillerViewerSource::GetContentSecurityPolicyObjectSrc()
+std::string DomDistillerViewerSource::GetContentSecurityPolicyStyleSrc()
     const {
-  return "object-src 'none'; style-src 'self' https://fonts.googleapis.com;";
+  return "style-src 'self' https://fonts.googleapis.com;";
 }
 
-std::string DomDistillerViewerSource::GetContentSecurityPolicyFrameSrc() const {
-  return "frame-src *;";
+std::string DomDistillerViewerSource::GetContentSecurityPolicyChildSrc() const {
+  return "child-src *;";
 }
 
 }  // namespace dom_distiller

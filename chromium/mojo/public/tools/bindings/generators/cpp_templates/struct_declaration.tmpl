@@ -5,7 +5,7 @@ class {{class_name}} {
   static {{class_name}}* New(mojo::internal::Buffer* buf);
 
   static bool Validate(const void* data,
-                       mojo::internal::BoundsChecker* bounds_checker);
+                       mojo::internal::ValidationContext* validation_context);
 
   void EncodePointers();
   void DecodePointers();
@@ -13,7 +13,11 @@ class {{class_name}} {
 {% from "enum_macros.tmpl" import enum_data_decl -%}
 {#--- Enums #}
 {%- for enum in struct.enums -%}
+{%-   if enum|is_native_only_kind %}
+  using {{enum.name}}_Data = mojo::internal::NativeEnum_Data;
+{%-   else %}
   {{enum_data_decl(enum)|indent(2)}}
+{%-   endif %}
 {%- endfor %}
 
   mojo::internal::StructHeader header_;

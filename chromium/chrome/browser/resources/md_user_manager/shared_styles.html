@@ -2,10 +2,18 @@
   <template>
     <style>
       :root {
+        --action-button: {
+          border-radius: 2px;
+          line-height: 20px;
+          margin: 0;
+          min-width: 52px;
+          padding: 6px 16px;
+        };
         --error-color: var(--google-red-700);
         --page-width: 624px;
         --primary-text-color: var(--paper-grey-800);
         --title-icon-color: var(--paper-grey-500);
+        --user-manager-separator-line: 1px solid rgba(0, 0, 0, .12);
       }
 
       a,
@@ -18,11 +26,7 @@
       }
 
       paper-button.action {
-        border-radius: 2px;
-        line-height: 32px;
-        margin: 0;
-        min-width: 52px;
-        padding: 0 16px;
+        @apply(--action-button);
       }
 
       paper-button.action.primary {
@@ -33,11 +37,10 @@
         };
         --paper-button-flat-keyboard-focus: {
           background: rgb(58, 117, 215);
-          font-weight: 500;
         };
         --paper-button-disabled: {
-          background: rgba(66, 133, 244, .5);
-          color: white;
+          background: var(--paper-grey-300);
+          color: var(--paper-grey-500);
         };
       }
 
@@ -48,7 +51,6 @@
         };
         --paper-button-flat-keyboard-focus: {
           background: rgba(0, 0, 0, .12);
-          font-weight: 500;
         };
       }
 
@@ -60,6 +62,18 @@
         --paper-listbox: {
           padding: 0;
         };
+      }
+
+      iron-overlay-backdrop {
+        --iron-overlay-backdrop-background-color: white;
+        --iron-overlay-backdrop-opacity: .8;
+      }
+
+      .product-logo {
+        content: -webkit-image-set(
+            url(../../../../../app/placeholders/product_logo_name_22.png) 1x,
+            url(../../../../../app/placeholders/product_logo_name_22.png) 2x);
+        height: 22px;
       }
     </style>
   </template>

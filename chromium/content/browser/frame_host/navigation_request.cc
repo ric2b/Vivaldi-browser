@@ -16,9 +16,8 @@
 #include "content/browser/frame_host/navigator_impl.h"
 #include "content/browser/loader/navigation_url_loader.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/service_worker/service_worker_navigation_handle.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/common/resource_request_body.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_data.h"
@@ -41,6 +40,7 @@ int LoadFlagFromNavigationType(FrameMsg_Navigate_Type::Value navigation_type) {
   int load_flags = net::LOAD_NORMAL;
   switch (navigation_type) {
     case FrameMsg_Navigate_Type::RELOAD:
+    case FrameMsg_Navigate_Type::RELOAD_MAIN_RESOURCE:
     case FrameMsg_Navigate_Type::RELOAD_ORIGINAL_REQUEST_URL:
       load_flags |= net::LOAD_VALIDATE_CACHE;
       break;
@@ -81,20 +81,15 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
   headers.SetHeaderIfMissing(net::HttpRequestHeaders::kUserAgent,
                              GetContentClient()->GetUserAgent());
 
-  // Fill POST data from the browser in the request body.
-  scoped_refptr<ResourceRequestBody> request_body;
-  if (entry.GetHasPostData()) {
-    request_body = new ResourceRequestBody();
-    request_body->AppendBytes(
-        reinterpret_cast<const char *>(
-            entry.GetBrowserInitiatedPostData()->front()),
-        entry.GetBrowserInitiatedPostData()->size());
-  }
+  // Fill POST data in the request body.
+  scoped_refptr<ResourceRequestBodyImpl> request_body;
+  if (frame_entry.method() == "POST")
+    request_body = frame_entry.GetPostData();
 
   std::unique_ptr<NavigationRequest> navigation_request(new NavigationRequest(
       frame_tree_node, entry.ConstructCommonNavigationParams(
-                           dest_url, dest_referrer, navigation_type, lofi_state,
-                           navigation_start),
+                           frame_entry, request_body, dest_url, dest_referrer,
+                           navigation_type, lofi_state, navigation_start),
       BeginNavigationParams(headers.ToString(),
                             LoadFlagFromNavigationType(navigation_type),
                             false,  // has_user_gestures
@@ -107,7 +102,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateBrowserInitiated(
           controller->GetIndexOfEntry(&entry),
           controller->GetLastCommittedEntryIndex(),
           controller->GetEntryCount()),
-      request_body, true, &frame_entry, &entry));
+      true, &frame_entry, &entry));
   return navigation_request;
 }
 
@@ -116,7 +111,6 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
     FrameTreeNode* frame_tree_node,
     const CommonNavigationParams& common_params,
     const BeginNavigationParams& begin_params,
-    scoped_refptr<ResourceRequestBody> body,
     int current_history_list_offset,
     int current_history_list_length) {
   // TODO(clamy): Check if some PageState should be provided here.
@@ -142,7 +136,7 @@ std::unique_ptr<NavigationRequest> NavigationRequest::CreateRendererInitiated(
       false);                  // should_clear_history_list
   std::unique_ptr<NavigationRequest> navigation_request(
       new NavigationRequest(frame_tree_node, common_params, begin_params,
-                            request_params, body, false, nullptr, nullptr));
+                            request_params, false, nullptr, nullptr));
   return navigation_request;
 }
 
@@ -151,7 +145,6 @@ NavigationRequest::NavigationRequest(
     const CommonNavigationParams& common_params,
     const BeginNavigationParams& begin_params,
     const RequestNavigationParams& request_params,
-    scoped_refptr<ResourceRequestBody> body,
     bool browser_initiated,
     const FrameNavigationEntry* frame_entry,
     const NavigationEntryImpl* entry)
@@ -196,7 +189,7 @@ NavigationRequest::NavigationRequest(
   info_.reset(new NavigationRequestInfo(
       common_params, begin_params, first_party_for_cookies,
       frame_tree_node->current_origin(), frame_tree_node->IsMainFrame(),
-      parent_is_main_frame, frame_tree_node->frame_tree_node_id(), body));
+      parent_is_main_frame, frame_tree_node->frame_tree_node_id()));
 }
 
 NavigationRequest::~NavigationRequest() {
@@ -215,8 +208,9 @@ void NavigationRequest::BeginNavigation() {
     // TODO(clamy): pass the method to the NavigationHandle instead of a
     // boolean.
     navigation_handle_->WillStartRequest(
-        common_params_.method, Referrer::SanitizeForRequest(
-                                   common_params_.url, common_params_.referrer),
+        common_params_.method, common_params_.post_data,
+        Referrer::SanitizeForRequest(common_params_.url,
+                                     common_params_.referrer),
         begin_params_.has_user_gesture, common_params_.transition, false,
         base::Bind(&NavigationRequest::OnStartChecksComplete,
                    base::Unretained(this)));
@@ -258,6 +252,10 @@ void NavigationRequest::TransferNavigationHandleOwnership(
 void NavigationRequest::OnRequestRedirected(
     const net::RedirectInfo& redirect_info,
     const scoped_refptr<ResourceResponse>& response) {
+  // If the navigation is no longer a POST, the POST data should be reset.
+  if (redirect_info.new_method != "POST")
+    common_params_.post_data = nullptr;
+
   common_params_.url = redirect_info.new_url;
   common_params_.method = redirect_info.new_method;
   common_params_.referrer.url = GURL(redirect_info.new_referrer);
@@ -290,16 +288,6 @@ void NavigationRequest::OnResponseStarted(
        response->head.headers->response_code() == 205)) {
     frame_tree_node_->ResetNavigationRequest(false);
     return;
-  }
-
-  // Update the service worker params of the request params.
-  request_params_.should_create_service_worker =
-      (frame_tree_node_->pending_sandbox_flags() &
-       blink::WebSandboxFlags::Origin) != blink::WebSandboxFlags::Origin;
-  if (navigation_handle_->service_worker_handle()) {
-    request_params_.service_worker_provider_id =
-        navigation_handle_->service_worker_handle()
-            ->service_worker_provider_host_id();
   }
 
   // Update the lofi state of the request.
@@ -359,6 +347,14 @@ void NavigationRequest::OnRequestStarted(base::TimeTicks timestamp) {
                                                         common_params_.url);
 }
 
+void NavigationRequest::OnServiceWorkerEncountered() {
+  request_params_.should_create_service_worker = true;
+
+  // TODO(clamy): the navigation should be sent to a RenderFrameHost to be
+  // picked up by the ServiceWorker.
+  NOTIMPLEMENTED();
+}
+
 void NavigationRequest::OnStartChecksComplete(
     NavigationThrottle::ThrottleCheckResult result) {
   CHECK(result != NavigationThrottle::DEFER);
@@ -371,10 +367,29 @@ void NavigationRequest::OnStartChecksComplete(
     return;
   }
 
-  InitializeServiceWorkerHandleIfNeeded();
+  // Use the SiteInstance of the navigating RenderFrameHost to get access to
+  // the StoragePartition. Using the url of the navigation will result in a
+  // wrong StoragePartition being picked when a WebView is navigating.
+  DCHECK_NE(AssociatedSiteInstanceType::NONE, associated_site_instance_type_);
+  RenderFrameHostImpl* navigating_frame_host =
+      associated_site_instance_type_ == AssociatedSiteInstanceType::SPECULATIVE
+          ? frame_tree_node_->render_manager()->speculative_frame_host()
+          : frame_tree_node_->current_frame_host();
+  DCHECK(navigating_frame_host);
+
+  BrowserContext* browser_context =
+      frame_tree_node_->navigator()->GetController()->GetBrowserContext();
+  StoragePartition* partition = BrowserContext::GetStoragePartition(
+      browser_context, navigating_frame_host->GetSiteInstance());
+  DCHECK(partition);
+
+  ServiceWorkerContextWrapper* service_worker_context =
+      static_cast<ServiceWorkerContextWrapper*>(
+          partition->GetServiceWorkerContext());
+
   loader_ = NavigationURLLoader::Create(
       frame_tree_node_->navigator()->GetController()->GetBrowserContext(),
-      std::move(info_), navigation_handle_->service_worker_handle(), this);
+      std::move(info_), service_worker_context, this);
 }
 
 void NavigationRequest::OnRedirectChecksComplete(
@@ -434,36 +449,6 @@ void NavigationRequest::CommitNavigation() {
   // existing pending navigation.
   if (!common_params_.url.SchemeIs(url::kJavaScriptScheme))
     frame_tree_node_->ResetNavigationRequest(true);
-}
-
-void NavigationRequest::InitializeServiceWorkerHandleIfNeeded() {
-  // Only initialize the ServiceWorkerNavigationHandle if it can be created for
-  // this frame.
-  bool can_create_service_worker =
-      (frame_tree_node_->pending_sandbox_flags() &
-       blink::WebSandboxFlags::Origin) != blink::WebSandboxFlags::Origin;
-  if (!can_create_service_worker)
-    return;
-
-  // Use the SiteInstance of the navigating RenderFrameHost to get access to
-  // the StoragePartition. Using the url of the navigation will result in a
-  // wrong StoragePartition being picked when a WebView is navigating.
-  RenderFrameHostImpl* navigating_frame_host =
-      frame_tree_node_->render_manager()->speculative_frame_host();
-  if (!navigating_frame_host)
-    navigating_frame_host = frame_tree_node_->current_frame_host();
-  DCHECK(navigating_frame_host);
-
-  BrowserContext* browser_context =
-      frame_tree_node_->navigator()->GetController()->GetBrowserContext();
-  StoragePartition* partition = BrowserContext::GetStoragePartition(
-      browser_context, navigating_frame_host->GetSiteInstance());
-  DCHECK(partition);
-
-  ServiceWorkerContextWrapper* service_worker_context =
-      static_cast<ServiceWorkerContextWrapper*>(
-          partition->GetServiceWorkerContext());
-  navigation_handle_->InitServiceWorkerHandle(service_worker_context);
 }
 
 }  // namespace content

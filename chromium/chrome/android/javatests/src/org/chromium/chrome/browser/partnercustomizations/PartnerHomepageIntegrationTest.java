@@ -4,8 +4,10 @@
 
 package org.chromium.chrome.browser.partnercustomizations;
 
+import android.annotation.TargetApi;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
 import android.support.v7.widget.SwitchCompat;
 import android.test.suitebuilder.annotation.MediumTest;
@@ -15,10 +17,8 @@ import android.widget.EditText;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.preferences.HomepageEditor;
 import org.chromium.chrome.browser.preferences.HomepagePreferences;
@@ -167,6 +167,7 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
      */
     @MediumTest
     @Feature({"Homepage"})
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
     public void testPreferenceCustomUriFixup() throws InterruptedException {
         // Change home page custom URI on hompage edit screen.
         final Preferences editHomepagePreferenceActivity =
@@ -195,9 +196,9 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
     /**
      * Closing the last tab should also close Chrome on Tabbed mode.
      */
-    @CommandLineFlags.Add(ChromeSwitches.DISABLE_DOCUMENT_MODE)
     @MediumTest
     @Feature({"Homepage" })
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
     public void testLastTabClosed() throws InterruptedException {
         ChromeTabUtils.closeCurrentTab(getInstrumentation(), (ChromeTabbedActivity) getActivity());
         assertTrue("Activity was not closed.",
@@ -207,9 +208,9 @@ public class PartnerHomepageIntegrationTest extends BasePartnerBrowserCustomizat
     /**
      * Closing all tabs should finalize all tab closures and close Chrome on Tabbed mode.
      */
-    @CommandLineFlags.Add(ChromeSwitches.DISABLE_DOCUMENT_MODE)
     @MediumTest
     @Feature({"Homepage" })
+    @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
     public void testCloseAllTabs() throws InterruptedException {
         final CallbackHelper tabClosed = new CallbackHelper();
         final TabModel tabModel = getActivity().getCurrentTabModel();

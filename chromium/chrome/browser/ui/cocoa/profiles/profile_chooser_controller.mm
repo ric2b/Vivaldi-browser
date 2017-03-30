@@ -1922,8 +1922,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   // Use the low-res, small default avatars in the fast user switcher, like
   // we do in the menu bar.
   gfx::Image itemIcon;
-  bool isRectangle;
-  AvatarMenu::GetImageForMenuButton(item.profile_path, &itemIcon, &isRectangle);
+  AvatarMenu::GetImageForMenuButton(item.profile_path, &itemIcon);
 
   [profileButton setDefaultImage:CreateProfileImage(
       itemIcon, kSmallImageSide).ToNSImage()];
@@ -1969,7 +1968,7 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
     viewRect.origin.y = NSMaxY([separator frame]);
   }
 
-  if ([self shouldShowGoIncognito]) {
+  if (!switches::IsMaterialDesignUserMenu() && [self shouldShowGoIncognito]) {
     NSButton* goIncognitoButton =
         [self hoverButtonWithRect:viewRect
                              text:l10n_util::GetNSString(
@@ -1987,6 +1986,9 @@ class ActiveProfileObserverBridge : public AvatarMenuObserver,
   NSString* text = isGuestSession_ ?
       l10n_util::GetNSString(IDS_PROFILES_EXIT_GUEST) :
       l10n_util::GetNSString(IDS_PROFILES_SWITCH_USERS_BUTTON);
+  if (!isGuestSession_ && switches::IsMaterialDesignUserMenu()) {
+    text = l10n_util::GetNSString(IDS_PROFILES_MANAGE_USERS_BUTTON);
+  }
   NSButton* switchUsersButton =
       [self hoverButtonWithRect:viewRect
                            text:text

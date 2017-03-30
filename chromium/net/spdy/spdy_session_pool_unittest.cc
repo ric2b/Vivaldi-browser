@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/memory/ref_counted.h"
+#include "base/run_loop.h"
 #include "net/dns/host_cache.h"
 #include "net/http/http_network_session.h"
 #include "net/socket/client_socket_handle.h"
@@ -117,7 +118,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentSessions) {
       CreateInsecureSpdySession(http_session_.get(), test_key, BoundNetLog());
 
   // Flush the SpdySession::OnReadComplete() task.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Verify that we have sessions for everything.
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, test_key));
@@ -164,7 +165,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM,
                                 session1, url1, MEDIUM, BoundNetLog());
-  ASSERT_TRUE(spdy_stream1.get() != NULL);
+  ASSERT_TRUE(spdy_stream1);
 
   // Set up session 2
   StaticSocketDataProvider data2(reads, arraysize(reads), nullptr, 0);
@@ -180,7 +181,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   base::WeakPtr<SpdyStream> spdy_stream2 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM,
                                 session2, url2, MEDIUM, BoundNetLog());
-  ASSERT_TRUE(spdy_stream2.get() != NULL);
+  ASSERT_TRUE(spdy_stream2);
 
   // Set up session 3
   StaticSocketDataProvider data3(reads, arraysize(reads), nullptr, 0);
@@ -196,7 +197,7 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   base::WeakPtr<SpdyStream> spdy_stream3 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM,
                                 session3, url3, MEDIUM, BoundNetLog());
-  ASSERT_TRUE(spdy_stream3.get() != NULL);
+  ASSERT_TRUE(spdy_stream3);
 
   // All sessions are active and not closed
   EXPECT_TRUE(session1->is_active());
@@ -218,9 +219,9 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
   // Make sessions 1 and 3 inactive, but keep them open.
   // Session 2 still open and active
   session1->CloseCreatedStream(spdy_stream1, OK);
-  EXPECT_EQ(NULL, spdy_stream1.get());
+  EXPECT_FALSE(spdy_stream1);
   session3->CloseCreatedStream(spdy_stream3, OK);
-  EXPECT_EQ(NULL, spdy_stream3.get());
+  EXPECT_FALSE(spdy_stream3);
   EXPECT_FALSE(session1->is_active());
   EXPECT_TRUE(session1->IsAvailable());
   EXPECT_TRUE(session2->is_active());
@@ -230,33 +231,33 @@ TEST_P(SpdySessionPoolTest, CloseCurrentIdleSessions) {
 
   // Should close session 1 and 3, 2 should be left open
   spdy_session_pool_->CloseCurrentIdleSessions();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(session1 == NULL);
+  EXPECT_FALSE(session1);
   EXPECT_TRUE(session2->is_active());
   EXPECT_TRUE(session2->IsAvailable());
-  EXPECT_TRUE(session3 == NULL);
+  EXPECT_FALSE(session3);
 
   // Should not do anything
   spdy_session_pool_->CloseCurrentIdleSessions();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(session2->is_active());
   EXPECT_TRUE(session2->IsAvailable());
 
   // Make 2 not active
   session2->CloseCreatedStream(spdy_stream2, OK);
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
-  EXPECT_EQ(NULL, spdy_stream2.get());
+  EXPECT_FALSE(spdy_stream2);
   EXPECT_FALSE(session2->is_active());
   EXPECT_TRUE(session2->IsAvailable());
 
   // This should close session 2
   spdy_session_pool_->CloseCurrentIdleSessions();
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(session2 == NULL);
+  EXPECT_FALSE(session2);
 }
 
 // Set up a SpdyStream to create a new session when it is closed.
@@ -292,7 +293,7 @@ TEST_P(SpdySessionPoolTest, CloseAllSessions) {
       CreateInsecureSpdySession(http_session_.get(), test_key, BoundNetLog());
 
   // Flush the SpdySession::OnReadComplete() task.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // Verify that we have sessions for everything.
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, test_key));
@@ -382,7 +383,7 @@ void SpdySessionPoolTest::RunIPPoolingTest(
       http_session_.get(), test_hosts[0].key, BoundNetLog());
 
   // Flush the SpdySession::OnReadComplete() task.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   // The third host has no overlap with the first, so it can't pool IPs.
   EXPECT_FALSE(HasSpdySession(spdy_session_pool_, test_hosts[2].key));
@@ -434,9 +435,9 @@ void SpdySessionPoolTest::RunIPPoolingTest(
     case SPDY_POOL_CLOSE_SESSIONS_MANUALLY:
       session->CloseSessionOnError(ERR_ABORTED, std::string());
       session2->CloseSessionOnError(ERR_ABORTED, std::string());
-      base::MessageLoop::current()->RunUntilIdle();
-      EXPECT_TRUE(session == NULL);
-      EXPECT_TRUE(session2 == NULL);
+      base::RunLoop().RunUntilIdle();
+      EXPECT_FALSE(session);
+      EXPECT_FALSE(session2);
       break;
     case SPDY_POOL_CLOSE_CURRENT_SESSIONS:
       spdy_session_pool_->CloseCurrentSessions(ERR_ABORTED);
@@ -457,9 +458,9 @@ void SpdySessionPoolTest::RunIPPoolingTest(
 
       // Close streams to make spdy_session and spdy_session1 inactive.
       session->CloseCreatedStream(spdy_stream, OK);
-      EXPECT_EQ(NULL, spdy_stream.get());
+      EXPECT_FALSE(spdy_stream);
       session1->CloseCreatedStream(spdy_stream1, OK);
-      EXPECT_EQ(NULL, spdy_stream1.get());
+      EXPECT_FALSE(spdy_stream1);
 
       // Check spdy_session and spdy_session1 are not closed.
       EXPECT_FALSE(session->is_active());
@@ -472,22 +473,22 @@ void SpdySessionPoolTest::RunIPPoolingTest(
       // Test that calling CloseIdleSessions, does not cause a crash.
       // http://crbug.com/181400
       spdy_session_pool_->CloseCurrentIdleSessions();
-      base::MessageLoop::current()->RunUntilIdle();
+      base::RunLoop().RunUntilIdle();
 
       // Verify spdy_session and spdy_session1 are closed.
-      EXPECT_TRUE(session == NULL);
-      EXPECT_TRUE(session1 == NULL);
+      EXPECT_FALSE(session);
+      EXPECT_FALSE(session1);
       EXPECT_TRUE(session2->is_active());
       EXPECT_TRUE(session2->IsAvailable());
 
       spdy_stream2->Cancel();
-      EXPECT_EQ(NULL, spdy_stream.get());
-      EXPECT_EQ(NULL, spdy_stream1.get());
-      EXPECT_EQ(NULL, spdy_stream2.get());
+      EXPECT_FALSE(spdy_stream);
+      EXPECT_FALSE(spdy_stream1);
+      EXPECT_FALSE(spdy_stream2);
 
       session2->CloseSessionOnError(ERR_ABORTED, std::string());
-      base::MessageLoop::current()->RunUntilIdle();
-      EXPECT_TRUE(session2 == NULL);
+      base::RunLoop().RunUntilIdle();
+      EXPECT_FALSE(session2);
       break;
   }
 
@@ -555,11 +556,11 @@ TEST_P(SpdySessionPoolTest, IPAddressChanged) {
   spdy_streamA->SetDelegate(&delegateA);
 
   std::unique_ptr<SpdyHeaderBlock> headers(
-      spdy_util.ConstructGetHeaderBlock(urlA.spec()));
+      new SpdyHeaderBlock(spdy_util.ConstructGetHeaderBlock(urlA.spec())));
   spdy_streamA->SendRequestHeaders(std::move(headers), NO_MORE_DATA_TO_SEND);
   EXPECT_TRUE(spdy_streamA->HasUrlFromHeaders());
 
-  base::MessageLoop::current()->RunUntilIdle();  // Allow headers to write.
+  base::RunLoop().RunUntilIdle();  // Allow headers to write.
   EXPECT_TRUE(delegateA.send_headers_completed());
 
   sessionA->MakeUnavailable();
@@ -650,7 +651,7 @@ TEST_P(SpdySessionPoolTest, FindAvailableSession) {
       CreateInsecureSpdySession(http_session_.get(), key, BoundNetLog());
 
   // Flush the SpdySession::OnReadComplete() task.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, key));
 

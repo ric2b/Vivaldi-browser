@@ -293,11 +293,8 @@ LocalSafeBrowsingDatabaseManager::LocalSafeBrowsingDatabaseManager(
   enable_csd_whitelist_ =
       !cmdline->HasSwitch(switches::kDisableClientSidePhishingDetection);
 
-  // TODO(noelutz): remove this boolean variable since it should always be true
-  // if SafeBrowsing is enabled.  Unfortunately, we have no test data for this
-  // list right now.  This means that we need to be able to disable this list
-  // for the SafeBrowsing test to pass.
-  enable_download_whitelist_ = enable_csd_whitelist_;
+  // We download the download-whitelist if download protection is enabled.
+  enable_download_whitelist_ = enable_download_protection_;
 
   // TODO(kalman): there really shouldn't be a flag for this.
   enable_extension_blacklist_ =
@@ -503,23 +500,22 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
     return false;
   }
 
+  std::vector<SBFullHash> full_hashes;
+  UrlToFullHashes(url, false, &full_hashes);
+
   // Cache hits should, in general, be the same for both (ignoring potential
   // cache evictions in the second call for entries that were just about to be
   // evicted in the first call).
   // TODO(gab): Refactor SafeBrowsingDatabase to avoid depending on this here.
   std::vector<SBFullHashResult> cache_hits;
-
-  std::vector<SBFullHash> full_hashes;
-  UrlToFullHashes(url, false, &full_hashes);
-
   std::vector<SBPrefix> browse_prefix_hits;
-  bool browse_prefix_match = database_->ContainsBrowseHashes(
-      full_hashes, &browse_prefix_hits, &cache_hits);
+  database_->ContainsBrowseHashes(full_hashes, &browse_prefix_hits,
+                                  &cache_hits);
 
   std::vector<SBPrefix> unwanted_prefix_hits;
   std::vector<SBFullHashResult> unused_cache_hits;
-  bool unwanted_prefix_match = database_->ContainsUnwantedSoftwareHashes(
-      full_hashes, &unwanted_prefix_hits, &unused_cache_hits);
+  database_->ContainsUnwantedSoftwareHashes(full_hashes, &unwanted_prefix_hits,
+                                            &unused_cache_hits);
 
   // Merge the two pre-sorted prefix hits lists.
   // TODO(gab): Refactor SafeBrowsingDatabase for it to return this merged list
@@ -534,7 +530,7 @@ bool LocalSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
 
   UMA_HISTOGRAM_TIMES("SB2.FilterCheck", base::TimeTicks::Now() - start);
 
-  if (!browse_prefix_match && !unwanted_prefix_match)
+  if (prefix_hits.empty() && cache_hits.empty())
     return true;  // URL is okay.
 
   // Needs to be asynchronous, since we could be in the constructor of a

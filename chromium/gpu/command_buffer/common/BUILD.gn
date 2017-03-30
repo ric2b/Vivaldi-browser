@@ -51,6 +51,7 @@ source_set("common_sources") {
     "mailbox_holder.h",
     "sync_token.cc",
     "sync_token.h",
+    "texture_in_use_response.h",
     "thread_local.h",
     "time.h",
   ]
@@ -79,6 +80,7 @@ component("gles2_utils") {
 
   deps = [
     "//base",
+    "//ui/gfx/geometry",
   ]
 
   all_dependent_configs = [ "//third_party/khronos:khronos_headers" ]

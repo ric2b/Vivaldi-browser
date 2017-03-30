@@ -497,7 +497,6 @@ void Program::Update() {
     }
   }
 
-#if !defined(NDEBUG)
   if (manager_->gpu_preferences_.enable_gpu_service_logging_gpu) {
     DVLOG(1) << "----: attribs for service_id: " << service_id();
     for (size_t ii = 0; ii < attrib_infos_.size(); ++ii) {
@@ -508,10 +507,9 @@ void Program::Update() {
                << ", name = " << info.name;
     }
   }
-#endif
+
   UpdateUniforms();
 
-#if !defined(NDEBUG)
   if (manager_->gpu_preferences_.enable_gpu_service_logging_gpu) {
     DVLOG(1) << "----: uniforms for service_id: " << service_id();
     size_t ii = 0;
@@ -522,7 +520,6 @@ void Program::Update() {
                << ", name = " << info.name;
     }
   }
-#endif
 
   UpdateFragmentInputs();
   UpdateProgramOutputs();
@@ -833,7 +830,7 @@ void Program::UpdateFragmentInputs() {
 }
 
 void Program::UpdateProgramOutputs() {
-  if (!feature_info().gl_version_info().IsES3Capable() ||
+  if (!feature_info().gl_version_info().is_es3_capable ||
       feature_info().disable_shader_translator())
     return;
 
@@ -1116,7 +1113,7 @@ bool Program::Link(ShaderManager* manager,
     ExecuteProgramOutputBindCalls();
 
     before_time = TimeTicks::Now();
-    if (cache && gfx::g_driver_gl.ext.b_GL_ARB_get_program_binary) {
+    if (cache && gl::g_driver_gl.ext.b_GL_ARB_get_program_binary) {
       glProgramParameteri(service_id(),
                           PROGRAM_BINARY_RETRIEVABLE_HINT,
                           GL_TRUE);
@@ -1463,18 +1460,19 @@ bool Program::AttachShader(
   return true;
 }
 
-bool Program::DetachShader(
+bool Program::IsShaderAttached(Shader* shader) {
+  return attached_shaders_[ShaderTypeToIndex(shader->shader_type())].get() ==
+         shader;
+}
+
+void Program::DetachShader(
     ShaderManager* shader_manager,
     Shader* shader) {
   DCHECK(shader_manager);
   DCHECK(shader);
-  if (attached_shaders_[ShaderTypeToIndex(shader->shader_type())].get() !=
-      shader) {
-    return false;
-  }
+  DCHECK(IsShaderAttached(shader));
   attached_shaders_[ShaderTypeToIndex(shader->shader_type())] = NULL;
   shader_manager->UnuseShader(shader);
-  return true;
 }
 
 void Program::DetachShaders(ShaderManager* shader_manager) {

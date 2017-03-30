@@ -1017,10 +1017,8 @@ void TabStrip::SetSelection(const ui::ListSelectionModel& old_selection,
           new_selection.selected_indices(),
           old_selection.selected_indices());
 
-  // Fire accessibility events that reflect the changes to selection, and
-  // stop the pinned tab title animation on tabs no longer selected.
+  // Fire accessibility events that reflect the changes to selection.
   for (size_t i = 0; i < no_longer_selected.size(); ++i) {
-    tab_at(no_longer_selected[i])->StopPinnedTabTitleAnimation();
     tab_at(no_longer_selected[i])->NotifyAccessibilityEvent(
         ui::AX_EVENT_SELECTION_REMOVE, true);
   }
@@ -1035,7 +1033,7 @@ void TabStrip::SetSelection(const ui::ListSelectionModel& old_selection,
 void TabStrip::TabTitleChangedNotLoading(int model_index) {
   Tab* tab = tab_at(model_index);
   if (tab->data().pinned && !tab->IsActive())
-    tab->StartPinnedTabTitleAnimation();
+    tab->SetPinnedTabTitleChangedIndicatorVisible(true);
 }
 
 int TabStrip::GetModelIndexOfTab(const Tab* tab) const {
@@ -1400,10 +1398,6 @@ bool TabStrip::CanPaintThrobberToLayer() const {
   const views::Widget* widget = GetWidget();
   return widget && !touch_layout_ && !dragging && !IsAnimating() &&
          !widget->IsFullscreen();
-}
-
-bool TabStrip::IsIncognito() const {
-  return controller_->IsIncognito();
 }
 
 bool TabStrip::IsImmersiveStyle() const {

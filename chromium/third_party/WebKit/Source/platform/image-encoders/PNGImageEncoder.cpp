@@ -31,7 +31,10 @@
 #include "platform/image-encoders/PNGImageEncoder.h"
 
 #include "platform/graphics/ImageBuffer.h"
-#include "wtf/OwnPtr.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
+
+#include "zlib.h"
 
 namespace blink {
 
@@ -45,7 +48,7 @@ static void writeOutput(png_structp png, png_bytep data, png_size_t size)
     static_cast<Vector<unsigned char>*>(png_get_io_ptr(png))->append(data, size);
 }
 
-PassOwnPtr<PNGImageEncoderState> PNGImageEncoderState::create(const IntSize& imageSize, Vector<unsigned char>* output)
+std::unique_ptr<PNGImageEncoderState> PNGImageEncoderState::create(const IntSize& imageSize, Vector<unsigned char>* output)
 {
     if (imageSize.width() <= 0 || imageSize.height() <= 0)
         return nullptr;
@@ -59,21 +62,26 @@ PassOwnPtr<PNGImageEncoderState> PNGImageEncoderState::create(const IntSize& ima
 
     // Optimize compression for speed.
     // The parameters are the same as what libpng uses by default for RGB and RGBA images, except:
-    // - the zlib compression level is 3 instead of 6, to avoid the lazy Ziv-Lempel match searching;
-    // - the delta filter is 1 ("sub") instead of 5 ("all"), to reduce the filter computations.
-    // The zlib memory level (8) and strategy (Z_FILTERED) will be set inside libpng.
-    //
+    // The zlib compression level is set to 3 instead of 6, to avoid the lazy Ziv-Lempel match searching.
+    png_set_compression_level(png, 3);
+
+    // The zlib memory level is set to 8.  This actually matches the default, we are just future-proofing.
+    png_set_compression_mem_level(png, 8);
+
+    // The zlib strategy is set to Z_FILTERED, which does not match the default.
     // Avoid the zlib strategies Z_HUFFMAN_ONLY or Z_RLE.
     // Although they are the fastest for poorly-compressible images (e.g. photographs),
     // they are very slow for highly-compressible images (e.g. text, drawings or business graphics)
-    png_set_compression_level(png, 3);
+    png_set_compression_strategy(png, Z_FILTERED);
+
+    // The delta filter is PNG_FILTER_SUB instead of PNG_ALL_FILTERS, to reduce the filter computations.
     png_set_filter(png, PNG_FILTER_TYPE_BASE, PNG_FILTER_SUB);
 
     png_set_write_fn(png, output, writeOutput, 0);
     png_set_IHDR(png, info, imageSize.width(), imageSize.height(), 8, PNG_COLOR_TYPE_RGB_ALPHA, 0, 0, 0);
     png_write_info(png, info);
 
-    return adoptPtr(new PNGImageEncoderState(png, info));
+    return wrapUnique(new PNGImageEncoderState(png, info));
 }
 
 void PNGImageEncoder::writeOneRowToPng(unsigned char* pixels, PNGImageEncoderState* encoderState)
@@ -88,7 +96,7 @@ void PNGImageEncoder::finalizePng(PNGImageEncoderState* encoderState)
 
 static bool encodePixels(const IntSize& imageSize, const unsigned char* inputPixels, Vector<unsigned char>* output)
 {
-    OwnPtr<PNGImageEncoderState> encoderState = PNGImageEncoderState::create(imageSize, output);
+    std::unique_ptr<PNGImageEncoderState> encoderState = PNGImageEncoderState::create(imageSize, output);
     if (!encoderState.get())
         return false;
 

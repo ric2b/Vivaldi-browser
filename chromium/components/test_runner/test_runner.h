@@ -132,6 +132,10 @@ class TestRunner : public WebTestRunner {
   bool shouldDumpSpellCheckCallbacks() const;
   bool shouldWaitUntilExternalURLLoad() const;
   const std::set<std::string>* httpHeadersToClear() const;
+  bool is_web_platform_tests_mode() const {
+    return is_web_platform_tests_mode_;
+  }
+  void set_is_web_platform_tests_mode() { is_web_platform_tests_mode_ = true; }
 
   // To be called when |frame| starts loading - TestRunner will check if
   // there is currently no top-loading-frame being tracked and if so, then it
@@ -397,7 +401,6 @@ class TestRunner : public WebTestRunner {
 
   // WebContentSettingsClient related.
   void SetImagesAllowed(bool allowed);
-  void SetMediaAllowed(bool allowed);
   void SetScriptsAllowed(bool allowed);
   void SetStorageAllowed(bool allowed);
   void SetPluginsAllowed(bool allowed);
@@ -405,6 +408,13 @@ class TestRunner : public WebTestRunner {
   void SetAllowRunningOfInsecureContent(bool allowed);
   void SetAutoplayAllowed(bool allowed);
   void DumpPermissionClientCallbacks();
+
+  // Sets up a mock DocumentSubresourceFilter to disallow subsequent subresource
+  // loads within the current document with the given path |suffixes|. The
+  // filter is created and injected even if |suffixes| is empty. If |suffixes|
+  // contains the empty string, all subresource loads will be disallowed.
+  void SetDisallowedSubresourcePathSuffixes(
+      const std::vector<std::string>& suffixes);
 
   // This function sets a flag that tells the test_shell to dump all calls
   // to window.status().
@@ -537,7 +547,6 @@ class TestRunner : public WebTestRunner {
   bool IsFramePartOfMainTestWindow(blink::WebFrame*) const;
 
   void CheckResponseMimeType();
-  void CompleteNotifyDone();
 
   // In the Mac code, this is called to trigger the end of a test after the
   // page has finished loading. From here, we can generate the dump for the
@@ -567,22 +576,6 @@ class TestRunner : public WebTestRunner {
 
   // If true, the test_shell will output a base64 encoded WAVE file.
   bool dump_as_audio_;
-
-  // If true, output a descriptive line each time WebViewClient::createView
-  // is invoked.
-  bool dump_create_view_;
-
-  // If true, new windows can be opened via javascript or by plugins. By
-  // default, set to false and can be toggled to true using
-  // setCanOpenWindows().
-  bool can_open_windows_;
-
-  // If true, the test_shell will dump all changes to window.status.
-  bool dump_window_status_changes_;
-
-  // If true, the test_shell will output descriptive test for spellcheck
-  // execution.
-  bool dump_spell_check_callbacks_;
 
   // If true, the test_shell will produce a dump of the back forward list as
   // well.
@@ -637,6 +630,9 @@ class TestRunner : public WebTestRunner {
   blink::WebView* previously_focused_view_;
 
   std::set<blink::WebWidget*> widgets_with_scheduled_animations_;
+
+  // True if we run a test in LayoutTests/imported/{csswg-test,wpt}/.
+  bool is_web_platform_tests_mode_;
 
   base::WeakPtrFactory<TestRunner> weak_factory_;
 

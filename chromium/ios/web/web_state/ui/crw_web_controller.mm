@@ -13,6 +13,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/callback.h"
 #include "base/containers/mru_cache.h"
 #include "base/ios/block_types.h"
 #include "base/ios/ios_util.h"
@@ -29,6 +30,7 @@
 #include "base/mac/scoped_cftyperef.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/metrics/histogram.h"
+#include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string_util.h"
 #include "base/strings/sys_string_conversions.h"
@@ -54,14 +56,15 @@
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/cert_store.h"
 #include "ios/web/public/favicon_url.h"
+#import "ios/web/public/java_script_dialog_presenter.h"
 #include "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
+#import "ios/web/public/origin_util.h"
 #include "ios/web/public/referrer.h"
 #include "ios/web/public/referrer_util.h"
 #include "ios/web/public/ssl_status.h"
 #import "ios/web/public/url_scheme_util.h"
 #include "ios/web/public/url_util.h"
-#include "ios/web/public/user_metrics.h"
 #include "ios/web/public/web_client.h"
 #include "ios/web/public/web_kit_constants.h"
 #import "ios/web/public/web_state/context_menu_params.h"
@@ -98,8 +101,10 @@
 #import "ios/web/web_state/web_view_internal_creation_util.h"
 #import "ios/web/web_state/wk_web_view_security_util.h"
 #import "ios/web/webui/crw_web_ui_manager.h"
+#import "ios/web/webui/mojo_facade.h"
 #import "net/base/mac/url_conversions.h"
 #include "net/base/net_errors.h"
+#include "services/shell/public/cpp/interface_registry.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -434,6 +439,9 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
   // Handles downloading PassKit data for WKWebView. Lazy initialized.
   base::scoped_nsobject<CRWPassKitDownloader> _passKitDownloader;
 
+  // Backs up property with the same name.
+  std::unique_ptr<web::MojoFacade> _mojoFacade;
+
   // Referrer for the current page; does not include the fragment.
   base::scoped_nsobject<NSString> _currentReferrerString;
 
@@ -512,6 +520,9 @@ NSError* WKWebViewErrorWithSource(NSError* error, WKWebViewErrorSource source) {
 // Returns whether the desktop user agent should be used when setting the user
 // agent.
 @property(nonatomic, readonly) BOOL useDesktopUserAgent;
+
+// Facade for Mojo API.
+@property(nonatomic, readonly) web::MojoFacade* mojoFacade;
 
 // Removes the container view from the hierarchy and resets the ivar.
 - (void)resetContainerView;
@@ -792,7 +803,7 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
 // Returns YES if the url was succesfully opened in the native app.
 - (BOOL)urlTriggersNativeAppLaunch:(const GURL&)URL
                          sourceURL:(const GURL&)sourceURL
-                       linkClicked:(BOOL)linkClicked;
+           linkActivatedNavigation:(BOOL)linkActivatedNavigation;
 // Called when a JavaScript dialog, HTTP authentication dialog or window.open
 // call has been suppressed.
 - (void)didSuppressDialog;
@@ -842,6 +853,14 @@ typedef void (^ViewportStateCompletion)(const web::PageViewportState*);
                       password:(NSString*)password
              completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition,
                                          NSURLCredential*))completionHandler;
+
+// Helper to respond to |webView:runJavaScript...| delegate methods.
+// |completionHandler| must not be nil.
+- (void)runJavaScriptDialogOfType:(web::JavaScriptDialogType)type
+                 initiatedByFrame:(WKFrameInfo*)frame
+                          message:(NSString*)message
+                      defaultText:(NSString*)defaultText
+                       completion:(void (^)(BOOL, NSString*))completionHandler;
 
 // Called when WKWebView estimatedProgress has been changed.
 - (void)webViewEstimatedProgressDidChange;
@@ -1005,6 +1024,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 @synthesize usePlaceholderOverlay = _usePlaceholderOverlay;
 @synthesize loadPhase = _loadPhase;
 @synthesize shouldSuppressDialogs = _shouldSuppressDialogs;
+@synthesize useMojoForWebUI = _useMojoForWebUI;
 
 - (instancetype)initWithWebState:(WebStateImpl*)webState {
   self = [super init];
@@ -1119,12 +1139,6 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   [[_webViewProxy scrollViewProxy] removeObserver:self];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   [super dealloc];
-}
-
-- (BOOL)runUnloadListenerBeforeClosing {
-  // There's not much that can be done since there's limited access to WebKit.
-  // Always return that it's ok to close immediately.
-  return YES;
 }
 
 - (void)dismissKeyboard {
@@ -1533,6 +1547,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     case WKNavigationTypeLinkActivated:
       return YES;
     case WKNavigationTypeOther:
+      // Sometimes link navigation is not detected by navigation type, so
+      // check last user interaction with the page in the recent time.
       return [self userClickedRecently];
     default:
       return NO;
@@ -1694,10 +1710,12 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // Transfer time is registered so that further transitions within the time
   // envelope are not also registered as links.
   _lastTransferTimeInSeconds = CFAbsoluteTimeGetCurrent();
-  // Before changing phases, the delegate should be informed that any existing
-  // request is being cancelled before completion.
-  [self loadCancelled];
-  DCHECK(_loadPhase == web::PAGE_LOADED);
+  if (!(transition & ui::PAGE_TRANSITION_IS_REDIRECT_MASK)) {
+    // Before changing phases, the delegate should be informed that any existing
+    // request is being cancelled before completion.
+    [self loadCancelled];
+    DCHECK(_loadPhase == web::PAGE_LOADED);
+  }
 
   _loadPhase = web::LOAD_REQUESTED;
   _lastRegisteredRequestURL = requestURL;
@@ -1870,6 +1888,15 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // page, and should not be associated.
   if (_webUIManager)
     return;
+  // The WKWebViewConfiguration's |userScripts| are not injected when navigating
+  // via BFLI to a page created using window.history.pushState.  This means that
+  // calling window.history navigation functions will invoke WKWebView's
+  // non-overridden implementations, causing a mismatch between the
+  // WKBackForwardList and NavigationManager.
+  web::NavigationItemImpl* currentItem =
+      [self currentSessionEntry].navigationItemImpl;
+  if (currentItem->IsCreatedFromPushState())
+    return;
 
   web::WKBackForwardListItemHolder* holder =
       [self currentBackForwardListItemHolder];
@@ -1916,7 +1943,18 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
   const GURL currentUrl = [self currentNavigationURL];
 
-  error = web::NetErrorFromError(error);
+  if (web::IsWKWebViewSSLCertError(error)) {
+    // This could happen only if certificate is absent or could not be parsed.
+    error = web::NetErrorFromError(error, net::ERR_SSL_SERVER_CERT_BAD_FORMAT);
+#if defined(DEBUG)
+    net::SSLInfo info;
+    web::GetSSLInfoFromWKWebViewSSLCertError(error, &info);
+    CHECK(!error.cert);
+#endif
+  } else {
+    error = web::NetErrorFromError(error);
+  }
+
   BOOL isPost = [self isCurrentNavigationItemPOST];
   [self setNativeController:[_nativeProvider controllerForURL:currentUrl
                                                     withError:error
@@ -2124,7 +2162,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // implementation. This will be inaccurate if the reload fails or is
   // cancelled.
   _lastUserInteraction.reset();
-  web::RecordAction(UserMetricsAction("Reload"));
+  base::RecordAction(UserMetricsAction("Reload"));
   if (_webView) {
     web::NavigationItem* transientItem =
         _webStateImpl->GetNavigationManagerImpl().GetTransientItem();
@@ -2184,6 +2222,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
         // FinishPageLoad, passing the exact same URL.
         self.webStateImpl->GetRequestTracker()->FinishPageLoad(
             _URLOnStartLoading, false);
+        _webStateImpl->SetIsLoading(false);
       }
       [_delegate webLoadCancelled:_URLOnStartLoading];
       break;
@@ -2306,6 +2345,27 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   _webStateImpl->GetRequestTracker()->SetCacheModeFromUIThread(
       net::RequestTracker::CACHE_NORMAL);
 
+  // Rather than creating a new WKBackForwardListItem when loading WebUI pages,
+  // WKWebView will cache the WebUI HTML in the previous WKBackForwardListItem
+  // since it's loaded via |-loadHTML:forURL:| instead of an NSURLRequest.  As a
+  // result, the WebUI's HTML and URL will be loaded when navigating to that
+  // WKBackForwardListItem, causing a mismatch between the visible content and
+  // the visible URL (WebUI page will be visible, but URL will be the previous
+  // page's URL).  To prevent this potential URL spoofing vulnerability, reset
+  // the previous NavigationItem's WKBackForwardListItem to force loading via
+  // NSURLRequest.
+  if (_webUIManager) {
+    web::NavigationItem* lastNavigationItem =
+        self.sessionController.previousEntry.navigationItem;
+    if (lastNavigationItem) {
+      web::WKBackForwardListItemHolder* holder =
+          web::WKBackForwardListItemHolder::FromNavigationItem(
+              lastNavigationItem);
+      DCHECK(holder);
+      holder->set_back_forward_list_item(nil);
+    }
+  }
+
   [self restoreStateFromHistory];
   _webStateImpl->OnPageLoaded(currentURL, loadSuccess);
   _webStateImpl->SetIsLoading(false);
@@ -2418,6 +2478,15 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (BOOL)useDesktopUserAgent {
   web::NavigationItem* item = [self currentNavItem];
   return item && item->IsOverridingUserAgent();
+}
+
+- (web::MojoFacade*)mojoFacade {
+  if (!_mojoFacade) {
+    shell::mojom::InterfaceProvider* interfaceProvider =
+        _webStateImpl->GetMojoInterfaceRegistry();
+    _mojoFacade.reset(new web::MojoFacade(interfaceProvider, self));
+  }
+  return _mojoFacade.get();
 }
 
 - (CRWPassKitDownloader*)passKitDownloader {
@@ -2847,7 +2916,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     return NO;
   }
   std::vector<std::string> federations;
-  for (auto federation_value : *federations_value) {
+  for (const auto& federation_value : *federations_value) {
     std::string federation;
     if (!federation_value->GetAsString(&federation)) {
       DLOG(WARNING) << "JS message parameter 'federations' contains wrong type";
@@ -3250,7 +3319,11 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (BOOL)shouldAllowLoadWithNavigationAction:(WKNavigationAction*)action {
   NSURLRequest* request = action.request;
   GURL requestURL = net::GURLWithNSURL(request.URL);
-  BOOL isLinkClick = [self isLinkNavigation:action.navigationType];
+
+  // External application launcher needs |isNavigationTypeLinkActivated| to
+  // decide if the user intended to open the application by clicking on a link.
+  BOOL isNavigationTypeLinkActivated =
+      action.navigationType == WKNavigationTypeLinkActivated;
 
   // Check if the request should be delayed.
   if (_externalRequest && _externalRequest->url == requestURL) {
@@ -3261,7 +3334,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     // also because there would be nothing shown in that new tab; it would
     // remain on about:blank (see crbug.com/240178)
     if ([CRWWebController webControllerCanShow:requestURL] ||
-        ![_delegate openExternalURL:requestURL linkClicked:isLinkClick]) {
+        ![_delegate openExternalURL:requestURL
+                        linkClicked:isNavigationTypeLinkActivated]) {
       web::NewWindowInfo windowInfo = *_externalRequest;
       dispatch_async(dispatch_get_main_queue(), ^{
         [self openPopupWithInfo:windowInfo];
@@ -3276,11 +3350,13 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   // and move it to externalAppLauncher.
   BOOL isOpenInNewTabNavigation =
       !_webStateImpl->GetNavigationManager()->GetItemCount();
-  if (isLinkClick || isOpenInNewTabNavigation) {
+  BOOL isPossibleLinkClick = [self isLinkNavigation:action.navigationType];
+  if (isPossibleLinkClick || isOpenInNewTabNavigation ||
+      [self currentTransition] == ui::PAGE_TRANSITION_AUTO_BOOKMARK) {
     // Check If the URL is handled by a native app.
     if ([self urlTriggersNativeAppLaunch:requestURL
                                sourceURL:[self currentNavigationURL]
-                             linkClicked:isLinkClick]) {
+                 linkActivatedNavigation:isNavigationTypeLinkActivated]) {
       // External app has been launched successfully. Stop the current page
       // load operation (e.g. notifying all observers) and record the URL so
       // that errors reported following the 'NO' reply can be safely ignored.
@@ -3298,7 +3374,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   DCHECK(_webView);
   if (![self shouldOpenURL:requestURL
            mainDocumentURL:mainDocumentURL
-               linkClicked:isLinkClick]) {
+               linkClicked:isPossibleLinkClick]) {
     return NO;
   }
 
@@ -3315,7 +3391,8 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
     if ([self isMainFrameNavigationAction:action])
       [self stopLoading];
 
-    if ([_delegate openExternalURL:requestURL linkClicked:isLinkClick]) {
+    if ([_delegate openExternalURL:requestURL
+                       linkClicked:isNavigationTypeLinkActivated]) {
       // Record the URL so that errors reported following the 'NO' reply can be
       // safely ignored.
       [_openedApplicationURL addObject:request.URL];
@@ -3725,6 +3802,21 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
           credentialWithUser:user
                     password:password
                  persistence:NSURLCredentialPersistenceForSession]);
+}
+
+#pragma mark -
+#pragma mark JavaScript Dialog
+
+- (void)runJavaScriptDialogOfType:(web::JavaScriptDialogType)type
+                 initiatedByFrame:(WKFrameInfo*)frame
+                          message:(NSString*)message
+                      defaultText:(NSString*)defaultText
+                       completion:(void (^)(BOOL, NSString*))completionHandler {
+  self.webStateImpl->RunJavaScriptDialog(
+      net::GURLWithNSURL(frame.request.URL), type, message, defaultText,
+      base::BindBlock(^(bool success, NSString* input) {
+        completionHandler(success, input);
+      }));
 }
 
 #pragma mark -
@@ -4382,7 +4474,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 
 - (BOOL)urlTriggersNativeAppLaunch:(const GURL&)URL
                          sourceURL:(const GURL&)sourceURL
-                       linkClicked:(BOOL)linkClicked {
+           linkActivatedNavigation:(BOOL)linkActivatedNavigation {
   if (![_delegate respondsToSelector:@selector(urlTriggersNativeAppLaunch:
                                                                 sourceURL:
                                                               linkClicked:)]) {
@@ -4390,7 +4482,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   }
   return [_delegate urlTriggersNativeAppLaunch:URL
                                      sourceURL:sourceURL
-                                   linkClicked:linkClicked];
+                                   linkClicked:linkActivatedNavigation];
 }
 
 - (CGFloat)headerHeight {
@@ -4450,12 +4542,16 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   web::SSLStatus status;
   status.security_style = web::SECURITY_STYLE_AUTHENTICATION_BROKEN;
   status.cert_status = info.cert_status;
-  // |info.cert| can be null if certChain in NSError is empty or can not be
-  // parsed.
-  if (info.cert) {
-    status.cert_id = web::CertStore::GetInstance()->StoreCert(info.cert.get(),
-                                                              self.certGroupID);
+  if (!info.cert) {
+    // |info.cert| can be null if certChain in NSError is empty or can not be
+    // parsed, in this case do not ask delegate if error should be allowed, it
+    // should not be.
+    [self handleLoadError:error inMainFrame:YES];
+    return;
   }
+
+  status.cert_id = web::CertStore::GetInstance()->StoreCert(info.cert.get(),
+                                                            self.certGroupID);
 
   // Retrieve verification results from _certVerificationErrors cache to avoid
   // unnecessary recalculations. Verification results are cached for the leaf
@@ -4661,6 +4757,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   SEL cancelDialogsSelector = @selector(cancelDialogsForWebController:);
   if ([self.UIDelegate respondsToSelector:cancelDialogsSelector])
     [self.UIDelegate cancelDialogsForWebController:self];
+  _webStateImpl->CancelActiveAndPendingDialogs();
 
   if (allowCache)
     _expectedReconstructionURL = [self currentNavigationURL];
@@ -4679,6 +4776,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
   SEL cancelDialogsSelector = @selector(cancelDialogsForWebController:);
   if ([self.UIDelegate respondsToSelector:cancelDialogsSelector])
     [self.UIDelegate cancelDialogsForWebController:self];
+  _webStateImpl->CancelActiveAndPendingDialogs();
 
   SEL rendererCrashSelector = @selector(webControllerWebProcessDidCrash:);
   if ([self.delegate respondsToSelector:rendererCrashSelector])
@@ -4744,7 +4842,7 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
 - (void)stopLoading {
   _stoppedWKNavigation.reset(_latestWKNavigation);
 
-  web::RecordAction(UserMetricsAction("Stop"));
+  base::RecordAction(UserMetricsAction("Stop"));
   // Discard the pending and transient entried before notifying the tab model
   // observers of the change via |-abortLoad|.
   [[self sessionController] discardNonCommittedEntries];
@@ -4819,8 +4917,14 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
         runJavaScriptAlertPanelWithMessage:message
                                 requestURL:net::GURLWithNSURL(frame.request.URL)
                          completionHandler:completionHandler];
-  } else if (completionHandler) {
-    completionHandler();
+  } else {
+    [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_ALERT
+                   initiatedByFrame:frame
+                            message:message
+                        defaultText:nil
+                         completion:^(BOOL, NSString*) {
+                           completionHandler();
+                         }];
   }
 }
 
@@ -4845,8 +4949,16 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                                   requestURL:net::GURLWithNSURL(
                                                  frame.request.URL)
                            completionHandler:completionHandler];
-  } else if (completionHandler) {
-    completionHandler(NO);
+  } else {
+    [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_CONFIRM
+                   initiatedByFrame:frame
+                            message:message
+                        defaultText:nil
+                         completion:^(BOOL success, NSString*) {
+                           if (completionHandler) {
+                             completionHandler(success);
+                           }
+                         }];
   }
 }
 
@@ -4856,6 +4968,15 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                          initiatedByFrame:(WKFrameInfo*)frame
                         completionHandler:
                             (void (^)(NSString* result))completionHandler {
+  GURL origin(web::GURLOriginWithWKSecurityOrigin(frame.securityOrigin));
+  if (self.useMojoForWebUI && web::GetWebClient()->IsAppSpecificURL(origin) &&
+      _webUIManager) {
+    std::string mojoResponse =
+        self.mojoFacade->HandleMojoMessage(base::SysNSStringToUTF8(prompt));
+    completionHandler(base::SysUTF8ToNSString(mojoResponse));
+    return;
+  }
+
   if (self.shouldSuppressDialogs) {
     [self didSuppressDialog];
     completionHandler(nil);
@@ -4874,8 +4995,16 @@ const NSTimeInterval kSnapshotOverlayTransition = 0.5;
                                   defaultText:defaultText
                                    requestURL:requestURL
                             completionHandler:completionHandler];
-  } else if (completionHandler) {
-    completionHandler(nil);
+  } else {
+    [self runJavaScriptDialogOfType:web::JAVASCRIPT_DIALOG_TYPE_PROMPT
+                   initiatedByFrame:frame
+                            message:prompt
+                        defaultText:defaultText
+                         completion:^(BOOL, NSString* input) {
+                           if (completionHandler) {
+                             completionHandler(input);
+                           }
+                         }];
   }
 }
 

@@ -19,7 +19,7 @@
 namespace scheduler {
 namespace {
 const base::Feature kExpensiveTaskBlockingPolicyFeature{
-    "SchedulerExpensiveTaskBlocking", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SchedulerExpensiveTaskBlocking", base::FEATURE_ENABLED_BY_DEFAULT};
 }
 
 RendererScheduler::RendererScheduler() {
@@ -27,6 +27,8 @@ RendererScheduler::RendererScheduler() {
 
 RendererScheduler::~RendererScheduler() {
 }
+
+RendererScheduler::RAILModeObserver::~RAILModeObserver() = default;
 
 // static
 std::unique_ptr<RendererScheduler> RendererScheduler::Create() {
@@ -56,29 +58,6 @@ std::unique_ptr<RendererScheduler> RendererScheduler::Create() {
     scheduler->SetExpensiveTaskBlockingAllowed(blocking_allowed);
   }
   return base::WrapUnique<RendererScheduler>(scheduler.release());
-}
-
-// static
-const char* RendererScheduler::UseCaseToString(UseCase use_case) {
-  switch (use_case) {
-    case UseCase::NONE:
-      return "none";
-    case UseCase::COMPOSITOR_GESTURE:
-      return "compositor_gesture";
-    case UseCase::MAIN_THREAD_CUSTOM_INPUT_HANDLING:
-      return "main_thread_custom_input_handling";
-    case UseCase::SYNCHRONIZED_GESTURE:
-      return "synchronized_gesture";
-    case UseCase::TOUCHSTART:
-      return "touchstart";
-    case UseCase::LOADING:
-      return "loading";
-    case UseCase::MAIN_THREAD_GESTURE:
-      return "main_thread_gesture";
-    default:
-      NOTREACHED();
-      return nullptr;
-  }
 }
 
 // static

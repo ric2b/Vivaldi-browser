@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 
+#include <list>
 #include <memory>
 #include <string>
 #include <vector>
@@ -70,18 +71,24 @@ class UsbDevice : public base::RefCountedThreadSafe<UsbDevice> {
   const std::vector<UsbConfigDescriptor>& configurations() const {
     return configurations_;
   }
+  const UsbConfigDescriptor* active_configuration() const {
+    return active_configuration_;
+  }
 
-  // On ChromeOS the permission_broker service is used to change the ownership
-  // of USB device nodes so that Chrome can open them. On other platforms these
-  // functions are no-ops and always return true.
+  // On ChromeOS the permission_broker service must be used to open USB devices.
+  // This function asks it to check whether a future Open call will be allowed.
+  // On all other platforms this is a no-op and always returns true.
   virtual void CheckUsbAccess(const ResultCallback& callback);
+
+  // On Android applications must request permission from the user to access a
+  // USB device before it can be opened. After permission is granted the device
+  // properties may contain information not previously available. On all other
+  // platforms this is a no-op and always returns true.
+  virtual void RequestPermission(const ResultCallback& callback);
+  virtual bool permission_granted() const;
 
   // Creates a UsbDeviceHandle for further manipulation.
   virtual void Open(const OpenCallback& callback) = 0;
-
-  // Gets the UsbConfigDescriptor for the active device configuration or nullptr
-  // if the device is unconfigured.
-  virtual const UsbConfigDescriptor* GetActiveConfiguration() const = 0;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -101,11 +108,16 @@ class UsbDevice : public base::RefCountedThreadSafe<UsbDevice> {
             const base::string16& serial_number);
   virtual ~UsbDevice();
 
+  void ActiveConfigurationChanged(int configuration_value);
   void NotifyDeviceRemoved();
+
+  std::list<UsbDeviceHandle*>& handles() { return handles_; }
 
   // These members must be mutable by subclasses as necessary during device
   // enumeration. To preserve the thread safety of this object they must remain
   // constant afterwards.
+  uint16_t usb_version_;
+  uint16_t device_version_;
   base::string16 manufacturer_string_;
   base::string16 product_string_;
   base::string16 serial_number_;
@@ -117,15 +129,30 @@ class UsbDevice : public base::RefCountedThreadSafe<UsbDevice> {
 
  private:
   friend class base::RefCountedThreadSafe<UsbDevice>;
+  friend class UsbDeviceHandleImpl;
+  friend class UsbDeviceHandleUsbfs;
+  friend class UsbServiceAndroid;
+  friend class UsbServiceImpl;
+  friend class UsbServiceLinux;
+
+  void OnDisconnect();
+  void HandleClosed(UsbDeviceHandle* handle);
 
   const std::string guid_;
-  const uint16_t usb_version_;
   const uint8_t device_class_;
   const uint8_t device_subclass_;
   const uint8_t device_protocol_;
   const uint16_t vendor_id_;
   const uint16_t product_id_;
-  const uint16_t device_version_;
+
+  // The current device configuration descriptor. May be null if the device is
+  // in an unconfigured state; if not null, it is a pointer to one of the
+  // items at UsbDevice::configurations_.
+  const UsbConfigDescriptor* active_configuration_ = nullptr;
+
+  // Weak pointers to open handles. HandleClosed() will be called before each
+  // is freed.
+  std::list<UsbDeviceHandle*> handles_;
 
   base::ObserverList<Observer, true> observer_list_;
 

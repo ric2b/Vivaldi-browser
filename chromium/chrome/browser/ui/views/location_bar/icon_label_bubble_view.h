@@ -31,6 +31,8 @@ class Painter;
 // tab-to-search UI, and content settings.
 class IconLabelBubbleView : public views::InkDropHostView {
  public:
+  static constexpr int kTrailingPaddingPreMd = 2;
+
   IconLabelBubbleView(int contained_image,
                       const gfx::FontList& font_list,
                       SkColor parent_background_color,
@@ -76,7 +78,7 @@ class IconLabelBubbleView : public views::InkDropHostView {
 
   // The view has been activated by a user gesture such as spacebar. Returns
   // true if some handling was performed.
-  virtual bool OnActivate();
+  virtual bool OnActivate(const ui::Event& event);
 
   // views::View:
   gfx::Size GetPreferredSize() const override;
@@ -86,7 +88,8 @@ class IconLabelBubbleView : public views::InkDropHostView {
   void OnNativeThemeChanged(const ui::NativeTheme* native_theme) override;
   void AddInkDropLayer(ui::Layer* ink_drop_layer) override;
   void RemoveInkDropLayer(ui::Layer* ink_drop_layer) override;
-  std::unique_ptr<views::InkDropHover> CreateInkDropHover() const override;
+  std::unique_ptr<views::InkDropHighlight> CreateInkDropHighlight()
+      const override;
   SkColor GetInkDropBaseColor() const override;
 
   const gfx::FontList& font_list() const { return label_->font_list(); }
@@ -109,8 +112,14 @@ class IconLabelBubbleView : public views::InkDropHostView {
   // (or image, if the label is invisible) to the trailing edge of the view.
   int GetOuterPadding(bool leading) const;
 
+  // Horizontal position of the image trailing edge (i.e. just after the image).
+  int GetImageTrailingEdge() const;
+
   // Spacing between the image and the label.
   int GetInternalSpacing() const;
+
+  // Padding after the separator.
+  int GetPostSeparatorPadding() const;
 
   // views::View:
   const char* GetClassName() const override;
@@ -122,14 +131,6 @@ class IconLabelBubbleView : public views::InkDropHostView {
   // The contents of the bubble.
   views::ImageView* image_;
   views::Label* label_;
-
-  // How much horizontal padding (fully-transparent columns) is inside the
-  // image.  These are subtracted from the desired padding values when
-  // calculating the padding around the image, so that the image always appears
-  // to have the same visible padding no matter what its composition is.  Only
-  // used in MD.
-  int builtin_leading_padding_;
-  int builtin_trailing_padding_;
 
   bool is_extension_icon_;
 

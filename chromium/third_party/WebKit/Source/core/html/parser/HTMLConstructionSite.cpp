@@ -379,16 +379,6 @@ HTMLFormElement* HTMLConstructionSite::takeForm()
     return m_form.release();
 }
 
-void HTMLConstructionSite::dispatchDocumentElementAvailableIfNeeded()
-{
-    ASSERT(m_document);
-    if (m_document->frame() && !m_isParsingFragment) {
-        m_document->frame()->loader().dispatchDocumentElementAvailable();
-        m_document->frame()->loader().runScriptsAtDocumentElementAvailable();
-        // runScriptsAtDocumentElementAvailable might have invalidated m_document.
-    }
-}
-
 void HTMLConstructionSite::insertHTMLHtmlStartTagBeforeHTML(AtomicHTMLToken* token)
 {
     ASSERT(m_document);
@@ -399,7 +389,6 @@ void HTMLConstructionSite::insertHTMLHtmlStartTagBeforeHTML(AtomicHTMLToken* tok
 
     executeQueuedTasks();
     element->insertedByParser();
-    dispatchDocumentElementAvailableIfNeeded();
 }
 
 void HTMLConstructionSite::mergeAttributesFromTokenIntoElement(AtomicHTMLToken* token, Element* element)
@@ -738,10 +727,15 @@ void HTMLConstructionSite::takeAllChildren(HTMLStackItem* newParent, HTMLElement
     queueTask(task);
 }
 
+CreateElementFlags HTMLConstructionSite::getCreateElementFlags() const
+{
+    return m_isParsingFragment ? CreatedByFragmentParser : CreatedByParser;
+}
+
 Element* HTMLConstructionSite::createElement(AtomicHTMLToken* token, const AtomicString& namespaceURI)
 {
     QualifiedName tagName(nullAtom, token->name(), namespaceURI);
-    Element* element = ownerDocumentForCurrentNode().createElement(tagName, true);
+    Element* element = ownerDocumentForCurrentNode().createElement(tagName, getCreateElementFlags());
     setAttributes(element, token, m_parserContentPolicy);
     return element;
 }
@@ -762,7 +756,7 @@ HTMLElement* HTMLConstructionSite::createHTMLElement(AtomicHTMLToken* token)
     // FIXME: This can't use HTMLConstructionSite::createElement because we
     // have to pass the current form element.  We should rework form association
     // to occur after construction to allow better code sharing here.
-    HTMLElement* element = HTMLElementFactory::createHTMLElement(token->name(), document, form, true);
+    HTMLElement* element = HTMLElementFactory::createHTMLElement(token->name(), document, form, getCreateElementFlags());
     setAttributes(element, token, m_parserContentPolicy);
     return element;
 }

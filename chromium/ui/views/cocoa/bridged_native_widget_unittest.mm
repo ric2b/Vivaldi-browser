@@ -57,6 +57,64 @@ using base::SysUTF8ToNSString;
 
 namespace {
 
+// Implemented NSResponder action messages for use in tests.
+NSArray* const kMoveActions = @[
+  @"moveForward:",
+  @"moveRight:",
+  @"moveBackward:",
+  @"moveLeft:",
+  @"moveUp:",
+  @"moveDown:",
+  @"moveWordForward:",
+  @"moveWordBackward:",
+  @"moveToBeginningOfLine:",
+  @"moveToEndOfLine:",
+  @"moveToBeginningOfParagraph:",
+  @"moveToEndOfParagraph:",
+  @"moveToEndOfDocument:",
+  @"moveToBeginningOfDocument:",
+  @"pageDown:",
+  @"pageUp:",
+  @"moveWordRight:",
+  @"moveWordLeft:",
+  @"moveToLeftEndOfLine:",
+  @"moveToRightEndOfLine:"
+];
+
+NSArray* const kSelectActions = @[
+  @"moveBackwardAndModifySelection:",
+  @"moveForwardAndModifySelection:",
+  @"moveWordForwardAndModifySelection:",
+  @"moveWordBackwardAndModifySelection:",
+  @"moveUpAndModifySelection:",
+  @"moveDownAndModifySelection:",
+  @"moveToBeginningOfLineAndModifySelection:",
+  @"moveToEndOfLineAndModifySelection:",
+  @"moveToBeginningOfParagraphAndModifySelection:",
+  @"moveToEndOfParagraphAndModifySelection:",
+  @"moveToEndOfDocumentAndModifySelection:",
+  @"moveToBeginningOfDocumentAndModifySelection:",
+  @"pageDownAndModifySelection:",
+  @"pageUpAndModifySelection:",
+  @"moveParagraphForwardAndModifySelection:",
+  @"moveParagraphBackwardAndModifySelection:",
+  @"moveRightAndModifySelection:",
+  @"moveLeftAndModifySelection:",
+  @"moveWordRightAndModifySelection:",
+  @"moveWordLeftAndModifySelection:",
+  @"moveToLeftEndOfLineAndModifySelection:",
+  @"moveToRightEndOfLineAndModifySelection:"
+];
+
+NSArray* const kDeleteActions = @[
+  @"deleteForward:", @"deleteBackward:", @"deleteWordForward:",
+  @"deleteWordBackward:", @"deleteToBeginningOfLine:", @"deleteToEndOfLine:",
+  @"deleteToBeginningOfParagraph:", @"deleteToEndOfParagraph:"
+];
+
+NSArray* const kMiscActions =
+    @[ @"insertText:", @"cancelOperation:", @"transpose:" ];
+
 // Empty range shortcut for readibility.
 NSRange EmptyRange() {
   return NSMakeRange(NSNotFound, 0);
@@ -304,8 +362,10 @@ void BridgedNativeWidgetTest::InstallTextField(
 
   [ns_view_ setTextInputClient:textfield];
 
-  // Initialize the dummy text view.
-  dummy_text_view_.reset([[NSTextView alloc] initWithFrame:NSZeroRect]);
+  // Initialize the dummy text view. Initializing this with NSZeroRect causes
+  // weird NSTextView behavior on OSX 10.9.
+  dummy_text_view_.reset(
+      [[NSTextView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)]);
   [dummy_text_view_ setString:SysUTF16ToNSString(text)];
 }
 
@@ -944,29 +1004,7 @@ TEST_F(BridgedNativeWidgetTest, TextInput_DeleteToEndOfParagraph) {
 
 // Test move commands against expectations set by |dummy_text_view_|.
 TEST_F(BridgedNativeWidgetTest, TextInput_MoveEditingCommands) {
-  NSArray* selectors = @[
-    @"moveForward:",
-    @"moveRight:",
-    @"moveBackward:",
-    @"moveLeft:",
-    @"moveUp:",
-    @"moveDown:",
-    @"moveWordForward:",
-    @"moveWordBackward:",
-    @"moveToBeginningOfLine:",
-    @"moveToEndOfLine:",
-    @"moveToBeginningOfParagraph:",
-    @"moveToEndOfParagraph:",
-    @"moveToEndOfDocument:",
-    @"moveToBeginningOfDocument:",
-    @"pageDown:",
-    @"pageUp:",
-    @"moveWordRight:",
-    @"moveWordLeft:",
-    @"moveToLeftEndOfLine:",
-    @"moveToRightEndOfLine:"
-  ];
-  TestEditingCommands(selectors);
+  TestEditingCommands(kMoveActions);
 }
 
 // Todo(karandeepb): Enable this test once the behavior of all move and select
@@ -974,41 +1012,31 @@ TEST_F(BridgedNativeWidgetTest, TextInput_MoveEditingCommands) {
 // Test move and select commands against expectations set by |dummy_text_view_|.
 TEST_F(BridgedNativeWidgetTest,
        TextInput_MoveAndSelectEditingCommands_DISABLED) {
-  NSArray* selectors = @[
-    @"moveBackwardAndModifySelection:",
-    @"moveForwardAndModifySelection:",
-    @"moveWordForwardAndModifySelection:",
-    @"moveWordBackwardAndModifySelection:",
-    @"moveUpAndModifySelection:",
-    @"moveDownAndModifySelection:",
-    @"moveToBeginningOfLineAndModifySelection:",
-    @"moveToEndOfLineAndModifySelection:",
-    @"moveToBeginningOfParagraphAndModifySelection:",
-    @"moveToEndOfParagraphAndModifySelection:",
-    @"moveToEndOfDocumentAndModifySelection:",
-    @"moveToBeginningOfDocumentAndModifySelection:",
-    @"pageDownAndModifySelection:",
-    @"pageUpAndModifySelection:",
-    @"moveParagraphForwardAndModifySelection:",
-    @"moveParagraphBackwardAndModifySelection:",
-    @"moveRightAndModifySelection:",
-    @"moveLeftAndModifySelection:",
-    @"moveWordRightAndModifySelection:",
-    @"moveWordLeftAndModifySelection:",
-    @"moveToLeftEndOfLineAndModifySelection:",
-    @"moveToRightEndOfLineAndModifySelection:"
-  ];
-  TestEditingCommands(selectors);
+  TestEditingCommands(kSelectActions);
 }
 
 // Test delete commands against expectations set by |dummy_text_view_|.
 TEST_F(BridgedNativeWidgetTest, TextInput_DeleteCommands) {
-  NSArray* selectors = @[
-    @"deleteForward:", @"deleteBackward:", @"deleteWordForward:",
-    @"deleteWordBackward:", @"deleteToBeginningOfLine:", @"deleteToEndOfLine:",
-    @"deleteToBeginningOfParagraph:", @"deleteToEndOfParagraph:"
-  ];
-  TestEditingCommands(selectors);
+  TestEditingCommands(kDeleteActions);
+}
+
+// Test that we don't crash during an action message even if the TextInputClient
+// is nil. Regression test for crbug.com/615745.
+TEST_F(BridgedNativeWidgetTest, NilTextInputClient) {
+  [ns_view_ setTextInputClient:nil];
+  NSMutableArray* selectors = [NSMutableArray array];
+  [selectors addObjectsFromArray:kMoveActions];
+  [selectors addObjectsFromArray:kSelectActions];
+  [selectors addObjectsFromArray:kDeleteActions];
+  [selectors addObjectsFromArray:kMiscActions];
+
+  for (NSString* selector in selectors)
+    [ns_view_ doCommandBySelector:NSSelectorFromString(selector)];
+}
+
+// Test transpose command against expectations set by |dummy_text_view_|.
+TEST_F(BridgedNativeWidgetTest, TextInput_Transpose) {
+  TestEditingCommands(@[ @"transpose:" ]);
 }
 
 // Test firstRectForCharacterRange:actualRange for cases where query range is

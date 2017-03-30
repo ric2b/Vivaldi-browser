@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "platform/animation/CompositorScrollOffsetAnimationCurve.h"
+#include "platform/animation/TimingFunction.h"
 
 #include "cc/animation/scroll_offset_animation_curve.h"
 #include "cc/animation/timing_function.h"
@@ -30,11 +31,10 @@ static DurationBehavior GetDurationBehavior(CompositorScrollOffsetAnimationCurve
 
 CompositorScrollOffsetAnimationCurve::CompositorScrollOffsetAnimationCurve(
     FloatPoint targetValue,
-    TimingFunctionType timingFunction,
     ScrollDurationBehavior durationBehavior)
     : m_curve(cc::ScrollOffsetAnimationCurve::Create(
         gfx::ScrollOffset(targetValue.x(), targetValue.y()),
-        createTimingFunction(timingFunction),
+        cc::CubicBezierTimingFunction::CreatePreset(CubicBezierTimingFunction::EaseType::EASE_IN_OUT),
         GetDurationBehavior(durationBehavior)))
 {
 }
@@ -49,11 +49,6 @@ CompositorScrollOffsetAnimationCurve::~CompositorScrollOffsetAnimationCurve()
 {
 }
 
-CompositorAnimationCurve::AnimationCurveType CompositorScrollOffsetAnimationCurve::type() const
-{
-    return CompositorAnimationCurve::AnimationCurveTypeScrollOffset;
-}
-
 void CompositorScrollOffsetAnimationCurve::setInitialValue(FloatPoint initialValue)
 {
     m_curve->SetInitialValue(gfx::ScrollOffset(initialValue.x(), initialValue.y()));
@@ -63,6 +58,11 @@ FloatPoint CompositorScrollOffsetAnimationCurve::getValue(double time) const
 {
     gfx::ScrollOffset value = m_curve->GetValue(base::TimeDelta::FromSecondsD(time));
     return FloatPoint(value.x(), value.y());
+}
+
+void CompositorScrollOffsetAnimationCurve::applyAdjustment(IntSize adjustment)
+{
+    m_curve->ApplyAdjustment(gfx::Vector2dF(adjustment.width(), adjustment.height()));
 }
 
 double CompositorScrollOffsetAnimationCurve::duration() const

@@ -47,6 +47,8 @@ test("device_unittests") {
     "bluetooth/test/bluetooth_test_mac.mm",
     "bluetooth/test/bluetooth_test_win.cc",
     "bluetooth/test/bluetooth_test_win.h",
+    "bluetooth/test/mock_bluetooth_cbcharacteristic_mac.h",
+    "bluetooth/test/mock_bluetooth_cbcharacteristic_mac.mm",
     "bluetooth/test/mock_bluetooth_cbperipheral_mac.h",
     "bluetooth/test/mock_bluetooth_cbperipheral_mac.mm",
     "bluetooth/test/mock_bluetooth_cbservice_mac.h",
@@ -57,9 +59,11 @@ test("device_unittests") {
     "bluetooth/test/test_bluetooth_adapter_observer.h",
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.cc",
     "bluetooth/test/test_bluetooth_local_gatt_service_delegate.h",
+    "gamepad/gamepad_provider_unittest.cc",
     "nfc/nfc_chromeos_unittest.cc",
     "nfc/nfc_ndef_record_unittest.cc",
     "test/run_all_unittests.cc",
+    "vr/vr_device_manager_unittest.cc",
   ]
 
   deps = [
@@ -68,7 +72,13 @@ test("device_unittests") {
     "//device/battery:mojo_bindings",
     "//device/bluetooth",
     "//device/bluetooth:mocks",
+    "//device/gamepad",
+    "//device/gamepad:test_helpers",
     "//device/nfc",
+    "//device/power_save_blocker",
+    "//device/vr",
+    "//device/vr:fakes",
+    "//device/vr:mojo_bindings",
     "//mojo/common",
     "//mojo/edk/system",
     "//mojo/public/cpp/bindings",
@@ -133,14 +143,14 @@ test("device_unittests") {
       "//device/core",
       "//device/core:mocks",
       "//device/usb",
-      "//device/usb:mocks",
+      "//device/usb:test_support",
       "//device/usb/mojo",
       "//device/usb/public/interfaces",
     ]
   }
 
   # UsbContext is a libusb-specific object.
-  if (!is_android && !is_ios) {
+  if (is_mac || is_win) {
     sources += [ "usb/usb_context_unittest.cc" ]
     deps += [ "//third_party/libusb" ]
   }
@@ -150,6 +160,7 @@ test("device_unittests") {
     deps += [
       ":bluetooth_test_java",
       ":bluetooth_test_jni_headers",
+      "//device/usb:java",
     ]
     deps -= [ "//device/battery" ]
   }
@@ -171,6 +182,8 @@ test("device_unittests") {
       "bluetooth/bluez/bluetooth_audio_sink_bluez_unittest.cc",
       "bluetooth/bluez/bluetooth_bluez_unittest.cc",
       "bluetooth/bluez/bluetooth_gatt_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_service_attribute_value_bluez_unittest.cc",
+      "bluetooth/bluez/bluetooth_service_record_bluez_unittest.cc",
       "bluetooth/bluez/bluetooth_socket_bluez_unittest.cc",
       "bluetooth/dbus/bluetooth_gatt_application_service_provider_unittest.cc",
       "bluetooth/test/bluetooth_test_bluez.cc",
@@ -222,7 +235,18 @@ if (is_android) {
     java_files = bluetooth_java_sources_needing_jni
     deps = [
       "//base:base_java",
+      "//components/location/android:location_java",
       "//device/bluetooth:java",
     ]
+  }
+
+  junit_binary("device_junit_tests") {
+    java_files = [ "gamepad/android/junit/src/org/chromium/device/gamepad/GamepadMappingsTest.java" ]
+    deps = [
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//device/gamepad:java",
+    ]
+    srcjar_deps = [ "//device/gamepad:java_enums_srcjar" ]
   }
 }

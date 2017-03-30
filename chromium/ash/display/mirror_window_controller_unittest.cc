@@ -4,7 +4,7 @@
 
 #include "ash/display/mirror_window_controller.h"
 
-#include "ash/ash_switches.h"
+#include "ash/common/ash_switches.h"
 #include "ash/display/display_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/screen_util.h"
@@ -49,7 +49,6 @@ class MirrorOnBootTest : public test::AshTestBase {
  private:
   DISALLOW_COPY_AND_ASSIGN(MirrorOnBootTest);
 };
-
 }
 
 typedef test::AshTestBase MirrorWindowControllerTest;
@@ -243,7 +242,6 @@ TEST_F(MirrorWindowControllerTest, MAYBE_MirrorCursorMoveOnEnter) {
 
   // Check mirrored cursor's location.
   test::MirrorWindowTestApi test_api;
-  gfx::Point hot_point = test_api.GetCursorHotPoint();
   // Rotated hot point must be (25-7, 7).
   EXPECT_EQ("18,7", test_api.GetCursorHotPoint().ToString());
   // New coordinates are not (200,200) because (200,200) is not the center of

@@ -163,10 +163,11 @@ public class ContextualSearchTabHelper extends EmptyTabObserver {
      * @param cvc The content view core to attach the gesture state listener to.
      */
     private void addContextualSearchHooks(ContentViewCore cvc) {
-        if (mGestureStateListener == null) {
-            mGestureStateListener = getContextualSearchManager().getGestureStateListener();
+        ContextualSearchManager manager = getContextualSearchManager();
+        if (mGestureStateListener == null && manager != null) {
+            mGestureStateListener = manager.getGestureStateListener();
             cvc.addGestureStateListener(mGestureStateListener);
-            cvc.setContextualSearchClient(getContextualSearchManager());
+            cvc.setContextualSearchClient(manager);
         }
     }
 
@@ -192,13 +193,14 @@ public class ContextualSearchTabHelper extends EmptyTabObserver {
         if (manager == null) return false;
 
         return !cvc.getWebContents().isIncognito()
-            && !PrefServiceBridge.getInstance().isContextualSearchDisabled()
-            && TemplateUrlService.getInstance().isDefaultSearchEngineGoogle()
-            // Svelte and Accessibility devices are incompatible with the first-run flow and
-            // Talkback has poor interaction with tap to search (see http://crbug.com/399708 and
-            // http://crbug.com/396934).
-            // TODO(jeremycho): Handle these cases.
-            && !manager.isRunningInCompatibilityMode();
+                && !PrefServiceBridge.getInstance().isContextualSearchDisabled()
+                && TemplateUrlService.getInstance().isDefaultSearchEngineGoogle()
+                // Svelte and Accessibility devices are incompatible with the first-run flow and
+                // Talkback has poor interaction with tap to search (see http://crbug.com/399708 and
+                // http://crbug.com/396934).
+                // TODO(jeremycho): Handle these cases.
+                && !manager.isRunningInCompatibilityMode()
+                && !(mTab.isShowingErrorPage() || mTab.isShowingInterstitialPage());
     }
 
     /**

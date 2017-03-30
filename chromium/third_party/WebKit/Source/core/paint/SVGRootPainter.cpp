@@ -14,7 +14,6 @@
 #include "core/paint/TransformRecorder.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/graphics/paint/ClipRecorder.h"
-#include "platform/graphics/paint/ScopedPaintChunkProperties.h"
 #include "wtf/Optional.h"
 
 namespace blink {
@@ -39,38 +38,13 @@ void SVGRootPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintO
     if (svg->hasEmptyViewBox())
         return;
 
-    // Don't paint if we don't have kids, except if we have filters we should paint those.
-    if (!m_layoutSVGRoot.firstChild() && !SVGLayoutSupport::hasFilterResource(m_layoutSVGRoot))
-        return;
-
     PaintInfo paintInfoBeforeFiltering(paintInfo);
-
-    Optional<ScopedPaintChunkProperties> transformPropertyScope;
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-        const auto* objectProperties = m_layoutSVGRoot.objectPaintProperties();
-        if (objectProperties && objectProperties->svgLocalTransform()) {
-            auto& paintController = paintInfoBeforeFiltering.context.getPaintController();
-            PaintChunkProperties properties(paintController.currentPaintChunkProperties());
-            properties.transform = objectProperties->svgLocalTransform();
-            transformPropertyScope.emplace(paintController, properties);
-        } else if (objectProperties && objectProperties->paintOffsetTranslation() && !m_layoutSVGRoot.hasLayer()) {
-            // TODO(pdr): Always create an svgLocalTransform and remove this paint offset quirk.
-            // At the HTML->SVG boundary, SVGRoot will have a paint offset transform
-            // paint property but may not have a PaintLayer, so we need to update the
-            // paint properties here since they will not be updated by PaintLayer
-            // (See: PaintPropertyTreeBuilder::createPaintOffsetTranslationIfNeeded).
-            auto& paintController = paintInfoBeforeFiltering.context.getPaintController();
-            PaintChunkProperties properties(paintController.currentPaintChunkProperties());
-            properties.transform = objectProperties->paintOffsetTranslation();
-            transformPropertyScope.emplace(paintController, properties);
-        }
-    }
 
     // Apply initial viewport clip.
     Optional<ClipRecorder> clipRecorder;
     if (m_layoutSVGRoot.shouldApplyViewportClip()) {
         // TODO(pdr): Clip the paint info cull rect here.
-        clipRecorder.emplace(paintInfoBeforeFiltering.context, m_layoutSVGRoot, paintInfoBeforeFiltering.displayItemTypeForClipping(), LayoutRect(pixelSnappedIntRect(m_layoutSVGRoot.overflowClipRect(paintOffset))));
+        clipRecorder.emplace(paintInfoBeforeFiltering.context, m_layoutSVGRoot, paintInfoBeforeFiltering.displayItemTypeForClipping(), pixelSnappedIntRect(m_layoutSVGRoot.overflowClipRect(paintOffset)));
     }
 
     // Convert from container offsets (html layoutObjects) to a relative transform (svg layoutObjects).
@@ -84,7 +58,7 @@ void SVGRootPainter::paint(const PaintInfo& paintInfo, const LayoutPoint& paintO
     paintOffsetToBorderBox.multiply(m_layoutSVGRoot.localToBorderBoxTransform());
 
     paintInfoBeforeFiltering.updateCullRect(paintOffsetToBorderBox);
-    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGRoot, paintOffsetToBorderBox);
+    SVGTransformContext transformContext(paintInfoBeforeFiltering.context, m_layoutSVGRoot, paintOffsetToBorderBox);
 
     SVGPaintContext paintContext(m_layoutSVGRoot, paintInfoBeforeFiltering);
     if (paintContext.paintInfo().phase == PaintPhaseForeground && !paintContext.applyClipMaskAndFilterIfNecessary())

@@ -129,6 +129,9 @@
           <button id="display-options" i18n-content="displayOptions" disabled>
           </button>
         </span>
+        <button id="storage-manager-button"
+            i18n-content="storageManagerButtonTitle" hidden>
+        </button>
       </div>
       <div id="power-row" hidden>
         <a is="action-link" id="power-settings-link"
@@ -227,12 +230,19 @@
     <div class="checkbox controlled-setting-with-label">
       <label>
         <input id="android-apps-enabled" pref="arc.enabled"
-            metric="Options_AndroidApps" type="checkbox">
+            metric="Options_AndroidApps" type="checkbox" dialog-pref>
         <span>
           <span i18n-content="androidAppsEnabled"></span>
           <span class="controlled-setting-indicator"
                 pref="arc.enabled"></span>
         </span>
+      </label>
+      <a target="_blank" i18n-content="learnMore"
+          href="http://support.google.com/chromebook?p=playapps"></a>
+    </div>
+    <div id="android-apps-settings" class="controlled-setting-with-label" hidden>
+      <label>
+        <span id="android-apps-settings-label"></span>
       </label>
     </div>
   </section>
@@ -947,15 +957,18 @@
             data-type="number"
             aria-labelledby="accessibility-autoclick-label"
             pref="settings.a11y.autoclick_delay_ms">
-          <option value="200"
+          <!-- i18n strings contain the autoclick duration; if the autoclick
+               timing gets changed, then the 18n strings also needs to be
+               updated. -->
+          <option value="600"
               i18n-content="autoclickDelayExtremelyShort"></option>
-          <option value="400"
+          <option value="800"
               i18n-content="autoclickDelayVeryShort"></option>
-          <option value="600" i18n-content="autoclickDelayShort">
+          <option value="1000" i18n-content="autoclickDelayShort">
           </option>
-          <option value="800" i18n-content="autoclickDelayLong">
+          <option value="2000" i18n-content="autoclickDelayLong">
           </option>
-          <option value="1000"
+          <option value="4000"
               i18n-content="autoclickDelayVeryLong"></option>
         </select>
         <span class="controlled-setting-indicator"
@@ -988,46 +1001,46 @@
         </label>
       </div>
     </div>
+    <div class="option-name">
+      <div class="checkbox controlled-setting-with-label">
+        <label>
+          <input pref="settings.a11y.caret_highlight" type="checkbox"
+              metric="Options_AccessibilityCaretHighlight">
+          <span>
+            <span i18n-content="accessibilityCaretHighlight"></span>
+            <span class="controlled-setting-indicator"
+                pref="settings.a11y.caret_highlight"></span>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="option-name">
+      <div class="checkbox controlled-setting-with-label">
+        <label>
+          <input pref="settings.a11y.cursor_highlight" type="checkbox"
+              metric="Options_AccessibilityCursorHighlight">
+          <span>
+            <span i18n-content="accessibilityCursorHighlight"></span>
+            <span class="controlled-setting-indicator"
+                pref="settings.a11y.cursor_highlight"></span>
+          </span>
+        </label>
+      </div>
+    </div>
+    <div class="option-name">
+      <div class="checkbox controlled-setting-with-label">
+        <label>
+          <input pref="settings.a11y.focus_highlight" type="checkbox"
+              metric="Options_AccessibilityFocusHighlight">
+          <span>
+            <span i18n-content="accessibilityFocusHighlight"></span>
+            <span class="controlled-setting-indicator"
+                pref="settings.a11y.focus_highlight"></span>
+          </span>
+        </label>
+      </div>
+    </div>
     <div id="experimental-accessibility-features" hidden>
-      <div class="option-name">
-        <div class="checkbox controlled-setting-with-label">
-          <label>
-            <input pref="settings.a11y.caret_highlight" type="checkbox"
-                metric="Options_AccessibilityCaretHighlight">
-            <span>
-              <span i18n-content="accessibilityCaretHighlight"></span>
-              <span class="controlled-setting-indicator"
-                  pref="settings.a11y.caret_highlight"></span>
-            </span>
-          </label>
-        </div>
-      </div>
-      <div class="option-name">
-        <div class="checkbox controlled-setting-with-label">
-          <label>
-            <input pref="settings.a11y.cursor_highlight" type="checkbox"
-                metric="Options_AccessibilityCursorHighlight">
-            <span>
-              <span i18n-content="accessibilityCursorHighlight"></span>
-              <span class="controlled-setting-indicator"
-                  pref="settings.a11y.cursor_highlight"></span>
-            </span>
-          </label>
-        </div>
-      </div>
-      <div class="option-name">
-        <div class="checkbox controlled-setting-with-label">
-          <label>
-            <input pref="settings.a11y.focus_highlight" type="checkbox"
-                metric="Options_AccessibilityFocusHighlight">
-            <span>
-              <span i18n-content="accessibilityFocusHighlight"></span>
-              <span class="controlled-setting-indicator"
-                  pref="settings.a11y.focus_highlight"></span>
-            </span>
-          </label>
-        </div>
-      </div>
       <div class="option-name">
         <div class="checkbox controlled-setting-with-label">
           <label>

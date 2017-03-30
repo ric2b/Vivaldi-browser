@@ -4,41 +4,42 @@
 
 package org.chromium.chrome.browser.payments.ui;
 
-import java.util.ArrayList;
-
 /**
- * The data to show in the PaymentRequest UI when first showing the UI.
+ * The data to show in the PaymentRequest UI.
  */
 public class PaymentInformation {
-    private final ArrayList<LineItem> mLineItems;
+    private final ShoppingCart mShoppingCart;
     private final SectionInformation mShippingAddresses;
     private final SectionInformation mShippingOptions;
+    private final SectionInformation mContactDetails;
     private final SectionInformation mPaymentMethods;
 
     /**
-     * Builds the default payment information to show in the initial PaymentRequest view.
+     * Builds the payment information to show in the PaymentRequest view.
      *
-     * @param totalPrice The total price.
-     * @param defaultShippingAddress The default shipping address.
-     * @param defaultShippingOption The default shipping option.
-     * @param defaultPaymentMethod The default payment method.
-    */
-    public PaymentInformation(LineItem totalPrice, PaymentOption defaultShippingAddress,
-            PaymentOption defaultShippingOption, PaymentOption defaultPaymentMethod) {
-        mLineItems = new ArrayList<LineItem>(1);
-        mLineItems.add(totalPrice);
-        mShippingAddresses = new SectionInformation(defaultShippingAddress);
-        mShippingOptions = new SectionInformation(defaultShippingOption);
-        mPaymentMethods = new SectionInformation(defaultPaymentMethod);
+     * @param shoppingCart     The shopping cart.
+     * @param sippingAddresses The shipping addresses.
+     * @param shippingOptions  The shipping options.
+     * @param contactDetails   The contact details.
+     * @param paymentMethods   The payment methods.
+     */
+    public PaymentInformation(ShoppingCart shoppingCart, SectionInformation shippingAddresses,
+            SectionInformation shippingOptions, SectionInformation contactDetails,
+            SectionInformation paymentMethods) {
+        mShoppingCart = shoppingCart;
+        mShippingAddresses = shippingAddresses;
+        mShippingOptions = shippingOptions;
+        mContactDetails = contactDetails;
+        mPaymentMethods = paymentMethods;
     }
 
     /**
-     * Returns the line items on the bill.
+     * Returns the shopping cart.
      *
-     * @return The line items on the bill.
+     * @return The shopping cart.
      */
-    public ArrayList<LineItem> getLineItems() {
-        return mLineItems;
+    public ShoppingCart getShoppingCart() {
+        return mShoppingCart;
     }
 
     /**
@@ -87,6 +88,15 @@ public class PaymentInformation {
     public String getSelectedShippingOptionLabel() {
         PaymentOption option = mShippingOptions.getSelectedItem();
         return option != null ? option.getLabel() : null;
+    }
+
+    /**
+     * Returns the contact details.
+     *
+     * @return The contact details.
+     */
+    public SectionInformation getContactDetails() {
+        return mContactDetails;
     }
 
     /**

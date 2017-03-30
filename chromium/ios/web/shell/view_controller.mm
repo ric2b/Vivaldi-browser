@@ -11,7 +11,6 @@
 #include <memory>
 #include <utility>
 
-#include "base/mac/objc_property_releaser.h"
 #import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/net/cookies/cookie_store_ios.h"
@@ -27,6 +26,10 @@
 #import "net/base/mac/url_conversions.h"
 #include "ui/base/page_transition_types.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 NSString* const kWebShellBackButtonAccessibilityLabel = @"Back";
 NSString* const kWebShellForwardButtonAccessibilityLabel = @"Forward";
 NSString* const kWebShellAddressFieldAccessibilityLabel = @"Address field";
@@ -35,16 +38,15 @@ using web::NavigationManager;
 
 @interface ViewController ()<CRWWebStateDelegate,
                              CRWWebStateObserver,
-                             UITextFieldDelegate> {
+                             UITextFieldDelegate,
+                             UIToolbarDelegate> {
   web::BrowserState* _browserState;
   std::unique_ptr<web::WebState> _webState;
   std::unique_ptr<web::WebStateObserverBridge> _webStateObserver;
   std::unique_ptr<web::WebStateDelegateBridge> _webStateDelegate;
-
-  base::mac::ObjCPropertyReleaser _propertyReleaser_ViewController;
 }
 @property(nonatomic, assign, readonly) NavigationManager* navigationManager;
-@property(nonatomic, readwrite, retain) UITextField* field;
+@property(nonatomic, readwrite, strong) UITextField* field;
 @end
 
 @implementation ViewController
@@ -54,9 +56,8 @@ using web::NavigationManager;
 @synthesize toolbarView = _toolbarView;
 
 - (instancetype)initWithBrowserState:(web::BrowserState*)browserState {
-  self = [super initWithNibName:@"MainView" bundle:nil];
+  self = [super initWithNibName:nil bundle:nil];
   if (self) {
-    _propertyReleaser_ViewController.Init(self, [ViewController class]);
     _browserState = browserState;
   }
   return self;
@@ -65,11 +66,31 @@ using web::NavigationManager;
 - (void)dealloc {
   net::HTTPProtocolHandlerDelegate::SetInstance(nullptr);
   net::RequestTracker::SetRequestTrackerFactory(nullptr);
-  [super dealloc];
 }
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+
+  CGRect bounds = self.view.bounds;
+
+  // Set up the toolbar.
+  _toolbarView = [[UIToolbar alloc] init];
+  _toolbarView.barTintColor =
+      [UIColor colorWithRed:0.337 green:0.467 blue:0.988 alpha:1.0];
+  _toolbarView.frame = CGRectMake(0, 20, CGRectGetWidth(bounds), 44);
+  _toolbarView.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
+  _toolbarView.delegate = self;
+  [self.view addSubview:_toolbarView];
+
+  // Set up the container view.
+  _containerView = [[UIView alloc] init];
+  _containerView.frame =
+      CGRectMake(0, 64, CGRectGetWidth(bounds), CGRectGetHeight(bounds) - 64);
+  _containerView.backgroundColor = [UIColor lightGrayColor];
+  _containerView.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  [self.view addSubview:_containerView];
 
   // Set up the toolbar buttons.
   UIButton* back = [UIButton buttonWithType:UIButtonTypeCustom];

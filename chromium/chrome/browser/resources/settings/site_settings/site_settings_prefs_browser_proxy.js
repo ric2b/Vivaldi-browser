@@ -34,6 +34,12 @@ var ExceptionListPref;
  */
 var SiteSettingsPref;
 
+/**
+ * @typedef {{name: string,
+ *            id: string}}
+ */
+var MediaPickerEntry;
+
 cr.define('settings', function() {
   /** @interface */
   function SiteSettingsPrefsBrowserProxy() {}
@@ -41,21 +47,21 @@ cr.define('settings', function() {
   SiteSettingsPrefsBrowserProxy.prototype = {
     /**
      * Sets the default value for a site settings category.
-     * @param {number} contentType The category to change.
-     * @param {number} defaultValue The value to set as default.
+     * @param {string} contentType The name of the category to change.
+     * @param {string} defaultValue The name of the value to set as default.
      */
     setDefaultValueForContentType: function(contentType, defaultValue) {},
 
     /**
      * Gets the default value for a site settings category.
-     * @param {number} contentType The category to change.
+     * @param {string} contentType The name of the category to query.
      * @return {Promise<boolean>}
      */
     getDefaultValueForContentType: function(contentType) {},
 
     /**
      * Gets the exceptions (site list) for a particular category.
-     * @param {number} contentType The category to change.
+     * @param {string} contentType The name of the category to query.
      * @return {Promise<Array<SiteException>>}
      */
     getExceptionList: function(contentType) {},
@@ -66,7 +72,7 @@ cr.define('settings', function() {
      * @param {string} primaryPattern The origin to change (primary pattern).
      * @param {string} secondaryPattern The embedding origin to change
      *    (secondary pattern).
-     * @param {number} contentType The category to change.
+     * @param {string} contentType The name of the category to reset.
      */
     resetCategoryPermissionForOrigin: function(
         primaryPattern, secondaryPattern, contentType) {},
@@ -77,7 +83,7 @@ cr.define('settings', function() {
      * @param {string} primaryPattern The origin to change (primary pattern).
      * @param {string} secondaryPattern The embedding origin to change
      *    (secondary pattern).
-     * @param {number} contentType The category to change.
+     * @param {string} contentType The name of the category to change.
      * @param {string} value The value to change the permission to.
      */
     setCategoryPermissionForOrigin: function(
@@ -89,11 +95,25 @@ cr.define('settings', function() {
      * @return {!Promise<boolean>} True if the pattern is valid.
      */
     isPatternValid: function(pattern) {},
+
+    /**
+     * Gets the list of default capture devices for a given type of media. List
+     * is returned through a JS call to updateDevicesMenu.
+     * @param {string} type The type to look up.
+     */
+    getDefaultCaptureDevices: function(type) {},
+
+    /**
+     * Sets a default devices for a given type of media.
+     * @param {string} type The type of media to configure.
+     * @param {string} defaultValue The id of the media device to set.
+     */
+    setDefaultCaptureDevice: function(type, defaultValue) {},
   };
 
   /**
    * @constructor
-   * @implements {SiteSettingsPrefsBrowserProxy}
+   * @implements {settings.SiteSettingsPrefsBrowserProxy}
    */
   function SiteSettingsPrefsBrowserProxyImpl() {}
 
@@ -136,9 +156,19 @@ cr.define('settings', function() {
       return cr.sendWithPromise('isPatternValid', pattern);
     },
 
+    /** @override */
+    getDefaultCaptureDevices: function(type) {
+      chrome.send('getDefaultCaptureDevices', [type]);
+    },
+
+    /** @override */
+    setDefaultCaptureDevice: function(type, defaultValue) {
+      chrome.send('setDefaultCaptureDevice', [type, defaultValue]);
+    },
   };
 
   return {
+    SiteSettingsPrefsBrowserProxy: SiteSettingsPrefsBrowserProxy,
     SiteSettingsPrefsBrowserProxyImpl: SiteSettingsPrefsBrowserProxyImpl,
   };
 });

@@ -188,7 +188,7 @@ void TranslateInternalsHandler::SendMessageToJs(const std::string& message,
                                                 const base::Value& value) {
   const char func[] = "cr.translateInternals.messageHandler";
   base::StringValue message_data(message);
-  web_ui()->CallJavascriptFunction(func, message_data, value);
+  web_ui()->CallJavascriptFunctionUnsafe(func, message_data, value);
 }
 
 void TranslateInternalsHandler::SendPrefsToJs() {
@@ -232,9 +232,9 @@ void TranslateInternalsHandler::SendSupportedLanguagesToJs() {
   for (std::vector<std::string>::iterator it = languages.begin();
        it != languages.end(); ++it) {
     const std::string& lang = *it;
-    languages_list->Append(new base::StringValue(lang));
+    languages_list->AppendString(lang);
     if (translate::TranslateDownloadManager::IsAlphaLanguage(lang))
-      alpha_languages_list->Append(new base::StringValue(lang));
+      alpha_languages_list->AppendString(lang);
   }
 
   dict.Set("languages", languages_list);

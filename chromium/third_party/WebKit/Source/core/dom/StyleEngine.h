@@ -43,6 +43,7 @@
 #include "wtf/TemporaryChange.h"
 #include "wtf/Vector.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -122,6 +123,9 @@ public:
     void shadowRootRemovedFromDocument(ShadowRoot*);
     void appendActiveAuthorStyleSheets();
 
+    void setHasUnresolvedKeyframesRule() { m_hasUnresolvedKeyframesRule = true; }
+    void keyframesRulesAdded();
+
     StyleResolver* resolver() const
     {
         return m_resolver.get();
@@ -168,7 +172,9 @@ public:
     void attributeChangedForElement(const QualifiedName& attributeName, Element&);
     void idChangedForElement(const AtomicString& oldId, const AtomicString& newId, Element&);
     void pseudoStateChangedForElement(CSSSelector::PseudoType, Element&);
-
+    void scheduleSiblingInvalidationsForElement(Element&, ContainerNode& schedulingParent);
+    void scheduleInvalidationsForInsertedSibling(Element* beforeElement, Element& insertedElement);
+    void scheduleInvalidationsForRemovedSibling(Element* beforeElement, Element& removedElement, Element& afterElement);
     unsigned styleForElementCount() const { return m_styleForElementCount; }
     void incStyleForElementCount() { m_styleForElementCount++; }
 
@@ -252,6 +258,7 @@ private:
 
     bool m_ignorePendingStylesheets = false;
     bool m_didCalculateResolver = false;
+    bool m_hasUnresolvedKeyframesRule = false;
 
     Member<StyleResolver> m_resolver;
     StyleInvalidator m_styleInvalidator;
@@ -261,7 +268,7 @@ private:
     HeapHashMap<AtomicString, Member<StyleSheetContents>> m_textToSheetCache;
     HeapHashMap<Member<StyleSheetContents>, AtomicString> m_sheetToTextCache;
 
-    OwnPtr<StyleResolverStats> m_styleResolverStats;
+    std::unique_ptr<StyleResolverStats> m_styleResolverStats;
     unsigned m_styleForElementCount = 0;
 
     friend class StyleEngineTest;

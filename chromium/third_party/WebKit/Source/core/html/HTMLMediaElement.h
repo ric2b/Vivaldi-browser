@@ -40,6 +40,7 @@
 #include "public/platform/WebAudioSourceProviderClient.h"
 #include "public/platform/WebMediaPlayerClient.h"
 #include "public/platform/WebMimeRegistry.h"
+#include <memory>
 
 namespace blink {
 
@@ -47,6 +48,7 @@ class AudioSourceProviderClient;
 class AudioTrackList;
 class ContentType;
 class CueTimeline;
+class ElementVisibilityObserver;
 class EnumerationHistogram;
 class Event;
 class ExceptionState;
@@ -296,6 +298,13 @@ protected:
     void recordAutoplayMetric(AutoplayMetrics);
 
 private:
+    // These values are used for histograms. Do not reorder.
+    enum AutoplayUnmuteActionStatus {
+        AutoplayUnmuteActionFailure = 0,
+        AutoplayUnmuteActionSuccess = 1,
+        AutoplayUnmuteActionMax
+    };
+
     void resetMediaPlayerAndMediaSource();
 
     bool alwaysCreateUserAgentShadowRoot() const final { return true; }
@@ -469,6 +478,10 @@ private:
     // gesture is currently being processed.
     bool isGestureNeededForPlayback() const;
 
+    // Return true if and only if the settings allow autoplay of media on this
+    // frame.
+    bool isAutoplayAllowedPerSettings() const;
+
     void setNetworkState(NetworkState);
 
     void audioTracksTimerFired(Timer<HTMLMediaElement>*);
@@ -487,6 +500,9 @@ private:
     EnumerationHistogram& showControlsHistogram() const;
 
     void recordAutoplaySourceMetric(int source);
+    void recordAutoplayUnmuteStatus(AutoplayUnmuteActionStatus);
+
+    void onVisibilityChangedForAutoplay(bool isVisible);
 
     UnthrottledTimer<HTMLMediaElement> m_loadTimer;
     UnthrottledTimer<HTMLMediaElement> m_progressEventTimer;
@@ -544,7 +560,7 @@ private:
     DeferredLoadState m_deferredLoadState;
     Timer<HTMLMediaElement> m_deferredLoadTimer;
 
-    OwnPtr<WebMediaPlayer> m_webMediaPlayer;
+    std::unique_ptr<WebMediaPlayer> m_webMediaPlayer;
     WebLayer* m_webLayer;
 
     DisplayMode m_displayMode;
@@ -593,8 +609,8 @@ private:
     Member<CueTimeline> m_cueTimeline;
 
     HeapVector<Member<ScriptPromiseResolver>> m_playPromiseResolvers;
-    OwnPtr<CancellableTaskFactory> m_playPromiseResolveTask;
-    OwnPtr<CancellableTaskFactory> m_playPromiseRejectTask;
+    std::unique_ptr<CancellableTaskFactory> m_playPromiseResolveTask;
+    std::unique_ptr<CancellableTaskFactory> m_playPromiseRejectTask;
     HeapVector<Member<ScriptPromiseResolver>> m_playPromiseResolveList;
     HeapVector<Member<ScriptPromiseResolver>> m_playPromiseRejectList;
     ExceptionCode m_playPromiseErrorCode;
@@ -664,6 +680,9 @@ private:
     Member<AutoplayExperimentHelper> m_autoplayHelper;
 
     WebRemotePlaybackClient* m_remotePlaybackClient;
+
+    // class AutoplayVisibilityObserver;
+    Member<ElementVisibilityObserver> m_autoplayVisibilityObserver;
 
     static URLRegistry* s_mediaStreamRegistry;
 };

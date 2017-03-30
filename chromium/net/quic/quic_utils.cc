@@ -298,6 +298,7 @@ const char* QuicUtils::ErrorToString(QuicErrorCode error) {
     RETURN_STRING_LITERAL(QUIC_TOO_MANY_RTOS);
     RETURN_STRING_LITERAL(QUIC_ATTEMPT_TO_SEND_UNENCRYPTED_STREAM_DATA);
     RETURN_STRING_LITERAL(QUIC_MAYBE_CORRUPTED_MEMORY);
+    RETURN_STRING_LITERAL(QUIC_CRYPTO_CHLO_TOO_LARGE);
     RETURN_STRING_LITERAL(QUIC_LAST_ERROR);
     // Intentionally have no default case, so we'll break the build
     // if we add errors and don't put them here.
@@ -408,6 +409,19 @@ string QuicUtils::StringToHexASCIIDump(StringPiece in_buffer) {
     s += '\n';
   }
   return s;
+}
+
+string QuicUtils::PeerAddressChangeTypeToString(PeerAddressChangeType type) {
+  switch (type) {
+    RETURN_STRING_LITERAL(NO_CHANGE);
+    RETURN_STRING_LITERAL(PORT_CHANGE);
+    RETURN_STRING_LITERAL(IPV4_SUBNET_CHANGE);
+    RETURN_STRING_LITERAL(IPV4_TO_IPV6_CHANGE);
+    RETURN_STRING_LITERAL(IPV6_TO_IPV4_CHANGE);
+    RETURN_STRING_LITERAL(IPV6_TO_IPV6_CHANGE);
+    RETURN_STRING_LITERAL(UNSPECIFIED_CHANGE);
+  }
+  return "INVALID_PEER_ADDRESS_CHANGE_TYPE";
 }
 
 // static

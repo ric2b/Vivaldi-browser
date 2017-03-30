@@ -13,7 +13,6 @@ namespace {
 // These keystrokes are dropped to avoid recording outliers, as well as pauses
 // between actual segments of typing.
 const int kKeystrokeThresholdInSeconds = 5;
-
 }
 
 namespace ash {
@@ -30,7 +29,7 @@ void KeyboardUMAEventFilter::OnKeyEvent(ui::KeyEvent* event) {
 
   // Reset the timer on non-character keystrokes.
   if (!isprint(event->GetCharacter())) {
-    last_keystroke_time_ = base::TimeDelta();
+    last_keystroke_time_ = base::TimeTicks();
     return;
   }
 

@@ -5,8 +5,8 @@
 #ifndef ASH_TEST_SHELF_VIEW_TEST_API_H_
 #define ASH_TEST_SHELF_VIEW_TEST_API_H_
 
-#include "ash/shelf/shelf_item_delegate.h"
-#include "ash/shelf/shelf_item_types.h"
+#include "ash/common/shelf/shelf_item_delegate.h"
+#include "ash/common/shelf/shelf_item_types.h"
 #include "base/macros.h"
 
 namespace gfx {
@@ -20,6 +20,7 @@ class Event;
 
 namespace views {
 class Button;
+class InkDrop;
 }
 
 namespace ash {
@@ -66,6 +67,9 @@ class ShelfViewTestAPI {
   // Runs message loop and waits until all add/remove animations are done.
   void RunMessageLoopUntilAnimationsDone();
 
+  // Closes the app list or context menu if it is running.
+  void CloseMenu();
+
   // An accessor for |shelf_view|.
   ShelfView* shelf_view() { return shelf_view_; }
 
@@ -84,8 +88,13 @@ class ShelfViewTestAPI {
   // Returns the button space size.
   int GetButtonSpacing();
 
+  // Returns minimum distance before drag starts.
+  int GetMinimumDragDistance() const;
+
   // Wrapper for ShelfView::ButtonPressed.
-  void ButtonPressed(views::Button* sender, const ui::Event& event);
+  void ButtonPressed(views::Button* sender,
+                     const ui::Event& event,
+                     views::InkDrop* ink_drop);
 
   // Wrapper for ShelfView::SameDragType.
   bool SameDragType(ShelfItemType typea, ShelfItemType typeb) const;

@@ -122,14 +122,15 @@ DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
           GetPrefName(CONTENT_SETTINGS_TYPE_COOKIES))),
       CONTENT_SETTING_NUM_SETTINGS);
   UMA_HISTOGRAM_ENUMERATION(
+      "ContentSettings.DefaultPopupsSetting",
+      IntToContentSetting(prefs_->GetInteger(
+          GetPrefName(CONTENT_SETTINGS_TYPE_POPUPS))),
+      CONTENT_SETTING_NUM_SETTINGS);
+#if !defined(OS_IOS) && !defined(OS_ANDROID)
+  UMA_HISTOGRAM_ENUMERATION(
       "ContentSettings.DefaultImagesSetting",
       IntToContentSetting(prefs_->GetInteger(
           GetPrefName(CONTENT_SETTINGS_TYPE_IMAGES))),
-      CONTENT_SETTING_NUM_SETTINGS);
-  UMA_HISTOGRAM_ENUMERATION(
-      "ContentSettings.DefaultJavaScriptSetting",
-      IntToContentSetting(prefs_->GetInteger(
-          GetPrefName(CONTENT_SETTINGS_TYPE_JAVASCRIPT))),
       CONTENT_SETTING_NUM_SETTINGS);
   UMA_HISTOGRAM_ENUMERATION(
       "ContentSettings.DefaultPluginsSetting",
@@ -137,10 +138,19 @@ DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
           GetPrefName(CONTENT_SETTINGS_TYPE_PLUGINS))),
       CONTENT_SETTING_NUM_SETTINGS);
   UMA_HISTOGRAM_ENUMERATION(
-      "ContentSettings.DefaultPopupsSetting",
+      "ContentSettings.DefaultMouseCursorSetting",
       IntToContentSetting(prefs_->GetInteger(
-          GetPrefName(CONTENT_SETTINGS_TYPE_POPUPS))),
+          GetPrefName(CONTENT_SETTINGS_TYPE_MOUSELOCK))),
       CONTENT_SETTING_NUM_SETTINGS);
+#endif
+
+#if !defined(OS_IOS)
+  UMA_HISTOGRAM_ENUMERATION(
+      "ContentSettings.DefaultJavaScriptSetting",
+      IntToContentSetting(prefs_->GetInteger(
+          GetPrefName(CONTENT_SETTINGS_TYPE_JAVASCRIPT))),
+      CONTENT_SETTING_NUM_SETTINGS);
+
   UMA_HISTOGRAM_ENUMERATION(
       "ContentSettings.DefaultLocationSetting",
       IntToContentSetting(prefs_->GetInteger(
@@ -151,11 +161,7 @@ DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
       IntToContentSetting(prefs_->GetInteger(
           GetPrefName(CONTENT_SETTINGS_TYPE_NOTIFICATIONS))),
       CONTENT_SETTING_NUM_SETTINGS);
-  UMA_HISTOGRAM_ENUMERATION(
-      "ContentSettings.DefaultMouseCursorSetting",
-      IntToContentSetting(prefs_->GetInteger(
-          GetPrefName(CONTENT_SETTINGS_TYPE_MOUSELOCK))),
-      CONTENT_SETTING_NUM_SETTINGS);
+
   UMA_HISTOGRAM_ENUMERATION(
       "ContentSettings.DefaultMediaStreamMicSetting",
       IntToContentSetting(prefs_->GetInteger(
@@ -186,7 +192,12 @@ DefaultProvider::DefaultProvider(PrefService* prefs, bool incognito)
       IntToContentSetting(prefs_->GetInteger(
           GetPrefName(CONTENT_SETTINGS_TYPE_BLUETOOTH_GUARD))),
       CONTENT_SETTING_NUM_SETTINGS);
-
+  UMA_HISTOGRAM_ENUMERATION(
+      "ContentSettings.DefaultAutoplaySetting",
+      IntToContentSetting(prefs_->GetInteger(
+          GetPrefName(CONTENT_SETTINGS_TYPE_AUTOPLAY))),
+      CONTENT_SETTING_NUM_SETTINGS);
+#endif
   pref_change_registrar_.Init(prefs_);
   PrefChangeRegistrar::NamedChangeCallback callback = base::Bind(
       &DefaultProvider::OnPreferenceChanged, base::Unretained(this));

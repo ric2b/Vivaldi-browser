@@ -24,12 +24,16 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.PowerManager;
 import android.os.Process;
+import android.os.StatFs;
+import android.os.UserManager;
 import android.provider.Settings;
 import android.view.View;
 import android.view.ViewGroup.MarginLayoutParams;
 import android.view.Window;
 import android.view.WindowManager;
 import android.widget.TextView;
+
+import java.lang.reflect.Method;
 
 /**
  * Utility class to use new APIs that were added after ICS (API level 14).
@@ -110,6 +114,17 @@ public class ApiCompatibilityUtils {
             view.setTextDirection(textDirection);
         } else {
             // Do nothing. RTL text isn't supported before JB MR1.
+        }
+    }
+
+    /**
+     * See {@link android.view.View#setLabelFor(int)}.
+     */
+    public static void setLabelFor(View labelView, int id) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            labelView.setLabelFor(id);
+        } else {
+            // Do nothing. #setLabelFor() isn't supported before JB MR1.
         }
     }
 
@@ -496,6 +511,66 @@ public class ApiCompatibilityUtils {
             view.setTextAppearance(id);
         } else {
             view.setTextAppearance(view.getContext(), id);
+        }
+    }
+
+    /**
+     * See {@link android.os.StatFs#getBlockCount()}.
+     */
+    @SuppressWarnings("deprecation")
+    public static long getBlockCount(StatFs statFs) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            return statFs.getBlockCountLong();
+        } else {
+            return statFs.getBlockCount();
+        }
+    }
+
+    /**
+     * See {@link android.os.StatFs#getBlockSize()}.
+     */
+    @SuppressWarnings("deprecation")
+    public static long getBlockSize(StatFs statFs) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            return statFs.getBlockSizeLong();
+        } else {
+            return statFs.getBlockSize();
+        }
+    }
+
+    /**
+     * @param context The Android context, used to retrieve the UserManager system service.
+     * @return Whether the device is running in demo mode.
+     */
+    public static boolean isDemoUser(Context context) {
+        // UserManager#isDemoUser() is only available in Android versions greater than N.
+        if (!BuildInfo.isGreaterThanN()) return false;
+
+        try {
+            UserManager userManager = (UserManager) context.getSystemService(Context.USER_SERVICE);
+            Method isDemoUserMethod = UserManager.class.getMethod("isDemoUser");
+            boolean isDemoUser = (boolean) isDemoUserMethod.invoke(userManager);
+            return isDemoUser;
+        } catch (RuntimeException e) {
+            // Ignore to avoid crashing on startup.
+        } catch (Exception e) {
+            // Ignore.
+        }
+
+        return false;
+    }
+
+    /**
+     * @see Context#checkPermission(String, int, int)
+     */
+    public static int checkPermission(Context context, String permission, int pid, int uid) {
+        try {
+            return context.checkPermission(permission, pid, uid);
+        } catch (RuntimeException e) {
+            // Some older versions of Android throw odd errors when checking for permissions, so
+            // just swallow the exception and treat it as the permission is denied.
+            // crbug.com/639099
+            return PackageManager.PERMISSION_DENIED;
         }
     }
 }

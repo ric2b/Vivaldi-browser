@@ -64,6 +64,7 @@ public:
     void setAllowRunningOfInsecureContent(bool) override;
     void setAllowScriptsToCloseWindows(bool) override;
     void setAllowUniversalAccessFromFileURLs(bool) override;
+    void setAlwaysShowContextMenuOnTouch(bool) override;
     void setAntialiased2dCanvasEnabled(bool) override;
     void setAntialiasedClips2dCanvasEnabled(bool) override;
     void setAutoplayExperimentMode(const WebString&) override;
@@ -111,6 +112,7 @@ public:
     void setLoadsImagesAutomatically(bool) override;
     void setLoadWithOverviewMode(bool) override;
     void setShouldReuseGlobalForUnownedMainFrame(bool) override;
+    void setProgressBarCompletion(ProgressBarCompletion) override;
     void setLocalStorageEnabled(bool) override;
     void setMainFrameClipsContent(bool) override;
     void setMainFrameResizesAreOrientationChanges(bool) override;
@@ -193,7 +195,6 @@ public:
     void setViewportMetaZeroValuesQuirk(bool) override;
     void setWebGLErrorsToConsoleEnabled(bool) override;
     void setWebSecurityEnabled(bool) override;
-    void setWheelGesturesEnabled(bool) override;
     void setWideViewportQuirkEnabled(bool) override;
     void setXSSAuditorEnabled(bool) override;
 
@@ -211,7 +212,6 @@ public:
 
     void setMockGestureTapHighlightsEnabled(bool);
     bool mockGestureTapHighlightsEnabled() const;
-    bool wheelGesturesEnabled() const;
 
 private:
     Settings* m_settings;

@@ -14,8 +14,10 @@
 #include "core/inspector/ConsoleMessage.h"
 #include "modules/bluetooth/BluetoothCharacteristicProperties.h"
 #include "modules/bluetooth/BluetoothError.h"
+#include "modules/bluetooth/BluetoothRemoteGATTService.h"
 #include "modules/bluetooth/BluetoothSupplement.h"
 #include "public/platform/modules/bluetooth/WebBluetooth.h"
+#include <memory>
 
 namespace blink {
 
@@ -30,9 +32,10 @@ DOMDataView* ConvertWebVectorToDataView(const WebVector<uint8_t>& webVector)
 
 } // anonymous namespace
 
-BluetoothRemoteGATTCharacteristic::BluetoothRemoteGATTCharacteristic(ExecutionContext* context, PassOwnPtr<WebBluetoothRemoteGATTCharacteristicInit> webCharacteristic)
+BluetoothRemoteGATTCharacteristic::BluetoothRemoteGATTCharacteristic(ExecutionContext* context, std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit> webCharacteristic, BluetoothRemoteGATTService* service)
     : ActiveDOMObject(context)
     , m_webCharacteristic(std::move(webCharacteristic))
+    , m_service(service)
     , m_stopped(false)
 {
     m_properties = BluetoothCharacteristicProperties::create(m_webCharacteristic->characteristicProperties);
@@ -40,12 +43,12 @@ BluetoothRemoteGATTCharacteristic::BluetoothRemoteGATTCharacteristic(ExecutionCo
     ThreadState::current()->registerPreFinalizer(this);
 }
 
-BluetoothRemoteGATTCharacteristic* BluetoothRemoteGATTCharacteristic::take(ScriptPromiseResolver* resolver, PassOwnPtr<WebBluetoothRemoteGATTCharacteristicInit> webCharacteristic)
+BluetoothRemoteGATTCharacteristic* BluetoothRemoteGATTCharacteristic::take(ScriptPromiseResolver* resolver, std::unique_ptr<WebBluetoothRemoteGATTCharacteristicInit> webCharacteristic, BluetoothRemoteGATTService* service)
 {
     if (!webCharacteristic) {
         return nullptr;
     }
-    BluetoothRemoteGATTCharacteristic* characteristic = new BluetoothRemoteGATTCharacteristic(resolver->getExecutionContext(), std::move(webCharacteristic));
+    BluetoothRemoteGATTCharacteristic* characteristic = new BluetoothRemoteGATTCharacteristic(resolver->getExecutionContext(), std::move(webCharacteristic), service);
     // See note in ActiveDOMObject about suspendIfNeeded.
     characteristic->suspendIfNeeded();
     return characteristic;
@@ -133,13 +136,6 @@ private:
 
 ScriptPromise BluetoothRemoteGATTCharacteristic::readValue(ScriptState* scriptState)
 {
-#if OS(MACOSX)
-    // TODO(jlebel): Remove when readValue is implemented.
-    return ScriptPromise::rejectWithDOMException(scriptState,
-        DOMException::create(NotSupportedError,
-            "readValue is not implemented yet. See https://goo.gl/J6ASzs"));
-#endif // OS(MACOSX)
-
     WebBluetooth* webbluetooth = BluetoothSupplement::fromScriptState(scriptState);
 
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
@@ -178,13 +174,6 @@ private:
 
 ScriptPromise BluetoothRemoteGATTCharacteristic::writeValue(ScriptState* scriptState, const DOMArrayPiece& value)
 {
-#if OS(MACOSX)
-    // TODO(jlebel): Remove when writeValue is implemented.
-    return ScriptPromise::rejectWithDOMException(scriptState,
-        DOMException::create(NotSupportedError,
-            "writeValue is not implemented yet. See https://goo.gl/J6ASzs"));
-#endif // OS(MACOSX)
-
     WebBluetooth* webbluetooth = BluetoothSupplement::fromScriptState(scriptState);
     // Partial implementation of writeValue algorithm:
     // https://webbluetoothchrome.github.io/web-bluetooth/#dom-bluetoothgattcharacteristic-writevalue
@@ -208,13 +197,6 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::writeValue(ScriptState* scriptS
 
 ScriptPromise BluetoothRemoteGATTCharacteristic::startNotifications(ScriptState* scriptState)
 {
-#if OS(MACOSX)
-    // TODO(jlebel): Remove when startNotifications is implemented.
-    return ScriptPromise::rejectWithDOMException(scriptState,
-        DOMException::create(NotSupportedError,
-            "startNotifications is not implemented yet. See https://goo.gl/J6ASzs"));
-#endif // OS(MACOSX)
-
     WebBluetooth* webbluetooth = BluetoothSupplement::fromScriptState(scriptState);
     ScriptPromiseResolver* resolver = ScriptPromiseResolver::create(scriptState);
     ScriptPromise promise = resolver->promise();
@@ -241,6 +223,7 @@ ScriptPromise BluetoothRemoteGATTCharacteristic::stopNotifications(ScriptState* 
 
 DEFINE_TRACE(BluetoothRemoteGATTCharacteristic)
 {
+    visitor->trace(m_service);
     visitor->trace(m_properties);
     visitor->trace(m_value);
     EventTargetWithInlineData::trace(visitor);

@@ -68,7 +68,7 @@ bool EmbeddedWorkerRegistry::OnMessageReceived(const IPC::Message& message,
   // We might be more precise and record timed out request ids, but some
   // cumbersome bookkeeping is needed and the IPC messaging will soon migrate
   // to Mojo anyway.
-  return handled || worker->status() == EmbeddedWorkerInstance::STOPPING;
+  return handled || worker->status() == EmbeddedWorkerStatus::STOPPING;
 }
 
 void EmbeddedWorkerRegistry::Shutdown() {

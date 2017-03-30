@@ -22,7 +22,7 @@ LiveRegionsTest.prototype = {
 
   /** @override */
   setUp: function() {
-    global.backgroundObj.forceChromeVoxNextActive();
+    ChromeVoxState.instance.toggleNext(true);
     window.RoleType = chrome.automation.RoleType;
   },
 
@@ -43,7 +43,7 @@ LiveRegionsTest.prototype = {
    */
   doCmd: function(cmd) {
     return function() {
-      global.backgroundObj.onGotCommand(cmd);
+      ChromeVoxState.instance.onGotCommand(cmd);
     };
   },
 };
@@ -110,7 +110,7 @@ TEST_F('LiveRegionsTest', 'LiveRegionChangeAtomic', function() {
     function(rootNode) {
       var go = rootNode.find({ role: RoleType.button });
       mockFeedback.call(go.doDefault.bind(go))
-          .expectQueuedSpeech('Alpha')
+          .expectCategoryFlushSpeech('Alpha')
           .expectQueuedSpeech('Bravo')
           .expectQueuedSpeech('Charlie');
       mockFeedback.replay();

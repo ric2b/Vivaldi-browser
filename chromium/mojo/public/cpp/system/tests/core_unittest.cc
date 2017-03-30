@@ -465,12 +465,10 @@ TEST(CoreCppTest, TearDownWithMessagesEnqueued) {
 }
 
 TEST(CoreCppTest, ScopedHandleMoveCtor) {
-  ScopedSharedBufferHandle buffer1;
-  EXPECT_EQ(MOJO_RESULT_OK, CreateSharedBuffer(nullptr, 1024, &buffer1));
+  ScopedSharedBufferHandle buffer1 = SharedBufferHandle::Create(1024);
   EXPECT_TRUE(buffer1.is_valid());
 
-  ScopedSharedBufferHandle buffer2;
-  EXPECT_EQ(MOJO_RESULT_OK, CreateSharedBuffer(nullptr, 1024, &buffer2));
+  ScopedSharedBufferHandle buffer2 = SharedBufferHandle::Create(1024);
   EXPECT_TRUE(buffer2.is_valid());
 
   // If this fails to close buffer1, ScopedHandleBase::CloseIfNecessary() will
@@ -479,6 +477,45 @@ TEST(CoreCppTest, ScopedHandleMoveCtor) {
 
   EXPECT_TRUE(buffer1.is_valid());
   EXPECT_FALSE(buffer2.is_valid());
+}
+
+TEST(CoreCppTest, BasicSharedBuffer) {
+  ScopedSharedBufferHandle h0 = SharedBufferHandle::Create(100);
+  ASSERT_TRUE(h0.is_valid());
+
+  // Map everything.
+  ScopedSharedBufferMapping mapping = h0->Map(100);
+  ASSERT_TRUE(mapping);
+  static_cast<char*>(mapping.get())[50] = 'x';
+
+  // Duplicate |h0| to |h1|.
+  ScopedSharedBufferHandle h1 =
+      h0->Clone(SharedBufferHandle::AccessMode::READ_ONLY);
+  ASSERT_TRUE(h1.is_valid());
+
+  // Close |h0|.
+  h0.reset();
+
+  // The mapping should still be good.
+  static_cast<char*>(mapping.get())[51] = 'y';
+
+  // Unmap it.
+  mapping.reset();
+
+  // Map half of |h1|.
+  mapping = h1->MapAtOffset(50, 50);
+  ASSERT_TRUE(mapping);
+
+  // It should have what we wrote.
+  EXPECT_EQ('x', static_cast<char*>(mapping.get())[0]);
+  EXPECT_EQ('y', static_cast<char*>(mapping.get())[1]);
+
+  // Unmap it.
+  mapping.reset();
+  h1.reset();
+
+  // Creating a 1 EB shared buffer should fail without crashing.
+  EXPECT_FALSE(SharedBufferHandle::Create(1ULL << 60).is_valid());
 }
 
 // TODO(vtl): Write data pipe tests.

@@ -17,17 +17,14 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import org.chromium.base.ApiCompatibilityUtils;
+import org.chromium.base.Callback;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.firstrun.ProfileDataCache;
-import org.chromium.chrome.browser.ntp.NtpColorUtils;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.profiles.ProfileDownloader;
 import org.chromium.chrome.browser.signin.AccountTrackerService.OnSystemAccountsSeededListener;
-import org.chromium.chrome.browser.sync.SyncUserDataWiper;
-import org.chromium.chrome.browser.sync.ui.ConfirmImportSyncDataDialog;
-import org.chromium.chrome.browser.sync.ui.ConfirmImportSyncDataDialog.ImportSyncType;
-import org.chromium.signin.InvestigatedScenario;
+import org.chromium.chrome.browser.signin.ConfirmImportSyncDataDialog.ImportSyncType;
 import org.chromium.sync.signin.AccountManagerHelper;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
@@ -189,10 +186,9 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
     /**
      * Changes the visuals slightly for when this view appears in the recent tabs page instead of
      * in first run.
-     * This is currently used in the Recent Tabs Promo and the bookmarks page.
+     * This is currently used when signing in from the Recent Tabs or Bookmarks pages.
      */
     public void configureForRecentTabsOrBookmarksPage() {
-        setBackgroundColor(NtpColorUtils.getBackgroundColorResource(getResources(), false));
         mCancelButtonTextId = R.string.cancel;
         setUpCancelButton();
     }
@@ -372,33 +368,25 @@ public class AccountSigninView extends FrameLayout implements ProfileDownloader.
 
     private void showConfirmSigninPagePreviousAccountCheck() {
         String accountName = getSelectedAccountName();
-        if (SigninInvestigator.investigate(accountName) == InvestigatedScenario.DIFFERENT_ACCOUNT) {
-            ConfirmImportSyncDataDialog.showNewInstance(
-                    PrefServiceBridge.getInstance().getSyncLastAccountName(), accountName,
-                    ImportSyncType.PREVIOUS_DATA_FOUND, mDelegate.getFragmentManager(),
-                    new ConfirmImportSyncDataDialog.Listener() {
-                        @Override
-                        public void onConfirm(boolean wipeData) {
-                            if (wipeData) {
-                                SyncUserDataWiper.wipeSyncUserData(new Runnable(){
+        ConfirmSyncDataStateMachine.run(PrefServiceBridge.getInstance().getSyncLastAccountName(),
+                accountName, ImportSyncType.PREVIOUS_DATA_FOUND, mDelegate.getFragmentManager(),
+                getContext(), new ConfirmImportSyncDataDialog.Listener() {
+                    @Override
+                    public void onConfirm(boolean wipeData) {
+                        SigninManager.wipeSyncUserDataIfRequired(wipeData)
+                                .then(new Callback<Void>() {
                                     @Override
-                                    public void run() {
+                                    public void onResult(Void v) {
                                         showConfirmSigninPage();
                                     }
                                 });
-                            } else {
-                                showConfirmSigninPage();
-                            }
-                        }
+                    }
 
-                        @Override
-                        public void onCancel() {
-                            setButtonsEnabled(true);
-                        }
-                    });
-        } else {
-            showConfirmSigninPage();
-        }
+                    @Override
+                    public void onCancel() {
+                        setButtonsEnabled(true);
+                    }
+                });
     }
 
     private void setUpCancelButton() {

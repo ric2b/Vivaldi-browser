@@ -5,11 +5,9 @@
 #import "chrome/browser/ui/cocoa/browser/exclusive_access_controller_views.h"
 
 #include "chrome/browser/download/download_shelf.h"
-#include "chrome/browser/fullscreen.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/cocoa/accelerators_cocoa.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
-#import "chrome/browser/ui/cocoa/exclusive_access_bubble_window_controller.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/status_bubble.h"
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
@@ -35,23 +33,10 @@ ExclusiveAccessController::ExclusiveAccessController(
 ExclusiveAccessController::~ExclusiveAccessController() {}
 
 void ExclusiveAccessController::Show() {
-  if (ExclusiveAccessManager::IsSimplifiedFullscreenUIEnabled()) {
-    // Hide the backspace shortcut bubble, to avoid overlapping.
-    new_back_shortcut_bubble_.reset();
+  // Hide the backspace shortcut bubble, to avoid overlapping.
+  new_back_shortcut_bubble_.reset();
 
-    views_bubble_.reset(
-        new ExclusiveAccessBubbleViews(this, url_, bubble_type_));
-    return;
-  }
-
-  [cocoa_bubble_ closeImmediately];
-  cocoa_bubble_.reset([[ExclusiveAccessBubbleWindowController alloc]
-                 initWithOwner:controller_
-      exclusive_access_manager:browser_->exclusive_access_manager()
-                       profile:browser_->profile()
-                           url:url_
-                    bubbleType:bubble_type_]);
-  [cocoa_bubble_ showWindow];
+  views_bubble_.reset(new ExclusiveAccessBubbleViews(this, url_, bubble_type_));
 }
 
 void ExclusiveAccessController::MaybeShowNewBackShortcutBubble(bool forward) {
@@ -91,8 +76,6 @@ void ExclusiveAccessController::HideNewBackShortcutBubble() {
 
 void ExclusiveAccessController::Destroy() {
   views_bubble_.reset();
-  [cocoa_bubble_ closeImmediately];
-  cocoa_bubble_.reset();
   url_ = GURL();
   bubble_type_ = EXCLUSIVE_ACCESS_BUBBLE_TYPE_NONE;
 }
@@ -100,7 +83,6 @@ void ExclusiveAccessController::Destroy() {
 void ExclusiveAccessController::Layout(CGFloat max_y) {
   if (views_bubble_)
     views_bubble_->RepositionIfVisible();
-  [cocoa_bubble_ positionInWindowAtTop:max_y];
 }
 
 Profile* ExclusiveAccessController::GetProfile() {
@@ -111,12 +93,9 @@ bool ExclusiveAccessController::IsFullscreen() const {
   return [controller_ isInAnyFullscreenMode];
 }
 
-bool ExclusiveAccessController::SupportsFullscreenWithToolbar() const {
-  return chrome::mac::SupportsSystemFullscreen();
-}
-
-void ExclusiveAccessController::UpdateFullscreenWithToolbar(bool with_toolbar) {
-  [controller_ updateFullscreenWithToolbar:with_toolbar];
+void ExclusiveAccessController::UpdateUIForTabFullscreen(
+    TabFullscreenState state) {
+  [controller_ updateUIForTabFullscreen:state];
 }
 
 void ExclusiveAccessController::UpdateFullscreenToolbar() {
@@ -125,27 +104,20 @@ void ExclusiveAccessController::UpdateFullscreenToolbar() {
   [controller_ setFullscreenToolbarVisible:showToolbar];
 }
 
-bool ExclusiveAccessController::IsFullscreenWithToolbar() const {
-  return IsFullscreen() && ![controller_ inPresentationMode];
-}
-
 // See the Fullscreen terminology section and the (Fullscreen) interface
 // category in browser_window_controller.h for a detailed explanation of the
 // logic in this method.
 void ExclusiveAccessController::EnterFullscreen(
     const GURL& url,
-    ExclusiveAccessBubbleType bubble_type,
-    bool with_toolbar) {
+    ExclusiveAccessBubbleType bubble_type) {
   url_ = url;
   bubble_type_ = bubble_type;
   if (browser_->exclusive_access_manager()
           ->fullscreen_controller()
           ->IsWindowFullscreenForTabOrPending())
     [controller_ enterWebContentFullscreen];
-  else if (!url.is_empty())
-    [controller_ enterExtensionFullscreen];
   else
-    [controller_ enterBrowserFullscreenWithToolbar:with_toolbar];
+    [controller_ enterBrowserFullscreen];
 }
 
 void ExclusiveAccessController::ExitFullscreen() {

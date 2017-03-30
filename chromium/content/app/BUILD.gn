@@ -8,8 +8,8 @@ import("//build/config/features.gni")
 content_app_sources = [
   "android/app_jni_registrar.cc",
   "android/app_jni_registrar.h",
-  "android/child_process_service.cc",
-  "android/child_process_service.h",
+  "android/child_process_service_impl.cc",
+  "android/child_process_service_impl.h",
   "android/content_jni_onload.cc",
   "android/content_main.cc",
   "android/content_main.h",
@@ -45,6 +45,7 @@ if (is_win) {
   content_app_sources -= [ "content_main.cc" ]
   content_app_deps += [
     "//content/public/android:jni",
+    "//device/gamepad",
     "//device/usb",
     "//device/vibration",
     "//skia",

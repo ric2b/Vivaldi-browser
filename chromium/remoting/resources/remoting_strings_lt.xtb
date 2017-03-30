@@ -130,6 +130,7 @@ priegloba</translation>
 <translation id="4156740505453712750">Jei norite apsaugoti prieigą prie šio kompiuterio, pasirinkite <ph name="BOLD_START" />bent šešių skaitmenų<ph name="BOLD_END" /> PIN kodą. Šio PIN kodo reikės prisijungiant iš kitos vietos.</translation>
 <translation id="4176825807642096119">Prieigos kodas</translation>
 <translation id="4207623512727273241">Paleiskite diegimo programą prieš tęsdami.</translation>
+<translation id="4227991223508142681">Prieglobos aprūpinimo paslaugų programa</translation>
 <translation id="4240294130679914010">„Chrome“ nuotolinio ryšio prieglobos pašalinimo priemonė</translation>
 <translation id="4277463233460010382">Šis kompiuteris sukonfigūruotas leisti vienam ar keliems klientams prisijungti neįvedus PIN kodo.</translation>
 <translation id="4277736576214464567">Netinkamas prieigos kodas. Bandykite dar kartą.</translation>
@@ -229,7 +230,7 @@ valdymo priegloba</translation>
 <translation id="6668065415969892472">PIN kodas atnaujintas.</translation>
 <translation id="6681800064886881394">Autorių teisės priklauso „Google Inc.“, 2013 m. Visos teisės saugomos.</translation>
 <translation id="6746493157771801606">Išvalyti istoriją</translation>
-<translation id="6748108480210050150">Ryšį užmezga</translation>
+<translation id="6748108480210050150">Nuo</translation>
 <translation id="677755392401385740">Pradėta naudotojo priegloba: <ph name="HOST_USERNAME" />.</translation>
 <translation id="6865175692670882333">Žiūrėti / redaguoti</translation>
 <translation id="6930242544192836755">Trukmė</translation>
@@ -237,7 +238,7 @@ valdymo priegloba</translation>
 <translation id="6944854424004126054">Atkurti langą</translation>
 <translation id="6965382102122355670">Gerai</translation>
 <translation id="6985691951107243942">Ar tikrai norite neleisti nuotolinio ryšio su „<ph name="HOSTNAME" />“? Jei apsigalvosite, turėsite iš naujo įgalinti ryšį tame kompiuteryje.</translation>
-<translation id="6998989275928107238">Ryšys užmezgamas su</translation>
+<translation id="6998989275928107238">Kam</translation>
 <translation id="7019153418965365059">Neatpažinta prieglobos klaida: <ph name="HOST_OFFLINE_REASON" />.</translation>
 <translation id="701976023053394610">Nuotolinė pagalba</translation>
 <translation id="7038683108611689168">Leidę mums kaupti naudojimo statistiką ir strigčių ataskaitas, padėsite tobulinti „Chrome“ nuotolinį ryšį.</translation>
@@ -261,6 +262,7 @@ valdymo priegloba</translation>
 <translation id="7836926030608666805">Trūksta kai kurių būtinų komponentų. Įsitikinkite, kad naudojate naujausios versijos „Chrome“, ir bandykite dar kartą.</translation>
 <translation id="7868137160098754906">Įveskite nuotolinio kompiuterio PIN kodą.</translation>
 <translation id="7869445566579231750">Neturite leidimo paleisti šią programą.</translation>
+<translation id="7895403300744144251">Pagal nuotolinio kompiuterio saugos politiką neleidžiama prisijungti naudojant jūsų paskyrą.</translation>
 <translation id="7948001860594368197">Ekrano parinktys</translation>
 <translation id="7970576581263377361">Nepavyko autentifikuoti. Dar kartą prisijunkite prie „Chromium“.</translation>
 <translation id="7981525049612125370">Baigėsi nuotolinės sesijos galiojimo laikas.</translation>

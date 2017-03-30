@@ -131,11 +131,12 @@ void WebUIScreenLocker::ShowErrorMessage(
 }
 
 void WebUIScreenLocker::AnimateAuthenticationSuccess() {
-  GetWebUI()->CallJavascriptFunction("cr.ui.Oobe.animateAuthenticationSuccess");
+  GetWebUI()->CallJavascriptFunctionUnsafe(
+      "cr.ui.Oobe.animateAuthenticationSuccess");
 }
 
 void WebUIScreenLocker::ClearErrors() {
-  GetWebUI()->CallJavascriptFunction("cr.ui.Oobe.clearErrors");
+  GetWebUI()->CallJavascriptFunctionUnsafe("cr.ui.Oobe.clearErrors");
 }
 
 gfx::NativeWindow WebUIScreenLocker::GetNativeWindow() const {
@@ -150,13 +151,14 @@ void WebUIScreenLocker::FocusUserPod() {
   if (!webui_ready_)
     return;
   webui_login_->RequestFocus();
-  GetWebUI()->CallJavascriptFunction("cr.ui.Oobe.forceLockedUserPodFocus");
+  GetWebUI()->CallJavascriptFunctionUnsafe(
+      "cr.ui.Oobe.forceLockedUserPodFocus");
 }
 
 void WebUIScreenLocker::ResetAndFocusUserPod() {
   if (!webui_ready_)
     return;
-  GetWebUI()->CallJavascriptFunction("cr.ui.Oobe.clearUserPodPassword");
+  GetWebUI()->CallJavascriptFunctionUnsafe("cr.ui.Oobe.clearUserPodPassword");
   FocusUserPod();
 }
 
@@ -303,7 +305,8 @@ void WebUIScreenLocker::OnLockStateEvent(
     // Release capture if any.
     aura::client::GetCaptureClient(GetNativeWindow()->GetRootWindow())->
         SetCapture(NULL);
-    GetWebUI()->CallJavascriptFunction("cr.ui.Oobe.animateOnceFullyDisplayed");
+    GetWebUI()->CallJavascriptFunctionUnsafe(
+        "cr.ui.Oobe.animateOnceFullyDisplayed");
   }
 }
 
@@ -348,27 +351,6 @@ void WebUIScreenLocker::RenderProcessGone(base::TerminationStatus status) {
     LOG(ERROR) << "Renderer crash on lock screen; signing out";
     Signout();
   }
-}
-
-void WebUIScreenLocker::PluginCrashed(const base::FilePath& plugin_path,
-                                      base::ProcessId plugin_pid) {
-  LOG(ERROR) << "Plugin crash on lock screen (plugin_path: "
-             << plugin_path.LossyDisplayName() << " plugin_pid: " << plugin_pid
-             << ")";
-}
-
-void WebUIScreenLocker::PluginHungStatusChanged(
-    int plugin_child_id,
-    const base::FilePath& plugin_path,
-    bool is_hung) {
-  LOG(ERROR) << "Plugin hung status change on lock screen;"
-             << " (plugin_child_id: " << plugin_child_id
-             << " plugin_path: " << plugin_path.LossyDisplayName()
-             << " is_hung: " << is_hung << ")";
-}
-
-void WebUIScreenLocker::WebContentsDestroyed() {
-  VLOG(2) << "Lock screen WebContents instance destroyed";
 }
 
 ////////////////////////////////////////////////////////////////////////////////

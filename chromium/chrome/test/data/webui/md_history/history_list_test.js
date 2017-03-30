@@ -5,14 +5,16 @@
 cr.define('md_history.history_list_test', function() {
   function registerTests() {
     suite('history-list', function() {
+      var app;
       var element;
       var toolbar;
       var TEST_HISTORY_RESULTS;
       var ADDITIONAL_RESULTS;
 
       suiteSetup(function() {
-        element = $('history-app').$['history-list'];
-        toolbar = $('history-app').$['toolbar'];
+        app = $('history-app');
+        element = app.$['history-list'];
+        toolbar = app.$['toolbar'];
 
         TEST_HISTORY_RESULTS = [
           createHistoryEntry('2016-03-15', 'https://www.google.com'),
@@ -29,9 +31,9 @@ cr.define('md_history.history_list_test', function() {
         ];
       });
 
-      test('cancelling selection of multiple items', function(done) {
-        element.addNewResults(TEST_HISTORY_RESULTS);
-        flush(function() {
+      test('cancelling selection of multiple items', function() {
+        app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+        return flush().then(function() {
           var items = Polymer.dom(element.root)
               .querySelectorAll('history-item');
 
@@ -56,15 +58,13 @@ cr.define('md_history.history_list_test', function() {
 
           assertFalse(items[2].$.checkbox.checked);
           assertFalse(items[3].$.checkbox.checked);
-
-          done();
         });
       });
 
-      test('setting first and last items', function(done) {
-        element.addNewResults(TEST_HISTORY_RESULTS);
+      test('setting first and last items', function() {
+        app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
 
-        flush(function() {
+        return flush().then(function() {
           var items =
               Polymer.dom(element.root).querySelectorAll('history-item');
           assertTrue(items[0].isCardStart);
@@ -74,16 +74,14 @@ cr.define('md_history.history_list_test', function() {
           assertTrue(items[2].isCardEnd);
           assertTrue(items[3].isCardStart);
           assertTrue(items[3].isCardEnd);
-
-          done();
         });
       });
 
-      test('updating history results', function(done) {
-        element.addNewResults(TEST_HISTORY_RESULTS);
-        element.addNewResults(ADDITIONAL_RESULTS);
+      test('updating history results', function() {
+        app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+        app.historyResult(createHistoryInfo(), ADDITIONAL_RESULTS);
 
-        flush(function() {
+        return flush().then(function() {
           var items =
               Polymer.dom(element.root).querySelectorAll('history-item');
           assertTrue(items[3].isCardStart);
@@ -94,15 +92,13 @@ cr.define('md_history.history_list_test', function() {
 
           assertTrue(items[7].isCardStart);
           assertTrue(items[7].isCardEnd);
-
-          done();
         });
       });
 
-      test('deleting multiple items from view', function(done) {
-        element.addNewResults(TEST_HISTORY_RESULTS);
-        element.addNewResults(ADDITIONAL_RESULTS);
-        flush(function() {
+      test('deleting multiple items from view', function() {
+        app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+        app.historyResult(createHistoryInfo(), ADDITIONAL_RESULTS);
+        return flush().then(function() {
           items = Polymer.dom(element.root).querySelectorAll('history-item');
 
           element.removeDeletedHistory_([
@@ -110,34 +106,32 @@ cr.define('md_history.history_list_test', function() {
             element.historyData_[7]
           ]);
 
-          flush(function() {
-            items = Polymer.dom(element.root).querySelectorAll('history-item');
+          return flush();
+        }).then(function() {
+          items = Polymer.dom(element.root).querySelectorAll('history-item');
 
-            assertEquals(element.historyData_.length, 5);
-            assertEquals(element.historyData_[0].dateRelativeDay,
-                         '2016-03-15');
-            assertEquals(element.historyData_[2].dateRelativeDay,
-                         '2016-03-13');
-            assertEquals(element.historyData_[4].dateRelativeDay,
-                         '2016-03-11');
+          assertEquals(element.historyData_.length, 5);
+          assertEquals(element.historyData_[0].dateRelativeDay,
+                       '2016-03-15');
+          assertEquals(element.historyData_[2].dateRelativeDay,
+                       '2016-03-13');
+          assertEquals(element.historyData_[4].dateRelativeDay,
+                       '2016-03-11');
 
-            // Checks that the first and last items have been reset correctly.
-            assertTrue(items[2].isCardStart);
-            assertTrue(items[3].isCardEnd);
-            assertTrue(items[4].isCardStart);
-            assertTrue(items[4].isCardEnd)
-
-            done();
-          });
+          // Checks that the first and last items have been reset correctly.
+          assertTrue(items[2].isCardStart);
+          assertTrue(items[3].isCardEnd);
+          assertTrue(items[4].isCardStart);
+          assertTrue(items[4].isCardEnd)
         });
       });
 
-      test('search results display with correct item title', function(done) {
-        element.addNewResults(
+      test('search results display with correct item title', function() {
+        app.historyResult(createHistoryInfo(),
             [createHistoryEntry('2016-03-15', 'https://www.google.com')]);
         element.searchedTerm = 'Google';
 
-        flush(function() {
+        return flush().then(function() {
           var item = element.$$('history-item');
           assertTrue(item.isCardStart);
           var heading = item.$$('#date-accessed').textContent;
@@ -148,25 +142,57 @@ cr.define('md_history.history_list_test', function() {
           assertTrue(index != -1);
 
           // Check that the search term is bolded correctly in the history-item.
-          assertGT(title.innerHTML.indexOf('<b>google</b>'), -1);
-          done();
+          assertGT(
+              title.children[0].$.container.innerHTML.indexOf('<b>google</b>'),
+              -1);
         });
       });
 
-      test('correct display message when no history available', function(done) {
-        element.addNewResults([]);
+      test('correct display message when no history available', function() {
+        app.historyResult(createHistoryInfo(), []);
 
-        flush(function() {
+        return flush().then(function() {
           assertFalse(element.$['no-results'].hidden);
           assertTrue(element.$['infinite-list'].hidden);
 
-          element.addNewResults(TEST_HISTORY_RESULTS);
+          app.historyResult(createHistoryInfo(), TEST_HISTORY_RESULTS);
+          return flush();
+        }).then(function() {
+          assertTrue(element.$['no-results'].hidden);
+          assertFalse(element.$['infinite-list'].hidden);
+        });
+      });
 
-          flush(function() {
-            assertTrue(element.$['no-results'].hidden);
-            assertFalse(element.$['infinite-list'].hidden);
+      test('more from this site sends and sets correct data', function(done) {
+        app.queryingDisabled_ = false;
+        registerMessageCallback('queryHistory', this, function (info) {
+          assertEquals('example.com', info[0]);
+          flush().then(function() {
+            assertEquals(
+                'example.com',
+                toolbar.$['main-toolbar'].getSearchField().getValue());
             done();
           });
+        });
+
+        element.$.sharedMenu.itemData = {domain: 'example.com'};
+        MockInteractions.tap(element.$.menuMoreButton);
+      });
+
+      test('changing search deselects items', function() {
+        app.historyResult(
+            createHistoryInfo('ex'),
+            [createHistoryEntry('2016-06-9', 'https://www.example.com')]);
+        return flush().then(function() {
+          var item = element.$$('history-item');
+          MockInteractions.tap(item.$.checkbox);
+
+          assertEquals(1, toolbar.count);
+
+          app.historyResult(
+              createHistoryInfo('ample'),
+              [createHistoryEntry('2016-06-9', 'https://www.example.com')]);
+          assertEquals(0, toolbar.count);
         });
       });
 

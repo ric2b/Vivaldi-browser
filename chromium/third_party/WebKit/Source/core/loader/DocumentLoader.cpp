@@ -70,10 +70,12 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "public/platform/Platform.h"
+#include "public/platform/WebDocumentSubresourceFilter.h"
 #include "public/platform/WebMimeRegistry.h"
 #include "wtf/Assertions.h"
 #include "wtf/TemporaryChange.h"
 #include "wtf/text/WTFString.h"
+#include <memory>
 
 namespace blink {
 
@@ -162,6 +164,11 @@ const ResourceRequest& DocumentLoader::request() const
 const KURL& DocumentLoader::url() const
 {
     return m_request.url();
+}
+
+void DocumentLoader::setSubresourceFilter(std::unique_ptr<WebDocumentSubresourceFilter> subresourceFilter)
+{
+    m_subresourceFilter = std::move(subresourceFilter);
 }
 
 Resource* DocumentLoader::startPreload(Resource::Type type, FetchRequest& request)
@@ -263,7 +270,9 @@ void DocumentLoader::notifyFinished(Resource* resource)
 
 void DocumentLoader::finishedLoading(double finishTime)
 {
-    ASSERT(!m_frame->page()->defersLoading() || InspectorInstrumentation::isDebuggerPaused(m_frame));
+    DCHECK(m_frame->loader().stateMachine()->creatingInitialEmptyDocument()
+        || !m_frame->page()->defersLoading()
+        || InspectorInstrumentation::isDebuggerPaused(m_frame));
 
     double responseEndTime = finishTime;
     if (!responseEndTime)
@@ -373,7 +382,7 @@ void DocumentLoader::cancelLoadAfterXFrameOptionsOrCSPDenied(const ResourceRespo
     return;
 }
 
-void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse& response, PassOwnPtr<WebDataConsumerHandle> handle)
+void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse& response, std::unique_ptr<WebDataConsumerHandle> handle)
 {
     ASSERT_UNUSED(resource, m_mainResource == resource);
     ASSERT_UNUSED(handle, !handle);
@@ -402,8 +411,7 @@ void DocumentLoader::responseReceived(Resource* resource, const ResourceResponse
             String content = it->value;
             if (frameLoader()->shouldInterruptLoadForXFrameOptions(content, response.url(), mainResourceIdentifier())) {
                 String message = "Refused to display '" + response.url().elidedString() + "' in a frame because it set 'X-Frame-Options' to '" + content + "'.";
-                ConsoleMessage* consoleMessage = ConsoleMessage::create(SecurityMessageSource, ErrorMessageLevel, message);
-                consoleMessage->setRequestIdentifier(mainResourceIdentifier());
+                ConsoleMessage* consoleMessage = ConsoleMessage::createForRequest(SecurityMessageSource, ErrorMessageLevel, message, response.url(), mainResourceIdentifier());
                 frame()->document()->addConsoleMessage(consoleMessage);
 
                 cancelLoadAfterXFrameOptionsOrCSPDenied(response);

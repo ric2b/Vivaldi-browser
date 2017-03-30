@@ -7,12 +7,10 @@
 #include "core/layout/ImageQualityController.h"
 #include "core/layout/LayoutImageResource.h"
 #include "core/layout/svg/LayoutSVGImage.h"
-#include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/SVGPaintContext.h"
-#include "core/paint/TransformRecorder.h"
 #include "core/svg/SVGImageElement.h"
 #include "core/svg/graphics/SVGImage.h"
 #include "platform/graphics/GraphicsContext.h"
@@ -23,7 +21,7 @@ namespace blink {
 void SVGImagePainter::paint(const PaintInfo& paintInfo)
 {
     if (paintInfo.phase != PaintPhaseForeground
-        || m_layoutSVGImage.style()->visibility() == HIDDEN
+        || m_layoutSVGImage.style()->visibility() != VISIBLE
         || !m_layoutSVGImage.imageResource()->hasImage())
         return;
 
@@ -33,7 +31,7 @@ void SVGImagePainter::paint(const PaintInfo& paintInfo)
 
     PaintInfo paintInfoBeforeFiltering(paintInfo);
     // Images cannot have children so do not call updateCullRect.
-    TransformRecorder transformRecorder(paintInfoBeforeFiltering.context, m_layoutSVGImage, m_layoutSVGImage.localToSVGParentTransform());
+    SVGTransformContext transformContext(paintInfoBeforeFiltering.context, m_layoutSVGImage, m_layoutSVGImage.localToSVGParentTransform());
     {
         SVGPaintContext paintContext(m_layoutSVGImage, paintInfoBeforeFiltering);
         if (paintContext.applyClipMaskAndFilterIfNecessary() && !LayoutObjectDrawingRecorder::useCachedDrawingIfPossible(paintContext.paintInfo().context, m_layoutSVGImage, paintContext.paintInfo().phase)) {

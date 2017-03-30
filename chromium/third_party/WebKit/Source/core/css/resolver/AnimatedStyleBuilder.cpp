@@ -287,7 +287,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
 {
     ASSERT(CSSPropertyMetadata::isInterpolableProperty(property));
     if (value->isUnknown()) {
-        StyleBuilder::applyProperty(property, state, toAnimatableUnknown(value)->toCSSValue());
+        StyleBuilder::applyProperty(property, state, *toAnimatableUnknown(value)->toCSSValue());
         return;
     }
     ComputedStyle* style = state.style();
@@ -561,7 +561,7 @@ void AnimatedStyleBuilder::applyProperty(CSSPropertyID property, StyleResolverSt
     case CSSPropertyColumnRuleWidth:
         style->setColumnRuleWidth(animatableLineWidthClamp<unsigned short>(value));
         return;
-    case CSSPropertyWebkitFilter:
+    case CSSPropertyFilter:
         style->setFilter(toAnimatableFilterOperations(value)->operations());
         return;
     case CSSPropertyBackdropFilter:

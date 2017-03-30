@@ -7,21 +7,26 @@
 
 #include <stdint.h>
 
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "components/mus/input_devices/input_device_server.h"
 #include "components/mus/public/interfaces/clipboard.mojom.h"
 #include "components/mus/public/interfaces/display.mojom.h"
 #include "components/mus/public/interfaces/gpu.mojom.h"
+#include "components/mus/public/interfaces/gpu_service.mojom.h"
 #include "components/mus/public/interfaces/user_access_manager.mojom.h"
-#include "components/mus/public/interfaces/window_manager_factory.mojom.h"
+#include "components/mus/public/interfaces/user_activity_monitor.mojom.h"
+#include "components/mus/public/interfaces/window_manager_window_tree_factory.mojom.h"
 #include "components/mus/public/interfaces/window_server_test.mojom.h"
 #include "components/mus/public/interfaces/window_tree.mojom.h"
 #include "components/mus/public/interfaces/window_tree_host.mojom.h"
 #include "components/mus/ws/platform_display_init_params.h"
+#include "components/mus/ws/touch_controller.h"
 #include "components/mus/ws/user_id.h"
 #include "components/mus/ws/window_server_delegate.h"
 #include "services/shell/public/cpp/application_runner.h"
@@ -58,8 +63,10 @@ class MusApp
       public shell::InterfaceFactory<mojom::Clipboard>,
       public shell::InterfaceFactory<mojom::DisplayManager>,
       public shell::InterfaceFactory<mojom::Gpu>,
+      public shell::InterfaceFactory<mojom::GpuService>,
       public shell::InterfaceFactory<mojom::UserAccessManager>,
-      public shell::InterfaceFactory<mojom::WindowManagerFactoryService>,
+      public shell::InterfaceFactory<mojom::UserActivityMonitor>,
+      public shell::InterfaceFactory<mojom::WindowManagerWindowTreeFactory>,
       public shell::InterfaceFactory<mojom::WindowTreeFactory>,
       public shell::InterfaceFactory<mojom::WindowTreeHostFactory>,
       public shell::InterfaceFactory<mojom::WindowServerTest> {
@@ -109,13 +116,22 @@ class MusApp
   void Create(shell::Connection* connection,
               mojom::GpuRequest request) override;
 
+  // shell::InterfaceFactory<mojom::GpuService> implementation.
+  void Create(shell::Connection* connection,
+              mojom::GpuServiceRequest request) override;
+
   // shell::InterfaceFactory<mojom::UserAccessManager> implementation.
   void Create(shell::Connection* connection,
               mojom::UserAccessManagerRequest request) override;
 
-  // shell::InterfaceFactory<mojom::WindowManagerFactoryService> implementation.
+  // shell::InterfaceFactory<mojom::UserActivityMonitor> implementation.
   void Create(shell::Connection* connection,
-              mojom::WindowManagerFactoryServiceRequest request) override;
+              mojom::UserActivityMonitorRequest request) override;
+
+  // shell::InterfaceFactory<mojom::WindowManagerWindowTreeFactory>
+  // implementation.
+  void Create(shell::Connection* connection,
+              mojom::WindowManagerWindowTreeFactoryRequest request) override;
 
   // shell::InterfaceFactory<mojom::WindowTreeFactory>:
   void Create(shell::Connection* connection,
@@ -144,12 +160,17 @@ class MusApp
 
   UserIdToUserState user_id_to_user_state_;
 
+  // Provides input-device information via Mojo IPC.
+  InputDeviceServer input_device_server_;
+
   bool test_config_;
+  bool use_chrome_gpu_command_buffer_;
 #if defined(USE_OZONE)
   std::unique_ptr<ui::ClientNativePixmapFactory> client_native_pixmap_factory_;
 #endif
 
   std::unique_ptr<ws::PlatformScreen> platform_screen_;
+  std::unique_ptr<ws::TouchController> touch_controller_;
 
   base::WeakPtrFactory<MusApp> weak_ptr_factory_;
 

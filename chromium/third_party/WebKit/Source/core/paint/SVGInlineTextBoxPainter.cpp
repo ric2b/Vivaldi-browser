@@ -22,6 +22,7 @@
 #include "core/paint/SVGPaintContext.h"
 #include "core/style/ShadowList.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
+#include <memory>
 
 namespace blink {
 
@@ -233,7 +234,7 @@ void SVGInlineTextBoxPainter::paintDecoration(const PaintInfo& paintInfo, TextDe
     LayoutObject* decorationLayoutObject = findLayoutObjectDefininingTextDecoration(m_svgInlineTextBox.parent());
     const ComputedStyle& decorationStyle = decorationLayoutObject->styleRef();
 
-    if (decorationStyle.visibility() == HIDDEN)
+    if (decorationStyle.visibility() != VISIBLE)
         return;
 
     float scalingFactor = 1;
@@ -313,7 +314,7 @@ bool SVGInlineTextBoxPainter::setupTextPaint(const PaintInfo& paintInfo, const C
     paint.setAntiAlias(true);
 
     if (hasShadow) {
-        OwnPtr<DrawLooperBuilder> drawLooperBuilder = shadowList->createDrawLooper(DrawLooperBuilder::ShadowRespectsAlpha, style.visitedDependentColor(CSSPropertyColor));
+        std::unique_ptr<DrawLooperBuilder> drawLooperBuilder = shadowList->createDrawLooper(DrawLooperBuilder::ShadowRespectsAlpha, style.visitedDependentColor(CSSPropertyColor));
         paint.setLooper(toSkSp(drawLooperBuilder->detachDrawLooper()));
     }
 

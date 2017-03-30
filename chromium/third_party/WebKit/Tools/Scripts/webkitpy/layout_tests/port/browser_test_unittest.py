@@ -29,7 +29,7 @@
 
 from webkitpy.common.system.executive_mock import MockExecutive2
 from webkitpy.common.system.systemhost_mock import MockSystemHost
-from webkitpy.tool.mocktool import MockOptions
+from webkitpy.tool.mock_tool import MockOptions
 
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port import browser_test
@@ -94,4 +94,4 @@ class BrowserTestMacTest(_BrowserTestTestCaseMixin, port_testcase.PortTestCase):
 
     def test_driver_path(self):
         test_port = self.make_port(options=MockOptions(driver_name='browser_tests'))
-        self.assertFalse('.app/Contents/MacOS' in test_port._path_to_driver())
+        self.assertNotIn('.app/Contents/MacOS', test_port._path_to_driver())

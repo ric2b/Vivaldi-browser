@@ -52,9 +52,6 @@ public abstract class ChromeSwitches {
     public static final String DISABLE_EXTERNAL_INTENT_REQUESTS =
             "disable-external-intent-requests";
 
-    /** Disable document mode. */
-    public static final String DISABLE_DOCUMENT_MODE = "disable-document-mode";
-
     /** Disable Contextual Search. */
     public static final String DISABLE_CONTEXTUAL_SEARCH = "disable-contextual-search";
 
@@ -102,16 +99,15 @@ public abstract class ChromeSwitches {
      */
     public static final String MARKET_URL_FOR_TESTING = "market-url-for-testing";
 
+    /** Enables the download manager UI. */
+    public static final String ENABLE_DOWNLOAD_MANAGER_UI = "enable-download-manager-ui";
+
     ///////////////////////////////////////////////////////////////////////////////////////////////
     // Native Switches
     ///////////////////////////////////////////////////////////////////////////////////////////////
 
     /** Enable the DOM Distiller. */
     public static final String ENABLE_DOM_DISTILLER = "enable-dom-distiller";
-
-    /** Enable experimental web-platform features, such as Push Messaging. */
-    public static final String EXPERIMENTAL_WEB_PLAFTORM_FEATURES =
-            "enable-experimental-web-platform-features";
 
     /**
      * Use sandbox Wallet environment for requestAutocomplete.
@@ -243,6 +239,18 @@ public abstract class ChromeSwitches {
      * Enables "Add to Home screen" to mint a WebApk.
      */
     public static final String ENABLE_WEBAPK = "enable-webapk";
+
+    /**
+     * Enables theme colors in the tab switcher.
+     */
+    public static final String ENABLE_TAB_SWITCHER_THEME_COLORS =
+            "enable-tab-switcher-theme-colors";
+
+    /**
+     * Forces the WebAPK runtime dex to be extracted each time that Chrome is started.
+     */
+    public static final String ALWAYS_EXTRACT_WEBAPK_RUNTIME_DEX_ON_STARTUP =
+            "always-extract-webapk-dex-on-startup";
 
     // Prevent instantiation.
     private ChromeSwitches() {}

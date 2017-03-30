@@ -49,6 +49,7 @@
 #include "content/browser/loader/async_revalidation_manager.h"
 #include "content/browser/loader/cross_site_resource_handler.h"
 #include "content/browser/loader/detachable_resource_handler.h"
+#include "content/browser/loader/loader_delegate.h"
 #include "content/browser/loader/mime_type_resource_handler.h"
 #include "content/browser/loader/navigation_resource_handler.h"
 #include "content/browser/loader/navigation_resource_throttle.h"
@@ -61,8 +62,6 @@
 #include "content/browser/loader/sync_resource_handler.h"
 #include "content/browser/loader/throttling_resource_handler.h"
 #include "content/browser/loader/upload_data_stream_builder.h"
-#include "content/browser/renderer_host/render_view_host_delegate.h"
-#include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/resource_context_impl.h"
 #include "content/browser/service_worker/foreign_fetch_request_handler.h"
 #include "content/browser/service_worker/link_header_support.h"
@@ -70,20 +69,17 @@
 #include "content/browser/streams/stream.h"
 #include "content/browser/streams/stream_context.h"
 #include "content/browser/streams/stream_registry.h"
-#include "content/browser/web_contents/web_contents_impl.h"
-#include "content/common/appcache_interfaces.h"
 #include "content/common/navigation_params.h"
 #include "content/common/net/url_request_service_worker_data.h"
 #include "content/common/resource_messages.h"
 #include "content/common/resource_request.h"
+#include "content/common/resource_request_body_impl.h"
 #include "content/common/resource_request_completion_status.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/common/ssl_status_serialization.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/download_manager.h"
-#include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/resource_dispatcher_host_delegate.h"
@@ -91,7 +87,6 @@
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/browser/stream_handle.h"
 #include "content/public/browser/stream_info.h"
-#include "content/public/browser/user_metrics.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -109,6 +104,7 @@
 #include "net/cookies/cookie_monster.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
+#include "net/ssl/client_cert_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
@@ -327,17 +323,18 @@ bool ShouldServiceRequest(int process_type,
 
   // Check if the renderer is permitted to upload the requested files.
   if (request_data.request_body.get()) {
-    const std::vector<ResourceRequestBody::Element>* uploads =
+    const std::vector<ResourceRequestBodyImpl::Element>* uploads =
         request_data.request_body->elements();
-    std::vector<ResourceRequestBody::Element>::const_iterator iter;
+    std::vector<ResourceRequestBodyImpl::Element>::const_iterator iter;
     for (iter = uploads->begin(); iter != uploads->end(); ++iter) {
-      if (iter->type() == ResourceRequestBody::Element::TYPE_FILE &&
+      if (iter->type() == ResourceRequestBodyImpl::Element::TYPE_FILE &&
           !policy->CanReadFile(child_id, iter->path())) {
         NOTREACHED() << "Denied unauthorized upload of "
                      << iter->path().value();
         return false;
       }
-      if (iter->type() == ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM) {
+      if (iter->type() ==
+          ResourceRequestBodyImpl::Element::TYPE_FILE_FILESYSTEM) {
         storage::FileSystemURL url =
             filter->file_system_context()->CrackURL(iter->filesystem_url());
         if (!policy->CanReadFileSystemFile(child_id, url)) {
@@ -364,30 +361,6 @@ int GetCertID(CertStore* cert_store, net::URLRequest* request, int child_id) {
   return 0;
 }
 
-void NotifyRedirectOnUI(int render_process_id,
-                        int render_frame_host,
-                        std::unique_ptr<ResourceRedirectDetails> details) {
-  RenderFrameHostImpl* host =
-      RenderFrameHostImpl::FromID(render_process_id, render_frame_host);
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(host));
-  if (!web_contents)
-    return;
-  web_contents->DidGetRedirectForResourceRequest(host, *details.get());
-}
-
-void NotifyResponseOnUI(int render_process_id,
-                        int render_frame_host,
-                        std::unique_ptr<ResourceRequestDetails> details) {
-  RenderFrameHostImpl* host =
-      RenderFrameHostImpl::FromID(render_process_id, render_frame_host);
-  WebContentsImpl* web_contents =
-      static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(host));
-  if (!web_contents)
-    return;
-  web_contents->DidGetResourceResponseStart(*details.get());
-}
-
 bool IsValidatedSCT(
     const net::SignedCertificateTimestampAndStatus& sct_status) {
   return sct_status.status == net::ct::SCT_STATUS_OK;
@@ -401,12 +374,12 @@ storage::BlobStorageContext* GetBlobStorageContext(
 }
 
 void AttachRequestBodyBlobDataHandles(
-    ResourceRequestBody* body,
+    ResourceRequestBodyImpl* body,
     storage::BlobStorageContext* blob_context) {
   DCHECK(blob_context);
   for (size_t i = 0; i < body->elements()->size(); ++i) {
-    const ResourceRequestBody::Element& element = (*body->elements())[i];
-    if (element.type() != ResourceRequestBody::Element::TYPE_BLOB)
+    const ResourceRequestBodyImpl::Element& element = (*body->elements())[i];
+    if (element.type() != ResourceRequestBodyImpl::Element::TYPE_BLOB)
       continue;
     std::unique_ptr<storage::BlobDataHandle> handle =
         blob_context->GetBlobDataFromUUID(element.blob_uuid());
@@ -548,8 +521,9 @@ ResourceDispatcherHostImpl::ResourceDispatcherHostImpl()
           max_num_in_flight_requests_ * kMaxRequestsPerProcessRatio)),
       max_outstanding_requests_cost_per_process_(
           kMaxOutstandingRequestsCostPerProcess),
-      filter_(NULL),
-      delegate_(NULL),
+      filter_(nullptr),
+      delegate_(nullptr),
+      loader_delegate_(nullptr),
       allow_cross_origin_auth_prompt_(false),
       cert_store_for_testing_(nullptr) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -637,23 +611,10 @@ void ResourceDispatcherHostImpl::SetAllowCrossOriginAuthPrompt(bool value) {
   allow_cross_origin_auth_prompt_ = value;
 }
 
-void ResourceDispatcherHostImpl::AddResourceContext(ResourceContext* context) {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  active_resource_contexts_.insert(context);
-}
-
-void ResourceDispatcherHostImpl::RemoveResourceContext(
-    ResourceContext* context) {
-  CHECK(ContainsKey(active_resource_contexts_, context));
-  active_resource_contexts_.erase(context);
-}
-
 void ResourceDispatcherHostImpl::CancelRequestsForContext(
     ResourceContext* context) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(context);
-
-  CHECK(ContainsKey(active_resource_contexts_, context));
 
   // Note that request cancellation has side effects. Therefore, we gather all
   // the requests to cancel first, and then we start cancelling. We assert at
@@ -725,21 +686,6 @@ void ResourceDispatcherHostImpl::CancelRequestsForContext(
     async_revalidation_manager_->CancelAsyncRevalidationsForResourceContext(
         context);
   }
-
-  // Validate that no more requests for this context were added.
-  for (const auto& loader : pending_loaders_) {
-    // http://crbug.com/90971
-    CHECK_NE(loader.second->GetRequestInfo()->GetContext(), context);
-  }
-
-  for (const auto& blocked_loaders : blocked_loaders_map_) {
-    BlockedLoadersList* loaders = blocked_loaders.second.get();
-    if (!loaders->empty()) {
-      ResourceRequestInfoImpl* info = loaders->front()->GetRequestInfo();
-      // http://crbug.com/90971
-      CHECK_NE(info->GetContext(), context);
-    }
-  }
 }
 
 DownloadInterruptReason ResourceDispatcherHostImpl::BeginDownload(
@@ -747,7 +693,7 @@ DownloadInterruptReason ResourceDispatcherHostImpl::BeginDownload(
     const Referrer& referrer,
     bool is_content_initiated,
     ResourceContext* context,
-    int child_id,
+    int render_process_id,
     int render_view_route_id,
     int render_frame_route_id,
     bool do_not_prompt_for_login) {
@@ -755,13 +701,6 @@ DownloadInterruptReason ResourceDispatcherHostImpl::BeginDownload(
     return DOWNLOAD_INTERRUPT_REASON_USER_SHUTDOWN;
 
   const GURL& url = request->original_url();
-
-  // http://crbug.com/90971
-  char url_buf[128];
-  base::strlcpy(url_buf, url.spec().c_str(), arraysize(url_buf));
-  base::debug::Alias(url_buf);
-  CHECK(ContainsKey(active_resource_contexts_, context));
-
   SetReferrerForRequest(request.get(), referrer);
 
   // We treat a download as a main frame load, and thus update the policy URL on
@@ -775,7 +714,7 @@ DownloadInterruptReason ResourceDispatcherHostImpl::BeginDownload(
 
   // Check if the renderer is permitted to request the requested URL.
   if (!ChildProcessSecurityPolicyImpl::GetInstance()->
-          CanRequestURL(child_id, url)) {
+          CanRequestURL(render_process_id, url)) {
     DVLOG(1) << "Denied unauthorized download request for "
              << url.possibly_invalid_spec();
     return DOWNLOAD_INTERRUPT_REASON_NETWORK_INVALID_REQUEST;
@@ -791,7 +730,7 @@ DownloadInterruptReason ResourceDispatcherHostImpl::BeginDownload(
   }
 
   ResourceRequestInfoImpl* extra_info =
-      CreateRequestInfo(child_id, render_view_route_id,
+      CreateRequestInfo(render_process_id, render_view_route_id,
                         render_frame_route_id, true, context);
   extra_info->set_do_not_prompt_for_login(do_not_prompt_for_login);
   extra_info->AssociateWithRequest(request.get());  // Request takes ownership.
@@ -847,8 +786,8 @@ ResourceDispatcherHostImpl::CreateResourceHandlerForDownload(
     ScopedVector<ResourceThrottle> throttles;
     delegate_->DownloadStarting(
         request, request_info->GetContext(), request_info->GetChildID(),
-        request_info->GetRouteID(), request_info->GetRequestID(),
-        is_content_initiated, must_download, &throttles);
+        request_info->GetRouteID(), is_content_initiated, must_download,
+        &throttles);
     if (!throttles.empty()) {
       handler.reset(new ThrottlingResourceHandler(std::move(handler), request,
                                                   std::move(throttles)));
@@ -923,7 +862,8 @@ bool ResourceDispatcherHostImpl::HandleExternalProtocol(ResourceLoader* loader,
 
   return delegate_->HandleExternalProtocol(
       url, info->GetChildID(), info->GetWebContentsGetterForRequest(),
-      info->IsMainFrame(), info->GetPageTransition(), info->HasUserGesture());
+      info->IsMainFrame(), info->GetPageTransition(), info->HasUserGesture(),
+      info->GetContext());
 }
 
 void ResourceDispatcherHostImpl::DidStartRequest(ResourceLoader* loader) {
@@ -977,11 +917,8 @@ void ResourceDispatcherHostImpl::DidReceiveRedirect(ResourceLoader* loader,
       loader->request(),
       GetCertID(GetCertStore(), loader->request(), info->GetChildID()),
       new_url));
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(
-          &NotifyRedirectOnUI,
-          render_process_id, render_frame_host, base::Passed(&detail)));
+  loader_delegate_->DidGetRedirectForResourceRequest(
+      render_process_id, render_frame_host, std::move(detail));
 }
 
 void ResourceDispatcherHostImpl::DidReceiveResponse(ResourceLoader* loader) {
@@ -1015,11 +952,8 @@ void ResourceDispatcherHostImpl::DidReceiveResponse(ResourceLoader* loader) {
   // Notify the observers on the UI thread.
   std::unique_ptr<ResourceRequestDetails> detail(new ResourceRequestDetails(
       request, GetCertID(GetCertStore(), request, info->GetChildID())));
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(
-          &NotifyResponseOnUI,
-          render_process_id, render_frame_host, base::Passed(&detail)));
+  loader_delegate_->DidGetResourceResponseStart(
+      render_process_id, render_frame_host, std::move(detail));
 }
 
 void ResourceDispatcherHostImpl::DidFinishLoading(ResourceLoader* loader) {
@@ -1139,6 +1073,12 @@ void ResourceDispatcherHostImpl::DidFinishLoading(ResourceLoader* loader) {
 
   // Destroy the ResourceLoader.
   RemovePendingRequest(info->GetChildID(), info->GetRequestID());
+}
+
+std::unique_ptr<net::ClientCertStore>
+    ResourceDispatcherHostImpl::CreateClientCertStore(ResourceLoader* loader) {
+  return delegate_->CreateClientCertStore(
+      loader->GetRequestInfo()->GetContext());
 }
 
 void ResourceDispatcherHostImpl::OnInit() {
@@ -1426,8 +1366,6 @@ void ResourceDispatcherHostImpl::BeginRequest(
   net::URLRequestContext* request_context = NULL;
   filter_->GetContexts(request_data.resource_type, request_data.origin_pid,
                        &resource_context, &request_context);
-  // http://crbug.com/90971
-  CHECK(ContainsKey(active_resource_contexts_, resource_context));
 
   // Parse the headers before calling ShouldServiceRequest, so that they are
   // available to be validated.
@@ -1581,7 +1519,8 @@ void ResourceDispatcherHostImpl::BeginRequest(
       IsUsingLoFi(request_data.lofi_state, delegate_, *new_request,
                   resource_context,
                   request_data.resource_type == RESOURCE_TYPE_MAIN_FRAME),
-      support_async_revalidation ? request_data.headers : std::string());
+      support_async_revalidation ? request_data.headers : std::string(),
+      request_data.request_body, request_data.initiated_in_secure_context);
   // Request takes ownership.
   extra_info->AssociateWithRequest(new_request.get());
 
@@ -1596,12 +1535,12 @@ void ResourceDispatcherHostImpl::BeginRequest(
 
   // Initialize the service worker handler for the request. We don't use
   // ServiceWorker for synchronous loads to avoid renderer deadlocks.
-  const bool should_skip_service_worker =
-      request_data.skip_service_worker || is_sync_load;
+  const SkipServiceWorker should_skip_service_worker =
+      is_sync_load ? SkipServiceWorker::ALL : request_data.skip_service_worker;
   ServiceWorkerRequestHandler::InitializeHandler(
       new_request.get(), filter_->service_worker_context(), blob_context,
       child_id, request_data.service_worker_provider_id,
-      should_skip_service_worker,
+      should_skip_service_worker != SkipServiceWorker::NONE,
       request_data.fetch_request_mode, request_data.fetch_credentials_mode,
       request_data.fetch_redirect_mode, request_data.resource_type,
       request_data.fetch_request_context_type, request_data.fetch_frame_type,
@@ -1612,11 +1551,11 @@ void ResourceDispatcherHostImpl::BeginRequest(
     ForeignFetchRequestHandler::InitializeHandler(
         new_request.get(), filter_->service_worker_context(), blob_context,
         child_id, request_data.service_worker_provider_id,
-        should_skip_service_worker,
-        request_data.fetch_request_mode, request_data.fetch_credentials_mode,
-        request_data.fetch_redirect_mode, request_data.resource_type,
-        request_data.fetch_request_context_type, request_data.fetch_frame_type,
-        request_data.request_body);
+        should_skip_service_worker, request_data.fetch_request_mode,
+        request_data.fetch_credentials_mode, request_data.fetch_redirect_mode,
+        request_data.resource_type, request_data.fetch_request_context_type,
+        request_data.fetch_frame_type, request_data.request_body,
+        request_data.initiated_in_secure_context);
   }
 
   // Have the appcache associate its extra info with the request.
@@ -1745,8 +1684,10 @@ ResourceDispatcherHostImpl::AddStandardHandlers(
 
   if (request->has_upload()) {
     // Block power save while uploading data.
-    throttles.push_back(
-        new PowerSaveBlockResourceThrottle(request->url().host()));
+    throttles.push_back(new PowerSaveBlockResourceThrottle(
+        request->url().host(),
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::UI),
+        BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)));
   }
 
   // TODO(ricea): Stop looking this up so much.
@@ -1878,7 +1819,9 @@ ResourceRequestInfoImpl* ResourceDispatcherHostImpl::CreateRequestInfo(
       false,                                   // report_raw_headers
       true,                                    // is_async
       false,                                   // is_using_lofi
-      std::string());                          // original_headers
+      std::string(),                           // original_headers
+      nullptr,                                 // body
+      false);                                  // initiated_in_secure_context
 }
 
 void ResourceDispatcherHostImpl::OnRenderFrameDeleted(
@@ -1914,12 +1857,6 @@ void ResourceDispatcherHostImpl::BeginSaveFile(const GURL& url,
   if (is_shutdown_)
     return;
 
-  // http://crbug.com/90971
-  char url_buf[128];
-  base::strlcpy(url_buf, url.spec().c_str(), arraysize(url_buf));
-  base::debug::Alias(url_buf);
-  CHECK(ContainsKey(active_resource_contexts_, context));
-
   request_id_--;
 
   const net::URLRequestContext* request_context = context->GetRequestContext();
@@ -1948,9 +1885,22 @@ void ResourceDispatcherHostImpl::BeginSaveFile(const GURL& url,
                         render_frame_route_id, false, context);
   extra_info->AssociateWithRequest(request.get());  // Request takes ownership.
 
-  std::unique_ptr<ResourceHandler> handler(new SaveFileResourceHandler(
+  // Check if the renderer is permitted to request the requested URL.
+  using AuthorizationState = SaveFileResourceHandler::AuthorizationState;
+  AuthorizationState authorization_state = AuthorizationState::AUTHORIZED;
+  if (!ChildProcessSecurityPolicyImpl::GetInstance()->CanRequestURL(child_id,
+                                                                    url)) {
+    DVLOG(1) << "Denying unauthorized save of " << url.possibly_invalid_spec();
+    authorization_state = AuthorizationState::NOT_AUTHORIZED;
+    // No need to return here (i.e. okay to begin processing the request below),
+    // because NOT_AUTHORIZED will cause the request to be cancelled.  See also
+    // doc comments for AuthorizationState enum.
+  }
+
+  std::unique_ptr<SaveFileResourceHandler> handler(new SaveFileResourceHandler(
       request.get(), save_item_id, save_package_id, child_id,
-      render_frame_route_id, url, save_file_manager_.get()));
+      render_frame_route_id, url, save_file_manager_.get(),
+      authorization_state));
 
   BeginRequestInternal(std::move(request), std::move(handler));
 }
@@ -2182,8 +2132,7 @@ void ResourceDispatcherHostImpl::FinishedWithResourcesForRequest(
 void ResourceDispatcherHostImpl::BeginNavigationRequest(
     ResourceContext* resource_context,
     const NavigationRequestInfo& info,
-    NavigationURLLoaderImplCore* loader,
-    ServiceWorkerNavigationHandleCore* service_worker_handle_core) {
+    NavigationURLLoaderImplCore* loader) {
   // PlzNavigate: BeginNavigationRequest currently should only be used for the
   // browser-side navigations project.
   CHECK(IsBrowserSideNavigationEnabled());
@@ -2203,14 +2152,6 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
     loader->NotifyRequestFailed(false, net::ERR_ABORTED);
     return;
   }
-
-  // Save the URL on the stack to help catch URLRequests which outlive their
-  // URLRequestContexts. See https://crbug.com/90971
-  char url_buf[128];
-  base::strlcpy(
-      url_buf, info.common_params.url.spec().c_str(), arraysize(url_buf));
-  base::debug::Alias(url_buf);
-  CHECK(ContainsKey(active_resource_contexts_, resource_context));
 
   const net::URLRequestContext* request_context =
       resource_context->GetRequestContext();
@@ -2252,15 +2193,14 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       GetChromeBlobStorageContextForResourceContext(resource_context));
 
   // Resolve elements from request_body and prepare upload data.
-  if (info.request_body.get()) {
-    AttachRequestBodyBlobDataHandles(
-        info.request_body.get(),
-        blob_context);
+  ResourceRequestBodyImpl* body = info.common_params.post_data.get();
+  if (body) {
+    AttachRequestBodyBlobDataHandles(body, blob_context);
     // TODO(davidben): The FileSystemContext is null here. In the case where
     // another renderer requested this navigation, this should be the same
     // FileSystemContext passed into ShouldServiceRequest.
     new_request->set_upload(UploadDataStreamBuilder::Build(
-        info.request_body.get(),
+        body,
         blob_context,
         nullptr,  // file_system_context
         BrowserThread::GetMessageLoopProxyForThread(BrowserThread::FILE)
@@ -2307,7 +2247,13 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
       // here.
       // TODO(ricea): Make the feature work with stale-while-revalidate
       // and clean this up.
-      std::string());  // original_headers
+      std::string(),  // original_headers
+      info.common_params.post_data,
+      // TODO(mek): Currently initiated_in_secure_context is only used for
+      // subresource requests, so it doesn't matter what value it gets here.
+      // If in the future this changes this should be updated to somehow get a
+      // meaningful value.
+      false);  // initiated_in_secure_context
   // Request takes ownership.
   extra_info->AssociateWithRequest(new_request.get());
 
@@ -2318,14 +2264,6 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
         new_request.get(),
         blob_context->GetBlobDataFromPublicURL(new_request->url()));
   }
-
-  RequestContextFrameType frame_type =
-      info.is_main_frame ? REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL
-                         : REQUEST_CONTEXT_FRAME_TYPE_NESTED;
-  ServiceWorkerRequestHandler::InitializeForNavigation(
-      new_request.get(), service_worker_handle_core, blob_context,
-      info.begin_params.skip_service_worker, resource_type,
-      info.begin_params.request_context_type, frame_type, info.request_body);
 
   // TODO(davidben): Attach AppCacheInterceptor.
 
@@ -2348,6 +2286,11 @@ void ResourceDispatcherHostImpl::BeginNavigationRequest(
 void ResourceDispatcherHostImpl::EnableStaleWhileRevalidateForTesting() {
   if (!async_revalidation_manager_)
     async_revalidation_manager_.reset(new AsyncRevalidationManager);
+}
+
+void ResourceDispatcherHostImpl::SetLoaderDelegate(
+    LoaderDelegate* loader_delegate) {
+  loader_delegate_ = loader_delegate;
 }
 
 // static
@@ -2432,7 +2375,7 @@ void ResourceDispatcherHostImpl::StartLoading(
   loader_ptr->StartRequest();
 }
 
-void ResourceDispatcherHostImpl::OnUserGesture(WebContentsImpl* contents) {
+void ResourceDispatcherHostImpl::OnUserGesture() {
   last_user_gesture_time_ = TimeTicks::Now();
 }
 
@@ -2463,27 +2406,6 @@ bool ResourceDispatcherHostImpl::LoadInfoIsMoreInteresting(const LoadInfo& a,
     return a_uploading_size > b_uploading_size;
 
   return a.load_state.state > b.load_state.state;
-}
-
-// static
-void ResourceDispatcherHostImpl::UpdateLoadInfoOnUIThread(
-    std::unique_ptr<LoadInfoMap> info_map) {
-  // TODO(erikchen): Remove ScopedTracker below once http://crbug.com/466285
-  // is fixed.
-  tracked_objects::ScopedTracker tracking_profile(
-      FROM_HERE_WITH_EXPLICIT_FUNCTION(
-          "466285 ResourceDispatcherHostImpl::UpdateLoadInfoOnUIThread"));
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  for (const auto& load_info : *info_map) {
-    RenderViewHostImpl* view = RenderViewHostImpl::FromID(
-        load_info.first.child_id, load_info.first.route_id);
-    // The view could be gone at this point.
-    if (view) {
-      view->LoadStateChanged(load_info.second.url, load_info.second.load_state,
-                             load_info.second.upload_position,
-                             load_info.second.upload_size);
-    }
-  }
 }
 
 std::unique_ptr<ResourceDispatcherHostImpl::LoadInfoMap>
@@ -2525,10 +2447,12 @@ void ResourceDispatcherHostImpl::UpdateLoadInfo() {
     return;
   }
 
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&ResourceDispatcherHostImpl::UpdateLoadInfoOnUIThread,
-                 base::Passed(&info_map)));
+  for (const auto& load_info : *info_map) {
+    loader_delegate_->LoadStateChanged(
+        load_info.first.child_id, load_info.first.route_id,
+        load_info.second.url, load_info.second.load_state,
+        load_info.second.upload_position, load_info.second.upload_size);
+  }
 }
 
 void ResourceDispatcherHostImpl::BlockRequestsForRoute(

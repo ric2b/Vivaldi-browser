@@ -291,12 +291,10 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // Returns the type passed to the constructor.
   Type type() const { return type_; }
 
-  // Optional call to connect the thread name with this loop.
-  void set_thread_name(const std::string& thread_name) {
-    DCHECK(thread_name_.empty()) << "Should not rename this thread!";
-    thread_name_ = thread_name;
-  }
-  const std::string& thread_name() const { return thread_name_; }
+  // Returns the name of the thread this message loop is bound to.
+  // This function is only valid when this message loop is running and
+  // BindToCurrentThread has already been called.
+  std::string GetThreadName() const;
 
   // Gets the TaskRunner associated with this message loop.
   const scoped_refptr<SingleThreadTaskRunner>& task_runner() {
@@ -375,16 +373,6 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   void AddTaskObserver(TaskObserver* task_observer);
   void RemoveTaskObserver(TaskObserver* task_observer);
 
-#if defined(OS_WIN)
-  void set_os_modal_loop(bool os_modal_loop) {
-    os_modal_loop_ = os_modal_loop;
-  }
-
-  bool os_modal_loop() const {
-    return os_modal_loop_;
-  }
-#endif  // OS_WIN
-
   // Can only be called from the thread that owns the MessageLoop.
   bool is_running() const;
 
@@ -401,6 +389,15 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
 
   // Runs the specified PendingTask.
   void RunTask(const PendingTask& pending_task);
+
+#if defined(OS_WIN)
+  // TODO (stanisc): crbug.com/596190: Remove this after the signaling issue
+  // has been investigated.
+  // This should be used for diagnostic only. If message pump wake-up mechanism
+  // is based on auto-reset event this call would reset the event to unset
+  // state.
+  bool MessagePumpWasSignaled();
+#endif
 
   //----------------------------------------------------------------------------
  protected:
@@ -523,17 +520,10 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // insider a (accidentally induced?) nested message pump.
   bool nestable_tasks_allowed_;
 
-#if defined(OS_WIN)
-  // Should be set to true before calling Windows APIs like TrackPopupMenu, etc.
-  // which enter a modal message loop.
-  bool os_modal_loop_;
-#endif
-
   // pump_factory_.Run() is called to create a message pump for this loop
   // if type_ is TYPE_CUSTOM and pump_ is null.
   MessagePumpFactoryCallback pump_factory_;
 
-  std::string thread_name_;
   // A profiling histogram showing the counts of various messages and events.
   HistogramBase* message_histogram_;
 
@@ -551,6 +541,9 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate {
   // The task runner associated with this message loop.
   scoped_refptr<SingleThreadTaskRunner> task_runner_;
   std::unique_ptr<ThreadTaskRunnerHandle> thread_task_runner_handle_;
+
+  // Id of the thread this message loop is bound to.
+  PlatformThreadId thread_id_;
 
   template <class T, class R> friend class base::subtle::DeleteHelperInternal;
   template <class T, class R> friend class base::subtle::ReleaseHelperInternal;

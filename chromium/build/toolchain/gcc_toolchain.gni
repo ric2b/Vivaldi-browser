@@ -2,21 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/clang/clang.gni")
 import("//build/config/nacl/config.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/toolchain/cc_wrapper.gni")
 import("//build/toolchain/goma.gni")
 import("//build/toolchain/toolchain.gni")
-
-# "concurrent_links" is a toolchain variable. By computing it here rather than
-# inside the toolchain, the exec_script will only get run once rather than
-# each time the toolchain template is invoked.
-if (allow_posix_link_time_opt || is_cfi) {
-  concurrent_links_ =
-      exec_script("get_concurrent_links.py", [ "--lto" ], "value")
-} else {
-  concurrent_links_ = exec_script("get_concurrent_links.py", [], "value")
-}
+import("//build/toolchain/concurrent_links.gni")
 
 # This template defines a toolchain for something that works like gcc
 # (including clang).
@@ -98,6 +90,9 @@ if (allow_posix_link_time_opt || is_cfi) {
 #      Override the global cc_wrapper setting. e.g. "ccache" or "icecc".
 #      useful to opt-out of cc_wrapper in a particular toolchain by setting
 #      cc_wrapper = "" in it.
+#  - use_debug_fission
+#      Override the global use_debug_fission setting, useful if the particular
+#      toolchain should not be generating split-dwarf code.
 #  - use_goma
 #      Override the global use_goma setting, useful to opt-out of goma in a
 #      particular toolchain by setting use_gome = false in it.
@@ -115,7 +110,7 @@ template("gcc_toolchain") {
     assert(defined(invoker.toolchain_os),
            "gcc_toolchain() must specify a \"toolchain_os\"")
 
-    concurrent_links = concurrent_links_
+    # concurrent_links is picked up from the declare_arg().
 
     if (defined(invoker.cc_wrapper)) {
       cc_wrapper = invoker.cc_wrapper
@@ -461,6 +456,9 @@ template("gcc_toolchain") {
       if (defined(invoker.use_allocator)) {
         use_allocator = invoker.use_allocator
       }
+      if (defined(invoker.use_debug_fission)) {
+        use_debug_fission = invoker.use_debug_fission
+      }
       if (defined(invoker.use_gold)) {
         use_gold = invoker.use_gold
       }
@@ -476,7 +474,18 @@ template("gcc_toolchain") {
       is_syzyasan = false
       is_tsan = false
       is_ubsan = false
+      is_ubsan_null = false
+      is_ubsan_no_recover = false
+      is_ubsan_security = false
       is_ubsan_vptr = false
+      msan_track_origins = 0
+      sanitizer_coverage_flags = ""
+      use_cfi_diag = false
+      use_custom_libcxx = false
+      use_drfuzz = false
+      use_libfuzzer = false
+      use_prebuilt_instrumented_libraries = false
+      use_sanitizer_coverage = false
     }
 
     forward_variables_from(invoker, [ "deps" ])
@@ -502,8 +511,7 @@ template("clang_toolchain") {
   }
 
   gcc_toolchain(target_name) {
-    prefix = rebase_path("//third_party/llvm-build/Release+Asserts/bin",
-                         root_build_dir)
+    prefix = rebase_path("$clang_base_path/bin", root_build_dir)
     cc = "$prefix/clang"
     cxx = "$prefix/clang++"
     ld = cxx
@@ -520,5 +528,9 @@ template("clang_toolchain") {
                              "use_gold",
                              "strip",
                            ])
+
+    if (defined(invoker.use_debug_fission)) {
+      use_debug_fission = invoker.use_debug_fission
+    }
   }
 }

@@ -38,9 +38,11 @@
 #include "platform/fonts/VDMXParser.h"
 #include "platform/geometry/FloatRect.h"
 #include "wtf/MathExtras.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/allocator/Partitions.h"
 #include "wtf/text/CharacterNames.h"
 #include "wtf/text/Unicode.h"
+#include <memory>
 #include <unicode/unorm.h>
 #include <unicode/utf16.h>
 
@@ -78,8 +80,6 @@ SimpleFontData::SimpleFontData(PassRefPtr<CustomFontData> customData, float font
     , m_hasVerticalGlyphs(false)
     , m_customFontData(customData)
 {
-    if (m_customFontData)
-        m_customFontData->initializeFontData(this, fontSize);
 }
 
 void SimpleFontData::platformInit()
@@ -345,9 +345,9 @@ bool SimpleFontData::isTextOrientationFallbackOf(const SimpleFontData* fontData)
         || fontData->m_derivedFontData->verticalRightOrientation == this;
 }
 
-PassOwnPtr<SimpleFontData::DerivedFontData> SimpleFontData::DerivedFontData::create(bool forCustomFont)
+std::unique_ptr<SimpleFontData::DerivedFontData> SimpleFontData::DerivedFontData::create(bool forCustomFont)
 {
-    return adoptPtr(new DerivedFontData(forCustomFont));
+    return wrapUnique(new DerivedFontData(forCustomFont));
 }
 
 SimpleFontData::DerivedFontData::~DerivedFontData()

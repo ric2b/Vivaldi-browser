@@ -4,6 +4,8 @@
 
 #include "net/spdy/spdy_proxy_client_socket.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/macros.h"
@@ -192,7 +194,7 @@ void SpdyProxyClientSocketTest::TearDown() {
     session_->spdy_session_pool()->CloseAllSessions();
 
   // Empty the current queue.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
   PlatformTest::TearDown();
 }
 
@@ -338,7 +340,8 @@ void SpdyProxyClientSocketTest::PopulateConnectReplyIR(SpdyHeaderBlock* block,
 SpdySerializedFrame* SpdyProxyClientSocketTest::ConstructConnectRequestFrame() {
   SpdyHeaderBlock block;
   PopulateConnectRequestIR(&block);
-  return spdy_util_.ConstructSpdySyn(kStreamId, block, LOWEST, false);
+  return spdy_util_.ConstructSpdySyn(kStreamId, std::move(block), LOWEST,
+                                     false);
 }
 
 // Constructs a SPDY SYN_STREAM frame for a CONNECT request which includes
@@ -348,15 +351,15 @@ SpdyProxyClientSocketTest::ConstructConnectAuthRequestFrame() {
   SpdyHeaderBlock block;
   PopulateConnectRequestIR(&block);
   block["proxy-authorization"] = "Basic Zm9vOmJhcg==";
-  return spdy_util_.ConstructSpdySyn(kStreamId, block, LOWEST, false);
+  return spdy_util_.ConstructSpdySyn(kStreamId, std::move(block), LOWEST,
+                                     false);
 }
 
 // Constructs a standard SPDY SYN_REPLY frame to match the SPDY CONNECT.
 SpdySerializedFrame* SpdyProxyClientSocketTest::ConstructConnectReplyFrame() {
   SpdyHeaderBlock block;
   PopulateConnectReplyIR(&block, "200");
-  SpdySynReplyIR reply_ir(kStreamId);
-  return spdy_util_.ConstructSpdyReply(kStreamId, block);
+  return spdy_util_.ConstructSpdyReply(kStreamId, std::move(block));
 }
 
 // Constructs a standard SPDY SYN_REPLY frame to match the SPDY CONNECT,
@@ -366,7 +369,7 @@ SpdyProxyClientSocketTest::ConstructConnectAuthReplyFrame() {
   SpdyHeaderBlock block;
   PopulateConnectReplyIR(&block, "407");
   block["proxy-authenticate"] = "Basic realm=\"MyRealm1\"";
-  return spdy_util_.ConstructSpdyReply(kStreamId, block);
+  return spdy_util_.ConstructSpdyReply(kStreamId, std::move(block));
 }
 
 // Constructs a SPDY SYN_REPLY frame with an HTTP 302 redirect.
@@ -376,7 +379,7 @@ SpdyProxyClientSocketTest::ConstructConnectRedirectReplyFrame() {
   PopulateConnectReplyIR(&block, "302");
   block["location"] = kRedirectUrl;
   block["set-cookie"] = "foo=bar";
-  return spdy_util_.ConstructSpdyReply(kStreamId, block);
+  return spdy_util_.ConstructSpdyReply(kStreamId, std::move(block));
 }
 
 // Constructs a SPDY SYN_REPLY frame with an HTTP 500 error.
@@ -384,7 +387,7 @@ SpdySerializedFrame*
 SpdyProxyClientSocketTest::ConstructConnectErrorReplyFrame() {
   SpdyHeaderBlock block;
   PopulateConnectReplyIR(&block, "500");
-  return spdy_util_.ConstructSpdyReply(kStreamId, block);
+  return spdy_util_.ConstructSpdyReply(kStreamId, std::move(block));
 }
 
 SpdySerializedFrame* SpdyProxyClientSocketTest::ConstructBodyFrame(
@@ -485,7 +488,7 @@ TEST_P(SpdyProxyClientSocketTest, ConnectRedirects) {
   ASSERT_EQ(location, kRedirectUrl);
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 TEST_P(SpdyProxyClientSocketTest, ConnectFails) {
@@ -532,7 +535,7 @@ TEST_P(SpdyProxyClientSocketTest, WasEverUsedReturnsCorrectValues) {
   EXPECT_TRUE(sock_->WasEverUsed());
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 // ----------- GetPeerAddress
@@ -1030,7 +1033,7 @@ TEST_P(SpdyProxyClientSocketTest,
             sock_->Read(NULL, 1, CompletionCallback()));
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 // Reading buffered data from an already closed socket should return
@@ -1117,7 +1120,7 @@ TEST_P(SpdyProxyClientSocketTest, WriteOnDisconnectedSocket) {
             sock_->Write(buf.get(), buf->size(), CompletionCallback()));
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 // If the socket is closed with a pending Write(), the callback
@@ -1182,7 +1185,7 @@ TEST_P(SpdyProxyClientSocketTest, DisconnectWithWritePending) {
   EXPECT_FALSE(write_callback_.have_result());
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 // If the socket is Disconnected with a pending Read(), the callback
@@ -1216,7 +1219,7 @@ TEST_P(SpdyProxyClientSocketTest, DisconnectWithReadPending) {
   EXPECT_FALSE(read_callback_.have_result());
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 // If the socket is Reset when both a read and write are pending,
@@ -1258,7 +1261,7 @@ TEST_P(SpdyProxyClientSocketTest, RstWithReadAndWritePending) {
   EXPECT_TRUE(write_callback_.have_result());
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 // Makes sure the proxy client socket's source gets the expected NetLog events
@@ -1317,7 +1320,7 @@ TEST_P(SpdyProxyClientSocketTest, NetLog) {
   EXPECT_TRUE(LogContainsEndEvent(entry_list, 9, NetLog::TYPE_SOCKET_ALIVE));
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 // CompletionCallback that causes the SpdyProxyClientSocket to be
@@ -1387,7 +1390,7 @@ TEST_P(SpdyProxyClientSocketTest, RstWithReadAndWritePendingDelete) {
   EXPECT_FALSE(write_callback_.have_result());
 
   // Let the RST_STREAM write while |rst| is in-scope.
-  base::MessageLoop::current()->RunUntilIdle();
+  base::RunLoop().RunUntilIdle();
 }
 
 }  // namespace net

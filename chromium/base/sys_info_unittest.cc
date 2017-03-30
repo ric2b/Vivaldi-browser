@@ -16,13 +16,6 @@
 typedef PlatformTest SysInfoTest;
 using base::FilePath;
 
-#if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
-TEST_F(SysInfoTest, MaxSharedMemorySize) {
-  // We aren't actually testing that it's correct, just that it's sane.
-  EXPECT_GT(base::SysInfo::MaxSharedMemorySize(), 0u);
-}
-#endif
-
 TEST_F(SysInfoTest, NumProcs) {
   // We aren't actually testing that it's correct, just that it's sane.
   EXPECT_GE(base::SysInfo::NumberOfProcessors(), 1);
@@ -40,7 +33,15 @@ TEST_F(SysInfoTest, AmountOfFreeDiskSpace) {
   // We aren't actually testing that it's correct, just that it's sane.
   FilePath tmp_path;
   ASSERT_TRUE(base::GetTempDir(&tmp_path));
-  EXPECT_GT(base::SysInfo::AmountOfFreeDiskSpace(tmp_path), 0)
+  EXPECT_GE(base::SysInfo::AmountOfFreeDiskSpace(tmp_path), 0)
+            << tmp_path.value();
+}
+
+TEST_F(SysInfoTest, AmountOfTotalDiskSpace) {
+  // We aren't actually testing that it's correct, just that it's sane.
+  FilePath tmp_path;
+  ASSERT_TRUE(base::GetTempDir(&tmp_path));
+  EXPECT_GT(base::SysInfo::AmountOfTotalDiskSpace(tmp_path), 0)
             << tmp_path.value();
 }
 

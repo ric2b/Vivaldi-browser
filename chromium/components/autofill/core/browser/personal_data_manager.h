@@ -36,6 +36,10 @@ class SigninManagerBase;
 class PersonalDataManagerFactory;
 #endif
 
+namespace sync_driver {
+class SyncService;
+}
+
 namespace autofill {
 class AutofillInteractiveTest;
 class AutofillTest;
@@ -75,12 +79,17 @@ class PersonalDataManager : public KeyedService,
             SigninManagerBase* signin_manager,
             bool is_off_the_record);
 
+  // Called once the sync service is known to be instantiated. Note that it may
+  // not be started, but it's preferences can be queried.
+  void OnSyncServiceInitialized(sync_driver::SyncService* sync_service);
+
   // WebDataServiceConsumer:
   void OnWebDataServiceRequestDone(WebDataServiceBase::Handle h,
                                    const WDTypedResult* result) override;
 
   // AutofillWebDataServiceObserverOnUIThread:
   void AutofillMultipleChanged() override;
+  void SyncStarted(syncer::ModelType model_type) override;
 
   // Adds a listener to be notified of PersonalDataManager events.
   virtual void AddObserver(PersonalDataManagerObserver* observer);
@@ -138,8 +147,12 @@ class PersonalDataManager : public KeyedService,
   virtual void UpdateCreditCard(const CreditCard& credit_card);
 
   // Update a server card. Only the full number and masked/unmasked
-  // status can be changed.
+  // status can be changed. Looks up the card by server ID.
   virtual void UpdateServerCreditCard(const CreditCard& credit_card);
+
+  // Updates the billing address for the server |credit_card|. Looks up the card
+  // by GUID.
+  void UpdateServerCardBillingAddress(const CreditCard& credit_card);
 
   // Resets the card for |guid| to the masked state.
   void ResetFullServerCard(const std::string& guid);
@@ -180,6 +193,9 @@ class PersonalDataManager : public KeyedService,
   // Returns true if there is some data synced from Wallet.
   bool HasServerData() const;
 
+  // Returns the profiles to suggest to the user, ordered by frecency.
+  const std::vector<AutofillProfile*> GetProfilesToSuggest() const;
+
   // Loads profiles that can suggest data for |type|. |field_contents| is the
   // part the user has already typed. |field_is_autofilled| is true if the field
   // has already been autofilled. |other_field_types| represents the rest of
@@ -189,6 +205,11 @@ class PersonalDataManager : public KeyedService,
       const base::string16& field_contents,
       bool field_is_autofilled,
       const std::vector<ServerFieldType>& other_field_types);
+
+  // Returns the credit cards to suggest to the user. Those have been deduped
+  // and ordered by frecency with the expired cards put at the end of the
+  // vector.
+  const std::vector<CreditCard*> GetCreditCardsToSuggest() const;
 
   // Gets credit cards that can suggest data for |type|. See
   // GetProfileSuggestions for argument descriptions. The variant in each
@@ -217,11 +238,10 @@ class PersonalDataManager : public KeyedService,
   // otherwise appends |new_profile| to the end of that list. Fills
   // |merged_profiles| with the result. Returns the |guid| of the new or updated
   // profile.
-  static std::string MergeProfile(
-      const AutofillProfile& new_profile,
-      std::vector<AutofillProfile*> existing_profiles,
-      const std::string& app_locale,
-      std::vector<AutofillProfile>* merged_profiles);
+  std::string MergeProfile(const AutofillProfile& new_profile,
+                           std::vector<AutofillProfile*> existing_profiles,
+                           const std::string& app_locale,
+                           std::vector<AutofillProfile>* merged_profiles);
 
   // Returns true if |country_code| is a country that the user is likely to
   // be associated with the user. More concretely, it checks if there are any
@@ -238,13 +258,37 @@ class PersonalDataManager : public KeyedService,
   // local duplicates, and local cards are preferred over their masked server
   // card duplicate.
   static void DedupeCreditCardToSuggest(
-      std::list<const CreditCard*>* cards_to_suggest);
+      std::list<CreditCard*>* cards_to_suggest);
+
+  // Notifies test observers that personal data has changed.
+  void NotifyPersonalDataChangedForTest() {
+    NotifyPersonalDataChanged();
+  }
 
  protected:
   // Only PersonalDataManagerFactory and certain tests can create instances of
   // PersonalDataManager.
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, FirstMiddleLast);
   FRIEND_TEST_ALL_PREFIXES(AutofillMetricsTest, AutofillIsEnabledAtStartup);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           DedupeProfiles_ProfilesToDelete);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest, ApplyProfileUseDatesFix);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyProfileUseDatesFix_NotAppliedTwice);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyDedupingRoutine_MergedProfileValues);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyDedupingRoutine_VerifiedProfileFirst);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyDedupingRoutine_VerifiedProfileLast);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyDedupingRoutine_MultipleVerifiedProfiles);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyDedupingRoutine_FeatureDisabled);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyDedupingRoutine_OncePerVersion);
+  FRIEND_TEST_ALL_PREFIXES(PersonalDataManagerTest,
+                           ApplyDedupingRoutine_MultipleDedupes);
   friend class autofill::AutofillInteractiveTest;
   friend class autofill::AutofillTest;
   friend class autofill::PersonalDataManagerFactory;
@@ -398,7 +442,29 @@ class PersonalDataManager : public KeyedService,
   std::vector<Suggestion> GetSuggestionsForCards(
       const AutofillType& type,
       const base::string16& field_contents,
-      const std::list<const CreditCard*>& cards_to_suggest) const;
+      const std::vector<CreditCard*>& cards_to_suggest) const;
+
+  // Runs the Autofill use date fix routine if it's never been done. Returns
+  // whether the routine was run.
+  void ApplyProfileUseDatesFix();
+
+  // Applies the deduping routine once per major version if the feature is
+  // enabled. Calls DedupeProfiles with the content of |web_profiles_| as a
+  // parameter. Removes the profiles to delete from the database and updates the
+  // others. Returns true if the routine was run.
+  bool ApplyDedupingRoutine();
+
+  // Goes through all the |existing_profiles| and merges all similar unverified
+  // profiles together. Also discards unverified profiles that are similar to a
+  // verified profile. All the profiles except the results of the merges will be
+  // added to |profile_guids_to_delete|. This routine should be run once per
+  // major version.
+  //
+  // This method should only be called by ApplyDedupingRoutine. It is split for
+  // testing purposes.
+  void DedupeProfiles(
+      std::vector<AutofillProfile*>* existing_profiles,
+      std::unordered_set<AutofillProfile*>* profile_guids_to_delete);
 
   const std::string app_locale_;
 
@@ -431,6 +497,10 @@ class PersonalDataManager : public KeyedService,
 
   // An observer to listen for changes to prefs::kAutofillWalletImportEnabled.
   std::unique_ptr<BooleanPrefMember> wallet_enabled_pref_;
+
+  // Set to true if autofill profile deduplication is enabled and needs to be
+  // performed on the next data refresh.
+  bool is_autofill_profile_dedupe_pending_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(PersonalDataManager);
 };

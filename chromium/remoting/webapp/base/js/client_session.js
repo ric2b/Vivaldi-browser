@@ -182,7 +182,8 @@ remoting.ClientSession.ConnectionError = {
   HOST_OVERLOAD: 5,
   MAX_SESSION_LENGTH: 6,
   HOST_CONFIGURATION_ERROR: 7,
-  NACL_PLUGIN_CRASHED: 8
+  NACL_PLUGIN_CRASHED: 8,
+  INVALID_ACCOUNT: 9
 };
 
 /**
@@ -203,29 +204,29 @@ remoting.ClientSession.ConnectionError.fromString = function(error) {
  */
 remoting.ClientSession.PerfStats = function() {};
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.videoBandwidth;
+remoting.ClientSession.PerfStats.prototype.videoBandwidth = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.videoFrameRate;
+remoting.ClientSession.PerfStats.prototype.videoFrameRate = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.captureLatency;
+remoting.ClientSession.PerfStats.prototype.captureLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.maxCaptureLatency;
+remoting.ClientSession.PerfStats.prototype.maxCaptureLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.encodeLatency;
+remoting.ClientSession.PerfStats.prototype.encodeLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.maxEncodeLatency;
+remoting.ClientSession.PerfStats.prototype.maxEncodeLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.decodeLatency;
+remoting.ClientSession.PerfStats.prototype.decodeLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.maxDecodeLatency;
+remoting.ClientSession.PerfStats.prototype.maxDecodeLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.renderLatency;
+remoting.ClientSession.PerfStats.prototype.renderLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.maxRenderLatency;
+remoting.ClientSession.PerfStats.prototype.maxRenderLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.roundtripLatency;
+remoting.ClientSession.PerfStats.prototype.roundtripLatency = 0;
 /** @type {number} */
-remoting.ClientSession.PerfStats.prototype.maxRoundtripLatency;
+remoting.ClientSession.PerfStats.prototype.maxRoundtripLatency = 0;
 
 // Keys for connection statistics.
 remoting.ClientSession.STATS_KEY_VIDEO_BANDWIDTH = 'videoBandwidth';
@@ -487,6 +488,9 @@ remoting.ClientSession.prototype.onConnectionStatusUpdate =
         break;
       case remoting.ClientSession.ConnectionError.NACL_PLUGIN_CRASHED:
         errorTag = remoting.Error.Tag.NACL_PLUGIN_CRASHED;
+        break;
+      case remoting.ClientSession.ConnectionError.INVALID_ACCOUNT:
+        errorTag = remoting.Error.Tag.INVALID_ACCOUNT;
         break;
       default:
         this.error_ = remoting.Error.unexpected();

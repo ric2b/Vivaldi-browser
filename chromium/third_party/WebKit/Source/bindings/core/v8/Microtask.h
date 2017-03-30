@@ -35,7 +35,6 @@
 #include "public/platform/WebTaskRunner.h"
 #include "wtf/Allocator.h"
 #include "wtf/Functional.h"
-#include "wtf/PassOwnPtr.h"
 #include <v8.h>
 
 namespace blink {
@@ -67,7 +66,7 @@ public:
     // TODO(jochen): Make all microtasks pass in the ScriptState they want to be
     // executed in. Until then, all microtasks have to keep track of their
     // ScriptState themselves.
-    static void enqueueMicrotask(std::unique_ptr<SameThreadClosure>);
+    static void enqueueMicrotask(std::unique_ptr<WTF::Closure>);
 };
 
 } // namespace blink

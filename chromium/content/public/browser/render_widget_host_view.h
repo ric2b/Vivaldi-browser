@@ -11,14 +11,13 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/web/WebInputEvent.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "third_party/skia/include/core/SkRegion.h"
 #include "ui/gfx/native_widget_types.h"
 
 class GURL;
 
 namespace gfx {
+class Point;
 class Rect;
 class Size;
 }
@@ -167,6 +166,14 @@ class CONTENT_EXPORT RenderWidgetHostView {
   // End subscribing for frame presentation events. FrameSubscriber will be
   // deleted after this call.
   virtual void EndFrameSubscription() = 0;
+
+  // Notification that a node was touched.
+  // The |location_dips_screen| parameter contains the location where the touch
+  // occurred in DIPs in screen coordinates.
+  // The |editable| parameter indicates if the node is editable, for e.g.
+  // an input field, etc.
+  virtual void FocusedNodeTouched(const gfx::Point& location_dips_screen,
+                                  bool editable) = 0;
 
 #if defined(OS_MACOSX)
   // Return the accelerated widget which hosts the CALayers that draw the

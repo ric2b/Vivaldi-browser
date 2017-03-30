@@ -20,10 +20,10 @@
 namespace cc {
 class ImageSerializationProcessor;
 
-ClipDisplayItem::ClipDisplayItem(
-    const gfx::Rect& clip_rect,
-    const std::vector<SkRRect>& rounded_clip_rects) {
-  SetNew(clip_rect, rounded_clip_rects);
+ClipDisplayItem::ClipDisplayItem(const gfx::Rect& clip_rect,
+                                 const std::vector<SkRRect>& rounded_clip_rects,
+                                 bool antialias) {
+  SetNew(clip_rect, rounded_clip_rects, antialias);
 }
 
 ClipDisplayItem::ClipDisplayItem(const proto::DisplayItem& proto) {
@@ -36,20 +36,21 @@ ClipDisplayItem::ClipDisplayItem(const proto::DisplayItem& proto) {
   for (int i = 0; i < details.rounded_rects_size(); i++) {
     rounded_clip_rects.push_back(ProtoToSkRRect(details.rounded_rects(i)));
   }
-  SetNew(clip_rect, rounded_clip_rects);
+  bool antialias = details.antialias();
+  SetNew(clip_rect, rounded_clip_rects, antialias);
 }
 
 void ClipDisplayItem::SetNew(const gfx::Rect& clip_rect,
-                             const std::vector<SkRRect>& rounded_clip_rects) {
+                             const std::vector<SkRRect>& rounded_clip_rects,
+                             bool antialias) {
   clip_rect_ = clip_rect;
   rounded_clip_rects_ = rounded_clip_rects;
+  antialias_ = antialias;
 }
 
 ClipDisplayItem::~ClipDisplayItem() {}
 
-void ClipDisplayItem::ToProtobuf(
-    proto::DisplayItem* proto,
-    ImageSerializationProcessor* image_serialization_processor) const {
+void ClipDisplayItem::ToProtobuf(proto::DisplayItem* proto) const {
   proto->set_type(proto::DisplayItem::Type_Clip);
 
   proto::ClipDisplayItem* details = proto->mutable_clip_item();
@@ -58,23 +59,22 @@ void ClipDisplayItem::ToProtobuf(
   for (const auto& rrect : rounded_clip_rects_) {
     SkRRectToProto(rrect, details->add_rounded_rects());
   }
+  details->set_antialias(antialias_);
 }
 
 void ClipDisplayItem::Raster(SkCanvas* canvas,
-                             const gfx::Rect& canvas_target_playback_rect,
                              SkPicture::AbortCallback* callback) const {
-  bool antialiased = true;
   canvas->save();
   canvas->clipRect(SkRect::MakeXYWH(clip_rect_.x(), clip_rect_.y(),
                                     clip_rect_.width(), clip_rect_.height()),
-                   SkRegion::kIntersect_Op, antialiased);
+                   SkRegion::kIntersect_Op, antialias_);
   for (size_t i = 0; i < rounded_clip_rects_.size(); ++i) {
     if (rounded_clip_rects_[i].isRect()) {
       canvas->clipRect(rounded_clip_rects_[i].rect(), SkRegion::kIntersect_Op,
-                       antialiased);
+                       antialias_);
     } else {
       canvas->clipRRect(rounded_clip_rects_[i], SkRegion::kIntersect_Op,
-                        antialiased);
+                        antialias_);
     }
   }
 }
@@ -120,14 +120,11 @@ EndClipDisplayItem::EndClipDisplayItem(const proto::DisplayItem& proto) {
 EndClipDisplayItem::~EndClipDisplayItem() {
 }
 
-void EndClipDisplayItem::ToProtobuf(
-    proto::DisplayItem* proto,
-    ImageSerializationProcessor* image_serialization_processor) const {
+void EndClipDisplayItem::ToProtobuf(proto::DisplayItem* proto) const {
   proto->set_type(proto::DisplayItem::Type_EndClip);
 }
 
 void EndClipDisplayItem::Raster(SkCanvas* canvas,
-                                const gfx::Rect& canvas_target_playback_rect,
                                 SkPicture::AbortCallback* callback) const {
   canvas->restore();
 }

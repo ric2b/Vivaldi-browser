@@ -41,7 +41,9 @@
 #include "modules/webdatabase/sqlite/SQLValue.h"
 #include "modules/webdatabase/sqlite/SQLiteTransaction.h"
 #include "platform/Logging.h"
+#include "wtf/PtrUtil.h"
 #include "wtf/StdLibExtras.h"
+#include <memory>
 
 
 // How does a SQLTransaction work?
@@ -253,7 +255,7 @@
 //
 //     When executing the transaction (in DatabaseThread::databaseThread()):
 //     ====================================================================
-//     OwnPtr<DatabaseTask> task;             // points to ...
+//     std::unique_ptr<DatabaseTask> task;             // points to ...
 //     --> DatabaseTransactionTask            // Member<SQLTransactionBackend> m_transaction points to ...
 //         --> SQLTransactionBackend          // Member<SQLTransaction> m_frontend;
 //             --> SQLTransaction             // Member<SQLTransactionBackend> m_backend points to ...
@@ -277,7 +279,7 @@
 //     However, there will still be a DatabaseTask pointing to the SQLTransactionBackend (see
 //     the "When executing the transaction" chain above). This will keep the
 //     SQLTransactionBackend alive until DatabaseThread::databaseThread() releases its
-//     task OwnPtr.
+//     task std::unique_ptr.
 //
 //     What happens if a transaction is interrupted?
 //     ============================================
@@ -356,6 +358,7 @@ SQLTransactionBackend::SQLTransactionBackend(Database* db, SQLTransaction* front
     , m_readOnly(readOnly)
     , m_hasVersionMismatch(false)
 {
+    DCHECK(isMainThread());
     ASSERT(m_database);
     m_frontend->setBackend(this);
     m_requestedState = SQLTransactionState::AcquireLock;
@@ -368,11 +371,8 @@ SQLTransactionBackend::~SQLTransactionBackend()
 
 DEFINE_TRACE(SQLTransactionBackend)
 {
-    visitor->trace(m_frontend);
-    visitor->trace(m_currentStatementBackend);
     visitor->trace(m_database);
     visitor->trace(m_wrapper);
-    visitor->trace(m_statementQueue);
 }
 
 void SQLTransactionBackend::doCleanup()
@@ -392,7 +392,7 @@ void SQLTransactionBackend::doCleanup()
         // m_sqliteTransaction invokes SQLiteTransaction's destructor which does
         // just that. We might as well do this unconditionally and free up its
         // resources because we're already terminating.
-        m_sqliteTransaction.clear();
+        m_sqliteTransaction.reset();
     }
 
     // Release the lock on this database
@@ -467,12 +467,14 @@ SQLTransactionBackend::StateFunction SQLTransactionBackend::stateFunctionFor(SQL
 
 void SQLTransactionBackend::enqueueStatementBackend(SQLStatementBackend* statementBackend)
 {
+    DCHECK(isMainThread());
     MutexLocker locker(m_statementMutex);
     m_statementQueue.append(statementBackend);
 }
 
 void SQLTransactionBackend::computeNextStateAndCleanupIfNeeded()
 {
+    DCHECK(database()->getDatabaseContext()->databaseThread()->isDatabaseThread());
     // Only honor the requested state transition if we're not supposed to be
     // cleaning up and shutting down:
     if (m_database->opened()) {
@@ -499,7 +501,7 @@ void SQLTransactionBackend::computeNextStateAndCleanupIfNeeded()
     // The current SQLite transaction should be stopped, as well
     if (m_sqliteTransaction) {
         m_sqliteTransaction->stop();
-        m_sqliteTransaction.clear();
+        m_sqliteTransaction.reset();
     }
 
     // Terminate the frontend state machine. This also gets the frontend to
@@ -520,6 +522,7 @@ void SQLTransactionBackend::performNextStep()
 void SQLTransactionBackend::executeSQL(SQLStatement* statement,
     const String& sqlStatement, const Vector<SQLValue>& arguments, int permissions)
 {
+    DCHECK(isMainThread());
     enqueueStatementBackend(SQLStatementBackend::create(statement, sqlStatement, arguments, permissions));
 }
 
@@ -549,6 +552,7 @@ void SQLTransactionBackend::lockAcquired()
 
 SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
 {
+    DCHECK(database()->getDatabaseContext()->databaseThread()->isDatabaseThread());
     ASSERT(!m_database->sqliteDatabase().transactionInProgress());
     ASSERT(m_lockAcquired);
 
@@ -559,7 +563,7 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
         m_database->sqliteDatabase().setMaximumSize(m_database->maximumSize());
 
     ASSERT(!m_sqliteTransaction);
-    m_sqliteTransaction = adoptPtr(new SQLiteTransaction(m_database->sqliteDatabase(), m_readOnly));
+    m_sqliteTransaction = wrapUnique(new SQLiteTransaction(m_database->sqliteDatabase(), m_readOnly));
 
     m_database->resetDeletes();
     m_database->disableAuthorizer();
@@ -572,7 +576,7 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
         m_database->reportStartTransactionResult(2, SQLError::DATABASE_ERR, m_database->sqliteDatabase().lastError());
         m_transactionError = SQLErrorData::create(SQLError::DATABASE_ERR, "unable to begin transaction",
             m_database->sqliteDatabase().lastError(), m_database->sqliteDatabase().lastErrorMsg());
-        m_sqliteTransaction.clear();
+        m_sqliteTransaction.reset();
         return nextStateForTransactionError();
     }
 
@@ -585,7 +589,7 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
         m_transactionError = SQLErrorData::create(SQLError::DATABASE_ERR, "unable to read version",
             m_database->sqliteDatabase().lastError(), m_database->sqliteDatabase().lastErrorMsg());
         m_database->disableAuthorizer();
-        m_sqliteTransaction.clear();
+        m_sqliteTransaction.reset();
         m_database->enableAuthorizer();
         return nextStateForTransactionError();
     }
@@ -594,7 +598,7 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
     // Spec 4.3.2.3: Perform preflight steps, jumping to the error callback if they fail
     if (m_wrapper && !m_wrapper->performPreflight(this)) {
         m_database->disableAuthorizer();
-        m_sqliteTransaction.clear();
+        m_sqliteTransaction.reset();
         m_database->enableAuthorizer();
         if (m_wrapper->sqlError()) {
             m_transactionError = SQLErrorData::create(*m_wrapper->sqlError());
@@ -615,6 +619,7 @@ SQLTransactionState SQLTransactionBackend::openTransactionAndPreflight()
 
 SQLTransactionState SQLTransactionBackend::runStatements()
 {
+    DCHECK(database()->getDatabaseContext()->databaseThread()->isDatabaseThread());
     ASSERT(m_lockAcquired);
     SQLTransactionState nextState;
 
@@ -649,6 +654,7 @@ SQLTransactionState SQLTransactionBackend::runStatements()
 
 void SQLTransactionBackend::getNextStatement()
 {
+    DCHECK(database()->getDatabaseContext()->databaseThread()->isDatabaseThread());
     m_currentStatementBackend = nullptr;
 
     MutexLocker locker(m_statementMutex);
@@ -788,7 +794,7 @@ SQLTransactionState SQLTransactionBackend::cleanupAfterTransactionErrorCallback(
         m_sqliteTransaction->rollback();
 
         ASSERT(!m_database->sqliteDatabase().transactionInProgress());
-        m_sqliteTransaction.clear();
+        m_sqliteTransaction.reset();
     }
     m_database->enableAuthorizer();
 

@@ -63,7 +63,7 @@ class TaskGraphRunnerTestBase {
     // Overridden from Task:
     void RunOnWorkerThread() override;
 
-    virtual void CompleteOnOriginThread();
+    virtual void OnTaskCompleted();
 
    protected:
     ~FakeTaskImpl() override {}
@@ -84,7 +84,7 @@ class TaskGraphRunnerTestBase {
         : FakeTaskImpl(test, namespace_index, id) {}
 
     // Overridden from FakeTaskImpl:
-    void CompleteOnOriginThread() override {}
+    void OnTaskCompleted() override {}
 
    private:
     ~FakeDependentTaskImpl() override {}

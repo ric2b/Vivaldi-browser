@@ -65,7 +65,7 @@ Para ver mais informações sobre privacidade, consulte a Política de Privacida
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2366718077645204424">Não é possível acessar o host. Isso se deve, provavelmente, à configuração da rede que você está usando.</translation>
 <translation id="2370754117186920852"><ph name="OPTIONAL_OFFLINE_REASON" />  Visto on-line pela última vez <ph name="RELATIVE_TIMESTAMP" />.</translation>
-<translation id="2498359688066513246">Ajuda e feedback</translation>
+<translation id="2498359688066513246">Central de ajuda e feedback</translation>
 <translation id="2499160551253595098">Ajude-nos a melhorar a Área de trabalho remota do Google Chrome por meio da coleta de estatísticas de uso e de relatórios de falhas.</translation>
 <translation id="2512228156274966424">OBSERVAÇÃO: para garantir que todos os atalhos do teclado estejam disponíveis, você pode configurar a Área de trabalho remota do Google Chrome para "Abrir como janela".</translation>
 <translation id="2540992418118313681">Gostaria de compartilhar este computador para que outro usuário o veja e controle?</translation>
@@ -130,6 +130,7 @@ Chromoting</translation>
 <translation id="4156740505453712750">Para proteger o acesso a este computador, selecione um PIN de <ph name="BOLD_START" />pelo menos seis dígitos<ph name="BOLD_END" />. Este PIN será necessário para estabelecer conexão a partir de outro local.</translation>
 <translation id="4176825807642096119">Código de acesso</translation>
 <translation id="4207623512727273241">Execute o instalador antes de continuar.</translation>
+<translation id="4227991223508142681">Utilitário de aprovisionamento de host</translation>
 <translation id="4240294130679914010">Desinstalador do host do Chromoting</translation>
 <translation id="4277463233460010382">Este computador está configurado para permitir que um ou mais clientes se conectem sem ter que inserir um PIN.</translation>
 <translation id="4277736576214464567">Código de acesso inválido. Tente novamente.</translation>
@@ -261,6 +262,7 @@ remota do Google Chrome</translation>
 <translation id="7836926030608666805">Alguns componentes obrigatórios não foram encontrados. Certifique-se de que você esteja executando a última versão do Google Chrome e tente novamente.</translation>
 <translation id="7868137160098754906">Digite seu PIN do computador remoto.</translation>
 <translation id="7869445566579231750">Você não tem permissão para executar este aplicativo.</translation>
+<translation id="7895403300744144251">As políticas de segurança no computador remoto não permitem conexões a partir da sua conta.</translation>
 <translation id="7948001860594368197">Opções de tela</translation>
 <translation id="7970576581263377361">Falha na autenticação. Faça login novamente no Chromium.</translation>
 <translation id="7981525049612125370">A sessão remota expirou.</translation>

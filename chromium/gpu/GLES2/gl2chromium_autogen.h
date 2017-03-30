@@ -290,10 +290,12 @@
 #define glDestroyImageCHROMIUM GLES2_GET_FUN(DestroyImageCHROMIUM)
 #define glCreateGpuMemoryBufferImageCHROMIUM \
   GLES2_GET_FUN(CreateGpuMemoryBufferImageCHROMIUM)
+#define glGetImageivCHROMIUM GLES2_GET_FUN(GetImageivCHROMIUM)
+#define glDescheduleUntilFinishedCHROMIUM \
+  GLES2_GET_FUN(DescheduleUntilFinishedCHROMIUM)
 #define glGetTranslatedShaderSourceANGLE \
   GLES2_GET_FUN(GetTranslatedShaderSourceANGLE)
 #define glPostSubBufferCHROMIUM GLES2_GET_FUN(PostSubBufferCHROMIUM)
-#define glTexImageIOSurface2DCHROMIUM GLES2_GET_FUN(TexImageIOSurface2DCHROMIUM)
 #define glCopyTextureCHROMIUM GLES2_GET_FUN(CopyTextureCHROMIUM)
 #define glCopySubTextureCHROMIUM GLES2_GET_FUN(CopySubTextureCHROMIUM)
 #define glCompressedCopyTextureCHROMIUM \
@@ -326,6 +328,8 @@
 #define glScheduleOverlayPlaneCHROMIUM \
   GLES2_GET_FUN(ScheduleOverlayPlaneCHROMIUM)
 #define glScheduleCALayerCHROMIUM GLES2_GET_FUN(ScheduleCALayerCHROMIUM)
+#define glScheduleCALayerInUseQueryCHROMIUM \
+  GLES2_GET_FUN(ScheduleCALayerInUseQueryCHROMIUM)
 #define glCommitOverlayPlanesCHROMIUM GLES2_GET_FUN(CommitOverlayPlanesCHROMIUM)
 #define glSwapInterval GLES2_GET_FUN(SwapInterval)
 #define glFlushDriverCachesCHROMIUM GLES2_GET_FUN(FlushDriverCachesCHROMIUM)

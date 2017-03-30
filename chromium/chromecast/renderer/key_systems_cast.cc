@@ -13,6 +13,7 @@
 #include "components/cdm/renderer/widevine_key_system_properties.h"
 #include "media/base/eme_constants.h"
 #include "media/base/key_system_properties.h"
+#include "media/media_features.h"
 
 #include "widevine_cdm_version.h" // In SHARED_INTERMEDIATE_DIR.
 
@@ -20,7 +21,6 @@ using ::media::EmeConfigRule;
 using ::media::EmeFeatureSupport;
 using ::media::EmeInitDataType;
 using ::media::EmeMediaType;
-using ::media::EmeRobustness;
 using ::media::EmeSessionTypeSupport;
 using ::media::SupportedCodecs;
 
@@ -31,6 +31,10 @@ namespace {
 #if defined(PLAYREADY_CDM_AVAILABLE)
 class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
  public:
+  explicit PlayReadyKeySystemProperties(bool persistent_license_support)
+      : persistent_license_support_(persistent_license_support) {
+  }
+
   std::string GetKeySystemName() const override {
     return media::kChromecastPlayreadyKeySystem;
   }
@@ -40,7 +44,12 @@ class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
   }
 
   SupportedCodecs GetSupportedCodecs() const override {
-    return ::media::EME_CODEC_MP4_AAC | ::media::EME_CODEC_MP4_AVC1;
+    SupportedCodecs codecs =
+        ::media::EME_CODEC_MP4_AAC | ::media::EME_CODEC_MP4_AVC1;
+#if BUILDFLAG(ENABLE_HEVC_DEMUXING)
+    codecs |= ::media::EME_CODEC_MP4_HEVC;
+#endif
+    return codecs;
   }
 
   EmeConfigRule GetRobustnessConfigRule(
@@ -51,11 +60,8 @@ class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
   }
 
   EmeSessionTypeSupport GetPersistentLicenseSessionSupport() const override {
-#if defined(OS_ANDROID)
-    return EmeSessionTypeSupport::NOT_SUPPORTED;
-#else
-    return EmeSessionTypeSupport::SUPPORTED;
-#endif
+    return persistent_license_support_ ? EmeSessionTypeSupport::SUPPORTED
+        : EmeSessionTypeSupport::NOT_SUPPORTED;
   }
 
   EmeSessionTypeSupport GetPersistentReleaseMessageSessionSupport()
@@ -69,6 +75,9 @@ class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
   EmeFeatureSupport GetDistinctiveIdentifierSupport() const override {
     return EmeFeatureSupport::ALWAYS_ENABLED;
   }
+
+ private:
+  const bool persistent_license_support_;
 };
 #endif  // PLAYREADY_CDM_AVAILABLE
 
@@ -76,12 +85,18 @@ class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
 
 void AddChromecastKeySystems(
     std::vector<std::unique_ptr<::media::KeySystemProperties>>*
-        key_systems_properties) {
+        key_systems_properties,
+    bool enable_persistent_license_support) {
 #if defined(PLAYREADY_CDM_AVAILABLE)
-  key_systems_properties->emplace_back(new PlayReadyKeySystemProperties());
+#if defined(OS_ANDROID)
+  CHECK(!enable_persistent_license_support);
+#endif
+  key_systems_properties->emplace_back(
+      new PlayReadyKeySystemProperties(enable_persistent_license_support));
 #endif  // defined(PLAYREADY_CDM_AVAILABLE)
 
 #if defined(WIDEVINE_CDM_AVAILABLE)
+  using Robustness = cdm::WidevineKeySystemProperties::Robustness;
   ::media::SupportedCodecs codecs =
       ::media::EME_CODEC_MP4_AAC | ::media::EME_CODEC_MP4_AVC1 |
       ::media::EME_CODEC_WEBM_VP8 | ::media::EME_CODEC_WEBM_VP9;
@@ -90,8 +105,8 @@ void AddChromecastKeySystems(
 #if defined(OS_ANDROID)
       codecs,  // Hardware-secure codecs.
 #endif
-      EmeRobustness::HW_SECURE_ALL,          // Max audio robustness.
-      EmeRobustness::HW_SECURE_ALL,          // Max video robustness.
+      Robustness::HW_SECURE_ALL,             // Max audio robustness.
+      Robustness::HW_SECURE_ALL,             // Max video robustness.
       EmeSessionTypeSupport::NOT_SUPPORTED,  // persistent-license.
       EmeSessionTypeSupport::NOT_SUPPORTED,  // persistent-release-message.
       // Note: On Chromecast, all CDMs may have persistent state.

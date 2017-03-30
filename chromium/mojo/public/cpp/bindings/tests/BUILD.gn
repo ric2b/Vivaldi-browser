@@ -14,9 +14,7 @@ source_set("tests") {
     "bind_task_runner_unittest.cc",
     "binding_callback_unittest.cc",
     "binding_unittest.cc",
-    "bounds_checker_unittest.cc",
     "buffer_unittest.cc",
-    "callback_unittest.cc",
     "connector_unittest.cc",
     "constant_unittest.cc",
     "container_test_util.cc",
@@ -24,6 +22,7 @@ source_set("tests") {
     "equals_unittest.cc",
     "handle_passing_unittest.cc",
     "interface_ptr_unittest.cc",
+    "map_common_test.h",
     "map_unittest.cc",
     "message_queue.cc",
     "message_queue.h",
@@ -40,6 +39,7 @@ source_set("tests") {
     "sync_method_unittest.cc",
     "type_conversion_unittest.cc",
     "union_unittest.cc",
+    "validation_context_unittest.cc",
     "validation_unittest.cc",
     "variant_test_util.h",
   ]
@@ -47,7 +47,6 @@ source_set("tests") {
   deps = [
     ":mojo_public_bindings_test_utils",
     "//mojo/public/cpp/bindings",
-    "//mojo/public/cpp/bindings:callback",
     "//mojo/public/cpp/system",
     "//mojo/public/cpp/test_support:test_utils",
     "//mojo/public/interfaces/bindings/tests:test_associated_interfaces",
@@ -73,27 +72,30 @@ source_set("tests") {
   }
 }
 
-source_set("for_blink_tests") {
-  testonly = true
+if (!is_ios) {
+  source_set("for_blink_tests") {
+    testonly = true
 
-  sources = [
-    "array_common_test.h",
-    "container_test_util.cc",
-    "container_test_util.h",
-    "variant_test_util.h",
-    "wtf_array_unittest.cc",
-    "wtf_types_unittest.cc",
-  ]
+    sources = [
+      "array_common_test.h",
+      "container_test_util.cc",
+      "container_test_util.h",
+      "map_common_test.h",
+      "variant_test_util.h",
+      "wtf_array_unittest.cc",
+      "wtf_map_unittest.cc",
+      "wtf_types_unittest.cc",
+    ]
 
-  deps = [
-    "//mojo/public/cpp/bindings",
-    "//mojo/public/cpp/bindings:callback",
-    "//mojo/public/cpp/system",
-    "//mojo/public/interfaces/bindings/tests:test_interfaces",
-    "//mojo/public/interfaces/bindings/tests:test_wtf_types",
-    "//mojo/public/interfaces/bindings/tests:test_wtf_types_blink",
-    "//testing/gtest",
-  ]
+    deps = [
+      "//mojo/public/cpp/bindings",
+      "//mojo/public/cpp/system",
+      "//mojo/public/interfaces/bindings/tests:test_interfaces",
+      "//mojo/public/interfaces/bindings/tests:test_wtf_types",
+      "//mojo/public/interfaces/bindings/tests:test_wtf_types_blink",
+      "//testing/gtest",
+    ]
+  }
 }
 
 source_set("struct_with_traits_impl") {
@@ -104,6 +106,7 @@ source_set("struct_with_traits_impl") {
 
   deps = [
     "//base",
+    "//mojo/public/cpp/system:system",
   ]
 }
 
@@ -112,14 +115,16 @@ source_set("perftests") {
 
   sources = [
     "bindings_perftest.cc",
-    "e2e_perftest.cc",
   ]
+
+  if (!is_ios) {
+    sources += [ "e2e_perftest.cc" ]
+  }
 
   deps = [
     "//base/test:test_support",
     "//mojo/edk/test:test_support",
     "//mojo/public/cpp/bindings",
-    "//mojo/public/cpp/bindings:callback",
     "//mojo/public/cpp/system",
     "//mojo/public/cpp/test_support:test_utils",
     "//mojo/public/interfaces/bindings/tests:test_interfaces",

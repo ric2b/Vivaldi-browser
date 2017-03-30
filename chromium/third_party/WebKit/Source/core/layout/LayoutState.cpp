@@ -64,6 +64,7 @@ LayoutState::LayoutState(LayoutBox& layoutObject, const LayoutSize& offset, Layo
     } else {
         m_layoutOffset = m_next->m_layoutOffset + offset;
     }
+    m_heightOffsetForTableHeaders = m_next->heightOffsetForTableHeaders();
 
     if (layoutObject.isOutOfFlowPositioned() && !fixed) {
         if (LayoutObject* container = layoutObject.container()) {
@@ -111,7 +112,6 @@ LayoutState::LayoutState(LayoutObject& root)
     , m_containingBlockLogicalWidthChanged(false)
     , m_flowThread(nullptr)
     , m_next(root.view()->layoutState())
-    , m_pageLogicalHeight(0)
     , m_layoutObject(root)
 {
     ASSERT(!m_next);

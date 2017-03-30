@@ -81,7 +81,7 @@ private:
 
     void defaultEventHandler(Event* event) override
     {
-        ASSERT(document().isActive());
+        DCHECK(document().isActive());
         if (event->type() != EventTypeNames::click)
             return;
         HTMLInputElement* host = hostInput();
@@ -210,10 +210,10 @@ void TextFieldInputType::handleKeydownEventForSpinButton(KeyboardEvent* event)
 {
     if (element().isDisabledOrReadOnly())
         return;
-    const String& key = event->keyIdentifier();
-    if (key == "Up")
+    const String& key = event->key();
+    if (key == "ArrowUp")
         spinButtonStepUp();
-    else if (key == "Down" && !event->altKey())
+    else if (key == "ArrowDown" && !event->altKey())
         spinButtonStepDown();
     else
         return;
@@ -282,9 +282,9 @@ bool TextFieldInputType::shouldHaveSpinButton() const
 
 void TextFieldInputType::createShadowSubtree()
 {
-    ASSERT(element().shadow());
+    DCHECK(element().shadow());
     ShadowRoot* shadowRoot = element().userAgentShadowRoot();
-    ASSERT(!shadowRoot->hasChildren());
+    DCHECK(!shadowRoot->hasChildren());
 
     Document& document = element().document();
     bool shouldHaveSpinButton = this->shouldHaveSpinButton();
@@ -424,7 +424,7 @@ void TextFieldInputType::handleBeforeTextInsertedEvent(BeforeTextInsertedEvent* 
     if (element().focused()) {
         selectionLength = element().document().frame()->selection().selectedText().length();
     }
-    ASSERT(oldLength >= selectionLength);
+    DCHECK_GE(oldLength, selectionLength);
 
     // Selected characters will be removed by the next text event.
     unsigned baseLength = oldLength - selectionLength;
@@ -469,7 +469,7 @@ void TextFieldInputType::updatePlaceholderText()
         Element* container = containerElement();
         Node* previous = container ? container : element().innerEditorElement();
         previous->parentNode()->insertBefore(placeholder, previous);
-        ASSERT_WITH_SECURITY_IMPLICATION(placeholder->parentNode() == previous->parentNode());
+        SECURITY_DCHECK(placeholder->parentNode() == previous->parentNode());
     }
     placeholder->setTextContent(placeholderText);
 }

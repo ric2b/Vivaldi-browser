@@ -32,11 +32,12 @@
 #define InjectedScript_h
 
 #include "platform/inspector_protocol/Allocator.h"
-#include "platform/inspector_protocol/TypeBuilder.h"
+#include "platform/inspector_protocol/Platform.h"
 #include "platform/v8_inspector/InjectedScriptNative.h"
 #include "platform/v8_inspector/InspectedContext.h"
+#include "platform/v8_inspector/V8Console.h"
 #include "platform/v8_inspector/V8DebuggerImpl.h"
-#include "wtf/PassOwnPtr.h"
+#include "platform/v8_inspector/protocol/Runtime.h"
 
 #include <v8.h>
 
@@ -55,19 +56,19 @@ using protocol::Maybe;
 class InjectedScript final {
     PROTOCOL_DISALLOW_COPY(InjectedScript);
 public:
-    static PassOwnPtr<InjectedScript> create(InspectedContext*);
+    static std::unique_ptr<InjectedScript> create(InspectedContext*);
     ~InjectedScript();
 
     InspectedContext* context() const { return m_context; }
 
-    void getProperties(ErrorString*, v8::Local<v8::Object>, const String16& groupName, bool ownProperties, bool accessorPropertiesOnly, bool generatePreview, OwnPtr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result, Maybe<protocol::Runtime::ExceptionDetails>*);
+    void getProperties(ErrorString*, v8::Local<v8::Object>, const String16& groupName, bool ownProperties, bool accessorPropertiesOnly, bool generatePreview, std::unique_ptr<protocol::Array<protocol::Runtime::PropertyDescriptor>>* result, Maybe<protocol::Runtime::ExceptionDetails>*);
     void releaseObject(const String16& objectId);
 
-    PassOwnPtr<protocol::Runtime::RemoteObject> wrapObject(ErrorString*, v8::Local<v8::Value>, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
-    bool wrapObjectProperty(ErrorString*, v8::Local<v8::Object>, v8::Local<v8::Value> key, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
+    std::unique_ptr<protocol::Runtime::RemoteObject> wrapObject(ErrorString*, v8::Local<v8::Value>, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
+    bool wrapObjectProperty(ErrorString*, v8::Local<v8::Object>, v8::Local<v8::Name> key, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
     bool wrapPropertyInArray(ErrorString*, v8::Local<v8::Array>, v8::Local<v8::String> property, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
     bool wrapObjectsInArray(ErrorString*, v8::Local<v8::Array>, const String16& groupName, bool forceValueType = false, bool generatePreview = false) const;
-    PassOwnPtr<protocol::Runtime::RemoteObject> wrapTable(v8::Local<v8::Value> table, v8::Local<v8::Value> columns) const;
+    std::unique_ptr<protocol::Runtime::RemoteObject> wrapTable(v8::Local<v8::Value> table, v8::Local<v8::Value> columns) const;
 
     bool findObject(ErrorString*, const RemoteObjectId&, v8::Local<v8::Value>*) const;
     String16 objectGroupName(const RemoteObjectId&) const;
@@ -75,14 +76,14 @@ public:
     void setCustomObjectFormatterEnabled(bool);
     v8::MaybeLocal<v8::Value> resolveCallArgument(ErrorString*, protocol::Runtime::CallArgument*);
 
-    PassOwnPtr<protocol::Runtime::ExceptionDetails> createExceptionDetails(v8::Local<v8::Message>);
+    std::unique_ptr<protocol::Runtime::ExceptionDetails> createExceptionDetails(v8::Local<v8::Message>);
     void wrapEvaluateResult(ErrorString*,
         v8::MaybeLocal<v8::Value> maybeResultValue,
         const v8::TryCatch&,
         const String16& objectGroup,
         bool returnByValue,
         bool generatePreview,
-        OwnPtr<protocol::Runtime::RemoteObject>* result,
+        std::unique_ptr<protocol::Runtime::RemoteObject>* result,
         Maybe<bool>* wasThrown,
         Maybe<protocol::Runtime::ExceptionDetails>*);
     v8::Local<v8::Value> lastEvaluationResult() const;
@@ -114,8 +115,7 @@ public:
         v8::HandleScope m_handleScope;
         v8::TryCatch m_tryCatch;
         v8::Local<v8::Context> m_context;
-        v8::Local<v8::Private> m_extensionPrivate;
-        v8::MaybeLocal<v8::Object> m_global;
+        std::unique_ptr<V8Console::CommandLineAPIScope> m_commandLineAPIScope;
         bool m_ignoreExceptionsAndMuteConsole;
         V8DebuggerImpl::PauseOnExceptionsState m_previousPauseOnExceptionsState;
         bool m_userGesture;
@@ -158,16 +158,16 @@ public:
     };
 
 private:
-    InjectedScript(InspectedContext*, v8::Local<v8::Object>, PassOwnPtr<InjectedScriptNative>);
+    InjectedScript(InspectedContext*, v8::Local<v8::Object>, std::unique_ptr<InjectedScriptNative>);
     bool canAccessInspectedWindow() const;
     v8::Local<v8::Value> v8Value() const;
     v8::MaybeLocal<v8::Value> wrapValue(ErrorString*, v8::Local<v8::Value>, const String16& groupName, bool forceValueType, bool generatePreview) const;
-    v8::MaybeLocal<v8::Object> commandLineAPI(ErrorString*);
+    v8::Local<v8::Object> commandLineAPI();
 
     InspectedContext* m_context;
     v8::Global<v8::Value> m_value;
     v8::Global<v8::Value> m_lastEvaluationResult;
-    OwnPtr<InjectedScriptNative> m_native;
+    std::unique_ptr<InjectedScriptNative> m_native;
     v8::Global<v8::Object> m_commandLineAPI;
 };
 

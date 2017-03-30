@@ -22,16 +22,17 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "modules/webaudio/AudioBufferSourceNode.h"
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/UseCounter.h"
 #include "modules/webaudio/AbstractAudioContext.h"
+#include "modules/webaudio/AudioBufferSourceNode.h"
 #include "modules/webaudio/AudioNodeOutput.h"
 #include "platform/FloatConversion.h"
 #include "platform/audio/AudioUtilities.h"
 #include "wtf/MathExtras.h"
+#include "wtf/PtrUtil.h"
 #include <algorithm>
 
 namespace blink {
@@ -369,8 +370,8 @@ void AudioBufferSourceHandler::setBuffer(AudioBuffer* buffer, ExceptionState& ex
 
         output(0).setNumberOfChannels(numberOfChannels);
 
-        m_sourceChannels = adoptArrayPtr(new const float* [numberOfChannels]);
-        m_destinationChannels = adoptArrayPtr(new float* [numberOfChannels]);
+        m_sourceChannels = wrapArrayUnique(new const float* [numberOfChannels]);
+        m_destinationChannels = wrapArrayUnique(new float* [numberOfChannels]);
 
         for (unsigned i = 0; i < numberOfChannels; ++i)
             m_sourceChannels[i] = buffer->getChannelData(i)->data();
@@ -583,17 +584,28 @@ void AudioBufferSourceHandler::handleStoppableSourceNode()
 }
 
 // ----------------------------------------------------------------
-AudioBufferSourceNode::AudioBufferSourceNode(AbstractAudioContext& context, float sampleRate)
+AudioBufferSourceNode::AudioBufferSourceNode(AbstractAudioContext& context)
     : AudioScheduledSourceNode(context)
     , m_playbackRate(AudioParam::create(context, ParamTypeAudioBufferSourcePlaybackRate, 1.0))
     , m_detune(AudioParam::create(context, ParamTypeAudioBufferSourceDetune, 0.0))
 {
-    setHandler(AudioBufferSourceHandler::create(*this, sampleRate, m_playbackRate->handler(), m_detune->handler()));
+    setHandler(AudioBufferSourceHandler::create(
+        *this,
+        context.sampleRate(),
+        m_playbackRate->handler(),
+        m_detune->handler()));
 }
 
-AudioBufferSourceNode* AudioBufferSourceNode::create(AbstractAudioContext& context, float sampleRate)
+AudioBufferSourceNode* AudioBufferSourceNode::create(AbstractAudioContext& context, ExceptionState& exceptionState)
 {
-    return new AudioBufferSourceNode(context, sampleRate);
+    DCHECK(isMainThread());
+
+    if (context.isContextClosed()) {
+        context.throwExceptionForClosedState(exceptionState);
+        return nullptr;
+    }
+
+    return new AudioBufferSourceNode(context);
 }
 
 DEFINE_TRACE(AudioBufferSourceNode)

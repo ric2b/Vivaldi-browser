@@ -141,7 +141,7 @@
             'win/loader_lock_dll.cc',
           ],
           'msvs_settings': {
-            'NoImportLibrary': 'true',
+            #'NoImportLibrary': 'true',
           },
         },
         {

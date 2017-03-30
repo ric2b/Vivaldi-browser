@@ -1316,6 +1316,14 @@ GLES2CreateGpuMemoryBufferImageCHROMIUM(GLsizei width,
   return gles2::GetGLContext()->CreateGpuMemoryBufferImageCHROMIUM(
       width, height, internalformat, usage);
 }
+void GL_APIENTRY GLES2GetImageivCHROMIUM(GLuint image_id,
+                                         GLenum param,
+                                         GLint* data) {
+  gles2::GetGLContext()->GetImageivCHROMIUM(image_id, param, data);
+}
+void GL_APIENTRY GLES2DescheduleUntilFinishedCHROMIUM() {
+  gles2::GetGLContext()->DescheduleUntilFinishedCHROMIUM();
+}
 void GL_APIENTRY GLES2GetTranslatedShaderSourceANGLE(GLuint shader,
                                                      GLsizei bufsize,
                                                      GLsizei* length,
@@ -1328,14 +1336,6 @@ void GL_APIENTRY GLES2PostSubBufferCHROMIUM(GLint x,
                                             GLint width,
                                             GLint height) {
   gles2::GetGLContext()->PostSubBufferCHROMIUM(x, y, width, height);
-}
-void GL_APIENTRY GLES2TexImageIOSurface2DCHROMIUM(GLenum target,
-                                                  GLsizei width,
-                                                  GLsizei height,
-                                                  GLuint ioSurfaceId,
-                                                  GLuint plane) {
-  gles2::GetGLContext()->TexImageIOSurface2DCHROMIUM(target, width, height,
-                                                     ioSurfaceId, plane);
 }
 void GL_APIENTRY GLES2CopyTextureCHROMIUM(GLenum source_id,
                                           GLenum dest_id,
@@ -1487,6 +1487,10 @@ void GL_APIENTRY GLES2ScheduleCALayerCHROMIUM(GLuint contents_texture_id,
       contents_texture_id, contents_rect, opacity, background_color,
       edge_aa_mask, bounds_rect, is_clipped, clip_rect, sorting_context_id,
       transform, filter);
+}
+void GL_APIENTRY
+GLES2ScheduleCALayerInUseQueryCHROMIUM(GLsizei count, const GLuint* textures) {
+  gles2::GetGLContext()->ScheduleCALayerInUseQueryCHROMIUM(count, textures);
 }
 void GL_APIENTRY GLES2CommitOverlayPlanesCHROMIUM() {
   gles2::GetGLContext()->CommitOverlayPlanesCHROMIUM();
@@ -2701,6 +2705,15 @@ extern const NameToFunc g_gles2_function_table[] = {
             glCreateGpuMemoryBufferImageCHROMIUM),
     },
     {
+        "glGetImageivCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(glGetImageivCHROMIUM),
+    },
+    {
+        "glDescheduleUntilFinishedCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glDescheduleUntilFinishedCHROMIUM),
+    },
+    {
         "glGetTranslatedShaderSourceANGLE",
         reinterpret_cast<GLES2FunctionPointer>(
             glGetTranslatedShaderSourceANGLE),
@@ -2708,10 +2721,6 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glPostSubBufferCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glPostSubBufferCHROMIUM),
-    },
-    {
-        "glTexImageIOSurface2DCHROMIUM",
-        reinterpret_cast<GLES2FunctionPointer>(glTexImageIOSurface2DCHROMIUM),
     },
     {
         "glCopyTextureCHROMIUM",
@@ -2822,6 +2831,11 @@ extern const NameToFunc g_gles2_function_table[] = {
     {
         "glScheduleCALayerCHROMIUM",
         reinterpret_cast<GLES2FunctionPointer>(glScheduleCALayerCHROMIUM),
+    },
+    {
+        "glScheduleCALayerInUseQueryCHROMIUM",
+        reinterpret_cast<GLES2FunctionPointer>(
+            glScheduleCALayerInUseQueryCHROMIUM),
     },
     {
         "glCommitOverlayPlanesCHROMIUM",

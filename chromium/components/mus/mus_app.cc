@@ -15,10 +15,13 @@
 #include "components/mus/clipboard/clipboard_impl.h"
 #include "components/mus/common/switches.h"
 #include "components/mus/gles2/gpu_impl.h"
+#include "components/mus/gpu/gpu_service_impl.h"
+#include "components/mus/gpu/gpu_service_mus.h"
 #include "components/mus/ws/display.h"
 #include "components/mus/ws/display_binding.h"
 #include "components/mus/ws/display_manager.h"
 #include "components/mus/ws/platform_screen.h"
+#include "components/mus/ws/user_activity_monitor.h"
 #include "components/mus/ws/user_display_manager.h"
 #include "components/mus/ws/window_server.h"
 #include "components/mus/ws/window_server_test_impl.h"
@@ -66,7 +69,8 @@ const char kResourceFile200[] = "mus_app_resources_200.pak";
 // TODO(sky): this is a pretty typical pattern, make it easier to do.
 struct MusApp::PendingRequest {
   shell::Connection* connection;
-  std::unique_ptr<mojo::InterfaceRequest<mojom::WindowTreeFactory>> wtf_request;
+  std::unique_ptr<mojom::WindowTreeFactoryRequest> wtf_request;
+  std::unique_ptr<mojom::DisplayManagerRequest> dm_request;
 };
 
 struct MusApp::UserState {
@@ -76,6 +80,13 @@ struct MusApp::UserState {
 
 MusApp::MusApp()
     : test_config_(false),
+      // TODO(penghuang): Kludge: Use mojo command buffer when running on
+      // Windows since chrome command buffer breaks unit tests
+#if defined(OS_WIN)
+      use_chrome_gpu_command_buffer_(false),
+#else
+      use_chrome_gpu_command_buffer_(true),
+#endif
       platform_screen_(ws::PlatformScreen::Create()),
       weak_ptr_factory_(this) {}
 
@@ -141,6 +152,15 @@ void MusApp::Initialize(shell::Connector* connector,
 
   test_config_ = base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kUseTestConfig);
+// TODO(penghuang): Kludge: use mojo command buffer when running on Windows
+// since Chrome command buffer breaks unit tests
+#if defined(OS_WIN)
+  use_chrome_gpu_command_buffer_ = false;
+#else
+  use_chrome_gpu_command_buffer_ =
+      !base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseMojoGpuCommandBufferInMus);
+#endif
 #if defined(USE_X11)
   XInitThreads();
   if (test_config_)
@@ -152,10 +172,13 @@ void MusApp::Initialize(shell::Connector* connector,
 #if defined(USE_OZONE)
   // The ozone platform can provide its own event source. So initialize the
   // platform before creating the default event source.
-  // TODO(rjkroege): Add tracing here.
   // Because GL libraries need to be initialized before entering the sandbox,
   // in MUS, |InitializeForUI| will load the GL libraries.
-  ui::OzonePlatform::InitializeForUI();
+  ui::OzonePlatform::InitParams params;
+  params.connector = connector;
+  params.single_process = false;
+
+  ui::OzonePlatform::InitializeForUI(params);
 
   // TODO(kylechar): We might not always want a US keyboard layout.
   ui::KeyboardLayoutEngineManager::GetKeyboardLayoutEngine()
@@ -174,34 +197,69 @@ void MusApp::Initialize(shell::Connector* connector,
   event_source_ = ui::PlatformEventSource::CreateDefault();
 #endif
 
-  // TODO(rjkroege): It is possible that we might want to generalize the
-  // GpuState object.
-  platform_display_init_params_.gpu_state = new GpuState();
+  // This needs to happen after DeviceDataManager has been constructed. That
+  // happens either during OzonePlatform or PlatformEventSource initialization,
+  // so keep this line below both of those.
+  input_device_server_.RegisterAsObserver();
+
+  if (use_chrome_gpu_command_buffer_) {
+    GpuServiceMus::GetInstance();
+  } else {
+    // TODO(rjkroege): It is possible that we might want to generalize the
+    // GpuState object.
+    platform_display_init_params_.gpu_state = new GpuState();
+  }
 
   // Gpu must be running before the PlatformScreen can be initialized.
   platform_screen_->Init();
   window_server_.reset(
       new ws::WindowServer(this, platform_display_init_params_.surfaces_state));
+
+  // DeviceDataManager must be initialized before TouchController. On non-Linux
+  // platforms there is no DeviceDataManager so don't create touch controller.
+  if (ui::DeviceDataManager::HasInstance())
+    touch_controller_.reset(
+        new ws::TouchController(window_server_->display_manager()));
 }
 
 bool MusApp::AcceptConnection(Connection* connection) {
-  connection->AddInterface<Gpu>(this);
   connection->AddInterface<mojom::Clipboard>(this);
   connection->AddInterface<mojom::DisplayManager>(this);
   connection->AddInterface<mojom::UserAccessManager>(this);
+  connection->AddInterface<mojom::UserActivityMonitor>(this);
   connection->AddInterface<WindowTreeHostFactory>(this);
-  connection->AddInterface<mojom::WindowManagerFactoryService>(this);
+  connection->AddInterface<mojom::WindowManagerWindowTreeFactory>(this);
   connection->AddInterface<mojom::WindowTreeFactory>(this);
   if (test_config_)
     connection->AddInterface<WindowServerTest>(this);
+
+  if (use_chrome_gpu_command_buffer_) {
+    connection->AddInterface<mojom::GpuService>(this);
+  } else {
+    connection->AddInterface<Gpu>(this);
+  }
+
+  // On non-Linux platforms there will be no DeviceDataManager instance and no
+  // purpose in adding the Mojo interface to connect to.
+  if (input_device_server_.IsRegisteredAsObserver())
+    input_device_server_.AddInterface(connection);
+
+#if defined(USE_OZONE)
+  ui::OzonePlatform::GetInstance()->AddInterfaces(connection);
+#endif
+
   return true;
 }
 
 void MusApp::OnFirstDisplayReady() {
   PendingRequests requests;
   requests.swap(pending_requests_);
-  for (auto& request : requests)
-    Create(request->connection, std::move(*request->wtf_request));
+  for (auto& request : requests) {
+    if (request->wtf_request)
+      Create(request->connection, std::move(*request->wtf_request));
+    else
+      Create(request->connection, std::move(*request->dm_request));
+  }
 }
 
 void MusApp::OnNoMoreDisplays() {
@@ -231,14 +289,32 @@ void MusApp::Create(shell::Connection* connection,
 
 void MusApp::Create(shell::Connection* connection,
                     mojom::DisplayManagerRequest request) {
+  // DisplayManagerObservers generally expect there to be at least one display.
+  if (!window_server_->display_manager()->has_displays()) {
+    std::unique_ptr<PendingRequest> pending_request(new PendingRequest);
+    pending_request->connection = connection;
+    pending_request->dm_request.reset(
+        new mojom::DisplayManagerRequest(std::move(request)));
+    pending_requests_.push_back(std::move(pending_request));
+    return;
+  }
   window_server_->display_manager()
       ->GetUserDisplayManager(connection->GetRemoteIdentity().user_id())
       ->AddDisplayManagerBinding(std::move(request));
 }
 
 void MusApp::Create(shell::Connection* connection, mojom::GpuRequest request) {
+  if (use_chrome_gpu_command_buffer_)
+    return;
   DCHECK(platform_display_init_params_.gpu_state);
   new GpuImpl(std::move(request), platform_display_init_params_.gpu_state);
+}
+
+void MusApp::Create(shell::Connection* connection,
+                    mojom::GpuServiceRequest request) {
+  if (!use_chrome_gpu_command_buffer_)
+    return;
+  new GpuServiceImpl(std::move(request), connection);
 }
 
 void MusApp::Create(shell::Connection* connection,
@@ -247,9 +323,17 @@ void MusApp::Create(shell::Connection* connection,
 }
 
 void MusApp::Create(shell::Connection* connection,
-                    mojom::WindowManagerFactoryServiceRequest request) {
+                    mojom::UserActivityMonitorRequest request) {
   AddUserIfNecessary(connection);
-  window_server_->window_manager_factory_registry()->Register(
+  const ws::UserId& user_id = connection->GetRemoteIdentity().user_id();
+  window_server_->GetUserActivityMonitorForUser(user_id)->Add(
+      std::move(request));
+}
+
+void MusApp::Create(shell::Connection* connection,
+                    mojom::WindowManagerWindowTreeFactoryRequest request) {
+  AddUserIfNecessary(connection);
+  window_server_->window_manager_window_tree_factory_set()->Add(
       connection->GetRemoteIdentity().user_id(), std::move(request));
 }
 
@@ -260,8 +344,7 @@ void MusApp::Create(Connection* connection,
     std::unique_ptr<PendingRequest> pending_request(new PendingRequest);
     pending_request->connection = connection;
     pending_request->wtf_request.reset(
-        new mojo::InterfaceRequest<mojom::WindowTreeFactory>(
-            std::move(request)));
+        new mojom::WindowTreeFactoryRequest(std::move(request)));
     pending_requests_.push_back(std::move(pending_request));
     return;
   }
@@ -297,6 +380,9 @@ void MusApp::OnCreatedPhysicalDisplay(int64_t id, const gfx::Rect& bounds) {
   ws::Display* host_impl =
       new ws::Display(window_server_.get(), platform_display_init_params_);
   host_impl->Init(nullptr);
+
+  if (touch_controller_)
+    touch_controller_->UpdateTouchTransforms();
 }
 
 }  // namespace mus

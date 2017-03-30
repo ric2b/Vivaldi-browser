@@ -7,6 +7,7 @@
 
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/native_library.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,12 +15,24 @@
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
+
 #include "widevine_cdm_version.h"  //  In SHARED_INTERMEDIATE_DIR.
 
+#if defined(ENABLE_PEPPER_CDMS)
+#include "chrome/browser/media/pepper_cdm_test_constants.h"
+#include "media/cdm/cdm_paths.h"
+#endif
+
+namespace {
+
 // Measures the size (bytes) and time to load (sec) of a native library.
-void MeasureSizeAndTimeToLoadNativeLibrary(const base::FilePath& library_name) {
+// |library_relative_dir| is the relative path based on DIR_MODULE.
+void MeasureSizeAndTimeToLoadNativeLibrary(
+    const base::FilePath& library_relative_dir,
+    const base::FilePath& library_name) {
   base::FilePath output_dir;
   ASSERT_TRUE(PathService::Get(base::DIR_MODULE, &output_dir));
+  output_dir = output_dir.Append(library_relative_dir);
   base::FilePath library_path = output_dir.Append(library_name);
   ASSERT_TRUE(base::PathExists(library_path)) << library_path.value();
 
@@ -47,42 +60,41 @@ void MeasureSizeAndTimeToLoadNativeLibrary(const base::FilePath& library_name) {
                          true);
 }
 
-// Use the base name of the library to dynamically get the platform specific
-// name. See base::GetNativeLibraryName() for details.
-void MeasureSizeAndTimeToLoadNativeLibraryByBaseName(
-    const std::string& base_library_name) {
-  MeasureSizeAndTimeToLoadNativeLibrary(base::FilePath::FromUTF16Unsafe(
-      base::GetNativeLibraryName(base::ASCIIToUTF16(base_library_name))));
+#if defined(ENABLE_PEPPER_CDMS)
+
+void MeasureSizeAndTimeToLoadCdm(const std::string& cdm_base_dir,
+                                 const std::string& cdm_name) {
+  MeasureSizeAndTimeToLoadNativeLibrary(
+      media::GetPlatformSpecificDirectory(cdm_base_dir),
+      base::FilePath::FromUTF8Unsafe(cdm_name));
 }
+
+#endif  // defined(ENABLE_PEPPER_CDMS)
+
+}  // namespace
 
 #if defined(ENABLE_PEPPER_CDMS)
 #if defined(WIDEVINE_CDM_AVAILABLE)
 TEST(LoadCDMPerfTest, Widevine) {
-  MeasureSizeAndTimeToLoadNativeLibrary(
-      base::FilePath::FromUTF8Unsafe(kWidevineCdmFileName));
+  MeasureSizeAndTimeToLoadCdm(
+      kWidevineCdmBaseDirectory,
+      base::GetNativeLibraryName(kWidevineCdmLibraryName));
 }
 
 TEST(LoadCDMPerfTest, WidevineAdapter) {
-  MeasureSizeAndTimeToLoadNativeLibrary(
-      base::FilePath::FromUTF8Unsafe(kWidevineCdmAdapterFileName));
+  MeasureSizeAndTimeToLoadCdm(kWidevineCdmBaseDirectory,
+                              kWidevineCdmAdapterFileName);
 }
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 
 TEST(LoadCDMPerfTest, ExternalClearKey) {
-#if defined(OS_MACOSX)
-  MeasureSizeAndTimeToLoadNativeLibrary(
-    base::FilePath::FromUTF8Unsafe("libclearkeycdm.dylib"));
-#else
-  MeasureSizeAndTimeToLoadNativeLibraryByBaseName("clearkeycdm");
-#endif  // defined(OS_MACOSX)
+  MeasureSizeAndTimeToLoadCdm(
+      kClearKeyCdmBaseDirectory,
+      base::GetNativeLibraryName(media::kClearKeyCdmLibraryName));
 }
 
 TEST(LoadCDMPerfTest, ExternalClearKeyAdapter) {
-#if defined(OS_MACOSX)
-  MeasureSizeAndTimeToLoadNativeLibrary(
-    base::FilePath::FromUTF8Unsafe("clearkeycdmadapter.plugin"));
-#else
-  MeasureSizeAndTimeToLoadNativeLibraryByBaseName("clearkeycdmadapter");
-#endif  // defined(OS_MACOSX)
+  MeasureSizeAndTimeToLoadCdm(kClearKeyCdmBaseDirectory,
+                              kClearKeyCdmAdapterFileName);
 }
 #endif  // defined(ENABLE_PEPPER_CDMS)

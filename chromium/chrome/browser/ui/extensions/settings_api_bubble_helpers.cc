@@ -48,7 +48,7 @@ void ShowSettingsApiBubble(SettingsApiOverrideType type,
 }  // namespace
 
 void MaybeShowExtensionControlledHomeNotification(Browser* browser) {
-#if !defined(OS_WIN)
+#if !defined(OS_WIN) && !defined(OS_MACOSX)
   return;
 #endif
 
@@ -59,7 +59,7 @@ void MaybeShowExtensionControlledSearchNotification(
     Profile* profile,
     content::WebContents* web_contents,
     AutocompleteMatch::Type match_type) {
-#if !defined(OS_WIN)
+#if !defined(OS_WIN) && !defined(OS_MACOSX)
   return;
 #endif
 

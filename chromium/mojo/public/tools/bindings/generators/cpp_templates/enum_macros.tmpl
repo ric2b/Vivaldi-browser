@@ -19,20 +19,24 @@ struct {{enum.name}}_Data {
   static bool const kIsExtensible = {% if enum.extensible %}true{% else %}false{% endif %};
 
   static bool IsKnownValue(int32_t value) {
+{%- if enum.fields %}
     switch (value) {
-{%- for enum_field in enum.fields|groupby('numeric_value') %}
+{%-   for enum_field in enum.fields|groupby('numeric_value') %}
       case {{enum_field[0]}}:
-{%- endfor %}
+{%-   endfor %}
         return true;
     }
+{%- endif %}
     return false;
   }
 
-  static bool Validate(int32_t value) {
+  static bool Validate(int32_t value,
+                       mojo::internal::ValidationContext* validation_context) {
     if (kIsExtensible || IsKnownValue(value))
       return true;
 
-    ReportValidationError(mojo::internal::VALIDATION_ERROR_UNKNOWN_ENUM_VALUE);
+    ReportValidationError(validation_context,
+                          mojo::internal::VALIDATION_ERROR_UNKNOWN_ENUM_VALUE);
     return false;
   }
 };

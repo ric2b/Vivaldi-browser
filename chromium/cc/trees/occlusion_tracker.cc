@@ -177,11 +177,11 @@ void OcclusionTracker::FinishedRenderTarget(const LayerImpl* finished_target) {
   // Readbacks always happen on render targets so we only need to check
   // for readbacks here.
   bool target_is_only_for_copy_request =
-      finished_target->HasCopyRequest() && finished_target->IsHidden();
+      surface->HasCopyRequest() && finished_target->IsHidden();
 
   // If the occlusion within the surface can not be applied to things outside of
   // the surface's subtree, then clear the occlusion here so it won't be used.
-  if (finished_target->mask_layer() || surface->draw_opacity() < 1 ||
+  if (surface->MaskLayer() || surface->draw_opacity() < 1 ||
       !finished_target->uses_default_blend_mode() ||
       target_is_only_for_copy_request ||
       finished_target->filters().HasFilterThatAffectsOpacity()) {
@@ -191,25 +191,23 @@ void OcclusionTracker::FinishedRenderTarget(const LayerImpl* finished_target) {
 }
 
 static void ReduceOcclusionBelowSurface(
-    const LayerImpl* contributing_layer,
+    const RenderSurfaceImpl* contributing_surface,
     const gfx::Rect& surface_rect,
     const gfx::Transform& surface_transform,
-    const LayerImpl* render_target,
     SimpleEnclosedRegion* occlusion_from_inside_target) {
   if (surface_rect.IsEmpty())
     return;
 
   gfx::Rect affected_area_in_target =
       MathUtil::MapEnclosingClippedRect(surface_transform, surface_rect);
-  if (contributing_layer->render_surface()->is_clipped()) {
-    affected_area_in_target.Intersect(
-        contributing_layer->render_surface()->clip_rect());
+  if (contributing_surface->is_clipped()) {
+    affected_area_in_target.Intersect(contributing_surface->clip_rect());
   }
   if (affected_area_in_target.IsEmpty())
     return;
 
   int outset_top, outset_right, outset_bottom, outset_left;
-  contributing_layer->background_filters().GetOutsets(
+  contributing_surface->BackgroundFilters().GetOutsets(
       &outset_top, &outset_right, &outset_bottom, &outset_left);
 
   // The filter can move pixels from outside of the clip, so allow affected_area
@@ -257,15 +255,13 @@ void OcclusionTracker::LeaveToRenderTarget(const LayerImpl* new_target) {
   // merged out as well but needs to be transformed to the new target.
 
   const RenderSurfaceImpl* old_surface = stack_[last_index].target;
-  const LayerImpl* old_target =
-      new_target->layer_tree_impl()->LayerById(old_surface->OwningLayerId());
 
   SimpleEnclosedRegion old_occlusion_from_inside_target_in_new_target =
       TransformSurfaceOpaqueRegion(
           stack_[last_index].occlusion_from_inside_target,
           old_surface->is_clipped(), old_surface->clip_rect(),
           old_surface->draw_transform());
-  if (old_target->has_replica() && !old_target->replica_has_mask()) {
+  if (old_surface->HasReplica() && !old_surface->HasReplicaMask()) {
     old_occlusion_from_inside_target_in_new_target.Union(
         TransformSurfaceOpaqueRegion(
             stack_[last_index].occlusion_from_inside_target,
@@ -280,12 +276,12 @@ void OcclusionTracker::LeaveToRenderTarget(const LayerImpl* new_target) {
 
   gfx::Rect unoccluded_surface_rect;
   gfx::Rect unoccluded_replica_rect;
-  if (old_target->background_filters().HasFilterThatMovesPixels()) {
+  if (old_surface->BackgroundFilters().HasFilterThatMovesPixels()) {
     Occlusion surface_occlusion = GetCurrentOcclusionForContributingSurface(
         old_surface->draw_transform());
     unoccluded_surface_rect =
         surface_occlusion.GetUnoccludedContentRect(old_surface->content_rect());
-    if (old_target->has_replica()) {
+    if (old_surface->HasReplica()) {
       Occlusion replica_occlusion = GetCurrentOcclusionForContributingSurface(
           old_surface->replica_draw_transform());
       unoccluded_replica_rect = replica_occlusion.GetUnoccludedContentRect(
@@ -317,31 +313,23 @@ void OcclusionTracker::LeaveToRenderTarget(const LayerImpl* new_target) {
     }
   }
 
-  if (!old_target->background_filters().HasFilterThatMovesPixels())
+  if (!old_surface->BackgroundFilters().HasFilterThatMovesPixels())
     return;
 
-  ReduceOcclusionBelowSurface(old_target,
-                              unoccluded_surface_rect,
+  ReduceOcclusionBelowSurface(old_surface, unoccluded_surface_rect,
                               old_surface->draw_transform(),
-                              new_target,
                               &stack_.back().occlusion_from_inside_target);
-  ReduceOcclusionBelowSurface(old_target,
-                              unoccluded_surface_rect,
+  ReduceOcclusionBelowSurface(old_surface, unoccluded_surface_rect,
                               old_surface->draw_transform(),
-                              new_target,
                               &stack_.back().occlusion_from_outside_target);
 
-  if (!old_target->has_replica())
+  if (!old_surface->HasReplica())
     return;
-  ReduceOcclusionBelowSurface(old_target,
-                              unoccluded_replica_rect,
+  ReduceOcclusionBelowSurface(old_surface, unoccluded_replica_rect,
                               old_surface->replica_draw_transform(),
-                              new_target,
                               &stack_.back().occlusion_from_inside_target);
-  ReduceOcclusionBelowSurface(old_target,
-                              unoccluded_replica_rect,
+  ReduceOcclusionBelowSurface(old_surface, unoccluded_replica_rect,
                               old_surface->replica_draw_transform(),
-                              new_target,
                               &stack_.back().occlusion_from_outside_target);
 }
 
@@ -391,7 +379,7 @@ void OcclusionTracker::MarkOccludedBehindLayer(const LayerImpl* layer) {
 
 Region OcclusionTracker::ComputeVisibleRegionInScreen(
     const LayerTreeImpl* layer_tree) const {
-  DCHECK(layer_tree->root_layer()->render_surface() == stack_.back().target);
+  DCHECK(layer_tree->RootRenderSurface() == stack_.back().target);
   const SimpleEnclosedRegion& occluded =
       stack_.back().occlusion_from_inside_target;
   Region visible_region(screen_space_clip_rect_);

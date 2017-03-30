@@ -77,7 +77,6 @@
 #include "base/win/scoped_handle.h"
 #include "components/nacl/browser/nacl_broker_service_win.h"
 #include "components/nacl/common/nacl_debug_exception_handler_win.h"
-#include "components/startup_metric_utils/common/pre_read_field_trial_utils_win.h"
 #include "content/public/common/sandbox_init.h"
 #endif
 
@@ -216,8 +215,6 @@ unsigned NaClProcessHost::keepalive_throttle_interval_milliseconds_ =
 // that this only takes a transferred IPC::ChannelHandle or one to be
 // transferred via IPC.
 class NaClProcessHost::ScopedChannelHandle {
-  MOVE_ONLY_TYPE_FOR_CPP_03(ScopedChannelHandle);
-
  public:
   ScopedChannelHandle() {
   }
@@ -275,6 +272,8 @@ class NaClProcessHost::ScopedChannelHandle {
   }
 
   IPC::ChannelHandle handle_;
+
+  DISALLOW_COPY_AND_ASSIGN(ScopedChannelHandle);
 };
 
 NaClProcessHost::NaClProcessHost(
@@ -645,8 +644,7 @@ bool NaClProcessHost::LaunchSelLdr() {
     cmd_line->AppendSwitch(switches::kNoErrorDialogs);
 
 #if defined(OS_WIN)
-  if (startup_metric_utils::GetPreReadOptions().use_prefetch_argument)
-    cmd_line->AppendArg(switches::kPrefetchArgumentOther);
+  cmd_line->AppendArg(switches::kPrefetchArgumentOther);
 #endif  // defined(OS_WIN)
 
 // On Windows we might need to start the broker process to launch a new loader

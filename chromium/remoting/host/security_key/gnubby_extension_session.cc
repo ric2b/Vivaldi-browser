@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/values.h"
 #include "remoting/base/logging.h"
+#include "remoting/host/client_session_details.h"
 #include "remoting/host/security_key/gnubby_auth_handler.h"
 #include "remoting/proto/control.pb.h"
 #include "remoting/protocol/client_stub.h"
@@ -60,22 +61,25 @@ bool ConvertListValueToString(base::ListValue* bytes, std::string* out) {
 namespace remoting {
 
 GnubbyExtensionSession::GnubbyExtensionSession(
+    ClientSessionDetails* client_session_details,
     protocol::ClientStub* client_stub)
     : client_stub_(client_stub) {
   DCHECK(client_stub_);
 
-  gnubby_auth_handler_ = remoting::GnubbyAuthHandler::Create(base::Bind(
-      &GnubbyExtensionSession::SendMessageToClient, base::Unretained(this)));
+  gnubby_auth_handler_ = remoting::GnubbyAuthHandler::Create(
+      client_session_details,
+      base::Bind(&GnubbyExtensionSession::SendMessageToClient,
+                 base::Unretained(this)));
 }
 
 GnubbyExtensionSession::~GnubbyExtensionSession() {}
 
 // Returns true if the |message| is a Security Key ExtensionMessage.
 // This is done so the host does not pass |message| to other HostExtensions.
-// TODO(joedow): Use |client_session_control| to disconnect the session if we
+// TODO(joedow): Use |client_session_details| to disconnect the session if we
 //               receive an invalid extension message.
 bool GnubbyExtensionSession::OnExtensionMessage(
-    ClientSessionControl* client_session_control,
+    ClientSessionDetails* client_session_details,
     protocol::ClientStub* client_stub,
     const protocol::ExtensionMessage& message) {
   DCHECK(thread_checker_.CalledOnValidThread());

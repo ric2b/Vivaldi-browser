@@ -50,7 +50,7 @@ namespace content {
 class BrowserChildProcessHostImpl;
 class GpuMainThread;
 class InProcessChildThreadParams;
-class MojoApplicationHost;
+class MojoChildConnection;
 class RenderWidgetHostViewFrameSubscriber;
 class ShaderDiskCache;
 
@@ -108,7 +108,8 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
       GpuMainThreadFactoryFunction create);
 
   // BrowserChildProcessHostDelegate implementation.
-  ServiceRegistry* GetServiceRegistry() override;
+  shell::InterfaceRegistry* GetInterfaceRegistry() override;
+  shell::InterfaceProvider* GetRemoteInterfaces() override;
 
   // Get the GPU process host for the GPU process with the given ID. Returns
   // null if the process no longer exists.
@@ -147,16 +148,6 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                              int client_id,
                              gpu::SurfaceHandle surface_handle,
                              const CreateGpuMemoryBufferCallback& callback);
-
-  // Tells the GPU process to create a new GPU memory buffer from an existing
-  // handle.
-  void CreateGpuMemoryBufferFromHandle(
-      const gfx::GpuMemoryBufferHandle& handle,
-      gfx::GpuMemoryBufferId id,
-      const gfx::Size& size,
-      gfx::BufferFormat format,
-      int client_id,
-      const CreateGpuMemoryBufferCallback& callback);
 
   // Tells the GPU process to destroy GPU memory buffer.
   void DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,
@@ -211,6 +202,7 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
                         const GURL& url);
   void OnDidDestroyOffscreenContext(const GURL& url);
   void OnGpuMemoryUmaStatsReceived(const gpu::GPUMemoryUmaStats& stats);
+  void OnFieldTrialActivated(const std::string& trial_name);
 
 #if defined(OS_WIN)
   void OnAcceleratedSurfaceCreatedChildWindow(
@@ -317,8 +309,9 @@ class GpuProcessHost : public BrowserChildProcessHostDelegate,
   std::string shader_prefix_key_;
 
   // Browser-side Mojo endpoint which sets up a Mojo channel with the child
-  // process and contains the browser's ServiceRegistry.
-  std::unique_ptr<MojoApplicationHost> mojo_application_host_;
+  // process and contains the browser's InterfaceRegistry.
+  const std::string child_token_;
+  std::unique_ptr<MojoChildConnection> mojo_child_connection_;
 
   DISALLOW_COPY_AND_ASSIGN(GpuProcessHost);
 };

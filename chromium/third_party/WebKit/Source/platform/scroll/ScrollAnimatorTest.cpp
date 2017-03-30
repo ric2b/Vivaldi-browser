@@ -83,8 +83,39 @@ public:
     bool scrollAnimatorEnabled() const override { return m_scrollAnimatorEnabled; }
     int pageStep(ScrollbarOrientation) const override { return 0; }
 
+    void setScrollAnimator(ScrollAnimator* scrollAnimator)
+    {
+        animator = scrollAnimator;
+    }
+
+    bool shouldScrollOnMainThread() const override
+    {
+        return m_scrollOnMainThread;
+    }
+
+    void setScrollOnMainThread(bool scrollOnMainThread)
+    {
+        m_scrollOnMainThread = scrollOnMainThread;
+    }
+
+    DoublePoint scrollPositionDouble() const override
+    {
+        if (animator)
+            return animator->currentPosition();
+        return ScrollableArea::scrollPositionDouble();
+    }
+
+    void setScrollPosition(const DoublePoint& position, ScrollType type,
+        ScrollBehavior behavior = ScrollBehaviorInstant)
+    {
+        if (animator)
+            animator->setCurrentPosition(toFloatPoint(position));
+        ScrollableArea::setScrollPosition(position, type, behavior);
+    }
+
     DEFINE_INLINE_VIRTUAL_TRACE()
     {
+        visitor->trace(animator);
         ScrollableArea::trace(visitor);
     }
 
@@ -93,6 +124,8 @@ private:
         : m_scrollAnimatorEnabled(scrollAnimatorEnabled) { }
 
     bool m_scrollAnimatorEnabled;
+    bool m_scrollOnMainThread = false;
+    Member<ScrollAnimator> animator;
 };
 
 class TestScrollAnimator : public ScrollAnimator {
@@ -135,6 +168,7 @@ static void reset(ScrollAnimator& scrollAnimator)
 TEST(ScrollAnimatorTest, MainThreadStates)
 {
     MockScrollableArea* scrollableArea = MockScrollableArea::create(true);
+    scrollableArea->setScrollOnMainThread(true);
     ScrollAnimator* scrollAnimator = new ScrollAnimator(scrollableArea, getMockedTime);
 
     EXPECT_CALL(*scrollableArea, minimumScrollPosition()).Times(AtLeast(1))
@@ -142,7 +176,8 @@ TEST(ScrollAnimatorTest, MainThreadStates)
     EXPECT_CALL(*scrollableArea, maximumScrollPosition()).Times(AtLeast(1))
         .WillRepeatedly(Return(IntPoint(1000, 1000)));
     EXPECT_CALL(*scrollableArea, setScrollOffset(_, _)).Times(2);
-    EXPECT_CALL(*scrollableArea, registerForAnimation()).Times(2);
+    // Once from userScroll.
+    EXPECT_CALL(*scrollableArea, registerForAnimation()).Times(1);
     EXPECT_CALL(*scrollableArea, scheduleAnimation()).Times(AtLeast(1))
         .WillRepeatedly(Return(true));
 
@@ -154,7 +189,7 @@ TEST(ScrollAnimatorTest, MainThreadStates)
     // WaitingToSendToCompositor
     scrollAnimator->userScroll(ScrollByLine, FloatSize(10, 0));
     EXPECT_EQ(scrollAnimator->m_runState,
-        ScrollAnimatorCompositorCoordinator::RunState::WaitingToSendToCompositor);
+        ScrollAnimatorCompositorCoordinator::RunState::RunningOnMainThread);
 
     // RunningOnMainThread
     gMockedTime += 0.05;
@@ -177,6 +212,9 @@ TEST(ScrollAnimatorTest, MainThreadStates)
         ScrollAnimatorCompositorCoordinator::RunState::Idle);
 
     reset(*scrollAnimator);
+
+    // Forced GC in order to finalize objects depending on the mock object.
+    ThreadHeap::collectAllGarbage();
 }
 
 TEST(ScrollAnimatorTest, MainThreadEnabled)
@@ -314,7 +352,7 @@ TEST(ScrollAnimatorTest, AnimatedScrollTakeover)
         .WillRepeatedly(Return(IntPoint(1000, 1000)));
     EXPECT_CALL(*scrollableArea, setScrollOffset(_, _)).Times(2);
     // Called from userScroll, updateCompositorAnimations, then
-    // takeoverCompositorAnimation (to re-register after RunningOnCompositor).
+    // takeOverCompositorAnimation (to re-register after RunningOnCompositor).
     EXPECT_CALL(*scrollableArea, registerForAnimation()).Times(3);
     EXPECT_CALL(*scrollableArea, scheduleAnimation()).Times(AtLeast(1))
         .WillRepeatedly(Return(true));
@@ -336,7 +374,7 @@ TEST(ScrollAnimatorTest, AnimatedScrollTakeover)
         ScrollAnimatorCompositorCoordinator::RunState::RunningOnCompositor);
 
     // Takeover.
-    scrollAnimator->takeoverCompositorAnimation();
+    scrollAnimator->takeOverCompositorAnimation();
     EXPECT_EQ(scrollAnimator->m_runState,
         ScrollAnimatorCompositorCoordinator::RunState::RunningOnCompositorButNeedsTakeover);
 
@@ -514,6 +552,92 @@ TEST(ScrollAnimatorTest, CancellingCompositorAnimation)
     EXPECT_EQ(250, scrollAnimator->desiredTargetPosition().x());
     EXPECT_EQ(0, scrollAnimator->desiredTargetPosition().y());
     reset(*scrollAnimator);
+
+    // Forced GC in order to finalize objects depending on the mock object.
+    ThreadHeap::collectAllGarbage();
+}
+
+// This test verifies that impl only animation updates get cleared once they
+// are pushed to compositor animation host.
+TEST(ScrollAnimatorTest, ImplOnlyAnimationUpdatesCleared)
+{
+    MockScrollableArea* scrollableArea = MockScrollableArea::create(true);
+    TestScrollAnimator* animator = new TestScrollAnimator(scrollableArea, getMockedTime);
+
+    // From calls to adjust/takeoverImplOnlyScrollOffsetAnimation.
+    EXPECT_CALL(*scrollableArea, registerForAnimation()).Times(3);
+
+    // Verify that the adjustment update is cleared.
+    EXPECT_EQ(animator->m_runState, ScrollAnimatorCompositorCoordinator::RunState::Idle);
+    EXPECT_FALSE(animator->hasAnimationThatRequiresService());
+    EXPECT_TRUE(animator->implOnlyAnimationAdjustmentForTesting().isZero());
+
+    animator->adjustImplOnlyScrollOffsetAnimation(IntSize(100, 100));
+    animator->adjustImplOnlyScrollOffsetAnimation(IntSize(10, -10));
+
+    EXPECT_TRUE(animator->hasAnimationThatRequiresService());
+    EXPECT_EQ(FloatSize(110, 90), animator->implOnlyAnimationAdjustmentForTesting());
+
+    animator->updateCompositorAnimations();
+
+    EXPECT_EQ(animator->m_runState, ScrollAnimatorCompositorCoordinator::RunState::Idle);
+    EXPECT_FALSE(animator->hasAnimationThatRequiresService());
+    EXPECT_TRUE(animator->implOnlyAnimationAdjustmentForTesting().isZero());
+
+    // Verify that the takeover update is cleared.
+    animator->takeOverImplOnlyScrollOffsetAnimation();
+    EXPECT_FALSE(animator->hasAnimationThatRequiresService());
+
+    // Forced GC in order to finalize objects depending on the mock object.
+    ThreadHeap::collectAllGarbage();
+}
+
+TEST(ScrollAnimatorTest, MainThreadAnimationTargetAdjustment)
+{
+    MockScrollableArea* scrollableArea = MockScrollableArea::create(true);
+    ScrollAnimator* animator = new ScrollAnimator(scrollableArea, getMockedTime);
+    scrollableArea->setScrollAnimator(animator);
+
+    EXPECT_CALL(*scrollableArea, minimumScrollPosition()).Times(AtLeast(1))
+        .WillRepeatedly(Return(IntPoint(-100, -100)));
+    EXPECT_CALL(*scrollableArea, maximumScrollPosition()).Times(AtLeast(1))
+        .WillRepeatedly(Return(IntPoint(1000, 1000)));
+    // Twice from tickAnimation, once from reset, and once from
+    // adjustAnimationAndSetScrollPosition.
+    EXPECT_CALL(*scrollableArea, setScrollOffset(_, _)).Times(4);
+    // One from call to userScroll and one from updateCompositorAnimations.
+    EXPECT_CALL(*scrollableArea, registerForAnimation()).Times(2);
+    EXPECT_CALL(*scrollableArea, scheduleAnimation()).Times(AtLeast(1))
+        .WillRepeatedly(Return(true));
+
+    // Idle
+    EXPECT_FALSE(animator->hasAnimationThatRequiresService());
+    EXPECT_EQ(FloatPoint(), animator->currentPosition());
+
+    // WaitingToSendToCompositor
+    animator->userScroll(ScrollByLine, FloatSize(100, 100));
+
+    // RunningOnMainThread
+    gMockedTime += 0.05;
+    animator->updateCompositorAnimations();
+    animator->tickAnimation(getMockedTime());
+    FloatPoint pos = animator->currentPosition();
+    EXPECT_EQ(FloatPoint(100, 100), animator->desiredTargetPosition());
+    EXPECT_GT(pos.x(), 0);
+    EXPECT_GT(pos.y(), 0);
+
+    // Adjustment
+    IntSize adjustment = IntSize(10, -10);
+    animator->adjustAnimationAndSetScrollPosition(adjustment, AnchoringScroll);
+    EXPECT_EQ(pos + FloatSize(adjustment), animator->currentPosition());
+    EXPECT_EQ(FloatPoint(110, 90), animator->desiredTargetPosition());
+
+    // Animation finished
+    gMockedTime += 1.0;
+    animator->updateCompositorAnimations();
+    animator->tickAnimation(getMockedTime());
+    EXPECT_EQ(FloatPoint(110, 90), animator->currentPosition());
+    reset(*animator);
 
     // Forced GC in order to finalize objects depending on the mock object.
     ThreadHeap::collectAllGarbage();

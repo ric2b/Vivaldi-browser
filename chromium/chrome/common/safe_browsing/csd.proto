@@ -286,9 +286,12 @@ message ClientDownloadRequest {
     // A .dmg, .pkg, etc, that Chrome failed to unpack to the point of finding
     // Mach O's.
     INVALID_MAC_ARCHIVE = 8;
-    PPAPI_SAVE_REQUEST =
-        9;  // A download request initiated via PPAPI. Typically
-            // the requestor is a Flash applet.
+    // A download request initiated via PPAPI. Typically the requestor is
+    // a Flash applet.
+    PPAPI_SAVE_REQUEST = 9;
+    // A file we don't support, but we've decided to sample and send
+    // a light-ping.
+    SAMPLED_UNSUPPORTED_FILE = 10;
   }
   optional DownloadType download_type = 10 [default = WIN_EXECUTABLE];
 
@@ -387,12 +390,15 @@ message ClientDownloadResponse {
     // Download is considered dangerous.  Chrome should show a warning to the
     // user.
     DANGEROUS = 1;
-    // Download is unknown.  Chrome should display a less severe warning.
+    // Download is uncommon.  Chrome should display a less severe warning.
     UNCOMMON = 2;
     // The download is potentially unwanted.
     POTENTIALLY_UNWANTED = 3;
     // The download is from a dangerous host.
     DANGEROUS_HOST = 4;
+    // The backend doesn't have confidence in its verdict of this file.
+    // Chrome should show the default warning if configured for this file type.
+    UNKNOWN = 5;
   }
   required Verdict verdict = 1;
 
@@ -694,7 +700,7 @@ message DownloadMetadata {
 // A Detailed Safebrowsing Report from clients. Chrome safebrowsing reports are
 // only sent by Chrome users who have opted into extended Safe Browsing.
 // This proto is replacing ClientMalwareReportRequest.
-// Next tag: 12
+// Next tag: 16
 message ClientSafeBrowsingReportRequest {
   // Note: A lot of the "optional" fields would make sense to be
   // "required" instead.  However, having them as optional allows the
@@ -710,6 +716,7 @@ message ClientSafeBrowsingReportRequest {
     CLIENT_SIDE_MALWARE_URL = 5;
     DANGEROUS_DOWNLOAD_RECOVERY = 6;
     DANGEROUS_DOWNLOAD_WARNING = 7;
+    DANGEROUS_DOWNLOAD_BY_API = 10;
   }
 
   message HTTPHeader {
@@ -761,8 +768,8 @@ message ClientSafeBrowsingReportRequest {
 
   optional ReportType type = 10;
 
-  // Only set if ReportType is DANGEROUS_DOWNLOAD_RECOVERY or
-  // DANGEROUS_DOWNLOAD_WARNING.
+  // Only set if ReportType is DANGEROUS_DOWNLOAD_RECOVERY,
+  // DANGEROUS_DOWNLOAD_WARNING or DANGEROUS_DOWNLOAD_BY_API.
   optional ClientDownloadResponse.Verdict download_verdict = 11;
 
   // URL of the page in the address bar.
@@ -785,4 +792,9 @@ message ClientSafeBrowsingReportRequest {
 
   // Whether user visited this origin before.
   optional bool repeat_visit = 9;
+
+  // The same token in ClientDownloadResponse. This field is only set if its
+  // report type is DANGEROUS_DOWNLOAD_RECOVERY, DANGEROUS_DOWNLOAD_WARNING or
+  // DANGEROUS_DOWNLOAD_BY_API.
+  optional bytes token = 15;
 }

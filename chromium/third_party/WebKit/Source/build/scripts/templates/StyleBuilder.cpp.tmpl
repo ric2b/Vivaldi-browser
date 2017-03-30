@@ -12,7 +12,7 @@
 
 namespace blink {
 
-void StyleBuilder::applyProperty(CSSPropertyID property, StyleResolverState& state, CSSValue* value, bool isInitial, bool isInherit) {
+void StyleBuilder::applyProperty(CSSPropertyID property, StyleResolverState& state, const CSSValue& value, bool isInitial, bool isInherit) {
     switch(property) {
     {% for property_id, property in properties.items()
         if property.should_declare_functions or property.use_handlers_for %}

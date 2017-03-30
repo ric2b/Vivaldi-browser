@@ -21,6 +21,7 @@ class StreamSocket;
 }  // namespace net
 
 namespace blimp {
+class BlimpConnectionStatistics;
 
 // Writes opaque length-prefixed packets to a StreamSocket.
 // The header segment is 32-bit, encoded in network byte order.
@@ -30,7 +31,10 @@ class BLIMP_NET_EXPORT StreamPacketWriter : public PacketWriter {
  public:
   // |socket|: The socket to write packets to. The caller must ensure |socket|
   // is valid while the reader is in-use (see ReadPacket below).
-  explicit StreamPacketWriter(net::StreamSocket* socket);
+  // |statistics|: Statistics collector which keeps track of number of bytes
+  // written. |statistics| is expected to outlive |this|.
+  StreamPacketWriter(net::StreamSocket* socket,
+                     BlimpConnectionStatistics* statistics);
 
   ~StreamPacketWriter() override;
 
@@ -60,6 +64,13 @@ class BLIMP_NET_EXPORT StreamPacketWriter : public PacketWriter {
   // Invokes |callback_| on packet write completion or on error.
   void OnWriteComplete(int result);
 
+  // Executes a socket write.
+  // Returns a positive value indicating the number of bytes written
+  // on success.
+  // Returns a negative net::Error value if the socket was closed or an error
+  // occurred.
+  int DoWrite(net::IOBuffer* buf, int buf_len);
+
   WriteState write_state_;
 
   net::StreamSocket* socket_;
@@ -67,6 +78,7 @@ class BLIMP_NET_EXPORT StreamPacketWriter : public PacketWriter {
   scoped_refptr<net::DrainableIOBuffer> payload_buffer_;
   scoped_refptr<net::DrainableIOBuffer> header_buffer_;
   net::CompletionCallback callback_;
+  BlimpConnectionStatistics* statistics_;
 
   base::WeakPtrFactory<StreamPacketWriter> weak_factory_;
 

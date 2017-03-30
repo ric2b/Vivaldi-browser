@@ -18,6 +18,17 @@
             "description": "Session display name created from the filename"
           }
         }
+      },
+      {
+        "id": "SessionOpenOptions",
+        "type": "object",
+        "description": "Options for saving the session.",
+        "properties": {
+          "openInNewWindow": {
+            "type": "boolean",
+            "description": "The session will open in a new window."
+          }
+        }
       }
     ],
     "functions": [
@@ -75,8 +86,15 @@
             "description": "Name of the session to open."
           },
           {
+            "name": "options",
+            "optional": true,
+            "description": "Session open options.",
+            "$ref": "SessionOpenOptions"
+          },
+          {
             "type": "function",
             "name": "callback",
+            "optional": true,
             "parameters": [
               {
                 "name": "status",

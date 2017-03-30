@@ -105,8 +105,8 @@ bool ZoomSetVivaldiUIZoomFunction::RunAsync() {
   WebContents* web_contents =
     dispatcher()->GetAssociatedWebContents();
 
-  ui_zoom::ZoomController* zoom_controller =
-    ui_zoom::ZoomController::FromWebContents(web_contents);
+  zoom::ZoomController* zoom_controller =
+    zoom::ZoomController::FromWebContents(web_contents);
   DCHECK(zoom_controller);
 
   double zoom_level = content::ZoomFactorToZoomLevel(params->zoom_factor);
@@ -136,8 +136,8 @@ bool ZoomGetVivaldiUIZoomFunction::RunAsync() {
     return true;
   }
 
-  ui_zoom::ZoomController* zoom_controller =
-    ui_zoom::ZoomController::FromWebContents(web_contents);
+  zoom::ZoomController* zoom_controller =
+    zoom::ZoomController::FromWebContents(web_contents);
   DCHECK(zoom_controller);
 
   double zoom_Level = zoom_controller->GetZoomLevel();
@@ -163,6 +163,7 @@ bool ZoomSetDefaultZoomFunction::RunAsync() {
   Profile* profile = GetProfile();
   double zoom_factor = content::ZoomFactorToZoomLevel(params->zoom_factor);
   profile->GetZoomLevelPrefs()->SetDefaultZoomLevelPref(zoom_factor);
+  SendResponse(true);
   return true;
 }
 

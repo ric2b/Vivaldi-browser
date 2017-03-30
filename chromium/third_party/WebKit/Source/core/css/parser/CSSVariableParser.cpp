@@ -14,7 +14,7 @@ bool CSSVariableParser::isValidVariableName(const CSSParserToken& token)
     if (token.type() != IdentToken)
         return false;
 
-    CSSParserString value = token.value();
+    StringView value = token.value();
     return value.length() >= 2 && value[0] == '-' && value[1] == '-';
 }
 
@@ -47,7 +47,7 @@ bool classifyBlock(CSSParserTokenRange range, bool& hasReferences, bool& hasAtAp
         const CSSParserToken& token = range.consume();
         switch (token.type()) {
         case AtKeywordToken: {
-            if (token.valueEqualsIgnoringASCIICase("apply")) {
+            if (equalIgnoringASCIICase(token.value(), "apply")) {
                 range.consumeWhitespace();
                 const CSSParserToken& variableName = range.consumeIncludingWhitespace();
                 if (!CSSVariableParser::isValidVariableName(variableName)

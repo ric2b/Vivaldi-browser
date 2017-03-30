@@ -39,7 +39,7 @@ public:
     // attached to the frame tree: it has the same parent as its potential
     // replacee but is invisible to the rest of the frames in the frame tree.
     // If the load commits, call swap() to fully attach this frame.
-    BLINK_EXPORT static WebLocalFrame* createProvisional(WebFrameClient*, WebRemoteFrame*, WebSandboxFlags, const WebFrameOwnerProperties&);
+    BLINK_EXPORT static WebLocalFrame* createProvisional(WebFrameClient*, WebRemoteFrame*, WebSandboxFlags);
 
     // Returns the WebFrame associated with the current V8 context. This
     // function can return 0 if the context is associated with a Document that
@@ -62,15 +62,6 @@ public:
     virtual void setDevToolsAgentClient(WebDevToolsAgentClient*) = 0;
     virtual WebDevToolsAgent* devToolsAgent() = 0;
 
-    // Basic properties ---------------------------------------------------
-
-    // Updates the scrolling and margin properties in the frame's FrameOwner.
-    // This is used when this frame's parent is in another process and it
-    // dynamically updates these properties.
-    // TODO(dcheng): Currently, the update only takes effect on next frame
-    // navigation.  This matches the in-process frame behavior.
-    virtual void setFrameOwnerProperties(const WebFrameOwnerProperties&) = 0;
-
     // Hierarchy ----------------------------------------------------------
 
     // Get the highest-level LocalFrame in this frame's in-process subtree.
@@ -86,6 +77,11 @@ public:
     virtual void sendPings(const WebURL& destinationURL) = 0;
 
     // Navigation ----------------------------------------------------------
+
+    // Runs beforeunload handlers for this frame and returns the value returned
+    // by handlers.
+    // Note: this may lead to the destruction of the frame.
+    virtual bool dispatchBeforeUnloadEvent(bool isReload) = 0;
 
     // Returns a WebURLRequest corresponding to the load of the WebHistoryItem.
     virtual WebURLRequest requestFromHistoryItem(const WebHistoryItem&, WebCachePolicy) const = 0;
@@ -227,6 +223,18 @@ public:
 
     // Find-in-page -----------------------------------------------------------
 
+    // Specifies the action to be taken at the end of a find-in-page session.
+    enum StopFindAction {
+        // No selection will be left.
+        StopFindActionClearSelection,
+
+        // The active match will remain selected.
+        StopFindActionKeepSelection,
+
+        // The active match selection will be activated.
+        StopFindActionActivateSelection
+    };
+
     // Searches a frame for a given string.
     //
     // If a match is found, this function will select it (scrolling down to
@@ -247,11 +255,9 @@ public:
     // Notifies the frame that we are no longer interested in searching.
     // This will abort any asynchronous scoping effort already under way
     // (see the function scopeStringMatches for details) and erase all
-    // tick-marks and highlighting from the previous search.  If
-    // clearSelection is true, it will also make sure the end state for the
-    // find operation does not leave a selection.  This can occur when the
-    // user clears the search string but does not close the find box.
-    virtual void stopFinding(bool clearSelection) = 0;
+    // tick-marks and highlighting from the previous search.  It will also
+    // follow the specified StopFindAction.
+    virtual void stopFinding(StopFindAction) = 0;
 
     // Counts how many times a particular string occurs within the frame.
     // It also retrieves the location of the string and updates a vector in
@@ -294,23 +300,31 @@ public:
     virtual WebFloatRect activeFindMatchRect() = 0;
 
     // Swaps the contents of the provided vector with the bounding boxes of the
-    // find-in-page match markers from all frames. The bounding boxes are returned
-    // in find-in-page coordinates. This method should be called only on the main frame.
+    // find-in-page match markers from all frames. The bounding boxes are
+    // returned in find-in-page coordinates. This method should be called only
+    // on the main frame.
     virtual void findMatchRects(WebVector<WebFloatRect>&) = 0;
 
-    // Selects the find-in-page match in the appropriate frame closest to the
-    // provided point in find-in-page coordinates. Returns the ordinal of such
-    // match or -1 if none could be found. If not null, selectionRect is set to
-    // the bounding box of the selected match in window coordinates.
-    // This method should be called only on the main frame.
+    // Selects the find-in-page match closest to the provided point in
+    // find-in-page coordinates. Returns the ordinal of such match or -1 if none
+    // could be found. If not null, selectionRect is set to the bounding box of
+    // the selected match in window coordinates.  This method should be called
+    // only on the main frame.
     virtual int selectNearestFindMatch(const WebFloatPoint&,
         WebRect* selectionRect)
         = 0;
+
+    // Returns the distance (squared) to the closest find-in-page match from the
+    // provided point, in find-in-page coordinates.
+    virtual float distanceToNearestFindMatch(const WebFloatPoint&) = 0;
 
     // Set the tickmarks for the frame. This will override the default tickmarks
     // generated by find results. If this is called with an empty array, the
     // default behavior will be restored.
     virtual void setTickmarks(const WebVector<WebRect>&) = 0;
+
+    // Clears the active find match in the frame, if one exists.
+    virtual void clearActiveFindMatch() = 0;
 
     // Context menu -----------------------------------------------------------
 
@@ -320,6 +334,14 @@ public:
     // Returns the WebFrameWidget associated with this frame if there is one or
     // nullptr otherwise.
     virtual WebWidget* frameWidget() const = 0;
+
+    // Copy to the clipboard the image located at a particular point in visual
+    // viewport coordinates.
+    virtual void copyImageAt(const WebPoint&) = 0;
+
+    // Save as the image located at a particular point in visual viewport
+    // coordinates.
+    virtual void saveImageAt(const WebPoint&) = 0;
 
 protected:
     explicit WebLocalFrame(WebTreeScopeType scope) : WebFrame(scope) { }

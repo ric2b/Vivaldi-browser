@@ -32,9 +32,13 @@ class WindowTreeClient;
 class Window;
 }
 
+namespace bitmap_uploader {
+class BitmapUploader;
+}
+
 namespace mus {
 class Window;
-class WindowTreeConnection;
+class WindowTreeClient;
 namespace mojom {
 enum class Cursor;
 enum class EventResult;
@@ -47,6 +51,7 @@ class Connector;
 
 namespace ui {
 class Event;
+class ViewProp;
 }
 
 namespace wm {
@@ -83,7 +88,7 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
       std::map<std::string, std::vector<uint8_t>>* properties);
 
   // Notifies all widgets the frame constants changed in some way.
-  static void NotifyFrameChanged(mus::WindowTreeConnection* connection);
+  static void NotifyFrameChanged(mus::WindowTreeClient* client);
 
   // Returns the widget for a mus::Window, or null if there is none.
   static Widget* GetWidgetForWindow(mus::Window* window);
@@ -160,7 +165,7 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
   void Restore() override;
   void SetFullscreen(bool fullscreen) override;
   bool IsFullscreen() const override;
-  void SetOpacity(unsigned char opacity) override;
+  void SetOpacity(float opacity) override;
   void FlashFrame(bool flash_frame) override;
   void RunShellDrag(View* view,
                     const ui::OSExchangeData& data,
@@ -227,6 +232,7 @@ class VIEWS_MUS_EXPORT NativeWidgetMus
 private:
   friend class NativeWidgetMusTest;
   class MusWindowObserver;
+  class MusCaptureClient;
 
   ui::PlatformWindowDelegate* platform_window_delegate() {
     return window_tree_host();
@@ -237,6 +243,11 @@ private:
 
   void OnMusWindowVisibilityChanging(mus::Window* window);
   void OnMusWindowVisibilityChanged(mus::Window* window);
+
+  // Propagates the widget hit test mask, if any, to the mus::Window.
+  // TODO(jamescook): Wire this through views::Widget so widgets can push
+  // updates if needed.
+  void UpdateHitTestMask();
 
   mus::Window* window_;
   mus::mojom::Cursor last_cursor_;
@@ -258,10 +269,15 @@ private:
   std::unique_ptr<WindowTreeHostMus> window_tree_host_;
   aura::Window* content_;
   std::unique_ptr<wm::FocusController> focus_client_;
-  std::unique_ptr<aura::client::DefaultCaptureClient> capture_client_;
+  std::unique_ptr<MusCaptureClient> capture_client_;
   std::unique_ptr<aura::client::WindowTreeClient> window_tree_client_;
   std::unique_ptr<aura::client::ScreenPositionClient> screen_position_client_;
   std::unique_ptr<wm::CursorManager> cursor_manager_;
+
+  // Bitmap management.
+  std::unique_ptr<bitmap_uploader::BitmapUploader> bitmap_uploader_;
+  std::unique_ptr<ui::ViewProp> prop_;
+
   base::WeakPtrFactory<NativeWidgetMus> close_widget_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeWidgetMus);

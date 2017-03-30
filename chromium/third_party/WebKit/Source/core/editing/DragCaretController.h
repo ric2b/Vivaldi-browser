@@ -28,8 +28,6 @@
 
 #include "core/editing/CaretBase.h"
 
-#include <memory>
-
 namespace blink {
 
 class DragCaretController final : public GarbageCollectedFinalized<DragCaretController> {
@@ -56,7 +54,7 @@ private:
     DragCaretController();
 
     VisiblePosition m_position;
-    const std::unique_ptr<CaretBase> m_caretBase;
+    const Member<CaretBase> m_caretBase;
 };
 
 } // namespace blink

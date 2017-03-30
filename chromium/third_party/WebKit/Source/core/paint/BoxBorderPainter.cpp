@@ -5,8 +5,10 @@
 #include "core/paint/BoxBorderPainter.h"
 
 #include "core/paint/BoxPainter.h"
+#include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/style/BorderEdge.h"
+#include "core/style/ComputedStyle.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
@@ -360,6 +362,17 @@ struct OpacityGroup {
     BorderEdgeFlags edgeFlags;
     unsigned alpha;
 };
+
+void clipQuad(GraphicsContext& context, const FloatPoint quad[], bool antialiased)
+{
+    SkPath path;
+    path.moveTo(quad[0]);
+    path.lineTo(quad[1]);
+    path.lineTo(quad[2]);
+    path.lineTo(quad[3]);
+
+    context.clipPath(path, antialiased ? AntiAliased : NotAntiAliased);
+}
 
 } // anonymous namespace
 
@@ -1154,7 +1167,7 @@ void BoxBorderPainter::clipBorderSidePolygon(GraphicsContext& graphicsContext, B
     }
 
     if (firstMiter == secondMiter) {
-        graphicsContext.clipPolygon(4, quad, firstMiter == SoftMiter);
+        clipQuad(graphicsContext, quad, firstMiter == SoftMiter);
         return;
     }
 
@@ -1187,7 +1200,7 @@ void BoxBorderPainter::clipBorderSidePolygon(GraphicsContext& graphicsContext, B
         firstQuad[1] = quad[1];
         firstQuad[2] = FloatPoint(quad[3].x() + r2 * ax, quad[3].y() + r2 * ay);
         firstQuad[3] = quad[3];
-        graphicsContext.clipPolygon(4, firstQuad, firstMiter == SoftMiter);
+        clipQuad(graphicsContext, firstQuad, firstMiter == SoftMiter);
     }
 
     if (secondMiter != NoMiter) {
@@ -1196,7 +1209,7 @@ void BoxBorderPainter::clipBorderSidePolygon(GraphicsContext& graphicsContext, B
         secondQuad[1] = FloatPoint(quad[0].x() - r1 * cx, quad[0].y() - r1 * cy);
         secondQuad[2] = quad[2];
         secondQuad[3] = quad[3];
-        graphicsContext.clipPolygon(4, secondQuad, secondMiter == SoftMiter);
+        clipQuad(graphicsContext, secondQuad, secondMiter == SoftMiter);
     }
 }
 

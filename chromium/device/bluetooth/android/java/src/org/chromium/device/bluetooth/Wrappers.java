@@ -18,14 +18,10 @@ import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.ParcelUuid;
-import android.os.Process;
 
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
@@ -56,7 +52,7 @@ class Wrappers {
      */
     static class BluetoothAdapterWrapper {
         private final BluetoothAdapter mAdapter;
-        protected final ContextWrapper mContext;
+        protected final Context mContext;
         protected BluetoothLeScannerWrapper mScannerWrapper;
 
         /**
@@ -99,11 +95,11 @@ class Wrappers {
                 Log.i(TAG, "BluetoothAdapterWrapper.create failed: Default adapter not found.");
                 return null;
             } else {
-                return new BluetoothAdapterWrapper(adapter, new ContextWrapper(context));
+                return new BluetoothAdapterWrapper(adapter, context);
             }
         }
 
-        public BluetoothAdapterWrapper(BluetoothAdapter adapter, ContextWrapper context) {
+        public BluetoothAdapterWrapper(BluetoothAdapter adapter, Context context) {
             mAdapter = adapter;
             mContext = context;
         }
@@ -131,7 +127,7 @@ class Wrappers {
             return mScannerWrapper;
         }
 
-        public ContextWrapper getContext() {
+        public Context getContext() {
             return mContext;
         }
 
@@ -149,30 +145,6 @@ class Wrappers {
 
         public boolean isEnabled() {
             return mAdapter.isEnabled();
-        }
-    }
-
-    /**
-     * Wraps android.content.Context.
-     */
-    static class ContextWrapper {
-        private final Context mContext;
-
-        public ContextWrapper(Context context) {
-            mContext = context;
-        }
-
-        public boolean checkPermission(String permission) {
-            return mContext.checkPermission(permission, Process.myPid(), Process.myUid())
-                    == PackageManager.PERMISSION_GRANTED;
-        }
-
-        public Intent registerReceiver(BroadcastReceiver receiver, IntentFilter filter) {
-            return mContext.registerReceiver(receiver, filter);
-        }
-
-        public void unregisterReceiver(BroadcastReceiver receiver) {
-            mContext.unregisterReceiver(receiver);
         }
     }
 

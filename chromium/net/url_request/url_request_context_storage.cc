@@ -11,6 +11,8 @@
 #include "net/base/proxy_delegate.h"
 #include "net/base/sdch_manager.h"
 #include "net/cert/cert_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
+#include "net/cert/ct_verifier.h"
 #include "net/cookies/cookie_store.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -88,8 +90,8 @@ void URLRequestContextStorage::set_proxy_delegate(
 
 void URLRequestContextStorage::set_http_server_properties(
     std::unique_ptr<HttpServerProperties> http_server_properties) {
+  context_->set_http_server_properties(http_server_properties.get());
   http_server_properties_ = std::move(http_server_properties);
-  context_->set_http_server_properties(http_server_properties_->GetWeakPtr());
 }
 
 void URLRequestContextStorage::set_cookie_store(
@@ -102,6 +104,18 @@ void URLRequestContextStorage::set_transport_security_state(
     std::unique_ptr<TransportSecurityState> transport_security_state) {
   context_->set_transport_security_state(transport_security_state.get());
   transport_security_state_ = std::move(transport_security_state);
+}
+
+void URLRequestContextStorage::set_cert_transparency_verifier(
+    std::unique_ptr<CTVerifier> cert_transparency_verifier) {
+  context_->set_cert_transparency_verifier(cert_transparency_verifier.get());
+  cert_transparency_verifier_ = std::move(cert_transparency_verifier);
+}
+
+void URLRequestContextStorage::set_ct_policy_enforcer(
+    std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer) {
+  context_->set_ct_policy_enforcer(ct_policy_enforcer.get());
+  ct_policy_enforcer_ = std::move(ct_policy_enforcer);
 }
 
 void URLRequestContextStorage::set_http_network_session(

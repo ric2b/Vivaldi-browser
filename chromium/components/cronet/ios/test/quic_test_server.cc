@@ -4,6 +4,8 @@
 
 #include "components/cronet/ios/test/quic_test_server.h"
 
+#include <utility>
+
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -12,9 +14,9 @@
 #include "base/threading/thread.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
-#include "net/base/test_data_directory.h"
 #include "net/quic/crypto/proof_source_chromium.h"
 #include "net/spdy/spdy_header_block.h"
+#include "net/test/test_data_directory.h"
 #include "net/tools/quic/quic_in_memory_cache.h"
 #include "net/tools/quic/quic_simple_server.h"
 
@@ -53,7 +55,8 @@ void SetupQuicInMemoryCache() {
   net::SpdyHeaderBlock trailers;
   trailers.ReplaceOrAppendHeader(kHelloTrailerName, kHelloTrailerValue);
   net::QuicInMemoryCache::GetInstance()->AddResponse(
-      kTestServerHost, kHelloPath, headers, kHelloBodyValue, trailers);
+      kTestServerHost, kHelloPath, std::move(headers), kHelloBodyValue,
+      std::move(trailers));
 }
 
 void StartQuicServerOnServerThread(const base::FilePath& test_files_root,
@@ -104,7 +107,9 @@ bool StartQuicTestServer() {
   if (!PathService::Get(base::DIR_EXE, &test_files_root))
     return false;
 
-  base::WaitableEvent server_started_event(true, false);
+  base::WaitableEvent server_started_event(
+      base::WaitableEvent::ResetPolicy::MANUAL,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
   g_quic_server_thread->task_runner()->PostTask(
       FROM_HERE, base::Bind(&StartQuicServerOnServerThread, test_files_root,
                             &server_started_event));
@@ -116,7 +121,9 @@ void ShutdownQuicTestServer() {
   if (!g_quic_server_thread)
     return;
   DCHECK(!g_quic_server_thread->task_runner()->BelongsToCurrentThread());
-  base::WaitableEvent server_stopped_event(true, false);
+  base::WaitableEvent server_stopped_event(
+      base::WaitableEvent::ResetPolicy::MANUAL,
+      base::WaitableEvent::InitialState::NOT_SIGNALED);
   g_quic_server_thread->task_runner()->PostTask(
       FROM_HERE, base::Bind(&ShutdownOnServerThread, &server_stopped_event));
   server_stopped_event.Wait();

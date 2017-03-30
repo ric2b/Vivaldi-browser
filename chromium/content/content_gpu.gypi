@@ -63,6 +63,7 @@
     ['system_proprietary_codecs==1 and OS=="win"', {
       'dependencies': [
         '<(DEPTH)/net/net.gyp:net', # For GetMimeTypeFromFile
+        '<(DEPTH)/media/media.gyp:mf_initializer',
       ],
       'sources': [
         'common/gpu/media/wmf_byte_stream.cc',

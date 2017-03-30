@@ -271,6 +271,7 @@ CryptoTestUtils::FakeClientOptions::FakeClientOptions()
 
 // static
 int CryptoTestUtils::HandshakeWithFakeServer(
+    QuicConfig* server_quic_config,
     MockQuicConnectionHelper* helper,
     MockAlarmFactory* alarm_factory,
     PacketSavingConnection* client_conn,
@@ -280,17 +281,17 @@ int CryptoTestUtils::HandshakeWithFakeServer(
       new PacketSavingConnection(helper, alarm_factory, Perspective::IS_SERVER,
                                  client_conn->supported_versions());
 
-  QuicConfig config = DefaultQuicConfig();
   QuicCryptoServerConfig crypto_config(QuicCryptoServerConfig::TESTING,
                                        QuicRandom::GetInstance(),
                                        ProofSourceForTesting());
   QuicCompressedCertsCache compressed_certs_cache(
       QuicCompressedCertsCache::kQuicCompressedCertsCacheSize);
   SetupCryptoServerConfigForTest(server_conn->clock(),
-                                 server_conn->random_generator(), &config,
-                                 &crypto_config, options);
+                                 server_conn->random_generator(),
+                                 server_quic_config, &crypto_config, options);
 
-  TestQuicSpdyServerSession server_session(server_conn, config, &crypto_config,
+  TestQuicSpdyServerSession server_session(server_conn, *server_quic_config,
+                                           &crypto_config,
                                            &compressed_certs_cache);
 
   // The client's handshake must have been started already.
@@ -445,6 +446,25 @@ string CryptoTestUtils::GetValueForTag(const CryptoHandshakeMessage& message,
     return string();
   }
   return it->second;
+}
+
+uint64_t CryptoTestUtils::LeafCertHashForTesting() {
+  scoped_refptr<ProofSource::Chain> chain;
+  IPAddress server_ip;
+  string sig;
+  string cert_sct;
+  std::unique_ptr<ProofSource> proof_source(
+      CryptoTestUtils::ProofSourceForTesting());
+  if (!proof_source->GetProof(server_ip, "", "",
+                              QuicSupportedVersions().front(), "", false,
+                              &chain, &sig, &cert_sct) ||
+      chain->certs.empty()) {
+    DCHECK(false) << "Proof generation failed";
+    return 0;
+  }
+
+  return QuicUtils::FNV1a_64_Hash(chain->certs.at(0).c_str(),
+                                  chain->certs.at(0).length());
 }
 
 class MockCommonCertSets : public CommonCertSets {

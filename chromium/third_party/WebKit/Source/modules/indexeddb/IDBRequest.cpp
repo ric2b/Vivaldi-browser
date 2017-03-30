@@ -44,6 +44,7 @@
 #include "modules/indexeddb/IDBValue.h"
 #include "platform/SharedBuffer.h"
 #include "public/platform/WebBlobInfo.h"
+#include <memory>
 
 using blink::WebIDBCursor;
 
@@ -90,11 +91,14 @@ DEFINE_TRACE(IDBRequest)
 ScriptValue IDBRequest::result(ExceptionState& exceptionState)
 {
     if (m_readyState != DONE) {
+        // Must throw if returning an empty value. Message is arbitrary since it will never be seen.
         exceptionState.throwDOMException(InvalidStateError, IDBDatabase::requestNotFinishedErrorMessage);
         return ScriptValue();
     }
-    if (m_contextStopped || !getExecutionContext())
+    if (m_contextStopped || !getExecutionContext()) {
+        exceptionState.throwDOMException(InvalidStateError, IDBDatabase::databaseClosedErrorMessage);
         return ScriptValue();
+    }
     m_resultDirty = false;
     ScriptValue value = ScriptValue::from(m_scriptState.get(), m_result);
     return value;
@@ -246,7 +250,7 @@ void IDBRequest::onSuccess(const Vector<String>& stringList)
     onSuccessInternal(IDBAny::create(domStringList));
 }
 
-void IDBRequest::onSuccess(PassOwnPtr<WebIDBCursor> backend, IDBKey* key, IDBKey* primaryKey, PassRefPtr<IDBValue> value)
+void IDBRequest::onSuccess(std::unique_ptr<WebIDBCursor> backend, IDBKey* key, IDBKey* primaryKey, PassRefPtr<IDBValue> value)
 {
     IDB_TRACE("IDBRequest::onSuccess(IDBCursor)");
     if (!shouldEnqueueEvent())

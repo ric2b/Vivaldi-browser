@@ -114,6 +114,10 @@ X11EventSource::~X11EventSource() {
     XDestroyWindow(display_, dummy_window_);
 }
 
+bool X11EventSource::HasInstance() {
+  return instance_;
+}
+
 // static
 X11EventSource* X11EventSource::GetInstance() {
   DCHECK(instance_);
@@ -137,13 +141,11 @@ void X11EventSource::DispatchXEvents() {
 }
 
 void X11EventSource::BlockUntilWindowMapped(XID window) {
-  XEvent event;
-  do {
-    // Block until there's a message of |event_mask| type on |w|. Then remove
-    // it from the queue and stuff it in |event|.
-    XWindowEvent(display_, window, StructureNotifyMask, &event);
-    ExtractCookieDataDispatchEvent(&event);
-  } while (event.type != MapNotify);
+  BlockOnWindowStructureEvent(window, MapNotify);
+}
+
+void X11EventSource::BlockUntilWindowUnmapped(XID window) {
+  BlockOnWindowStructureEvent(window, UnmapNotify);
 }
 
 Time X11EventSource::UpdateLastSeenServerTime() {
@@ -206,9 +208,7 @@ void X11EventSource::ExtractCookieDataDispatchEvent(XEvent* xevent) {
 void X11EventSource::PostDispatchEvent(XEvent* xevent) {
   if (xevent->type == GenericEvent &&
       (xevent->xgeneric.evtype == XI_HierarchyChanged ||
-       (xevent->xgeneric.evtype == XI_DeviceChanged &&
-        static_cast<XIDeviceChangedEvent*>(xevent->xcookie.data)->reason ==
-            XIDeviceChange))) {
+       xevent->xgeneric.evtype == XI_DeviceChanged)) {
     UpdateDeviceList();
     hotplug_event_handler_->OnHotplugEvent();
   }
@@ -219,6 +219,16 @@ void X11EventSource::PostDispatchEvent(XEvent* xevent) {
     // Clear stored scroll data
     ui::DeviceDataManagerX11::GetInstance()->InvalidateScrollClasses();
   }
+}
+
+void X11EventSource::BlockOnWindowStructureEvent(XID window, int type) {
+  XEvent event;
+  do {
+    // Block until there's a StructureNotify event of |type| on |window|. Then
+    // remove it from the queue and stuff it in |event|.
+    XWindowEvent(display_, window, StructureNotifyMask, &event);
+    ExtractCookieDataDispatchEvent(&event);
+  } while (event.type != type);
 }
 
 void X11EventSource::StopCurrentEventStream() {

@@ -214,14 +214,27 @@ void LogUMAHistogramLongTimes(const std::string& name,
 // Logs a type quality metric.  The primary histogram name is constructed based
 // on |base_name|.  The field-specific histogram name also factors in the
 // |field_type|.  Logs a sample of |metric|, which should be in the range
-// [0, |num_possible_metrics|).
+// [0, |num_possible_metrics|). May log a suffixed version of the metric
+// depending on |metric_type|.
 void LogTypeQualityMetric(const std::string& base_name,
                           AutofillMetrics::FieldTypeQualityMetric metric,
                           ServerFieldType field_type,
-                          bool observed_submission) {
+                          AutofillMetrics::QualityMetricType metric_type) {
   DCHECK_LT(metric, AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
 
-  const std::string suffix(observed_submission ? "" : ".NoSubmission");
+  std::string suffix;
+  switch (metric_type) {
+    case AutofillMetrics::TYPE_SUBMISSION:
+      break;
+    case AutofillMetrics::TYPE_NO_SUBMISSION:
+      suffix = ".NoSubmission";
+      break;
+    case AutofillMetrics::TYPE_AUTOCOMPLETE_BASED:
+      suffix = ".BasedOnAutocomplete";
+      break;
+    default:
+      NOTREACHED();
+  }
   LogUMAHistogramEnumeration(base_name + suffix, metric,
                              AutofillMetrics::NUM_FIELD_TYPE_QUALITY_METRICS);
 
@@ -408,27 +421,28 @@ void AutofillMetrics::LogDeveloperEngagementMetric(
 }
 
 // static
-void AutofillMetrics::LogHeuristicTypePrediction(FieldTypeQualityMetric metric,
-                                                 ServerFieldType field_type,
-                                                 bool observed_submission) {
+void AutofillMetrics::LogHeuristicTypePrediction(
+    FieldTypeQualityMetric metric,
+    ServerFieldType field_type,
+    QualityMetricType metric_type) {
   LogTypeQualityMetric("Autofill.Quality.HeuristicType", metric, field_type,
-                       observed_submission);
+                       metric_type);
 }
 
 // static
 void AutofillMetrics::LogOverallTypePrediction(FieldTypeQualityMetric metric,
                                                ServerFieldType field_type,
-                                               bool observed_submission) {
+                                               QualityMetricType metric_type) {
   LogTypeQualityMetric("Autofill.Quality.PredictedType", metric, field_type,
-                       observed_submission);
+                       metric_type);
 }
 
 // static
 void AutofillMetrics::LogServerTypePrediction(FieldTypeQualityMetric metric,
                                               ServerFieldType field_type,
-                                              bool observed_submission) {
+                                              QualityMetricType metric_type) {
   LogTypeQualityMetric("Autofill.Quality.ServerType", metric, field_type,
-                       observed_submission);
+                       metric_type);
 }
 
 // static
@@ -567,6 +581,37 @@ void AutofillMetrics::LogAutofillFormSubmittedState(
     AutofillFormSubmittedState state) {
   UMA_HISTOGRAM_ENUMERATION("Autofill.FormSubmittedState", state,
                             AUTOFILL_FORM_SUBMITTED_STATE_ENUM_SIZE);
+
+  switch (state) {
+    case NON_FILLABLE_FORM_OR_NEW_DATA:
+      base::RecordAction(
+          base::UserMetricsAction("Autofill_FormSubmitted_NonFillable"));
+      break;
+
+    case FILLABLE_FORM_AUTOFILLED_ALL:
+      base::RecordAction(
+          base::UserMetricsAction("Autofill_FormSubmitted_FilledAll"));
+      break;
+
+    case FILLABLE_FORM_AUTOFILLED_SOME:
+      base::RecordAction(
+          base::UserMetricsAction("Autofill_FormSubmitted_FilledSome"));
+      break;
+
+    case FILLABLE_FORM_AUTOFILLED_NONE_DID_SHOW_SUGGESTIONS:
+      base::RecordAction(base::UserMetricsAction(
+          "Autofill_FormSubmitted_FilledNone_SuggestionsShown"));
+      break;
+
+    case FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS:
+      base::RecordAction(base::UserMetricsAction(
+          "Autofill_FormSubmitted_FilledNone_SuggestionsNotShown"));
+      break;
+
+    default:
+      NOTREACHED();
+      break;
+  }
 }
 
 // static
@@ -578,6 +623,22 @@ void AutofillMetrics::LogDetermineHeuristicTypesTiming(
 // static
 void AutofillMetrics::LogParseFormTiming(const base::TimeDelta& duration) {
   UMA_HISTOGRAM_TIMES("Autofill.Timing.ParseForm", duration);
+}
+
+// static
+void AutofillMetrics::LogNumberOfProfilesConsideredForDedupe(
+    size_t num_considered) {
+  // A maximum of 50 is enforced to reduce the number of generated buckets.
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.NumberOfProfilesConsideredForDedupe",
+                            std::min(int(num_considered), 50));
+}
+
+// static
+void AutofillMetrics::LogNumberOfProfilesRemovedDuringDedupe(
+    size_t num_removed) {
+  // A maximum of 50 is enforced to reduce the number of generated buckets.
+  UMA_HISTOGRAM_COUNTS_1000("Autofill.NumberOfProfilesRemovedDuringDedupe",
+                            std::min(int(num_removed), 50));
 }
 
 AutofillMetrics::FormEventLogger::FormEventLogger(bool is_for_credit_card)
@@ -601,13 +662,22 @@ void AutofillMetrics::FormEventLogger::OnDidInteractWithAutofillableForm() {
   }
 }
 
-void AutofillMetrics::FormEventLogger::OnDidPollSuggestions() {
-  if (is_for_credit_card_) {
-    base::RecordAction(
-        base::UserMetricsAction("Autofill_PolledCreditCardSuggestions"));
-  } else {
-    base::RecordAction(
-        base::UserMetricsAction("Autofill_PolledProfileSuggestions"));
+void AutofillMetrics::FormEventLogger::OnDidPollSuggestions(
+    const FormFieldData& field) {
+  // Record only one poll user action for consecutive polls of the same field.
+  // This is to avoid recording too many poll actions (for example when a user
+  // types in a field, triggering multiple queries) to make the analysis more
+  // simple.
+  if (!field.SameFieldAs(last_polled_field_)) {
+    if (is_for_credit_card_) {
+      base::RecordAction(
+          base::UserMetricsAction("Autofill_PolledCreditCardSuggestions"));
+    } else {
+      base::RecordAction(
+          base::UserMetricsAction("Autofill_PolledProfileSuggestions"));
+    }
+
+    last_polled_field_ = field;
   }
 }
 
@@ -733,8 +803,6 @@ void AutofillMetrics::FormEventLogger::OnFormSubmitted() {
   } else {
     Log(AutofillMetrics::FORM_EVENT_LOCAL_SUGGESTION_SUBMITTED_ONCE);
   }
-
-  base::RecordAction(base::UserMetricsAction("Autofill_FormSubmitted"));
 }
 
 void AutofillMetrics::FormEventLogger::Log(FormEvent event) const {

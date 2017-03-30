@@ -6,18 +6,19 @@
 
 #include <algorithm>
 
-#include "ash/ash_layout_constants.h"
+#include "ash/common/ash_layout_constants.h"
+#include "ash/common/material_design/material_design_controller.h"
+#include "ash/common/wm_shell.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/frame/default_header_painter.h"
 #include "ash/frame/frame_border_hit_test_controller.h"
 #include "ash/frame/header_painter_util.h"
-#include "ash/material_design/material_design_controller.h"
-#include "ash/shell.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -26,7 +27,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/web_app_left_header_view_ash.h"
-#include "chrome/browser/ui/views/profiles/avatar_menu_button.h"
+#include "chrome/browser/ui/views/profiles/profile_indicator_icon.h"
 #include "chrome/browser/ui/views/tab_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
@@ -96,11 +97,11 @@ BrowserNonClientFrameViewAsh::BrowserNonClientFrameViewAsh(
       window_icon_(nullptr),
       frame_border_hit_test_controller_(
           new ash::FrameBorderHitTestController(frame)) {
-  ash::Shell::GetInstance()->AddShellObserver(this);
+  ash::WmShell::Get()->AddShellObserver(this);
 }
 
 BrowserNonClientFrameViewAsh::~BrowserNonClientFrameViewAsh() {
-  ash::Shell::GetInstance()->RemoveShellObserver(this);
+  ash::WmShell::Get()->RemoveShellObserver(this);
 }
 
 void BrowserNonClientFrameViewAsh::Init() {
@@ -306,8 +307,8 @@ void BrowserNonClientFrameViewAsh::Layout() {
 
   header_painter_->SetHeaderHeightForPainting(painted_height);
 
-  if (avatar_button())
-    LayoutAvatar();
+  if (profile_indicator_icon())
+    LayoutProfileIndicatorIcon();
   BrowserNonClientFrameView::Layout();
   frame()->GetNativeWindow()->SetProperty(
       aura::client::kTopViewInset,
@@ -394,8 +395,15 @@ gfx::ImageSkia BrowserNonClientFrameViewAsh::GetFaviconForTabIconView() {
 // BrowserNonClientFrameViewAsh, protected:
 
 // BrowserNonClientFrameView:
-void BrowserNonClientFrameViewAsh::UpdateAvatar() {
-  UpdateOldAvatarButton();
+void BrowserNonClientFrameViewAsh::UpdateProfileIcons() {
+  Browser* browser = browser_view()->browser();
+  if (!browser->is_type_tabbed() && !browser->is_app())
+    return;
+  if ((browser->profile()->GetProfileType() == Profile::INCOGNITO_PROFILE) ||
+      chrome::MultiUserWindowManager::ShouldShowAvatar(
+          browser_view()->GetNativeWindow())) {
+    UpdateProfileIndicatorIcon();
+  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -431,8 +439,9 @@ bool BrowserNonClientFrameViewAsh::DoesIntersectRect(
 
 int BrowserNonClientFrameViewAsh::GetTabStripLeftInset() const {
   const gfx::Insets insets(GetLayoutInsets(AVATAR_ICON));
-  const int avatar_right =
-      avatar_button() ? (insets.left() + GetOTRAvatarIcon().width()) : 0;
+  const int avatar_right = profile_indicator_icon()
+                               ? (insets.left() + GetOTRAvatarIcon().width())
+                               : 0;
   return avatar_right + insets.right();
 }
 
@@ -462,8 +471,8 @@ bool BrowserNonClientFrameViewAsh::UseWebAppHeaderStyle() const {
       Browser::FEATURE_WEBAPPFRAME);
 }
 
-void BrowserNonClientFrameViewAsh::LayoutAvatar() {
-  DCHECK(avatar_button());
+void BrowserNonClientFrameViewAsh::LayoutProfileIndicatorIcon() {
+  DCHECK(profile_indicator_icon());
 #if !defined(OS_CHROMEOS)
   // ChromeOS shows avatar on V1 app.
   DCHECK(browser_view()->IsTabStripVisible());
@@ -485,9 +494,9 @@ void BrowserNonClientFrameViewAsh::LayoutAvatar() {
   // recognizable.
   const bool avatar_visible = !UseImmersiveLightbarHeaderStyle();
   const int avatar_height = avatar_visible ? (avatar_bottom - avatar_y) : 0;
-  avatar_button()->SetBounds(avatar_insets.left(), avatar_y,
-                             incognito_icon.width(), avatar_height);
-  avatar_button()->SetVisible(avatar_visible);
+  profile_indicator_icon()->SetBounds(avatar_insets.left(), avatar_y,
+                                      incognito_icon.width(), avatar_height);
+  profile_indicator_icon()->SetVisible(avatar_visible);
 }
 
 bool BrowserNonClientFrameViewAsh::ShouldPaint() const {

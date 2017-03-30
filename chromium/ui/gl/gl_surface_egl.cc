@@ -23,6 +23,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gl/egl_util.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_context_egl.h"
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface_stub.h"
@@ -103,7 +104,7 @@ extern "C" {
 
 using ui::GetLastEGLErrorString;
 
-namespace gfx {
+namespace gl {
 
 #if defined(OS_WIN)
 unsigned int NativeViewGLSurfaceEGL::current_swap_generation_ = 0;
@@ -126,8 +127,7 @@ bool g_egl_surfaceless_context_supported = false;
 bool g_egl_surface_orientation_supported = false;
 bool g_use_direct_composition = false;
 
-class EGLSyncControlVSyncProvider
-    : public gfx::SyncControlVSyncProvider {
+class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
  public:
   explicit EGLSyncControlVSyncProvider(EGLSurface surface)
       : SyncControlVSyncProvider(),
@@ -488,9 +488,9 @@ bool GLSurfaceEGL::InitializeOneOff() {
     // EGL_KHR_surfaceless_context is supported but ensure
     // GL_OES_surfaceless_context is also supported. We need a current context
     // to query for supported GL extensions.
-    scoped_refptr<GLSurface> surface = new SurfacelessEGL(Size(1, 1));
-    scoped_refptr<GLContext> context = GLContext::CreateGLContext(
-      NULL, surface.get(), PreferIntegratedGpu);
+    scoped_refptr<GLSurface> surface = new SurfacelessEGL(gfx::Size(1, 1));
+    scoped_refptr<GLContext> context = InitializeGLContext(
+        new GLContextEGL(nullptr), surface.get(), PreferIntegratedGpu);
     if (!context->MakeCurrent(surface.get()))
       g_egl_surfaceless_context_supported = false;
 
@@ -637,7 +637,7 @@ bool NativeViewGLSurfaceEGL::Initialize(GLSurface::Format format) {
 }
 
 bool NativeViewGLSurfaceEGL::Initialize(
-    std::unique_ptr<VSyncProvider> sync_provider) {
+    std::unique_ptr<gfx::VSyncProvider> sync_provider) {
   DCHECK(!surface_);
 
   if (!GetDisplay()) {
@@ -663,7 +663,7 @@ bool NativeViewGLSurfaceEGL::Initialize(
     egl_window_attributes.push_back(size_.height());
   }
 
-  if (gfx::g_driver_egl.ext.b_EGL_NV_post_sub_buffer) {
+  if (g_driver_egl.ext.b_EGL_NV_post_sub_buffer) {
     egl_window_attributes.push_back(EGL_POST_SUB_BUFFER_SUPPORTED_NV);
     egl_window_attributes.push_back(EGL_TRUE);
   }
@@ -700,7 +700,7 @@ bool NativeViewGLSurfaceEGL::Initialize(
     return false;
   }
 
-  if (gfx::g_driver_egl.ext.b_EGL_NV_post_sub_buffer) {
+  if (g_driver_egl.ext.b_EGL_NV_post_sub_buffer) {
     EGLint surfaceVal;
     EGLBoolean retVal = eglQuerySurface(
         GetDisplay(), surface_, EGL_POST_SUB_BUFFER_SUPPORTED_NV, &surfaceVal);
@@ -892,15 +892,16 @@ gfx::SwapResult NativeViewGLSurfaceEGL::CommitOverlayPlanes() {
                                          : gfx::SwapResult::SWAP_FAILED;
 }
 
-VSyncProvider* NativeViewGLSurfaceEGL::GetVSyncProvider() {
+gfx::VSyncProvider* NativeViewGLSurfaceEGL::GetVSyncProvider() {
   return vsync_provider_.get();
 }
 
-bool NativeViewGLSurfaceEGL::ScheduleOverlayPlane(int z_order,
-                                                  OverlayTransform transform,
-                                                  gl::GLImage* image,
-                                                  const Rect& bounds_rect,
-                                                  const RectF& crop_rect) {
+bool NativeViewGLSurfaceEGL::ScheduleOverlayPlane(
+    int z_order,
+    gfx::OverlayTransform transform,
+    GLImage* image,
+    const gfx::Rect& bounds_rect,
+    const gfx::RectF& crop_rect) {
 #if !defined(OS_ANDROID)
   NOTIMPLEMENTED();
   return false;
@@ -1056,10 +1057,10 @@ void* PbufferGLSurfaceEGL::GetShareHandle() {
   NOTREACHED();
   return NULL;
 #else
-  if (!gfx::g_driver_egl.ext.b_EGL_ANGLE_query_surface_pointer)
+  if (!g_driver_egl.ext.b_EGL_ANGLE_query_surface_pointer)
     return NULL;
 
-  if (!gfx::g_driver_egl.ext.b_EGL_ANGLE_surface_d3d_texture_2d_share_handle)
+  if (!g_driver_egl.ext.b_EGL_ANGLE_surface_d3d_texture_2d_share_handle)
     return NULL;
 
   void* handle;
@@ -1130,4 +1131,4 @@ void* SurfacelessEGL::GetShareHandle() {
 SurfacelessEGL::~SurfacelessEGL() {
 }
 
-}  // namespace gfx
+}  // namespace gl

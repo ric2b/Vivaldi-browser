@@ -71,9 +71,8 @@ class GLHelperTest : public testing::Test {
         nullptr,                     /* surface */
         true,                        /* offscreen */
         gfx::kNullAcceleratedWidget, /* window */
-        gfx::Size(1, 1),             /* size */
         nullptr,                     /* share_context */
-        attributes, gfx::PreferDiscreteGpu, gpu::SharedMemoryLimits(),
+        attributes, gpu::SharedMemoryLimits(),
         nullptr, /* gpu_memory_buffer_manager */
         nullptr /* image_factory */));
     gl_ = context_->GetImplementation();
@@ -1268,7 +1267,7 @@ class GLHelperTest : public testing::Test {
 
 class GLHelperPixelTest : public GLHelperTest {
  private:
-  gfx::DisableNullDrawGLBindings enable_pixel_output_;
+  gl::DisableNullDrawGLBindings enable_pixel_output_;
 };
 
 TEST_F(GLHelperTest, RGBASyncReadbackTest) {

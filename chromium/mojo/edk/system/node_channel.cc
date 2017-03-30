@@ -29,6 +29,7 @@ T Align(T t) {
   return t + (k - (t % k)) % k;
 }
 
+// NOTE: Please ONLY append messages to the end of this enum.
 enum class MessageType : uint32_t {
   ACCEPT_CHILD,
   ACCEPT_PARENT,
@@ -41,6 +42,10 @@ enum class MessageType : uint32_t {
   INTRODUCE,
 #if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
   RELAY_PORTS_MESSAGE,
+#endif
+  BROADCAST,
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+  PORTS_MESSAGE_FROM_RELAY,
 #endif
 };
 
@@ -110,6 +115,11 @@ struct IntroductionData {
 struct RelayPortsMessageData {
   ports::NodeName destination;
 };
+
+// This struct is followed by the full payload of a relayed message.
+struct PortsMessageFromRelayData {
+  ports::NodeName source;
+};
 #endif
 
 template <typename DataType>
@@ -144,8 +154,15 @@ bool GetMessagePayload(const void* bytes,
 scoped_refptr<NodeChannel> NodeChannel::Create(
     Delegate* delegate,
     ScopedPlatformHandle platform_handle,
-    scoped_refptr<base::TaskRunner> io_task_runner) {
-  return new NodeChannel(delegate, std::move(platform_handle), io_task_runner);
+    scoped_refptr<base::TaskRunner> io_task_runner,
+    const ProcessErrorCallback& process_error_callback) {
+#if defined(OS_NACL_SFI)
+  LOG(FATAL) << "Multi-process not yet supported on NaCl-SFI";
+  return nullptr;
+#else
+  return new NodeChannel(delegate, std::move(platform_handle), io_task_runner,
+                         process_error_callback);
+#endif
 }
 
 // static
@@ -191,11 +208,28 @@ void NodeChannel::ShutDown() {
   }
 }
 
+void NodeChannel::LeakHandleOnShutdown() {
+  base::AutoLock lock(channel_lock_);
+  if (channel_) {
+    channel_->LeakHandle();
+  }
+}
+
+void NodeChannel::NotifyBadMessage(const std::string& error) {
+  if (!process_error_callback_.is_null())
+    process_error_callback_.Run("Received bad user message: " + error);
+}
+
 void NodeChannel::SetRemoteProcessHandle(base::ProcessHandle process_handle) {
   DCHECK(io_task_runner_->RunsTasksOnCurrentThread());
   base::AutoLock lock(remote_process_handle_lock_);
+  DCHECK_EQ(base::kNullProcessHandle, remote_process_handle_);
   CHECK_NE(remote_process_handle_, base::GetCurrentProcessHandle());
   remote_process_handle_ = process_handle;
+#if defined(OS_WIN)
+  DCHECK(!scoped_remote_process_handle_.is_valid());
+  scoped_remote_process_handle_.reset(PlatformHandle(process_handle));
+#endif
 }
 
 bool NodeChannel::HasRemoteProcessHandle() {
@@ -214,7 +248,7 @@ base::ProcessHandle NodeChannel::CopyRemoteProcessHandle() {
         base::GetCurrentProcessHandle(), remote_process_handle_,
         base::GetCurrentProcessHandle(), &handle, 0, FALSE,
         DUPLICATE_SAME_ACCESS);
-    DCHECK(result);
+    DPCHECK(result);
     return handle;
   }
   return base::kNullProcessHandle;
@@ -262,6 +296,7 @@ void NodeChannel::AddBrokerClient(const ports::NodeName& client_name,
   data->client_name = client_name;
 #if !defined(OS_WIN)
   data->process_handle = process_handle;
+  data->padding = 0;
 #endif
   WriteChannelMessage(std::move(message));
 }
@@ -330,6 +365,15 @@ void NodeChannel::Introduce(const ports::NodeName& name,
   WriteChannelMessage(std::move(message));
 }
 
+void NodeChannel::Broadcast(Channel::MessagePtr message) {
+  DCHECK(!message->has_handles());
+  void* data;
+  Channel::MessagePtr broadcast_message = CreateMessage(
+      MessageType::BROADCAST, message->data_num_bytes(), 0, &data);
+  memcpy(data, message->data(), message->data_num_bytes());
+  WriteChannelMessage(std::move(broadcast_message));
+}
+
 #if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
 void NodeChannel::RelayPortsMessage(const ports::NodeName& destination,
                                     Channel::MessagePtr message) {
@@ -373,15 +417,35 @@ void NodeChannel::RelayPortsMessage(const ports::NodeName& destination,
 
   WriteChannelMessage(std::move(relay_message));
 }
+
+void NodeChannel::PortsMessageFromRelay(const ports::NodeName& source,
+                                        Channel::MessagePtr message) {
+  size_t num_bytes = sizeof(PortsMessageFromRelayData) +
+      message->payload_size();
+  PortsMessageFromRelayData* data;
+  Channel::MessagePtr relayed_message = CreateMessage(
+      MessageType::PORTS_MESSAGE_FROM_RELAY, num_bytes, message->num_handles(),
+      &data);
+  data->source = source;
+  if (message->payload_size())
+    memcpy(data + 1, message->payload(), message->payload_size());
+  relayed_message->SetHandles(message->TakeHandles());
+  WriteChannelMessage(std::move(relayed_message));
+}
 #endif  // defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
 
 NodeChannel::NodeChannel(Delegate* delegate,
                          ScopedPlatformHandle platform_handle,
-                         scoped_refptr<base::TaskRunner> io_task_runner)
+                         scoped_refptr<base::TaskRunner> io_task_runner,
+                         const ProcessErrorCallback& process_error_callback)
     : delegate_(delegate),
       io_task_runner_(io_task_runner),
-      channel_(
-          Channel::Create(this, std::move(platform_handle), io_task_runner_)) {
+      process_error_callback_(process_error_callback)
+#if !defined(OS_NACL_SFI)
+      , channel_(
+          Channel::Create(this, std::move(platform_handle), io_task_runner_))
+#endif
+      {
 }
 
 NodeChannel::~NodeChannel() {
@@ -414,7 +478,7 @@ void NodeChannel::OnChannelMessage(const void* payload,
         handle.owning_process = remote_process_handle_;
       if (!Channel::Message::RewriteHandles(remote_process_handle_,
                                             base::GetCurrentProcessHandle(),
-                                            handles->data(), handles->size())) {
+                                            handles.get())) {
         DLOG(ERROR) << "Received one or more invalid handles.";
       }
     } else if (handles) {
@@ -626,6 +690,44 @@ void NodeChannel::OnChannelMessage(const void* payload,
     }
 #endif
 
+    case MessageType::BROADCAST: {
+      if (payload_size <= sizeof(Header))
+        break;
+      const void* data = static_cast<const void*>(
+          reinterpret_cast<const Header*>(payload) + 1);
+      Channel::MessagePtr message =
+          Channel::Message::Deserialize(data, payload_size - sizeof(Header));
+      if (!message || message->has_handles()) {
+        DLOG(ERROR) << "Dropping invalid broadcast message.";
+        break;
+      }
+      delegate_->OnBroadcast(remote_node_name_, std::move(message));
+      return;
+    }
+
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+    case MessageType::PORTS_MESSAGE_FROM_RELAY:
+      const PortsMessageFromRelayData* data;
+      if (GetMessagePayload(payload, payload_size, &data)) {
+        size_t num_bytes = payload_size - sizeof(*data);
+        if (num_bytes < sizeof(Header))
+          break;
+        num_bytes -= sizeof(Header);
+
+        size_t num_handles = handles ? handles->size() : 0;
+        Channel::MessagePtr message(
+            new Channel::Message(num_bytes, num_handles));
+        message->SetHandles(std::move(handles));
+        if (num_bytes)
+          memcpy(message->mutable_payload(), data + 1, num_bytes);
+        delegate_->OnPortsMessageFromRelay(
+            remote_node_name_, data->source, std::move(message));
+        return;
+      }
+      break;
+
+#endif  // defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS))
+
     default:
       break;
   }
@@ -719,11 +821,13 @@ void NodeChannel::WriteChannelMessage(Channel::MessagePtr message) {
 
     // Rewrite outgoing handles if we have a handle to the destination process.
     if (remote_process_handle != base::kNullProcessHandle) {
-      if (!message->RewriteHandles(base::GetCurrentProcessHandle(),
-                                   remote_process_handle, message->handles(),
-                                   message->num_handles())) {
+      ScopedPlatformHandleVectorPtr handles = message->TakeHandles();
+      if (!Channel::Message::RewriteHandles(base::GetCurrentProcessHandle(),
+                                            remote_process_handle,
+                                            handles.get())) {
         DLOG(ERROR) << "Failed to duplicate one or more outgoing handles.";
       }
+      message->SetHandles(std::move(handles));
     }
   }
 #elif defined(OS_MACOSX) && !defined(OS_IOS)

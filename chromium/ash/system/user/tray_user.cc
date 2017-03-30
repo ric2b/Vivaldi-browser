@@ -4,27 +4,23 @@
 
 #include "ash/system/user/tray_user.h"
 
-#include "ash/ash_switches.h"
-#include "ash/root_window_controller.h"
-#include "ash/session/session_state_delegate.h"
-#include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_util.h"
-#include "ash/shell_delegate.h"
+#include "ash/common/ash_switches.h"
+#include "ash/common/session/session_state_delegate.h"
+#include "ash/common/shelf/wm_shelf_util.h"
+#include "ash/common/system/tray/system_tray_delegate.h"
+#include "ash/common/system/tray/system_tray_notifier.h"
+#include "ash/common/system/tray/tray_constants.h"
+#include "ash/common/system/tray/tray_item_view.h"
+#include "ash/common/system/tray/tray_utils.h"
+#include "ash/common/system/user/rounded_image_view.h"
+#include "ash/common/wm_shell.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
-#include "ash/system/tray/system_tray_notifier.h"
-#include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_item_view.h"
-#include "ash/system/tray/tray_utils.h"
-#include "ash/system/user/rounded_image_view.h"
 #include "ash/system/user/user_view.h"
-#include "ash/wm/common/shelf/wm_shelf_util.h"
 #include "base/logging.h"
 #include "base/strings/string16.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "grit/ash_strings.h"
-#include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/border.h"
@@ -42,17 +38,17 @@ const int kUserLabelToIconPadding = 5;
 namespace ash {
 
 TrayUser::TrayUser(SystemTray* system_tray, UserIndex index)
-    : SystemTrayItem(system_tray),
+    : SystemTrayItem(system_tray, UMA_USER),
       user_index_(index),
       user_(nullptr),
       layout_view_(nullptr),
       avatar_(nullptr),
       label_(nullptr) {
-  Shell::GetInstance()->system_tray_notifier()->AddUserObserver(this);
+  WmShell::Get()->system_tray_notifier()->AddUserObserver(this);
 }
 
 TrayUser::~TrayUser() {
-  Shell::GetInstance()->system_tray_notifier()->RemoveUserObserver(this);
+  WmShell::Get()->system_tray_notifier()->RemoveUserObserver(this);
 }
 
 TrayUser::TestState TrayUser::GetStateForTest() const {
@@ -74,31 +70,30 @@ gfx::Rect TrayUser::GetUserPanelBoundsInScreenForTest() const {
   return user_->GetBoundsInScreenOfUserButtonForTest();
 }
 
-void TrayUser::UpdateAfterLoginStatusChangeForTest(user::LoginStatus status) {
+void TrayUser::UpdateAfterLoginStatusChangeForTest(LoginStatus status) {
   UpdateAfterLoginStatusChange(status);
 }
 
-views::View* TrayUser::CreateTrayView(user::LoginStatus status) {
+views::View* TrayUser::CreateTrayView(LoginStatus status) {
   CHECK(layout_view_ == nullptr);
 
   layout_view_ = new views::View;
-  layout_view_->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal,
-                           0, 0, kUserLabelToIconPadding));
+  layout_view_->SetLayoutManager(new views::BoxLayout(
+      views::BoxLayout::kHorizontal, 0, 0, kUserLabelToIconPadding));
   UpdateAfterLoginStatusChange(status);
   return layout_view_;
 }
 
-views::View* TrayUser::CreateDefaultView(user::LoginStatus status) {
-  if (status == user::LOGGED_IN_NONE)
+views::View* TrayUser::CreateDefaultView(LoginStatus status) {
+  if (status == LoginStatus::NOT_LOGGED_IN)
     return nullptr;
   const SessionStateDelegate* session_state_delegate =
-      Shell::GetInstance()->session_state_delegate();
+      WmShell::Get()->GetSessionStateDelegate();
 
   // If the screen is locked or a system modal dialog box is shown, show only
   // the currently active user.
   if (user_index_ && (session_state_delegate->IsUserSessionBlocked() ||
-                      Shell::GetInstance()->IsSystemModalWindowOpen()))
+                      WmShell::Get()->IsSystemModalWindowOpen()))
     return nullptr;
 
   CHECK(user_ == nullptr);
@@ -123,7 +118,7 @@ void TrayUser::DestroyDefaultView() {
   user_ = nullptr;
 }
 
-void TrayUser::UpdateAfterLoginStatusChange(user::LoginStatus status) {
+void TrayUser::UpdateAfterLoginStatusChange(LoginStatus status) {
   // Only the active user is represented in the tray.
   if (!layout_view_)
     return;
@@ -131,25 +126,25 @@ void TrayUser::UpdateAfterLoginStatusChange(user::LoginStatus status) {
     return;
   bool need_label = false;
   bool need_avatar = false;
-  SystemTrayDelegate* delegate = Shell::GetInstance()->system_tray_delegate();
+  SystemTrayDelegate* delegate = WmShell::Get()->system_tray_delegate();
   if (delegate->IsUserSupervised())
-    need_label =  true;
+    need_label = true;
   switch (status) {
-    case user::LOGGED_IN_LOCKED:
-    case user::LOGGED_IN_USER:
-    case user::LOGGED_IN_OWNER:
-    case user::LOGGED_IN_PUBLIC:
+    case LoginStatus::LOCKED:
+    case LoginStatus::USER:
+    case LoginStatus::OWNER:
+    case LoginStatus::PUBLIC:
       need_avatar = true;
       break;
-    case user::LOGGED_IN_SUPERVISED:
+    case LoginStatus::SUPERVISED:
       need_avatar = true;
       need_label = true;
       break;
-    case user::LOGGED_IN_GUEST:
+    case LoginStatus::GUEST:
       need_label = true;
       break;
-    case user::LOGGED_IN_KIOSK_APP:
-    case user::LOGGED_IN_NONE:
+    case LoginStatus::KIOSK_APP:
+    case LoginStatus::NOT_LOGGED_IN:
       break;
   }
 
@@ -164,7 +159,7 @@ void TrayUser::UpdateAfterLoginStatusChange(user::LoginStatus status) {
       label_ = nullptr;
     }
     if (need_avatar) {
-      avatar_ = new tray::RoundedImageView(kTrayAvatarCornerRadius, true);
+      avatar_ = new tray::RoundedImageView(kTrayRoundedBorderRadius, true);
       layout_view_->AddChildView(avatar_);
     } else {
       avatar_ = nullptr;
@@ -174,13 +169,13 @@ void TrayUser::UpdateAfterLoginStatusChange(user::LoginStatus status) {
   if (delegate->IsUserSupervised()) {
     label_->SetText(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_SUPERVISED_LABEL));
-  } else if (status == user::LOGGED_IN_GUEST) {
+  } else if (status == LoginStatus::GUEST) {
     label_->SetText(l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_GUEST_LABEL));
   }
 
   if (avatar_) {
-    avatar_->SetCornerRadii(
-        0, kTrayAvatarCornerRadius, kTrayAvatarCornerRadius, 0);
+    avatar_->SetCornerRadii(0, kTrayRoundedBorderRadius,
+                            kTrayRoundedBorderRadius, 0);
     avatar_->SetBorder(views::Border::NullBorder());
   }
   UpdateAvatarImage(status);
@@ -189,15 +184,15 @@ void TrayUser::UpdateAfterLoginStatusChange(user::LoginStatus status) {
   UpdateLayoutOfItem();
 }
 
-void TrayUser::UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment) {
+void TrayUser::UpdateAfterShelfAlignmentChange(ShelfAlignment alignment) {
   // Inactive users won't have a layout.
   if (!layout_view_)
     return;
-  if (wm::IsHorizontalAlignment(alignment)) {
+  if (IsHorizontalAlignment(alignment)) {
     if (avatar_) {
       avatar_->SetBorder(views::Border::NullBorder());
-      avatar_->SetCornerRadii(
-          0, kTrayAvatarCornerRadius, kTrayAvatarCornerRadius, 0);
+      avatar_->SetCornerRadii(0, kTrayRoundedBorderRadius,
+                              kTrayRoundedBorderRadius, 0);
     }
     if (label_) {
       // If label_ hasn't figured out its size yet, do that first.
@@ -208,18 +203,16 @@ void TrayUser::UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment) {
       int remainder = height % 2;
       label_->SetBorder(views::Border::CreateEmptyBorder(
           vertical_pad + remainder,
-          kTrayLabelItemHorizontalPaddingBottomAlignment,
-          vertical_pad,
+          kTrayLabelItemHorizontalPaddingBottomAlignment, vertical_pad,
           kTrayLabelItemHorizontalPaddingBottomAlignment));
     }
-    layout_view_->SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kHorizontal,
-                             0, 0, kUserLabelToIconPadding));
+    layout_view_->SetLayoutManager(new views::BoxLayout(
+        views::BoxLayout::kHorizontal, 0, 0, kUserLabelToIconPadding));
   } else {
     if (avatar_) {
       avatar_->SetBorder(views::Border::NullBorder());
-      avatar_->SetCornerRadii(
-          0, 0, kTrayAvatarCornerRadius, kTrayAvatarCornerRadius);
+      avatar_->SetCornerRadii(0, 0, kTrayRoundedBorderRadius,
+                              kTrayRoundedBorderRadius);
     }
     if (label_) {
       label_->SetBorder(views::Border::CreateEmptyBorder(
@@ -228,20 +221,19 @@ void TrayUser::UpdateAfterShelfAlignmentChange(wm::ShelfAlignment alignment) {
           kTrayLabelItemVerticalPaddingVerticalAlignment,
           kTrayLabelItemHorizontalPaddingBottomAlignment));
     }
-    layout_view_->SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kVertical,
-                             0, 0, kUserLabelToIconPadding));
+    layout_view_->SetLayoutManager(new views::BoxLayout(
+        views::BoxLayout::kVertical, 0, 0, kUserLabelToIconPadding));
   }
 }
 
 void TrayUser::OnUserUpdate() {
-  UpdateAvatarImage(Shell::GetInstance()->system_tray_delegate()->
-      GetUserLoginStatus());
+  UpdateAvatarImage(
+      WmShell::Get()->system_tray_delegate()->GetUserLoginStatus());
 }
 
 void TrayUser::OnUserAddedToSession() {
   SessionStateDelegate* session_state_delegate =
-      Shell::GetInstance()->session_state_delegate();
+      WmShell::Get()->GetSessionStateDelegate();
   // Only create views for user items which are logged in.
   if (user_index_ >= session_state_delegate->NumberOfLoggedInUsers())
     return;
@@ -251,12 +243,12 @@ void TrayUser::OnUserAddedToSession() {
 
   // Update the user item.
   UpdateAvatarImage(
-      Shell::GetInstance()->system_tray_delegate()->GetUserLoginStatus());
+      WmShell::Get()->system_tray_delegate()->GetUserLoginStatus());
 }
 
-void TrayUser::UpdateAvatarImage(user::LoginStatus status) {
+void TrayUser::UpdateAvatarImage(LoginStatus status) {
   SessionStateDelegate* session_state_delegate =
-      Shell::GetInstance()->session_state_delegate();
+      WmShell::Get()->GetSessionStateDelegate();
   if (!avatar_ ||
       user_index_ >= session_state_delegate->NumberOfLoggedInUsers())
     return;
@@ -265,11 +257,11 @@ void TrayUser::UpdateAvatarImage(user::LoginStatus status) {
       session_state_delegate->GetUserInfo(user_index_);
   CHECK(user_info);
   avatar_->SetImage(user_info->GetImage(),
-                    gfx::Size(kTrayAvatarSize, kTrayAvatarSize));
+                    gfx::Size(kTrayItemSize, kTrayItemSize));
 
   // Unit tests might come here with no images for some users.
   if (avatar_->size().IsEmpty())
-    avatar_->SetSize(gfx::Size(kTrayAvatarSize, kTrayAvatarSize));
+    avatar_->SetSize(gfx::Size(kTrayItemSize, kTrayItemSize));
 }
 
 void TrayUser::UpdateLayoutOfItem() {

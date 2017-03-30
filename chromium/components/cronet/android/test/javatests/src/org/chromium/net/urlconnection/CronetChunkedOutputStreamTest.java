@@ -10,6 +10,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.net.CronetTestBase;
 import org.chromium.net.CronetTestFramework;
 import org.chromium.net.NativeTestServer;
+import org.chromium.net.UrlRequestException;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -82,6 +83,74 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         } catch (IOException e) {
             // Expected.
         }
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testWriteAfterRequestFailed() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        connection.setChunkedStreamingMode(0);
+        OutputStream out = connection.getOutputStream();
+        out.write(UPLOAD_DATA);
+        NativeTestServer.shutdownNativeTestServer();
+        try {
+            out.write(TestUtil.getLargeData());
+            connection.getResponseCode();
+            fail();
+        } catch (IOException e) {
+            if (!testingSystemHttpURLConnection()) {
+                UrlRequestException requestException = (UrlRequestException) e;
+                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
+                        requestException.getErrorCode());
+            }
+        }
+        // Restarting server to run the test for a second time.
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @CompareDefaultWithCronet
+    public void testGetResponseAfterWriteFailed() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        NativeTestServer.shutdownNativeTestServer();
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        // Set 1 byte as chunk size so internally Cronet will try upload when
+        // 1 byte is filled.
+        connection.setChunkedStreamingMode(1);
+        try {
+            OutputStream out = connection.getOutputStream();
+            out.write(1);
+            out.write(1);
+            fail();
+        } catch (IOException e) {
+            if (!testingSystemHttpURLConnection()) {
+                UrlRequestException requestException = (UrlRequestException) e;
+                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
+                        requestException.getErrorCode());
+            }
+        }
+        // Make sure IOException is reported again when trying to read response
+        // from the connection.
+        try {
+            connection.getResponseCode();
+            fail();
+        } catch (IOException e) {
+            // Expected.
+            if (!testingSystemHttpURLConnection()) {
+                UrlRequestException requestException = (UrlRequestException) e;
+                assertEquals(UrlRequestException.ERROR_CONNECTION_REFUSED,
+                        requestException.getErrorCode());
+            }
+        }
+        // Restarting server to run the test for a second time.
+        assertTrue(NativeTestServer.startNativeTestServer(getContext()));
     }
 
     @SmallTest
@@ -194,6 +263,26 @@ public class CronetChunkedOutputStreamTest extends CronetTestBase {
         out.write(largeData);
         assertEquals(200, connection.getResponseCode());
         assertEquals("OK", connection.getResponseMessage());
+        TestUtil.checkLargeData(TestUtil.getResponseAsString(connection));
+        connection.disconnect();
+    }
+
+    @SmallTest
+    @Feature({"Cronet"})
+    @OnlyRunCronetHttpURLConnection
+    // Regression testing for crbug.com/618872.
+    public void testOneMassiveWriteLargerThanInternalBuffer() throws Exception {
+        URL url = new URL(NativeTestServer.getEchoBodyURL());
+        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+        connection.setDoOutput(true);
+        connection.setRequestMethod("POST");
+        // Use a super big chunk size so that it exceeds the UploadDataProvider
+        // read buffer size.
+        byte[] largeData = TestUtil.getLargeData();
+        connection.setChunkedStreamingMode(largeData.length);
+        OutputStream out = connection.getOutputStream();
+        out.write(largeData);
+        assertEquals(200, connection.getResponseCode());
         TestUtil.checkLargeData(TestUtil.getResponseAsString(connection));
         connection.disconnect();
     }

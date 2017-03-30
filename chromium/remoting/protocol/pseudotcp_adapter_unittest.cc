@@ -4,12 +4,16 @@
 
 #include "remoting/protocol/pseudotcp_adapter.h"
 
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "jingle/glue/thread_wrapper.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -127,7 +131,7 @@ class FakeSocket : public P2PDatagramSocket {
            const net::CompletionCallback& callback) override {
     DCHECK(buf);
     if (peer_socket_) {
-      base::MessageLoop::current()->PostDelayedTask(
+      base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
           FROM_HERE,
           base::Bind(&FakeSocket::AppendInputPacket,
                      base::Unretained(peer_socket_),
@@ -152,10 +156,10 @@ class FakeSocket : public P2PDatagramSocket {
 
 class TCPChannelTester : public base::RefCountedThreadSafe<TCPChannelTester> {
  public:
-  TCPChannelTester(base::MessageLoop* message_loop,
+  TCPChannelTester(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                    P2PStreamSocket* client_socket,
                    P2PStreamSocket* host_socket)
-      : message_loop_(message_loop),
+      : task_runner_(std::move(task_runner)),
         host_socket_(host_socket),
         client_socket_(client_socket),
         done_(false),
@@ -163,8 +167,8 @@ class TCPChannelTester : public base::RefCountedThreadSafe<TCPChannelTester> {
         read_errors_(0) {}
 
   void Start() {
-    message_loop_->PostTask(
-        FROM_HERE, base::Bind(&TCPChannelTester::DoStart, this));
+    task_runner_->PostTask(FROM_HERE,
+                           base::Bind(&TCPChannelTester::DoStart, this));
   }
 
   void CheckResults() {
@@ -185,8 +189,7 @@ class TCPChannelTester : public base::RefCountedThreadSafe<TCPChannelTester> {
 
   void Done() {
     done_ = true;
-    message_loop_->PostTask(FROM_HERE,
-                            base::MessageLoop::QuitWhenIdleClosure());
+    task_runner_->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
 
   void DoStart() {
@@ -272,7 +275,7 @@ class TCPChannelTester : public base::RefCountedThreadSafe<TCPChannelTester> {
  private:
   friend class base::RefCountedThreadSafe<TCPChannelTester>;
 
-  base::MessageLoop* message_loop_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   P2PStreamSocket* host_socket_;
   P2PStreamSocket* client_socket_;
   bool done_;
@@ -323,11 +326,11 @@ TEST_F(PseudoTcpAdapterTest, DataTransfer) {
   ASSERT_EQ(net::OK, rv2);
 
   scoped_refptr<TCPChannelTester> tester =
-      new TCPChannelTester(&message_loop_, host_pseudotcp_.get(),
-                           client_pseudotcp_.get());
+      new TCPChannelTester(base::ThreadTaskRunnerHandle::Get(),
+                           host_pseudotcp_.get(), client_pseudotcp_.get());
 
   tester->Start();
-  message_loop_.Run();
+  base::RunLoop().Run();
   tester->CheckResults();
 }
 
@@ -358,25 +361,24 @@ TEST_F(PseudoTcpAdapterTest, LimitedChannel) {
   ASSERT_EQ(net::OK, rv2);
 
   scoped_refptr<TCPChannelTester> tester =
-      new TCPChannelTester(&message_loop_, host_pseudotcp_.get(),
-                           client_pseudotcp_.get());
+      new TCPChannelTester(base::ThreadTaskRunnerHandle::Get(),
+                           host_pseudotcp_.get(), client_pseudotcp_.get());
 
   tester->Start();
-  message_loop_.Run();
+  base::RunLoop().Run();
   tester->CheckResults();
 }
 
 class DeleteOnConnected {
  public:
-  DeleteOnConnected(base::MessageLoop* message_loop,
+  DeleteOnConnected(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
                     std::unique_ptr<PseudoTcpAdapter>* adapter)
-      : message_loop_(message_loop), adapter_(adapter) {}
+      : task_runner_(std::move(task_runner)), adapter_(adapter) {}
   void OnConnected(int error) {
     adapter_->reset();
-    message_loop_->PostTask(FROM_HERE,
-                            base::MessageLoop::QuitWhenIdleClosure());
+    task_runner_->PostTask(FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
   }
-  base::MessageLoop* message_loop_;
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   std::unique_ptr<PseudoTcpAdapter>* adapter_;
 };
 
@@ -385,12 +387,13 @@ TEST_F(PseudoTcpAdapterTest, DeleteOnConnected) {
   // to deleted structures being touched as the stack unrolls, so the failure
   // mode is a crash rather than a normal test failure.
   net::TestCompletionCallback client_connect_cb;
-  DeleteOnConnected host_delete(&message_loop_, &host_pseudotcp_);
+  DeleteOnConnected host_delete(base::ThreadTaskRunnerHandle::Get(),
+                                &host_pseudotcp_);
 
   host_pseudotcp_->Connect(base::Bind(&DeleteOnConnected::OnConnected,
                                       base::Unretained(&host_delete)));
   client_pseudotcp_->Connect(client_connect_cb.callback());
-  message_loop_.Run();
+  base::RunLoop().Run();
 
   ASSERT_EQ(NULL, host_pseudotcp_.get());
 }
@@ -419,11 +422,11 @@ TEST_F(PseudoTcpAdapterTest, WriteWaitsForSendLetsDataThrough) {
   ASSERT_EQ(net::OK, rv2);
 
   scoped_refptr<TCPChannelTester> tester =
-      new TCPChannelTester(&message_loop_, host_pseudotcp_.get(),
-                           client_pseudotcp_.get());
+      new TCPChannelTester(base::ThreadTaskRunnerHandle::Get(),
+                           host_pseudotcp_.get(), client_pseudotcp_.get());
 
   tester->Start();
-  message_loop_.Run();
+  base::RunLoop().Run();
   tester->CheckResults();
 }
 

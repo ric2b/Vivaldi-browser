@@ -25,7 +25,11 @@
             'build_irt': 1,
           },
           'dependencies': [
+            'ipc.gyp:ipc_interfaces_mojom',
             '../base/base_nacl.gyp:base_nacl',
+            '../mojo/mojo_public.gyp:mojo_interface_bindings_generation',
+            '../mojo/mojo_public_nacl.gyp:mojo_cpp_bindings_nacl',
+            '../mojo/mojo_public_nacl.gyp:mojo_cpp_system_nacl',
           ],
         },
         {
@@ -54,7 +58,11 @@
             'ipc_channel_nacl.cc',
           ],
           'dependencies': [
+            'ipc.gyp:ipc_interfaces_mojom',
             '../base/base_nacl.gyp:base_nacl_nonsfi',
+            '../mojo/mojo_public.gyp:mojo_interface_bindings_generation',
+            '../mojo/mojo_public_nacl.gyp:mojo_cpp_bindings_nacl',
+            '../mojo/mojo_public_nacl.gyp:mojo_cpp_system_nacl',
           ],
         },
       ],

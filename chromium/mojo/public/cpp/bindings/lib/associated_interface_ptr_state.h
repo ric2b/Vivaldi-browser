@@ -11,17 +11,18 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/associated_group.h"
+#include "mojo/public/cpp/bindings/associated_group_controller.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
-#include "mojo/public/cpp/bindings/callback.h"
+#include "mojo/public/cpp/bindings/interface_endpoint_client.h"
+#include "mojo/public/cpp/bindings/interface_id.h"
 #include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
-#include "mojo/public/cpp/bindings/lib/interface_endpoint_client.h"
-#include "mojo/public/cpp/bindings/lib/interface_id.h"
-#include "mojo/public/cpp/bindings/lib/multiplex_router.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 
@@ -50,18 +51,13 @@ class AssociatedInterfacePtrState {
     return endpoint_client_->interface_id();
   }
 
-  void QueryVersion(const Callback<void(uint32_t)>& callback) {
-    // It is safe to capture |this| because the callback won't be run after this
-    // object goes away.
-    auto callback_wrapper = [this, callback](uint32_t version) {
-      this->version_ = version;
-      callback.Run(version);
-    };
-
+  void QueryVersion(const base::Callback<void(uint32_t)>& callback) {
     // Do a static cast in case the interface contains methods with the same
-    // name.
+    // name. It is safe to capture |this| because the callback won't be run
+    // after this object goes away.
     static_cast<ControlMessageProxy*>(proxy_.get())
-        ->QueryVersion(callback_wrapper);
+        ->QueryVersion(base::Bind(&AssociatedInterfacePtrState::OnQueryVersion,
+                                  base::Unretained(this), callback));
   }
 
   void RequireVersion(uint32_t version) {
@@ -94,7 +90,8 @@ class AssociatedInterfacePtrState {
         base::WrapUnique(new typename Interface::ResponseValidator_()), false,
         std::move(runner)));
     proxy_.reset(new Proxy(endpoint_client_.get()));
-    proxy_->serialization_context()->router = endpoint_client_->router();
+    proxy_->serialization_context()->group_controller =
+        endpoint_client_->group_controller();
   }
 
   // After this method is called, the object is in an invalid state and
@@ -112,7 +109,7 @@ class AssociatedInterfacePtrState {
     return endpoint_client_ ? endpoint_client_->encountered_error() : false;
   }
 
-  void set_connection_error_handler(const Closure& error_handler) {
+  void set_connection_error_handler(const base::Closure& error_handler) {
     DCHECK(endpoint_client_);
     endpoint_client_->set_connection_error_handler(error_handler);
   }
@@ -128,6 +125,12 @@ class AssociatedInterfacePtrState {
 
  private:
   using Proxy = typename Interface::Proxy_;
+
+  void OnQueryVersion(const base::Callback<void(uint32_t)>& callback,
+                      uint32_t version) {
+    version_ = version;
+    callback.Run(version);
+  }
 
   std::unique_ptr<InterfaceEndpointClient> endpoint_client_;
   std::unique_ptr<Proxy> proxy_;

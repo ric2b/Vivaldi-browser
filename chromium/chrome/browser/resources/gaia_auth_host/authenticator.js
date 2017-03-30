@@ -806,8 +806,7 @@ cr.define('cr.login', function() {
    */
   Authenticator.prototype.onLoadAbort_ = function(e) {
     this.dispatchEvent(new CustomEvent('loadAbort',
-        {detail: {error: e.reason,
-                  src: this.webview_.src}}));
+        {detail: {error: e.reason, src: e.url}}));
   };
 
   /**

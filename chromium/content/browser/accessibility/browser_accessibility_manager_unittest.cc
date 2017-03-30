@@ -1321,6 +1321,21 @@ TEST(BrowserAccessibilityManagerTest, TestGetTextForRange) {
       paragraph_text_accessible->InternalGetChild(1);
   ASSERT_NE(nullptr, paragraph_line2_accessible);
 
+  std::vector<const BrowserAccessibility*> text_only_objects =
+      BrowserAccessibilityManager::FindTextOnlyObjectsInRange(*root_accessible,
+                                                              *root_accessible);
+  EXPECT_EQ(3U, text_only_objects.size());
+  EXPECT_EQ(button_text_accessible, text_only_objects[0]);
+  EXPECT_EQ(line_break_accessible, text_only_objects[1]);
+  EXPECT_EQ(paragraph_text_accessible, text_only_objects[2]);
+
+  text_only_objects = BrowserAccessibilityManager::FindTextOnlyObjectsInRange(
+      *div_accessible, *paragraph_accessible);
+  EXPECT_EQ(3U, text_only_objects.size());
+  EXPECT_EQ(button_text_accessible, text_only_objects[0]);
+  EXPECT_EQ(line_break_accessible, text_only_objects[1]);
+  EXPECT_EQ(paragraph_text_accessible, text_only_objects[2]);
+
   EXPECT_EQ(base::ASCIIToUTF16("Button\nHello world."),
             BrowserAccessibilityManager::GetTextForRange(*root_accessible, 0,
                                                          *root_accessible, 19));
@@ -1380,6 +1395,11 @@ TEST(BrowserAccessibilityManagerTest, TestGetTextForRange) {
       base::ASCIIToUTF16("Hello world."),
       BrowserAccessibilityManager::GetTextForRange(
           *paragraph_line1_accessible, 0, *paragraph_line2_accessible, 6));
+  // Start and end positions could be reversed.
+  EXPECT_EQ(
+      base::ASCIIToUTF16("Hello world."),
+      BrowserAccessibilityManager::GetTextForRange(
+          *paragraph_line2_accessible, 6, *paragraph_line1_accessible, 0));
 }
 
 TEST(BrowserAccessibilityManagerTest, DeletingFocusedNodeDoesNotCrash) {

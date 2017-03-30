@@ -5,11 +5,11 @@
 #include "core/layout/PaintInvalidationState.h"
 
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/svg/LayoutSVGModelObject.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/paint/PaintLayer.h"
@@ -27,7 +27,7 @@ static bool supportsCachedOffsets(const LayoutObject& object)
         && !(object.isLayoutBlock() && object.isSVG());
 }
 
-PaintInvalidationState::PaintInvalidationState(const LayoutView& layoutView, Vector<LayoutObject*>& pendingDelayedPaintInvalidations)
+PaintInvalidationState::PaintInvalidationState(const LayoutView& layoutView, Vector<const LayoutObject*>& pendingDelayedPaintInvalidations)
     : m_currentObject(layoutView)
     , m_forcedSubtreeInvalidationFlags(0)
     , m_clipped(false)
@@ -71,7 +71,7 @@ PaintInvalidationState::PaintInvalidationState(const PaintInvalidationState& par
     , m_paintInvalidationContainerForStackedContents(parentState.m_paintInvalidationContainerForStackedContents)
     , m_containerForAbsolutePosition(currentObject.canContainAbsolutePositionObjects() ? currentObject : parentState.m_containerForAbsolutePosition)
     , m_svgTransform(parentState.m_svgTransform)
-    , m_pendingDelayedPaintInvalidations(parentState.pendingDelayedPaintInvalidationTargets())
+    , m_pendingDelayedPaintInvalidations(parentState.m_pendingDelayedPaintInvalidations)
     , m_paintingLayer(currentObject.hasLayer() && toLayoutBoxModelObject(currentObject).hasSelfPaintingLayer() ? *toLayoutBoxModelObject(currentObject).layer() : parentState.m_paintingLayer)
 #if ENABLE(ASSERT)
     , m_didUpdateForChildren(false)
@@ -244,7 +244,7 @@ void PaintInvalidationState::updateForChildren(PaintInvalidationReason reason)
 
     switch (reason) {
     case PaintInvalidationDelayedFull:
-        pushDelayedPaintInvalidationTarget(const_cast<LayoutObject&>(m_currentObject));
+        m_pendingDelayedPaintInvalidations.append(&m_currentObject);
         break;
     case PaintInvalidationSubtree:
         m_forcedSubtreeInvalidationFlags |= (FullInvalidation | FullInvalidationForStackedContents);

@@ -61,7 +61,8 @@ class CONTENT_EXPORT WebContentsAudioInputStream
       const std::string& device_id,
       const media::AudioParameters& params,
       const scoped_refptr<base::SingleThreadTaskRunner>& worker_task_runner,
-      AudioMirroringManager* audio_mirroring_manager);
+      AudioMirroringManager* audio_mirroring_manager,
+      bool is_duplication);
 
  private:
   friend class WebContentsAudioInputStreamTest;
@@ -73,11 +74,12 @@ class CONTENT_EXPORT WebContentsAudioInputStream
   // thread, and the VirtualAudioOuputStreams on the audio thread.
   class Impl;
 
-  WebContentsAudioInputStream(
-      int render_process_id, int main_render_frame_id,
-      AudioMirroringManager* mirroring_manager,
-      const scoped_refptr<WebContentsTracker>& tracker,
-      media::VirtualAudioInputStream* mixer_stream);
+  WebContentsAudioInputStream(int render_process_id,
+                              int main_render_frame_id,
+                              AudioMirroringManager* mirroring_manager,
+                              const scoped_refptr<WebContentsTracker>& tracker,
+                              media::VirtualAudioInputStream* mixer_stream,
+                              bool is_duplication);
 
   ~WebContentsAudioInputStream() override;
 

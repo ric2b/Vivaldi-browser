@@ -33,8 +33,8 @@
 
 #include "core/CoreExport.h"
 #include "core/inspector/InspectorBaseAgent.h"
+#include "core/inspector/protocol/Input.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/PassOwnPtr.h"
 #include "wtf/text/WTFString.h"
 
 namespace blink {
@@ -42,7 +42,7 @@ class InspectedFrames;
 class PlatformKeyboardEvent;
 class PlatformMouseEvent;
 
-class CORE_EXPORT InspectorInputAgent final : public InspectorBaseAgent<InspectorInputAgent, protocol::Frontend::Input>, public protocol::Backend::Input {
+class CORE_EXPORT InspectorInputAgent final : public InspectorBaseAgent<protocol::Input::Metainfo> {
     WTF_MAKE_NONCOPYABLE(InspectorInputAgent);
 public:
     static InspectorInputAgent* create(InspectedFrames* inspectedFrames)
@@ -54,7 +54,7 @@ public:
     DECLARE_VIRTUAL_TRACE();
 
     // Methods called from the frontend for simulating input.
-    void dispatchTouchEvent(ErrorString*, const String& type, PassOwnPtr<protocol::Array<protocol::Input::TouchPoint>> touchPoints, const Maybe<int>& modifiers, const Maybe<double>& timestamp) override;
+    void dispatchTouchEvent(ErrorString*, const String& type, std::unique_ptr<protocol::Array<protocol::Input::TouchPoint>> touchPoints, const Maybe<int>& modifiers, const Maybe<double>& timestamp) override;
 private:
     explicit InspectorInputAgent(InspectedFrames*);
 

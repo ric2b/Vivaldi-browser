@@ -9,10 +9,6 @@ cr.define('downloads', function() {
     attached: function() {
       // isRTL() only works after i18n_template.js runs to set <html dir>.
       this.overflowAlign_ = isRTL() ? 'left' : 'right';
-
-      /** @private {!SearchFieldDelegate} */
-      this.searchFieldDelegate_ = new ToolbarSearchFieldDelegate(this);
-      this.$['search-input'].setDelegate(this.searchFieldDelegate_);
     },
 
     properties: {
@@ -27,6 +23,11 @@ cr.define('downloads', function() {
         type: String,
         value: 'right',
       },
+    },
+
+    listeners: {
+      'paper-dropdown-close': 'onPaperDropdownClose_',
+      'paper-dropdown-open': 'onPaperDropdownOpen_',
     },
 
     /** @return {boolean} Whether removal can be undone. */
@@ -54,9 +55,26 @@ cr.define('downloads', function() {
       this.updateClearAll_();
     },
 
-    /** @param {string} searchTerm */
-    onSearchTermSearch: function(searchTerm) {
-      downloads.ActionService.getInstance().search(searchTerm);
+    /** @private */
+    onPaperDropdownClose_: function() {
+      window.removeEventListener('resize', assert(this.boundResize_));
+    },
+
+    /** @private */
+    onPaperDropdownOpen_: function() {
+      this.boundResize_ = this.boundResize_ || function() {
+        this.$.more.close();
+      }.bind(this);
+      window.addEventListener('resize', this.boundResize_);
+    },
+
+    /**
+     * @param {!CustomEvent} event
+     * @private
+     */
+    onSearchChanged_: function(event) {
+      downloads.ActionService.getInstance().search(
+          /** @type {string} */ (event.detail));
       this.updateClearAll_();
     },
 
@@ -71,24 +89,6 @@ cr.define('downloads', function() {
       this.$$('paper-menu .clear-all').hidden = !this.canClearAll();
     },
   });
-
-  /**
-   * @constructor
-   * @implements {SearchFieldDelegate}
-   */
-  // TODO(devlin): This is a bit excessive, and it would be better to just have
-  // Toolbar implement SearchFieldDelegate. But for now, we don't know how to
-  // make that happen with closure compiler.
-  function ToolbarSearchFieldDelegate(toolbar) {
-    this.toolbar_ = toolbar;
-  }
-
-  ToolbarSearchFieldDelegate.prototype = {
-    /** @override */
-    onSearchTermSearch: function(searchTerm) {
-      this.toolbar_.onSearchTermSearch(searchTerm);
-    }
-  };
 
   return {Toolbar: Toolbar};
 });

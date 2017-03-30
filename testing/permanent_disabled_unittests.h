@@ -29,6 +29,7 @@
   DISABLE(UberUIBrowserTest, EnableMdExtensionsHidesExtensions)
   DISABLE(UberUIBrowserTest, EnableMdHistoryHidesHistory)
   DISABLE(UberUIBrowserTest, EnableSettingsWindowHidesSettingsAndHelp)
+  DISABLE(UberUIBrowserTest, EnableMdSettingsHidesSettings)
 
   DISABLE(WebUIAccessibilityAuditBrowserTest_IssuesAreWarnings,
           testCanIgnoreSelectors)

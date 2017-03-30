@@ -42,7 +42,7 @@
 #include "core/events/ScopedEventQueue.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLElement.h"
-#include "core/layout/LayoutBoxModelObject.h"
+#include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutText.h"
 #include "core/svg/SVGSVGElement.h"
 #include "platform/geometry/FloatQuad.h"
@@ -1244,11 +1244,6 @@ Node* Range::firstNode() const
     return NodeTraversal::nextSkippingChildren(*m_start.container());
 }
 
-ShadowRoot* Range::shadowRoot() const
-{
-    return startContainer() ? startContainer()->containingShadowRoot() : nullptr;
-}
-
 Node* Range::pastLastNode() const
 {
     if (m_end.container()->offsetInCharacters())
@@ -1313,14 +1308,14 @@ void Range::formatForDebugger(char* buffer, unsigned length) const
 
     const int FormatBufferSize = 1024;
     char s[FormatBufferSize];
-    result.appendLiteral("from offset ");
+    result.append("from offset ");
     result.appendNumber(m_start.offset());
-    result.appendLiteral(" of ");
+    result.append(" of ");
     m_start.container()->formatForDebugger(s, FormatBufferSize);
     result.append(s);
-    result.appendLiteral(" to offset ");
+    result.append(" to offset ");
     result.appendNumber(m_end.offset());
-    result.appendLiteral(" of ");
+    result.append(" of ");
     m_end.container()->formatForDebugger(s, FormatBufferSize);
     result.append(s);
 
@@ -1335,23 +1330,6 @@ bool areRangesEqual(const Range* a, const Range* b)
     if (!a || !b)
         return false;
     return a->startPosition() == b->startPosition() && a->endPosition() == b->endPosition();
-}
-
-static inline void boundaryNodeChildrenChanged(RangeBoundaryPoint& boundary, ContainerNode* container)
-{
-    if (!boundary.childBefore())
-        return;
-    if (boundary.container() != container)
-        return;
-    boundary.invalidateOffset();
-}
-
-void Range::nodeChildrenChanged(ContainerNode* container)
-{
-    DCHECK(container);
-    DCHECK_EQ(container->document(), m_ownerDocument);
-    boundaryNodeChildrenChanged(m_start, container);
-    boundaryNodeChildrenChanged(m_end, container);
 }
 
 static inline void boundaryNodeChildrenWillBeRemoved(RangeBoundaryPoint& boundary, ContainerNode& container)
@@ -1410,6 +1388,7 @@ static inline void boundaryTextInserted(RangeBoundaryPoint& boundary, Node* text
 {
     if (boundary.container() != text)
         return;
+    boundary.markValid();
     unsigned boundaryOffset = boundary.offset();
     if (offset >= boundaryOffset)
         return;
@@ -1428,6 +1407,7 @@ static inline void boundaryTextRemoved(RangeBoundaryPoint& boundary, Node* text,
 {
     if (boundary.container() != text)
         return;
+    boundary.markValid();
     unsigned boundaryOffset = boundary.offset();
     if (offset >= boundaryOffset)
         return;
@@ -1551,10 +1531,10 @@ void Range::getBorderAndTextQuads(Vector<FloatQuad>& quads) const
     for (Node* node = firstNode(); node != stopNode; node = NodeTraversal::next(*node)) {
         if (node->isElementNode()) {
             if (!nodeSet.contains(node->parentNode())) {
-                if (LayoutBoxModelObject* layoutBoxModelObject = toElement(node)->layoutBoxModelObject()) {
+                if (LayoutObject* layoutObject = toElement(node)->layoutObject()) {
                     Vector<FloatQuad> elementQuads;
-                    layoutBoxModelObject->absoluteQuads(elementQuads);
-                    m_ownerDocument->adjustFloatQuadsForScrollAndAbsoluteZoom(elementQuads, *layoutBoxModelObject);
+                    layoutObject->absoluteQuads(elementQuads);
+                    m_ownerDocument->adjustFloatQuadsForScrollAndAbsoluteZoom(elementQuads, *layoutObject);
 
                     quads.appendVector(elementQuads);
                 }

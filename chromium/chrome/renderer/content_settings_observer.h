@@ -9,7 +9,6 @@
 #include <set>
 
 #include "base/gtest_prod_util.h"
-#include "base/macros.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "content/public/renderer/render_frame_observer.h"
@@ -61,7 +60,7 @@ class ContentSettingsObserver
   // blink::WebContentSettingsClient implementation.
   bool allowDatabase(const blink::WebString& name,
                      const blink::WebString& display_name,
-                     unsigned long estimated_size) override;
+                     unsigned estimated_size) override;
   void requestFileSystemAccessAsync(
       const blink::WebContentSettingCallbacks& callbacks) override;
   bool allowImage(bool enabled_per_settings,
@@ -96,6 +95,7 @@ class ContentSettingsObserver
   bool OnMessageReceived(const IPC::Message& message) override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_page_navigation) override;
+  void OnDestruct() override;
 
   // Message handlers.
   void OnLoadBlockedPlugins(const std::string& identifier);

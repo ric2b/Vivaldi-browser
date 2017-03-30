@@ -260,7 +260,8 @@ base::ListValue* ContentSettingsStore::GetSettingsForExtension(
         NULL));  // We already hold the lock.
     while (rule_iterator->HasNext()) {
       const Rule& rule = rule_iterator->Next();
-      base::DictionaryValue* setting_dict = new base::DictionaryValue();
+      std::unique_ptr<base::DictionaryValue> setting_dict(
+          new base::DictionaryValue());
       setting_dict->SetString(keys::kPrimaryPatternKey,
                               rule.primary_pattern.ToString());
       setting_dict->SetString(keys::kSecondaryPatternKey,
@@ -278,7 +279,7 @@ base::ListValue* ContentSettingsStore::GetSettingsForExtension(
       DCHECK(!setting_string.empty());
 
       setting_dict->SetString(keys::kContentSettingKey, setting_string);
-      settings->Append(setting_dict);
+      settings->Append(std::move(setting_dict));
     }
   }
   return settings;
@@ -288,13 +289,12 @@ void ContentSettingsStore::SetExtensionContentSettingFromList(
     const std::string& extension_id,
     const base::ListValue* list,
     ExtensionPrefsScope scope) {
-  for (base::ListValue::const_iterator it = list->begin();
-       it != list->end(); ++it) {
-    if ((*it)->GetType() != base::Value::TYPE_DICTIONARY) {
+  for (const auto& value : *list) {
+    base::DictionaryValue* dict;
+    if (!value->GetAsDictionary(&dict)) {
       NOTREACHED();
       continue;
     }
-    base::DictionaryValue* dict = static_cast<base::DictionaryValue*>(*it);
     std::string primary_pattern_str;
     dict->GetString(keys::kPrimaryPatternKey, &primary_pattern_str);
     ContentSettingsPattern primary_pattern =

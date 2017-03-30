@@ -8,19 +8,9 @@ namespace ash {
 namespace test {
 
 TestLockStateControllerDelegate::TestLockStateControllerDelegate()
-    : num_lock_requests_(0),
-      num_shutdown_requests_(0) {
-}
+    : num_lock_requests_(0), num_shutdown_requests_(0) {}
 
-TestLockStateControllerDelegate::~TestLockStateControllerDelegate() {
-}
-
-bool TestLockStateControllerDelegate::IsLoading() const {
-  // There is no way for to know, since we can't include the
-  // content::WebContents definition (whose instance we can retrieve from
-  // ScreenLocker).
-  return false;
-}
+TestLockStateControllerDelegate::~TestLockStateControllerDelegate() {}
 
 void TestLockStateControllerDelegate::RequestLockScreen() {
   ++num_lock_requests_;

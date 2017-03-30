@@ -29,23 +29,17 @@ DamageTracker::DamageTracker()
 
 DamageTracker::~DamageTracker() {}
 
-static inline void ExpandRectWithFilters(gfx::Rect* rect,
-                                         const FilterOperations& filters) {
-  int top, right, bottom, left;
-  filters.GetOutsets(&top, &right, &bottom, &left);
-  rect->Inset(-left, -top, -right, -bottom);
-}
-
 static inline void ExpandDamageRectInsideRectWithFilters(
     gfx::Rect* damage_rect,
     const gfx::Rect& pre_filter_rect,
     const FilterOperations& filters) {
-  gfx::Rect expanded_damage_rect = *damage_rect;
-  ExpandRectWithFilters(&expanded_damage_rect, filters);
-  gfx::Rect filter_rect = pre_filter_rect;
-  ExpandRectWithFilters(&filter_rect, filters);
+  // Compute the pixels in the background of the surface that could be affected
+  // by the damage in the content below.
+  gfx::Rect expanded_damage_rect = filters.MapRect(*damage_rect, SkMatrix::I());
 
-  expanded_damage_rect.Intersect(filter_rect);
+  // Restrict it to the rectangle in which the background filter is shown.
+  expanded_damage_rect.Intersect(pre_filter_rect);
+
   damage_rect->Union(expanded_damage_rect);
 }
 
@@ -144,8 +138,8 @@ void DamageTracker::UpdateDamageTrackingState(
     damage_rect_for_this_update = damage_from_active_layers;
     damage_rect_for_this_update.Union(damage_from_surface_mask);
     damage_rect_for_this_update.Union(damage_from_leftover_rects);
-
-    ExpandRectWithFilters(&damage_rect_for_this_update, filters);
+    damage_rect_for_this_update =
+        filters.MapRect(damage_rect_for_this_update, SkMatrix::I());
   }
 
   // Damage accumulates until we are notified that we actually did draw on that
@@ -202,7 +196,7 @@ gfx::Rect DamageTracker::TrackDamageFromActiveLayers(
       continue;
 
     if (layer->render_surface() && layer->render_surface() != target_surface)
-      ExtendDamageForRenderSurface(layer, &damage_rect);
+      ExtendDamageForRenderSurface(layer->render_surface(), &damage_rect);
     else
       ExtendDamageForLayer(layer, &damage_rect);
   }
@@ -349,7 +343,7 @@ void DamageTracker::ExtendDamageForLayer(LayerImpl* layer,
 }
 
 void DamageTracker::ExtendDamageForRenderSurface(
-    LayerImpl* layer,
+    RenderSurfaceImpl* render_surface,
     gfx::Rect* target_damage_rect) {
   // There are two ways a "descendant surface" can damage regions of the "target
   // surface":
@@ -366,10 +360,9 @@ void DamageTracker::ExtendDamageForRenderSurface(
   //      as well, and that damage should propagate to the target surface.
   //
 
-  RenderSurfaceImpl* render_surface = layer->render_surface();
-
   bool surface_is_new = false;
-  SurfaceRectMapData& data = RectDataForSurface(layer->id(), &surface_is_new);
+  SurfaceRectMapData& data =
+      RectDataForSurface(render_surface->OwningLayerId(), &surface_is_new);
   gfx::Rect old_surface_rect = data.rect_;
 
   // The drawableContextRect() already includes the replica if it exists.
@@ -396,7 +389,7 @@ void DamageTracker::ExtendDamageForRenderSurface(
           draw_transform, damage_rect_in_local_space);
       target_damage_rect->Union(damage_rect_in_target_space);
 
-      if (layer->replica_layer()) {
+      if (render_surface->HasReplica()) {
         const gfx::Transform& replica_draw_transform =
             render_surface->replica_draw_transform();
         target_damage_rect->Union(MathUtil::MapEnclosingClippedRect(
@@ -407,8 +400,8 @@ void DamageTracker::ExtendDamageForRenderSurface(
 
   // If there was damage on the replica's mask, then the target surface receives
   // that damage as well.
-  if (layer->replica_layer() && layer->replica_layer()->mask_layer()) {
-    LayerImpl* replica_mask_layer = layer->replica_layer()->mask_layer();
+  if (render_surface->HasReplicaMask()) {
+    LayerImpl* replica_mask_layer = render_surface->ReplicaMaskLayer();
 
     bool replica_is_new = false;
     LayerRectMapData& data =
@@ -434,10 +427,11 @@ void DamageTracker::ExtendDamageForRenderSurface(
   // those pixels from the surface with only the contents of layers below this
   // one in them. This means we need to redraw any pixels in the surface being
   // used for the blur in this layer this frame.
-  if (layer->background_filters().HasFilterThatMovesPixels()) {
-    ExpandDamageRectInsideRectWithFilters(target_damage_rect,
-                                          surface_rect_in_target_space,
-                                          layer->background_filters());
+  const FilterOperations& background_filters =
+      render_surface->BackgroundFilters();
+  if (background_filters.HasFilterThatMovesPixels()) {
+    ExpandDamageRectInsideRectWithFilters(
+        target_damage_rect, surface_rect_in_target_space, background_filters);
   }
 }
 

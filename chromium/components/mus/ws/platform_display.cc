@@ -6,6 +6,7 @@
 
 #include "base/numerics/safe_conversions.h"
 #include "build/build_config.h"
+#include "cc/ipc/quads.mojom.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/delegated_frame_data.h"
@@ -14,7 +15,6 @@
 #include "cc/quads/surface_draw_quad.h"
 #include "components/mus/gles2/gpu_state.h"
 #include "components/mus/public/interfaces/gpu.mojom.h"
-#include "components/mus/public/interfaces/quads.mojom.h"
 #include "components/mus/surfaces/display_compositor.h"
 #include "components/mus/surfaces/surfaces_state.h"
 #include "components/mus/ws/platform_display_factory.h"
@@ -22,12 +22,6 @@
 #include "components/mus/ws/server_window_surface.h"
 #include "components/mus/ws/server_window_surface_manager.h"
 #include "components/mus/ws/window_coordinate_conversions.h"
-#include "mojo/converters/geometry/geometry_type_converters.h"
-#include "mojo/converters/input_events/input_events_type_converters.h"
-#include "mojo/converters/input_events/mojo_extended_key_event_data.h"
-#include "mojo/converters/surfaces/surfaces_type_converters.h"
-#include "mojo/converters/surfaces/surfaces_utils.h"
-#include "mojo/converters/transform/transform_type_converters.h"
 #include "services/shell/public/cpp/connection.h"
 #include "services/shell/public/cpp/connector.h"
 #include "third_party/skia/include/core/SkXfermode.h"
@@ -48,38 +42,23 @@
 #include "ui/ozone/public/ozone_platform.h"
 #endif
 
-using mojo::Rect;
-using mojo::Size;
-
 namespace mus {
 
 namespace ws {
 namespace {
 
 // DrawWindowTree recursively visits ServerWindows, creating a SurfaceDrawQuad
-// for each that lacks one. A ServerWindow may hold a CompositorFrame that
-// references other ServerWindows in SurfaceDrawQuads. We should not create new
-// SurfaceDrawQuads for these |referenced_window_ids|. Instead,
-// cc::SurfaceAggregator will do the heavy lifting here by expanding those
-// references to generate one top-level display CompositorFrame.
+// for each that lacks one.
 void DrawWindowTree(cc::RenderPass* pass,
                     ServerWindow* window,
                     const gfx::Vector2d& parent_to_root_origin_offset,
-                    float opacity,
-                    std::set<WindowId>* referenced_window_ids) {
+                    float opacity) {
   if (!window->visible())
     return;
 
   ServerWindowSurface* default_surface =
       window->surface_manager() ? window->surface_manager()->GetDefaultSurface()
                                 : nullptr;
-
-  if (default_surface) {
-    // Accumulate referenced windows in each ServerWindow's CompositorFrame.
-    referenced_window_ids->insert(
-        default_surface->referenced_window_ids().begin(),
-        default_surface->referenced_window_ids().end());
-  }
 
   const gfx::Rect absolute_bounds =
       window->bounds() + parent_to_root_origin_offset;
@@ -88,23 +67,18 @@ void DrawWindowTree(cc::RenderPass* pass,
   const float combined_opacity = opacity * window->opacity();
   for (auto it = children.rbegin(); it != children.rend(); ++it) {
     DrawWindowTree(pass, *it, absolute_bounds.OffsetFromOrigin(),
-                   combined_opacity, referenced_window_ids);
+                   combined_opacity);
   }
 
   if (!window->surface_manager() || !window->surface_manager()->ShouldDraw())
     return;
 
-  // If an ancestor has already referenced this window, then we do not need
-  // to create a SurfaceDrawQuad for it.
-  const bool draw_default_surface =
-      default_surface && (referenced_window_ids->count(window->id()) == 0);
-
   ServerWindowSurface* underlay_surface =
       window->surface_manager()->GetUnderlaySurface();
-  if (!draw_default_surface && !underlay_surface)
+  if (!default_surface && !underlay_surface)
     return;
 
-  if (draw_default_surface) {
+  if (default_surface) {
     gfx::Transform quad_to_target_transform;
     quad_to_target_transform.Translate(absolute_bounds.x(),
                                        absolute_bounds.y());
@@ -166,7 +140,8 @@ PlatformDisplay* PlatformDisplay::Create(
 
 DefaultPlatformDisplay::DefaultPlatformDisplay(
     const PlatformDisplayInitParams& init_params)
-    : gpu_state_(init_params.gpu_state),
+    : display_id_(init_params.display_id),
+      gpu_state_(init_params.gpu_state),
       surfaces_state_(init_params.surfaces_state),
       delegate_(nullptr),
       draw_timer_(false, false),
@@ -175,16 +150,14 @@ DefaultPlatformDisplay::DefaultPlatformDisplay(
       cursor_loader_(ui::CursorLoader::Create()),
 #endif
       weak_factory_(this) {
-  metrics_.size_in_pixels = mojo::Size::New();
-  metrics_.size_in_pixels->width = init_params.display_bounds.width();
-  metrics_.size_in_pixels->height = init_params.display_bounds.height();
+  metrics_.size_in_pixels = init_params.display_bounds.size();
   // TODO(rjkroege): Preserve the display_id when Ozone platform can use it.
 }
 
 void DefaultPlatformDisplay::Init(PlatformDisplayDelegate* delegate) {
   delegate_ = delegate;
 
-  gfx::Rect bounds(metrics_.size_in_pixels.To<gfx::Size>());
+  gfx::Rect bounds(metrics_.size_in_pixels);
 #if defined(OS_WIN)
   platform_window_.reset(new ui::WinWindow(this, bounds));
 #elif defined(USE_X11)
@@ -257,8 +230,8 @@ void DefaultPlatformDisplay::SetCursorById(int32_t cursor_id) {
 #endif
 }
 
-const mojom::ViewportMetrics& DefaultPlatformDisplay::GetViewportMetrics() {
-  return metrics_;
+float DefaultPlatformDisplay::GetDeviceScaleFactor() {
+  return metrics_.device_scale_factor;
 }
 
 mojom::Rotation DefaultPlatformDisplay::GetRotation() {
@@ -284,7 +257,7 @@ void DefaultPlatformDisplay::Draw() {
     return;
 
   // TODO(fsamuel): We should add a trace for generating a top level frame.
-  std::unique_ptr<cc::CompositorFrame> frame(GenerateCompositorFrame());
+  cc::CompositorFrame frame(GenerateCompositorFrame());
   frame_pending_ = true;
   if (display_compositor_) {
     display_compositor_->SubmitCompositorFrame(
@@ -305,6 +278,10 @@ bool DefaultPlatformDisplay::IsFramePending() const {
   return frame_pending_;
 }
 
+int64_t DefaultPlatformDisplay::GetDisplayId() const {
+  return display_id_;
+}
+
 void DefaultPlatformDisplay::WantToDraw() {
   if (draw_timer_.IsRunning() || frame_pending_)
     return;
@@ -316,44 +293,38 @@ void DefaultPlatformDisplay::WantToDraw() {
 }
 
 void DefaultPlatformDisplay::UpdateMetrics(const gfx::Size& size,
-                                           float device_pixel_ratio) {
+                                           float device_scale_factor) {
   if (display::Display::HasForceDeviceScaleFactor())
-    device_pixel_ratio = display::Display::GetForcedDeviceScaleFactor();
-  if (metrics_.size_in_pixels.To<gfx::Size>() == size &&
-      metrics_.device_pixel_ratio == device_pixel_ratio)
+    device_scale_factor = display::Display::GetForcedDeviceScaleFactor();
+  if (metrics_.size_in_pixels == size &&
+      metrics_.device_scale_factor == device_scale_factor)
     return;
-  mojom::ViewportMetrics old_metrics;
-  old_metrics.size_in_pixels = metrics_.size_in_pixels.Clone();
-  old_metrics.device_pixel_ratio = metrics_.device_pixel_ratio;
 
-  metrics_.size_in_pixels = mojo::Size::From(size);
-  metrics_.device_pixel_ratio = device_pixel_ratio;
-
+  ViewportMetrics old_metrics = metrics_;
+  metrics_.size_in_pixels = size;
+  metrics_.device_scale_factor = device_scale_factor;
   delegate_->OnViewportMetricsChanged(old_metrics, metrics_);
 }
 
-std::unique_ptr<cc::CompositorFrame>
-DefaultPlatformDisplay::GenerateCompositorFrame() {
+cc::CompositorFrame DefaultPlatformDisplay::GenerateCompositorFrame() {
   std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
   render_pass->damage_rect = dirty_rect_;
-  render_pass->output_rect = gfx::Rect(metrics_.size_in_pixels.To<gfx::Size>());
+  render_pass->output_rect = gfx::Rect(metrics_.size_in_pixels);
 
-  std::set<WindowId> referenced_window_ids;
   DrawWindowTree(render_pass.get(), delegate_->GetRootWindow(), gfx::Vector2d(),
-                 1.0f, &referenced_window_ids);
+                 1.0f);
 
   std::unique_ptr<cc::DelegatedFrameData> frame_data(
       new cc::DelegatedFrameData);
-  frame_data->device_scale_factor = metrics_.device_pixel_ratio;
   frame_data->render_pass_list.push_back(std::move(render_pass));
 
-  std::unique_ptr<cc::CompositorFrame> frame(new cc::CompositorFrame);
-  frame->delegated_frame_data = std::move(frame_data);
+  cc::CompositorFrame frame;
+  frame.delegated_frame_data = std::move(frame_data);
   return frame;
 }
 
 void DefaultPlatformDisplay::OnBoundsChanged(const gfx::Rect& new_bounds) {
-  UpdateMetrics(new_bounds.size(), metrics_.device_pixel_ratio);
+  UpdateMetrics(new_bounds.size(), metrics_.device_scale_factor);
 }
 
 void DefaultPlatformDisplay::OnDamageRect(const gfx::Rect& damaged_region) {
@@ -417,13 +388,13 @@ void DefaultPlatformDisplay::OnLostCapture() {
 
 void DefaultPlatformDisplay::OnAcceleratedWidgetAvailable(
     gfx::AcceleratedWidget widget,
-    float device_pixel_ratio) {
+    float device_scale_factor) {
   if (widget != gfx::kNullAcceleratedWidget) {
     display_compositor_.reset(
         new DisplayCompositor(base::ThreadTaskRunnerHandle::Get(), widget,
                               gpu_state_, surfaces_state_));
   }
-  UpdateMetrics(metrics_.size_in_pixels.To<gfx::Size>(), device_pixel_ratio);
+  UpdateMetrics(metrics_.size_in_pixels, device_scale_factor);
 }
 
 void DefaultPlatformDisplay::OnAcceleratedWidgetDestroyed() {

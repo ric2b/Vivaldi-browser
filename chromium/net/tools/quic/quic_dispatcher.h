@@ -16,11 +16,12 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/linked_hash_map.h"
 #include "net/quic/crypto/quic_compressed_certs_cache.h"
+#include "net/quic/crypto/quic_random.h"
 #include "net/quic/quic_blocked_writer_interface.h"
 #include "net/quic/quic_connection.h"
 #include "net/quic/quic_protocol.h"
+#include "net/quic/quic_server_session_base.h"
 #include "net/tools/quic/quic_process_packet_interface.h"
-#include "net/tools/quic/quic_server_session_base.h"
 #include "net/tools/quic/quic_time_wait_list_manager.h"
 
 namespace net {
@@ -33,7 +34,7 @@ namespace test {
 class QuicDispatcherPeer;
 }  // namespace test
 
-class QuicDispatcher : public QuicServerSessionVisitor,
+class QuicDispatcher : public QuicServerSessionBase::Visitor,
                        public ProcessPacketInterface,
                        public QuicBlockedWriterInterface,
                        public QuicFramerVisitorInterface {
@@ -48,6 +49,7 @@ class QuicDispatcher : public QuicServerSessionVisitor,
                  const QuicCryptoServerConfig* crypto_config,
                  const QuicVersionVector& supported_versions,
                  std::unique_ptr<QuicConnectionHelperInterface> helper,
+                 std::unique_ptr<QuicServerSessionBase::Helper> session_helper,
                  std::unique_ptr<QuicAlarmFactory> alarm_factory);
 
   ~QuicDispatcher() override;
@@ -70,7 +72,7 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   // Sends ConnectionClose frames to all connected clients.
   void Shutdown();
 
-  // QuicServerSessionVisitor interface implementation:
+  // QuicServerSessionBase::Visitor interface implementation:
   // Ensure that the closed connection is cleaned up asynchronously.
   void OnConnectionClosed(QuicConnectionId connection_id,
                           QuicErrorCode error,
@@ -89,7 +91,7 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   const SessionMap& session_map() const { return session_map_; }
 
   // Deletes all sessions on the closed session list and clears the list.
-  void DeleteSessions();
+  virtual void DeleteSessions();
 
   // The largest packet number we expect to receive with a connection
   // ID for a connection that is not established yet.  The current design will
@@ -142,6 +144,15 @@ class QuicDispatcher : public QuicServerSessionVisitor,
       QuicConnectionId connection_id,
       const IPEndPoint& client_address);
 
+  // Called when a connection is rejected statelessly.
+  virtual void OnConnectionRejectedStatelessly();
+
+  // Called when a connection is closed statelessly.
+  virtual void OnConnectionClosedStatelessly(QuicErrorCode error);
+
+  // Returns true if cheap stateless rejection should be attempted.
+  virtual bool ShouldAttemptCheapStatelessRejection();
+
   // Values to be returned by ValidityChecks() to indicate what should be done
   // with a packet.  Fates with greater values are considered to be higher
   // priority, in that if one validity check indicates a lower-valued fate and
@@ -169,9 +180,7 @@ class QuicDispatcher : public QuicServerSessionVisitor,
     return time_wait_list_manager_.get();
   }
 
-  const QuicVersionVector& supported_versions() const {
-    return supported_versions_;
-  }
+  const QuicVersionVector& GetSupportedVersions();
 
   const IPEndPoint& current_server_address() { return current_server_address_; }
   const IPEndPoint& current_client_address() { return current_client_address_; }
@@ -188,6 +197,10 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   QuicFramer* framer() { return &framer_; }
 
   QuicConnectionHelperInterface* helper() { return helper_.get(); }
+
+  QuicServerSessionBase::Helper* session_helper() {
+    return session_helper_.get();
+  }
 
   QuicAlarmFactory* alarm_factory() { return alarm_factory_.get(); }
 
@@ -206,6 +219,12 @@ class QuicDispatcher : public QuicServerSessionVisitor,
 
   void SetLastError(QuicErrorCode error);
 
+  // Called when the public header has been parsed and the session has been
+  // looked up, and the session was not found in the active list of sessions.
+  // Returns false if processing should stop after this call.
+  virtual bool OnUnauthenticatedUnknownPublicHeader(
+      const QuicPacketPublicHeader& header);
+
  private:
   friend class net::test::QuicDispatcherPeer;
 
@@ -215,6 +234,13 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   void CleanUpSession(SessionMap::iterator it, bool session_closed_statelessly);
 
   bool HandlePacketForTimeWait(const QuicPacketPublicHeader& header);
+
+  // Attempts to reject the connection statelessly, if stateless rejects are
+  // possible and if the current packet contains a CHLO message.
+  // Returns a fate which describes what subsequent processing should be
+  // performed on the packets, like ValidityChecks.
+  QuicPacketFate MaybeRejectStatelessly(QuicConnectionId connection_id,
+                                        const QuicPacketHeader& header);
 
   const QuicConfig& config_;
 
@@ -237,6 +263,9 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   // The helper used for all connections.
   std::unique_ptr<QuicConnectionHelperInterface> helper_;
 
+  // The helper used for all sessions.
+  std::unique_ptr<QuicServerSessionBase::Helper> session_helper_;
+
   // Creates alarms.
   std::unique_ptr<QuicAlarmFactory> alarm_factory_;
 
@@ -250,7 +279,13 @@ class QuicDispatcher : public QuicServerSessionVisitor,
   // This should be ordered such that the highest supported version is the first
   // element, with subsequent elements in descending order (versions can be
   // skipped as necessary).
-  const QuicVersionVector supported_versions_;
+  QuicVersionVector supported_versions_;
+
+  // FLAGS_quic_disable_pre_30
+  bool disable_quic_pre_30_;
+  // The list of versions that may be supported by this dispatcher.
+  // |supported_versions| is derived from this list and |disable_quic_pre_30_|.
+  const QuicVersionVector allowed_supported_versions_;
 
   // Information about the packet currently being handled.
   IPEndPoint current_client_address_;

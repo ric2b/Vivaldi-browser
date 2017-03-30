@@ -25,7 +25,6 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/profiler/scoped_profile.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -48,13 +47,13 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
-#include "chrome/browser/component_updater/cld_component_installer.h"
 #include "chrome/browser/component_updater/ev_whitelist_component_installer.h"
 #include "chrome/browser/component_updater/file_type_policies_component_installer.h"
 #include "chrome/browser/component_updater/origin_trials_component_installer.h"
 #include "chrome/browser/component_updater/pepper_flash_component_installer.h"
 #include "chrome/browser/component_updater/recovery_component_installer.h"
 #include "chrome/browser/component_updater/sth_set_component_installer.h"
+#include "chrome/browser/component_updater/subresource_filter_component_installer.h"
 #include "chrome/browser/component_updater/supervised_user_whitelist_installer.h"
 #include "chrome/browser/component_updater/swiftshader_component_installer.h"
 #include "chrome/browser/component_updater/widevine_cdm_component_installer.h"
@@ -118,6 +117,7 @@
 #include "components/google/core/browser/google_util.h"
 #include "components/language_usage_metrics/language_usage_metrics.h"
 #include "components/metrics/call_stack_profile_metrics_provider.h"
+#include "components/metrics/metrics_reporting_default_state.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/profiler/content/content_tracking_synchronizer_delegate.h"
 #include "components/metrics/profiler/tracking_synchronizer.h"
@@ -131,9 +131,7 @@
 #include "components/rappor/rappor_service.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
-#include "components/tracing/tracing_switches.h"
-#include "components/translate/content/browser/browser_cld_utils.h"
-#include "components/translate/content/common/cld_data_source.h"
+#include "components/tracing/common/tracing_switches.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/variations/pref_names.h"
 #include "components/variations/service/variations_service.h"
@@ -183,7 +181,7 @@
 #endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 #if defined(OS_CHROMEOS)
-#include "ash/material_design/material_design_controller.h"
+#include "ash/common/material_design/material_design_controller.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/chromeos_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
@@ -198,15 +196,16 @@
 #include "base/trace_event/trace_event_etw_export_win.h"
 #include "base/win/windows_version.h"
 #include "chrome/app/file_pre_reader_win.h"
-#include "chrome/browser/browser_util_win.h"
 #include "chrome/browser/chrome_browser_main_win.h"
-#include "chrome/browser/chrome_select_file_dialog_factory_win.h"
 #include "chrome/browser/component_updater/caps_installer_win.h"
 #include "chrome/browser/component_updater/sw_reporter_installer_win.h"
+#include "chrome/browser/downgrade/user_data_downgrade.h"
 #include "chrome/browser/first_run/try_chrome_dialog_view.h"
 #include "chrome/browser/first_run/upgrade_util_win.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/ui/network_profile_bubble.h"
+#include "chrome/browser/win/browser_util.h"
+#include "chrome/browser/win/chrome_select_file_dialog_factory.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/helper.h"
 #include "chrome/installer/util/install_util.h"
@@ -265,6 +264,7 @@
 #if defined(MOJO_SHELL_CLIENT)
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "content/public/common/mojo_shell_connection.h"
+#include "services/shell/runner/common/client_util.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -316,6 +316,15 @@ PrefService* InitializeLocalState(
     if (GoogleUpdateSettings::GetLanguage(&install_lang)) {
       local_state->SetString(prefs::kApplicationLocale,
                              base::UTF16ToASCII(install_lang));
+    }
+    bool stats_default;
+    if (GoogleUpdateSettings::GetCollectStatsConsentDefault(&stats_default)) {
+      // |stats_default| == true means that the default state of consent for the
+      // product at the time of install was to report usage statistics, meaning
+      // "opt-out".
+      metrics::RecordMetricsReportingDefaultState(
+          local_state, stats_default ? metrics::EnableMetricsDefault::OPT_OUT
+                                     : metrics::EnableMetricsDefault::OPT_IN);
     }
   }
 #endif  // defined(OS_WIN)
@@ -375,8 +384,6 @@ Profile* CreatePrimaryProfile(const content::MainFunctionParams& parameters,
                               const base::FilePath& user_data_dir,
                               const base::CommandLine& parsed_command_line) {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::CreateProfile")
-  TRACK_SCOPED_REGION(
-      "Startup", "ChromeBrowserMainParts::CreatePrimaryProfile");
 
   base::Time start = base::Time::Now();
   if (profiles::IsMultipleProfilesEnabled() &&
@@ -470,13 +477,11 @@ void RegisterComponentsForUpdate() {
     g_browser_process->pnacl_component_installer()->RegisterPnaclComponent(cus);
 #endif  // !defined(DISABLE_NACL) && !defined(OS_ANDROID)
 
-  // Registration of the CLD Component is a no-op unless the CLD data source has
-  // been configured to be the "Component" data source.
-  RegisterCldComponent(cus);
-
   component_updater::SupervisedUserWhitelistInstaller* whitelist_installer =
       g_browser_process->supervised_user_whitelist_installer();
   whitelist_installer->RegisterComponents();
+
+  RegisterSubresourceFilterComponent(cus);
 
   base::FilePath path;
   if (PathService::Get(chrome::DIR_USER_DATA, &path)) {
@@ -643,9 +648,7 @@ ChromeBrowserMainParts::ChromeBrowserMainParts(
                   false))),
       profile_(NULL),
       run_message_loop_(true),
-      notify_result_(ProcessSingleton::PROCESS_NONE),
-      local_state_(NULL),
-      restart_last_session_(false) {
+      local_state_(NULL) {
   if (sampling_profiler_config_.IsProfilerEnabled())
     sampling_profiler_.Start();
 
@@ -675,10 +678,8 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
   // Initialize FieldTrialList to support FieldTrials that use one-time
   // randomization.
   metrics::MetricsService* metrics = browser_process_->metrics_service();
-  // TODO(asvitkine): Turn into a DCHECK after http://crbug.com/359406 is fixed.
-  CHECK(!field_trial_list_);
-  // TODO(asvitkine): Remove this after http://crbug.com/359406 is fixed.
-  base::FieldTrialList::EnableGlobalStateChecks();
+
+  DCHECK(!field_trial_list_);
   field_trial_list_.reset(
       new base::FieldTrialList(metrics->CreateEntropyProvider().release()));
 
@@ -723,6 +724,11 @@ void ChromeBrowserMainParts::SetupMetricsAndFieldTrials() {
                   << " list specified.";
     metrics->AddSyntheticTrialObserver(provider);
   }
+
+  // Associate parameters chosen in about:flags and create trial/group for them.
+  flags_ui::PrefServiceFlagsStorage flags_storage(
+      g_browser_process->local_state());
+  about_flags::RegisterAllFeatureVariationParameters(&flags_storage);
 
   std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
   feature_list->InitializeFromCommandLine(
@@ -815,6 +821,38 @@ void ChromeBrowserMainParts::RecordBrowserStartupTime() {
   // Record collected startup metrics.
   startup_metric_utils::RecordBrowserMainMessageLoopStart(
       base::TimeTicks::Now(), is_first_run, g_browser_process->local_state());
+}
+
+void ChromeBrowserMainParts::SetupOriginTrialsCommandLine() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switches::kOriginTrialPublicKey)) {
+    std::string new_public_key =
+        local_state_->GetString(prefs::kOriginTrialPublicKey);
+    if (!new_public_key.empty()) {
+      command_line->AppendSwitchASCII(
+          switches::kOriginTrialPublicKey,
+          local_state_->GetString(prefs::kOriginTrialPublicKey));
+    }
+  }
+  if (!command_line->HasSwitch(switches::kOriginTrialDisabledFeatures)) {
+    const base::ListValue* override_disabled_feature_list =
+        local_state_->GetList(prefs::kOriginTrialDisabledFeatures);
+    if (override_disabled_feature_list) {
+      std::vector<std::string> disabled_features;
+      std::string disabled_feature;
+      for (const auto& item : *override_disabled_feature_list) {
+        if (item->GetAsString(&disabled_feature)) {
+          disabled_features.push_back(disabled_feature);
+        }
+      }
+      if (!disabled_features.empty()) {
+        const std::string override_disabled_features =
+            base::JoinString(disabled_features, "|");
+        command_line->AppendSwitchASCII(switches::kOriginTrialDisabledFeatures,
+                                        override_disabled_features);
+      }
+    }
+  }
 }
 
 // -----------------------------------------------------------------------------
@@ -976,9 +1014,9 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   {
     TRACE_EVENT0("startup",
         "ChromeBrowserMainParts::PreCreateThreadsImpl:ConvertFlags");
-    flags_ui::PrefServiceFlagsStorage flags_storage_(
+    flags_ui::PrefServiceFlagsStorage flags_storage(
         g_browser_process->local_state());
-    about_flags::ConvertFlagsToSwitches(&flags_storage_,
+    about_flags::ConvertFlagsToSwitches(&flags_storage,
                                         base::CommandLine::ForCurrentProcess(),
                                         flags_ui::kAddSentinels);
   }
@@ -1073,8 +1111,8 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   }
 #endif  // defined(OS_MACOSX)
 
-  // Android does first run in Java instead of native.
-  // Chrome OS has its own out-of-box-experience code.
+// Android does first run in Java instead of native.
+// Chrome OS has its own out-of-box-experience code.
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
   // On first run, we need to process the predictor preferences before the
   // browser's profile_manager object is created, but after ResourceBundle
@@ -1162,6 +1200,8 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
   chromeos::CrosSettings::Initialize();
 #endif  // defined(OS_CHROMEOS)
 
+  SetupOriginTrialsCommandLine();
+
   // Now the command line has been mutated based on about:flags, we can setup
   // metrics and initialize field trials. The field trials are needed by
   // IOThread's initialization which happens in BrowserProcess:PreCreateThreads.
@@ -1175,15 +1215,12 @@ int ChromeBrowserMainParts::PreCreateThreadsImpl() {
 
 void ChromeBrowserMainParts::PreMainMessageLoopRun() {
 #if defined(MOJO_SHELL_CLIENT)
-  if (content::MojoShellConnection::Get() &&
-      content::MojoShellConnection::Get()->UsingExternalShell()) {
-    content::MojoShellConnection::Get()->SetConnectionLostClosure(
+  if (content::MojoShellConnection::GetForProcess() && shell::ShellIsRemote()) {
+    content::MojoShellConnection::GetForProcess()->SetConnectionLostClosure(
         base::Bind(&chrome::SessionEnding));
   }
 #endif
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreMainMessageLoopRun");
-  TRACK_SCOPED_REGION(
-      "Startup", "ChromeBrowserMainParts::PreMainMessageLoopRun");
 
   result_code_ = PreMainMessageLoopRunImpl();
 
@@ -1355,8 +1392,6 @@ void ChromeBrowserMainParts::PostBrowserStart() {
 
 int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   TRACE_EVENT0("startup", "ChromeBrowserMainParts::PreMainMessageLoopRunImpl");
-  TRACK_SCOPED_REGION(
-      "Startup", "ChromeBrowserMainParts::PreMainMessageLoopRunImpl");
 
   SCOPED_UMA_HISTOGRAM_LONG_TIMER("Startup.PreMainMessageLoopRunImplLongTime");
   const base::TimeTicks start_time_step1 = base::TimeTicks::Now();
@@ -1771,10 +1806,6 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
   // http://crbug.com/105065.
   browser_process_->notification_ui_manager();
 
-  // This must be called prior to RegisterComponentsForUpdate, in case the CLD
-  // data source is based on the Component Updater.
-  translate::BrowserCldUtils::ConfigureDefaultDataProvider();
-
   if (!parsed_command_line().HasSwitch(switches::kDisableComponentUpdate))
     RegisterComponentsForUpdate();
 
@@ -1875,6 +1906,12 @@ int ChromeBrowserMainParts::PreMainMessageLoopRunImpl() {
     delete parameters().ui_task;
     run_message_loop_ = false;
   }
+
+#if defined(OS_WIN)
+  // Clean up old user data directory and disk cache directory.
+  downgrade::DeleteMovedUserDataSoon();
+#endif
+
 #if defined(OS_ANDROID)
   // We never run the C++ main loop on Android, since the UI thread message
   // loop is controlled by the OS, so this is as close as we can get to

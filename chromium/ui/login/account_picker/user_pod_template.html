@@ -1,6 +1,4 @@
-<!-- Polymer is lazily-loaded inside of user_pod_template.js -->
-
-<div id="user-pod-template" class="pod" hidden>
+<div id="user-pod-template" class="pod disabled" hidden>
   <div class="user-image-pane">
     <div class="user-image-container">
       <img class="user-image" alt>
@@ -11,6 +9,9 @@
       <div class="indicator child-indicator"></div>
       <div class="indicator locked-indicator"></div>
     </div>
+  </div>
+  <div class="pin-container pin-disabled">
+    <pin-keyboard></pin-keyboard>
   </div>
   <div class="main-pane">
     <div class="name-container">
@@ -41,7 +42,7 @@
       </div>
       <div class="custom-icon-container" hidden></div>
       <div class="reauth-hint-container">
-        <iron-icon icon="warning" class="reauth-warning"></iron-icon>
+        <span class="reauth-warning"></span>
         <span class="reauth-name-hint"></span>
       </div>
       <div class="launch-app-button-container" hidden>
@@ -52,7 +53,8 @@
   </div>
   <div class="action-box-area">
     <div class="custom-appearance action-box-button"></div>
-    <iron-icon icon="more-vert" class="action-box-icon"></iron-icon>
+    <!-- iron-icon is imported inside user_manager.html -->
+    <iron-icon icon="cr:more-vert" class="action-box-icon"></iron-icon>
   </div>
   <div class="user-image-gradient-area">
   </div>
@@ -100,6 +102,7 @@
       </table>
       <div class="action-box-remove-legacy-supervised-user-warning-text"
           i18n-content="removeLegacySupervisedUserWarningText"></div>
+      <!-- paper-button is imported inside user_manager.html -->
       <paper-button class="remove-warning-button"
           i18n-content="removeUserWarningButtonTitle"></paper-button>
     </div>

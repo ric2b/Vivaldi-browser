@@ -31,10 +31,10 @@
 #include "modules/serviceworkers/ServiceWorkerGlobalScope.h"
 
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
-#include "bindings/core/v8/ScriptCallStack.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/ScriptState.h"
+#include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8ThrowException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/events/Event.h"
@@ -62,10 +62,12 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebURL.h"
 #include "wtf/CurrentTime.h"
+#include "wtf/PtrUtil.h"
+#include <memory>
 
 namespace blink {
 
-ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::create(ServiceWorkerThread* thread, PassOwnPtr<WorkerThreadStartupData> startupData)
+ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::create(ServiceWorkerThread* thread, std::unique_ptr<WorkerThreadStartupData> startupData)
 {
     // Note: startupData is finalized on return. After the relevant parts has been
     // passed along to the created 'context'.
@@ -73,13 +75,15 @@ ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::create(ServiceWorkerThread* 
 
     context->setV8CacheOptions(startupData->m_v8CacheOptions);
     context->applyContentSecurityPolicyFromVector(*startupData->m_contentSecurityPolicyHeaders);
+    if (!startupData->m_referrerPolicy.isNull())
+        context->parseAndSetReferrerPolicy(startupData->m_referrerPolicy);
     context->setAddressSpace(startupData->m_addressSpace);
     OriginTrialContext::addTokens(context, startupData->m_originTrialTokens.get());
 
     return context;
 }
 
-ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(const KURL& url, const String& userAgent, ServiceWorkerThread* thread, double timeOrigin, PassOwnPtr<SecurityOrigin::PrivilegeData> starterOriginPrivilegeData, WorkerClients* workerClients)
+ServiceWorkerGlobalScope::ServiceWorkerGlobalScope(const KURL& url, const String& userAgent, ServiceWorkerThread* thread, double timeOrigin, std::unique_ptr<SecurityOrigin::PrivilegeData> starterOriginPrivilegeData, WorkerClients* workerClients)
     : WorkerGlobalScope(url, userAgent, thread, timeOrigin, std::move(starterOriginPrivilegeData), workerClients)
     , m_didEvaluateScript(false)
     , m_hadErrorInTopLevelEventHandler(false)
@@ -142,7 +146,7 @@ void ServiceWorkerGlobalScope::setRegistration(std::unique_ptr<WebServiceWorkerR
 {
     if (!getExecutionContext())
         return;
-    m_registration = ServiceWorkerRegistration::getOrCreate(getExecutionContext(), adoptPtr(handle.release()));
+    m_registration = ServiceWorkerRegistration::getOrCreate(getExecutionContext(), wrapUnique(handle.release()));
 }
 
 bool ServiceWorkerGlobalScope::addEventListenerInternal(const AtomicString& eventType, EventListener* listener, const AddEventListenerOptions& options)
@@ -208,12 +212,10 @@ CachedMetadataHandler* ServiceWorkerGlobalScope::createWorkerScriptCachedMetadat
     return ServiceWorkerScriptCachedMetadataHandler::create(this, scriptURL, metaData);
 }
 
-void ServiceWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, int scriptId, const String& sourceURL, int lineNumber, int columnNumber, PassRefPtr<ScriptCallStack> callStack)
+void ServiceWorkerGlobalScope::logExceptionToConsole(const String& errorMessage, std::unique_ptr<SourceLocation> location)
 {
-    WorkerGlobalScope::logExceptionToConsole(errorMessage, scriptId, sourceURL, lineNumber, columnNumber, callStack);
-    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, sourceURL, lineNumber, columnNumber);
-    consoleMessage->setScriptId(scriptId);
-    consoleMessage->setCallStack(callStack);
+    WorkerGlobalScope::logExceptionToConsole(errorMessage, location->clone());
+    ConsoleMessage* consoleMessage = ConsoleMessage::create(JSMessageSource, ErrorMessageLevel, errorMessage, std::move(location));
     addMessageToWorkerConsole(consoleMessage);
 }
 

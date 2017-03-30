@@ -19,7 +19,7 @@
 class GURL;
 
 namespace base {
-class RefCountedStaticMemory;
+class RefCountedMemory;
 }
 
 namespace IPC {
@@ -49,6 +49,7 @@ class ContentClient;
 class ContentGpuClient;
 class ContentRendererClient;
 class ContentUtilityClient;
+class OriginTrialPolicy;
 struct CdmInfo;
 struct PepperPluginInfo;
 
@@ -123,7 +124,7 @@ class CONTENT_EXPORT ContentClient {
       ui::ScaleFactor scale_factor) const;
 
   // Returns the raw bytes of a scale independent data resource.
-  virtual base::RefCountedStaticMemory* GetDataResourceBytes(
+  virtual base::RefCountedMemory* GetDataResourceBytes(
       int resource_id) const;
 
   // Returns a native image given its id.
@@ -157,6 +158,10 @@ class CONTENT_EXPORT ContentClient {
   // trustworthy schemes should be added.
   virtual void AddServiceWorkerSchemes(std::set<std::string>* schemes) {}
 
+  // Returns whether or not V8 script extensions should be allowed for a
+  // service worker.
+  virtual bool AllowScriptExtensionForServiceWorker(const GURL& script_url);
+
   // Returns true if the embedder wishes to supplement the site isolation policy
   // used by the content layer. Returning true enables the infrastructure for
   // out-of-process iframes, and causes the content layer to consult
@@ -164,9 +169,9 @@ class CONTENT_EXPORT ContentClient {
   // model decisions.
   virtual bool IsSupplementarySiteIsolationModeEnabled();
 
-  // Returns the public key to be used for origin trials, or an empty string if
-  // origin trials are not enabled in this context.
-  virtual base::StringPiece GetOriginTrialPublicKey();
+  // Returns the origin trial policy, or nullptr if origin trials are not
+  // supported by the embedder.
+  virtual OriginTrialPolicy* GetOriginTrialPolicy();
 
 #if defined(OS_ANDROID)
   // Returns true for clients like Android WebView that uses synchronous

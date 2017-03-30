@@ -4,6 +4,7 @@
 
 #include "web/WebRemoteFrameImpl.h"
 
+#include "core/dom/Fullscreen.h"
 #include "core/dom/RemoteSecurityContext.h"
 #include "core/dom/SecurityContext.h"
 #include "core/frame/FrameView.h"
@@ -178,12 +179,6 @@ WebPerformance WebRemoteFrameImpl::performance() const
 {
     NOTREACHED();
     return WebPerformance();
-}
-
-bool WebRemoteFrameImpl::dispatchBeforeUnloadEvent()
-{
-    NOTREACHED();
-    return false;
 }
 
 void WebRemoteFrameImpl::dispatchUnloadEvent()
@@ -663,10 +658,10 @@ void WebRemoteFrameImpl::resetReplicatedContentSecurityPolicy() const
     frame()->securityContext()->resetReplicatedContentSecurityPolicy();
 }
 
-void WebRemoteFrameImpl::setReplicatedShouldEnforceStrictMixedContentChecking(bool shouldEnforce) const
+void WebRemoteFrameImpl::setReplicatedInsecureRequestPolicy(WebInsecureRequestPolicy policy) const
 {
     DCHECK(frame());
-    frame()->securityContext()->setShouldEnforceStrictMixedContentChecking(shouldEnforce);
+    frame()->securityContext()->setInsecureRequestPolicy(policy);
 }
 
 void WebRemoteFrameImpl::setReplicatedPotentiallyTrustworthyUniqueOrigin(bool isUniqueOriginPotentiallyTrustworthy) const
@@ -704,6 +699,29 @@ bool WebRemoteFrameImpl::isIgnoredForHitTest() const
     if (!owner || !owner->layoutObject())
         return false;
     return owner->layoutObject()->style()->pointerEvents() == PE_NONE;
+}
+
+void WebRemoteFrameImpl::willEnterFullScreen()
+{
+    // This should only ever be called when the FrameOwner is local.
+    HTMLFrameOwnerElement* ownerElement = toHTMLFrameOwnerElement(frame()->owner());
+
+    // Call requestFullscreen() on |ownerElement| to make it the provisional
+    // fullscreen element in FullscreenController, and to prepare
+    // fullscreenchange events that will need to fire on it and its (local)
+    // ancestors. The events will be triggered if/when fullscreen is entered.
+    //
+    // Passing |forCrossProcessAncestor| to requestFullscreen is necessary
+    // because:
+    // - |ownerElement| will need :-webkit-full-screen-ancestor style in
+    //   addition to :-webkit-full-screen.
+    // - there's no need to resend the ToggleFullscreen IPC to the browser
+    //   process.
+    //
+    // TODO(alexmos): currently, this assumes prefixed requests, but in the
+    // future, this should plumb in information about which request type
+    // (prefixed or unprefixed) to use for firing fullscreen events.
+    Fullscreen::from(ownerElement->document()).requestFullscreen(*ownerElement, Fullscreen::PrefixedRequest, true /* forCrossProcessAncestor */);
 }
 
 WebRemoteFrameImpl::WebRemoteFrameImpl(WebTreeScopeType scope, WebRemoteFrameClient* client)

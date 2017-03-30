@@ -135,8 +135,8 @@
 // GL_CHROMIUM_gpu_memory_buffer_image
 #define GL_READ_WRITE_CHROMIUM                           0x78F2
 
-// GL_CHROMIUM_yuv_420_image
-#define GL_RGB_YUV_420_CHROMIUM                          0x78FA
+// GL_CHROMIUM_ycrcb_420_image
+#define GL_RGB_YCRCB_420_CHROMIUM                        0x78FA
 
 // GL_CHROMIUM_ycbcr_422_image
 #define GL_RGB_YCBCR_422_CHROMIUM                        0x78FB
@@ -336,7 +336,7 @@
 #define GL_RG8_EXT 0x822B
 #endif /* GL_EXT_texture_rg */
 
-// This is from NV_path_rendering, but the Mesa GL header is not up-to-date with
+// This is from NV_path_rendering, but the Mesa GL header is not up to date with
 // the most recent
 // version of the extension. This definition could be removed once glext.h
 // r27498 or later is
@@ -392,7 +392,7 @@ typedef uint64_t EGLuint64CHROMIUM;
 #include "gl_bindings_autogen_glx.h"
 #endif
 
-namespace gfx {
+namespace gl {
 
 struct GL_EXPORT DriverGL {
   void InitializeStaticBindings();
@@ -499,6 +499,6 @@ GL_EXPORT extern GLXApi* g_current_glx_context;
 GL_EXPORT extern DriverGLX g_driver_glx;
 #endif
 
-}  // namespace gfx
+}  // namespace gl
 
 #endif  // UI_GL_GL_BINDINGS_H_

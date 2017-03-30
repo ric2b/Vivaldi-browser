@@ -108,7 +108,7 @@ float ShapeResultSpacing::computeSpacing(const TextRun& run, size_t index,
     // isCJKIdeographOrSymbol() has expansion opportunities both before and
     // after each character.
     // http://www.w3.org/TR/jlreq/#line_adjustment
-    if (U16_IS_LEAD(character) && index + 1 < static_cast<unsigned>(run.length()) && U16_IS_TRAIL(run[index + 1]))
+    if (U16_IS_LEAD(character) && index + 1 < run.length() && U16_IS_TRAIL(run[index + 1]))
         character = U16_GET_SUPPLEMENTARY(character, run[index + 1]);
     if (!Character::isCJKIdeographOrSymbol(character)) {
         m_isAfterExpansion = false;

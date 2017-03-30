@@ -6,9 +6,9 @@
 #define ASH_SYSTEM_CHROMEOS_SUPERVISED_TRAY_SUPERVISED_USER_H
 
 #include "ash/ash_export.h"
+#include "ash/common/system/tray/system_tray_item.h"
+#include "ash/common/system/tray/view_click_listener.h"
 #include "ash/system/chromeos/supervised/custodian_info_tray_observer.h"
-#include "ash/system/tray/system_tray_item.h"
-#include "ash/system/tray/view_click_listener.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
 
@@ -28,9 +28,9 @@ class ASH_EXPORT TraySupervisedUser : public SystemTrayItem,
   void UpdateMessage();
 
   // Overridden from SystemTrayItem.
-  views::View* CreateDefaultView(user::LoginStatus status) override;
+  views::View* CreateDefaultView(LoginStatus status) override;
   void DestroyDefaultView() override;
-  void UpdateAfterLoginStatusChange(user::LoginStatus status) override;
+  void UpdateAfterLoginStatusChange(LoginStatus status) override;
 
   // Overridden from ViewClickListener.
   void OnViewClicked(views::View* sender) override;
@@ -52,7 +52,7 @@ class ASH_EXPORT TraySupervisedUser : public SystemTrayItem,
   LabelTrayView* tray_view_;
 
   // Previous login status to avoid showing notification upon unlock.
-  user::LoginStatus status_;
+  LoginStatus status_;
 
   // Previous user supervised state to avoid showing notification upon unlock.
   bool is_user_supervised_;
@@ -60,6 +60,6 @@ class ASH_EXPORT TraySupervisedUser : public SystemTrayItem,
   DISALLOW_COPY_AND_ASSIGN(TraySupervisedUser);
 };
 
-} // namespace ash
+}  // namespace ash
 
 #endif  // ASH_SYSTEM_CHROMEOS_SUPERVISED_TRAY_SUPERVISED_USER_H

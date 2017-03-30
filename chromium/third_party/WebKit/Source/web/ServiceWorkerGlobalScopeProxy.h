@@ -37,7 +37,7 @@
 #include "public/platform/WebString.h"
 #include "public/web/modules/serviceworker/WebServiceWorkerContextProxy.h"
 #include "wtf/Forward.h"
-#include "wtf/OwnPtr.h"
+#include <memory>
 
 namespace blink {
 
@@ -74,16 +74,17 @@ public:
     void dispatchActivateEvent(int) override;
     void dispatchExtendableMessageEvent(int eventID, const WebString& message, const WebSecurityOrigin& sourceOrigin, const WebMessagePortChannelArray&, const WebServiceWorkerClientInfo&) override;
     void dispatchExtendableMessageEvent(int eventID, const WebString& message, const WebSecurityOrigin& sourceOrigin, const WebMessagePortChannelArray&, std::unique_ptr<WebServiceWorker::Handle>) override;
-    void dispatchFetchEvent(int, const WebServiceWorkerRequest&) override;
-    void dispatchForeignFetchEvent(int, const WebServiceWorkerRequest&) override;
+    void dispatchFetchEvent(int responseID, int eventFinishID, const WebServiceWorkerRequest&) override;
+    void dispatchForeignFetchEvent(int responseID, int eventFinishID, const WebServiceWorkerRequest&) override;
     void dispatchInstallEvent(int) override;
     void dispatchNotificationClickEvent(int, int64_t notificationID, const WebNotificationData&, int actionIndex) override;
     void dispatchNotificationCloseEvent(int, int64_t notificationID, const WebNotificationData&) override;
     void dispatchPushEvent(int, const WebString& data) override;
     void dispatchSyncEvent(int, const WebString& tag, LastChanceOption) override;
+    bool hasFetchEventHandler() override;
 
     // WorkerReportingProxy overrides:
-    void reportException(const String& errorMessage, int lineNumber, int columnNumber, const String& sourceURL, int exceptionId) override;
+    void reportException(const String& errorMessage, std::unique_ptr<SourceLocation>) override;
     void reportConsoleMessage(ConsoleMessage*) override;
     void postMessageToPageInspector(const String&) override;
     void postWorkerConsoleAgentEnabled() override { }

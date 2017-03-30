@@ -6,10 +6,10 @@
 
 #include <memory>
 
+#include "ash/common/shell_window_ids.h"
 #include "ash/display/display_manager.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
-#include "ash/shell_window_ids.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/shell_test_api.h"
 #include "ui/aura/env.h"
@@ -25,9 +25,12 @@
 // TODO(scottmg): RootWindow doesn't get resized immediately on Windows
 // Ash. http://crbug.com/247916.
 #define MAYBE_ConvertHostPointToScreen DISABLED_ConvertHostPointToScreen
-#define MAYBE_ConvertHostPointToScreenHiDPI DISABLED_ConvertHostPointToScreenHiDPI
-#define MAYBE_ConvertHostPointToScreenRotate DISABLED_ConvertHostPointToScreenRotate
-#define MAYBE_ConvertHostPointToScreenUIScale DISABLED_ConvertHostPointToScreenUIScale
+#define MAYBE_ConvertHostPointToScreenHiDPI \
+  DISABLED_ConvertHostPointToScreenHiDPI
+#define MAYBE_ConvertHostPointToScreenRotate \
+  DISABLED_ConvertHostPointToScreenRotate
+#define MAYBE_ConvertHostPointToScreenUIScale \
+  DISABLED_ConvertHostPointToScreenUIScale
 #define MAYBE_ConvertToScreenWhileRemovingSecondaryDisplay \
   DISABLED_ConvertToScreenWhileRemovingSecondaryDisplay
 #else

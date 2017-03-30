@@ -9,8 +9,8 @@
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/paint/DisplayItemClient.h"
 #include "wtf/Noncopyable.h"
-#include "wtf/OwnPtr.h"
 #include "wtf/PassRefPtr.h"
+#include <memory>
 
 class SkMetaData;
 class SkPicture;
@@ -43,8 +43,8 @@ public:
     LayoutRect visualRect() const final { return LayoutRect(); }
 
 private:
-    OwnPtr<PaintController> m_paintController;
-    OwnPtr<GraphicsContext> m_context;
+    std::unique_ptr<PaintController> m_paintController;
+    std::unique_ptr<GraphicsContext> m_context;
     FloatRect m_bounds;
 };
 

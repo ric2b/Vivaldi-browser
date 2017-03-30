@@ -225,6 +225,9 @@ def ExtractAll(zip_path, path=None, no_clobber=True, pattern=None,
   elif not os.path.exists(path):
     MakeDirectory(path)
 
+  if not zipfile.is_zipfile(zip_path):
+    raise Exception('Invalid zip file: %s' % zip_path)
+
   with zipfile.ZipFile(zip_path) as z:
     for name in z.namelist():
       if name.endswith('/'):
@@ -496,9 +499,7 @@ def CallAndWriteDepfileIfStale(function, options, record_path=None,
   python_deps = None
   if hasattr(options, 'depfile') and options.depfile:
     python_deps = GetPythonDependencies()
-    # List python deps in input_strings rather than input_paths since the
-    # contents of them does not change what gets written to the depfile.
-    input_strings += python_deps
+    input_paths += python_deps
     output_paths += [options.depfile]
 
   stamp_file = hasattr(options, 'stamp') and options.stamp

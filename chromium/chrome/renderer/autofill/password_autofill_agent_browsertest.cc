@@ -4,6 +4,7 @@
 
 #include <tuple>
 
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -16,10 +17,10 @@
 #include "components/autofill/content/renderer/test_password_autofill_agent.h"
 #include "components/autofill/content/renderer/test_password_generation_agent.h"
 #include "components/autofill/core/common/autofill_constants.h"
-#include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
+#include "components/password_manager/core/common/password_manager_features.h"
 #include "content/public/renderer/render_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -241,7 +242,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   void SimulateOnFillPasswordForm(
       const PasswordFormFillData& fill_data) {
     AutofillMsg_FillPasswordForm msg(0, kPasswordFillFormDataId, fill_data);
-    static_cast<content::RenderFrameObserver*>(password_autofill_agent_)
+    static_cast<IPC::Listener*>(password_autofill_agent_)
         ->OnMessageReceived(msg);
   }
 
@@ -251,6 +252,17 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
       const PasswordFormFillData& fill_data) {
     AutofillMsg_FillPasswordForm msg(0, kPasswordFillFormDataId, fill_data);
     content::RenderFrame::FromWebFrame(frame)->OnMessageReceived(msg);
+  }
+
+  // Simulates the show initial password account suggestions message being sent
+  // to the renderer. We use that so we don't have to make
+  // RenderView::OnShowInitialPasswordAccountSuggestions() protected.
+  void SimulateOnShowInitialPasswordAccountSuggestions(
+      const PasswordFormFillData& fill_data) {
+    AutofillMsg_ShowInitialPasswordAccountSuggestions msg(
+        0, kPasswordFillFormDataId, fill_data);
+    static_cast<content::RenderFrameObserver*>(autofill_agent_)
+        ->OnMessageReceived(msg);
   }
 
   void SendVisiblePasswordForms() {
@@ -313,6 +325,14 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     username_element_.reset();
     password_element_.reset();
     ChromeRenderViewTest::TearDown();
+  }
+
+  void SetFillOnAccountSelect() {
+    base::FeatureList::ClearInstanceForTesting();
+    std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
+    feature_list->InitializeFromCommandLine(
+        password_manager::features::kFillOnAccountSelect.name, "");
+    base::FeatureList::SetInstance(std::move(feature_list));
   }
 
   void UpdateOriginForHTML(const std::string& html) {
@@ -922,7 +942,7 @@ TEST_F(PasswordAutofillAgentTest,
   // set directly.
   SimulateElementClick(kUsernameName);
 
-  // Simulate the user entering the first letter of her username and selecting
+  // Simulate the user entering the first letter of their username and selecting
   // the matching autofill from the dropdown.
   SimulateUsernameChange("a");
   SimulateSuggestionChoice(username_element_);
@@ -1278,11 +1298,10 @@ TEST_F(PasswordAutofillAgentTest, CredentialsOnClick) {
 // user clicks on the password field when FillOnAccountSelect is enabled.
 TEST_F(PasswordAutofillAgentTest,
        FillOnAccountSelectOnlyNoCredentialsOnPasswordClick) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      autofill::switches::kEnableFillOnAccountSelect);
+  SetFillOnAccountSelect();
 
   // Simulate the browser sending back the login info.
-  SimulateOnFillPasswordForm(fill_data_);
+  SimulateOnShowInitialPasswordAccountSuggestions(fill_data_);
 
   // Clear the text fields to start fresh.
   ClearUsernameAndPasswordFields();
@@ -1308,11 +1327,10 @@ TEST_F(PasswordAutofillAgentTest,
 // suggested.
 TEST_F(PasswordAutofillAgentTest,
        FillOnAccountSelectOnlyCredentialsOnPasswordClick) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      autofill::switches::kEnableFillOnAccountSelect);
+  SetFillOnAccountSelect();
 
   // Simulate the browser sending back the login info.
-  SimulateOnFillPasswordForm(fill_data_);
+  SimulateOnShowInitialPasswordAccountSuggestions(fill_data_);
 
   // Clear the text fields to start fresh.
   ClearUsernameAndPasswordFields();
@@ -1436,7 +1454,7 @@ TEST_F(PasswordAutofillAgentTest,
   // the ones which can be filled as a result of TextFieldDidEndEditing.
   fill_data_.wait_for_username = true;
   SimulateOnFillPasswordForm(fill_data_);
-  // Simulate that the user typed her name to make the autofill work.
+  // Simulate that the user typed their name to make the autofill work.
   SimulateUsernameChange(kAliceUsername);
   SimulateDidEndEditing(GetMainFrame(), username_element_);
   const std::string old_username(username_element_.value().utf8());
@@ -1558,20 +1576,19 @@ TEST_F(PasswordAutofillAgentTest, FormFillDataMustHaveUsername) {
 }
 
 TEST_F(PasswordAutofillAgentTest, FillOnAccountSelectOnly) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      autofill::switches::kEnableFillOnAccountSelect);
+  SetFillOnAccountSelect();
 
   ClearUsernameAndPasswordFields();
 
   // Simulate the browser sending back the login info for an initial page load.
-  SimulateOnFillPasswordForm(fill_data_);
+  SimulateOnShowInitialPasswordAccountSuggestions(fill_data_);
 
-  CheckTextFieldsState(std::string(), true, std::string(), false);
+  CheckTextFieldsState(std::string(), false, std::string(), false);
+  CheckSuggestions(std::string(), true);
 }
 
 TEST_F(PasswordAutofillAgentTest, FillOnAccountSelectOnlyReadonlyUsername) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      autofill::switches::kEnableFillOnAccountSelect);
+  SetFillOnAccountSelect();
 
   ClearUsernameAndPasswordFields();
 
@@ -1579,15 +1596,14 @@ TEST_F(PasswordAutofillAgentTest, FillOnAccountSelectOnlyReadonlyUsername) {
   SetElementReadOnly(username_element_, true);
 
   // Simulate the browser sending back the login info for an initial page load.
-  SimulateOnFillPasswordForm(fill_data_);
+  SimulateOnShowInitialPasswordAccountSuggestions(fill_data_);
 
-  CheckTextFieldsState(std::string("alice"), false, std::string(), true);
+  CheckTextFieldsState(std::string("alice"), false, std::string(), false);
 }
 
 TEST_F(PasswordAutofillAgentTest,
        FillOnAccountSelectOnlyReadonlyNotPreferredUsername) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      autofill::switches::kEnableFillOnAccountSelect);
+  SetFillOnAccountSelect();
 
   ClearUsernameAndPasswordFields();
 
@@ -1595,14 +1611,13 @@ TEST_F(PasswordAutofillAgentTest,
   SetElementReadOnly(username_element_, true);
 
   // Simulate the browser sending back the login info for an initial page load.
-  SimulateOnFillPasswordForm(fill_data_);
+  SimulateOnShowInitialPasswordAccountSuggestions(fill_data_);
 
-  CheckTextFieldsState(std::string("Carol"), false, std::string(), true);
+  CheckTextFieldsState(std::string("Carol"), false, std::string(), false);
 }
 
 TEST_F(PasswordAutofillAgentTest, FillOnAccountSelectOnlyNoUsername) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      autofill::switches::kEnableFillOnAccountSelect);
+  SetFillOnAccountSelect();
 
   // Load a form with no username and update test data.
   LoadHTML(kVisibleFormWithNoUsernameHTML);
@@ -1621,10 +1636,11 @@ TEST_F(PasswordAutofillAgentTest, FillOnAccountSelectOnlyNoUsername) {
   password_element_.setAutofilled(false);
 
   // Simulate the browser sending back the login info for an initial page load.
-  SimulateOnFillPasswordForm(fill_data_);
+  SimulateOnShowInitialPasswordAccountSuggestions(fill_data_);
 
   EXPECT_TRUE(password_element_.suggestedValue().isEmpty());
-  EXPECT_TRUE(password_element_.isAutofilled());
+  EXPECT_FALSE(password_element_.isAutofilled());
+  CheckSuggestions(std::string(), false);
 }
 
 TEST_F(PasswordAutofillAgentTest, ShowPopupOnEmptyPasswordField) {
@@ -1725,8 +1741,7 @@ TEST_F(PasswordAutofillAgentTest, NotShowPopupPasswordField) {
 // highlighted as autofillable (regression test for https://crbug.com/442564).
 TEST_F(PasswordAutofillAgentTest,
        FillOnAccountSelectOnlyReadonlyUnknownUsername) {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      autofill::switches::kEnableFillOnAccountSelect);
+  SetFillOnAccountSelect();
 
   ClearUsernameAndPasswordFields();
 
@@ -1850,7 +1865,7 @@ TEST_F(PasswordAutofillAgentTest,
 
   base::string16 password = base::ASCIIToUTF16("NewPass22");
   AutofillMsg_GeneratedPasswordAccepted msg(0, password);
-  password_generation_->OnMessageReceived(msg);
+  static_cast<IPC::Listener*>(password_generation_)->OnMessageReceived(msg);
 
   static_cast<content::RenderFrameObserver*>(password_autofill_agent_)
       ->WillSendSubmitEvent(username_element_.form());

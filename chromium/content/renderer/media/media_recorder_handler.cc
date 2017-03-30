@@ -40,10 +40,8 @@ media::VideoCodec CodecIdToMediaVideoCodec(VideoTrackRecorder::CodecId id) {
       return media::kCodecVP8;
     case VideoTrackRecorder::CodecId::VP9:
       return media::kCodecVP9;
-#if BUILDFLAG(RTC_USE_H264)
     case VideoTrackRecorder::CodecId::H264:
       return media::kCodecH264;
-#endif
   }
   NOTREACHED() << "Unsupported codec";
   return media::kUnknownVideoCodec;
@@ -176,6 +174,11 @@ bool MediaRecorderHandler::start(int timeslice) {
       audio_tracks[0].isEnabled() &&
       audio_tracks[0].source().getReadyState() !=
           blink::WebMediaStreamSource::ReadyStateEnded;
+
+  if (!use_video_tracks && !use_audio_tracks) {
+    LOG(WARNING) << __FUNCTION__ << ": no tracks to be recorded.";
+    return false;
+  }
 
   webm_muxer_.reset(new media::WebmMuxer(
       CodecIdToMediaVideoCodec(codec_id_), use_video_tracks, use_audio_tracks,

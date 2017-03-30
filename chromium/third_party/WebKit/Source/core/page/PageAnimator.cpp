@@ -36,13 +36,15 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
     TemporaryChange<bool> servicing(m_servicingAnimations, true);
     clock().updateTime(monotonicAnimationStartTime);
 
-    HeapVector<Member<Document>> documents;
+    HeapVector<Member<Document>, 32> documents;
     for (Frame* frame = m_page->mainFrame(); frame; frame = frame->tree().traverseNext()) {
         if (frame->isLocalFrame())
             documents.append(toLocalFrame(frame)->document());
     }
 
     for (auto& document : documents) {
+        ScopedFrameBlamer frameBlamer(document->frame());
+        TRACE_EVENT0("blink", "PageAnimator::serviceScriptedAnimations");
         DocumentAnimations::updateAnimationTimingForAnimationFrame(*document);
         if (document->view()) {
             if (document->view()->shouldThrottleRendering())
@@ -50,7 +52,8 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
             // Disallow throttling in case any script needs to do a synchronous
             // lifecycle update in other frames which are throttled.
             DocumentLifecycle::DisallowThrottlingScope noThrottlingScope(document->lifecycle());
-            document->view()->getScrollableArea()->serviceScrollAnimations(monotonicAnimationStartTime);
+            if (ScrollableArea* scrollableArea = document->view()->getScrollableArea())
+                scrollableArea->serviceScrollAnimations(monotonicAnimationStartTime);
 
             if (const FrameView::ScrollableAreaSet* animatingScrollableAreas = document->view()->animatingScrollableAreas()) {
                 // Iterate over a copy, since ScrollableAreas may deregister
@@ -66,10 +69,6 @@ void PageAnimator::serviceScriptedAnimations(double monotonicAnimationStartTime)
         DocumentLifecycle::DisallowThrottlingScope noThrottlingScope(document->lifecycle());
         document->serviceScriptedAnimations(monotonicAnimationStartTime);
     }
-
-    // Oilpan: This is performance optimization to promptly clear the backing
-    // storage of the vector and reuse it in the next PageAnimator::serviceScriptedAnimations.
-    documents.clear();
 }
 
 void PageAnimator::scheduleVisualUpdate(LocalFrame* frame)

@@ -8,11 +8,13 @@
 
 #include "app/vivaldi_constants.h"
 #include "base/bind.h"
+#include "base/location.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/devtools_agent_host.h"
@@ -556,12 +558,10 @@ void ProcessManager::OnShouldSuspendAck(const std::string& extension_id,
 void ProcessManager::OnSuspendAck(const std::string& extension_id) {
   background_page_data_[extension_id].is_closing = true;
   uint64_t sequence_id = background_page_data_[extension_id].close_sequence_id;
-  base::MessageLoop::current()->PostDelayedTask(
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
       base::Bind(&ProcessManager::CloseLazyBackgroundPageNow,
-                 weak_ptr_factory_.GetWeakPtr(),
-                 extension_id,
-                 sequence_id),
+                 weak_ptr_factory_.GetWeakPtr(), extension_id, sequence_id),
       base::TimeDelta::FromMilliseconds(g_event_page_suspending_time_msec));
 }
 
@@ -570,24 +570,37 @@ void ProcessManager::OnNetworkRequestStarted(
     uint64_t request_id) {
   ExtensionHost* host = GetBackgroundHostForExtension(
       GetExtensionID(render_frame_host));
-  auto result = pending_network_requests_.insert(request_id);
+  if (!host || !IsFrameInExtensionHost(host, render_frame_host))
+    return;
+
+  auto result =
+      pending_network_requests_.insert(std::make_pair(request_id, host));
   DCHECK(result.second) << "Duplicate network request IDs.";
-  if (host && IsFrameInExtensionHost(host, render_frame_host)) {
-    IncrementLazyKeepaliveCount(host->extension());
-    host->OnNetworkRequestStarted(request_id);
-  }
+
+  IncrementLazyKeepaliveCount(host->extension());
+  host->OnNetworkRequestStarted(request_id);
 }
 
 void ProcessManager::OnNetworkRequestDone(
     content::RenderFrameHost* render_frame_host,
     uint64_t request_id) {
-  ExtensionHost* host = GetBackgroundHostForExtension(
-      GetExtensionID(render_frame_host));
-  if (host && IsFrameInExtensionHost(host, render_frame_host)) {
-    host->OnNetworkRequestDone(request_id);
-    if (pending_network_requests_.erase(request_id))
-      DecrementLazyKeepaliveCount(host->extension());
-  }
+  auto result = pending_network_requests_.find(request_id);
+  if (result == pending_network_requests_.end())
+    return;
+
+  // The cached |host| can be invalid, if it was deleted between the time it
+  // was inserted in the map and the look up. It is checked to ensure it is in
+  // the list of existing background_hosts_.
+  ExtensionHost* host = result->second;
+  pending_network_requests_.erase(result);
+
+  if (background_hosts_.find(host) == background_hosts_.end())
+    return;
+
+  DCHECK(IsFrameInExtensionHost(host, render_frame_host));
+
+  host->OnNetworkRequestDone(request_id);
+  DecrementLazyKeepaliveCount(host->extension());
 }
 
 void ProcessManager::CancelSuspend(const Extension* extension) {
@@ -775,12 +788,10 @@ void ProcessManager::DecrementLazyKeepaliveCount(
   if (--count == 0 && !background_page_data_[extension_id].is_closing) {
     background_page_data_[extension_id].close_sequence_id =
         ++last_background_close_sequence_id_;
-    base::MessageLoop::current()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&ProcessManager::OnLazyBackgroundPageIdle,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   extension_id,
-                   last_background_close_sequence_id_),
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::Bind(&ProcessManager::OnLazyBackgroundPageIdle,
+                              weak_ptr_factory_.GetWeakPtr(), extension_id,
+                              last_background_close_sequence_id_),
         base::TimeDelta::FromMilliseconds(g_event_page_idle_time_msec));
   }
 }
@@ -810,12 +821,12 @@ void ProcessManager::OnKeepaliveImpulseCheck() {
   }
 
   // OnKeepaliveImpulseCheck() is always called in constructor, but in unit
-  // tests there will be no message loop. In that event don't schedule tasks.
-  if (base::MessageLoop::current()) {
-    base::MessageLoop::current()->PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&ProcessManager::OnKeepaliveImpulseCheck,
-                   weak_ptr_factory_.GetWeakPtr()),
+  // tests there will be no thread task runner handle. In that event don't
+  // schedule tasks.
+  if (base::ThreadTaskRunnerHandle::IsSet()) {
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE, base::Bind(&ProcessManager::OnKeepaliveImpulseCheck,
+                              weak_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromMilliseconds(g_event_page_idle_time_msec));
   }
 }

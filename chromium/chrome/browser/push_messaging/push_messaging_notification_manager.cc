@@ -11,11 +11,11 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/budget_service/background_budget_service.h"
+#include "chrome/browser/budget_service/background_budget_service_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/push_messaging/background_budget_service.h"
-#include "chrome/browser/push_messaging/background_budget_service_factory.h"
 #include "chrome/browser/push_messaging/push_messaging_constants.h"
 #include "chrome/common/features.h"
 #include "chrome/grit/generated_resources.h"
@@ -186,12 +186,24 @@ void PushMessagingNotificationManager::DidGetNotificationsFromDatabase(
     }
   }
 
-  // Get the budget for the service worker. This will internally record UMA
-  // for budget development work in the future.
+  // Get the budget for the service worker.
   BackgroundBudgetService* service =
       BackgroundBudgetServiceFactory::GetForProfile(profile_);
-  double budget = service->GetBudget(origin);
+  service->GetBudget(
+      origin,
+      base::Bind(&PushMessagingNotificationManager::DidGetBudget,
+                 weak_factory_.GetWeakPtr(), origin,
+                 service_worker_registration_id, message_handled_closure,
+                 notification_needed, notification_shown));
+}
 
+void PushMessagingNotificationManager::DidGetBudget(
+    const GURL& origin,
+    int64_t service_worker_registration_id,
+    const base::Closure& message_handled_closure,
+    bool notification_needed,
+    bool notification_shown,
+    const double budget) {
   // Record the budget available any time the budget is queried.
   UMA_HISTOGRAM_COUNTS_100("PushMessaging.BackgroundBudget", budget);
 
@@ -275,14 +287,14 @@ void PushMessagingNotificationManager::CheckForMissedNotification(
   double cost = BackgroundBudgetService::GetCost(
       BackgroundBudgetService::CostType::SILENT_PUSH);
   if (budget >= cost) {
-    // Update the stored budget.
-    BackgroundBudgetService* service =
-        BackgroundBudgetServiceFactory::GetForProfile(profile_);
-    service->StoreBudget(origin, budget - cost);
-
     RecordUserVisibleStatus(
         content::PUSH_USER_VISIBLE_STATUS_REQUIRED_BUT_NOT_SHOWN_USED_GRACE);
-    message_handled_closure.Run();
+
+    BackgroundBudgetService* service =
+        BackgroundBudgetServiceFactory::GetForProfile(profile_);
+    // Update the stored budget.
+    service->StoreBudget(origin, budget - cost, message_handled_closure);
+
     return;
   }
 

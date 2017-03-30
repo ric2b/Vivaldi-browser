@@ -4,19 +4,22 @@
 
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host_x11.h"
 
+#include <X11/extensions/shape.h>
+#include <X11/extensions/XInput2.h>
 #include <X11/Xatom.h>
 #include <X11/Xregion.h>
 #include <X11/Xutil.h>
-#include <X11/extensions/XInput2.h>
-#include <X11/extensions/shape.h>
 
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/aura/client/cursor_client.h"
@@ -166,6 +169,7 @@ DesktopWindowTreeHostX11::DesktopWindowTreeHostX11(
       x_root_window_(DefaultRootWindow(xdisplay_)),
       atom_cache_(xdisplay_, kAtomsToCache),
       window_mapped_(false),
+      wait_for_unmap_(false),
       is_fullscreen_(false),
       is_always_on_top_(false),
       use_native_frame_(false),
@@ -345,10 +349,9 @@ void DesktopWindowTreeHostX11::Close() {
     // we don't destroy the window before the callback returned (as the caller
     // may delete ourselves on destroy and the ATL callback would still
     // dereference us when the callback returns).
-    base::MessageLoop::current()->PostTask(
-        FROM_HERE,
-        base::Bind(&DesktopWindowTreeHostX11::CloseNow,
-                   close_widget_factory_.GetWeakPtr()));
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&DesktopWindowTreeHostX11::CloseNow,
+                              close_widget_factory_.GetWeakPtr()));
   }
 }
 
@@ -782,7 +785,7 @@ bool DesktopWindowTreeHostX11::ShouldUseNativeFrame() const {
 }
 
 bool DesktopWindowTreeHostX11::ShouldWindowContentsBeTransparent() const {
-  return false;
+  return IsTranslucentWindowOpacitySupported();
 }
 
 void DesktopWindowTreeHostX11::FrameTypeChanged() {
@@ -851,11 +854,11 @@ bool DesktopWindowTreeHostX11::IsFullscreen() const {
   return is_fullscreen_;
 }
 
-void DesktopWindowTreeHostX11::SetOpacity(unsigned char opacity) {
+void DesktopWindowTreeHostX11::SetOpacity(float opacity) {
   // X server opacity is in terms of 32 bit unsigned int space, and counts from
   // the opposite direction.
   // XChangeProperty() expects "cardinality" to be long.
-  unsigned long cardinality = opacity * 0x1010101;
+  unsigned long cardinality = static_cast<int>(opacity * 255) * 0x1010101;
 
   if (cardinality == 0xffffffff) {
     XDeleteProperty(xdisplay_, xwindow_,
@@ -938,7 +941,7 @@ bool DesktopWindowTreeHostX11::IsAnimatingClosed() const {
 }
 
 bool DesktopWindowTreeHostX11::IsTranslucentWindowOpacitySupported() const {
-  return false;
+  return use_argb_visual_;
 }
 
 void DesktopWindowTreeHostX11::SizeConstraintsChanged() {
@@ -978,6 +981,7 @@ void DesktopWindowTreeHostX11::HideImpl() {
   if (window_mapped_) {
     XWithdrawWindow(xdisplay_, xwindow_, 0);
     window_mapped_ = false;
+    wait_for_unmap_ = true;
   }
   native_widget_delegate_->OnNativeWidgetVisibilityChanged(false);
 }
@@ -1154,7 +1158,10 @@ void DesktopWindowTreeHostX11::InitX11Window(
     attribute_mask |= CWBorderPixel;
     swa.border_pixel = 0;
 
-    use_argb_visual_ = true;
+    // A compositing manager is required to support transparency.
+    use_argb_visual_ =
+        XGetSelectionOwner(xdisplay_, atom_cache_.GetAtom("_NET_WM_CM_S0")) !=
+        None;
   }
 
   bounds_in_pixels_ = ToPixelRect(params.bounds);
@@ -1452,7 +1459,7 @@ void DesktopWindowTreeHostX11::UpdateWMUserTime(
       type == ui::ET_KEY_PRESSED ||
       type == ui::ET_TOUCH_PRESSED) {
     unsigned long wm_user_time_ms = static_cast<unsigned long>(
-        ui::EventTimeFromNative(event).InMilliseconds());
+        (ui::EventTimeFromNative(event) - base::TimeTicks()).InMilliseconds());
     XChangeProperty(xdisplay_,
                     xwindow_,
                     atom_cache_.GetAtom("_NET_WM_USER_TIME"),
@@ -1691,13 +1698,22 @@ void DesktopWindowTreeHostX11::MapWindow(ui::WindowShowState show_state) {
                     1);
   }
 
+  ui::X11EventSource* event_source = ui::X11EventSource::GetInstance();
+  DCHECK(event_source);
+
+  if (wait_for_unmap_) {
+    // Block until our window is unmapped. This avoids a race condition when
+    // remapping an unmapped window.
+    event_source->BlockUntilWindowUnmapped(xwindow_);
+    DCHECK(!wait_for_unmap_);
+  }
+
   XMapWindow(xdisplay_, xwindow_);
 
   // We now block until our window is mapped. Some X11 APIs will crash and
   // burn if passed |xwindow_| before the window is mapped, and XMapWindow is
   // asynchronous.
-  if (ui::X11EventSource::GetInstance())
-    ui::X11EventSource::GetInstance()->BlockUntilWindowMapped(xwindow_);
+  event_source->BlockUntilWindowMapped(xwindow_);
 }
 
 void DesktopWindowTreeHostX11::SetWindowTransparency() {
@@ -1838,7 +1854,7 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
         delayed_resize_task_.Reset(base::Bind(
             &DesktopWindowTreeHostX11::DelayedResize,
             close_widget_factory_.GetWeakPtr(), bounds_in_pixels.size()));
-        base::MessageLoop::current()->PostTask(
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
             FROM_HERE, delayed_resize_task_.callback());
       }
       break;
@@ -1929,6 +1945,7 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
       break;
     }
     case UnmapNotify: {
+      wait_for_unmap_ = false;
       FOR_EACH_OBSERVER(DesktopWindowTreeHostObserverX11,
                         observer_list_,
                         OnWindowUnmapped(xwindow_));

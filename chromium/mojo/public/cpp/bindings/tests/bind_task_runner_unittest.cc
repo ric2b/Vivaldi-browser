@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/bind.h"
+#include "base/callback.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
@@ -25,7 +27,8 @@ class TestTaskRunner : public base::SingleThreadTaskRunner {
   TestTaskRunner()
       : thread_id_(base::PlatformThread::CurrentRef()),
         quit_called_(false),
-        task_ready_(false, false) {}
+        task_ready_(base::WaitableEvent::ResetPolicy::AUTOMATIC,
+                    base::WaitableEvent::InitialState::NOT_SIGNALED) {}
 
   bool PostNonNestableDelayedTask(const tracked_objects::Location& from_here,
                                   const base::Closure& task,
@@ -122,7 +125,8 @@ class IntegerSenderImpl : public IntegerSender {
 
   ~IntegerSenderImpl() override {}
 
-  using EchoHandler = Callback<void(int32_t, const EchoCallback&)>;
+  using EchoHandler = base::Callback<void(int32_t, const EchoCallback&)>;
+
   void set_echo_handler(const EchoHandler& handler) { echo_handler_ = handler; }
 
   void Echo(int32_t value, const EchoCallback& callback) override {
@@ -154,7 +158,7 @@ class IntegerSenderConnectionImpl : public IntegerSenderConnection {
 
   ~IntegerSenderConnectionImpl() override {}
 
-  void set_get_sender_notification(const Closure& notification) {
+  void set_get_sender_notification(const base::Closure& notification) {
     get_sender_notification_ = notification;
   }
   void GetSender(IntegerSenderAssociatedRequest sender) override {
@@ -174,7 +178,7 @@ class IntegerSenderConnectionImpl : public IntegerSenderConnection {
   Binding<IntegerSenderConnection> binding_;
   std::unique_ptr<SenderType> sender_impl_;
   scoped_refptr<base::SingleThreadTaskRunner> sender_runner_;
-  Closure get_sender_notification_;
+  base::Closure get_sender_notification_;
 };
 
 class BindTaskRunnerTest : public testing::Test {
@@ -215,12 +219,17 @@ class AssociatedBindTaskRunnerTest : public testing::Test {
         sender_binding_task_runner_));
 
     connection_impl_->set_get_sender_notification(
-        [this]() { connection_binding_task_runner_->Quit(); });
+        base::Bind(&AssociatedBindTaskRunnerTest::QuitTaskRunner,
+                   base::Unretained(this)));
 
     connection_ptr_->GetSender(GetProxy(&sender_ptr_,
                                         connection_ptr_.associated_group(),
                                         sender_ptr_task_runner_));
     connection_binding_task_runner_->Run();
+  }
+
+  void QuitTaskRunner() {
+    connection_binding_task_runner_->Quit();
   }
 
   base::MessageLoop loop_;
@@ -234,22 +243,56 @@ class AssociatedBindTaskRunnerTest : public testing::Test {
   IntegerSenderAssociatedPtr sender_ptr_;
 };
 
+void DoSetFlagAndQuitTaskRunner(bool* flag,
+                                scoped_refptr<TestTaskRunner> task_runner) {
+  *flag = true;
+  if (task_runner)
+    task_runner->Quit();
+}
+
+void DoExpectValueSetFlagAndQuitTaskRunner(
+    int32_t expected_value,
+    bool* flag,
+    scoped_refptr<TestTaskRunner> task_runner,
+    int32_t value) {
+  EXPECT_EQ(expected_value, value);
+  DoSetFlagAndQuitTaskRunner(flag, task_runner);
+}
+
+void DoExpectValueSetFlagForwardValueAndQuitTaskRunner(
+    int32_t expected_value,
+    bool* flag,
+    scoped_refptr<TestTaskRunner> task_runner,
+    int32_t value,
+    const IntegerSender::EchoCallback& callback) {
+  EXPECT_EQ(expected_value, value);
+  *flag = true;
+  callback.Run(value);
+  task_runner->Quit();
+}
+
+base::Closure SetFlagAndQuitTaskRunner(
+    bool* flag,
+    scoped_refptr<TestTaskRunner> task_runner) {
+  return base::Bind(&DoSetFlagAndQuitTaskRunner, flag, task_runner);
+}
+
+base::Callback<void(int32_t)> ExpectValueSetFlagAndQuitTaskRunner(
+    int32_t expected_value,
+    bool* flag,
+    scoped_refptr<TestTaskRunner> task_runner) {
+  return base::Bind(&DoExpectValueSetFlagAndQuitTaskRunner, expected_value,
+                    flag, task_runner);
+}
+
 TEST_F(BindTaskRunnerTest, MethodCall) {
   bool echo_called = false;
   impl_->set_echo_handler(
-      [&, this](int32_t value, const IntegerSender::EchoCallback& callback) {
-        EXPECT_EQ(1024, value);
-        echo_called = true;
-        callback.Run(value);
-        binding_task_runner_->Quit();
-      });
-
+      base::Bind(&DoExpectValueSetFlagForwardValueAndQuitTaskRunner,
+                 1024, &echo_called, binding_task_runner_));
   bool echo_replied = false;
-  ptr_->Echo(1024, [&, this](int32_t value) {
-    EXPECT_EQ(1024, value);
-    echo_replied = true;
-    ptr_task_runner_->Quit();
-  });
+  ptr_->Echo(1024, ExpectValueSetFlagAndQuitTaskRunner(1024, &echo_replied,
+                                                       ptr_task_runner_));
   binding_task_runner_->Run();
   EXPECT_TRUE(echo_called);
   ptr_task_runner_->Run();
@@ -258,11 +301,8 @@ TEST_F(BindTaskRunnerTest, MethodCall) {
 
 TEST_F(BindTaskRunnerTest, BindingConnectionError) {
   bool connection_error_called = false;
-  impl_->binding()->set_connection_error_handler([&, this]() {
-    connection_error_called = true;
-    binding_task_runner_->Quit();
-  });
-
+  impl_->binding()->set_connection_error_handler(
+      SetFlagAndQuitTaskRunner(&connection_error_called, binding_task_runner_));
   ptr_.reset();
   binding_task_runner_->Run();
   EXPECT_TRUE(connection_error_called);
@@ -270,30 +310,30 @@ TEST_F(BindTaskRunnerTest, BindingConnectionError) {
 
 TEST_F(BindTaskRunnerTest, PtrConnectionError) {
   bool connection_error_called = false;
-  ptr_.set_connection_error_handler([&, this]() {
-    connection_error_called = true;
-    ptr_task_runner_->Quit();
-  });
-
+  ptr_.set_connection_error_handler(
+      SetFlagAndQuitTaskRunner(&connection_error_called, ptr_task_runner_));
   impl_->binding()->Close();
   ptr_task_runner_->Run();
   EXPECT_TRUE(connection_error_called);
 }
 
+void ExpectValueSetFlagAndForward(int32_t expected_value,
+                                  bool* flag,
+                                  int32_t value,
+                                  const IntegerSender::EchoCallback& callback) {
+  EXPECT_EQ(expected_value, value);
+  *flag = true;
+  callback.Run(value);
+}
+
 TEST_F(AssociatedBindTaskRunnerTest, MethodCall) {
   bool echo_called = false;
   connection_impl_->sender_impl()->set_echo_handler(
-      [&](int32_t value, const IntegerSender::EchoCallback& callback) {
-        EXPECT_EQ(1024, value);
-        echo_called = true;
-        callback.Run(value);
-      });
+      base::Bind(&ExpectValueSetFlagAndForward, 1024, &echo_called));
 
   bool echo_replied = false;
-  sender_ptr_->Echo(1024, [&](int32_t value) {
-    EXPECT_EQ(1024, value);
-    echo_replied = true;
-  });
+  sender_ptr_->Echo(
+      1024, ExpectValueSetFlagAndQuitTaskRunner(1024, &echo_replied, nullptr));
 
   // The Echo request first arrives at the master endpoint's task runner, and
   // then is forwarded to the associated endpoint's task runner.
@@ -311,22 +351,15 @@ TEST_F(AssociatedBindTaskRunnerTest, MethodCall) {
 TEST_F(AssociatedBindTaskRunnerTest, BindingConnectionError) {
   bool sender_impl_error = false;
   connection_impl_->sender_impl()->binding()->set_connection_error_handler(
-      [&, this]() {
-        sender_impl_error = true;
-        sender_binding_task_runner_->Quit();
-      });
-
+      SetFlagAndQuitTaskRunner(&sender_impl_error,
+                               sender_binding_task_runner_));
   bool connection_impl_error = false;
-  connection_impl_->binding()->set_connection_error_handler([&, this]() {
-    connection_impl_error = true;
-    connection_binding_task_runner_->Quit();
-  });
-
+  connection_impl_->binding()->set_connection_error_handler(
+      SetFlagAndQuitTaskRunner(&connection_impl_error,
+                               connection_binding_task_runner_));
   bool sender_ptr_error = false;
-  sender_ptr_.set_connection_error_handler([&, this]() {
-    sender_ptr_error = true;
-    sender_ptr_task_runner_->Quit();
-  });
+  sender_ptr_.set_connection_error_handler(
+      SetFlagAndQuitTaskRunner(&sender_ptr_error, sender_ptr_task_runner_));
   connection_ptr_.reset();
   sender_ptr_task_runner_->Run();
   EXPECT_TRUE(sender_ptr_error);
@@ -339,22 +372,15 @@ TEST_F(AssociatedBindTaskRunnerTest, BindingConnectionError) {
 TEST_F(AssociatedBindTaskRunnerTest, PtrConnectionError) {
   bool sender_impl_error = false;
   connection_impl_->sender_impl()->binding()->set_connection_error_handler(
-      [&, this]() {
-        sender_impl_error = true;
-        sender_binding_task_runner_->Quit();
-      });
-
+      SetFlagAndQuitTaskRunner(&sender_impl_error,
+                               sender_binding_task_runner_));
   bool connection_ptr_error = false;
-  connection_ptr_.set_connection_error_handler([&, this]() {
-    connection_ptr_error = true;
-    connection_ptr_task_runner_->Quit();
-  });
-
+  connection_ptr_.set_connection_error_handler(
+      SetFlagAndQuitTaskRunner(&connection_ptr_error,
+                               connection_ptr_task_runner_));
   bool sender_ptr_error = false;
-  sender_ptr_.set_connection_error_handler([&, this]() {
-    sender_ptr_error = true;
-    sender_ptr_task_runner_->Quit();
-  });
+  sender_ptr_.set_connection_error_handler(
+      SetFlagAndQuitTaskRunner(&sender_ptr_error, sender_ptr_task_runner_));
   connection_impl_->binding()->Close();
   sender_binding_task_runner_->Run();
   EXPECT_TRUE(sender_impl_error);
